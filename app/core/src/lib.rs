@@ -239,10 +239,12 @@ pub use search::{
     SearchArticleResultsSnapshot, SearchChromeSnapshot, SearchCommunityRowProjection,
     SearchCommunityRowProjectionInput, SearchHighlightRowProjection,
     SearchHighlightRowProjectionInput, SearchQueryProjection, SearchQueryProjectionInput,
-    SearchResultsApplyInput, SearchResultsApplyProjection, SearchResultsSnapshot,
-    SearchScheduleInput, SearchScheduleProjection, SearchSuggestionsProjection,
-    SearchSuggestionsProjectionInput, SearchTextMatchSpan, SearchTextMatchesProjection,
-    SearchTextMatchesProjectionInput,
+    SearchRelayArticlesApplyInput, SearchRelayArticlesApplyProjection, SearchRelayRefreshInput,
+    SearchRelayRefreshProjection, SearchRelayStartResultInput, SearchRelayStartResultProjection,
+    SearchRelayUpdateInput, SearchRelayUpdateProjection, SearchResultsApplyInput,
+    SearchResultsApplyProjection, SearchResultsSnapshot, SearchScheduleInput,
+    SearchScheduleProjection, SearchSuggestionsProjection, SearchSuggestionsProjectionInput,
+    SearchTextMatchSpan, SearchTextMatchesProjection, SearchTextMatchesProjectionInput,
 };
 pub use session::{
     AccountGenerationSnapshot, AuthSessionRestoreSnapshot, AuthSessionSnapshot,

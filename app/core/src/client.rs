@@ -1875,6 +1875,34 @@ impl HighlighterCore {
         crate::search::search_results_apply_projection(input)
     }
 
+    pub fn project_search_relay_refresh(
+        &self,
+        input: crate::search::SearchRelayRefreshInput,
+    ) -> crate::search::SearchRelayRefreshProjection {
+        crate::search::search_relay_refresh_projection(input)
+    }
+
+    pub fn project_search_relay_start_result(
+        &self,
+        input: crate::search::SearchRelayStartResultInput,
+    ) -> crate::search::SearchRelayStartResultProjection {
+        crate::search::search_relay_start_result_projection(input)
+    }
+
+    pub fn project_search_relay_update(
+        &self,
+        input: crate::search::SearchRelayUpdateInput,
+    ) -> crate::search::SearchRelayUpdateProjection {
+        crate::search::search_relay_update_projection(input)
+    }
+
+    pub fn project_search_relay_articles_apply(
+        &self,
+        input: crate::search::SearchRelayArticlesApplyInput,
+    ) -> crate::search::SearchRelayArticlesApplyProjection {
+        crate::search::search_relay_articles_apply_projection(input)
+    }
+
     /// Project suggested search chips. Rust owns room/fallback ordering,
     /// trimming, dedupe, and cap policy.
     pub fn project_search_suggestions(

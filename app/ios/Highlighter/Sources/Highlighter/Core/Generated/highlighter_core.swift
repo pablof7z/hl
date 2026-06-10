@@ -1482,6 +1482,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectSearchQuery(input: SearchQueryProjectionInput)  -> SearchQueryProjection
 
+    func projectSearchRelayArticlesApply(input: SearchRelayArticlesApplyInput)  -> SearchRelayArticlesApplyProjection
+
+    func projectSearchRelayRefresh(input: SearchRelayRefreshInput)  -> SearchRelayRefreshProjection
+
+    func projectSearchRelayStartResult(input: SearchRelayStartResultInput)  -> SearchRelayStartResultProjection
+
+    func projectSearchRelayUpdate(input: SearchRelayUpdateInput)  -> SearchRelayUpdateProjection
+
     func projectSearchResultsApply(input: SearchResultsApplyInput)  -> SearchResultsApplyProjection
 
     func projectSearchSchedule(input: SearchScheduleInput)  -> SearchScheduleProjection
@@ -4292,6 +4300,38 @@ open func projectSearchQuery(input: SearchQueryProjectionInput) -> SearchQueryPr
     return try!  FfiConverterTypeSearchQueryProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_search_query(self.uniffiClonePointer(),
         FfiConverterTypeSearchQueryProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectSearchRelayArticlesApply(input: SearchRelayArticlesApplyInput) -> SearchRelayArticlesApplyProjection  {
+    return try!  FfiConverterTypeSearchRelayArticlesApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_search_relay_articles_apply(self.uniffiClonePointer(),
+        FfiConverterTypeSearchRelayArticlesApplyInput_lower(input),$0
+    )
+})
+}
+
+open func projectSearchRelayRefresh(input: SearchRelayRefreshInput) -> SearchRelayRefreshProjection  {
+    return try!  FfiConverterTypeSearchRelayRefreshProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_search_relay_refresh(self.uniffiClonePointer(),
+        FfiConverterTypeSearchRelayRefreshInput_lower(input),$0
+    )
+})
+}
+
+open func projectSearchRelayStartResult(input: SearchRelayStartResultInput) -> SearchRelayStartResultProjection  {
+    return try!  FfiConverterTypeSearchRelayStartResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_search_relay_start_result(self.uniffiClonePointer(),
+        FfiConverterTypeSearchRelayStartResultInput_lower(input),$0
+    )
+})
+}
+
+open func projectSearchRelayUpdate(input: SearchRelayUpdateInput) -> SearchRelayUpdateProjection  {
+    return try!  FfiConverterTypeSearchRelayUpdateProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_search_relay_update(self.uniffiClonePointer(),
+        FfiConverterTypeSearchRelayUpdateInput_lower(input),$0
     )
 })
 }
@@ -31710,6 +31750,638 @@ public func FfiConverterTypeSearchQueryProjectionInput_lower(_ value: SearchQuer
 }
 
 
+public struct SearchRelayArticlesApplyInput {
+    public var requestToken: UInt64
+    public var currentToken: UInt64
+    public var requestQuery: String
+    public var appliedQuery: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(requestToken: UInt64, currentToken: UInt64, requestQuery: String, appliedQuery: String) {
+        self.requestToken = requestToken
+        self.currentToken = currentToken
+        self.requestQuery = requestQuery
+        self.appliedQuery = appliedQuery
+    }
+}
+
+#if compiler(>=6)
+extension SearchRelayArticlesApplyInput: Sendable {}
+#endif
+
+
+extension SearchRelayArticlesApplyInput: Equatable, Hashable {
+    public static func ==(lhs: SearchRelayArticlesApplyInput, rhs: SearchRelayArticlesApplyInput) -> Bool {
+        if lhs.requestToken != rhs.requestToken {
+            return false
+        }
+        if lhs.currentToken != rhs.currentToken {
+            return false
+        }
+        if lhs.requestQuery != rhs.requestQuery {
+            return false
+        }
+        if lhs.appliedQuery != rhs.appliedQuery {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(requestToken)
+        hasher.combine(currentToken)
+        hasher.combine(requestQuery)
+        hasher.combine(appliedQuery)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchRelayArticlesApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchRelayArticlesApplyInput {
+        return
+            try SearchRelayArticlesApplyInput(
+                requestToken: FfiConverterUInt64.read(from: &buf),
+                currentToken: FfiConverterUInt64.read(from: &buf),
+                requestQuery: FfiConverterString.read(from: &buf),
+                appliedQuery: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchRelayArticlesApplyInput, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.requestToken, into: &buf)
+        FfiConverterUInt64.write(value.currentToken, into: &buf)
+        FfiConverterString.write(value.requestQuery, into: &buf)
+        FfiConverterString.write(value.appliedQuery, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchRelayArticlesApplyInput_lift(_ buf: RustBuffer) throws -> SearchRelayArticlesApplyInput {
+    return try FfiConverterTypeSearchRelayArticlesApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchRelayArticlesApplyInput_lower(_ value: SearchRelayArticlesApplyInput) -> RustBuffer {
+    return FfiConverterTypeSearchRelayArticlesApplyInput.lower(value)
+}
+
+
+public struct SearchRelayArticlesApplyProjection {
+    public var shouldApply: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldApply: Bool) {
+        self.shouldApply = shouldApply
+    }
+}
+
+#if compiler(>=6)
+extension SearchRelayArticlesApplyProjection: Sendable {}
+#endif
+
+
+extension SearchRelayArticlesApplyProjection: Equatable, Hashable {
+    public static func ==(lhs: SearchRelayArticlesApplyProjection, rhs: SearchRelayArticlesApplyProjection) -> Bool {
+        if lhs.shouldApply != rhs.shouldApply {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldApply)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchRelayArticlesApplyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchRelayArticlesApplyProjection {
+        return
+            try SearchRelayArticlesApplyProjection(
+                shouldApply: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchRelayArticlesApplyProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldApply, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchRelayArticlesApplyProjection_lift(_ buf: RustBuffer) throws -> SearchRelayArticlesApplyProjection {
+    return try FfiConverterTypeSearchRelayArticlesApplyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchRelayArticlesApplyProjection_lower(_ value: SearchRelayArticlesApplyProjection) -> RustBuffer {
+    return FfiConverterTypeSearchRelayArticlesApplyProjection.lower(value)
+}
+
+
+public struct SearchRelayRefreshInput {
+    public var requestedQuery: String
+    public var activeRelayQuery: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(requestedQuery: String, activeRelayQuery: String) {
+        self.requestedQuery = requestedQuery
+        self.activeRelayQuery = activeRelayQuery
+    }
+}
+
+#if compiler(>=6)
+extension SearchRelayRefreshInput: Sendable {}
+#endif
+
+
+extension SearchRelayRefreshInput: Equatable, Hashable {
+    public static func ==(lhs: SearchRelayRefreshInput, rhs: SearchRelayRefreshInput) -> Bool {
+        if lhs.requestedQuery != rhs.requestedQuery {
+            return false
+        }
+        if lhs.activeRelayQuery != rhs.activeRelayQuery {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(requestedQuery)
+        hasher.combine(activeRelayQuery)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchRelayRefreshInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchRelayRefreshInput {
+        return
+            try SearchRelayRefreshInput(
+                requestedQuery: FfiConverterString.read(from: &buf),
+                activeRelayQuery: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchRelayRefreshInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.requestedQuery, into: &buf)
+        FfiConverterString.write(value.activeRelayQuery, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchRelayRefreshInput_lift(_ buf: RustBuffer) throws -> SearchRelayRefreshInput {
+    return try FfiConverterTypeSearchRelayRefreshInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchRelayRefreshInput_lower(_ value: SearchRelayRefreshInput) -> RustBuffer {
+    return FfiConverterTypeSearchRelayRefreshInput.lower(value)
+}
+
+
+public struct SearchRelayRefreshProjection {
+    public var shouldRefresh: Bool
+    public var subscribeQuery: String
+    public var activeRelayQuery: String
+    public var isRelayLoading: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldRefresh: Bool, subscribeQuery: String, activeRelayQuery: String, isRelayLoading: Bool) {
+        self.shouldRefresh = shouldRefresh
+        self.subscribeQuery = subscribeQuery
+        self.activeRelayQuery = activeRelayQuery
+        self.isRelayLoading = isRelayLoading
+    }
+}
+
+#if compiler(>=6)
+extension SearchRelayRefreshProjection: Sendable {}
+#endif
+
+
+extension SearchRelayRefreshProjection: Equatable, Hashable {
+    public static func ==(lhs: SearchRelayRefreshProjection, rhs: SearchRelayRefreshProjection) -> Bool {
+        if lhs.shouldRefresh != rhs.shouldRefresh {
+            return false
+        }
+        if lhs.subscribeQuery != rhs.subscribeQuery {
+            return false
+        }
+        if lhs.activeRelayQuery != rhs.activeRelayQuery {
+            return false
+        }
+        if lhs.isRelayLoading != rhs.isRelayLoading {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldRefresh)
+        hasher.combine(subscribeQuery)
+        hasher.combine(activeRelayQuery)
+        hasher.combine(isRelayLoading)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchRelayRefreshProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchRelayRefreshProjection {
+        return
+            try SearchRelayRefreshProjection(
+                shouldRefresh: FfiConverterBool.read(from: &buf),
+                subscribeQuery: FfiConverterString.read(from: &buf),
+                activeRelayQuery: FfiConverterString.read(from: &buf),
+                isRelayLoading: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchRelayRefreshProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldRefresh, into: &buf)
+        FfiConverterString.write(value.subscribeQuery, into: &buf)
+        FfiConverterString.write(value.activeRelayQuery, into: &buf)
+        FfiConverterBool.write(value.isRelayLoading, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchRelayRefreshProjection_lift(_ buf: RustBuffer) throws -> SearchRelayRefreshProjection {
+    return try FfiConverterTypeSearchRelayRefreshProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchRelayRefreshProjection_lower(_ value: SearchRelayRefreshProjection) -> RustBuffer {
+    return FfiConverterTypeSearchRelayRefreshProjection.lower(value)
+}
+
+
+public struct SearchRelayStartResultInput {
+    public var requestedQuery: String
+    public var appliedQuery: String
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(requestedQuery: String, appliedQuery: String, error: String) {
+        self.requestedQuery = requestedQuery
+        self.appliedQuery = appliedQuery
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension SearchRelayStartResultInput: Sendable {}
+#endif
+
+
+extension SearchRelayStartResultInput: Equatable, Hashable {
+    public static func ==(lhs: SearchRelayStartResultInput, rhs: SearchRelayStartResultInput) -> Bool {
+        if lhs.requestedQuery != rhs.requestedQuery {
+            return false
+        }
+        if lhs.appliedQuery != rhs.appliedQuery {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(requestedQuery)
+        hasher.combine(appliedQuery)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchRelayStartResultInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchRelayStartResultInput {
+        return
+            try SearchRelayStartResultInput(
+                requestedQuery: FfiConverterString.read(from: &buf),
+                appliedQuery: FfiConverterString.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchRelayStartResultInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.requestedQuery, into: &buf)
+        FfiConverterString.write(value.appliedQuery, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchRelayStartResultInput_lift(_ buf: RustBuffer) throws -> SearchRelayStartResultInput {
+    return try FfiConverterTypeSearchRelayStartResultInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchRelayStartResultInput_lower(_ value: SearchRelayStartResultInput) -> RustBuffer {
+    return FfiConverterTypeSearchRelayStartResultInput.lower(value)
+}
+
+
+public struct SearchRelayStartResultProjection {
+    public var shouldRegisterHandle: Bool
+    public var shouldUnsubscribeHandle: Bool
+    public var activeRelayQuery: String
+    public var isRelayLoading: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldRegisterHandle: Bool, shouldUnsubscribeHandle: Bool, activeRelayQuery: String, isRelayLoading: Bool) {
+        self.shouldRegisterHandle = shouldRegisterHandle
+        self.shouldUnsubscribeHandle = shouldUnsubscribeHandle
+        self.activeRelayQuery = activeRelayQuery
+        self.isRelayLoading = isRelayLoading
+    }
+}
+
+#if compiler(>=6)
+extension SearchRelayStartResultProjection: Sendable {}
+#endif
+
+
+extension SearchRelayStartResultProjection: Equatable, Hashable {
+    public static func ==(lhs: SearchRelayStartResultProjection, rhs: SearchRelayStartResultProjection) -> Bool {
+        if lhs.shouldRegisterHandle != rhs.shouldRegisterHandle {
+            return false
+        }
+        if lhs.shouldUnsubscribeHandle != rhs.shouldUnsubscribeHandle {
+            return false
+        }
+        if lhs.activeRelayQuery != rhs.activeRelayQuery {
+            return false
+        }
+        if lhs.isRelayLoading != rhs.isRelayLoading {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldRegisterHandle)
+        hasher.combine(shouldUnsubscribeHandle)
+        hasher.combine(activeRelayQuery)
+        hasher.combine(isRelayLoading)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchRelayStartResultProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchRelayStartResultProjection {
+        return
+            try SearchRelayStartResultProjection(
+                shouldRegisterHandle: FfiConverterBool.read(from: &buf),
+                shouldUnsubscribeHandle: FfiConverterBool.read(from: &buf),
+                activeRelayQuery: FfiConverterString.read(from: &buf),
+                isRelayLoading: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchRelayStartResultProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldRegisterHandle, into: &buf)
+        FfiConverterBool.write(value.shouldUnsubscribeHandle, into: &buf)
+        FfiConverterString.write(value.activeRelayQuery, into: &buf)
+        FfiConverterBool.write(value.isRelayLoading, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchRelayStartResultProjection_lift(_ buf: RustBuffer) throws -> SearchRelayStartResultProjection {
+    return try FfiConverterTypeSearchRelayStartResultProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchRelayStartResultProjection_lower(_ value: SearchRelayStartResultProjection) -> RustBuffer {
+    return FfiConverterTypeSearchRelayStartResultProjection.lower(value)
+}
+
+
+public struct SearchRelayUpdateInput {
+    public var incomingQuery: String
+    public var appliedQuery: String
+    public var currentToken: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(incomingQuery: String, appliedQuery: String, currentToken: UInt64) {
+        self.incomingQuery = incomingQuery
+        self.appliedQuery = appliedQuery
+        self.currentToken = currentToken
+    }
+}
+
+#if compiler(>=6)
+extension SearchRelayUpdateInput: Sendable {}
+#endif
+
+
+extension SearchRelayUpdateInput: Equatable, Hashable {
+    public static func ==(lhs: SearchRelayUpdateInput, rhs: SearchRelayUpdateInput) -> Bool {
+        if lhs.incomingQuery != rhs.incomingQuery {
+            return false
+        }
+        if lhs.appliedQuery != rhs.appliedQuery {
+            return false
+        }
+        if lhs.currentToken != rhs.currentToken {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(incomingQuery)
+        hasher.combine(appliedQuery)
+        hasher.combine(currentToken)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchRelayUpdateInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchRelayUpdateInput {
+        return
+            try SearchRelayUpdateInput(
+                incomingQuery: FfiConverterString.read(from: &buf),
+                appliedQuery: FfiConverterString.read(from: &buf),
+                currentToken: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchRelayUpdateInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.incomingQuery, into: &buf)
+        FfiConverterString.write(value.appliedQuery, into: &buf)
+        FfiConverterUInt64.write(value.currentToken, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchRelayUpdateInput_lift(_ buf: RustBuffer) throws -> SearchRelayUpdateInput {
+    return try FfiConverterTypeSearchRelayUpdateInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchRelayUpdateInput_lower(_ value: SearchRelayUpdateInput) -> RustBuffer {
+    return FfiConverterTypeSearchRelayUpdateInput.lower(value)
+}
+
+
+public struct SearchRelayUpdateProjection {
+    public var shouldRefreshArticles: Bool
+    public var articleQuery: String
+    public var requestToken: UInt64
+    public var isRelayLoading: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldRefreshArticles: Bool, articleQuery: String, requestToken: UInt64, isRelayLoading: Bool) {
+        self.shouldRefreshArticles = shouldRefreshArticles
+        self.articleQuery = articleQuery
+        self.requestToken = requestToken
+        self.isRelayLoading = isRelayLoading
+    }
+}
+
+#if compiler(>=6)
+extension SearchRelayUpdateProjection: Sendable {}
+#endif
+
+
+extension SearchRelayUpdateProjection: Equatable, Hashable {
+    public static func ==(lhs: SearchRelayUpdateProjection, rhs: SearchRelayUpdateProjection) -> Bool {
+        if lhs.shouldRefreshArticles != rhs.shouldRefreshArticles {
+            return false
+        }
+        if lhs.articleQuery != rhs.articleQuery {
+            return false
+        }
+        if lhs.requestToken != rhs.requestToken {
+            return false
+        }
+        if lhs.isRelayLoading != rhs.isRelayLoading {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldRefreshArticles)
+        hasher.combine(articleQuery)
+        hasher.combine(requestToken)
+        hasher.combine(isRelayLoading)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchRelayUpdateProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchRelayUpdateProjection {
+        return
+            try SearchRelayUpdateProjection(
+                shouldRefreshArticles: FfiConverterBool.read(from: &buf),
+                articleQuery: FfiConverterString.read(from: &buf),
+                requestToken: FfiConverterUInt64.read(from: &buf),
+                isRelayLoading: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchRelayUpdateProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldRefreshArticles, into: &buf)
+        FfiConverterString.write(value.articleQuery, into: &buf)
+        FfiConverterUInt64.write(value.requestToken, into: &buf)
+        FfiConverterBool.write(value.isRelayLoading, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchRelayUpdateProjection_lift(_ buf: RustBuffer) throws -> SearchRelayUpdateProjection {
+    return try FfiConverterTypeSearchRelayUpdateProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchRelayUpdateProjection_lower(_ value: SearchRelayUpdateProjection) -> RustBuffer {
+    return FfiConverterTypeSearchRelayUpdateProjection.lower(value)
+}
+
+
 public struct SearchResultsApplyInput {
     public var requestToken: UInt64
     public var currentToken: UInt64
@@ -40896,6 +41568,18 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_query() != 17921) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_relay_articles_apply() != 63283) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_relay_refresh() != 45560) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_relay_start_result() != 55784) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_relay_update() != 38769) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_results_apply() != 2227) {

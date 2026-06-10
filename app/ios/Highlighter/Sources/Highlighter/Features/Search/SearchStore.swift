@@ -165,30 +165,39 @@ final class SearchStore {
         apply(snapshot)
         isLocalLoading = applyProjection.isLocalLoading
 
-        if activeRelayQuery != q {
-            await refreshRelaySubscription(for: q)
-        }
+        let relayProjection = safeCore.projectSearchRelayRefresh(
+            input: SearchRelayRefreshInput(
+                requestedQuery: q,
+                activeRelayQuery: activeRelayQuery
+            )
+        )
+        guard relayProjection.shouldRefresh else { return }
+        await refreshRelaySubscription(using: relayProjection)
     }
 
     // MARK: - NIP-50 relay subscription
 
-    private func refreshRelaySubscription(for q: String) async {
+    private func refreshRelaySubscription(using projection: SearchRelayRefreshProjection) async {
         tearDownRelaySearch()
-        activeRelayQuery = q
-        isRelayLoading = true
-        let outcome = await safeCore.subscribeArticleSearch(query: q)
-        guard outcome.error.isEmpty else {
-            isRelayLoading = false
-            return
-        }
-        if appliedQuery != q {
-            // Query moved on while we were opening — tear down immediately.
+        activeRelayQuery = projection.activeRelayQuery
+        isRelayLoading = projection.isRelayLoading
+        let outcome = await safeCore.subscribeArticleSearch(query: projection.subscribeQuery)
+        let startProjection = safeCore.projectSearchRelayStartResult(
+            input: SearchRelayStartResultInput(
+                requestedQuery: projection.subscribeQuery,
+                appliedQuery: appliedQuery,
+                error: outcome.error
+            )
+        )
+        activeRelayQuery = startProjection.activeRelayQuery
+        isRelayLoading = startProjection.isRelayLoading
+        if startProjection.shouldUnsubscribeHandle {
             await safeCore.unsubscribe(outcome.handle)
             return
         }
+        guard startProjection.shouldRegisterHandle else { return }
         activeSearchHandle = outcome.handle
         eventBridge?.registerSearch(self, handle: outcome.handle)
-        isRelayLoading = false
     }
 
     private func tearDownRelaySearch() {
@@ -206,18 +215,32 @@ final class SearchStore {
     }
 
     /// EventBridge callback: the relay search delivered new matching events
-    /// into ndb. Re-run the local article scan to pick them up. Guarded by
-    /// query string so a late delta for a stale query doesn't clobber fresh
-    /// results.
+    /// into ndb. Re-run the local article scan only when Rust projects the
+    /// delta as current for the open query.
     func applyRelaySearchUpdate(query incomingQuery: String) {
-        guard incomingQuery == appliedQuery, !appliedQuery.isEmpty else { return }
-        isRelayLoading = false
-        let q = appliedQuery
-        let token = searchToken
+        let updateProjection = safeCore.projectSearchRelayUpdate(
+            input: SearchRelayUpdateInput(
+                incomingQuery: incomingQuery,
+                appliedQuery: appliedQuery,
+                currentToken: searchToken
+            )
+        )
+        guard updateProjection.shouldRefreshArticles else { return }
+        isRelayLoading = updateProjection.isRelayLoading
+        let q = updateProjection.articleQuery
+        let token = updateProjection.requestToken
         Task { [weak self] in
             guard let self else { return }
             let snapshot = await self.safeCore.getSearchArticleResultsSnapshot(query: q)
-            guard token == self.searchToken, q == self.appliedQuery else { return }
+            let applyProjection = self.safeCore.projectSearchRelayArticlesApply(
+                input: SearchRelayArticlesApplyInput(
+                    requestToken: token,
+                    currentToken: self.searchToken,
+                    requestQuery: q,
+                    appliedQuery: self.appliedQuery
+                )
+            )
+            guard applyProjection.shouldApply else { return }
             self.articles = snapshot.articles
         }
     }

@@ -286,6 +286,30 @@ actor SafeHighlighterCore {
         core.projectSearchResultsApply(input: input)
     }
 
+    nonisolated func projectSearchRelayRefresh(
+        input: SearchRelayRefreshInput
+    ) -> SearchRelayRefreshProjection {
+        core.projectSearchRelayRefresh(input: input)
+    }
+
+    nonisolated func projectSearchRelayStartResult(
+        input: SearchRelayStartResultInput
+    ) -> SearchRelayStartResultProjection {
+        core.projectSearchRelayStartResult(input: input)
+    }
+
+    nonisolated func projectSearchRelayUpdate(
+        input: SearchRelayUpdateInput
+    ) -> SearchRelayUpdateProjection {
+        core.projectSearchRelayUpdate(input: input)
+    }
+
+    nonisolated func projectSearchRelayArticlesApply(
+        input: SearchRelayArticlesApplyInput
+    ) -> SearchRelayArticlesApplyProjection {
+        core.projectSearchRelayArticlesApply(input: input)
+    }
+
     nonisolated func projectSearchSuggestions(
         input: SearchSuggestionsProjectionInput
     ) -> SearchSuggestionsProjection {

@@ -113,6 +113,63 @@ pub struct SearchResultsApplyProjection {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchRelayRefreshInput {
+    pub requested_query: String,
+    pub active_relay_query: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchRelayRefreshProjection {
+    pub should_refresh: bool,
+    pub subscribe_query: String,
+    pub active_relay_query: String,
+    pub is_relay_loading: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchRelayStartResultInput {
+    pub requested_query: String,
+    pub applied_query: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchRelayStartResultProjection {
+    pub should_register_handle: bool,
+    pub should_unsubscribe_handle: bool,
+    pub active_relay_query: String,
+    pub is_relay_loading: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchRelayUpdateInput {
+    pub incoming_query: String,
+    pub applied_query: String,
+    pub current_token: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchRelayUpdateProjection {
+    pub should_refresh_articles: bool,
+    pub article_query: String,
+    pub request_token: u64,
+    pub is_relay_loading: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchRelayArticlesApplyInput {
+    pub request_token: u64,
+    pub current_token: u64,
+    pub request_query: String,
+    pub applied_query: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchRelayArticlesApplyProjection {
+    pub should_apply: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct SearchSuggestionsProjectionInput {
     pub joined_communities: Vec<CommunitySummary>,
 }
@@ -200,6 +257,84 @@ pub fn search_results_apply_projection(
     SearchResultsApplyProjection {
         should_apply: input.request_token == input.current_token,
         is_local_loading: false,
+    }
+}
+
+pub fn search_relay_refresh_projection(
+    input: SearchRelayRefreshInput,
+) -> SearchRelayRefreshProjection {
+    let requested = search_query_projection(SearchQueryProjectionInput {
+        query: input.requested_query,
+    });
+    let active = input.active_relay_query.trim().to_string();
+    let should_refresh = requested.has_query && active != requested.search_query;
+    SearchRelayRefreshProjection {
+        should_refresh,
+        subscribe_query: if should_refresh {
+            requested.search_query.clone()
+        } else {
+            String::new()
+        },
+        active_relay_query: if should_refresh {
+            requested.search_query
+        } else {
+            active
+        },
+        is_relay_loading: should_refresh,
+    }
+}
+
+pub fn search_relay_start_result_projection(
+    input: SearchRelayStartResultInput,
+) -> SearchRelayStartResultProjection {
+    let requested = input.requested_query.trim().to_string();
+    let applied = input.applied_query.trim().to_string();
+    let has_error = !input.error.trim().is_empty();
+    let should_register_handle = !has_error && !requested.is_empty() && requested == applied;
+    let should_unsubscribe_handle = !has_error && !should_register_handle;
+    SearchRelayStartResultProjection {
+        should_register_handle,
+        should_unsubscribe_handle,
+        active_relay_query: if should_register_handle {
+            requested
+        } else {
+            String::new()
+        },
+        is_relay_loading: false,
+    }
+}
+
+pub fn search_relay_update_projection(
+    input: SearchRelayUpdateInput,
+) -> SearchRelayUpdateProjection {
+    let incoming = input.incoming_query.trim();
+    let applied = input.applied_query.trim();
+    let should_refresh_articles = !applied.is_empty() && incoming == applied;
+    SearchRelayUpdateProjection {
+        should_refresh_articles,
+        article_query: if should_refresh_articles {
+            applied.to_string()
+        } else {
+            String::new()
+        },
+        request_token: if should_refresh_articles {
+            input.current_token
+        } else {
+            0
+        },
+        is_relay_loading: false,
+    }
+}
+
+pub fn search_relay_articles_apply_projection(
+    input: SearchRelayArticlesApplyInput,
+) -> SearchRelayArticlesApplyProjection {
+    let request = input.request_query.trim();
+    let applied = input.applied_query.trim();
+    SearchRelayArticlesApplyProjection {
+        should_apply: input.request_token == input.current_token
+            && !applied.is_empty()
+            && request == applied,
     }
 }
 
@@ -904,6 +1039,125 @@ mod tests {
         });
         assert!(!stale.should_apply);
         assert!(!stale.is_local_loading);
+    }
+
+    #[test]
+    fn search_relay_refresh_projection_refreshes_only_for_new_nonblank_queries() {
+        let refresh = search_relay_refresh_projection(SearchRelayRefreshInput {
+            requested_query: "  nostr books ".into(),
+            active_relay_query: "bitcoin".into(),
+        });
+        assert!(refresh.should_refresh);
+        assert_eq!(refresh.subscribe_query, "nostr books");
+        assert_eq!(refresh.active_relay_query, "nostr books");
+        assert!(refresh.is_relay_loading);
+
+        let unchanged = search_relay_refresh_projection(SearchRelayRefreshInput {
+            requested_query: "nostr books".into(),
+            active_relay_query: " nostr books ".into(),
+        });
+        assert!(!unchanged.should_refresh);
+        assert_eq!(unchanged.subscribe_query, "");
+        assert_eq!(unchanged.active_relay_query, "nostr books");
+        assert!(!unchanged.is_relay_loading);
+
+        let blank = search_relay_refresh_projection(SearchRelayRefreshInput {
+            requested_query: " ".into(),
+            active_relay_query: "nostr books".into(),
+        });
+        assert!(!blank.should_refresh);
+        assert_eq!(blank.subscribe_query, "");
+        assert_eq!(blank.active_relay_query, "nostr books");
+        assert!(!blank.is_relay_loading);
+    }
+
+    #[test]
+    fn search_relay_start_result_projection_clears_failed_or_stale_opens() {
+        let success = search_relay_start_result_projection(SearchRelayStartResultInput {
+            requested_query: "nostr books".into(),
+            applied_query: " nostr books ".into(),
+            error: String::new(),
+        });
+        assert!(success.should_register_handle);
+        assert!(!success.should_unsubscribe_handle);
+        assert_eq!(success.active_relay_query, "nostr books");
+        assert!(!success.is_relay_loading);
+
+        let failed = search_relay_start_result_projection(SearchRelayStartResultInput {
+            requested_query: "nostr books".into(),
+            applied_query: "nostr books".into(),
+            error: "relay unavailable".into(),
+        });
+        assert!(!failed.should_register_handle);
+        assert!(!failed.should_unsubscribe_handle);
+        assert_eq!(failed.active_relay_query, "");
+        assert!(!failed.is_relay_loading);
+
+        let stale = search_relay_start_result_projection(SearchRelayStartResultInput {
+            requested_query: "nostr books".into(),
+            applied_query: "bitcoin".into(),
+            error: String::new(),
+        });
+        assert!(!stale.should_register_handle);
+        assert!(stale.should_unsubscribe_handle);
+        assert_eq!(stale.active_relay_query, "");
+        assert!(!stale.is_relay_loading);
+    }
+
+    #[test]
+    fn search_relay_update_projection_accepts_only_current_article_query() {
+        let accepted = search_relay_update_projection(SearchRelayUpdateInput {
+            incoming_query: " nostr books ".into(),
+            applied_query: "nostr books".into(),
+            current_token: 12,
+        });
+        assert!(accepted.should_refresh_articles);
+        assert_eq!(accepted.article_query, "nostr books");
+        assert_eq!(accepted.request_token, 12);
+        assert!(!accepted.is_relay_loading);
+
+        let stale = search_relay_update_projection(SearchRelayUpdateInput {
+            incoming_query: "bitcoin".into(),
+            applied_query: "nostr books".into(),
+            current_token: 12,
+        });
+        assert!(!stale.should_refresh_articles);
+        assert_eq!(stale.article_query, "");
+        assert_eq!(stale.request_token, 0);
+
+        let blank = search_relay_update_projection(SearchRelayUpdateInput {
+            incoming_query: " ".into(),
+            applied_query: " ".into(),
+            current_token: 12,
+        });
+        assert!(!blank.should_refresh_articles);
+    }
+
+    #[test]
+    fn search_relay_articles_apply_projection_rejects_stale_tokens_and_queries() {
+        let accepted = search_relay_articles_apply_projection(SearchRelayArticlesApplyInput {
+            request_token: 8,
+            current_token: 8,
+            request_query: "nostr books".into(),
+            applied_query: " nostr books ".into(),
+        });
+        assert!(accepted.should_apply);
+
+        let stale_token = search_relay_articles_apply_projection(SearchRelayArticlesApplyInput {
+            request_token: 7,
+            current_token: 8,
+            request_query: "nostr books".into(),
+            applied_query: "nostr books".into(),
+        });
+        assert!(!stale_token.should_apply);
+
+        let stale_query = search_relay_articles_apply_projection(SearchRelayArticlesApplyInput {
+            request_token: 8,
+            current_token: 8,
+            request_query: "nostr books".into(),
+            applied_query: "bitcoin".into(),
+        });
+        assert!(!stale_query.should_apply);
     }
 
     #[test]
