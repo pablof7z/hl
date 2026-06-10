@@ -119,8 +119,9 @@ pub use events::{DataChangeType, Delta, EventCallback};
 pub use feedback::{
     FeedbackComposerProjection, FeedbackComposerProjectionInput, FeedbackMessagePresentationInput,
     FeedbackMessagePresentationProjection, FeedbackMessageRowProjection,
-    FeedbackReplyPublishSnapshot, FeedbackRootPublishSnapshot,
-    FeedbackThreadPresentationProjection, FeedbackThreadSnapshot, FeedbackThreadsSnapshot,
+    FeedbackPublishResultInput, FeedbackPublishResultProjection, FeedbackReplyPublishSnapshot,
+    FeedbackRootPublishSnapshot, FeedbackThreadPresentationProjection, FeedbackThreadSnapshot,
+    FeedbackThreadsSnapshot,
 };
 pub use groups::{
     CommunityRowProjection, CommunityRowProjectionInput, CreateRoomProjection,

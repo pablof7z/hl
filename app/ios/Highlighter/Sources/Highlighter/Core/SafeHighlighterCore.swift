@@ -678,6 +678,12 @@ actor SafeHighlighterCore {
         core.projectFeedbackComposer(input: input)
     }
 
+    nonisolated func projectFeedbackPublishResult(
+        input: FeedbackPublishResultInput
+    ) -> FeedbackPublishResultProjection {
+        core.projectFeedbackPublishResult(input: input)
+    }
+
     nonisolated func projectFeedbackThreadPresentation(
         thread: FeedbackThreadRecord
     ) -> FeedbackThreadPresentationProjection {

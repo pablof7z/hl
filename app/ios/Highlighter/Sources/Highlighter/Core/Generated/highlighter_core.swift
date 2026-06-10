@@ -1341,6 +1341,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectFeedbackMessagePresentation(input: FeedbackMessagePresentationInput)  -> FeedbackMessagePresentationProjection
 
     /**
+     * Feedback publish result projection shared by root-thread and reply
+     * surfaces. Rust owns success/error classification; native shells apply
+     * the corresponding view transition.
+     */
+    func projectFeedbackPublishResult(input: FeedbackPublishResultInput)  -> FeedbackPublishResultProjection
+
+    /**
      * Feedback thread row/detail presentation projection. Rust owns title,
      * preview, summary, and status fallback rules; native shells keep
      * localized relative-time formatting and rendering.
@@ -3928,6 +3935,19 @@ open func projectFeedbackMessagePresentation(input: FeedbackMessagePresentationI
     return try!  FfiConverterTypeFeedbackMessagePresentationProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_feedback_message_presentation(self.uniffiClonePointer(),
         FfiConverterTypeFeedbackMessagePresentationInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Feedback publish result projection shared by root-thread and reply
+     * surfaces. Rust owns success/error classification; native shells apply
+     * the corresponding view transition.
+     */
+open func projectFeedbackPublishResult(input: FeedbackPublishResultInput) -> FeedbackPublishResultProjection  {
+    return try!  FfiConverterTypeFeedbackPublishResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_feedback_publish_result(self.uniffiClonePointer(),
+        FfiConverterTypeFeedbackPublishResultInput_lower(input),$0
     )
 })
 }
@@ -17169,6 +17189,138 @@ public func FfiConverterTypeFeedbackMessageRowProjection_lift(_ buf: RustBuffer)
 #endif
 public func FfiConverterTypeFeedbackMessageRowProjection_lower(_ value: FeedbackMessageRowProjection) -> RustBuffer {
     return FfiConverterTypeFeedbackMessageRowProjection.lower(value)
+}
+
+
+public struct FeedbackPublishResultInput {
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(error: String) {
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension FeedbackPublishResultInput: Sendable {}
+#endif
+
+
+extension FeedbackPublishResultInput: Equatable, Hashable {
+    public static func ==(lhs: FeedbackPublishResultInput, rhs: FeedbackPublishResultInput) -> Bool {
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeedbackPublishResultInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackPublishResultInput {
+        return
+            try FeedbackPublishResultInput(
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FeedbackPublishResultInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackPublishResultInput_lift(_ buf: RustBuffer) throws -> FeedbackPublishResultInput {
+    return try FfiConverterTypeFeedbackPublishResultInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackPublishResultInput_lower(_ value: FeedbackPublishResultInput) -> RustBuffer {
+    return FfiConverterTypeFeedbackPublishResultInput.lower(value)
+}
+
+
+public struct FeedbackPublishResultProjection {
+    public var didPublish: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(didPublish: Bool, errorMessage: String) {
+        self.didPublish = didPublish
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension FeedbackPublishResultProjection: Sendable {}
+#endif
+
+
+extension FeedbackPublishResultProjection: Equatable, Hashable {
+    public static func ==(lhs: FeedbackPublishResultProjection, rhs: FeedbackPublishResultProjection) -> Bool {
+        if lhs.didPublish != rhs.didPublish {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(didPublish)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeedbackPublishResultProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackPublishResultProjection {
+        return
+            try FeedbackPublishResultProjection(
+                didPublish: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FeedbackPublishResultProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.didPublish, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackPublishResultProjection_lift(_ buf: RustBuffer) throws -> FeedbackPublishResultProjection {
+    return try FfiConverterTypeFeedbackPublishResultProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackPublishResultProjection_lower(_ value: FeedbackPublishResultProjection) -> RustBuffer {
+    return FfiConverterTypeFeedbackPublishResultProjection.lower(value)
 }
 
 
@@ -42396,6 +42548,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_message_presentation() != 48372) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_publish_result() != 4889) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_thread_presentation() != 19722) {

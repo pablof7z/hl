@@ -80,8 +80,11 @@ struct FeedbackNewThreadView: View {
             coordinate: FeedbackProject.coordinate,
             body: projection.submitBody
         )
-        guard outcome.error.isEmpty else {
-            errorMessage = outcome.error.isEmpty ? "Failed to publish." : outcome.error
+        let result = app.safeCore.projectFeedbackPublishResult(
+            input: FeedbackPublishResultInput(error: outcome.error)
+        )
+        guard result.didPublish else {
+            errorMessage = result.errorMessage
             return
         }
         store.apply(snapshot: outcome.snapshot)

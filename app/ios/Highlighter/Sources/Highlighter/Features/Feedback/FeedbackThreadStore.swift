@@ -91,7 +91,10 @@ final class FeedbackThreadStore {
             parentEventId: rootEventId,
             body: body
         )
-        if outcome.error.isEmpty {
+        let result = core.projectFeedbackPublishResult(
+            input: FeedbackPublishResultInput(error: outcome.error)
+        )
+        if result.didPublish {
             apply(snapshot: outcome.snapshot)
         }
         return outcome

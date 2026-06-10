@@ -2712,6 +2712,16 @@ impl HighlighterCore {
         feedback::feedback_composer_projection(input)
     }
 
+    /// Feedback publish result projection shared by root-thread and reply
+    /// surfaces. Rust owns success/error classification; native shells apply
+    /// the corresponding view transition.
+    pub fn project_feedback_publish_result(
+        &self,
+        input: feedback::FeedbackPublishResultInput,
+    ) -> feedback::FeedbackPublishResultProjection {
+        feedback::feedback_publish_result_projection(input)
+    }
+
     /// Feedback thread row/detail presentation projection. Rust owns title,
     /// preview, summary, and status fallback rules; native shells keep
     /// localized relative-time formatting and rendering.

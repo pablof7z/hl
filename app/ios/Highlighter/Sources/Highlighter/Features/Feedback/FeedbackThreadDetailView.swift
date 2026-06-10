@@ -122,11 +122,14 @@ struct FeedbackThreadDetailView: View {
         sendError = nil
         let outcome = await detailStore.sendReply(body: projection.submitBody)
         guard let outcome else { return }
-        if outcome.error.isEmpty {
+        let result = app.safeCore.projectFeedbackPublishResult(
+            input: FeedbackPublishResultInput(error: outcome.error)
+        )
+        if result.didPublish {
             draft = ""
             await listStore.refreshThreads()
         } else {
-            sendError = outcome.error
+            sendError = result.errorMessage
         }
     }
 

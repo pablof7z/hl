@@ -69,6 +69,17 @@ pub struct FeedbackComposerProjection {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeedbackPublishResultInput {
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeedbackPublishResultProjection {
+    pub did_publish: bool,
+    pub error_message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct FeedbackThreadPresentationProjection {
     pub navigation_title: String,
     pub row_title: String,
@@ -101,6 +112,16 @@ pub fn feedback_composer_projection(
     FeedbackComposerProjection {
         can_send: !submit_body.is_empty() && !input.is_publishing,
         submit_body,
+    }
+}
+
+pub fn feedback_publish_result_projection(
+    input: FeedbackPublishResultInput,
+) -> FeedbackPublishResultProjection {
+    let error_message = input.error.trim().to_string();
+    FeedbackPublishResultProjection {
+        did_publish: error_message.is_empty(),
+        error_message,
     }
 }
 
@@ -1074,6 +1095,21 @@ mod tests {
         assert!(!blank.can_send);
         assert_eq!(publishing.submit_body, "ready");
         assert!(!publishing.can_send);
+    }
+
+    #[test]
+    fn feedback_publish_result_projection_classifies_success_and_error() {
+        let success = feedback_publish_result_projection(FeedbackPublishResultInput {
+            error: String::new(),
+        });
+        assert!(success.did_publish);
+        assert_eq!(success.error_message, "");
+
+        let failed = feedback_publish_result_projection(FeedbackPublishResultInput {
+            error: " publish failed ".into(),
+        });
+        assert!(!failed.did_publish);
+        assert_eq!(failed.error_message, "publish failed");
     }
 
     #[test]
