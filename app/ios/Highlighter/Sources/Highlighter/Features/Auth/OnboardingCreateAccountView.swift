@@ -250,7 +250,14 @@ struct OnboardingCreateAccountView: View {
                 errorMessage = accountSnapshot.errorMessage
                 return
             }
-            AppSessionStore.shared.persistAccountInstructions(accountSnapshot)
+            let storage = AppSessionStore.shared.persistAccountInstructions(
+                accountSnapshot,
+                core: store.safeCore
+            )
+            guard storage.succeeded else {
+                errorMessage = storage.errorMessage
+                return
+            }
 
             let claimedUsername: String
             if case .available(let identifier, let domain) = usernameState,

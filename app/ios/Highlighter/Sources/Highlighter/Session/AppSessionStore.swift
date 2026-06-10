@@ -24,19 +24,40 @@ final class AppSessionStore {
         return snapshot.isAuthenticated ? snapshot.user : nil
     }
 
-    func persistAuthInstructions(_ snapshot: AuthSessionSnapshot) {
+    func persistAuthInstructions(
+        _ snapshot: AuthSessionSnapshot,
+        core: SafeHighlighterCore
+    ) -> SessionStorageWriteSnapshot {
+        var nsecSucceeded = false
+        var bunkerSucceeded = false
         if let nsec = snapshot.persistNsec {
-            _ = KeychainService.saveNsec(nsec)
+            nsecSucceeded = KeychainService.saveNsec(nsec)
         }
         if let uri = snapshot.persistBunkerUri {
-            _ = KeychainService.saveBunkerURI(uri)
+            bunkerSucceeded = KeychainService.saveBunkerURI(uri)
         }
+        return core.projectSessionStorageWrite(input: SessionStorageWriteInput(
+            nsecRequested: snapshot.persistNsec != nil,
+            nsecSucceeded: nsecSucceeded,
+            bunkerUriRequested: snapshot.persistBunkerUri != nil,
+            bunkerUriSucceeded: bunkerSucceeded
+        ))
     }
 
-    func persistAccountInstructions(_ snapshot: AccountGenerationSnapshot) {
+    func persistAccountInstructions(
+        _ snapshot: AccountGenerationSnapshot,
+        core: SafeHighlighterCore
+    ) -> SessionStorageWriteSnapshot {
+        var nsecSucceeded = false
         if let nsec = snapshot.persistNsec {
-            _ = KeychainService.saveNsec(nsec)
+            nsecSucceeded = KeychainService.saveNsec(nsec)
         }
+        return core.projectSessionStorageWrite(input: SessionStorageWriteInput(
+            nsecRequested: snapshot.persistNsec != nil,
+            nsecSucceeded: nsecSucceeded,
+            bunkerUriRequested: false,
+            bunkerUriSucceeded: false
+        ))
     }
 
     func clear() {

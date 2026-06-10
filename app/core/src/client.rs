@@ -381,6 +381,13 @@ impl HighlighterCore {
         crate::session::secret_key_display_projection(input)
     }
 
+    pub fn project_session_storage_write(
+        &self,
+        input: crate::session::SessionStorageWriteInput,
+    ) -> crate::session::SessionStorageWriteSnapshot {
+        crate::session::session_storage_write_snapshot(input)
+    }
+
     pub fn current_secret_key_settings_snapshot(
         &self,
         is_revealed: bool,

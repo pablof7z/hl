@@ -1490,6 +1490,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectSecretKeyDisplay(input: SecretKeyDisplayProjectionInput)  -> SecretKeyDisplayProjection
 
+    func projectSessionStorageWrite(input: SessionStorageWriteInput)  -> SessionStorageWriteSnapshot
+
     func projectShareArticleTarget(input: ShareArticleTargetProjectionInput)  -> ShareArtifactTargetProjection
 
     func projectShareArtifactTarget(input: ShareArtifactTargetProjectionInput)  -> ShareArtifactTargetProjection
@@ -4287,6 +4289,14 @@ open func projectSecretKeyDisplay(input: SecretKeyDisplayProjectionInput) -> Sec
     return try!  FfiConverterTypeSecretKeyDisplayProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_secret_key_display(self.uniffiClonePointer(),
         FfiConverterTypeSecretKeyDisplayProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectSessionStorageWrite(input: SessionStorageWriteInput) -> SessionStorageWriteSnapshot  {
+    return try!  FfiConverterTypeSessionStorageWriteSnapshot_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_session_storage_write(self.uniffiClonePointer(),
+        FfiConverterTypeSessionStorageWriteInput_lower(input),$0
     )
 })
 }
@@ -31568,6 +31578,162 @@ public func FfiConverterTypeSecretKeySettingsSnapshot_lower(_ value: SecretKeySe
 }
 
 
+public struct SessionStorageWriteInput {
+    public var nsecRequested: Bool
+    public var nsecSucceeded: Bool
+    public var bunkerUriRequested: Bool
+    public var bunkerUriSucceeded: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(nsecRequested: Bool, nsecSucceeded: Bool, bunkerUriRequested: Bool, bunkerUriSucceeded: Bool) {
+        self.nsecRequested = nsecRequested
+        self.nsecSucceeded = nsecSucceeded
+        self.bunkerUriRequested = bunkerUriRequested
+        self.bunkerUriSucceeded = bunkerUriSucceeded
+    }
+}
+
+#if compiler(>=6)
+extension SessionStorageWriteInput: Sendable {}
+#endif
+
+
+extension SessionStorageWriteInput: Equatable, Hashable {
+    public static func ==(lhs: SessionStorageWriteInput, rhs: SessionStorageWriteInput) -> Bool {
+        if lhs.nsecRequested != rhs.nsecRequested {
+            return false
+        }
+        if lhs.nsecSucceeded != rhs.nsecSucceeded {
+            return false
+        }
+        if lhs.bunkerUriRequested != rhs.bunkerUriRequested {
+            return false
+        }
+        if lhs.bunkerUriSucceeded != rhs.bunkerUriSucceeded {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(nsecRequested)
+        hasher.combine(nsecSucceeded)
+        hasher.combine(bunkerUriRequested)
+        hasher.combine(bunkerUriSucceeded)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSessionStorageWriteInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SessionStorageWriteInput {
+        return
+            try SessionStorageWriteInput(
+                nsecRequested: FfiConverterBool.read(from: &buf),
+                nsecSucceeded: FfiConverterBool.read(from: &buf),
+                bunkerUriRequested: FfiConverterBool.read(from: &buf),
+                bunkerUriSucceeded: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SessionStorageWriteInput, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.nsecRequested, into: &buf)
+        FfiConverterBool.write(value.nsecSucceeded, into: &buf)
+        FfiConverterBool.write(value.bunkerUriRequested, into: &buf)
+        FfiConverterBool.write(value.bunkerUriSucceeded, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSessionStorageWriteInput_lift(_ buf: RustBuffer) throws -> SessionStorageWriteInput {
+    return try FfiConverterTypeSessionStorageWriteInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSessionStorageWriteInput_lower(_ value: SessionStorageWriteInput) -> RustBuffer {
+    return FfiConverterTypeSessionStorageWriteInput.lower(value)
+}
+
+
+public struct SessionStorageWriteSnapshot {
+    public var succeeded: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(succeeded: Bool, errorMessage: String) {
+        self.succeeded = succeeded
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension SessionStorageWriteSnapshot: Sendable {}
+#endif
+
+
+extension SessionStorageWriteSnapshot: Equatable, Hashable {
+    public static func ==(lhs: SessionStorageWriteSnapshot, rhs: SessionStorageWriteSnapshot) -> Bool {
+        if lhs.succeeded != rhs.succeeded {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(succeeded)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSessionStorageWriteSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SessionStorageWriteSnapshot {
+        return
+            try SessionStorageWriteSnapshot(
+                succeeded: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SessionStorageWriteSnapshot, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.succeeded, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSessionStorageWriteSnapshot_lift(_ buf: RustBuffer) throws -> SessionStorageWriteSnapshot {
+    return try FfiConverterTypeSessionStorageWriteSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSessionStorageWriteSnapshot_lower(_ value: SessionStorageWriteSnapshot) -> RustBuffer {
+    return FfiConverterTypeSessionStorageWriteSnapshot.lower(value)
+}
+
+
 public struct ShareArticleTargetProjectionInput {
     public var article: ArticleRecord
 
@@ -39688,6 +39854,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_secret_key_display() != 28126) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_session_storage_write() != 51689) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_article_target() != 4077) {

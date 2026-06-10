@@ -159,7 +159,14 @@ struct LoginView: View {
         case .nsec(let nsec):
             let snapshot = await store.safeCore.loginNsec(nsec)
             if snapshot.isAuthenticated, let user = snapshot.user {
-                AppSessionStore.shared.persistAuthInstructions(snapshot)
+                let storage = AppSessionStore.shared.persistAuthInstructions(
+                    snapshot,
+                    core: store.safeCore
+                )
+                guard storage.succeeded else {
+                    errorMessage = storage.errorMessage
+                    return
+                }
                 await store.completeLogin(user: user)
             } else {
                 errorMessage = snapshot.errorMessage
@@ -167,7 +174,14 @@ struct LoginView: View {
         case .bunker(let uri):
             let snapshot = await store.safeCore.pairBunker(uri)
             if snapshot.isAuthenticated, let user = snapshot.user {
-                AppSessionStore.shared.persistAuthInstructions(snapshot)
+                let storage = AppSessionStore.shared.persistAuthInstructions(
+                    snapshot,
+                    core: store.safeCore
+                )
+                guard storage.succeeded else {
+                    errorMessage = storage.errorMessage
+                    return
+                }
                 await store.completeLogin(user: user)
             } else {
                 errorMessage = snapshot.errorMessage

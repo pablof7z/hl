@@ -134,6 +134,20 @@ pub struct AccountGenerationSnapshot {
     pub persist_nsec: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SessionStorageWriteInput {
+    pub nsec_requested: bool,
+    pub nsec_succeeded: bool,
+    pub bunker_uri_requested: bool,
+    pub bunker_uri_succeeded: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SessionStorageWriteSnapshot {
+    pub succeeded: bool,
+    pub error_message: String,
+}
+
 pub fn account_generation_snapshot(
     result: Result<GeneratedAccount, CoreError>,
 ) -> AccountGenerationSnapshot {
@@ -150,6 +164,27 @@ pub fn account_generation_snapshot(
             error_message: error.to_string(),
             persist_nsec: None,
         },
+    }
+}
+
+/// Secure-storage capability result projection. Native shells execute the
+/// Keychain/Keystore write and return raw success bits; Rust owns whether the
+/// auth flow may proceed and which error copy is shown.
+pub fn session_storage_write_snapshot(
+    input: SessionStorageWriteInput,
+) -> SessionStorageWriteSnapshot {
+    let nsec_failed = input.nsec_requested && !input.nsec_succeeded;
+    let bunker_failed = input.bunker_uri_requested && !input.bunker_uri_succeeded;
+    if nsec_failed || bunker_failed {
+        return SessionStorageWriteSnapshot {
+            succeeded: false,
+            error_message: "Couldn't save your session on this device.".into(),
+        };
+    }
+
+    SessionStorageWriteSnapshot {
+        succeeded: true,
+        error_message: String::new(),
     }
 }
 
@@ -601,6 +636,39 @@ mod tests {
         assert!(!failure.succeeded);
         assert_eq!(failure.error_message, "entropy failed");
         assert_eq!(failure.persist_nsec, None);
+    }
+
+    #[test]
+    fn session_storage_write_snapshot_projects_capability_result() {
+        let noop = session_storage_write_snapshot(SessionStorageWriteInput {
+            nsec_requested: false,
+            nsec_succeeded: false,
+            bunker_uri_requested: false,
+            bunker_uri_succeeded: false,
+        });
+        assert!(noop.succeeded);
+        assert!(noop.error_message.is_empty());
+
+        let success = session_storage_write_snapshot(SessionStorageWriteInput {
+            nsec_requested: true,
+            nsec_succeeded: true,
+            bunker_uri_requested: true,
+            bunker_uri_succeeded: true,
+        });
+        assert!(success.succeeded);
+        assert!(success.error_message.is_empty());
+
+        let failure = session_storage_write_snapshot(SessionStorageWriteInput {
+            nsec_requested: true,
+            nsec_succeeded: false,
+            bunker_uri_requested: false,
+            bunker_uri_succeeded: false,
+        });
+        assert!(!failure.succeeded);
+        assert_eq!(
+            failure.error_message,
+            "Couldn't save your session on this device."
+        );
     }
 
     #[test]

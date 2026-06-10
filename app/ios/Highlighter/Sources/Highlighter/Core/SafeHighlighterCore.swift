@@ -672,6 +672,12 @@ actor SafeHighlighterCore {
         core.projectSecretKeyDisplay(input: input)
     }
 
+    nonisolated func projectSessionStorageWrite(
+        input: SessionStorageWriteInput
+    ) -> SessionStorageWriteSnapshot {
+        core.projectSessionStorageWrite(input: input)
+    }
+
     nonisolated func currentSecretKeySettingsSnapshot(
         isRevealed: Bool
     ) -> SecretKeySettingsSnapshot {
