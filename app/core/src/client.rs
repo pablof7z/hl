@@ -3267,6 +3267,13 @@ impl HighlighterCore {
         }
     }
 
+    pub fn project_room_browse_snapshot_apply(
+        &self,
+        input: crate::room_explorer::RoomBrowseSnapshotApplyInput,
+    ) -> crate::room_explorer::RoomBrowseSnapshotApplyProjection {
+        crate::room_explorer::room_browse_snapshot_apply_projection(input)
+    }
+
     /// Publish a NIP-29 kind:9021 join-request for `group_id`. Rust owns the
     /// pending-join state and emits app toast deltas for request sent,
     /// request failure, and later membership confirmation.

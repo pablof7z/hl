@@ -1190,6 +1190,12 @@ actor SafeHighlighterCore {
         await core.getRoomBrowseSnapshot(query: query, limit: limit)
     }
 
+    nonisolated func projectRoomBrowseSnapshotApply(
+        input: RoomBrowseSnapshotApplyInput
+    ) -> RoomBrowseSnapshotApplyProjection {
+        core.projectRoomBrowseSnapshotApply(input: input)
+    }
+
     func requestJoinRoom(groupId: String, roomName: String) async -> JoinRoomRequestSnapshot {
         await core.requestJoinRoom(groupId: groupId, roomName: roomName)
     }

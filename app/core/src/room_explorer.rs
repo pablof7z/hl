@@ -14,6 +14,17 @@ pub struct RoomBrowseSnapshot {
     pub error: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomBrowseSnapshotApplyInput {
+    pub rooms: Vec<CommunitySummary>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomBrowseSnapshotApplyProjection {
+    pub rooms: Vec<CommunitySummary>,
+}
+
 pub fn room_browse_snapshot(rooms: &[CommunitySummary], query: &str) -> RoomBrowseSnapshot {
     RoomBrowseSnapshot {
         rooms: crate::discovery::search_rooms(rooms, query),
@@ -25,6 +36,18 @@ pub fn room_browse_error_snapshot(error: impl ToString) -> RoomBrowseSnapshot {
     RoomBrowseSnapshot {
         rooms: Vec::new(),
         error: error.to_string(),
+    }
+}
+
+pub fn room_browse_snapshot_apply_projection(
+    input: RoomBrowseSnapshotApplyInput,
+) -> RoomBrowseSnapshotApplyProjection {
+    RoomBrowseSnapshotApplyProjection {
+        rooms: if input.error.trim().is_empty() {
+            input.rooms
+        } else {
+            Vec::new()
+        },
     }
 }
 
@@ -81,5 +104,22 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["one", "two"]
         );
+    }
+
+    #[test]
+    fn room_browse_snapshot_apply_clears_rooms_on_error() {
+        let rooms = vec![room("one", "Bitcoin Readers", "Money and books", 3)];
+
+        let success = room_browse_snapshot_apply_projection(RoomBrowseSnapshotApplyInput {
+            rooms: rooms.clone(),
+            error: String::new(),
+        });
+        assert_eq!(success.rooms.len(), 1);
+
+        let failed = room_browse_snapshot_apply_projection(RoomBrowseSnapshotApplyInput {
+            rooms,
+            error: " cache failed ".into(),
+        });
+        assert!(failed.rooms.is_empty());
     }
 }
