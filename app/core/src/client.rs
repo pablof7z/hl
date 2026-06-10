@@ -1488,6 +1488,13 @@ impl HighlighterCore {
         share_targets::highlight_article_target_projection(input)
     }
 
+    pub fn project_share_to_community_publish_result(
+        &self,
+        input: share_targets::ShareToCommunityPublishResultInput,
+    ) -> share_targets::ShareToCommunityPublishResultProjection {
+        share_targets::share_to_community_publish_result_projection(input)
+    }
+
     pub fn project_community_row(
         &self,
         input: groups::CommunityRowProjectionInput,

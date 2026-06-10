@@ -270,6 +270,7 @@ pub use share_targets::{
     ShareArticleTargetProjectionInput, ShareArtifactTargetProjection,
     ShareArtifactTargetProjectionInput, ShareHighlightArticleTargetProjectionInput,
     ShareHighlightTargetProjection, ShareHighlightTargetProjectionInput,
+    ShareToCommunityPublishResultInput, ShareToCommunityPublishResultProjection,
     ShareWebReaderTargetProjectionInput, ShareWebReaderTargetSnapshot,
 };
 pub use time_labels::{

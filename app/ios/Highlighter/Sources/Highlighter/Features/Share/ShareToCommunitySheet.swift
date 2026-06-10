@@ -212,7 +212,7 @@ struct ShareToCommunitySheet: View {
         publishingId = groupId
         let rawNote = note
         Task {
-            let publishError: String?
+            let result: ShareToCommunityPublishResultProjection
             switch target.payload {
             case .artifactShare(let preview):
                 let outcome = await app.safeCore.publishArtifact(
@@ -220,7 +220,9 @@ struct ShareToCommunitySheet: View {
                     groupId: groupId,
                     note: rawNote
                 )
-                publishError = outcome.error.isEmpty ? nil : outcome.error
+                result = app.safeCore.projectShareToCommunityPublishResult(
+                    input: ShareToCommunityPublishResultInput(error: outcome.error)
+                )
             case .highlightRepost(let eventId, let authorPubkey, let relayHint):
                 let outcome = await app.safeCore.shareHighlightToRoom(
                     highlightId: eventId,
@@ -228,17 +230,19 @@ struct ShareToCommunitySheet: View {
                     highlightRelayUrl: relayHint,
                     targetGroupId: groupId
                 )
-                publishError = outcome.error.isEmpty ? nil : outcome.error
+                result = app.safeCore.projectShareToCommunityPublishResult(
+                    input: ShareToCommunityPublishResultInput(error: outcome.error)
+                )
             }
-            if let publishError {
-                await MainActor.run {
-                    publishingId = nil
-                    errorMessage = publishError
-                }
-            } else {
+            if result.didPublish {
                 await MainActor.run {
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     dismiss()
+                }
+            } else {
+                await MainActor.run {
+                    publishingId = nil
+                    errorMessage = result.errorMessage
                 }
             }
         }

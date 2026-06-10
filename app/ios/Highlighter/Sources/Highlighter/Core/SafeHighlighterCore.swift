@@ -1010,6 +1010,12 @@ actor SafeHighlighterCore {
         core.projectShareHighlightArticleTarget(input: input)
     }
 
+    nonisolated func projectShareToCommunityPublishResult(
+        input: ShareToCommunityPublishResultInput
+    ) -> ShareToCommunityPublishResultProjection {
+        core.projectShareToCommunityPublishResult(input: input)
+    }
+
     nonisolated func projectShareQueueDrain(
         input: ShareQueueDrainProjectionInput
     ) -> ShareQueueDrainProjection {

@@ -55,6 +55,17 @@ pub struct ShareHighlightArticleTargetProjectionInput {
     pub highlight: HighlightRecord,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ShareToCommunityPublishResultInput {
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ShareToCommunityPublishResultProjection {
+    pub did_publish: bool,
+    pub error_message: Option<String>,
+}
+
 pub fn article_target_projection(
     input: ShareArticleTargetProjectionInput,
 ) -> ShareArtifactTargetProjection {
@@ -152,6 +163,20 @@ pub fn highlight_article_target_projection(
         display_subtitle: highlight.quote,
         image_url: None,
     })
+}
+
+pub fn share_to_community_publish_result_projection(
+    input: ShareToCommunityPublishResultInput,
+) -> ShareToCommunityPublishResultProjection {
+    let error_message = input.error.trim().to_string();
+    ShareToCommunityPublishResultProjection {
+        did_publish: error_message.is_empty(),
+        error_message: if error_message.is_empty() {
+            None
+        } else {
+            Some(error_message)
+        },
+    }
 }
 
 fn title_or_fallback(title: &str) -> String {
@@ -368,6 +393,22 @@ mod tests {
             })
             .is_none()
         );
+    }
+
+    #[test]
+    fn share_to_community_publish_result_projection_normalizes_error_state() {
+        let ok = share_to_community_publish_result_projection(ShareToCommunityPublishResultInput {
+            error: String::new(),
+        });
+        assert!(ok.did_publish);
+        assert_eq!(ok.error_message, None);
+
+        let failed =
+            share_to_community_publish_result_projection(ShareToCommunityPublishResultInput {
+                error: " relay failed ".into(),
+            });
+        assert!(!failed.did_publish);
+        assert_eq!(failed.error_message.as_deref(), Some("relay failed"));
     }
 
     fn article_record() -> ArticleRecord {

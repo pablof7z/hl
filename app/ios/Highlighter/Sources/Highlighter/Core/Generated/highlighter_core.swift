@@ -1552,6 +1552,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectShareQueueDrain(input: ShareQueueDrainProjectionInput)  -> ShareQueueDrainProjection
 
+    func projectShareToCommunityPublishResult(input: ShareToCommunityPublishResultInput)  -> ShareToCommunityPublishResultProjection
+
     func projectShareWebReaderTarget(input: ShareWebReaderTargetProjectionInput)  -> ShareArtifactTargetProjection
 
     func projectViewSubscriptionStart(input: ViewSubscriptionStartProjectionInput)  -> ViewSubscriptionStartProjection
@@ -4560,6 +4562,14 @@ open func projectShareQueueDrain(input: ShareQueueDrainProjectionInput) -> Share
     return try!  FfiConverterTypeShareQueueDrainProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_share_queue_drain(self.uniffiClonePointer(),
         FfiConverterTypeShareQueueDrainProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectShareToCommunityPublishResult(input: ShareToCommunityPublishResultInput) -> ShareToCommunityPublishResultProjection  {
+    return try!  FfiConverterTypeShareToCommunityPublishResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_share_to_community_publish_result(self.uniffiClonePointer(),
+        FfiConverterTypeShareToCommunityPublishResultInput_lower(input),$0
     )
 })
 }
@@ -35924,6 +35934,138 @@ public func FfiConverterTypeShareQueueItem_lower(_ value: ShareQueueItem) -> Rus
 }
 
 
+public struct ShareToCommunityPublishResultInput {
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(error: String) {
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ShareToCommunityPublishResultInput: Sendable {}
+#endif
+
+
+extension ShareToCommunityPublishResultInput: Equatable, Hashable {
+    public static func ==(lhs: ShareToCommunityPublishResultInput, rhs: ShareToCommunityPublishResultInput) -> Bool {
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareToCommunityPublishResultInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareToCommunityPublishResultInput {
+        return
+            try ShareToCommunityPublishResultInput(
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ShareToCommunityPublishResultInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareToCommunityPublishResultInput_lift(_ buf: RustBuffer) throws -> ShareToCommunityPublishResultInput {
+    return try FfiConverterTypeShareToCommunityPublishResultInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareToCommunityPublishResultInput_lower(_ value: ShareToCommunityPublishResultInput) -> RustBuffer {
+    return FfiConverterTypeShareToCommunityPublishResultInput.lower(value)
+}
+
+
+public struct ShareToCommunityPublishResultProjection {
+    public var didPublish: Bool
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(didPublish: Bool, errorMessage: String?) {
+        self.didPublish = didPublish
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension ShareToCommunityPublishResultProjection: Sendable {}
+#endif
+
+
+extension ShareToCommunityPublishResultProjection: Equatable, Hashable {
+    public static func ==(lhs: ShareToCommunityPublishResultProjection, rhs: ShareToCommunityPublishResultProjection) -> Bool {
+        if lhs.didPublish != rhs.didPublish {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(didPublish)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareToCommunityPublishResultProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareToCommunityPublishResultProjection {
+        return
+            try ShareToCommunityPublishResultProjection(
+                didPublish: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ShareToCommunityPublishResultProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.didPublish, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareToCommunityPublishResultProjection_lift(_ buf: RustBuffer) throws -> ShareToCommunityPublishResultProjection {
+    return try FfiConverterTypeShareToCommunityPublishResultProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareToCommunityPublishResultProjection_lower(_ value: ShareToCommunityPublishResultProjection) -> RustBuffer {
+    return FfiConverterTypeShareToCommunityPublishResultProjection.lower(value)
+}
+
+
 public struct ShareWebReaderTargetProjectionInput {
     public var preview: ArtifactPreview
     public var fallbackUrl: String
@@ -43474,6 +43616,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_queue_drain() != 43648) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_to_community_publish_result() != 25173) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_web_reader_target() != 11832) {
