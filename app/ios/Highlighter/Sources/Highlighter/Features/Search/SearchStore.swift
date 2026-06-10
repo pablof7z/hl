@@ -17,7 +17,10 @@ final class SearchStore {
 
     /// Raw text from the search field. Writes schedule a query.
     var query: String = "" {
-        didSet { scheduleSearch(for: query) }
+        didSet {
+            guard query != oldValue else { return }
+            scheduleSearch(for: query)
+        }
     }
 
     // MARK: - Outputs (reactive)
@@ -48,8 +51,8 @@ final class SearchStore {
 
     // MARK: - Internal state
 
-    /// Monotonically increasing token — every scheduled query bumps it so
-    /// in-flight callbacks for a stale query can no-op.
+    /// Rust-projected token for the currently scheduled query. In-flight
+    /// callbacks pass it back through Rust before applying results.
     private var searchToken: UInt64 = 0
     /// Most-recent applied query (the one whose results populate the buckets).
     private var appliedQuery: String = ""
@@ -89,48 +92,50 @@ final class SearchStore {
 
     /// Re-applies a search explicitly (e.g. tapping a recent search chip).
     func submit(_ query: String) {
-        self.query = query
-        // Fire immediately, replacing any in-flight query.
-        searchTask?.cancel()
-        let projection = queryProjection(for: query)
-        guard projection.hasQuery else {
-            clearResultsForEmptyQuery()
-            return
-        }
-        hasQuery = true
-        isLocalLoading = true
-        let token = bumpToken()
-        searchTask = Task { [weak self] in
-            guard let self else { return }
-            await self.runSearch(for: projection.searchQuery, token: token)
+        if self.query != query {
+            self.query = query
+        } else {
+            scheduleSearch(for: query)
         }
     }
 
     func clear() {
-        searchTask?.cancel()
-        searchTask = nil
-        query = ""
-        clearResultsForEmptyQuery()
+        if query.isEmpty {
+            scheduleSearch(for: "")
+        } else {
+            query = ""
+        }
     }
 
     private func scheduleSearch(for q: String) {
         searchTask?.cancel()
-        let projection = queryProjection(for: q)
-        if !projection.hasQuery {
-            clearResultsForEmptyQuery()
-            return
-        }
-        hasQuery = true
-        isLocalLoading = true
-        let token = bumpToken()
+        let projection = scheduleProjection(for: q)
+        applyScheduleProjection(projection)
+        guard projection.shouldRunSearch else { return }
+        let token = projection.searchToken
         searchTask = Task { [weak self] in
             guard let self else { return }
             await self.runSearch(for: projection.searchQuery, token: token)
         }
     }
 
-    private func queryProjection(for query: String) -> SearchQueryProjection {
-        safeCore.projectSearchQuery(input: SearchQueryProjectionInput(query: query))
+    private func scheduleProjection(for query: String) -> SearchScheduleProjection {
+        safeCore.projectSearchSchedule(
+            input: SearchScheduleInput(
+                query: query,
+                currentToken: searchToken
+            )
+        )
+    }
+
+    private func applyScheduleProjection(_ projection: SearchScheduleProjection) {
+        searchToken = projection.searchToken
+        if projection.shouldClearResults {
+            clearResultsForEmptyQuery()
+            return
+        }
+        hasQuery = projection.hasQuery
+        isLocalLoading = projection.isLocalLoading
     }
 
     private func clearResultsForEmptyQuery() {
@@ -145,19 +150,20 @@ final class SearchStore {
         tearDownRelaySearch()
     }
 
-    private func bumpToken() -> UInt64 {
-        searchToken &+= 1
-        return searchToken
-    }
-
     private func runSearch(for q: String, token: UInt64) async {
         let snapshot = await safeCore.getSearchResultsSnapshot(query: q)
 
-        guard token == searchToken else { return }
+        let applyProjection = safeCore.projectSearchResultsApply(
+            input: SearchResultsApplyInput(
+                requestToken: token,
+                currentToken: searchToken
+            )
+        )
+        guard applyProjection.shouldApply else { return }
 
         appliedQuery = q
         apply(snapshot)
-        isLocalLoading = false
+        isLocalLoading = applyProjection.isLocalLoading
 
         if activeRelayQuery != q {
             await refreshRelaySubscription(for: q)

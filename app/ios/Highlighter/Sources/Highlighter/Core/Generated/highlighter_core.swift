@@ -1482,6 +1482,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectSearchQuery(input: SearchQueryProjectionInput)  -> SearchQueryProjection
 
+    func projectSearchResultsApply(input: SearchResultsApplyInput)  -> SearchResultsApplyProjection
+
+    func projectSearchSchedule(input: SearchScheduleInput)  -> SearchScheduleProjection
+
     /**
      * Project suggested search chips. Rust owns room/fallback ordering,
      * trimming, dedupe, and cap policy.
@@ -4288,6 +4292,22 @@ open func projectSearchQuery(input: SearchQueryProjectionInput) -> SearchQueryPr
     return try!  FfiConverterTypeSearchQueryProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_search_query(self.uniffiClonePointer(),
         FfiConverterTypeSearchQueryProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectSearchResultsApply(input: SearchResultsApplyInput) -> SearchResultsApplyProjection  {
+    return try!  FfiConverterTypeSearchResultsApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_search_results_apply(self.uniffiClonePointer(),
+        FfiConverterTypeSearchResultsApplyInput_lower(input),$0
+    )
+})
+}
+
+open func projectSearchSchedule(input: SearchScheduleInput) -> SearchScheduleProjection  {
+    return try!  FfiConverterTypeSearchScheduleProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_search_schedule(self.uniffiClonePointer(),
+        FfiConverterTypeSearchScheduleInput_lower(input),$0
     )
 })
 }
@@ -31690,6 +31710,146 @@ public func FfiConverterTypeSearchQueryProjectionInput_lower(_ value: SearchQuer
 }
 
 
+public struct SearchResultsApplyInput {
+    public var requestToken: UInt64
+    public var currentToken: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(requestToken: UInt64, currentToken: UInt64) {
+        self.requestToken = requestToken
+        self.currentToken = currentToken
+    }
+}
+
+#if compiler(>=6)
+extension SearchResultsApplyInput: Sendable {}
+#endif
+
+
+extension SearchResultsApplyInput: Equatable, Hashable {
+    public static func ==(lhs: SearchResultsApplyInput, rhs: SearchResultsApplyInput) -> Bool {
+        if lhs.requestToken != rhs.requestToken {
+            return false
+        }
+        if lhs.currentToken != rhs.currentToken {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(requestToken)
+        hasher.combine(currentToken)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchResultsApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchResultsApplyInput {
+        return
+            try SearchResultsApplyInput(
+                requestToken: FfiConverterUInt64.read(from: &buf),
+                currentToken: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchResultsApplyInput, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.requestToken, into: &buf)
+        FfiConverterUInt64.write(value.currentToken, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchResultsApplyInput_lift(_ buf: RustBuffer) throws -> SearchResultsApplyInput {
+    return try FfiConverterTypeSearchResultsApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchResultsApplyInput_lower(_ value: SearchResultsApplyInput) -> RustBuffer {
+    return FfiConverterTypeSearchResultsApplyInput.lower(value)
+}
+
+
+public struct SearchResultsApplyProjection {
+    public var shouldApply: Bool
+    public var isLocalLoading: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldApply: Bool, isLocalLoading: Bool) {
+        self.shouldApply = shouldApply
+        self.isLocalLoading = isLocalLoading
+    }
+}
+
+#if compiler(>=6)
+extension SearchResultsApplyProjection: Sendable {}
+#endif
+
+
+extension SearchResultsApplyProjection: Equatable, Hashable {
+    public static func ==(lhs: SearchResultsApplyProjection, rhs: SearchResultsApplyProjection) -> Bool {
+        if lhs.shouldApply != rhs.shouldApply {
+            return false
+        }
+        if lhs.isLocalLoading != rhs.isLocalLoading {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldApply)
+        hasher.combine(isLocalLoading)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchResultsApplyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchResultsApplyProjection {
+        return
+            try SearchResultsApplyProjection(
+                shouldApply: FfiConverterBool.read(from: &buf),
+                isLocalLoading: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchResultsApplyProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldApply, into: &buf)
+        FfiConverterBool.write(value.isLocalLoading, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchResultsApplyProjection_lift(_ buf: RustBuffer) throws -> SearchResultsApplyProjection {
+    return try FfiConverterTypeSearchResultsApplyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchResultsApplyProjection_lower(_ value: SearchResultsApplyProjection) -> RustBuffer {
+    return FfiConverterTypeSearchResultsApplyProjection.lower(value)
+}
+
+
 public struct SearchResultsSnapshot {
     public var highlights: [HighlightRecord]
     public var articles: [ArticleRecord]
@@ -31773,6 +31933,178 @@ public func FfiConverterTypeSearchResultsSnapshot_lift(_ buf: RustBuffer) throws
 #endif
 public func FfiConverterTypeSearchResultsSnapshot_lower(_ value: SearchResultsSnapshot) -> RustBuffer {
     return FfiConverterTypeSearchResultsSnapshot.lower(value)
+}
+
+
+public struct SearchScheduleInput {
+    public var query: String
+    public var currentToken: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(query: String, currentToken: UInt64) {
+        self.query = query
+        self.currentToken = currentToken
+    }
+}
+
+#if compiler(>=6)
+extension SearchScheduleInput: Sendable {}
+#endif
+
+
+extension SearchScheduleInput: Equatable, Hashable {
+    public static func ==(lhs: SearchScheduleInput, rhs: SearchScheduleInput) -> Bool {
+        if lhs.query != rhs.query {
+            return false
+        }
+        if lhs.currentToken != rhs.currentToken {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(query)
+        hasher.combine(currentToken)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchScheduleInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchScheduleInput {
+        return
+            try SearchScheduleInput(
+                query: FfiConverterString.read(from: &buf),
+                currentToken: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchScheduleInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.query, into: &buf)
+        FfiConverterUInt64.write(value.currentToken, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchScheduleInput_lift(_ buf: RustBuffer) throws -> SearchScheduleInput {
+    return try FfiConverterTypeSearchScheduleInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchScheduleInput_lower(_ value: SearchScheduleInput) -> RustBuffer {
+    return FfiConverterTypeSearchScheduleInput.lower(value)
+}
+
+
+public struct SearchScheduleProjection {
+    public var searchQuery: String
+    public var hasQuery: Bool
+    public var searchToken: UInt64
+    public var shouldRunSearch: Bool
+    public var shouldClearResults: Bool
+    public var isLocalLoading: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(searchQuery: String, hasQuery: Bool, searchToken: UInt64, shouldRunSearch: Bool, shouldClearResults: Bool, isLocalLoading: Bool) {
+        self.searchQuery = searchQuery
+        self.hasQuery = hasQuery
+        self.searchToken = searchToken
+        self.shouldRunSearch = shouldRunSearch
+        self.shouldClearResults = shouldClearResults
+        self.isLocalLoading = isLocalLoading
+    }
+}
+
+#if compiler(>=6)
+extension SearchScheduleProjection: Sendable {}
+#endif
+
+
+extension SearchScheduleProjection: Equatable, Hashable {
+    public static func ==(lhs: SearchScheduleProjection, rhs: SearchScheduleProjection) -> Bool {
+        if lhs.searchQuery != rhs.searchQuery {
+            return false
+        }
+        if lhs.hasQuery != rhs.hasQuery {
+            return false
+        }
+        if lhs.searchToken != rhs.searchToken {
+            return false
+        }
+        if lhs.shouldRunSearch != rhs.shouldRunSearch {
+            return false
+        }
+        if lhs.shouldClearResults != rhs.shouldClearResults {
+            return false
+        }
+        if lhs.isLocalLoading != rhs.isLocalLoading {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(searchQuery)
+        hasher.combine(hasQuery)
+        hasher.combine(searchToken)
+        hasher.combine(shouldRunSearch)
+        hasher.combine(shouldClearResults)
+        hasher.combine(isLocalLoading)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchScheduleProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchScheduleProjection {
+        return
+            try SearchScheduleProjection(
+                searchQuery: FfiConverterString.read(from: &buf),
+                hasQuery: FfiConverterBool.read(from: &buf),
+                searchToken: FfiConverterUInt64.read(from: &buf),
+                shouldRunSearch: FfiConverterBool.read(from: &buf),
+                shouldClearResults: FfiConverterBool.read(from: &buf),
+                isLocalLoading: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchScheduleProjection, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.searchQuery, into: &buf)
+        FfiConverterBool.write(value.hasQuery, into: &buf)
+        FfiConverterUInt64.write(value.searchToken, into: &buf)
+        FfiConverterBool.write(value.shouldRunSearch, into: &buf)
+        FfiConverterBool.write(value.shouldClearResults, into: &buf)
+        FfiConverterBool.write(value.isLocalLoading, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchScheduleProjection_lift(_ buf: RustBuffer) throws -> SearchScheduleProjection {
+    return try FfiConverterTypeSearchScheduleProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchScheduleProjection_lower(_ value: SearchScheduleProjection) -> RustBuffer {
+    return FfiConverterTypeSearchScheduleProjection.lower(value)
 }
 
 
@@ -40564,6 +40896,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_query() != 17921) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_results_apply() != 2227) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_schedule() != 63782) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_suggestions() != 46024) {

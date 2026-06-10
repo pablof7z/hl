@@ -1861,6 +1861,20 @@ impl HighlighterCore {
         crate::search::search_query_projection(input)
     }
 
+    pub fn project_search_schedule(
+        &self,
+        input: crate::search::SearchScheduleInput,
+    ) -> crate::search::SearchScheduleProjection {
+        crate::search::search_schedule_projection(input)
+    }
+
+    pub fn project_search_results_apply(
+        &self,
+        input: crate::search::SearchResultsApplyInput,
+    ) -> crate::search::SearchResultsApplyProjection {
+        crate::search::search_results_apply_projection(input)
+    }
+
     /// Project suggested search chips. Rust owns room/fallback ordering,
     /// trimming, dedupe, and cap policy.
     pub fn project_search_suggestions(

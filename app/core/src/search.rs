@@ -85,6 +85,34 @@ pub struct SearchQueryProjection {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchScheduleInput {
+    pub query: String,
+    pub current_token: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchScheduleProjection {
+    pub search_query: String,
+    pub has_query: bool,
+    pub search_token: u64,
+    pub should_run_search: bool,
+    pub should_clear_results: bool,
+    pub is_local_loading: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchResultsApplyInput {
+    pub request_token: u64,
+    pub current_token: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchResultsApplyProjection {
+    pub should_apply: bool,
+    pub is_local_loading: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct SearchSuggestionsProjectionInput {
     pub joined_communities: Vec<CommunitySummary>,
 }
@@ -150,6 +178,28 @@ pub fn search_query_projection(input: SearchQueryProjectionInput) -> SearchQuery
     SearchQueryProjection {
         has_query: !search_query.is_empty(),
         search_query,
+    }
+}
+
+pub fn search_schedule_projection(input: SearchScheduleInput) -> SearchScheduleProjection {
+    let query = search_query_projection(SearchQueryProjectionInput { query: input.query });
+    let search_token = input.current_token.wrapping_add(1);
+    SearchScheduleProjection {
+        search_query: query.search_query,
+        has_query: query.has_query,
+        search_token,
+        should_run_search: query.has_query,
+        should_clear_results: !query.has_query,
+        is_local_loading: query.has_query,
+    }
+}
+
+pub fn search_results_apply_projection(
+    input: SearchResultsApplyInput,
+) -> SearchResultsApplyProjection {
+    SearchResultsApplyProjection {
+        should_apply: input.request_token == input.current_token,
+        is_local_loading: false,
     }
 }
 
@@ -812,6 +862,48 @@ mod tests {
         assert!(ready.has_query);
         assert_eq!(blank.search_query, "");
         assert!(!blank.has_query);
+    }
+
+    #[test]
+    fn search_schedule_projection_advances_token_for_queries_and_clears() {
+        let ready = search_schedule_projection(SearchScheduleInput {
+            query: "  nostr books\n".into(),
+            current_token: 41,
+        });
+        assert_eq!(ready.search_query, "nostr books");
+        assert_eq!(ready.search_token, 42);
+        assert!(ready.has_query);
+        assert!(ready.should_run_search);
+        assert!(!ready.should_clear_results);
+        assert!(ready.is_local_loading);
+
+        let clear = search_schedule_projection(SearchScheduleInput {
+            query: " \n\t ".into(),
+            current_token: 42,
+        });
+        assert_eq!(clear.search_query, "");
+        assert_eq!(clear.search_token, 43);
+        assert!(!clear.has_query);
+        assert!(!clear.should_run_search);
+        assert!(clear.should_clear_results);
+        assert!(!clear.is_local_loading);
+    }
+
+    #[test]
+    fn search_results_apply_projection_rejects_stale_tokens() {
+        let fresh = search_results_apply_projection(SearchResultsApplyInput {
+            request_token: 7,
+            current_token: 7,
+        });
+        assert!(fresh.should_apply);
+        assert!(!fresh.is_local_loading);
+
+        let stale = search_results_apply_projection(SearchResultsApplyInput {
+            request_token: 6,
+            current_token: 7,
+        });
+        assert!(!stale.should_apply);
+        assert!(!stale.is_local_loading);
     }
 
     #[test]

@@ -274,6 +274,18 @@ actor SafeHighlighterCore {
         core.projectSearchQuery(input: input)
     }
 
+    nonisolated func projectSearchSchedule(
+        input: SearchScheduleInput
+    ) -> SearchScheduleProjection {
+        core.projectSearchSchedule(input: input)
+    }
+
+    nonisolated func projectSearchResultsApply(
+        input: SearchResultsApplyInput
+    ) -> SearchResultsApplyProjection {
+        core.projectSearchResultsApply(input: input)
+    }
+
     nonisolated func projectSearchSuggestions(
         input: SearchSuggestionsProjectionInput
     ) -> SearchSuggestionsProjection {
