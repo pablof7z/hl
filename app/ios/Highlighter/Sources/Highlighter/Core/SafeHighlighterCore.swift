@@ -926,6 +926,18 @@ actor SafeHighlighterCore {
         await core.getArticleReaderSnapshot(pubkeyHex: pubkeyHex, dTag: dTag)
     }
 
+    nonisolated func projectArticleReaderSnapshot(
+        input: ArticleReaderSnapshotApplyInput
+    ) -> ArticleReaderSnapshotProjection {
+        core.projectArticleReaderSnapshot(input: input)
+    }
+
+    nonisolated func projectArticleReaderPublishResult(
+        input: ArticleReaderPublishResultInput
+    ) -> ArticleReaderPublishResultProjection {
+        core.projectArticleReaderPublishResult(input: input)
+    }
+
     func getArticleByAddress(address: String) async -> ArticleRecord? {
         await core.getArticleByAddress(address: address)
     }

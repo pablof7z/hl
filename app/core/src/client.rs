@@ -1390,6 +1390,20 @@ impl HighlighterCore {
         )
     }
 
+    pub fn project_article_reader_snapshot(
+        &self,
+        input: article_reader::ArticleReaderSnapshotApplyInput,
+    ) -> article_reader::ArticleReaderSnapshotProjection {
+        article_reader::article_reader_snapshot_projection(input)
+    }
+
+    pub fn project_article_reader_publish_result(
+        &self,
+        input: article_reader::ArticleReaderPublishResultInput,
+    ) -> article_reader::ArticleReaderPublishResultProjection {
+        article_reader::article_reader_publish_result_projection(input)
+    }
+
     /// Read a single NIP-23 article by its full NIP-33 address
     /// (`30023:<pubkey>:<d>`) from nostrdb.
     pub async fn get_article_by_address(&self, address: String) -> Option<ArticleRecord> {

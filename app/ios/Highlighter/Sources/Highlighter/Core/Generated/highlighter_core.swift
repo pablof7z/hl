@@ -1221,11 +1221,15 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput)  -> ArticleReaderHeaderProjection
 
+    func projectArticleReaderPublishResult(input: ArticleReaderPublishResultInput)  -> ArticleReaderPublishResultProjection
+
     /**
      * Project selected article-reader text. Native shells own text-range
      * extraction; Rust owns quote/context normalization.
      */
     func projectArticleReaderSelection(input: ArticleReaderSelectionProjectionInput)  -> ArticleReaderSelectionProjection
+
+    func projectArticleReaderSnapshot(input: ArticleReaderSnapshotApplyInput)  -> ArticleReaderSnapshotProjection
 
     /**
      * Project the add-Blossom-server sheet. Rust owns URL normalization,
@@ -3625,6 +3629,14 @@ open func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput) 
 })
 }
 
+open func projectArticleReaderPublishResult(input: ArticleReaderPublishResultInput) -> ArticleReaderPublishResultProjection  {
+    return try!  FfiConverterTypeArticleReaderPublishResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_article_reader_publish_result(self.uniffiClonePointer(),
+        FfiConverterTypeArticleReaderPublishResultInput_lower(input),$0
+    )
+})
+}
+
     /**
      * Project selected article-reader text. Native shells own text-range
      * extraction; Rust owns quote/context normalization.
@@ -3633,6 +3645,14 @@ open func projectArticleReaderSelection(input: ArticleReaderSelectionProjectionI
     return try!  FfiConverterTypeArticleReaderSelectionProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_article_reader_selection(self.uniffiClonePointer(),
         FfiConverterTypeArticleReaderSelectionProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectArticleReaderSnapshot(input: ArticleReaderSnapshotApplyInput) -> ArticleReaderSnapshotProjection  {
+    return try!  FfiConverterTypeArticleReaderSnapshotProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_article_reader_snapshot(self.uniffiClonePointer(),
+        FfiConverterTypeArticleReaderSnapshotApplyInput_lower(input),$0
     )
 })
 }
@@ -7144,6 +7164,146 @@ public func FfiConverterTypeArticleReaderHighlightPublishSnapshot_lower(_ value:
 }
 
 
+public struct ArticleReaderPublishResultInput {
+    public var error: String
+    public var publishedHighlightId: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(error: String, publishedHighlightId: String) {
+        self.error = error
+        self.publishedHighlightId = publishedHighlightId
+    }
+}
+
+#if compiler(>=6)
+extension ArticleReaderPublishResultInput: Sendable {}
+#endif
+
+
+extension ArticleReaderPublishResultInput: Equatable, Hashable {
+    public static func ==(lhs: ArticleReaderPublishResultInput, rhs: ArticleReaderPublishResultInput) -> Bool {
+        if lhs.error != rhs.error {
+            return false
+        }
+        if lhs.publishedHighlightId != rhs.publishedHighlightId {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(error)
+        hasher.combine(publishedHighlightId)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleReaderPublishResultInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderPublishResultInput {
+        return
+            try ArticleReaderPublishResultInput(
+                error: FfiConverterString.read(from: &buf),
+                publishedHighlightId: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleReaderPublishResultInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.error, into: &buf)
+        FfiConverterString.write(value.publishedHighlightId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderPublishResultInput_lift(_ buf: RustBuffer) throws -> ArticleReaderPublishResultInput {
+    return try FfiConverterTypeArticleReaderPublishResultInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderPublishResultInput_lower(_ value: ArticleReaderPublishResultInput) -> RustBuffer {
+    return FfiConverterTypeArticleReaderPublishResultInput.lower(value)
+}
+
+
+public struct ArticleReaderPublishResultProjection {
+    public var shouldApplySnapshot: Bool
+    public var lastPublishedHighlightId: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldApplySnapshot: Bool, lastPublishedHighlightId: String) {
+        self.shouldApplySnapshot = shouldApplySnapshot
+        self.lastPublishedHighlightId = lastPublishedHighlightId
+    }
+}
+
+#if compiler(>=6)
+extension ArticleReaderPublishResultProjection: Sendable {}
+#endif
+
+
+extension ArticleReaderPublishResultProjection: Equatable, Hashable {
+    public static func ==(lhs: ArticleReaderPublishResultProjection, rhs: ArticleReaderPublishResultProjection) -> Bool {
+        if lhs.shouldApplySnapshot != rhs.shouldApplySnapshot {
+            return false
+        }
+        if lhs.lastPublishedHighlightId != rhs.lastPublishedHighlightId {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldApplySnapshot)
+        hasher.combine(lastPublishedHighlightId)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleReaderPublishResultProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderPublishResultProjection {
+        return
+            try ArticleReaderPublishResultProjection(
+                shouldApplySnapshot: FfiConverterBool.read(from: &buf),
+                lastPublishedHighlightId: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleReaderPublishResultProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldApplySnapshot, into: &buf)
+        FfiConverterString.write(value.lastPublishedHighlightId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderPublishResultProjection_lift(_ buf: RustBuffer) throws -> ArticleReaderPublishResultProjection {
+    return try FfiConverterTypeArticleReaderPublishResultProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderPublishResultProjection_lower(_ value: ArticleReaderPublishResultProjection) -> RustBuffer {
+    return FfiConverterTypeArticleReaderPublishResultProjection.lower(value)
+}
+
+
 /**
  * Native reader destination for a NIP-23 article. Rust owns the address
  * interpretation and canonical address construction; native shells map this
@@ -7450,6 +7610,162 @@ public func FfiConverterTypeArticleReaderSnapshot_lift(_ buf: RustBuffer) throws
 #endif
 public func FfiConverterTypeArticleReaderSnapshot_lower(_ value: ArticleReaderSnapshot) -> RustBuffer {
     return FfiConverterTypeArticleReaderSnapshot.lower(value)
+}
+
+
+public struct ArticleReaderSnapshotApplyInput {
+    public var snapshot: ArticleReaderSnapshot
+    public var currentArticle: ArticleRecord?
+    public var currentAuthorProfile: ProfileMetadata?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: ArticleReaderSnapshot, currentArticle: ArticleRecord?, currentAuthorProfile: ProfileMetadata?) {
+        self.snapshot = snapshot
+        self.currentArticle = currentArticle
+        self.currentAuthorProfile = currentAuthorProfile
+    }
+}
+
+#if compiler(>=6)
+extension ArticleReaderSnapshotApplyInput: Sendable {}
+#endif
+
+
+extension ArticleReaderSnapshotApplyInput: Equatable, Hashable {
+    public static func ==(lhs: ArticleReaderSnapshotApplyInput, rhs: ArticleReaderSnapshotApplyInput) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        if lhs.currentArticle != rhs.currentArticle {
+            return false
+        }
+        if lhs.currentAuthorProfile != rhs.currentAuthorProfile {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+        hasher.combine(currentArticle)
+        hasher.combine(currentAuthorProfile)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleReaderSnapshotApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderSnapshotApplyInput {
+        return
+            try ArticleReaderSnapshotApplyInput(
+                snapshot: FfiConverterTypeArticleReaderSnapshot.read(from: &buf),
+                currentArticle: FfiConverterOptionTypeArticleRecord.read(from: &buf),
+                currentAuthorProfile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleReaderSnapshotApplyInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArticleReaderSnapshot.write(value.snapshot, into: &buf)
+        FfiConverterOptionTypeArticleRecord.write(value.currentArticle, into: &buf)
+        FfiConverterOptionTypeProfileMetadata.write(value.currentAuthorProfile, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderSnapshotApplyInput_lift(_ buf: RustBuffer) throws -> ArticleReaderSnapshotApplyInput {
+    return try FfiConverterTypeArticleReaderSnapshotApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderSnapshotApplyInput_lower(_ value: ArticleReaderSnapshotApplyInput) -> RustBuffer {
+    return FfiConverterTypeArticleReaderSnapshotApplyInput.lower(value)
+}
+
+
+public struct ArticleReaderSnapshotProjection {
+    public var article: ArticleRecord?
+    public var authorProfile: ProfileMetadata?
+    public var highlights: [HighlightRecord]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(article: ArticleRecord?, authorProfile: ProfileMetadata?, highlights: [HighlightRecord]) {
+        self.article = article
+        self.authorProfile = authorProfile
+        self.highlights = highlights
+    }
+}
+
+#if compiler(>=6)
+extension ArticleReaderSnapshotProjection: Sendable {}
+#endif
+
+
+extension ArticleReaderSnapshotProjection: Equatable, Hashable {
+    public static func ==(lhs: ArticleReaderSnapshotProjection, rhs: ArticleReaderSnapshotProjection) -> Bool {
+        if lhs.article != rhs.article {
+            return false
+        }
+        if lhs.authorProfile != rhs.authorProfile {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(article)
+        hasher.combine(authorProfile)
+        hasher.combine(highlights)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleReaderSnapshotProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderSnapshotProjection {
+        return
+            try ArticleReaderSnapshotProjection(
+                article: FfiConverterOptionTypeArticleRecord.read(from: &buf),
+                authorProfile: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleReaderSnapshotProjection, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeArticleRecord.write(value.article, into: &buf)
+        FfiConverterOptionTypeProfileMetadata.write(value.authorProfile, into: &buf)
+        FfiConverterSequenceTypeHighlightRecord.write(value.highlights, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderSnapshotProjection_lift(_ buf: RustBuffer) throws -> ArticleReaderSnapshotProjection {
+    return try FfiConverterTypeArticleReaderSnapshotProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleReaderSnapshotProjection_lower(_ value: ArticleReaderSnapshotProjection) -> RustBuffer {
+    return FfiConverterTypeArticleReaderSnapshotProjection.lower(value)
 }
 
 
@@ -41692,7 +42008,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_reader_header() != 55976) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_reader_publish_result() != 38362) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_reader_selection() != 45922) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_article_reader_snapshot() != 35047) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_blossom_server_entry() != 9121) {

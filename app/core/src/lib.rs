@@ -67,7 +67,11 @@ pub mod waveform;
 pub mod web_metadata;
 pub mod whats_new;
 
-pub use article_reader::{ArticleReaderHighlightPublishSnapshot, ArticleReaderSnapshot};
+pub use article_reader::{
+    ArticleReaderHighlightPublishSnapshot, ArticleReaderPublishResultInput,
+    ArticleReaderPublishResultProjection, ArticleReaderSnapshot, ArticleReaderSnapshotApplyInput,
+    ArticleReaderSnapshotProjection,
+};
 pub use articles::{
     ArticleProfileCardProjection, ArticleProfileCardProjectionInput, ArticleReaderHeaderProjection,
     ArticleReaderHeaderProjectionInput,

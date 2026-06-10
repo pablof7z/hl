@@ -108,13 +108,20 @@ final class ArticleReaderStore {
     }
 
     private func apply(snapshot: ArticleReaderSnapshot) {
-        if let loadedArticle = snapshot.article {
-            article = loadedArticle
-        }
-        highlights = snapshot.highlights
-        if let profile = snapshot.authorProfile {
-            authorProfile = profile
-        }
+        let projection = safeCore.projectArticleReaderSnapshot(
+            input: ArticleReaderSnapshotApplyInput(
+                snapshot: snapshot,
+                currentArticle: article,
+                currentAuthorProfile: authorProfile
+            )
+        )
+        apply(projection: projection)
+    }
+
+    private func apply(projection: ArticleReaderSnapshotProjection) {
+        article = projection.article
+        authorProfile = projection.authorProfile
+        highlights = projection.highlights
     }
 
     /// Called by `EventBridge` when an `ArticleUpdated` delta arrives.
@@ -144,9 +151,15 @@ final class ArticleReaderStore {
             note: note,
             context: context
         )
-        guard outcome.error.isEmpty else { return outcome }
+        let projection = safeCore.projectArticleReaderPublishResult(
+            input: ArticleReaderPublishResultInput(
+                error: outcome.error,
+                publishedHighlightId: outcome.publishedHighlightId
+            )
+        )
+        guard projection.shouldApplySnapshot else { return outcome }
         apply(snapshot: outcome.snapshot)
-        lastPublishedHighlightId = outcome.publishedHighlightId
+        lastPublishedHighlightId = projection.lastPublishedHighlightId
         return outcome
     }
 

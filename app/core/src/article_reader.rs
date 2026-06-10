@@ -24,6 +24,32 @@ pub struct ArticleReaderHighlightPublishSnapshot {
     pub error: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleReaderSnapshotApplyInput {
+    pub snapshot: ArticleReaderSnapshot,
+    pub current_article: Option<ArticleRecord>,
+    pub current_author_profile: Option<ProfileMetadata>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleReaderSnapshotProjection {
+    pub article: Option<ArticleRecord>,
+    pub author_profile: Option<ProfileMetadata>,
+    pub highlights: Vec<HighlightRecord>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleReaderPublishResultInput {
+    pub error: String,
+    pub published_highlight_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArticleReaderPublishResultProjection {
+    pub should_apply_snapshot: bool,
+    pub last_published_highlight_id: String,
+}
+
 impl ArticleReaderSnapshot {
     fn empty() -> Self {
         Self {
@@ -31,6 +57,33 @@ impl ArticleReaderSnapshot {
             author_profile: None,
             highlights: Vec::new(),
         }
+    }
+}
+
+pub fn article_reader_snapshot_projection(
+    input: ArticleReaderSnapshotApplyInput,
+) -> ArticleReaderSnapshotProjection {
+    ArticleReaderSnapshotProjection {
+        article: input.snapshot.article.or(input.current_article),
+        author_profile: input
+            .snapshot
+            .author_profile
+            .or(input.current_author_profile),
+        highlights: input.snapshot.highlights,
+    }
+}
+
+pub fn article_reader_publish_result_projection(
+    input: ArticleReaderPublishResultInput,
+) -> ArticleReaderPublishResultProjection {
+    let should_apply_snapshot = input.error.trim().is_empty();
+    ArticleReaderPublishResultProjection {
+        should_apply_snapshot,
+        last_published_highlight_id: if should_apply_snapshot {
+            input.published_highlight_id
+        } else {
+            String::new()
+        },
     }
 }
 
@@ -129,6 +182,58 @@ mod tests {
         Tag::parse(vec![name.to_string(), value.to_string()]).unwrap()
     }
 
+    fn article(title: &str) -> ArticleRecord {
+        ArticleRecord {
+            event_id: format!("event-{title}"),
+            address: format!("30023:author:{title}"),
+            pubkey: "author".into(),
+            identifier: title.into(),
+            title: title.into(),
+            summary: String::new(),
+            image: String::new(),
+            content: String::new(),
+            hashtags: Vec::new(),
+            published_at: None,
+            created_at: None,
+        }
+    }
+
+    fn profile(name: &str) -> ProfileMetadata {
+        ProfileMetadata {
+            pubkey: "author".into(),
+            name: name.into(),
+            display_name: name.into(),
+            about: String::new(),
+            picture: String::new(),
+            banner: String::new(),
+            nip05: String::new(),
+            website: String::new(),
+            lud16: String::new(),
+            created_at: None,
+        }
+    }
+
+    fn highlight(event_id: &str) -> HighlightRecord {
+        HighlightRecord {
+            event_id: event_id.into(),
+            pubkey: "reader".into(),
+            quote: event_id.into(),
+            context: String::new(),
+            note: String::new(),
+            artifact_address: "30023:author:essay".into(),
+            event_reference: String::new(),
+            external_reference: String::new(),
+            source_url: String::new(),
+            source_reference_key: "a:30023:author:essay".into(),
+            clip_start_seconds: None,
+            clip_end_seconds: None,
+            clip_speaker: String::new(),
+            clip_transcript_segment_ids: Vec::new(),
+            image_url: String::new(),
+            created_at: None,
+        }
+    }
+
     #[test]
     fn article_reader_snapshot_hydrates_reader_dependencies() {
         let author = Keys::generate();
@@ -185,6 +290,82 @@ mod tests {
         assert!(snapshot.article.is_none());
         assert!(snapshot.author_profile.is_none());
         assert!(snapshot.highlights.is_empty());
+    }
+
+    #[test]
+    fn article_reader_snapshot_projection_preserves_seed_fallbacks() {
+        let seed_article = article("seed");
+        let seed_profile = profile("Seed Author");
+        let loaded_highlight = highlight("highlight-1");
+        let projection = article_reader_snapshot_projection(ArticleReaderSnapshotApplyInput {
+            snapshot: ArticleReaderSnapshot {
+                article: None,
+                author_profile: None,
+                highlights: vec![loaded_highlight.clone()],
+            },
+            current_article: Some(seed_article.clone()),
+            current_author_profile: Some(seed_profile.clone()),
+        });
+
+        assert_eq!(
+            projection
+                .article
+                .as_ref()
+                .map(|article| article.title.as_str()),
+            Some("seed")
+        );
+        assert_eq!(
+            projection
+                .author_profile
+                .as_ref()
+                .map(|profile| profile.display_name.as_str()),
+            Some("Seed Author")
+        );
+        assert_eq!(projection.highlights[0].event_id, loaded_highlight.event_id);
+
+        let loaded_article = article("loaded");
+        let loaded_profile = profile("Loaded Author");
+        let projection = article_reader_snapshot_projection(ArticleReaderSnapshotApplyInput {
+            snapshot: ArticleReaderSnapshot {
+                article: Some(loaded_article.clone()),
+                author_profile: Some(loaded_profile.clone()),
+                highlights: Vec::new(),
+            },
+            current_article: Some(seed_article),
+            current_author_profile: Some(seed_profile),
+        });
+
+        assert_eq!(
+            projection
+                .article
+                .as_ref()
+                .map(|article| article.title.as_str()),
+            Some("loaded")
+        );
+        assert_eq!(
+            projection
+                .author_profile
+                .as_ref()
+                .map(|profile| profile.display_name.as_str()),
+            Some("Loaded Author")
+        );
+    }
+
+    #[test]
+    fn article_reader_publish_result_projection_applies_success_only() {
+        let success = article_reader_publish_result_projection(ArticleReaderPublishResultInput {
+            error: String::new(),
+            published_highlight_id: "highlight-1".into(),
+        });
+        assert!(success.should_apply_snapshot);
+        assert_eq!(success.last_published_highlight_id, "highlight-1");
+
+        let failure = article_reader_publish_result_projection(ArticleReaderPublishResultInput {
+            error: "publish failed".into(),
+            published_highlight_id: "highlight-1".into(),
+        });
+        assert!(!failure.should_apply_snapshot);
+        assert_eq!(failure.last_published_highlight_id, "");
     }
 
     #[test]
