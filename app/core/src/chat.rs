@@ -56,6 +56,34 @@ pub struct ChatComposerProjection {
     pub can_send: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatLoadMoreProjectionInput {
+    pub is_loading_more: bool,
+    pub has_more: bool,
+    pub current_page_count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatLoadMoreProjection {
+    pub should_load: bool,
+    pub requested_page_count: u32,
+    pub is_loading_more: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatActivityReloadProjectionInput {
+    pub activity_event_id: String,
+    pub visible_event_ids: Vec<String>,
+    pub current_activity_revision: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatActivityReloadProjection {
+    pub should_mark_activity: bool,
+    pub activity_delta: u64,
+    pub activity_revision: u64,
+}
+
 /// Chat composer projection. Rust owns draft normalization and send
 /// eligibility; native shells render the composer affordance.
 pub fn chat_composer_projection(input: ChatComposerProjectionInput) -> ChatComposerProjection {
@@ -63,6 +91,41 @@ pub fn chat_composer_projection(input: ChatComposerProjectionInput) -> ChatCompo
     ChatComposerProjection {
         can_send: !submit_body.is_empty(),
         submit_body,
+    }
+}
+
+pub fn chat_load_more_projection(input: ChatLoadMoreProjectionInput) -> ChatLoadMoreProjection {
+    let current_page_count = normalized_page_count(input.current_page_count);
+    let should_load =
+        !input.is_loading_more && input.has_more && current_page_count < CHAT_MAX_PAGES;
+    ChatLoadMoreProjection {
+        should_load,
+        requested_page_count: if should_load {
+            current_page_count.saturating_add(1)
+        } else {
+            current_page_count
+        },
+        is_loading_more: should_load,
+    }
+}
+
+pub fn chat_activity_reload_projection(
+    input: ChatActivityReloadProjectionInput,
+) -> ChatActivityReloadProjection {
+    let activity_event_id = input.activity_event_id.trim();
+    let should_mark_activity = !activity_event_id.is_empty()
+        && !input
+            .visible_event_ids
+            .iter()
+            .any(|event_id| event_id == activity_event_id);
+    ChatActivityReloadProjection {
+        should_mark_activity,
+        activity_delta: if should_mark_activity { 1 } else { 0 },
+        activity_revision: if should_mark_activity {
+            input.current_activity_revision.saturating_add(1)
+        } else {
+            input.current_activity_revision
+        },
     }
 }
 
@@ -553,5 +616,73 @@ mod tests {
 
         assert_eq!(projection.submit_body, "");
         assert!(!projection.can_send);
+    }
+
+    #[test]
+    fn chat_load_more_projection_blocks_duplicate_or_exhausted_loads() {
+        let ready = chat_load_more_projection(ChatLoadMoreProjectionInput {
+            is_loading_more: false,
+            has_more: true,
+            current_page_count: 1,
+        });
+        assert!(ready.should_load);
+        assert_eq!(ready.requested_page_count, 2);
+        assert!(ready.is_loading_more);
+
+        let already_loading = chat_load_more_projection(ChatLoadMoreProjectionInput {
+            is_loading_more: true,
+            has_more: true,
+            current_page_count: 2,
+        });
+        assert!(!already_loading.should_load);
+        assert_eq!(already_loading.requested_page_count, 2);
+        assert!(!already_loading.is_loading_more);
+
+        let exhausted = chat_load_more_projection(ChatLoadMoreProjectionInput {
+            is_loading_more: false,
+            has_more: false,
+            current_page_count: 2,
+        });
+        assert!(!exhausted.should_load);
+        assert_eq!(exhausted.requested_page_count, 2);
+        assert!(!exhausted.is_loading_more);
+
+        let maxed = chat_load_more_projection(ChatLoadMoreProjectionInput {
+            is_loading_more: false,
+            has_more: true,
+            current_page_count: CHAT_MAX_PAGES,
+        });
+        assert!(!maxed.should_load);
+        assert_eq!(maxed.requested_page_count, CHAT_MAX_PAGES);
+        assert!(!maxed.is_loading_more);
+    }
+
+    #[test]
+    fn chat_activity_reload_projection_marks_only_offscreen_activity() {
+        let hidden = chat_activity_reload_projection(ChatActivityReloadProjectionInput {
+            activity_event_id: "event-3".into(),
+            visible_event_ids: vec!["event-1".into(), "event-2".into()],
+            current_activity_revision: 4,
+        });
+        assert!(hidden.should_mark_activity);
+        assert_eq!(hidden.activity_delta, 1);
+        assert_eq!(hidden.activity_revision, 5);
+
+        let visible = chat_activity_reload_projection(ChatActivityReloadProjectionInput {
+            activity_event_id: "event-2".into(),
+            visible_event_ids: vec!["event-1".into(), "event-2".into()],
+            current_activity_revision: 4,
+        });
+        assert!(!visible.should_mark_activity);
+        assert_eq!(visible.activity_delta, 0);
+        assert_eq!(visible.activity_revision, 4);
+
+        let blank = chat_activity_reload_projection(ChatActivityReloadProjectionInput {
+            activity_event_id: " ".into(),
+            visible_event_ids: vec!["event-1".into()],
+            current_activity_revision: 4,
+        });
+        assert!(!blank.should_mark_activity);
+        assert_eq!(blank.activity_revision, 4);
     }
 }

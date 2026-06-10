@@ -2640,6 +2640,20 @@ impl HighlighterCore {
         crate::chat::query_chat_snapshot(self.runtime.ndb(), &group_id, page_count)
     }
 
+    pub fn project_chat_load_more(
+        &self,
+        input: crate::chat::ChatLoadMoreProjectionInput,
+    ) -> crate::chat::ChatLoadMoreProjection {
+        crate::chat::chat_load_more_projection(input)
+    }
+
+    pub fn project_chat_activity_reload(
+        &self,
+        input: crate::chat::ChatActivityReloadProjectionInput,
+    ) -> crate::chat::ChatActivityReloadProjection {
+        crate::chat::chat_activity_reload_projection(input)
+    }
+
     // -- Feedback (shake-to-share) --
 
     /// Threads scoped to `coordinate` authored by the current user. Rust owns

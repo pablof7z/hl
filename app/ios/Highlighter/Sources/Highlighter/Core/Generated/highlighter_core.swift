@@ -1257,11 +1257,15 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectCaptureUpload(input: CaptureUploadProjectionInput)  -> CaptureUploadProjection
 
+    func projectChatActivityReload(input: ChatActivityReloadProjectionInput)  -> ChatActivityReloadProjection
+
     /**
      * Chat composer projection. Rust owns draft normalization and send
      * eligibility; native shells render the composer affordance.
      */
     func projectChatComposer(input: ChatComposerProjectionInput)  -> ChatComposerProjection
+
+    func projectChatLoadMore(input: ChatLoadMoreProjectionInput)  -> ChatLoadMoreProjection
 
     /**
      * Project comment row reaction/bookmark chrome.
@@ -3729,6 +3733,14 @@ open func projectCaptureUpload(input: CaptureUploadProjectionInput) -> CaptureUp
 })
 }
 
+open func projectChatActivityReload(input: ChatActivityReloadProjectionInput) -> ChatActivityReloadProjection  {
+    return try!  FfiConverterTypeChatActivityReloadProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_chat_activity_reload(self.uniffiClonePointer(),
+        FfiConverterTypeChatActivityReloadProjectionInput_lower(input),$0
+    )
+})
+}
+
     /**
      * Chat composer projection. Rust owns draft normalization and send
      * eligibility; native shells render the composer affordance.
@@ -3737,6 +3749,14 @@ open func projectChatComposer(input: ChatComposerProjectionInput) -> ChatCompose
     return try!  FfiConverterTypeChatComposerProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_chat_composer(self.uniffiClonePointer(),
         FfiConverterTypeChatComposerProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectChatLoadMore(input: ChatLoadMoreProjectionInput) -> ChatLoadMoreProjection  {
+    return try!  FfiConverterTypeChatLoadMoreProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_chat_load_more(self.uniffiClonePointer(),
+        FfiConverterTypeChatLoadMoreProjectionInput_lower(input),$0
     )
 })
 }
@@ -11649,6 +11669,162 @@ public func FfiConverterTypeChapter_lower(_ value: Chapter) -> RustBuffer {
 }
 
 
+public struct ChatActivityReloadProjection {
+    public var shouldMarkActivity: Bool
+    public var activityDelta: UInt64
+    public var activityRevision: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldMarkActivity: Bool, activityDelta: UInt64, activityRevision: UInt64) {
+        self.shouldMarkActivity = shouldMarkActivity
+        self.activityDelta = activityDelta
+        self.activityRevision = activityRevision
+    }
+}
+
+#if compiler(>=6)
+extension ChatActivityReloadProjection: Sendable {}
+#endif
+
+
+extension ChatActivityReloadProjection: Equatable, Hashable {
+    public static func ==(lhs: ChatActivityReloadProjection, rhs: ChatActivityReloadProjection) -> Bool {
+        if lhs.shouldMarkActivity != rhs.shouldMarkActivity {
+            return false
+        }
+        if lhs.activityDelta != rhs.activityDelta {
+            return false
+        }
+        if lhs.activityRevision != rhs.activityRevision {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldMarkActivity)
+        hasher.combine(activityDelta)
+        hasher.combine(activityRevision)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatActivityReloadProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatActivityReloadProjection {
+        return
+            try ChatActivityReloadProjection(
+                shouldMarkActivity: FfiConverterBool.read(from: &buf),
+                activityDelta: FfiConverterUInt64.read(from: &buf),
+                activityRevision: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatActivityReloadProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldMarkActivity, into: &buf)
+        FfiConverterUInt64.write(value.activityDelta, into: &buf)
+        FfiConverterUInt64.write(value.activityRevision, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatActivityReloadProjection_lift(_ buf: RustBuffer) throws -> ChatActivityReloadProjection {
+    return try FfiConverterTypeChatActivityReloadProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatActivityReloadProjection_lower(_ value: ChatActivityReloadProjection) -> RustBuffer {
+    return FfiConverterTypeChatActivityReloadProjection.lower(value)
+}
+
+
+public struct ChatActivityReloadProjectionInput {
+    public var activityEventId: String
+    public var visibleEventIds: [String]
+    public var currentActivityRevision: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(activityEventId: String, visibleEventIds: [String], currentActivityRevision: UInt64) {
+        self.activityEventId = activityEventId
+        self.visibleEventIds = visibleEventIds
+        self.currentActivityRevision = currentActivityRevision
+    }
+}
+
+#if compiler(>=6)
+extension ChatActivityReloadProjectionInput: Sendable {}
+#endif
+
+
+extension ChatActivityReloadProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ChatActivityReloadProjectionInput, rhs: ChatActivityReloadProjectionInput) -> Bool {
+        if lhs.activityEventId != rhs.activityEventId {
+            return false
+        }
+        if lhs.visibleEventIds != rhs.visibleEventIds {
+            return false
+        }
+        if lhs.currentActivityRevision != rhs.currentActivityRevision {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(activityEventId)
+        hasher.combine(visibleEventIds)
+        hasher.combine(currentActivityRevision)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatActivityReloadProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatActivityReloadProjectionInput {
+        return
+            try ChatActivityReloadProjectionInput(
+                activityEventId: FfiConverterString.read(from: &buf),
+                visibleEventIds: FfiConverterSequenceString.read(from: &buf),
+                currentActivityRevision: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatActivityReloadProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.activityEventId, into: &buf)
+        FfiConverterSequenceString.write(value.visibleEventIds, into: &buf)
+        FfiConverterUInt64.write(value.currentActivityRevision, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatActivityReloadProjectionInput_lift(_ buf: RustBuffer) throws -> ChatActivityReloadProjectionInput {
+    return try FfiConverterTypeChatActivityReloadProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatActivityReloadProjectionInput_lower(_ value: ChatActivityReloadProjectionInput) -> RustBuffer {
+    return FfiConverterTypeChatActivityReloadProjectionInput.lower(value)
+}
+
+
 public struct ChatComposerProjection {
     public var submitBody: String
     public var canSend: Bool
@@ -11778,6 +11954,162 @@ public func FfiConverterTypeChatComposerProjectionInput_lift(_ buf: RustBuffer) 
 #endif
 public func FfiConverterTypeChatComposerProjectionInput_lower(_ value: ChatComposerProjectionInput) -> RustBuffer {
     return FfiConverterTypeChatComposerProjectionInput.lower(value)
+}
+
+
+public struct ChatLoadMoreProjection {
+    public var shouldLoad: Bool
+    public var requestedPageCount: UInt32
+    public var isLoadingMore: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldLoad: Bool, requestedPageCount: UInt32, isLoadingMore: Bool) {
+        self.shouldLoad = shouldLoad
+        self.requestedPageCount = requestedPageCount
+        self.isLoadingMore = isLoadingMore
+    }
+}
+
+#if compiler(>=6)
+extension ChatLoadMoreProjection: Sendable {}
+#endif
+
+
+extension ChatLoadMoreProjection: Equatable, Hashable {
+    public static func ==(lhs: ChatLoadMoreProjection, rhs: ChatLoadMoreProjection) -> Bool {
+        if lhs.shouldLoad != rhs.shouldLoad {
+            return false
+        }
+        if lhs.requestedPageCount != rhs.requestedPageCount {
+            return false
+        }
+        if lhs.isLoadingMore != rhs.isLoadingMore {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldLoad)
+        hasher.combine(requestedPageCount)
+        hasher.combine(isLoadingMore)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatLoadMoreProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatLoadMoreProjection {
+        return
+            try ChatLoadMoreProjection(
+                shouldLoad: FfiConverterBool.read(from: &buf),
+                requestedPageCount: FfiConverterUInt32.read(from: &buf),
+                isLoadingMore: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatLoadMoreProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldLoad, into: &buf)
+        FfiConverterUInt32.write(value.requestedPageCount, into: &buf)
+        FfiConverterBool.write(value.isLoadingMore, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatLoadMoreProjection_lift(_ buf: RustBuffer) throws -> ChatLoadMoreProjection {
+    return try FfiConverterTypeChatLoadMoreProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatLoadMoreProjection_lower(_ value: ChatLoadMoreProjection) -> RustBuffer {
+    return FfiConverterTypeChatLoadMoreProjection.lower(value)
+}
+
+
+public struct ChatLoadMoreProjectionInput {
+    public var isLoadingMore: Bool
+    public var hasMore: Bool
+    public var currentPageCount: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(isLoadingMore: Bool, hasMore: Bool, currentPageCount: UInt32) {
+        self.isLoadingMore = isLoadingMore
+        self.hasMore = hasMore
+        self.currentPageCount = currentPageCount
+    }
+}
+
+#if compiler(>=6)
+extension ChatLoadMoreProjectionInput: Sendable {}
+#endif
+
+
+extension ChatLoadMoreProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ChatLoadMoreProjectionInput, rhs: ChatLoadMoreProjectionInput) -> Bool {
+        if lhs.isLoadingMore != rhs.isLoadingMore {
+            return false
+        }
+        if lhs.hasMore != rhs.hasMore {
+            return false
+        }
+        if lhs.currentPageCount != rhs.currentPageCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(isLoadingMore)
+        hasher.combine(hasMore)
+        hasher.combine(currentPageCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatLoadMoreProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatLoadMoreProjectionInput {
+        return
+            try ChatLoadMoreProjectionInput(
+                isLoadingMore: FfiConverterBool.read(from: &buf),
+                hasMore: FfiConverterBool.read(from: &buf),
+                currentPageCount: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatLoadMoreProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.isLoadingMore, into: &buf)
+        FfiConverterBool.write(value.hasMore, into: &buf)
+        FfiConverterUInt32.write(value.currentPageCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatLoadMoreProjectionInput_lift(_ buf: RustBuffer) throws -> ChatLoadMoreProjectionInput {
+    return try FfiConverterTypeChatLoadMoreProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatLoadMoreProjectionInput_lower(_ value: ChatLoadMoreProjectionInput) -> RustBuffer {
+    return FfiConverterTypeChatLoadMoreProjectionInput.lower(value)
 }
 
 
@@ -41396,7 +41728,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_capture_upload() != 64820) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_chat_activity_reload() != 58787) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_chat_composer() != 32840) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_chat_load_more() != 40844) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_action_chrome() != 20671) {

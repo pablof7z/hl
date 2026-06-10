@@ -626,6 +626,18 @@ actor SafeHighlighterCore {
         await core.getChatSnapshot(groupId: groupId, pageCount: pageCount)
     }
 
+    nonisolated func projectChatLoadMore(
+        input: ChatLoadMoreProjectionInput
+    ) -> ChatLoadMoreProjection {
+        core.projectChatLoadMore(input: input)
+    }
+
+    nonisolated func projectChatActivityReload(
+        input: ChatActivityReloadProjectionInput
+    ) -> ChatActivityReloadProjection {
+        core.projectChatActivityReload(input: input)
+    }
+
     nonisolated func projectChatComposer(
         input: ChatComposerProjectionInput
     ) -> ChatComposerProjection {

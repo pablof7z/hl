@@ -113,9 +113,17 @@ final class ChatStore {
     /// larger slice from the DB; the caller is responsible for restoring
     /// the scroll position to the previously-topmost visible message.
     func loadMore() async {
-        guard !isLoadingMore, hasMore else { return }
-        isLoadingMore = true
-        await reloadSnapshot(pageCount: loadedPageCount + 1)
+        guard let core else { return }
+        let projection = core.projectChatLoadMore(
+            input: ChatLoadMoreProjectionInput(
+                isLoadingMore: isLoadingMore,
+                hasMore: hasMore,
+                currentPageCount: loadedPageCount
+            )
+        )
+        guard projection.shouldLoad else { return }
+        isLoadingMore = projection.isLoadingMore
+        await reloadSnapshot(pageCount: projection.requestedPageCount)
         isLoadingMore = false
     }
 
@@ -128,13 +136,17 @@ final class ChatStore {
     }
 
     func reloadFromCache(activityEventId: String? = nil) async {
-        let alreadyVisible = activityEventId.map { eventId in
-            rows.contains { $0.message.eventId == eventId }
-        } ?? true
+        let activityProjection = core?.projectChatActivityReload(
+            input: ChatActivityReloadProjectionInput(
+                activityEventId: activityEventId ?? "",
+                visibleEventIds: rows.map(\.message.eventId),
+                currentActivityRevision: activityRevision
+            )
+        )
         await reloadSnapshot(pageCount: loadedPageCount)
-        if activityEventId != nil && !alreadyVisible {
-            activityDelta = 1
-            activityRevision += 1
+        if let activityProjection, activityProjection.shouldMarkActivity {
+            activityDelta = Int(activityProjection.activityDelta)
+            activityRevision = activityProjection.activityRevision
         }
     }
 
