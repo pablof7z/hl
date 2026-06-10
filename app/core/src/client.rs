@@ -545,6 +545,13 @@ impl HighlighterCore {
         )
     }
 
+    pub fn project_network_wifi_only_preference_apply(
+        &self,
+        input: crate::relays::NetworkWifiOnlyPreferenceApplyInput,
+    ) -> crate::relays::NetworkWifiOnlyPreferenceApplyProjection {
+        crate::relays::network_wifi_only_preference_apply_projection(input)
+    }
+
     pub fn plan_podcast_playback_session(
         &self,
         input: podcast_playback::PodcastPlaybackSessionInput,
@@ -1138,6 +1145,13 @@ impl HighlighterCore {
             )
         })();
         crate::relays::relay_hosted_rooms_snapshot(result)
+    }
+
+    pub fn project_relay_hosted_rooms_apply(
+        &self,
+        input: crate::relays::RelayHostedRoomsApplyInput,
+    ) -> crate::relays::RelayHostedRoomsApplyProjection {
+        crate::relays::relay_hosted_rooms_apply_projection(input)
     }
 
     /// Full room-home read model for one community. Rust owns artifact and
@@ -3813,6 +3827,13 @@ impl HighlighterCore {
         )
     }
 
+    pub fn project_network_settings_snapshot_apply(
+        &self,
+        input: crate::relays::NetworkSettingsSnapshotApplyInput,
+    ) -> crate::relays::NetworkSettingsSnapshotApplyProjection {
+        crate::relays::network_settings_snapshot_apply_projection(input)
+    }
+
     /// Insert-or-update a single relay. Replaces the row with matching URL or
     /// appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
     /// the live relay pool so the change takes effect immediately.
@@ -3833,6 +3854,13 @@ impl HighlighterCore {
         }
         .await;
         crate::relays::network_settings_mutation_snapshot(result, true, "Couldn't add relay")
+    }
+
+    pub fn project_network_settings_mutation_apply(
+        &self,
+        input: crate::relays::NetworkSettingsMutationApplyInput,
+    ) -> crate::relays::NetworkSettingsMutationApplyProjection {
+        crate::relays::network_settings_mutation_apply_projection(input)
     }
 
     /// Remove a relay by URL.
@@ -3898,6 +3926,13 @@ impl HighlighterCore {
         diagnostics: Vec<RelayDiagnostic>,
     ) -> crate::relays::NetworkDiagnosticsSnapshot {
         crate::relays::network_diagnostics_snapshot(configured_relays, diagnostics)
+    }
+
+    pub fn project_network_diagnostics_snapshot_apply(
+        &self,
+        input: crate::relays::NetworkDiagnosticsSnapshotApplyInput,
+    ) -> crate::relays::NetworkDiagnosticsSnapshotApplyProjection {
+        crate::relays::network_diagnostics_snapshot_apply_projection(input)
     }
 
     pub fn auto_connected_relay_config(&self, url: String) -> crate::relays::RelayConfig {

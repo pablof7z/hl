@@ -211,11 +211,32 @@ pub struct RelayHostedRoomsSnapshot {
     pub error_message: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RelayHostedRoomsApplyInput {
+    pub snapshot: RelayHostedRoomsSnapshot,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RelayHostedRoomsApplyProjection {
+    pub error_message: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct NetworkSettingsMutationSnapshot {
     pub applied: bool,
     pub should_reload: bool,
     pub error_message: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct NetworkSettingsMutationApplyInput {
+    pub snapshot: NetworkSettingsMutationSnapshot,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct NetworkSettingsMutationApplyProjection {
+    pub should_reload: bool,
+    pub error_message: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -231,6 +252,18 @@ pub struct NetworkWifiOnlyPreferenceSnapshot {
     pub wifi_only_enabled: bool,
     pub path_monitor_enabled: bool,
     pub error_message: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct NetworkWifiOnlyPreferenceApplyInput {
+    pub snapshot: NetworkWifiOnlyPreferenceSnapshot,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct NetworkWifiOnlyPreferenceApplyProjection {
+    pub wifi_only_enabled: bool,
+    pub path_monitor_enabled: bool,
+    pub error_message: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -251,11 +284,38 @@ pub struct NetworkSettingsSnapshot {
     pub error_message: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct NetworkSettingsSnapshotApplyInput {
+    pub snapshot: NetworkSettingsSnapshot,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct NetworkSettingsSnapshotApplyProjection {
+    pub relays: Vec<RelayConfig>,
+    pub diagnostics: Vec<RelayDiagnostic>,
+    pub settings_projection: RelaySettingsProjection,
+    pub wifi_only_enabled: bool,
+    pub path_monitor_enabled: bool,
+    pub error_message: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct NetworkDiagnosticsSnapshot {
     pub diagnostics: Vec<RelayDiagnostic>,
     pub projection: RelaySettingsProjection,
     pub error_message: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct NetworkDiagnosticsSnapshotApplyInput {
+    pub snapshot: NetworkDiagnosticsSnapshot,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct NetworkDiagnosticsSnapshotApplyProjection {
+    pub diagnostics: Vec<RelayDiagnostic>,
+    pub settings_projection: RelaySettingsProjection,
+    pub error_message: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -586,6 +646,14 @@ pub fn relay_hosted_rooms_snapshot(
     }
 }
 
+pub fn relay_hosted_rooms_apply_projection(
+    input: RelayHostedRoomsApplyInput,
+) -> RelayHostedRoomsApplyProjection {
+    RelayHostedRoomsApplyProjection {
+        error_message: optional_error_message(&input.snapshot.error_message),
+    }
+}
+
 pub fn network_settings_mutation_snapshot(
     result: Result<(), CoreError>,
     should_reload_on_success: bool,
@@ -602,6 +670,15 @@ pub fn network_settings_mutation_snapshot(
             should_reload: false,
             error_message: format!("{error_prefix} — {error}"),
         },
+    }
+}
+
+pub fn network_settings_mutation_apply_projection(
+    input: NetworkSettingsMutationApplyInput,
+) -> NetworkSettingsMutationApplyProjection {
+    NetworkSettingsMutationApplyProjection {
+        should_reload: input.snapshot.applied && input.snapshot.should_reload,
+        error_message: optional_error_message(&input.snapshot.error_message),
     }
 }
 
@@ -623,6 +700,16 @@ pub fn network_wifi_only_preference_snapshot(
             path_monitor_enabled: previous_enabled,
             error_message: format!("Couldn't update Wi-Fi-only mode — {error}"),
         },
+    }
+}
+
+pub fn network_wifi_only_preference_apply_projection(
+    input: NetworkWifiOnlyPreferenceApplyInput,
+) -> NetworkWifiOnlyPreferenceApplyProjection {
+    NetworkWifiOnlyPreferenceApplyProjection {
+        wifi_only_enabled: input.snapshot.wifi_only_enabled,
+        path_monitor_enabled: input.snapshot.path_monitor_enabled,
+        error_message: optional_error_message(&input.snapshot.error_message),
     }
 }
 
@@ -675,6 +762,19 @@ pub fn network_settings_snapshot(
     }
 }
 
+pub fn network_settings_snapshot_apply_projection(
+    input: NetworkSettingsSnapshotApplyInput,
+) -> NetworkSettingsSnapshotApplyProjection {
+    NetworkSettingsSnapshotApplyProjection {
+        relays: input.snapshot.relays,
+        diagnostics: input.snapshot.diagnostics,
+        settings_projection: input.snapshot.projection,
+        wifi_only_enabled: input.snapshot.wifi_only_enabled,
+        path_monitor_enabled: input.snapshot.wifi_only_enabled,
+        error_message: optional_error_message(&input.snapshot.error_message),
+    }
+}
+
 pub fn network_diagnostics_snapshot(
     configured_relays: Vec<RelayConfig>,
     diagnostics: Vec<RelayDiagnostic>,
@@ -684,6 +784,16 @@ pub fn network_diagnostics_snapshot(
         diagnostics,
         projection,
         error_message: String::new(),
+    }
+}
+
+pub fn network_diagnostics_snapshot_apply_projection(
+    input: NetworkDiagnosticsSnapshotApplyInput,
+) -> NetworkDiagnosticsSnapshotApplyProjection {
+    NetworkDiagnosticsSnapshotApplyProjection {
+        diagnostics: input.snapshot.diagnostics,
+        settings_projection: input.snapshot.projection,
+        error_message: optional_error_message(&input.snapshot.error_message),
     }
 }
 
@@ -959,6 +1069,11 @@ fn joined_limited_names(names: &[String], limit: usize) -> String {
         summary.push_str(", …");
     }
     summary
+}
+
+fn optional_error_message(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    (!trimmed.is_empty()).then(|| trimmed.to_string())
 }
 
 fn trimmed_non_empty(value: Option<&str>) -> Option<String> {
@@ -1711,6 +1826,19 @@ mod tests {
     }
 
     #[test]
+    fn relay_hosted_rooms_apply_projection_projects_error_state() {
+        let success = relay_hosted_rooms_apply_projection(RelayHostedRoomsApplyInput {
+            snapshot: relay_hosted_rooms_snapshot(Ok(vec!["Books".into()])),
+        });
+        assert_eq!(success.error_message, None);
+
+        let failure = relay_hosted_rooms_apply_projection(RelayHostedRoomsApplyInput {
+            snapshot: relay_hosted_rooms_snapshot(Err(CoreError::NotAuthenticated)),
+        });
+        assert_eq!(failure.error_message.as_deref(), Some("not authenticated"));
+    }
+
+    #[test]
     fn network_settings_mutation_snapshot_projects_reload_and_error_copy() {
         let success = network_settings_mutation_snapshot(Ok(()), true, "Couldn't add relay");
         assert!(success.applied);
@@ -1731,6 +1859,37 @@ mod tests {
         assert_eq!(
             failure.error_message,
             "Couldn't remove relay — relay error: offline"
+        );
+    }
+
+    #[test]
+    fn network_settings_mutation_apply_projection_projects_reload_and_error_state() {
+        let success =
+            network_settings_mutation_apply_projection(NetworkSettingsMutationApplyInput {
+                snapshot: network_settings_mutation_snapshot(Ok(()), true, "Couldn't add relay"),
+            });
+        assert!(success.should_reload);
+        assert_eq!(success.error_message, None);
+
+        let no_reload =
+            network_settings_mutation_apply_projection(NetworkSettingsMutationApplyInput {
+                snapshot: network_settings_mutation_snapshot(Ok(()), false, "Couldn't reconnect"),
+            });
+        assert!(!no_reload.should_reload);
+        assert_eq!(no_reload.error_message, None);
+
+        let failure =
+            network_settings_mutation_apply_projection(NetworkSettingsMutationApplyInput {
+                snapshot: network_settings_mutation_snapshot(
+                    Err(CoreError::Relay("offline".into())),
+                    true,
+                    "Couldn't remove relay",
+                ),
+            });
+        assert!(!failure.should_reload);
+        assert_eq!(
+            failure.error_message.as_deref(),
+            Some("Couldn't remove relay — relay error: offline")
         );
     }
 
@@ -1758,6 +1917,32 @@ mod tests {
         assert_eq!(
             failure.error_message,
             "Couldn't update Wi-Fi-only mode — cache error: readonly"
+        );
+    }
+
+    #[test]
+    fn network_wifi_only_preference_apply_projection_projects_policy_and_error() {
+        let enabled =
+            network_wifi_only_preference_apply_projection(NetworkWifiOnlyPreferenceApplyInput {
+                snapshot: network_wifi_only_preference_snapshot(Ok(()), true, false),
+            });
+        assert!(enabled.wifi_only_enabled);
+        assert!(enabled.path_monitor_enabled);
+        assert_eq!(enabled.error_message, None);
+
+        let failed =
+            network_wifi_only_preference_apply_projection(NetworkWifiOnlyPreferenceApplyInput {
+                snapshot: network_wifi_only_preference_snapshot(
+                    Err(CoreError::Cache("readonly".into())),
+                    true,
+                    false,
+                ),
+            });
+        assert!(!failed.wifi_only_enabled);
+        assert!(!failed.path_monitor_enabled);
+        assert_eq!(
+            failed.error_message.as_deref(),
+            Some("Couldn't update Wi-Fi-only mode — cache error: readonly")
         );
     }
 
@@ -1829,6 +2014,43 @@ mod tests {
     }
 
     #[test]
+    fn network_settings_snapshot_apply_projection_projects_rows_and_error() {
+        let relays = vec![RelayConfig::read_write("wss://relay.example.com")];
+        let diagnostics = vec![diagnostic(
+            "wss://relay.example.com",
+            RelayStatus::Connected,
+        )];
+        let success =
+            network_settings_snapshot(Ok(relays.clone()), Vec::new(), diagnostics.clone(), true);
+        let applied =
+            network_settings_snapshot_apply_projection(NetworkSettingsSnapshotApplyInput {
+                snapshot: success,
+            });
+        assert_eq!(applied.relays, relays);
+        assert_eq!(applied.diagnostics, diagnostics);
+        assert!(applied.wifi_only_enabled);
+        assert!(applied.path_monitor_enabled);
+        assert_eq!(applied.settings_projection.connected_count, 1);
+        assert_eq!(applied.error_message, None);
+
+        let previous = vec![RelayConfig::read_write("wss://previous.example.com")];
+        let failure = network_settings_snapshot(
+            Err(CoreError::NotAuthenticated),
+            previous.clone(),
+            Vec::new(),
+            false,
+        );
+        let applied =
+            network_settings_snapshot_apply_projection(NetworkSettingsSnapshotApplyInput {
+                snapshot: failure,
+            });
+        assert_eq!(applied.relays, previous);
+        assert!(!applied.wifi_only_enabled);
+        assert!(!applied.path_monitor_enabled);
+        assert_eq!(applied.error_message.as_deref(), Some("not authenticated"));
+    }
+
+    #[test]
     fn network_diagnostics_snapshot_projects_live_rows() {
         let configured = vec![RelayConfig::read_write("wss://relay.example.com")];
         let diagnostics = vec![diagnostic(
@@ -1840,6 +2062,23 @@ mod tests {
         assert!(snapshot.error_message.is_empty());
         assert_eq!(snapshot.projection.connected_count, 1);
         assert_eq!(snapshot.projection.aggregate_state_label, "Online — 1 of 1");
+    }
+
+    #[test]
+    fn network_diagnostics_snapshot_apply_projection_projects_rows_and_error() {
+        let configured = vec![RelayConfig::read_write("wss://relay.example.com")];
+        let diagnostics = vec![diagnostic(
+            "wss://relay.example.com",
+            RelayStatus::Connected,
+        )];
+        let snapshot = network_diagnostics_snapshot(configured, diagnostics.clone());
+        let applied =
+            network_diagnostics_snapshot_apply_projection(NetworkDiagnosticsSnapshotApplyInput {
+                snapshot,
+            });
+        assert_eq!(applied.diagnostics, diagnostics);
+        assert_eq!(applied.settings_projection.connected_count, 1);
+        assert_eq!(applied.error_message, None);
     }
 
     #[test]

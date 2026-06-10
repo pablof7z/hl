@@ -75,6 +75,12 @@ actor SafeHighlighterCore {
         await core.setWifiOnlyEnabled(enabled: enabled)
     }
 
+    nonisolated func projectNetworkWifiOnlyPreferenceApply(
+        input: NetworkWifiOnlyPreferenceApplyInput
+    ) -> NetworkWifiOnlyPreferenceApplyProjection {
+        core.projectNetworkWifiOnlyPreferenceApply(input: input)
+    }
+
     nonisolated func getNetworkWifiOnlyPreferenceSnapshot() -> NetworkWifiOnlyPreferenceSnapshot {
         core.getNetworkWifiOnlyPreferenceSnapshot()
     }
@@ -266,6 +272,12 @@ actor SafeHighlighterCore {
 
     func getRelayHostedRoomsSnapshot(hostedOnRelay url: String) async -> RelayHostedRoomsSnapshot {
         await core.getRelayHostedRoomsSnapshot(url: url)
+    }
+
+    nonisolated func projectRelayHostedRoomsApply(
+        input: RelayHostedRoomsApplyInput
+    ) -> RelayHostedRoomsApplyProjection {
+        core.projectRelayHostedRoomsApply(input: input)
     }
 
     func getRoomHomeSnapshot(groupId: String) async -> RoomHomeSnapshot {
@@ -1649,8 +1661,20 @@ actor SafeHighlighterCore {
         await core.getNetworkSettingsSnapshot(previousRelays: previousRelays)
     }
 
+    nonisolated func projectNetworkSettingsSnapshotApply(
+        input: NetworkSettingsSnapshotApplyInput
+    ) -> NetworkSettingsSnapshotApplyProjection {
+        core.projectNetworkSettingsSnapshotApply(input: input)
+    }
+
     func upsertRelay(_ cfg: RelayConfig) async -> NetworkSettingsMutationSnapshot {
         await core.upsertRelay(cfg: cfg)
+    }
+
+    nonisolated func projectNetworkSettingsMutationApply(
+        input: NetworkSettingsMutationApplyInput
+    ) -> NetworkSettingsMutationApplyProjection {
+        core.projectNetworkSettingsMutationApply(input: input)
     }
 
     func removeRelay(_ url: String) async -> NetworkSettingsMutationSnapshot {
@@ -1683,6 +1707,12 @@ actor SafeHighlighterCore {
             configuredRelays: configuredRelays,
             diagnostics: diagnostics
         )
+    }
+
+    nonisolated func projectNetworkDiagnosticsSnapshotApply(
+        input: NetworkDiagnosticsSnapshotApplyInput
+    ) -> NetworkDiagnosticsSnapshotApplyProjection {
+        core.projectNetworkDiagnosticsSnapshotApply(input: input)
     }
 
     func autoConnectedRelayConfig(url: String) -> RelayConfig {

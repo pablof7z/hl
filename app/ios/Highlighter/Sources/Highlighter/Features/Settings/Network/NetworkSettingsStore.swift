@@ -80,8 +80,11 @@ final class NetworkSettingsStore {
     /// Kick the pool to attempt a reconnect on every disconnected relay.
     func reconnectAll() async {
         let snapshot = await core.reconnectAll()
-        if !snapshot.errorMessage.isEmpty {
-            lastError = snapshot.errorMessage
+        let apply = core.projectNetworkSettingsMutationApply(
+            input: NetworkSettingsMutationApplyInput(snapshot: snapshot)
+        )
+        if let errorMessage = apply.errorMessage {
+            lastError = errorMessage
         }
     }
 
@@ -155,26 +158,35 @@ final class NetworkSettingsStore {
 
     func upsert(_ cfg: RelayConfig) async {
         let snapshot = await core.upsertRelay(cfg)
-        if snapshot.shouldReload {
+        let apply = core.projectNetworkSettingsMutationApply(
+            input: NetworkSettingsMutationApplyInput(snapshot: snapshot)
+        )
+        if apply.shouldReload {
             await load()
-        } else if !snapshot.errorMessage.isEmpty {
-            lastError = snapshot.errorMessage
+        } else if let errorMessage = apply.errorMessage {
+            lastError = errorMessage
         }
     }
 
     func remove(_ url: String) async {
         let snapshot = await core.removeRelay(url)
-        if snapshot.shouldReload {
+        let apply = core.projectNetworkSettingsMutationApply(
+            input: NetworkSettingsMutationApplyInput(snapshot: snapshot)
+        )
+        if apply.shouldReload {
             await load()
-        } else if !snapshot.errorMessage.isEmpty {
-            lastError = snapshot.errorMessage
+        } else if let errorMessage = apply.errorMessage {
+            lastError = errorMessage
         }
     }
 
     func relayHostedRooms(hostedOnRelay url: String) async -> RelayHostedRoomsSnapshot {
         let snapshot = await core.getRelayHostedRoomsSnapshot(hostedOnRelay: url)
-        if !snapshot.errorMessage.isEmpty {
-            lastError = snapshot.errorMessage
+        let apply = core.projectRelayHostedRoomsApply(
+            input: RelayHostedRoomsApplyInput(snapshot: snapshot)
+        )
+        if let errorMessage = apply.errorMessage {
+            lastError = errorMessage
         }
         return snapshot
     }
@@ -183,10 +195,13 @@ final class NetworkSettingsStore {
         let snapshot = await core.setRelayRoles(
             url: url, read: read, write: write, rooms: rooms, indexer: indexer
         )
-        if snapshot.shouldReload {
+        let apply = core.projectNetworkSettingsMutationApply(
+            input: NetworkSettingsMutationApplyInput(snapshot: snapshot)
+        )
+        if apply.shouldReload {
             await load()
-        } else if !snapshot.errorMessage.isEmpty {
-            lastError = snapshot.errorMessage
+        } else if let errorMessage = apply.errorMessage {
+            lastError = errorMessage
         }
     }
 
@@ -230,25 +245,34 @@ final class NetworkSettingsStore {
     // MARK: - Private
 
     private func applyNetworkSettingsSnapshot(_ snapshot: NetworkSettingsSnapshot) {
-        relays = snapshot.relays
-        wifiOnlyEnabled = snapshot.wifiOnlyEnabled
-        appStore?.applyNetworkPathMonitorEnabled(snapshot.wifiOnlyEnabled)
-        applyRelaySettingsProjection(snapshot.projection, rows: snapshot.diagnostics)
-        lastError = snapshot.errorMessage.isEmpty ? nil : snapshot.errorMessage
+        let apply = core.projectNetworkSettingsSnapshotApply(
+            input: NetworkSettingsSnapshotApplyInput(snapshot: snapshot)
+        )
+        relays = apply.relays
+        wifiOnlyEnabled = apply.wifiOnlyEnabled
+        appStore?.applyNetworkPathMonitorEnabled(apply.pathMonitorEnabled)
+        applyRelaySettingsProjection(apply.settingsProjection, rows: apply.diagnostics)
+        lastError = apply.errorMessage
     }
 
     private func applyWifiOnlyPreferenceSnapshot(_ snapshot: NetworkWifiOnlyPreferenceSnapshot) {
-        wifiOnlyEnabled = snapshot.wifiOnlyEnabled
-        appStore?.applyNetworkPathMonitorEnabled(snapshot.pathMonitorEnabled)
-        if !snapshot.errorMessage.isEmpty {
-            lastError = snapshot.errorMessage
+        let apply = core.projectNetworkWifiOnlyPreferenceApply(
+            input: NetworkWifiOnlyPreferenceApplyInput(snapshot: snapshot)
+        )
+        wifiOnlyEnabled = apply.wifiOnlyEnabled
+        appStore?.applyNetworkPathMonitorEnabled(apply.pathMonitorEnabled)
+        if let errorMessage = apply.errorMessage {
+            lastError = errorMessage
         }
     }
 
     private func applyNetworkDiagnosticsSnapshot(_ snapshot: NetworkDiagnosticsSnapshot) {
-        applyRelaySettingsProjection(snapshot.projection, rows: snapshot.diagnostics)
-        if !snapshot.errorMessage.isEmpty {
-            lastError = snapshot.errorMessage
+        let apply = core.projectNetworkDiagnosticsSnapshotApply(
+            input: NetworkDiagnosticsSnapshotApplyInput(snapshot: snapshot)
+        )
+        applyRelaySettingsProjection(apply.settingsProjection, rows: apply.diagnostics)
+        if let errorMessage = apply.errorMessage {
+            lastError = errorMessage
         }
     }
 

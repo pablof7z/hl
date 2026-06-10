@@ -1417,6 +1417,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectNetworkDiagnosticsSnapshot(configuredRelays: [RelayConfig], diagnostics: [RelayDiagnostic])  -> NetworkDiagnosticsSnapshot
 
+    func projectNetworkDiagnosticsSnapshotApply(input: NetworkDiagnosticsSnapshotApplyInput)  -> NetworkDiagnosticsSnapshotApplyProjection
+
+    func projectNetworkSettingsMutationApply(input: NetworkSettingsMutationApplyInput)  -> NetworkSettingsMutationApplyProjection
+
+    func projectNetworkSettingsSnapshotApply(input: NetworkSettingsSnapshotApplyInput)  -> NetworkSettingsSnapshotApplyProjection
+
+    func projectNetworkWifiOnlyPreferenceApply(input: NetworkWifiOnlyPreferenceApplyInput)  -> NetworkWifiOnlyPreferenceApplyProjection
+
     func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionInput)  -> NostrEntityArticleCardProjection
 
     /**
@@ -1497,6 +1505,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectRelativeTimeLabel(input: RelativeTimeLabelInput)  -> RelativeTimeLabelProjection
 
     func projectRelayDetail(input: RelayDetailProjectionInput)  -> RelayDetailProjection
+
+    func projectRelayHostedRoomsApply(input: RelayHostedRoomsApplyInput)  -> RelayHostedRoomsApplyProjection
 
     func projectRelayRemove(input: RelayRemoveProjectionInput)  -> RelayRemoveProjection
 
@@ -4234,6 +4244,38 @@ open func projectNetworkDiagnosticsSnapshot(configuredRelays: [RelayConfig], dia
 })
 }
 
+open func projectNetworkDiagnosticsSnapshotApply(input: NetworkDiagnosticsSnapshotApplyInput) -> NetworkDiagnosticsSnapshotApplyProjection  {
+    return try!  FfiConverterTypeNetworkDiagnosticsSnapshotApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_network_diagnostics_snapshot_apply(self.uniffiClonePointer(),
+        FfiConverterTypeNetworkDiagnosticsSnapshotApplyInput_lower(input),$0
+    )
+})
+}
+
+open func projectNetworkSettingsMutationApply(input: NetworkSettingsMutationApplyInput) -> NetworkSettingsMutationApplyProjection  {
+    return try!  FfiConverterTypeNetworkSettingsMutationApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_network_settings_mutation_apply(self.uniffiClonePointer(),
+        FfiConverterTypeNetworkSettingsMutationApplyInput_lower(input),$0
+    )
+})
+}
+
+open func projectNetworkSettingsSnapshotApply(input: NetworkSettingsSnapshotApplyInput) -> NetworkSettingsSnapshotApplyProjection  {
+    return try!  FfiConverterTypeNetworkSettingsSnapshotApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_network_settings_snapshot_apply(self.uniffiClonePointer(),
+        FfiConverterTypeNetworkSettingsSnapshotApplyInput_lower(input),$0
+    )
+})
+}
+
+open func projectNetworkWifiOnlyPreferenceApply(input: NetworkWifiOnlyPreferenceApplyInput) -> NetworkWifiOnlyPreferenceApplyProjection  {
+    return try!  FfiConverterTypeNetworkWifiOnlyPreferenceApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_network_wifi_only_preference_apply(self.uniffiClonePointer(),
+        FfiConverterTypeNetworkWifiOnlyPreferenceApplyInput_lower(input),$0
+    )
+})
+}
+
 open func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionInput) -> NostrEntityArticleCardProjection  {
     return try!  FfiConverterTypeNostrEntityArticleCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_nostr_entity_article_card(self.uniffiClonePointer(),
@@ -4444,6 +4486,14 @@ open func projectRelayDetail(input: RelayDetailProjectionInput) -> RelayDetailPr
     return try!  FfiConverterTypeRelayDetailProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_relay_detail(self.uniffiClonePointer(),
         FfiConverterTypeRelayDetailProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectRelayHostedRoomsApply(input: RelayHostedRoomsApplyInput) -> RelayHostedRoomsApplyProjection  {
+    return try!  FfiConverterTypeRelayHostedRoomsApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_relay_hosted_rooms_apply(self.uniffiClonePointer(),
+        FfiConverterTypeRelayHostedRoomsApplyInput_lower(input),$0
     )
 })
 }
@@ -23304,6 +23354,146 @@ public func FfiConverterTypeNetworkDiagnosticsSnapshot_lower(_ value: NetworkDia
 }
 
 
+public struct NetworkDiagnosticsSnapshotApplyInput {
+    public var snapshot: NetworkDiagnosticsSnapshot
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: NetworkDiagnosticsSnapshot) {
+        self.snapshot = snapshot
+    }
+}
+
+#if compiler(>=6)
+extension NetworkDiagnosticsSnapshotApplyInput: Sendable {}
+#endif
+
+
+extension NetworkDiagnosticsSnapshotApplyInput: Equatable, Hashable {
+    public static func ==(lhs: NetworkDiagnosticsSnapshotApplyInput, rhs: NetworkDiagnosticsSnapshotApplyInput) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkDiagnosticsSnapshotApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkDiagnosticsSnapshotApplyInput {
+        return
+            try NetworkDiagnosticsSnapshotApplyInput(
+                snapshot: FfiConverterTypeNetworkDiagnosticsSnapshot.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NetworkDiagnosticsSnapshotApplyInput, into buf: inout [UInt8]) {
+        FfiConverterTypeNetworkDiagnosticsSnapshot.write(value.snapshot, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkDiagnosticsSnapshotApplyInput_lift(_ buf: RustBuffer) throws -> NetworkDiagnosticsSnapshotApplyInput {
+    return try FfiConverterTypeNetworkDiagnosticsSnapshotApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkDiagnosticsSnapshotApplyInput_lower(_ value: NetworkDiagnosticsSnapshotApplyInput) -> RustBuffer {
+    return FfiConverterTypeNetworkDiagnosticsSnapshotApplyInput.lower(value)
+}
+
+
+public struct NetworkDiagnosticsSnapshotApplyProjection {
+    public var diagnostics: [RelayDiagnostic]
+    public var settingsProjection: RelaySettingsProjection
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(diagnostics: [RelayDiagnostic], settingsProjection: RelaySettingsProjection, errorMessage: String?) {
+        self.diagnostics = diagnostics
+        self.settingsProjection = settingsProjection
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension NetworkDiagnosticsSnapshotApplyProjection: Sendable {}
+#endif
+
+
+extension NetworkDiagnosticsSnapshotApplyProjection: Equatable, Hashable {
+    public static func ==(lhs: NetworkDiagnosticsSnapshotApplyProjection, rhs: NetworkDiagnosticsSnapshotApplyProjection) -> Bool {
+        if lhs.diagnostics != rhs.diagnostics {
+            return false
+        }
+        if lhs.settingsProjection != rhs.settingsProjection {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(diagnostics)
+        hasher.combine(settingsProjection)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkDiagnosticsSnapshotApplyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkDiagnosticsSnapshotApplyProjection {
+        return
+            try NetworkDiagnosticsSnapshotApplyProjection(
+                diagnostics: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf),
+                settingsProjection: FfiConverterTypeRelaySettingsProjection.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NetworkDiagnosticsSnapshotApplyProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeRelayDiagnostic.write(value.diagnostics, into: &buf)
+        FfiConverterTypeRelaySettingsProjection.write(value.settingsProjection, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkDiagnosticsSnapshotApplyProjection_lift(_ buf: RustBuffer) throws -> NetworkDiagnosticsSnapshotApplyProjection {
+    return try FfiConverterTypeNetworkDiagnosticsSnapshotApplyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkDiagnosticsSnapshotApplyProjection_lower(_ value: NetworkDiagnosticsSnapshotApplyProjection) -> RustBuffer {
+    return FfiConverterTypeNetworkDiagnosticsSnapshotApplyProjection.lower(value)
+}
+
+
 public struct NetworkPathPolicySnapshot {
     public var wifiOnlyEnabled: Bool
     public var pathMonitorEnabled: Bool
@@ -23395,6 +23585,138 @@ public func FfiConverterTypeNetworkPathPolicySnapshot_lift(_ buf: RustBuffer) th
 #endif
 public func FfiConverterTypeNetworkPathPolicySnapshot_lower(_ value: NetworkPathPolicySnapshot) -> RustBuffer {
     return FfiConverterTypeNetworkPathPolicySnapshot.lower(value)
+}
+
+
+public struct NetworkSettingsMutationApplyInput {
+    public var snapshot: NetworkSettingsMutationSnapshot
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: NetworkSettingsMutationSnapshot) {
+        self.snapshot = snapshot
+    }
+}
+
+#if compiler(>=6)
+extension NetworkSettingsMutationApplyInput: Sendable {}
+#endif
+
+
+extension NetworkSettingsMutationApplyInput: Equatable, Hashable {
+    public static func ==(lhs: NetworkSettingsMutationApplyInput, rhs: NetworkSettingsMutationApplyInput) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkSettingsMutationApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkSettingsMutationApplyInput {
+        return
+            try NetworkSettingsMutationApplyInput(
+                snapshot: FfiConverterTypeNetworkSettingsMutationSnapshot.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NetworkSettingsMutationApplyInput, into buf: inout [UInt8]) {
+        FfiConverterTypeNetworkSettingsMutationSnapshot.write(value.snapshot, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkSettingsMutationApplyInput_lift(_ buf: RustBuffer) throws -> NetworkSettingsMutationApplyInput {
+    return try FfiConverterTypeNetworkSettingsMutationApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkSettingsMutationApplyInput_lower(_ value: NetworkSettingsMutationApplyInput) -> RustBuffer {
+    return FfiConverterTypeNetworkSettingsMutationApplyInput.lower(value)
+}
+
+
+public struct NetworkSettingsMutationApplyProjection {
+    public var shouldReload: Bool
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldReload: Bool, errorMessage: String?) {
+        self.shouldReload = shouldReload
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension NetworkSettingsMutationApplyProjection: Sendable {}
+#endif
+
+
+extension NetworkSettingsMutationApplyProjection: Equatable, Hashable {
+    public static func ==(lhs: NetworkSettingsMutationApplyProjection, rhs: NetworkSettingsMutationApplyProjection) -> Bool {
+        if lhs.shouldReload != rhs.shouldReload {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldReload)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkSettingsMutationApplyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkSettingsMutationApplyProjection {
+        return
+            try NetworkSettingsMutationApplyProjection(
+                shouldReload: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NetworkSettingsMutationApplyProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldReload, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkSettingsMutationApplyProjection_lift(_ buf: RustBuffer) throws -> NetworkSettingsMutationApplyProjection {
+    return try FfiConverterTypeNetworkSettingsMutationApplyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkSettingsMutationApplyProjection_lower(_ value: NetworkSettingsMutationApplyProjection) -> RustBuffer {
+    return FfiConverterTypeNetworkSettingsMutationApplyProjection.lower(value)
 }
 
 
@@ -23567,6 +23889,310 @@ public func FfiConverterTypeNetworkSettingsSnapshot_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeNetworkSettingsSnapshot_lower(_ value: NetworkSettingsSnapshot) -> RustBuffer {
     return FfiConverterTypeNetworkSettingsSnapshot.lower(value)
+}
+
+
+public struct NetworkSettingsSnapshotApplyInput {
+    public var snapshot: NetworkSettingsSnapshot
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: NetworkSettingsSnapshot) {
+        self.snapshot = snapshot
+    }
+}
+
+#if compiler(>=6)
+extension NetworkSettingsSnapshotApplyInput: Sendable {}
+#endif
+
+
+extension NetworkSettingsSnapshotApplyInput: Equatable, Hashable {
+    public static func ==(lhs: NetworkSettingsSnapshotApplyInput, rhs: NetworkSettingsSnapshotApplyInput) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkSettingsSnapshotApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkSettingsSnapshotApplyInput {
+        return
+            try NetworkSettingsSnapshotApplyInput(
+                snapshot: FfiConverterTypeNetworkSettingsSnapshot.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NetworkSettingsSnapshotApplyInput, into buf: inout [UInt8]) {
+        FfiConverterTypeNetworkSettingsSnapshot.write(value.snapshot, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkSettingsSnapshotApplyInput_lift(_ buf: RustBuffer) throws -> NetworkSettingsSnapshotApplyInput {
+    return try FfiConverterTypeNetworkSettingsSnapshotApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkSettingsSnapshotApplyInput_lower(_ value: NetworkSettingsSnapshotApplyInput) -> RustBuffer {
+    return FfiConverterTypeNetworkSettingsSnapshotApplyInput.lower(value)
+}
+
+
+public struct NetworkSettingsSnapshotApplyProjection {
+    public var relays: [RelayConfig]
+    public var diagnostics: [RelayDiagnostic]
+    public var settingsProjection: RelaySettingsProjection
+    public var wifiOnlyEnabled: Bool
+    public var pathMonitorEnabled: Bool
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(relays: [RelayConfig], diagnostics: [RelayDiagnostic], settingsProjection: RelaySettingsProjection, wifiOnlyEnabled: Bool, pathMonitorEnabled: Bool, errorMessage: String?) {
+        self.relays = relays
+        self.diagnostics = diagnostics
+        self.settingsProjection = settingsProjection
+        self.wifiOnlyEnabled = wifiOnlyEnabled
+        self.pathMonitorEnabled = pathMonitorEnabled
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension NetworkSettingsSnapshotApplyProjection: Sendable {}
+#endif
+
+
+extension NetworkSettingsSnapshotApplyProjection: Equatable, Hashable {
+    public static func ==(lhs: NetworkSettingsSnapshotApplyProjection, rhs: NetworkSettingsSnapshotApplyProjection) -> Bool {
+        if lhs.relays != rhs.relays {
+            return false
+        }
+        if lhs.diagnostics != rhs.diagnostics {
+            return false
+        }
+        if lhs.settingsProjection != rhs.settingsProjection {
+            return false
+        }
+        if lhs.wifiOnlyEnabled != rhs.wifiOnlyEnabled {
+            return false
+        }
+        if lhs.pathMonitorEnabled != rhs.pathMonitorEnabled {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(relays)
+        hasher.combine(diagnostics)
+        hasher.combine(settingsProjection)
+        hasher.combine(wifiOnlyEnabled)
+        hasher.combine(pathMonitorEnabled)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkSettingsSnapshotApplyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkSettingsSnapshotApplyProjection {
+        return
+            try NetworkSettingsSnapshotApplyProjection(
+                relays: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
+                diagnostics: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf),
+                settingsProjection: FfiConverterTypeRelaySettingsProjection.read(from: &buf),
+                wifiOnlyEnabled: FfiConverterBool.read(from: &buf),
+                pathMonitorEnabled: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NetworkSettingsSnapshotApplyProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeRelayConfig.write(value.relays, into: &buf)
+        FfiConverterSequenceTypeRelayDiagnostic.write(value.diagnostics, into: &buf)
+        FfiConverterTypeRelaySettingsProjection.write(value.settingsProjection, into: &buf)
+        FfiConverterBool.write(value.wifiOnlyEnabled, into: &buf)
+        FfiConverterBool.write(value.pathMonitorEnabled, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkSettingsSnapshotApplyProjection_lift(_ buf: RustBuffer) throws -> NetworkSettingsSnapshotApplyProjection {
+    return try FfiConverterTypeNetworkSettingsSnapshotApplyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkSettingsSnapshotApplyProjection_lower(_ value: NetworkSettingsSnapshotApplyProjection) -> RustBuffer {
+    return FfiConverterTypeNetworkSettingsSnapshotApplyProjection.lower(value)
+}
+
+
+public struct NetworkWifiOnlyPreferenceApplyInput {
+    public var snapshot: NetworkWifiOnlyPreferenceSnapshot
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: NetworkWifiOnlyPreferenceSnapshot) {
+        self.snapshot = snapshot
+    }
+}
+
+#if compiler(>=6)
+extension NetworkWifiOnlyPreferenceApplyInput: Sendable {}
+#endif
+
+
+extension NetworkWifiOnlyPreferenceApplyInput: Equatable, Hashable {
+    public static func ==(lhs: NetworkWifiOnlyPreferenceApplyInput, rhs: NetworkWifiOnlyPreferenceApplyInput) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkWifiOnlyPreferenceApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkWifiOnlyPreferenceApplyInput {
+        return
+            try NetworkWifiOnlyPreferenceApplyInput(
+                snapshot: FfiConverterTypeNetworkWifiOnlyPreferenceSnapshot.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NetworkWifiOnlyPreferenceApplyInput, into buf: inout [UInt8]) {
+        FfiConverterTypeNetworkWifiOnlyPreferenceSnapshot.write(value.snapshot, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkWifiOnlyPreferenceApplyInput_lift(_ buf: RustBuffer) throws -> NetworkWifiOnlyPreferenceApplyInput {
+    return try FfiConverterTypeNetworkWifiOnlyPreferenceApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkWifiOnlyPreferenceApplyInput_lower(_ value: NetworkWifiOnlyPreferenceApplyInput) -> RustBuffer {
+    return FfiConverterTypeNetworkWifiOnlyPreferenceApplyInput.lower(value)
+}
+
+
+public struct NetworkWifiOnlyPreferenceApplyProjection {
+    public var wifiOnlyEnabled: Bool
+    public var pathMonitorEnabled: Bool
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(wifiOnlyEnabled: Bool, pathMonitorEnabled: Bool, errorMessage: String?) {
+        self.wifiOnlyEnabled = wifiOnlyEnabled
+        self.pathMonitorEnabled = pathMonitorEnabled
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension NetworkWifiOnlyPreferenceApplyProjection: Sendable {}
+#endif
+
+
+extension NetworkWifiOnlyPreferenceApplyProjection: Equatable, Hashable {
+    public static func ==(lhs: NetworkWifiOnlyPreferenceApplyProjection, rhs: NetworkWifiOnlyPreferenceApplyProjection) -> Bool {
+        if lhs.wifiOnlyEnabled != rhs.wifiOnlyEnabled {
+            return false
+        }
+        if lhs.pathMonitorEnabled != rhs.pathMonitorEnabled {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(wifiOnlyEnabled)
+        hasher.combine(pathMonitorEnabled)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkWifiOnlyPreferenceApplyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkWifiOnlyPreferenceApplyProjection {
+        return
+            try NetworkWifiOnlyPreferenceApplyProjection(
+                wifiOnlyEnabled: FfiConverterBool.read(from: &buf),
+                pathMonitorEnabled: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NetworkWifiOnlyPreferenceApplyProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.wifiOnlyEnabled, into: &buf)
+        FfiConverterBool.write(value.pathMonitorEnabled, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkWifiOnlyPreferenceApplyProjection_lift(_ buf: RustBuffer) throws -> NetworkWifiOnlyPreferenceApplyProjection {
+    return try FfiConverterTypeNetworkWifiOnlyPreferenceApplyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkWifiOnlyPreferenceApplyProjection_lower(_ value: NetworkWifiOnlyPreferenceApplyProjection) -> RustBuffer {
+    return FfiConverterTypeNetworkWifiOnlyPreferenceApplyProjection.lower(value)
 }
 
 
@@ -31007,6 +31633,130 @@ public func FfiConverterTypeRelayDiagnostic_lift(_ buf: RustBuffer) throws -> Re
 #endif
 public func FfiConverterTypeRelayDiagnostic_lower(_ value: RelayDiagnostic) -> RustBuffer {
     return FfiConverterTypeRelayDiagnostic.lower(value)
+}
+
+
+public struct RelayHostedRoomsApplyInput {
+    public var snapshot: RelayHostedRoomsSnapshot
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: RelayHostedRoomsSnapshot) {
+        self.snapshot = snapshot
+    }
+}
+
+#if compiler(>=6)
+extension RelayHostedRoomsApplyInput: Sendable {}
+#endif
+
+
+extension RelayHostedRoomsApplyInput: Equatable, Hashable {
+    public static func ==(lhs: RelayHostedRoomsApplyInput, rhs: RelayHostedRoomsApplyInput) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayHostedRoomsApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayHostedRoomsApplyInput {
+        return
+            try RelayHostedRoomsApplyInput(
+                snapshot: FfiConverterTypeRelayHostedRoomsSnapshot.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayHostedRoomsApplyInput, into buf: inout [UInt8]) {
+        FfiConverterTypeRelayHostedRoomsSnapshot.write(value.snapshot, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayHostedRoomsApplyInput_lift(_ buf: RustBuffer) throws -> RelayHostedRoomsApplyInput {
+    return try FfiConverterTypeRelayHostedRoomsApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayHostedRoomsApplyInput_lower(_ value: RelayHostedRoomsApplyInput) -> RustBuffer {
+    return FfiConverterTypeRelayHostedRoomsApplyInput.lower(value)
+}
+
+
+public struct RelayHostedRoomsApplyProjection {
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(errorMessage: String?) {
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension RelayHostedRoomsApplyProjection: Sendable {}
+#endif
+
+
+extension RelayHostedRoomsApplyProjection: Equatable, Hashable {
+    public static func ==(lhs: RelayHostedRoomsApplyProjection, rhs: RelayHostedRoomsApplyProjection) -> Bool {
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayHostedRoomsApplyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayHostedRoomsApplyProjection {
+        return
+            try RelayHostedRoomsApplyProjection(
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayHostedRoomsApplyProjection, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayHostedRoomsApplyProjection_lift(_ buf: RustBuffer) throws -> RelayHostedRoomsApplyProjection {
+    return try FfiConverterTypeRelayHostedRoomsApplyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayHostedRoomsApplyProjection_lower(_ value: RelayHostedRoomsApplyProjection) -> RustBuffer {
+    return FfiConverterTypeRelayHostedRoomsApplyProjection.lower(value)
 }
 
 
@@ -46415,6 +47165,18 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_network_diagnostics_snapshot() != 27417) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_network_diagnostics_snapshot_apply() != 25039) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_network_settings_mutation_apply() != 18089) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_network_settings_snapshot_apply() != 25161) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_network_wifi_only_preference_apply() != 58714) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_nostr_entity_article_card() != 6476) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -46479,6 +47241,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_detail() != 11729) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_hosted_rooms_apply() != 52524) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_relay_remove() != 7088) {
