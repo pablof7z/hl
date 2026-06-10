@@ -507,6 +507,12 @@ actor SafeHighlighterCore {
         core.projectIsbnPreviewRequest(input: input)
     }
 
+    nonisolated func projectIsbnPreviewLookupApply(
+        input: IsbnPreviewLookupApplyInput
+    ) -> IsbnPreviewLookupApplyProjection {
+        core.projectIsbnPreviewLookupApply(input: input)
+    }
+
     nonisolated func findExistingBookForIsbn(
         _ isbn: String,
         recents: [ArtifactRecord]

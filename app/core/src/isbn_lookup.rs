@@ -48,6 +48,18 @@ pub struct IsbnPreviewLookupSnapshot {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
+pub struct IsbnPreviewLookupApplyInput {
+    pub preview: Option<ArtifactPreview>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct IsbnPreviewLookupApplyProjection {
+    pub preview: Option<ArtifactPreview>,
+    pub error_message: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct IsbnManualPreviewProjectionInput {
     pub title: String,
     pub author: String,
@@ -194,6 +206,29 @@ pub fn lookup_snapshot(result: Result<ArtifactPreview, CoreError>) -> IsbnPrevie
             preview: None,
             error: error.to_string(),
         },
+    }
+}
+
+pub fn lookup_apply_projection(
+    input: IsbnPreviewLookupApplyInput,
+) -> IsbnPreviewLookupApplyProjection {
+    let error = input.error.trim().to_string();
+    if error.is_empty() {
+        if input.preview.is_some() {
+            return IsbnPreviewLookupApplyProjection {
+                preview: input.preview,
+                error_message: None,
+            };
+        }
+        return IsbnPreviewLookupApplyProjection {
+            preview: None,
+            error_message: Some("Unable to resolve ISBN".into()),
+        };
+    }
+
+    IsbnPreviewLookupApplyProjection {
+        preview: None,
+        error_message: Some(error),
     }
 }
 
@@ -805,6 +840,38 @@ mod tests {
         let err = lookup_snapshot(Err(CoreError::InvalidInput("bad isbn".into())));
         assert!(err.preview.is_none());
         assert_eq!(err.error, "invalid input: bad isbn");
+    }
+
+    #[test]
+    fn lookup_apply_projection_projects_preview_or_error_message() {
+        let preview = partial_preview("9780735211292");
+
+        let ok = lookup_apply_projection(IsbnPreviewLookupApplyInput {
+            preview: Some(preview),
+            error: String::new(),
+        });
+        assert_eq!(
+            ok.preview.as_ref().map(|p| p.catalog_id.as_str()),
+            Some("isbn:9780735211292")
+        );
+        assert_eq!(ok.error_message, None);
+
+        let missing_preview = lookup_apply_projection(IsbnPreviewLookupApplyInput {
+            preview: None,
+            error: String::new(),
+        });
+        assert!(missing_preview.preview.is_none());
+        assert_eq!(
+            missing_preview.error_message.as_deref(),
+            Some("Unable to resolve ISBN")
+        );
+
+        let failed = lookup_apply_projection(IsbnPreviewLookupApplyInput {
+            preview: Some(partial_preview("9780735211292")),
+            error: " lookup failed ".into(),
+        });
+        assert!(failed.preview.is_none());
+        assert_eq!(failed.error_message.as_deref(), Some("lookup failed"));
     }
 
     #[test]

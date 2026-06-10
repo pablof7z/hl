@@ -873,6 +873,9 @@ fn publish_relay_diagnostics_row(
     events_enabled: &DiagnosticsEventsEnabled,
 ) {
     let mut next = diagnostics.read().clone();
+    if !next.contains_key(&row.url) {
+        return;
+    }
     next.insert(row.url.clone(), row);
     publish_relay_diagnostics_snapshot(diagnostics, next, callback_slot, events_enabled);
 }
@@ -1076,6 +1079,8 @@ pub async fn apply_relay_config(client: &Client, rows: &[RelayConfig]) {
             tracing::warn!(relay = %url, error = %e, "force_remove_relay");
         }
     }
+
+    let current = client.relays().await;
 
     // Add-or-update the desired set.
     for row in rows {

@@ -1397,6 +1397,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     
     func projectIsbnManualPreview(input: IsbnManualPreviewProjectionInput)  -> IsbnManualPreviewProjection
     
+    func projectIsbnPreviewLookupApply(input: IsbnPreviewLookupApplyInput)  -> IsbnPreviewLookupApplyProjection
+    
     func projectIsbnPreviewRequest(input: IsbnPreviewRequestProjectionInput)  -> IsbnPreviewRequestProjection
     
     /**
@@ -4137,6 +4139,14 @@ open func projectIsbnManualPreview(input: IsbnManualPreviewProjectionInput) -> I
     return try!  FfiConverterTypeIsbnManualPreviewProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_isbn_manual_preview(self.uniffiClonePointer(),
         FfiConverterTypeIsbnManualPreviewProjectionInput_lower(input),$0
+    )
+})
+}
+    
+open func projectIsbnPreviewLookupApply(input: IsbnPreviewLookupApplyInput) -> IsbnPreviewLookupApplyProjection  {
+    return try!  FfiConverterTypeIsbnPreviewLookupApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_isbn_preview_lookup_apply(self.uniffiClonePointer(),
+        FfiConverterTypeIsbnPreviewLookupApplyInput_lower(input),$0
     )
 })
 }
@@ -21765,6 +21775,146 @@ public func FfiConverterTypeIsbnManualPreviewProjectionInput_lift(_ buf: RustBuf
 #endif
 public func FfiConverterTypeIsbnManualPreviewProjectionInput_lower(_ value: IsbnManualPreviewProjectionInput) -> RustBuffer {
     return FfiConverterTypeIsbnManualPreviewProjectionInput.lower(value)
+}
+
+
+public struct IsbnPreviewLookupApplyInput {
+    public var preview: ArtifactPreview?
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(preview: ArtifactPreview?, error: String) {
+        self.preview = preview
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension IsbnPreviewLookupApplyInput: Sendable {}
+#endif
+
+
+extension IsbnPreviewLookupApplyInput: Equatable, Hashable {
+    public static func ==(lhs: IsbnPreviewLookupApplyInput, rhs: IsbnPreviewLookupApplyInput) -> Bool {
+        if lhs.preview != rhs.preview {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(preview)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIsbnPreviewLookupApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IsbnPreviewLookupApplyInput {
+        return
+            try IsbnPreviewLookupApplyInput(
+                preview: FfiConverterOptionTypeArtifactPreview.read(from: &buf), 
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IsbnPreviewLookupApplyInput, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeArtifactPreview.write(value.preview, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIsbnPreviewLookupApplyInput_lift(_ buf: RustBuffer) throws -> IsbnPreviewLookupApplyInput {
+    return try FfiConverterTypeIsbnPreviewLookupApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIsbnPreviewLookupApplyInput_lower(_ value: IsbnPreviewLookupApplyInput) -> RustBuffer {
+    return FfiConverterTypeIsbnPreviewLookupApplyInput.lower(value)
+}
+
+
+public struct IsbnPreviewLookupApplyProjection {
+    public var preview: ArtifactPreview?
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(preview: ArtifactPreview?, errorMessage: String?) {
+        self.preview = preview
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension IsbnPreviewLookupApplyProjection: Sendable {}
+#endif
+
+
+extension IsbnPreviewLookupApplyProjection: Equatable, Hashable {
+    public static func ==(lhs: IsbnPreviewLookupApplyProjection, rhs: IsbnPreviewLookupApplyProjection) -> Bool {
+        if lhs.preview != rhs.preview {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(preview)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeIsbnPreviewLookupApplyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IsbnPreviewLookupApplyProjection {
+        return
+            try IsbnPreviewLookupApplyProjection(
+                preview: FfiConverterOptionTypeArtifactPreview.read(from: &buf), 
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: IsbnPreviewLookupApplyProjection, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeArtifactPreview.write(value.preview, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIsbnPreviewLookupApplyProjection_lift(_ buf: RustBuffer) throws -> IsbnPreviewLookupApplyProjection {
+    return try FfiConverterTypeIsbnPreviewLookupApplyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeIsbnPreviewLookupApplyProjection_lower(_ value: IsbnPreviewLookupApplyProjection) -> RustBuffer {
+    return FfiConverterTypeIsbnPreviewLookupApplyProjection.lower(value)
 }
 
 
@@ -44533,6 +44683,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_isbn_manual_preview() != 64480) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_isbn_preview_lookup_apply() != 60670) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_isbn_preview_request() != 19235) {

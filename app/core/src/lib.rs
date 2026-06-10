@@ -153,7 +153,8 @@ pub use home_feed::{
 pub use isbn_lookup::{
     BookPickerQueryProjection, BookPickerQueryProjectionInput, BookPickerSnapshot,
     EditedBookPreviewProjection, IsbnManualPreviewProjection, IsbnManualPreviewProjectionInput,
-    IsbnPreviewLookupSnapshot, IsbnPreviewRequestProjection, IsbnPreviewRequestProjectionInput,
+    IsbnPreviewLookupApplyInput, IsbnPreviewLookupApplyProjection, IsbnPreviewLookupSnapshot,
+    IsbnPreviewRequestProjection, IsbnPreviewRequestProjectionInput,
 };
 pub use lists::{
     BookmarkLibraryFilter, BookmarkLibraryFilterChipProjection, BookmarkLibraryPane,
