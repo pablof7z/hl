@@ -1530,6 +1530,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectShareWebReaderTarget(input: ShareWebReaderTargetProjectionInput)  -> ShareArtifactTargetProjection
 
+    func projectViewSubscriptionStart(input: ViewSubscriptionStartProjectionInput)  -> ViewSubscriptionStartProjection
+
     func projectWaveformCacheKey(input: WaveformCacheKeyProjectionInput)  -> WaveformCacheKeyProjection
 
     func projectWebBookmarkRow(input: WebBookmarkRowProjectionInput)  -> WebBookmarkRowProjection
@@ -4476,6 +4478,14 @@ open func projectShareWebReaderTarget(input: ShareWebReaderTargetProjectionInput
     return try!  FfiConverterTypeShareArtifactTargetProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_share_web_reader_target(self.uniffiClonePointer(),
         FfiConverterTypeShareWebReaderTargetProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectViewSubscriptionStart(input: ViewSubscriptionStartProjectionInput) -> ViewSubscriptionStartProjection  {
+    return try!  FfiConverterTypeViewSubscriptionStartProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_view_subscription_start(self.uniffiClonePointer(),
+        FfiConverterTypeViewSubscriptionStartProjectionInput_lower(input),$0
     )
 })
 }
@@ -35188,6 +35198,138 @@ public func FfiConverterTypeTranscriptSegment_lower(_ value: TranscriptSegment) 
 }
 
 
+public struct ViewSubscriptionStartProjection {
+    public var shouldRegister: Bool
+    public var handle: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldRegister: Bool, handle: UInt64) {
+        self.shouldRegister = shouldRegister
+        self.handle = handle
+    }
+}
+
+#if compiler(>=6)
+extension ViewSubscriptionStartProjection: Sendable {}
+#endif
+
+
+extension ViewSubscriptionStartProjection: Equatable, Hashable {
+    public static func ==(lhs: ViewSubscriptionStartProjection, rhs: ViewSubscriptionStartProjection) -> Bool {
+        if lhs.shouldRegister != rhs.shouldRegister {
+            return false
+        }
+        if lhs.handle != rhs.handle {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldRegister)
+        hasher.combine(handle)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeViewSubscriptionStartProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ViewSubscriptionStartProjection {
+        return
+            try ViewSubscriptionStartProjection(
+                shouldRegister: FfiConverterBool.read(from: &buf),
+                handle: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ViewSubscriptionStartProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldRegister, into: &buf)
+        FfiConverterUInt64.write(value.handle, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewSubscriptionStartProjection_lift(_ buf: RustBuffer) throws -> ViewSubscriptionStartProjection {
+    return try FfiConverterTypeViewSubscriptionStartProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewSubscriptionStartProjection_lower(_ value: ViewSubscriptionStartProjection) -> RustBuffer {
+    return FfiConverterTypeViewSubscriptionStartProjection.lower(value)
+}
+
+
+public struct ViewSubscriptionStartProjectionInput {
+    public var start: SubscriptionStartSnapshot
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(start: SubscriptionStartSnapshot) {
+        self.start = start
+    }
+}
+
+#if compiler(>=6)
+extension ViewSubscriptionStartProjectionInput: Sendable {}
+#endif
+
+
+extension ViewSubscriptionStartProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: ViewSubscriptionStartProjectionInput, rhs: ViewSubscriptionStartProjectionInput) -> Bool {
+        if lhs.start != rhs.start {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(start)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeViewSubscriptionStartProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ViewSubscriptionStartProjectionInput {
+        return
+            try ViewSubscriptionStartProjectionInput(
+                start: FfiConverterTypeSubscriptionStartSnapshot.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ViewSubscriptionStartProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeSubscriptionStartSnapshot.write(value.start, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewSubscriptionStartProjectionInput_lift(_ buf: RustBuffer) throws -> ViewSubscriptionStartProjectionInput {
+    return try FfiConverterTypeViewSubscriptionStartProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewSubscriptionStartProjectionInput_lower(_ value: ViewSubscriptionStartProjectionInput) -> RustBuffer {
+    return FfiConverterTypeViewSubscriptionStartProjectionInput.lower(value)
+}
+
+
 public struct WaveformCacheKeyProjection {
     public var cacheKey: String
     public var isUsable: Bool
@@ -42276,6 +42418,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_share_web_reader_target() != 11832) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_view_subscription_start() != 19035) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_waveform_cache_key() != 46885) {

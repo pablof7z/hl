@@ -28,12 +28,15 @@ final class DiscussionStore {
 
         guard subscriptionHandle == nil else { return }
         let outcome = await core.subscribeRoomDiscussions(groupId: groupId)
-        guard outcome.error.isEmpty else {
+        let projection = core.projectViewSubscriptionStart(
+            input: ViewSubscriptionStartProjectionInput(start: outcome)
+        )
+        guard projection.shouldRegister else {
             // Subscription failure leaves cache-only rendering working.
             return
         }
-        subscriptionHandle = outcome.handle
-        bridge?.registerDiscussions(self, handle: outcome.handle)
+        subscriptionHandle = projection.handle
+        bridge?.registerDiscussions(self, handle: projection.handle)
     }
 
     func stop() {

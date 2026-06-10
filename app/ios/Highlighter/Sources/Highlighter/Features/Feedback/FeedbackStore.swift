@@ -35,12 +35,15 @@ final class FeedbackStore {
 
         guard subscriptionHandle == nil else { return }
         let outcome = await core.subscribeFeedbackThreads(coordinate: coordinate)
-        guard outcome.error.isEmpty else {
+        let projection = core.projectViewSubscriptionStart(
+            input: ViewSubscriptionStartProjectionInput(start: outcome)
+        )
+        guard projection.shouldRegister else {
             // Subscription failure leaves cache-only rendering working.
             return
         }
-        subscriptionHandle = outcome.handle
-        bridge?.registerFeedbackThreads(self, handle: outcome.handle)
+        subscriptionHandle = projection.handle
+        bridge?.registerFeedbackThreads(self, handle: projection.handle)
     }
 
     func stop() {

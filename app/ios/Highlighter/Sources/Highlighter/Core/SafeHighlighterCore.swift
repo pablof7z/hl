@@ -1322,6 +1322,12 @@ actor SafeHighlighterCore {
 
     // MARK: - Subscriptions
 
+    nonisolated func projectViewSubscriptionStart(
+        input: ViewSubscriptionStartProjectionInput
+    ) -> ViewSubscriptionStartProjection {
+        core.projectViewSubscriptionStart(input: input)
+    }
+
     func subscribeFollowingReads() async -> SubscriptionStartSnapshot {
         await core.subscribeFollowingReads()
     }

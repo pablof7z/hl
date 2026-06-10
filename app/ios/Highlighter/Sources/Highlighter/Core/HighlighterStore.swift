@@ -208,9 +208,12 @@ final class HighlighterStore {
         }
         guard profileSnapshotHandles[pubkeyHex] == nil else { return }
         let profileStart = await safeCore.subscribeUserProfile(pubkeyHex: pubkeyHex)
-        if profileStart.error.isEmpty {
-            profileSnapshotHandles[pubkeyHex] = profileStart.handle
-            eventBridge?.registerProfileSnapshot(pubkeyHex: pubkeyHex, handle: profileStart.handle)
+        let projection = safeCore.projectViewSubscriptionStart(
+            input: ViewSubscriptionStartProjectionInput(start: profileStart)
+        )
+        if projection.shouldRegister {
+            profileSnapshotHandles[pubkeyHex] = projection.handle
+            eventBridge?.registerProfileSnapshot(pubkeyHex: pubkeyHex, handle: projection.handle)
         }
     }
 

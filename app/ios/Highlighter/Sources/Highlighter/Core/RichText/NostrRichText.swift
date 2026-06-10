@@ -181,16 +181,19 @@ final class NostrEntityCardStore {
         guard subscriptionHandle == nil else { return }
 
         let outcome = await safeCore.subscribeNostrEntity(entity)
-        guard outcome.error.isEmpty else {
+        let projection = safeCore.projectViewSubscriptionStart(
+            input: ViewSubscriptionStartProjectionInput(start: outcome)
+        )
+        guard projection.shouldRegister else {
             // Cache-only rendering remains valid; the placeholder stays visible.
             return
         }
         guard !Task.isCancelled else {
-            await safeCore.unsubscribe(outcome.handle)
+            await safeCore.unsubscribe(projection.handle)
             return
         }
-        subscriptionHandle = outcome.handle
-        eventBridge?.registerNostrEntity(self, handle: outcome.handle)
+        subscriptionHandle = projection.handle
+        eventBridge?.registerNostrEntity(self, handle: projection.handle)
     }
 
     func stop() {

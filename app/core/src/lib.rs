@@ -164,7 +164,8 @@ pub use models::{
     HydratedHighlight, LoginInputAction, MutationSnapshot, OnboardingInterest,
     OnboardingInterestChip, OnboardingInterestProjection, OnboardingInterestSelection,
     ProfileMetadata, ProfileUpdateDraft, ReadingFeedItem, RoomLane, RoomRecommendation,
-    RoomRecommendationReason, SubscriptionStartSnapshot, WebBookmarkRecord,
+    RoomRecommendationReason, SubscriptionStartSnapshot, ViewSubscriptionStartProjection,
+    ViewSubscriptionStartProjectionInput, WebBookmarkRecord,
 };
 pub use nip05::{
     Nip05Availability, Nip05AvailabilitySnapshot, Nip05AvailabilityState,

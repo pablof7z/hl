@@ -74,6 +74,66 @@ pub struct SubscriptionStartSnapshot {
     pub error: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ViewSubscriptionStartProjectionInput {
+    pub start: SubscriptionStartSnapshot,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ViewSubscriptionStartProjection {
+    pub should_register: bool,
+    pub handle: u64,
+}
+
+pub fn view_subscription_start_projection(
+    input: ViewSubscriptionStartProjectionInput,
+) -> ViewSubscriptionStartProjection {
+    let should_register = input.start.error.trim().is_empty() && input.start.handle != 0;
+    ViewSubscriptionStartProjection {
+        should_register,
+        handle: if should_register {
+            input.start.handle
+        } else {
+            0
+        },
+    }
+}
+
+#[cfg(test)]
+mod view_subscription_start_projection_tests {
+    use super::*;
+
+    #[test]
+    fn view_subscription_start_projection_requires_successful_nonzero_handle() {
+        let success = view_subscription_start_projection(ViewSubscriptionStartProjectionInput {
+            start: SubscriptionStartSnapshot {
+                handle: 42,
+                error: String::new(),
+            },
+        });
+        assert!(success.should_register);
+        assert_eq!(success.handle, 42);
+
+        let failed = view_subscription_start_projection(ViewSubscriptionStartProjectionInput {
+            start: SubscriptionStartSnapshot {
+                handle: 42,
+                error: "subscribe failed".into(),
+            },
+        });
+        assert!(!failed.should_register);
+        assert_eq!(failed.handle, 0);
+
+        let app_scope = view_subscription_start_projection(ViewSubscriptionStartProjectionInput {
+            start: SubscriptionStartSnapshot {
+                handle: 0,
+                error: String::new(),
+            },
+        });
+        assert!(!app_scope.should_register);
+        assert_eq!(app_scope.handle, 0);
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum HighlightSourceKind {
     Article,

@@ -43,12 +43,15 @@ final class FeedbackThreadStore {
 
         guard subscriptionHandle == nil else { return }
         let outcome = await core.subscribeFeedbackThread(rootEventId: rootEventId)
-        guard outcome.error.isEmpty else {
+        let projection = core.projectViewSubscriptionStart(
+            input: ViewSubscriptionStartProjectionInput(start: outcome)
+        )
+        guard projection.shouldRegister else {
             // Cache-only rendering still works.
             return
         }
-        subscriptionHandle = outcome.handle
-        bridge?.registerFeedbackThread(self, handle: outcome.handle)
+        subscriptionHandle = projection.handle
+        bridge?.registerFeedbackThread(self, handle: projection.handle)
     }
 
     func stop() {

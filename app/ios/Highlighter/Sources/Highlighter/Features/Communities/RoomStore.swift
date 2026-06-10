@@ -39,12 +39,15 @@ final class RoomStore {
 
         guard subscriptionHandle == nil else { return }
         let outcome = await core.subscribeRoom(groupId: groupId)
-        guard outcome.error.isEmpty else {
+        let projection = core.projectViewSubscriptionStart(
+            input: ViewSubscriptionStartProjectionInput(start: outcome)
+        )
+        guard projection.shouldRegister else {
             // Subscription failure leaves cache-only rendering working.
             return
         }
-        subscriptionHandle = outcome.handle
-        bridge?.registerRoom(self, handle: outcome.handle)
+        subscriptionHandle = projection.handle
+        bridge?.registerRoom(self, handle: projection.handle)
     }
 
     func stop() {

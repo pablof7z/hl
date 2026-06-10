@@ -52,15 +52,21 @@ final class HomeFeedStore {
         guard subscriptionHandles.isEmpty, let bridge = eventBridge else { return }
 
         let reads = await core.subscribeFollowingReads()
-        if reads.error.isEmpty {
-            subscriptionHandles.append(reads.handle)
-            bridge.registerHomeFeed(self, handle: reads.handle)
+        let readsProjection = core.projectViewSubscriptionStart(
+            input: ViewSubscriptionStartProjectionInput(start: reads)
+        )
+        if readsProjection.shouldRegister {
+            subscriptionHandles.append(readsProjection.handle)
+            bridge.registerHomeFeed(self, handle: readsProjection.handle)
         }
 
         let highlights = await core.subscribeFollowingHighlights()
-        if highlights.error.isEmpty {
-            subscriptionHandles.append(highlights.handle)
-            bridge.registerHomeFeed(self, handle: highlights.handle)
+        let highlightsProjection = core.projectViewSubscriptionStart(
+            input: ViewSubscriptionStartProjectionInput(start: highlights)
+        )
+        if highlightsProjection.shouldRegister {
+            subscriptionHandles.append(highlightsProjection.handle)
+            bridge.registerHomeFeed(self, handle: highlightsProjection.handle)
         }
     }
 }

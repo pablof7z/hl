@@ -41,13 +41,16 @@ final class ChatPresenceProbe {
 
         guard subscriptionHandle == nil else { return }
         let presenceStart = await core.subscribeRoomChat(groupId: groupId)
-        guard presenceStart.error.isEmpty else {
+        let presenceProjection = core.projectViewSubscriptionStart(
+            input: ViewSubscriptionStartProjectionInput(start: presenceStart)
+        )
+        guard presenceProjection.shouldRegister else {
             // No live promotion if the subscription failed; the cache peek
             // result still applies.
             return
         }
-        subscriptionHandle = presenceStart.handle
-        bridge?.registerChatPresence(self, handle: presenceStart.handle)
+        subscriptionHandle = presenceProjection.handle
+        bridge?.registerChatPresence(self, handle: presenceProjection.handle)
     }
 
     func stop() {
@@ -101,12 +104,15 @@ final class ChatStore {
 
         guard subscriptionHandle == nil else { return }
         let outcome = await core.subscribeRoomChat(groupId: groupId)
-        guard outcome.error.isEmpty else {
+        let projection = core.projectViewSubscriptionStart(
+            input: ViewSubscriptionStartProjectionInput(start: outcome)
+        )
+        guard projection.shouldRegister else {
             // Subscription failure leaves cache-only rendering working.
             return
         }
-        subscriptionHandle = outcome.handle
-        bridge?.registerChat(self, handle: outcome.handle)
+        subscriptionHandle = projection.handle
+        bridge?.registerChat(self, handle: projection.handle)
     }
 
     /// Expand the loaded window by one page. Replaces `messages` with a

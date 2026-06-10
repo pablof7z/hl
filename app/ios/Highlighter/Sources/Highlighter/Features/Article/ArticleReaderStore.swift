@@ -171,13 +171,16 @@ final class ArticleReaderStore {
             pubkeyHex: target.pubkey,
             dTag: target.dTag
         )
-        guard outcome.error.isEmpty else {
+        let projection = safeCore.projectViewSubscriptionStart(
+            input: ViewSubscriptionStartProjectionInput(start: outcome)
+        )
+        guard projection.shouldRegister else {
             // Non-fatal: cold ndb path still shows the seeded article and
             // its cached highlights. Live updates will resume on the next
             // visit.
             return
         }
-        subscriptionHandle = outcome.handle
-        bridge.registerArticle(self, handle: outcome.handle)
+        subscriptionHandle = projection.handle
+        bridge.registerArticle(self, handle: projection.handle)
     }
 }

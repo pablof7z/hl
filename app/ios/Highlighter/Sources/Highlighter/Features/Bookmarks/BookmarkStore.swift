@@ -51,23 +51,32 @@ final class BookmarkStore {
     private func installSubscriptions(core: SafeHighlighterCore, bridge: EventBridge) async {
         if setsHandle == nil {
             let setsStart = await core.subscribeBookmarkSets()
-            if setsStart.error.isEmpty {
-                setsHandle = setsStart.handle
-                bridge.registerBookmarkStore(self, handle: setsStart.handle)
+            let projection = core.projectViewSubscriptionStart(
+                input: ViewSubscriptionStartProjectionInput(start: setsStart)
+            )
+            if projection.shouldRegister {
+                setsHandle = projection.handle
+                bridge.registerBookmarkStore(self, handle: projection.handle)
             }
         }
         if followingHandle == nil {
             let followingStart = await core.subscribeFollowingCurationSets()
-            if followingStart.error.isEmpty {
-                followingHandle = followingStart.handle
-                bridge.registerBookmarkStore(self, handle: followingStart.handle)
+            let projection = core.projectViewSubscriptionStart(
+                input: ViewSubscriptionStartProjectionInput(start: followingStart)
+            )
+            if projection.shouldRegister {
+                followingHandle = projection.handle
+                bridge.registerBookmarkStore(self, handle: projection.handle)
             }
         }
         if webHandle == nil {
             let webStart = await core.subscribeWebBookmarks()
-            if webStart.error.isEmpty {
-                webHandle = webStart.handle
-                bridge.registerBookmarkStore(self, handle: webStart.handle)
+            let projection = core.projectViewSubscriptionStart(
+                input: ViewSubscriptionStartProjectionInput(start: webStart)
+            )
+            if projection.shouldRegister {
+                webHandle = projection.handle
+                bridge.registerBookmarkStore(self, handle: projection.handle)
             }
         }
     }
