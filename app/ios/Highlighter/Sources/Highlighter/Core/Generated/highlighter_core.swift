@@ -1324,6 +1324,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectCreateRoom(input: CreateRoomProjectionInput)  -> CreateRoomProjection
     
+    func projectCreateRoomCoverUploadResult(input: CreateRoomCoverUploadResultInput)  -> CreateRoomCoverUploadResultProjection
+    
+    func projectCreateRoomPublishResult(input: CreateRoomPublishResultInput)  -> CreateRoomPublishResultProjection
+    
     func projectCurationMenuSnapshotApply(input: CurationMenuSnapshotApplyInput)  -> CurationMenuSnapshotApplyProjection
     
     /**
@@ -3960,6 +3964,22 @@ open func projectCreateRoom(input: CreateRoomProjectionInput) -> CreateRoomProje
     return try!  FfiConverterTypeCreateRoomProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_create_room(self.uniffiClonePointer(),
         FfiConverterTypeCreateRoomProjectionInput_lower(input),$0
+    )
+})
+}
+    
+open func projectCreateRoomCoverUploadResult(input: CreateRoomCoverUploadResultInput) -> CreateRoomCoverUploadResultProjection  {
+    return try!  FfiConverterTypeCreateRoomCoverUploadResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_create_room_cover_upload_result(self.uniffiClonePointer(),
+        FfiConverterTypeCreateRoomCoverUploadResultInput_lower(input),$0
+    )
+})
+}
+    
+open func projectCreateRoomPublishResult(input: CreateRoomPublishResultInput) -> CreateRoomPublishResultProjection  {
+    return try!  FfiConverterTypeCreateRoomPublishResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_create_room_publish_result(self.uniffiClonePointer(),
+        FfiConverterTypeCreateRoomPublishResultInput_lower(input),$0
     )
 })
 }
@@ -16066,6 +16086,138 @@ public func FfiConverterTypeCommunitySummary_lower(_ value: CommunitySummary) ->
 }
 
 
+public struct CreateRoomCoverUploadResultInput {
+    public var snapshot: BlossomUploadSnapshot
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: BlossomUploadSnapshot) {
+        self.snapshot = snapshot
+    }
+}
+
+#if compiler(>=6)
+extension CreateRoomCoverUploadResultInput: Sendable {}
+#endif
+
+
+extension CreateRoomCoverUploadResultInput: Equatable, Hashable {
+    public static func ==(lhs: CreateRoomCoverUploadResultInput, rhs: CreateRoomCoverUploadResultInput) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCreateRoomCoverUploadResultInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateRoomCoverUploadResultInput {
+        return
+            try CreateRoomCoverUploadResultInput(
+                snapshot: FfiConverterTypeBlossomUploadSnapshot.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CreateRoomCoverUploadResultInput, into buf: inout [UInt8]) {
+        FfiConverterTypeBlossomUploadSnapshot.write(value.snapshot, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateRoomCoverUploadResultInput_lift(_ buf: RustBuffer) throws -> CreateRoomCoverUploadResultInput {
+    return try FfiConverterTypeCreateRoomCoverUploadResultInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateRoomCoverUploadResultInput_lower(_ value: CreateRoomCoverUploadResultInput) -> RustBuffer {
+    return FfiConverterTypeCreateRoomCoverUploadResultInput.lower(value)
+}
+
+
+public struct CreateRoomCoverUploadResultProjection {
+    public var upload: BlossomUpload?
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(upload: BlossomUpload?, errorMessage: String?) {
+        self.upload = upload
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension CreateRoomCoverUploadResultProjection: Sendable {}
+#endif
+
+
+extension CreateRoomCoverUploadResultProjection: Equatable, Hashable {
+    public static func ==(lhs: CreateRoomCoverUploadResultProjection, rhs: CreateRoomCoverUploadResultProjection) -> Bool {
+        if lhs.upload != rhs.upload {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(upload)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCreateRoomCoverUploadResultProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateRoomCoverUploadResultProjection {
+        return
+            try CreateRoomCoverUploadResultProjection(
+                upload: FfiConverterOptionTypeBlossomUpload.read(from: &buf), 
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CreateRoomCoverUploadResultProjection, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeBlossomUpload.write(value.upload, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateRoomCoverUploadResultProjection_lift(_ buf: RustBuffer) throws -> CreateRoomCoverUploadResultProjection {
+    return try FfiConverterTypeCreateRoomCoverUploadResultProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateRoomCoverUploadResultProjection_lower(_ value: CreateRoomCoverUploadResultProjection) -> RustBuffer {
+    return FfiConverterTypeCreateRoomCoverUploadResultProjection.lower(value)
+}
+
+
 public struct CreateRoomProjection {
     public var canCreate: Bool
     public var createName: String
@@ -16267,6 +16419,162 @@ public func FfiConverterTypeCreateRoomProjectionInput_lift(_ buf: RustBuffer) th
 #endif
 public func FfiConverterTypeCreateRoomProjectionInput_lower(_ value: CreateRoomProjectionInput) -> RustBuffer {
     return FfiConverterTypeCreateRoomProjectionInput.lower(value)
+}
+
+
+public struct CreateRoomPublishResultInput {
+    public var groupId: String
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(groupId: String, error: String) {
+        self.groupId = groupId
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension CreateRoomPublishResultInput: Sendable {}
+#endif
+
+
+extension CreateRoomPublishResultInput: Equatable, Hashable {
+    public static func ==(lhs: CreateRoomPublishResultInput, rhs: CreateRoomPublishResultInput) -> Bool {
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groupId)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCreateRoomPublishResultInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateRoomPublishResultInput {
+        return
+            try CreateRoomPublishResultInput(
+                groupId: FfiConverterString.read(from: &buf), 
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CreateRoomPublishResultInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateRoomPublishResultInput_lift(_ buf: RustBuffer) throws -> CreateRoomPublishResultInput {
+    return try FfiConverterTypeCreateRoomPublishResultInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateRoomPublishResultInput_lower(_ value: CreateRoomPublishResultInput) -> RustBuffer {
+    return FfiConverterTypeCreateRoomPublishResultInput.lower(value)
+}
+
+
+public struct CreateRoomPublishResultProjection {
+    public var didCreate: Bool
+    public var groupId: String
+    public var shouldEmitSuccessFeedback: Bool
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(didCreate: Bool, groupId: String, shouldEmitSuccessFeedback: Bool, errorMessage: String?) {
+        self.didCreate = didCreate
+        self.groupId = groupId
+        self.shouldEmitSuccessFeedback = shouldEmitSuccessFeedback
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension CreateRoomPublishResultProjection: Sendable {}
+#endif
+
+
+extension CreateRoomPublishResultProjection: Equatable, Hashable {
+    public static func ==(lhs: CreateRoomPublishResultProjection, rhs: CreateRoomPublishResultProjection) -> Bool {
+        if lhs.didCreate != rhs.didCreate {
+            return false
+        }
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.shouldEmitSuccessFeedback != rhs.shouldEmitSuccessFeedback {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(didCreate)
+        hasher.combine(groupId)
+        hasher.combine(shouldEmitSuccessFeedback)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCreateRoomPublishResultProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateRoomPublishResultProjection {
+        return
+            try CreateRoomPublishResultProjection(
+                didCreate: FfiConverterBool.read(from: &buf), 
+                groupId: FfiConverterString.read(from: &buf), 
+                shouldEmitSuccessFeedback: FfiConverterBool.read(from: &buf), 
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CreateRoomPublishResultProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.didCreate, into: &buf)
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterBool.write(value.shouldEmitSuccessFeedback, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateRoomPublishResultProjection_lift(_ buf: RustBuffer) throws -> CreateRoomPublishResultProjection {
+    return try FfiConverterTypeCreateRoomPublishResultProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCreateRoomPublishResultProjection_lower(_ value: CreateRoomPublishResultProjection) -> RustBuffer {
+    return FfiConverterTypeCreateRoomPublishResultProjection.lower(value)
 }
 
 
@@ -44787,6 +45095,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_create_room() != 12904) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_create_room_cover_upload_result() != 58334) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_create_room_publish_result() != 5344) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_curation_menu_snapshot_apply() != 35320) {

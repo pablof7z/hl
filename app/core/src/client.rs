@@ -3348,6 +3348,20 @@ impl HighlighterCore {
         groups::create_room_projection(input)
     }
 
+    pub fn project_create_room_cover_upload_result(
+        &self,
+        input: groups::CreateRoomCoverUploadResultInput,
+    ) -> groups::CreateRoomCoverUploadResultProjection {
+        groups::create_room_cover_upload_result_projection(input)
+    }
+
+    pub fn project_create_room_publish_result(
+        &self,
+        input: groups::CreateRoomPublishResultInput,
+    ) -> groups::CreateRoomPublishResultProjection {
+        groups::create_room_publish_result_projection(input)
+    }
+
     pub fn project_room_avatar(
         &self,
         input: groups::RoomAvatarProjectionInput,

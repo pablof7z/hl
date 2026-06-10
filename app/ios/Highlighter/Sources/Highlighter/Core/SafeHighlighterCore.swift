@@ -1254,6 +1254,18 @@ actor SafeHighlighterCore {
         core.projectCreateRoom(input: input)
     }
 
+    nonisolated func projectCreateRoomCoverUploadResult(
+        input: CreateRoomCoverUploadResultInput
+    ) -> CreateRoomCoverUploadResultProjection {
+        core.projectCreateRoomCoverUploadResult(input: input)
+    }
+
+    nonisolated func projectCreateRoomPublishResult(
+        input: CreateRoomPublishResultInput
+    ) -> CreateRoomPublishResultProjection {
+        core.projectCreateRoomPublishResult(input: input)
+    }
+
     nonisolated func projectRoomAvatar(input: RoomAvatarProjectionInput) -> RoomAvatarProjection {
         core.projectRoomAvatar(input: input)
     }

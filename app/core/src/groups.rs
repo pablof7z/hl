@@ -11,8 +11,9 @@ use std::collections::{BTreeMap, HashSet};
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
+use crate::blossom::BlossomUploadSnapshot;
 use crate::errors::CoreError;
-use crate::models::CommunitySummary;
+use crate::models::{BlossomUpload, CommunitySummary};
 use crate::nostr_runtime::NostrRuntime;
 use crate::relays::highlighter_relay;
 
@@ -451,6 +452,31 @@ pub struct CreateRoomPublishSnapshot {
     pub error: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CreateRoomCoverUploadResultInput {
+    pub snapshot: BlossomUploadSnapshot,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CreateRoomCoverUploadResultProjection {
+    pub upload: Option<BlossomUpload>,
+    pub error_message: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CreateRoomPublishResultInput {
+    pub group_id: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CreateRoomPublishResultProjection {
+    pub did_create: bool,
+    pub group_id: String,
+    pub should_emit_success_feedback: bool,
+    pub error_message: Option<String>,
+}
+
 impl RoomVisibility {
     fn marker(self) -> &'static str {
         match self {
@@ -576,6 +602,46 @@ pub fn create_room_publish_snapshot(
             group_id: String::new(),
             error: error.to_string(),
         },
+    }
+}
+
+pub fn create_room_cover_upload_result_projection(
+    input: CreateRoomCoverUploadResultInput,
+) -> CreateRoomCoverUploadResultProjection {
+    if let Some(upload) = input.snapshot.upload {
+        return CreateRoomCoverUploadResultProjection {
+            upload: Some(upload),
+            error_message: None,
+        };
+    }
+
+    CreateRoomCoverUploadResultProjection {
+        upload: None,
+        error_message: Some(format!(
+            "Couldn't upload cover: {}",
+            input.snapshot.error.trim()
+        )),
+    }
+}
+
+pub fn create_room_publish_result_projection(
+    input: CreateRoomPublishResultInput,
+) -> CreateRoomPublishResultProjection {
+    let error = input.error.trim().to_string();
+    if error.is_empty() {
+        return CreateRoomPublishResultProjection {
+            did_create: true,
+            group_id: input.group_id,
+            should_emit_success_feedback: true,
+            error_message: None,
+        };
+    }
+
+    CreateRoomPublishResultProjection {
+        did_create: false,
+        group_id: String::new(),
+        should_emit_success_feedback: false,
+        error_message: Some(format!("Couldn't publish: {error}")),
     }
 }
 
@@ -1391,6 +1457,57 @@ mod tests {
     }
 
     #[test]
+    fn create_room_cover_upload_result_projects_upload_or_error() {
+        let ok = create_room_cover_upload_result_projection(CreateRoomCoverUploadResultInput {
+            snapshot: BlossomUploadSnapshot {
+                upload: Some(upload()),
+                error: String::new(),
+            },
+        });
+        assert_eq!(
+            ok.upload.as_ref().map(|upload| upload.url.as_str()),
+            Some("https://blossom.example/cover.jpg")
+        );
+        assert_eq!(ok.error_message, None);
+
+        let failed = create_room_cover_upload_result_projection(CreateRoomCoverUploadResultInput {
+            snapshot: BlossomUploadSnapshot {
+                upload: None,
+                error: " offline ".into(),
+            },
+        });
+        assert!(failed.upload.is_none());
+        assert_eq!(
+            failed.error_message.as_deref(),
+            Some("Couldn't upload cover: offline")
+        );
+    }
+
+    #[test]
+    fn create_room_publish_result_projects_success_feedback_and_error_copy() {
+        let ok = create_room_publish_result_projection(CreateRoomPublishResultInput {
+            group_id: "room123".into(),
+            error: String::new(),
+        });
+        assert!(ok.did_create);
+        assert!(ok.should_emit_success_feedback);
+        assert_eq!(ok.group_id, "room123");
+        assert_eq!(ok.error_message, None);
+
+        let failed = create_room_publish_result_projection(CreateRoomPublishResultInput {
+            group_id: "ignored".into(),
+            error: " relay offline ".into(),
+        });
+        assert!(!failed.did_create);
+        assert!(!failed.should_emit_success_feedback);
+        assert_eq!(failed.group_id, "");
+        assert_eq!(
+            failed.error_message.as_deref(),
+            Some("Couldn't publish: relay offline")
+        );
+    }
+
+    #[test]
     fn generated_group_ids_are_well_formed_and_distinct() {
         let a = generate_group_id();
         let b = generate_group_id();
@@ -1401,6 +1518,18 @@ mod tests {
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
             "group id must satisfy [a-z0-9]+: {a}"
         );
+    }
+
+    fn upload() -> BlossomUpload {
+        BlossomUpload {
+            url: "https://blossom.example/cover.jpg".into(),
+            sha256_hex: "abc".into(),
+            mime: "image/jpeg".into(),
+            size_bytes: 123,
+            width: 640,
+            height: 480,
+            alt: String::new(),
+        }
     }
 
     #[test]

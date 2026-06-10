@@ -131,11 +131,12 @@ pub use feedback::{
     FeedbackThreadPresentationProjection, FeedbackThreadSnapshot, FeedbackThreadsSnapshot,
 };
 pub use groups::{
-    CommunityRowProjection, CommunityRowProjectionInput, CreateRoomProjection,
-    CreateRoomProjectionInput, CreateRoomPublishSnapshot, CreateRoomVisibilityOption,
-    JoinRoomRequestSnapshot, JoinedCommunitiesSnapshot, RoomAccess, RoomAvatarProjection,
-    RoomAvatarProjectionInput, RoomCoverCardProjection, RoomCoverCardProjectionInput,
-    RoomVisibility,
+    CommunityRowProjection, CommunityRowProjectionInput, CreateRoomCoverUploadResultInput,
+    CreateRoomCoverUploadResultProjection, CreateRoomProjection, CreateRoomProjectionInput,
+    CreateRoomPublishResultInput, CreateRoomPublishResultProjection, CreateRoomPublishSnapshot,
+    CreateRoomVisibilityOption, JoinRoomRequestSnapshot, JoinedCommunitiesSnapshot, RoomAccess,
+    RoomAvatarProjection, RoomAvatarProjectionInput, RoomCoverCardProjection,
+    RoomCoverCardProjectionInput, RoomVisibility,
 };
 pub use highlights::{
     ArticleHighlightPublishProjection, ArticleHighlightPublishProjectionInput,
