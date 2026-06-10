@@ -250,7 +250,7 @@ struct OnboardingCreateAccountView: View {
                 errorMessage = accountSnapshot.errorMessage
                 return
             }
-            AppSessionStore.shared.persistNsec(account.nsec)
+            AppSessionStore.shared.persistAccountInstructions(accountSnapshot)
 
             let claimedUsername: String
             if case .available(let identifier, let domain) = usernameState,

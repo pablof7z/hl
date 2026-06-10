@@ -397,7 +397,11 @@ impl HighlighterCore {
     }
 
     pub fn login_nsec(&self, nsec: String) -> crate::session::AuthSessionSnapshot {
-        crate::session::auth_session_snapshot(self.login_nsec_result(&nsec))
+        crate::session::auth_session_snapshot_with_persistence(
+            self.login_nsec_result(&nsec),
+            Some(nsec),
+            None,
+        )
     }
 
     pub fn generate_account(&self) -> crate::session::AccountGenerationSnapshot {
@@ -782,7 +786,7 @@ impl HighlighterCore {
 
     pub async fn pair_bunker(&self, uri: String) -> crate::session::AuthSessionSnapshot {
         let result = self.pair_bunker_result(&uri).await;
-        crate::session::auth_session_snapshot(result)
+        crate::session::auth_session_snapshot_with_persistence(result, None, Some(uri))
     }
 
     // -- Subscriptions --
@@ -4139,6 +4143,8 @@ mod tests {
         let nsec = Keys::generate().secret_key().to_bech32().unwrap();
         let login = core.login_nsec(nsec.clone());
         assert!(login.is_authenticated);
+        assert_eq!(login.persist_nsec, Some(nsec.clone()));
+        assert_eq!(login.persist_bunker_uri, None);
 
         let hidden = core.current_secret_key_settings_snapshot(false);
         assert!(hidden.has_secret_key);

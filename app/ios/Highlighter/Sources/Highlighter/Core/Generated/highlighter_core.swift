@@ -5772,13 +5772,15 @@ public struct AccountGenerationSnapshot {
     public var account: GeneratedAccount?
     public var succeeded: Bool
     public var errorMessage: String
+    public var persistNsec: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(account: GeneratedAccount?, succeeded: Bool, errorMessage: String) {
+    public init(account: GeneratedAccount?, succeeded: Bool, errorMessage: String, persistNsec: String?) {
         self.account = account
         self.succeeded = succeeded
         self.errorMessage = errorMessage
+        self.persistNsec = persistNsec
     }
 }
 
@@ -5798,6 +5800,9 @@ extension AccountGenerationSnapshot: Equatable, Hashable {
         if lhs.errorMessage != rhs.errorMessage {
             return false
         }
+        if lhs.persistNsec != rhs.persistNsec {
+            return false
+        }
         return true
     }
 
@@ -5805,6 +5810,7 @@ extension AccountGenerationSnapshot: Equatable, Hashable {
         hasher.combine(account)
         hasher.combine(succeeded)
         hasher.combine(errorMessage)
+        hasher.combine(persistNsec)
     }
 }
 
@@ -5819,7 +5825,8 @@ public struct FfiConverterTypeAccountGenerationSnapshot: FfiConverterRustBuffer 
             try AccountGenerationSnapshot(
                 account: FfiConverterOptionTypeGeneratedAccount.read(from: &buf),
                 succeeded: FfiConverterBool.read(from: &buf),
-                errorMessage: FfiConverterString.read(from: &buf)
+                errorMessage: FfiConverterString.read(from: &buf),
+                persistNsec: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -5827,6 +5834,7 @@ public struct FfiConverterTypeAccountGenerationSnapshot: FfiConverterRustBuffer 
         FfiConverterOptionTypeGeneratedAccount.write(value.account, into: &buf)
         FfiConverterBool.write(value.succeeded, into: &buf)
         FfiConverterString.write(value.errorMessage, into: &buf)
+        FfiConverterOptionString.write(value.persistNsec, into: &buf)
     }
 }
 
@@ -8365,13 +8373,17 @@ public struct AuthSessionSnapshot {
     public var user: CurrentUser?
     public var isAuthenticated: Bool
     public var errorMessage: String
+    public var persistNsec: String?
+    public var persistBunkerUri: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(user: CurrentUser?, isAuthenticated: Bool, errorMessage: String) {
+    public init(user: CurrentUser?, isAuthenticated: Bool, errorMessage: String, persistNsec: String?, persistBunkerUri: String?) {
         self.user = user
         self.isAuthenticated = isAuthenticated
         self.errorMessage = errorMessage
+        self.persistNsec = persistNsec
+        self.persistBunkerUri = persistBunkerUri
     }
 }
 
@@ -8391,6 +8403,12 @@ extension AuthSessionSnapshot: Equatable, Hashable {
         if lhs.errorMessage != rhs.errorMessage {
             return false
         }
+        if lhs.persistNsec != rhs.persistNsec {
+            return false
+        }
+        if lhs.persistBunkerUri != rhs.persistBunkerUri {
+            return false
+        }
         return true
     }
 
@@ -8398,6 +8416,8 @@ extension AuthSessionSnapshot: Equatable, Hashable {
         hasher.combine(user)
         hasher.combine(isAuthenticated)
         hasher.combine(errorMessage)
+        hasher.combine(persistNsec)
+        hasher.combine(persistBunkerUri)
     }
 }
 
@@ -8412,7 +8432,9 @@ public struct FfiConverterTypeAuthSessionSnapshot: FfiConverterRustBuffer {
             try AuthSessionSnapshot(
                 user: FfiConverterOptionTypeCurrentUser.read(from: &buf),
                 isAuthenticated: FfiConverterBool.read(from: &buf),
-                errorMessage: FfiConverterString.read(from: &buf)
+                errorMessage: FfiConverterString.read(from: &buf),
+                persistNsec: FfiConverterOptionString.read(from: &buf),
+                persistBunkerUri: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -8420,6 +8442,8 @@ public struct FfiConverterTypeAuthSessionSnapshot: FfiConverterRustBuffer {
         FfiConverterOptionTypeCurrentUser.write(value.user, into: &buf)
         FfiConverterBool.write(value.isAuthenticated, into: &buf)
         FfiConverterString.write(value.errorMessage, into: &buf)
+        FfiConverterOptionString.write(value.persistNsec, into: &buf)
+        FfiConverterOptionString.write(value.persistBunkerUri, into: &buf)
     }
 }
 

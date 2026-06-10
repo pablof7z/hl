@@ -24,12 +24,19 @@ final class AppSessionStore {
         return snapshot.isAuthenticated ? snapshot.user : nil
     }
 
-    func persistNsec(_ nsec: String) {
-        _ = KeychainService.saveNsec(nsec)
+    func persistAuthInstructions(_ snapshot: AuthSessionSnapshot) {
+        if let nsec = snapshot.persistNsec {
+            _ = KeychainService.saveNsec(nsec)
+        }
+        if let uri = snapshot.persistBunkerUri {
+            _ = KeychainService.saveBunkerURI(uri)
+        }
     }
 
-    func persistBunkerURI(_ uri: String) {
-        _ = KeychainService.saveBunkerURI(uri)
+    func persistAccountInstructions(_ snapshot: AccountGenerationSnapshot) {
+        if let nsec = snapshot.persistNsec {
+            _ = KeychainService.saveNsec(nsec)
+        }
     }
 
     func clear() {

@@ -56,19 +56,33 @@ pub struct AuthSessionSnapshot {
     pub user: Option<CurrentUser>,
     pub is_authenticated: bool,
     pub error_message: String,
+    pub persist_nsec: Option<String>,
+    pub persist_bunker_uri: Option<String>,
 }
 
 pub fn auth_session_snapshot(result: Result<CurrentUser, CoreError>) -> AuthSessionSnapshot {
+    auth_session_snapshot_with_persistence(result, None, None)
+}
+
+pub fn auth_session_snapshot_with_persistence(
+    result: Result<CurrentUser, CoreError>,
+    persist_nsec: Option<String>,
+    persist_bunker_uri: Option<String>,
+) -> AuthSessionSnapshot {
     match result {
         Ok(user) => AuthSessionSnapshot {
             user: Some(user),
             is_authenticated: true,
             error_message: String::new(),
+            persist_nsec,
+            persist_bunker_uri,
         },
         Err(error) => AuthSessionSnapshot {
             user: None,
             is_authenticated: false,
             error_message: error.to_string(),
+            persist_nsec: None,
+            persist_bunker_uri: None,
         },
     }
 }
@@ -117,6 +131,7 @@ pub struct AccountGenerationSnapshot {
     pub account: Option<GeneratedAccount>,
     pub succeeded: bool,
     pub error_message: String,
+    pub persist_nsec: Option<String>,
 }
 
 pub fn account_generation_snapshot(
@@ -124,6 +139,7 @@ pub fn account_generation_snapshot(
 ) -> AccountGenerationSnapshot {
     match result {
         Ok(account) => AccountGenerationSnapshot {
+            persist_nsec: Some(account.nsec.clone()),
             account: Some(account),
             succeeded: true,
             error_message: String::new(),
@@ -132,6 +148,7 @@ pub fn account_generation_snapshot(
             account: None,
             succeeded: false,
             error_message: error.to_string(),
+            persist_nsec: None,
         },
     }
 }
@@ -495,11 +512,41 @@ mod tests {
         assert_eq!(success.user, Some(user));
         assert!(success.is_authenticated);
         assert!(success.error_message.is_empty());
+        assert_eq!(success.persist_nsec, None);
+        assert_eq!(success.persist_bunker_uri, None);
 
         let failure = auth_session_snapshot(Err(CoreError::InvalidInput("bad key".into())));
         assert_eq!(failure.user, None);
         assert!(!failure.is_authenticated);
         assert_eq!(failure.error_message, "invalid input: bad key");
+        assert_eq!(failure.persist_nsec, None);
+        assert_eq!(failure.persist_bunker_uri, None);
+    }
+
+    #[test]
+    fn auth_session_snapshot_projects_persistence_only_on_success() {
+        let user = CurrentUser {
+            pubkey: "abc123".into(),
+            npub: "npub1abc".into(),
+        };
+        let success = auth_session_snapshot_with_persistence(
+            Ok(user),
+            Some("nsec1abc".into()),
+            Some("bunker://relay.example".into()),
+        );
+        assert_eq!(success.persist_nsec, Some("nsec1abc".into()));
+        assert_eq!(
+            success.persist_bunker_uri,
+            Some("bunker://relay.example".into())
+        );
+
+        let failure = auth_session_snapshot_with_persistence(
+            Err(CoreError::InvalidInput("bad key".into())),
+            Some("nsec1abc".into()),
+            Some("bunker://relay.example".into()),
+        );
+        assert_eq!(failure.persist_nsec, None);
+        assert_eq!(failure.persist_bunker_uri, None);
     }
 
     #[test]
@@ -547,11 +594,13 @@ mod tests {
         assert_eq!(success.account, Some(account));
         assert!(success.succeeded);
         assert!(success.error_message.is_empty());
+        assert_eq!(success.persist_nsec, Some("nsec1abc".into()));
 
         let failure = account_generation_snapshot(Err(CoreError::Other("entropy failed".into())));
         assert_eq!(failure.account, None);
         assert!(!failure.succeeded);
         assert_eq!(failure.error_message, "entropy failed");
+        assert_eq!(failure.persist_nsec, None);
     }
 
     #[test]
