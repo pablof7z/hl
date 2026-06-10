@@ -4011,6 +4011,13 @@ impl HighlighterCore {
         crate::relays::import_relays_projection(input)
     }
 
+    pub fn project_import_relays_fetch_apply(
+        &self,
+        input: crate::relays::ImportRelaysFetchApplyInput,
+    ) -> crate::relays::ImportRelaysFetchApplyProjection {
+        crate::relays::import_relays_fetch_apply_projection(input)
+    }
+
     /// Handle the Swift side uses to match `RelayStatusChanged` deltas on the
     /// event bus. Relay status changes are app-scoped and ride
     /// `subscription_id == 0`, so this returns `0` unconditionally — the

@@ -427,6 +427,18 @@ pub struct ImportRelaysFetchSnapshot {
     pub error_message: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ImportRelaysFetchApplyInput {
+    pub snapshot: ImportRelaysFetchSnapshot,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ImportRelaysFetchApplyProjection {
+    pub fetched: Vec<RelayConfig>,
+    pub selected_urls: Vec<String>,
+    pub error_message: Option<String>,
+}
+
 /// Native import-relays source field projection. Rust owns the canonical
 /// source input and whether fetching can start.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -936,6 +948,16 @@ pub fn import_relays_fetch_snapshot(
             selected_urls: Vec::new(),
             error_message: error.to_string(),
         },
+    }
+}
+
+pub fn import_relays_fetch_apply_projection(
+    input: ImportRelaysFetchApplyInput,
+) -> ImportRelaysFetchApplyProjection {
+    ImportRelaysFetchApplyProjection {
+        fetched: input.snapshot.fetched,
+        selected_urls: input.snapshot.selected_urls,
+        error_message: optional_error_message(&input.snapshot.error_message),
     }
 }
 
@@ -2278,6 +2300,27 @@ mod tests {
         assert!(failure.fetched.is_empty());
         assert!(failure.selected_urls.is_empty());
         assert_eq!(failure.error_message, "network error: missing");
+    }
+
+    #[test]
+    fn import_relays_fetch_apply_projection_projects_rows_and_error() {
+        let fetched = vec![RelayConfig::read_write("wss://one.example")];
+        let success = import_relays_fetch_apply_projection(ImportRelaysFetchApplyInput {
+            snapshot: import_relays_fetch_snapshot(Ok(fetched.clone())),
+        });
+        assert_eq!(success.fetched, fetched);
+        assert_eq!(success.selected_urls, vec!["wss://one.example"]);
+        assert_eq!(success.error_message, None);
+
+        let failure = import_relays_fetch_apply_projection(ImportRelaysFetchApplyInput {
+            snapshot: import_relays_fetch_snapshot(Err(CoreError::Network("missing".into()))),
+        });
+        assert!(failure.fetched.is_empty());
+        assert!(failure.selected_urls.is_empty());
+        assert_eq!(
+            failure.error_message.as_deref(),
+            Some("network error: missing")
+        );
     }
 
     #[test]

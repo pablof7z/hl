@@ -1769,6 +1769,12 @@ actor SafeHighlighterCore {
         core.projectImportRelays(input: input)
     }
 
+    nonisolated func projectImportRelaysFetchApply(
+        input: ImportRelaysFetchApplyInput
+    ) -> ImportRelaysFetchApplyProjection {
+        core.projectImportRelaysFetchApply(input: input)
+    }
+
     func subscribeRelayStatus() async -> SubscriptionStartSnapshot {
         await core.subscribeRelayStatus()
     }

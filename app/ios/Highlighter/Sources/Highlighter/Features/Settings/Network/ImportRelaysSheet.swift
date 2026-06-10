@@ -138,9 +138,12 @@ struct ImportRelaysSheet: View {
         defer { isFetching = false }
         let snapshot = await appStore.safeCore
             .importRelaysFromNpubSnapshot(source.submitNpub)
-        fetched = snapshot.fetched
-        selectedUrls = snapshot.selectedUrls
-        errorText = snapshot.errorMessage.isEmpty ? nil : snapshot.errorMessage
+        let apply = appStore.safeCore.projectImportRelaysFetchApply(
+            input: ImportRelaysFetchApplyInput(snapshot: snapshot)
+        )
+        fetched = apply.fetched
+        selectedUrls = apply.selectedUrls
+        errorText = apply.errorMessage
     }
 
     private func applySelected() async {

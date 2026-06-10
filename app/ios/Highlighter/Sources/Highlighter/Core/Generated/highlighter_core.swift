@@ -1397,6 +1397,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectImportRelays(input: ImportRelaysProjectionInput)  -> ImportRelaysProjection
 
+    func projectImportRelaysFetchApply(input: ImportRelaysFetchApplyInput)  -> ImportRelaysFetchApplyProjection
+
     /**
      * Project import-relays source input. Rust owns source trimming and fetch
      * eligibility; native shells render and execute the fetch action.
@@ -4183,6 +4185,14 @@ open func projectImportRelays(input: ImportRelaysProjectionInput) -> ImportRelay
     return try!  FfiConverterTypeImportRelaysProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_import_relays(self.uniffiClonePointer(),
         FfiConverterTypeImportRelaysProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectImportRelaysFetchApply(input: ImportRelaysFetchApplyInput) -> ImportRelaysFetchApplyProjection  {
+    return try!  FfiConverterTypeImportRelaysFetchApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_import_relays_fetch_apply(self.uniffiClonePointer(),
+        FfiConverterTypeImportRelaysFetchApplyInput_lower(input),$0
     )
 })
 }
@@ -21974,6 +21984,146 @@ public func FfiConverterTypeImportRelayRow_lift(_ buf: RustBuffer) throws -> Imp
 #endif
 public func FfiConverterTypeImportRelayRow_lower(_ value: ImportRelayRow) -> RustBuffer {
     return FfiConverterTypeImportRelayRow.lower(value)
+}
+
+
+public struct ImportRelaysFetchApplyInput {
+    public var snapshot: ImportRelaysFetchSnapshot
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: ImportRelaysFetchSnapshot) {
+        self.snapshot = snapshot
+    }
+}
+
+#if compiler(>=6)
+extension ImportRelaysFetchApplyInput: Sendable {}
+#endif
+
+
+extension ImportRelaysFetchApplyInput: Equatable, Hashable {
+    public static func ==(lhs: ImportRelaysFetchApplyInput, rhs: ImportRelaysFetchApplyInput) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeImportRelaysFetchApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRelaysFetchApplyInput {
+        return
+            try ImportRelaysFetchApplyInput(
+                snapshot: FfiConverterTypeImportRelaysFetchSnapshot.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ImportRelaysFetchApplyInput, into buf: inout [UInt8]) {
+        FfiConverterTypeImportRelaysFetchSnapshot.write(value.snapshot, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRelaysFetchApplyInput_lift(_ buf: RustBuffer) throws -> ImportRelaysFetchApplyInput {
+    return try FfiConverterTypeImportRelaysFetchApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRelaysFetchApplyInput_lower(_ value: ImportRelaysFetchApplyInput) -> RustBuffer {
+    return FfiConverterTypeImportRelaysFetchApplyInput.lower(value)
+}
+
+
+public struct ImportRelaysFetchApplyProjection {
+    public var fetched: [RelayConfig]
+    public var selectedUrls: [String]
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(fetched: [RelayConfig], selectedUrls: [String], errorMessage: String?) {
+        self.fetched = fetched
+        self.selectedUrls = selectedUrls
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension ImportRelaysFetchApplyProjection: Sendable {}
+#endif
+
+
+extension ImportRelaysFetchApplyProjection: Equatable, Hashable {
+    public static func ==(lhs: ImportRelaysFetchApplyProjection, rhs: ImportRelaysFetchApplyProjection) -> Bool {
+        if lhs.fetched != rhs.fetched {
+            return false
+        }
+        if lhs.selectedUrls != rhs.selectedUrls {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(fetched)
+        hasher.combine(selectedUrls)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeImportRelaysFetchApplyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRelaysFetchApplyProjection {
+        return
+            try ImportRelaysFetchApplyProjection(
+                fetched: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
+                selectedUrls: FfiConverterSequenceString.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ImportRelaysFetchApplyProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeRelayConfig.write(value.fetched, into: &buf)
+        FfiConverterSequenceString.write(value.selectedUrls, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRelaysFetchApplyProjection_lift(_ buf: RustBuffer) throws -> ImportRelaysFetchApplyProjection {
+    return try FfiConverterTypeImportRelaysFetchApplyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeImportRelaysFetchApplyProjection_lower(_ value: ImportRelaysFetchApplyProjection) -> RustBuffer {
+    return FfiConverterTypeImportRelaysFetchApplyProjection.lower(value)
 }
 
 
@@ -47145,6 +47295,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays() != 28442) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays_fetch_apply() != 22754) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays_source() != 18021) {
