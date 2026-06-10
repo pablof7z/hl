@@ -1040,6 +1040,12 @@ actor SafeHighlighterCore {
         await core.getBookDetailSnapshot(catalogId: catalogId, limit: limit)
     }
 
+    nonisolated func projectBookDetailSnapshotApply(
+        input: BookDetailSnapshotApplyInput
+    ) -> BookDetailSnapshotApplyProjection {
+        core.projectBookDetailSnapshotApply(input: input)
+    }
+
     nonisolated func getProfileUpdateAction(kind: UInt32) -> ProfileUpdateAction {
         core.getProfileUpdateAction(kind: kind)
     }

@@ -83,7 +83,9 @@ pub use blossom::{
     BlossomServerListProjectionInput, BlossomServerSettingsMutationSnapshot,
     BlossomServerSettingsSnapshot, BlossomUploadSnapshot,
 };
-pub use book_detail::BookDetailSnapshot;
+pub use book_detail::{
+    BookDetailSnapshot, BookDetailSnapshotApplyInput, BookDetailSnapshotApplyProjection,
+};
 pub use bookmarks::{
     ArticleBookmarkChromeProjection, ArticleBookmarkChromeProjectionInput,
     ArticleBookmarkStateProjection, ArticleBookmarkStateProjectionInput, ArticleBookmarksSnapshot,

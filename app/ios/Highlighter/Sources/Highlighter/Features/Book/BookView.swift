@@ -247,17 +247,19 @@ struct BookView: View {
 
     private func load() async {
         let snapshot = await app.safeCore.getBookDetailSnapshot(catalogId: catalogId, limit: 64)
-        guard let route = snapshot.route else {
-            await MainActor.run {
-                loadedRoute = nil
-                highlights = []
-            }
-            return
+        let projection = app.safeCore.projectBookDetailSnapshotApply(
+            input: BookDetailSnapshotApplyInput(
+                route: snapshot.route,
+                highlights: snapshot.highlights,
+                error: snapshot.error
+            )
+        )
+        if let isbn = projection.isbnPreviewRequest {
+            await app.requestIsbnPreview(isbn: isbn)
         }
-        await app.requestIsbnPreview(isbn: route.isbn)
         await MainActor.run {
-            loadedRoute = route
-            highlights = snapshot.error.isEmpty ? snapshot.highlights : []
+            loadedRoute = projection.route
+            highlights = projection.highlights
         }
     }
 

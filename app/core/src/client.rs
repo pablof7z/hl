@@ -1541,6 +1541,13 @@ impl HighlighterCore {
         }
     }
 
+    pub fn project_book_detail_snapshot_apply(
+        &self,
+        input: crate::book_detail::BookDetailSnapshotApplyInput,
+    ) -> crate::book_detail::BookDetailSnapshotApplyProjection {
+        crate::book_detail::snapshot_apply_projection(input)
+    }
+
     /// Classify a subscription event kind into the exact profile slice that
     /// native shells should refresh.
     pub fn get_profile_update_action(&self, kind: u32) -> ProfileUpdateAction {
