@@ -116,13 +116,16 @@ struct CommentComposer: View {
                 isPublishing = false
                 return
             }
-            if outcome.error.isEmpty {
+            let result = app.safeCore.projectCommentPublishResult(
+                input: CommentPublishResultInput(error: outcome.error)
+            )
+            if result.didPublish {
                 isPublishing = false
                 focused = false
             } else {
                 isPublishing = false
                 withAnimation(.easeOut(duration: 0.18)) {
-                    errorMessage = "Couldn't publish — \(outcome.error)"
+                    errorMessage = "Couldn't publish — \(result.errorMessage)"
                 }
                 errorResetTimer.schedule(after: 2.4) {
                     withAnimation(.easeIn(duration: 0.18)) {

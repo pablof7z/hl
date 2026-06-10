@@ -1292,6 +1292,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectCommentNodeChrome(input: CommentNodeChromeProjectionInput)  -> CommentNodeChromeProjection
 
+    func projectCommentPublishResult(input: CommentPublishResultInput)  -> CommentPublishResultProjection
+
     /**
      * Project a comment thread screen. Rust owns focused-node lookup,
      * visible child selection, and thread chrome labels.
@@ -3848,6 +3850,14 @@ open func projectCommentNodeChrome(input: CommentNodeChromeProjectionInput) -> C
     return try!  FfiConverterTypeCommentNodeChromeProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_comment_node_chrome(self.uniffiClonePointer(),
         FfiConverterTypeCommentNodeChromeProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectCommentPublishResult(input: CommentPublishResultInput) -> CommentPublishResultProjection  {
+    return try!  FfiConverterTypeCommentPublishResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_comment_publish_result(self.uniffiClonePointer(),
+        FfiConverterTypeCommentPublishResultInput_lower(input),$0
     )
 })
 }
@@ -13942,6 +13952,138 @@ public func FfiConverterTypeCommentNodeChromeProjectionInput_lift(_ buf: RustBuf
 #endif
 public func FfiConverterTypeCommentNodeChromeProjectionInput_lower(_ value: CommentNodeChromeProjectionInput) -> RustBuffer {
     return FfiConverterTypeCommentNodeChromeProjectionInput.lower(value)
+}
+
+
+public struct CommentPublishResultInput {
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(error: String) {
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension CommentPublishResultInput: Sendable {}
+#endif
+
+
+extension CommentPublishResultInput: Equatable, Hashable {
+    public static func ==(lhs: CommentPublishResultInput, rhs: CommentPublishResultInput) -> Bool {
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentPublishResultInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentPublishResultInput {
+        return
+            try CommentPublishResultInput(
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentPublishResultInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentPublishResultInput_lift(_ buf: RustBuffer) throws -> CommentPublishResultInput {
+    return try FfiConverterTypeCommentPublishResultInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentPublishResultInput_lower(_ value: CommentPublishResultInput) -> RustBuffer {
+    return FfiConverterTypeCommentPublishResultInput.lower(value)
+}
+
+
+public struct CommentPublishResultProjection {
+    public var didPublish: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(didPublish: Bool, errorMessage: String) {
+        self.didPublish = didPublish
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension CommentPublishResultProjection: Sendable {}
+#endif
+
+
+extension CommentPublishResultProjection: Equatable, Hashable {
+    public static func ==(lhs: CommentPublishResultProjection, rhs: CommentPublishResultProjection) -> Bool {
+        if lhs.didPublish != rhs.didPublish {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(didPublish)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentPublishResultProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentPublishResultProjection {
+        return
+            try CommentPublishResultProjection(
+                didPublish: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentPublishResultProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.didPublish, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentPublishResultProjection_lift(_ buf: RustBuffer) throws -> CommentPublishResultProjection {
+    return try FfiConverterTypeCommentPublishResultProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentPublishResultProjection_lower(_ value: CommentPublishResultProjection) -> RustBuffer {
+    return FfiConverterTypeCommentPublishResultProjection.lower(value)
 }
 
 
@@ -42818,6 +42960,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_node_chrome() != 45537) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_publish_result() != 60245) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_thread_view() != 58541) {

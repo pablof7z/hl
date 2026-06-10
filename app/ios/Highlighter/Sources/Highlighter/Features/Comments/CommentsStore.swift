@@ -104,7 +104,10 @@ final class CommentsStore {
             parentEventId: parentEventId,
             content: content
         )
-        guard outcome.error.isEmpty else { return outcome }
+        let result = core.projectCommentPublishResult(
+            input: CommentPublishResultInput(error: outcome.error)
+        )
+        guard result.didPublish else { return outcome }
         apply(snapshot: outcome.snapshot)
         setDraft("", forParent: parentEventId)
         return outcome

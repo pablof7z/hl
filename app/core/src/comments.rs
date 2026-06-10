@@ -34,6 +34,17 @@ pub struct CommentComposerProjection {
     pub can_submit: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommentPublishResultInput {
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommentPublishResultProjection {
+    pub did_publish: bool,
+    pub error_message: String,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CommentThreadViewProjectionInput {
     pub tree: Vec<CommentThreadNode>,
@@ -150,6 +161,16 @@ pub fn comment_composer_projection(
     CommentComposerProjection {
         can_submit: !submit_body.is_empty() && !input.is_publishing,
         submit_body,
+    }
+}
+
+pub fn comment_publish_result_projection(
+    input: CommentPublishResultInput,
+) -> CommentPublishResultProjection {
+    let error_message = input.error.trim().to_string();
+    CommentPublishResultProjection {
+        did_publish: error_message.is_empty(),
+        error_message,
     }
 }
 
@@ -1524,6 +1545,21 @@ mod tests {
         assert!(!blank.can_submit);
         assert_eq!(publishing.submit_body, "hello");
         assert!(!publishing.can_submit);
+    }
+
+    #[test]
+    fn comment_publish_result_projection_classifies_success_and_error() {
+        let success = comment_publish_result_projection(CommentPublishResultInput {
+            error: String::new(),
+        });
+        assert!(success.did_publish);
+        assert_eq!(success.error_message, "");
+
+        let failed = comment_publish_result_projection(CommentPublishResultInput {
+            error: " publish failed ".into(),
+        });
+        assert!(!failed.did_publish);
+        assert_eq!(failed.error_message, "publish failed");
     }
 
     fn comment(event_id: &str, parent_tag_value: &str, created_at: Option<u64>) -> CommentRecord {
