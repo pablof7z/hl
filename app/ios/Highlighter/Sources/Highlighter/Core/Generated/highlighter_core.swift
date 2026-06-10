@@ -1482,6 +1482,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectRoomCoverCard(input: RoomCoverCardProjectionInput)  -> RoomCoverCardProjection
 
+    func projectRoomExplorerFeaturedStartResult(input: RoomExplorerFeaturedStartResultInput)  -> RoomExplorerFeaturedStartResultProjection
+
+    func projectRoomExplorerJoinRequestResult(input: RoomExplorerJoinRequestResultInput)  -> RoomExplorerJoinRequestResultProjection
+
     func projectRoomInviteSelection(input: RoomInviteSelectionInput)  -> RoomInviteSelectionProjection
 
     func projectRoomInviteSelectionChrome(input: RoomInviteSelectionChromeInput)  -> RoomInviteSelectionChromeProjection
@@ -4350,6 +4354,22 @@ open func projectRoomCoverCard(input: RoomCoverCardProjectionInput) -> RoomCover
     return try!  FfiConverterTypeRoomCoverCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_cover_card(self.uniffiClonePointer(),
         FfiConverterTypeRoomCoverCardProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectRoomExplorerFeaturedStartResult(input: RoomExplorerFeaturedStartResultInput) -> RoomExplorerFeaturedStartResultProjection  {
+    return try!  FfiConverterTypeRoomExplorerFeaturedStartResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_room_explorer_featured_start_result(self.uniffiClonePointer(),
+        FfiConverterTypeRoomExplorerFeaturedStartResultInput_lower(input),$0
+    )
+})
+}
+
+open func projectRoomExplorerJoinRequestResult(input: RoomExplorerJoinRequestResultInput) -> RoomExplorerJoinRequestResultProjection  {
+    return try!  FfiConverterTypeRoomExplorerJoinRequestResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_room_explorer_join_request_result(self.uniffiClonePointer(),
+        FfiConverterTypeRoomExplorerJoinRequestResultInput_lower(input),$0
     )
 })
 }
@@ -30302,6 +30322,286 @@ public func FfiConverterTypeRoomDiscussionSnapshot_lower(_ value: RoomDiscussion
 }
 
 
+public struct RoomExplorerFeaturedStartResultInput {
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(error: String) {
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension RoomExplorerFeaturedStartResultInput: Sendable {}
+#endif
+
+
+extension RoomExplorerFeaturedStartResultInput: Equatable, Hashable {
+    public static func ==(lhs: RoomExplorerFeaturedStartResultInput, rhs: RoomExplorerFeaturedStartResultInput) -> Bool {
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomExplorerFeaturedStartResultInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomExplorerFeaturedStartResultInput {
+        return
+            try RoomExplorerFeaturedStartResultInput(
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomExplorerFeaturedStartResultInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomExplorerFeaturedStartResultInput_lift(_ buf: RustBuffer) throws -> RoomExplorerFeaturedStartResultInput {
+    return try FfiConverterTypeRoomExplorerFeaturedStartResultInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomExplorerFeaturedStartResultInput_lower(_ value: RoomExplorerFeaturedStartResultInput) -> RustBuffer {
+    return FfiConverterTypeRoomExplorerFeaturedStartResultInput.lower(value)
+}
+
+
+public struct RoomExplorerFeaturedStartResultProjection {
+    public var shouldMarkStarted: Bool
+    public var shouldLog: Bool
+    public var logMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldMarkStarted: Bool, shouldLog: Bool, logMessage: String) {
+        self.shouldMarkStarted = shouldMarkStarted
+        self.shouldLog = shouldLog
+        self.logMessage = logMessage
+    }
+}
+
+#if compiler(>=6)
+extension RoomExplorerFeaturedStartResultProjection: Sendable {}
+#endif
+
+
+extension RoomExplorerFeaturedStartResultProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomExplorerFeaturedStartResultProjection, rhs: RoomExplorerFeaturedStartResultProjection) -> Bool {
+        if lhs.shouldMarkStarted != rhs.shouldMarkStarted {
+            return false
+        }
+        if lhs.shouldLog != rhs.shouldLog {
+            return false
+        }
+        if lhs.logMessage != rhs.logMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldMarkStarted)
+        hasher.combine(shouldLog)
+        hasher.combine(logMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomExplorerFeaturedStartResultProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomExplorerFeaturedStartResultProjection {
+        return
+            try RoomExplorerFeaturedStartResultProjection(
+                shouldMarkStarted: FfiConverterBool.read(from: &buf),
+                shouldLog: FfiConverterBool.read(from: &buf),
+                logMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomExplorerFeaturedStartResultProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldMarkStarted, into: &buf)
+        FfiConverterBool.write(value.shouldLog, into: &buf)
+        FfiConverterString.write(value.logMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomExplorerFeaturedStartResultProjection_lift(_ buf: RustBuffer) throws -> RoomExplorerFeaturedStartResultProjection {
+    return try FfiConverterTypeRoomExplorerFeaturedStartResultProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomExplorerFeaturedStartResultProjection_lower(_ value: RoomExplorerFeaturedStartResultProjection) -> RustBuffer {
+    return FfiConverterTypeRoomExplorerFeaturedStartResultProjection.lower(value)
+}
+
+
+public struct RoomExplorerJoinRequestResultInput {
+    public var groupId: String
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(groupId: String, error: String) {
+        self.groupId = groupId
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension RoomExplorerJoinRequestResultInput: Sendable {}
+#endif
+
+
+extension RoomExplorerJoinRequestResultInput: Equatable, Hashable {
+    public static func ==(lhs: RoomExplorerJoinRequestResultInput, rhs: RoomExplorerJoinRequestResultInput) -> Bool {
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groupId)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomExplorerJoinRequestResultInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomExplorerJoinRequestResultInput {
+        return
+            try RoomExplorerJoinRequestResultInput(
+                groupId: FfiConverterString.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomExplorerJoinRequestResultInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomExplorerJoinRequestResultInput_lift(_ buf: RustBuffer) throws -> RoomExplorerJoinRequestResultInput {
+    return try FfiConverterTypeRoomExplorerJoinRequestResultInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomExplorerJoinRequestResultInput_lower(_ value: RoomExplorerJoinRequestResultInput) -> RustBuffer {
+    return FfiConverterTypeRoomExplorerJoinRequestResultInput.lower(value)
+}
+
+
+public struct RoomExplorerJoinRequestResultProjection {
+    public var shouldLog: Bool
+    public var logMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldLog: Bool, logMessage: String) {
+        self.shouldLog = shouldLog
+        self.logMessage = logMessage
+    }
+}
+
+#if compiler(>=6)
+extension RoomExplorerJoinRequestResultProjection: Sendable {}
+#endif
+
+
+extension RoomExplorerJoinRequestResultProjection: Equatable, Hashable {
+    public static func ==(lhs: RoomExplorerJoinRequestResultProjection, rhs: RoomExplorerJoinRequestResultProjection) -> Bool {
+        if lhs.shouldLog != rhs.shouldLog {
+            return false
+        }
+        if lhs.logMessage != rhs.logMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldLog)
+        hasher.combine(logMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomExplorerJoinRequestResultProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomExplorerJoinRequestResultProjection {
+        return
+            try RoomExplorerJoinRequestResultProjection(
+                shouldLog: FfiConverterBool.read(from: &buf),
+                logMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomExplorerJoinRequestResultProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldLog, into: &buf)
+        FfiConverterString.write(value.logMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomExplorerJoinRequestResultProjection_lift(_ buf: RustBuffer) throws -> RoomExplorerJoinRequestResultProjection {
+    return try FfiConverterTypeRoomExplorerJoinRequestResultProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomExplorerJoinRequestResultProjection_lower(_ value: RoomExplorerJoinRequestResultProjection) -> RustBuffer {
+    return FfiConverterTypeRoomExplorerJoinRequestResultProjection.lower(value)
+}
+
+
 public struct RoomExplorerSnapshot {
     public var featured: [CommunitySummary]
     public var newNoteworthy: [CommunitySummary]
@@ -44149,6 +44449,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_cover_card() != 60263) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_explorer_featured_start_result() != 31917) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_explorer_join_request_result() != 29689) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_invite_selection() != 36933) {

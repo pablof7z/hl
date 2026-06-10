@@ -25,6 +25,30 @@ pub struct RoomBrowseSnapshotApplyProjection {
     pub rooms: Vec<CommunitySummary>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomExplorerJoinRequestResultInput {
+    pub group_id: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomExplorerJoinRequestResultProjection {
+    pub should_log: bool,
+    pub log_message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomExplorerFeaturedStartResultInput {
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomExplorerFeaturedStartResultProjection {
+    pub should_mark_started: bool,
+    pub should_log: bool,
+    pub log_message: String,
+}
+
 pub fn room_browse_snapshot(rooms: &[CommunitySummary], query: &str) -> RoomBrowseSnapshot {
     RoomBrowseSnapshot {
         rooms: crate::discovery::search_rooms(rooms, query),
@@ -47,6 +71,36 @@ pub fn room_browse_snapshot_apply_projection(
             input.rooms
         } else {
             Vec::new()
+        },
+    }
+}
+
+pub fn room_explorer_join_request_result_projection(
+    input: RoomExplorerJoinRequestResultInput,
+) -> RoomExplorerJoinRequestResultProjection {
+    let error = input.error.trim().to_string();
+    let group_id = input.group_id.trim();
+    RoomExplorerJoinRequestResultProjection {
+        should_log: !error.is_empty(),
+        log_message: if error.is_empty() {
+            String::new()
+        } else {
+            format!("requestJoinRoom failed for {group_id}: {error}")
+        },
+    }
+}
+
+pub fn room_explorer_featured_start_result_projection(
+    input: RoomExplorerFeaturedStartResultInput,
+) -> RoomExplorerFeaturedStartResultProjection {
+    let error = input.error.trim().to_string();
+    RoomExplorerFeaturedStartResultProjection {
+        should_mark_started: error.is_empty(),
+        should_log: !error.is_empty(),
+        log_message: if error.is_empty() {
+            String::new()
+        } else {
+            format!("startRoomExplorerFeaturedRooms failed: {error}")
         },
     }
 }
@@ -121,5 +175,49 @@ mod tests {
             error: " cache failed ".into(),
         });
         assert!(failed.rooms.is_empty());
+    }
+
+    #[test]
+    fn room_explorer_join_request_result_projects_log_message() {
+        let success =
+            room_explorer_join_request_result_projection(RoomExplorerJoinRequestResultInput {
+                group_id: "room-a".into(),
+                error: String::new(),
+            });
+        assert!(!success.should_log);
+        assert!(success.log_message.is_empty());
+
+        let failed =
+            room_explorer_join_request_result_projection(RoomExplorerJoinRequestResultInput {
+                group_id: " room-a ".into(),
+                error: " relay failed ".into(),
+            });
+        assert!(failed.should_log);
+        assert_eq!(
+            failed.log_message,
+            "requestJoinRoom failed for room-a: relay failed"
+        );
+    }
+
+    #[test]
+    fn room_explorer_featured_start_result_projects_started_state() {
+        let success =
+            room_explorer_featured_start_result_projection(RoomExplorerFeaturedStartResultInput {
+                error: String::new(),
+            });
+        assert!(success.should_mark_started);
+        assert!(!success.should_log);
+        assert!(success.log_message.is_empty());
+
+        let failed =
+            room_explorer_featured_start_result_projection(RoomExplorerFeaturedStartResultInput {
+                error: " relay failed ".into(),
+            });
+        assert!(!failed.should_mark_started);
+        assert!(failed.should_log);
+        assert_eq!(
+            failed.log_message,
+            "startRoomExplorerFeaturedRooms failed: relay failed"
+        );
     }
 }

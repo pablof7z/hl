@@ -55,8 +55,14 @@ final class RoomExplorerStore {
     func requestJoin(room: CommunitySummary) async {
         guard let appStore else { return }
         let outcome = await appStore.safeCore.requestJoinRoom(groupId: room.id, roomName: room.name)
-        if !outcome.error.isEmpty {
-            print("requestJoinRoom failed for \(room.id): \(outcome.error)")
+        let projection = appStore.safeCore.projectRoomExplorerJoinRequestResult(
+            input: RoomExplorerJoinRequestResultInput(
+                groupId: room.id,
+                error: outcome.error
+            )
+        )
+        if projection.shouldLog {
+            print(projection.logMessage)
         }
     }
 
@@ -82,10 +88,14 @@ final class RoomExplorerStore {
     private func ensureCurationSubscription(safeCore: SafeHighlighterCore) async {
         if !hasStartedCuration {
             let outcome = await safeCore.startRoomExplorerFeaturedRooms()
-            if outcome.error.isEmpty {
+            let projection = safeCore.projectRoomExplorerFeaturedStartResult(
+                input: RoomExplorerFeaturedStartResultInput(error: outcome.error)
+            )
+            if projection.shouldMarkStarted {
                 hasStartedCuration = true
-            } else {
-                print("startRoomExplorerFeaturedRooms failed: \(outcome.error)")
+            }
+            if projection.shouldLog {
+                print(projection.logMessage)
             }
         }
     }

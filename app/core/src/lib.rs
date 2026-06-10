@@ -230,6 +230,8 @@ pub use relays::{
 };
 pub use room_explorer::{
     RoomBrowseSnapshot, RoomBrowseSnapshotApplyInput, RoomBrowseSnapshotApplyProjection,
+    RoomExplorerFeaturedStartResultInput, RoomExplorerFeaturedStartResultProjection,
+    RoomExplorerJoinRequestResultInput, RoomExplorerJoinRequestResultProjection,
     RoomExplorerSnapshot,
 };
 pub use room_home::RoomHomeSnapshot;
