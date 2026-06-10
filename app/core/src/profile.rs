@@ -194,7 +194,6 @@ pub struct ProfileFollowActionProjection {
     pub can_start: bool,
     pub optimistic_is_following: bool,
     pub mutation: Option<ProfileFollowMutationInput>,
-    pub error_message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -420,7 +419,6 @@ pub fn profile_follow_action_projection(
             can_start: false,
             optimistic_is_following: input.is_following,
             mutation: None,
-            error_message: String::new(),
         };
     }
 
@@ -429,7 +427,6 @@ pub fn profile_follow_action_projection(
             can_start: false,
             optimistic_is_following: input.is_following,
             mutation: None,
-            error_message: String::new(),
         };
     }
 
@@ -442,7 +439,6 @@ pub fn profile_follow_action_projection(
             requested_follow_state,
             previous_follow_state: input.is_following,
         }),
-        error_message: String::new(),
     }
 }
 

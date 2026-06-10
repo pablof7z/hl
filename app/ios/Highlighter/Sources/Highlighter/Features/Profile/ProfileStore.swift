@@ -102,9 +102,6 @@ final class ProfileStore {
             )
         )
         guard action.canStart, let mutation = action.mutation else {
-            if !action.errorMessage.isEmpty {
-                followError = action.errorMessage
-            }
             return
         }
         isMutatingFollow = true
