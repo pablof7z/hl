@@ -80,16 +80,20 @@ final class PodcastPlayerStore {
     // MARK: - Global load / clear
 
     func load(artifact: ArtifactRecord) {
-        let audioCandidate = artifact.preview.audioUrl.isEmpty
-            ? artifact.preview.audioPreviewUrl
-            : artifact.preview.audioUrl
-        guard !audioCandidate.isEmpty, let url = URL(string: audioCandidate) else {
+        let plan = core.planPodcastPlaybackSession(
+            input: PodcastPlaybackSessionInput(
+                artifact: artifact,
+                loadedShareEventId: currentArtifact?.shareEventId,
+                hasLoadedPlayer: player != nil
+            )
+        )
+        guard plan.error.isEmpty, let url = URL(string: plan.audioUrl) else {
             logger.warning("load: no usable audio URL for artifact \(artifact.shareEventId, privacy: .public)")
             return
         }
 
         // If same episode is already loaded, just play.
-        if currentArtifact?.shareEventId == artifact.shareEventId {
+        if plan.shouldReuseLoadedPlayer {
             play()
             return
         }
@@ -130,9 +134,9 @@ final class PodcastPlayerStore {
         configureRemoteCommandCenter()
         updateNowPlayingInfo()
         fetchAndApplyArtwork(from: artifact.preview.image)
-        beginPlaybackAfterRestoringPosition(for: artifact)
+        beginPlayback(using: plan, shareEventId: artifact.shareEventId)
 
-        let transcriptUrl = artifact.preview.transcriptUrl
+        let transcriptUrl = plan.transcriptUrl
         if !transcriptUrl.isEmpty {
             transcriptAvailability = .loading
             transcriptTask = Task { await loadTranscript(from: transcriptUrl) }
@@ -143,7 +147,7 @@ final class PodcastPlayerStore {
         // present, so playback isn't blocked by this work.
         waveformPeaks = []
         waveformTask?.cancel()
-        let dur = artifact.preview.durationSeconds.map(TimeInterval.init) ?? 0
+        let dur = plan.previewDurationSeconds
         let safeCore = core
         waveformTask = Task(priority: .background) { [weak self, url, safeCore] in
             let peaks = await WaveformExtractor.peaks(
@@ -222,7 +226,13 @@ final class PodcastPlayerStore {
     }
 
     func seek(to seconds: TimeInterval) {
-        let clamped = max(0, duration > 0 ? min(seconds, duration) : seconds)
+        let projection = core.projectPodcastPlaybackSeek(
+            input: PodcastPlaybackSeekInput(
+                targetSeconds: seconds,
+                durationSeconds: duration
+            )
+        )
+        let clamped = projection.positionSeconds
         let time = CMTime(seconds: clamped, preferredTimescale: 600)
         player?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
         currentTime = clamped
@@ -347,39 +357,28 @@ final class PodcastPlayerStore {
 
     private func persistPosition(position: TimeInterval? = nil) {
         guard let artifact = currentArtifact else { return }
-        let guid = artifact.preview.podcastItemGuid
-        guard !guid.isEmpty else { return }
         let position = position ?? currentTime
-        guard position.isFinite, position >= 0 else { return }
-        Task { [core, guid, position, artifact] in
-            _ = await core.savePodcastPosition(
-                guid: guid,
-                positionSeconds: position,
-                artifact: artifact
+        Task { [core, position, artifact] in
+            _ = await core.recordPodcastPlaybackPosition(
+                artifact: artifact,
+                positionSeconds: position
             )
         }
     }
 
-    private func beginPlaybackAfterRestoringPosition(for artifact: ArtifactRecord) {
-        let guid = artifact.preview.podcastItemGuid
-        guard !guid.isEmpty else {
-            player?.play()
-            isPlaying = true
-            updateNowPlayingInfo()
-            return
-        }
-        let shareEventId = artifact.shareEventId
-        Task { @MainActor [weak self, core, guid, shareEventId] in
-            let position = await core.getPodcastPositionSeconds(guid: guid)
+    private func beginPlayback(using plan: PodcastPlaybackSessionPlan, shareEventId: String) {
+        Task { @MainActor [weak self, plan, shareEventId] in
             guard let self, self.currentArtifact?.shareEventId == shareEventId else { return }
-            if let position {
+            if let position = plan.resumePositionSeconds {
                 let seekTime = CMTime(seconds: position, preferredTimescale: 600)
                 _ = await self.player?.seek(to: seekTime, toleranceBefore: .zero, toleranceAfter: .zero)
                 self.currentTime = position
             }
-            self.player?.play()
-            self.isPlaying = true
-            self.updateNowPlayingInfo()
+            if plan.shouldAutoplay {
+                self.player?.play()
+                self.isPlaying = true
+                self.updateNowPlayingInfo()
+            }
         }
     }
 
@@ -388,14 +387,14 @@ final class PodcastPlayerStore {
     /// AVPlayer is NOT created — that happens when the user taps play and we
     /// route through `load(artifact:)` which seeks to the saved position.
     func rehydrateFromSavedRecord() async {
-        guard currentArtifact == nil else { return }
-        guard let record = await core.getPodcastPosition() else { return }
-        currentArtifact = record.artifact
-        currentTime = record.positionSeconds
-        if let dur = record.artifact.preview.durationSeconds, dur > 0 {
-            duration = TimeInterval(dur)
-        }
-        isPlaying = false
+        let snapshot = await core.getPodcastPlaybackRehydrationSnapshot(
+            hasCurrentArtifact: currentArtifact != nil
+        )
+        guard snapshot.shouldApply, let artifact = snapshot.artifact else { return }
+        currentArtifact = artifact
+        currentTime = snapshot.currentTimeSeconds
+        duration = snapshot.durationSeconds
+        isPlaying = snapshot.isPlaying
     }
 
     // MARK: - Player setup helpers
@@ -405,14 +404,18 @@ final class PodcastPlayerStore {
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                let seconds = time.seconds.isFinite ? time.seconds : 0
-                let previousWhole = Int(self.currentTime)
+                let tick = self.core.projectPodcastPlaybackTick(
+                    input: PodcastPlaybackTickInput(
+                        previousTimeSeconds: self.currentTime,
+                        currentTimeSeconds: time.seconds,
+                        isPlaying: self.isPlaying
+                    )
+                )
+                let seconds = tick.currentTimeSeconds
                 self.currentTime = seconds
-                // Update Now Playing elapsed time once per second to keep the
-                // lock screen scrubber accurate without excessive churn.
-                if Int(seconds) != previousWhole {
+                if tick.shouldUpdateNowPlaying {
                     self.updateNowPlayingInfo()
-                    if self.isPlaying, Int(seconds) > 0, Int(seconds) % 5 == 0 {
+                    if tick.shouldPersistPosition {
                         self.persistPosition(position: seconds)
                     }
                 }

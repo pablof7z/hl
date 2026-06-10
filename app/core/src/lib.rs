@@ -34,6 +34,7 @@ pub mod ocr;
 pub mod onboarding;
 pub mod outbox;
 pub mod pictures;
+pub mod podcast_playback;
 pub mod podcast_position;
 pub mod podcast_transcript;
 pub mod profile;
@@ -157,8 +158,8 @@ pub use models::{
     HighlightReferenceBucket, HighlightReferenceTarget, HighlightSourceKind, HomeFeedItem,
     HydratedHighlight, LoginInputAction, MutationSnapshot, OnboardingInterest,
     OnboardingInterestChip, OnboardingInterestProjection, OnboardingInterestSelection,
-    PodcastPositionRecord, ProfileMetadata, ProfileUpdateDraft, ReadingFeedItem, RoomLane,
-    RoomRecommendation, RoomRecommendationReason, SubscriptionStartSnapshot, WebBookmarkRecord,
+    ProfileMetadata, ProfileUpdateDraft, ReadingFeedItem, RoomLane, RoomRecommendation,
+    RoomRecommendationReason, SubscriptionStartSnapshot, WebBookmarkRecord,
 };
 pub use nip05::{
     Nip05Availability, Nip05AvailabilitySnapshot, Nip05AvailabilityState,
@@ -171,6 +172,11 @@ pub use nostr_entities::{
     NostrEntityRefSnapshot, NostrEntityResolutionSnapshot,
 };
 pub use ocr::{OcrLine, OcrPageDetection, OcrPageSide, OcrRect, OcrWord};
+pub use podcast_playback::{
+    PodcastPlaybackPositionInput, PodcastPlaybackRehydrationSnapshot, PodcastPlaybackSeekInput,
+    PodcastPlaybackSeekProjection, PodcastPlaybackSessionInput, PodcastPlaybackSessionPlan,
+    PodcastPlaybackTickInput, PodcastPlaybackTickProjection,
+};
 pub use podcast_transcript::{
     PodcastClipComposerInput, PodcastClipComposerProjection, PodcastClipComposerPublishInput,
     PodcastClipPublishInput, PodcastClipPublishSnapshot, PodcastClipSelection,

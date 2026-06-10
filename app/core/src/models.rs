@@ -190,7 +190,7 @@ pub struct ArtifactDetailRoute {
 /// Last podcast playback position persisted by the Rust core. Native shells
 /// own AV playback handles, but durable playback state and the cold-launch
 /// episode projection live here so every platform resumes the same episode.
-#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PodcastPositionRecord {
     pub guid: String,
     pub position_seconds: f64,

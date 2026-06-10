@@ -1043,9 +1043,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getPodcastNowPlayingProjection(input: PodcastNowPlayingProjectionInput)  -> PodcastNowPlayingProjection
 
-    func getPodcastPosition()  -> PodcastPositionRecord?
-
-    func getPodcastPositionSeconds(guid: String)  -> Double?
+    func getPodcastPlaybackRehydrationSnapshot(hasCurrentArtifact: Bool)  -> PodcastPlaybackRehydrationSnapshot
 
     /**
      * Full profile-page read model. Rust owns tab queries, section limits,
@@ -1184,6 +1182,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func ocrAltText(markdown: String)  -> String
 
     func pairBunker(uri: String) async  -> AuthSessionSnapshot
+
+    func planPodcastPlaybackSession(input: PodcastPlaybackSessionInput)  -> PodcastPlaybackSessionPlan
 
     func planRelayNip11Probes(input: RelayNip11ProbePlanInput)  -> RelayNip11ProbePlan
 
@@ -1376,6 +1376,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * and username validity for the onboarding flow.
      */
     func projectOnboardingUsernameCheck(username: String)  -> OnboardingUsernameCheckProjection
+
+    func projectPodcastPlaybackSeek(input: PodcastPlaybackSeekInput)  -> PodcastPlaybackSeekProjection
+
+    func projectPodcastPlaybackTick(input: PodcastPlaybackTickInput)  -> PodcastPlaybackTickProjection
 
     /**
      * Profile/avatar presentation projection. Rust owns profile-name
@@ -1587,6 +1591,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func reconstructOcrMarkdown(lines: [OcrLine])  -> String
 
+    func recordPodcastPlaybackPosition(input: PodcastPlaybackPositionInput)  -> MutationSnapshot
+
     func recordRecentSearchSnapshot(query: String) async  -> SearchChromeSnapshot
 
     /**
@@ -1622,8 +1628,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func restoreSessionSnapshot(nsec: String?, bunkerUri: String?) async  -> AuthSessionRestoreSnapshot
 
     func sanitizeHighlightCropBox(cropBox: OcrRect, fallback: OcrRect?)  -> OcrRect
-
-    func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord)  -> MutationSnapshot
 
     func selectableOcrWords(lines: [OcrLine])  -> [OcrWord]
 
@@ -2934,17 +2938,10 @@ open func getPodcastNowPlayingProjection(input: PodcastNowPlayingProjectionInput
 })
 }
 
-open func getPodcastPosition() -> PodcastPositionRecord?  {
-    return try!  FfiConverterOptionTypePodcastPositionRecord.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_podcast_position(self.uniffiClonePointer(),$0
-    )
-})
-}
-
-open func getPodcastPositionSeconds(guid: String) -> Double?  {
-    return try!  FfiConverterOptionDouble.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_podcast_position_seconds(self.uniffiClonePointer(),
-        FfiConverterString.lower(guid),$0
+open func getPodcastPlaybackRehydrationSnapshot(hasCurrentArtifact: Bool) -> PodcastPlaybackRehydrationSnapshot  {
+    return try!  FfiConverterTypePodcastPlaybackRehydrationSnapshot_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_get_podcast_playback_rehydration_snapshot(self.uniffiClonePointer(),
+        FfiConverterBool.lower(hasCurrentArtifact),$0
     )
 })
 }
@@ -3486,6 +3483,14 @@ open func pairBunker(uri: String)async  -> AuthSessionSnapshot  {
         )
 }
 
+open func planPodcastPlaybackSession(input: PodcastPlaybackSessionInput) -> PodcastPlaybackSessionPlan  {
+    return try!  FfiConverterTypePodcastPlaybackSessionPlan_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_plan_podcast_playback_session(self.uniffiClonePointer(),
+        FfiConverterTypePodcastPlaybackSessionInput_lower(input),$0
+    )
+})
+}
+
 open func planRelayNip11Probes(input: RelayNip11ProbePlanInput) -> RelayNip11ProbePlan  {
     return try!  FfiConverterTypeRelayNip11ProbePlan_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_plan_relay_nip11_probes(self.uniffiClonePointer(),
@@ -3983,6 +3988,22 @@ open func projectOnboardingUsernameCheck(username: String) -> OnboardingUsername
     return try!  FfiConverterTypeOnboardingUsernameCheckProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_onboarding_username_check(self.uniffiClonePointer(),
         FfiConverterString.lower(username),$0
+    )
+})
+}
+
+open func projectPodcastPlaybackSeek(input: PodcastPlaybackSeekInput) -> PodcastPlaybackSeekProjection  {
+    return try!  FfiConverterTypePodcastPlaybackSeekProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_podcast_playback_seek(self.uniffiClonePointer(),
+        FfiConverterTypePodcastPlaybackSeekInput_lower(input),$0
+    )
+})
+}
+
+open func projectPodcastPlaybackTick(input: PodcastPlaybackTickInput) -> PodcastPlaybackTickProjection  {
+    return try!  FfiConverterTypePodcastPlaybackTickProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_podcast_playback_tick(self.uniffiClonePointer(),
+        FfiConverterTypePodcastPlaybackTickInput_lower(input),$0
     )
 })
 }
@@ -4664,6 +4685,14 @@ open func reconstructOcrMarkdown(lines: [OcrLine]) -> String  {
 })
 }
 
+open func recordPodcastPlaybackPosition(input: PodcastPlaybackPositionInput) -> MutationSnapshot  {
+    return try!  FfiConverterTypeMutationSnapshot_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_record_podcast_playback_position(self.uniffiClonePointer(),
+        FfiConverterTypePodcastPlaybackPositionInput_lower(input),$0
+    )
+})
+}
+
 open func recordRecentSearchSnapshot(query: String)async  -> SearchChromeSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -4815,16 +4844,6 @@ open func sanitizeHighlightCropBox(cropBox: OcrRect, fallback: OcrRect?) -> OcrR
     uniffi_highlighter_core_fn_method_highlightercore_sanitize_highlight_crop_box(self.uniffiClonePointer(),
         FfiConverterTypeOcrRect_lower(cropBox),
         FfiConverterOptionTypeOcrRect.lower(fallback),$0
-    )
-})
-}
-
-open func savePodcastPosition(guid: String, positionSeconds: Double, artifact: ArtifactRecord) -> MutationSnapshot  {
-    return try!  FfiConverterTypeMutationSnapshot_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_save_podcast_position(self.uniffiClonePointer(),
-        FfiConverterString.lower(guid),
-        FfiConverterDouble.lower(positionSeconds),
-        FfiConverterTypeArtifactRecord_lower(artifact),$0
     )
 })
 }
@@ -23015,54 +23034,37 @@ public func FfiConverterTypePodcastNowPlayingProjectionInput_lower(_ value: Podc
 }
 
 
-/**
- * Last podcast playback position persisted by the Rust core. Native shells
- * own AV playback handles, but durable playback state and the cold-launch
- * episode projection live here so every platform resumes the same episode.
- */
-public struct PodcastPositionRecord {
-    public var guid: String
-    public var positionSeconds: Double
-    public var lastPlayedAtUnixSeconds: UInt64
+public struct PodcastPlaybackPositionInput {
     public var artifact: ArtifactRecord
+    public var positionSeconds: Double
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(guid: String, positionSeconds: Double, lastPlayedAtUnixSeconds: UInt64, artifact: ArtifactRecord) {
-        self.guid = guid
-        self.positionSeconds = positionSeconds
-        self.lastPlayedAtUnixSeconds = lastPlayedAtUnixSeconds
+    public init(artifact: ArtifactRecord, positionSeconds: Double) {
         self.artifact = artifact
+        self.positionSeconds = positionSeconds
     }
 }
 
 #if compiler(>=6)
-extension PodcastPositionRecord: Sendable {}
+extension PodcastPlaybackPositionInput: Sendable {}
 #endif
 
 
-extension PodcastPositionRecord: Equatable, Hashable {
-    public static func ==(lhs: PodcastPositionRecord, rhs: PodcastPositionRecord) -> Bool {
-        if lhs.guid != rhs.guid {
+extension PodcastPlaybackPositionInput: Equatable, Hashable {
+    public static func ==(lhs: PodcastPlaybackPositionInput, rhs: PodcastPlaybackPositionInput) -> Bool {
+        if lhs.artifact != rhs.artifact {
             return false
         }
         if lhs.positionSeconds != rhs.positionSeconds {
-            return false
-        }
-        if lhs.lastPlayedAtUnixSeconds != rhs.lastPlayedAtUnixSeconds {
-            return false
-        }
-        if lhs.artifact != rhs.artifact {
             return false
         }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(guid)
-        hasher.combine(positionSeconds)
-        hasher.combine(lastPlayedAtUnixSeconds)
         hasher.combine(artifact)
+        hasher.combine(positionSeconds)
     }
 }
 
@@ -23071,22 +23073,18 @@ extension PodcastPositionRecord: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypePodcastPositionRecord: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPositionRecord {
+public struct FfiConverterTypePodcastPlaybackPositionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPlaybackPositionInput {
         return
-            try PodcastPositionRecord(
-                guid: FfiConverterString.read(from: &buf),
-                positionSeconds: FfiConverterDouble.read(from: &buf),
-                lastPlayedAtUnixSeconds: FfiConverterUInt64.read(from: &buf),
-                artifact: FfiConverterTypeArtifactRecord.read(from: &buf)
+            try PodcastPlaybackPositionInput(
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
+                positionSeconds: FfiConverterDouble.read(from: &buf)
         )
     }
 
-    public static func write(_ value: PodcastPositionRecord, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.guid, into: &buf)
-        FfiConverterDouble.write(value.positionSeconds, into: &buf)
-        FfiConverterUInt64.write(value.lastPlayedAtUnixSeconds, into: &buf)
+    public static func write(_ value: PodcastPlaybackPositionInput, into buf: inout [UInt8]) {
         FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
+        FfiConverterDouble.write(value.positionSeconds, into: &buf)
     }
 }
 
@@ -23094,15 +23092,585 @@ public struct FfiConverterTypePodcastPositionRecord: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypePodcastPositionRecord_lift(_ buf: RustBuffer) throws -> PodcastPositionRecord {
-    return try FfiConverterTypePodcastPositionRecord.lift(buf)
+public func FfiConverterTypePodcastPlaybackPositionInput_lift(_ buf: RustBuffer) throws -> PodcastPlaybackPositionInput {
+    return try FfiConverterTypePodcastPlaybackPositionInput.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypePodcastPositionRecord_lower(_ value: PodcastPositionRecord) -> RustBuffer {
-    return FfiConverterTypePodcastPositionRecord.lower(value)
+public func FfiConverterTypePodcastPlaybackPositionInput_lower(_ value: PodcastPlaybackPositionInput) -> RustBuffer {
+    return FfiConverterTypePodcastPlaybackPositionInput.lower(value)
+}
+
+
+public struct PodcastPlaybackRehydrationSnapshot {
+    public var shouldApply: Bool
+    public var artifact: ArtifactRecord?
+    public var currentTimeSeconds: Double
+    public var durationSeconds: Double
+    public var isPlaying: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldApply: Bool, artifact: ArtifactRecord?, currentTimeSeconds: Double, durationSeconds: Double, isPlaying: Bool) {
+        self.shouldApply = shouldApply
+        self.artifact = artifact
+        self.currentTimeSeconds = currentTimeSeconds
+        self.durationSeconds = durationSeconds
+        self.isPlaying = isPlaying
+    }
+}
+
+#if compiler(>=6)
+extension PodcastPlaybackRehydrationSnapshot: Sendable {}
+#endif
+
+
+extension PodcastPlaybackRehydrationSnapshot: Equatable, Hashable {
+    public static func ==(lhs: PodcastPlaybackRehydrationSnapshot, rhs: PodcastPlaybackRehydrationSnapshot) -> Bool {
+        if lhs.shouldApply != rhs.shouldApply {
+            return false
+        }
+        if lhs.artifact != rhs.artifact {
+            return false
+        }
+        if lhs.currentTimeSeconds != rhs.currentTimeSeconds {
+            return false
+        }
+        if lhs.durationSeconds != rhs.durationSeconds {
+            return false
+        }
+        if lhs.isPlaying != rhs.isPlaying {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldApply)
+        hasher.combine(artifact)
+        hasher.combine(currentTimeSeconds)
+        hasher.combine(durationSeconds)
+        hasher.combine(isPlaying)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastPlaybackRehydrationSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPlaybackRehydrationSnapshot {
+        return
+            try PodcastPlaybackRehydrationSnapshot(
+                shouldApply: FfiConverterBool.read(from: &buf),
+                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf),
+                currentTimeSeconds: FfiConverterDouble.read(from: &buf),
+                durationSeconds: FfiConverterDouble.read(from: &buf),
+                isPlaying: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastPlaybackRehydrationSnapshot, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldApply, into: &buf)
+        FfiConverterOptionTypeArtifactRecord.write(value.artifact, into: &buf)
+        FfiConverterDouble.write(value.currentTimeSeconds, into: &buf)
+        FfiConverterDouble.write(value.durationSeconds, into: &buf)
+        FfiConverterBool.write(value.isPlaying, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastPlaybackRehydrationSnapshot_lift(_ buf: RustBuffer) throws -> PodcastPlaybackRehydrationSnapshot {
+    return try FfiConverterTypePodcastPlaybackRehydrationSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastPlaybackRehydrationSnapshot_lower(_ value: PodcastPlaybackRehydrationSnapshot) -> RustBuffer {
+    return FfiConverterTypePodcastPlaybackRehydrationSnapshot.lower(value)
+}
+
+
+public struct PodcastPlaybackSeekInput {
+    public var targetSeconds: Double
+    public var durationSeconds: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(targetSeconds: Double, durationSeconds: Double) {
+        self.targetSeconds = targetSeconds
+        self.durationSeconds = durationSeconds
+    }
+}
+
+#if compiler(>=6)
+extension PodcastPlaybackSeekInput: Sendable {}
+#endif
+
+
+extension PodcastPlaybackSeekInput: Equatable, Hashable {
+    public static func ==(lhs: PodcastPlaybackSeekInput, rhs: PodcastPlaybackSeekInput) -> Bool {
+        if lhs.targetSeconds != rhs.targetSeconds {
+            return false
+        }
+        if lhs.durationSeconds != rhs.durationSeconds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(targetSeconds)
+        hasher.combine(durationSeconds)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastPlaybackSeekInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPlaybackSeekInput {
+        return
+            try PodcastPlaybackSeekInput(
+                targetSeconds: FfiConverterDouble.read(from: &buf),
+                durationSeconds: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastPlaybackSeekInput, into buf: inout [UInt8]) {
+        FfiConverterDouble.write(value.targetSeconds, into: &buf)
+        FfiConverterDouble.write(value.durationSeconds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastPlaybackSeekInput_lift(_ buf: RustBuffer) throws -> PodcastPlaybackSeekInput {
+    return try FfiConverterTypePodcastPlaybackSeekInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastPlaybackSeekInput_lower(_ value: PodcastPlaybackSeekInput) -> RustBuffer {
+    return FfiConverterTypePodcastPlaybackSeekInput.lower(value)
+}
+
+
+public struct PodcastPlaybackSeekProjection {
+    public var positionSeconds: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(positionSeconds: Double) {
+        self.positionSeconds = positionSeconds
+    }
+}
+
+#if compiler(>=6)
+extension PodcastPlaybackSeekProjection: Sendable {}
+#endif
+
+
+extension PodcastPlaybackSeekProjection: Equatable, Hashable {
+    public static func ==(lhs: PodcastPlaybackSeekProjection, rhs: PodcastPlaybackSeekProjection) -> Bool {
+        if lhs.positionSeconds != rhs.positionSeconds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(positionSeconds)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastPlaybackSeekProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPlaybackSeekProjection {
+        return
+            try PodcastPlaybackSeekProjection(
+                positionSeconds: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastPlaybackSeekProjection, into buf: inout [UInt8]) {
+        FfiConverterDouble.write(value.positionSeconds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastPlaybackSeekProjection_lift(_ buf: RustBuffer) throws -> PodcastPlaybackSeekProjection {
+    return try FfiConverterTypePodcastPlaybackSeekProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastPlaybackSeekProjection_lower(_ value: PodcastPlaybackSeekProjection) -> RustBuffer {
+    return FfiConverterTypePodcastPlaybackSeekProjection.lower(value)
+}
+
+
+public struct PodcastPlaybackSessionInput {
+    public var artifact: ArtifactRecord
+    public var loadedShareEventId: String?
+    public var hasLoadedPlayer: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(artifact: ArtifactRecord, loadedShareEventId: String?, hasLoadedPlayer: Bool) {
+        self.artifact = artifact
+        self.loadedShareEventId = loadedShareEventId
+        self.hasLoadedPlayer = hasLoadedPlayer
+    }
+}
+
+#if compiler(>=6)
+extension PodcastPlaybackSessionInput: Sendable {}
+#endif
+
+
+extension PodcastPlaybackSessionInput: Equatable, Hashable {
+    public static func ==(lhs: PodcastPlaybackSessionInput, rhs: PodcastPlaybackSessionInput) -> Bool {
+        if lhs.artifact != rhs.artifact {
+            return false
+        }
+        if lhs.loadedShareEventId != rhs.loadedShareEventId {
+            return false
+        }
+        if lhs.hasLoadedPlayer != rhs.hasLoadedPlayer {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(artifact)
+        hasher.combine(loadedShareEventId)
+        hasher.combine(hasLoadedPlayer)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastPlaybackSessionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPlaybackSessionInput {
+        return
+            try PodcastPlaybackSessionInput(
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
+                loadedShareEventId: FfiConverterOptionString.read(from: &buf),
+                hasLoadedPlayer: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastPlaybackSessionInput, into buf: inout [UInt8]) {
+        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
+        FfiConverterOptionString.write(value.loadedShareEventId, into: &buf)
+        FfiConverterBool.write(value.hasLoadedPlayer, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastPlaybackSessionInput_lift(_ buf: RustBuffer) throws -> PodcastPlaybackSessionInput {
+    return try FfiConverterTypePodcastPlaybackSessionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastPlaybackSessionInput_lower(_ value: PodcastPlaybackSessionInput) -> RustBuffer {
+    return FfiConverterTypePodcastPlaybackSessionInput.lower(value)
+}
+
+
+public struct PodcastPlaybackSessionPlan {
+    public var audioUrl: String
+    public var shouldReuseLoadedPlayer: Bool
+    public var shouldAutoplay: Bool
+    public var resumePositionSeconds: Double?
+    public var transcriptUrl: String
+    public var previewDurationSeconds: Double
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(audioUrl: String, shouldReuseLoadedPlayer: Bool, shouldAutoplay: Bool, resumePositionSeconds: Double?, transcriptUrl: String, previewDurationSeconds: Double, error: String) {
+        self.audioUrl = audioUrl
+        self.shouldReuseLoadedPlayer = shouldReuseLoadedPlayer
+        self.shouldAutoplay = shouldAutoplay
+        self.resumePositionSeconds = resumePositionSeconds
+        self.transcriptUrl = transcriptUrl
+        self.previewDurationSeconds = previewDurationSeconds
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension PodcastPlaybackSessionPlan: Sendable {}
+#endif
+
+
+extension PodcastPlaybackSessionPlan: Equatable, Hashable {
+    public static func ==(lhs: PodcastPlaybackSessionPlan, rhs: PodcastPlaybackSessionPlan) -> Bool {
+        if lhs.audioUrl != rhs.audioUrl {
+            return false
+        }
+        if lhs.shouldReuseLoadedPlayer != rhs.shouldReuseLoadedPlayer {
+            return false
+        }
+        if lhs.shouldAutoplay != rhs.shouldAutoplay {
+            return false
+        }
+        if lhs.resumePositionSeconds != rhs.resumePositionSeconds {
+            return false
+        }
+        if lhs.transcriptUrl != rhs.transcriptUrl {
+            return false
+        }
+        if lhs.previewDurationSeconds != rhs.previewDurationSeconds {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(audioUrl)
+        hasher.combine(shouldReuseLoadedPlayer)
+        hasher.combine(shouldAutoplay)
+        hasher.combine(resumePositionSeconds)
+        hasher.combine(transcriptUrl)
+        hasher.combine(previewDurationSeconds)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastPlaybackSessionPlan: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPlaybackSessionPlan {
+        return
+            try PodcastPlaybackSessionPlan(
+                audioUrl: FfiConverterString.read(from: &buf),
+                shouldReuseLoadedPlayer: FfiConverterBool.read(from: &buf),
+                shouldAutoplay: FfiConverterBool.read(from: &buf),
+                resumePositionSeconds: FfiConverterOptionDouble.read(from: &buf),
+                transcriptUrl: FfiConverterString.read(from: &buf),
+                previewDurationSeconds: FfiConverterDouble.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastPlaybackSessionPlan, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.audioUrl, into: &buf)
+        FfiConverterBool.write(value.shouldReuseLoadedPlayer, into: &buf)
+        FfiConverterBool.write(value.shouldAutoplay, into: &buf)
+        FfiConverterOptionDouble.write(value.resumePositionSeconds, into: &buf)
+        FfiConverterString.write(value.transcriptUrl, into: &buf)
+        FfiConverterDouble.write(value.previewDurationSeconds, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastPlaybackSessionPlan_lift(_ buf: RustBuffer) throws -> PodcastPlaybackSessionPlan {
+    return try FfiConverterTypePodcastPlaybackSessionPlan.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastPlaybackSessionPlan_lower(_ value: PodcastPlaybackSessionPlan) -> RustBuffer {
+    return FfiConverterTypePodcastPlaybackSessionPlan.lower(value)
+}
+
+
+public struct PodcastPlaybackTickInput {
+    public var previousTimeSeconds: Double
+    public var currentTimeSeconds: Double
+    public var isPlaying: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(previousTimeSeconds: Double, currentTimeSeconds: Double, isPlaying: Bool) {
+        self.previousTimeSeconds = previousTimeSeconds
+        self.currentTimeSeconds = currentTimeSeconds
+        self.isPlaying = isPlaying
+    }
+}
+
+#if compiler(>=6)
+extension PodcastPlaybackTickInput: Sendable {}
+#endif
+
+
+extension PodcastPlaybackTickInput: Equatable, Hashable {
+    public static func ==(lhs: PodcastPlaybackTickInput, rhs: PodcastPlaybackTickInput) -> Bool {
+        if lhs.previousTimeSeconds != rhs.previousTimeSeconds {
+            return false
+        }
+        if lhs.currentTimeSeconds != rhs.currentTimeSeconds {
+            return false
+        }
+        if lhs.isPlaying != rhs.isPlaying {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(previousTimeSeconds)
+        hasher.combine(currentTimeSeconds)
+        hasher.combine(isPlaying)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastPlaybackTickInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPlaybackTickInput {
+        return
+            try PodcastPlaybackTickInput(
+                previousTimeSeconds: FfiConverterDouble.read(from: &buf),
+                currentTimeSeconds: FfiConverterDouble.read(from: &buf),
+                isPlaying: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastPlaybackTickInput, into buf: inout [UInt8]) {
+        FfiConverterDouble.write(value.previousTimeSeconds, into: &buf)
+        FfiConverterDouble.write(value.currentTimeSeconds, into: &buf)
+        FfiConverterBool.write(value.isPlaying, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastPlaybackTickInput_lift(_ buf: RustBuffer) throws -> PodcastPlaybackTickInput {
+    return try FfiConverterTypePodcastPlaybackTickInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastPlaybackTickInput_lower(_ value: PodcastPlaybackTickInput) -> RustBuffer {
+    return FfiConverterTypePodcastPlaybackTickInput.lower(value)
+}
+
+
+public struct PodcastPlaybackTickProjection {
+    public var currentTimeSeconds: Double
+    public var shouldUpdateNowPlaying: Bool
+    public var shouldPersistPosition: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(currentTimeSeconds: Double, shouldUpdateNowPlaying: Bool, shouldPersistPosition: Bool) {
+        self.currentTimeSeconds = currentTimeSeconds
+        self.shouldUpdateNowPlaying = shouldUpdateNowPlaying
+        self.shouldPersistPosition = shouldPersistPosition
+    }
+}
+
+#if compiler(>=6)
+extension PodcastPlaybackTickProjection: Sendable {}
+#endif
+
+
+extension PodcastPlaybackTickProjection: Equatable, Hashable {
+    public static func ==(lhs: PodcastPlaybackTickProjection, rhs: PodcastPlaybackTickProjection) -> Bool {
+        if lhs.currentTimeSeconds != rhs.currentTimeSeconds {
+            return false
+        }
+        if lhs.shouldUpdateNowPlaying != rhs.shouldUpdateNowPlaying {
+            return false
+        }
+        if lhs.shouldPersistPosition != rhs.shouldPersistPosition {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(currentTimeSeconds)
+        hasher.combine(shouldUpdateNowPlaying)
+        hasher.combine(shouldPersistPosition)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastPlaybackTickProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPlaybackTickProjection {
+        return
+            try PodcastPlaybackTickProjection(
+                currentTimeSeconds: FfiConverterDouble.read(from: &buf),
+                shouldUpdateNowPlaying: FfiConverterBool.read(from: &buf),
+                shouldPersistPosition: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastPlaybackTickProjection, into buf: inout [UInt8]) {
+        FfiConverterDouble.write(value.currentTimeSeconds, into: &buf)
+        FfiConverterBool.write(value.shouldUpdateNowPlaying, into: &buf)
+        FfiConverterBool.write(value.shouldPersistPosition, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastPlaybackTickProjection_lift(_ buf: RustBuffer) throws -> PodcastPlaybackTickProjection {
+    return try FfiConverterTypePodcastPlaybackTickProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastPlaybackTickProjection_lower(_ value: PodcastPlaybackTickProjection) -> RustBuffer {
+    return FfiConverterTypePodcastPlaybackTickProjection.lower(value)
 }
 
 
@@ -37634,30 +38202,6 @@ fileprivate struct FfiConverterOptionTypeOcrRect: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypePodcastPositionRecord: FfiConverterRustBuffer {
-    typealias SwiftType = PodcastPositionRecord?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypePodcastPositionRecord.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypePodcastPositionRecord.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeProfileFollowMutationInput: FfiConverterRustBuffer {
     typealias SwiftType = ProfileFollowMutationInput?
 
@@ -39505,10 +40049,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_now_playing_projection() != 17405) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_position() != 36439) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_position_seconds() != 16855) {
+    if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_playback_rehydration_snapshot() != 22927) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_profile_page_snapshot() != 21484) {
@@ -39614,6 +40155,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_pair_bunker() != 32523) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_plan_podcast_playback_session() != 62610) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_plan_relay_nip11_probes() != 54478) {
@@ -39758,6 +40302,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_onboarding_username_check() != 9841) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_podcast_playback_seek() != 949) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_podcast_playback_tick() != 46931) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_display() != 29583) {
@@ -39928,6 +40478,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_reconstruct_ocr_markdown() != 15497) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_record_podcast_playback_position() != 26014) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_record_recent_search_snapshot() != 36017) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -39950,9 +40503,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_sanitize_highlight_crop_box() != 64518) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_save_podcast_position() != 57580) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_selectable_ocr_words() != 2832) {

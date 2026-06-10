@@ -29,15 +29,15 @@ use crate::models::{
     BookmarkSetRecord, CommentRecord, CommentReferenceBucket, CommentScope, CommunitySummary,
     CurrentUser, DiscussionRecord, FeedbackThreadRecord, HighlightRecord, HighlightSourceKind,
     LoginInputAction, MutationSnapshot, NostrConnectOptions, OnboardingInterest,
-    OnboardingInterestProjection, OnboardingInterestSelection, PodcastPositionRecord,
-    ProfileMetadata, ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic,
-    SubscriptionStartSnapshot,
+    OnboardingInterestProjection, OnboardingInterestSelection, ProfileMetadata,
+    ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, SubscriptionStartSnapshot,
 };
 use crate::network_preferences;
 use crate::nip05;
 use crate::nip46::{self, BunkerSigner};
 use crate::nostr_runtime::NostrRuntime;
 use crate::onboarding;
+use crate::podcast_playback;
 use crate::podcast_position;
 use crate::podcast_transcript::{
     self, PodcastClipComposerInput, PodcastClipComposerProjection, PodcastClipSelection,
@@ -545,21 +545,57 @@ impl HighlighterCore {
         )
     }
 
-    pub fn get_podcast_position(&self) -> Option<PodcastPositionRecord> {
-        self.podcast_position.current()
-    }
-
-    pub fn get_podcast_position_seconds(&self, guid: String) -> Option<f64> {
-        self.podcast_position.position_for_guid(&guid)
-    }
-
-    pub fn save_podcast_position(
+    pub fn plan_podcast_playback_session(
         &self,
-        guid: String,
-        position_seconds: f64,
-        artifact: ArtifactRecord,
+        input: podcast_playback::PodcastPlaybackSessionInput,
+    ) -> podcast_playback::PodcastPlaybackSessionPlan {
+        let guid = input.artifact.preview.podcast_item_guid.trim();
+        let saved_position_seconds = if guid.is_empty() {
+            None
+        } else {
+            self.podcast_position.position_for_guid(guid)
+        };
+        podcast_playback::session_plan(input, saved_position_seconds)
+    }
+
+    pub fn record_podcast_playback_position(
+        &self,
+        input: podcast_playback::PodcastPlaybackPositionInput,
     ) -> MutationSnapshot {
-        mutation_snapshot(self.podcast_position.save(guid, position_seconds, artifact))
+        let result = (|| {
+            let Some(request) = podcast_playback::position_save_request(input)? else {
+                return Ok(());
+            };
+            self.podcast_position
+                .save(request.guid, request.position_seconds, request.artifact)
+        })();
+        mutation_snapshot(result)
+    }
+
+    pub fn project_podcast_playback_seek(
+        &self,
+        input: podcast_playback::PodcastPlaybackSeekInput,
+    ) -> podcast_playback::PodcastPlaybackSeekProjection {
+        podcast_playback::seek_projection(input)
+    }
+
+    pub fn project_podcast_playback_tick(
+        &self,
+        input: podcast_playback::PodcastPlaybackTickInput,
+    ) -> podcast_playback::PodcastPlaybackTickProjection {
+        podcast_playback::tick_projection(input)
+    }
+
+    pub fn get_podcast_playback_rehydration_snapshot(
+        &self,
+        has_current_artifact: bool,
+    ) -> podcast_playback::PodcastPlaybackRehydrationSnapshot {
+        let record = if has_current_artifact {
+            None
+        } else {
+            self.podcast_position.current()
+        };
+        podcast_playback::rehydration_snapshot(has_current_artifact, record)
     }
 
     pub async fn load_podcast_transcript(

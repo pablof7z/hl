@@ -79,24 +79,40 @@ actor SafeHighlighterCore {
         core.getNetworkWifiOnlyPreferenceSnapshot()
     }
 
-    func getPodcastPosition() -> PodcastPositionRecord? {
-        core.getPodcastPosition()
+    nonisolated func planPodcastPlaybackSession(
+        input: PodcastPlaybackSessionInput
+    ) -> PodcastPlaybackSessionPlan {
+        core.planPodcastPlaybackSession(input: input)
     }
 
-    func getPodcastPositionSeconds(guid: String) -> Double? {
-        core.getPodcastPositionSeconds(guid: guid)
-    }
-
-    func savePodcastPosition(
-        guid: String,
-        positionSeconds: Double,
-        artifact: ArtifactRecord
+    func recordPodcastPlaybackPosition(
+        artifact: ArtifactRecord,
+        positionSeconds: Double
     ) -> MutationSnapshot {
-        core.savePodcastPosition(
-            guid: guid,
-            positionSeconds: positionSeconds,
-            artifact: artifact
+        core.recordPodcastPlaybackPosition(
+            input: PodcastPlaybackPositionInput(
+                artifact: artifact,
+                positionSeconds: positionSeconds
+            )
         )
+    }
+
+    nonisolated func projectPodcastPlaybackSeek(
+        input: PodcastPlaybackSeekInput
+    ) -> PodcastPlaybackSeekProjection {
+        core.projectPodcastPlaybackSeek(input: input)
+    }
+
+    nonisolated func projectPodcastPlaybackTick(
+        input: PodcastPlaybackTickInput
+    ) -> PodcastPlaybackTickProjection {
+        core.projectPodcastPlaybackTick(input: input)
+    }
+
+    func getPodcastPlaybackRehydrationSnapshot(
+        hasCurrentArtifact: Bool
+    ) -> PodcastPlaybackRehydrationSnapshot {
+        core.getPodcastPlaybackRehydrationSnapshot(hasCurrentArtifact: hasCurrentArtifact)
     }
 
     func loadPodcastTranscript(url: String) async -> PodcastTranscriptLoadSnapshot {
