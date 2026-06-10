@@ -12714,11 +12714,11 @@ public func FfiConverterTypeCaptureStashProjectionInput_lower(_ value: CaptureSt
 public struct CaptureUploadProjection {
     public var shouldApply: Bool
     public var upload: BlossomUpload?
-    public var uploadError: String
+    public var uploadError: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(shouldApply: Bool, upload: BlossomUpload?, uploadError: String) {
+    public init(shouldApply: Bool, upload: BlossomUpload?, uploadError: String?) {
         self.shouldApply = shouldApply
         self.upload = upload
         self.uploadError = uploadError
@@ -12762,14 +12762,14 @@ public struct FfiConverterTypeCaptureUploadProjection: FfiConverterRustBuffer {
             try CaptureUploadProjection(
                 shouldApply: FfiConverterBool.read(from: &buf), 
                 upload: FfiConverterOptionTypeBlossomUpload.read(from: &buf), 
-                uploadError: FfiConverterString.read(from: &buf)
+                uploadError: FfiConverterOptionString.read(from: &buf)
         )
     }
 
     public static func write(_ value: CaptureUploadProjection, into buf: inout [UInt8]) {
         FfiConverterBool.write(value.shouldApply, into: &buf)
         FfiConverterOptionTypeBlossomUpload.write(value.upload, into: &buf)
-        FfiConverterString.write(value.uploadError, into: &buf)
+        FfiConverterOptionString.write(value.uploadError, into: &buf)
     }
 }
 

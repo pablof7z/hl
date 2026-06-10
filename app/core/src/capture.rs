@@ -86,7 +86,7 @@ pub struct CaptureUploadProjectionInput {
 pub struct CaptureUploadProjection {
     pub should_apply: bool,
     pub upload: Option<BlossomUpload>,
-    pub upload_error: String,
+    pub upload_error: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -197,7 +197,7 @@ pub fn upload_projection(input: CaptureUploadProjectionInput) -> CaptureUploadPr
         return CaptureUploadProjection {
             should_apply: false,
             upload: None,
-            upload_error: String::new(),
+            upload_error: None,
         };
     }
 
@@ -205,14 +205,14 @@ pub fn upload_projection(input: CaptureUploadProjectionInput) -> CaptureUploadPr
         return CaptureUploadProjection {
             should_apply: true,
             upload: None,
-            upload_error: input.snapshot.error,
+            upload_error: Some(input.snapshot.error),
         };
     }
 
     CaptureUploadProjection {
         should_apply: true,
         upload: input.snapshot.upload,
-        upload_error: String::new(),
+        upload_error: None,
     }
 }
 
@@ -424,7 +424,7 @@ mod tests {
         });
         assert!(!stale.should_apply);
         assert!(stale.upload.is_none());
-        assert!(stale.upload_error.is_empty());
+        assert_eq!(stale.upload_error, None);
 
         let failed = upload_projection(CaptureUploadProjectionInput {
             snapshot: crate::blossom::BlossomUploadSnapshot {
@@ -436,7 +436,7 @@ mod tests {
         });
         assert!(failed.should_apply);
         assert!(failed.upload.is_none());
-        assert_eq!(failed.upload_error, "network down");
+        assert_eq!(failed.upload_error.as_deref(), Some("network down"));
 
         let ok = upload_projection(CaptureUploadProjectionInput {
             snapshot: crate::blossom::BlossomUploadSnapshot {
@@ -451,7 +451,7 @@ mod tests {
             ok.upload.as_ref().map(|upload| upload.url.as_str()),
             Some("https://blossom.example/page.jpg")
         );
-        assert!(ok.upload_error.is_empty());
+        assert_eq!(ok.upload_error, None);
     }
 
     #[test]

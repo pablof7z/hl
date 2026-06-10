@@ -386,7 +386,7 @@ final class CaptureStore {
     private func applyUploadProjection(_ projection: CaptureUploadProjection) {
         guard projection.shouldApply else { return }
         upload = projection.upload
-        uploadError = projection.uploadError.isEmpty ? nil : projection.uploadError
+        uploadError = projection.uploadError
     }
 
     private func defaultHighlightCropBox(processed: ImageProcessing.Result) -> CGRect? {
