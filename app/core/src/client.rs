@@ -558,6 +558,13 @@ impl HighlighterCore {
         podcast_playback::session_plan(input, saved_position_seconds)
     }
 
+    pub fn project_podcast_playback_session_apply(
+        &self,
+        input: podcast_playback::PodcastPlaybackSessionApplyInput,
+    ) -> podcast_playback::PodcastPlaybackSessionApplyProjection {
+        podcast_playback::session_apply_projection(input)
+    }
+
     pub fn record_podcast_playback_position(
         &self,
         input: podcast_playback::PodcastPlaybackPositionInput,
@@ -605,6 +612,13 @@ impl HighlighterCore {
         podcast_transcript::transcript_load_snapshot(
             podcast_transcript::fetch_transcript(&url).await,
         )
+    }
+
+    pub fn project_podcast_transcript_load_apply(
+        &self,
+        input: podcast_transcript::PodcastTranscriptLoadApplyInput,
+    ) -> podcast_transcript::PodcastTranscriptLoadApplyProjection {
+        podcast_transcript::transcript_load_apply_projection(input)
     }
 
     pub fn get_podcast_clip_composer_projection(
@@ -3056,6 +3070,13 @@ impl HighlighterCore {
         }
         .await;
         podcast_transcript::clip_publish_snapshot(result)
+    }
+
+    pub fn project_podcast_clip_publish_result(
+        &self,
+        input: podcast_transcript::PodcastClipPublishResultInput,
+    ) -> podcast_transcript::PodcastClipPublishResultProjection {
+        podcast_transcript::clip_publish_result_projection(input)
     }
 
     /// Publish a podcast clip from the composer sheet. Rust owns draft

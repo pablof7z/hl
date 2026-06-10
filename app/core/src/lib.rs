@@ -194,16 +194,18 @@ pub use nostr_entities::{
 pub use ocr::{OcrLine, OcrPageDetection, OcrPageSide, OcrRect, OcrWord};
 pub use podcast_playback::{
     PodcastPlaybackPositionInput, PodcastPlaybackRehydrationSnapshot, PodcastPlaybackSeekInput,
-    PodcastPlaybackSeekProjection, PodcastPlaybackSessionInput, PodcastPlaybackSessionPlan,
+    PodcastPlaybackSeekProjection, PodcastPlaybackSessionApplyInput,
+    PodcastPlaybackSessionApplyProjection, PodcastPlaybackSessionInput, PodcastPlaybackSessionPlan,
     PodcastPlaybackTickInput, PodcastPlaybackTickProjection,
 };
 pub use podcast_transcript::{
     PodcastClipComposerInput, PodcastClipComposerProjection, PodcastClipComposerPublishInput,
-    PodcastClipPublishInput, PodcastClipPublishSnapshot, PodcastClipSelection,
-    PodcastListeningClipsSnapshot, PodcastListeningProjection, PodcastListeningProjectionInput,
-    PodcastNowPlayingProjection, PodcastNowPlayingProjectionInput, PodcastTimelineRow,
-    PodcastTimelineRowKind, PodcastTimelineRowState, PodcastTranscriptAvailability,
-    PodcastTranscriptLoadSnapshot, TranscriptSegment,
+    PodcastClipPublishInput, PodcastClipPublishResultInput, PodcastClipPublishResultProjection,
+    PodcastClipPublishSnapshot, PodcastClipSelection, PodcastListeningClipsSnapshot,
+    PodcastListeningProjection, PodcastListeningProjectionInput, PodcastNowPlayingProjection,
+    PodcastNowPlayingProjectionInput, PodcastTimelineRow, PodcastTimelineRowKind,
+    PodcastTimelineRowState, PodcastTranscriptAvailability, PodcastTranscriptLoadApplyInput,
+    PodcastTranscriptLoadApplyProjection, PodcastTranscriptLoadSnapshot, TranscriptSegment,
 };
 pub use profile::{
     ProfileDisplayFallback, ProfileDisplayProjection, ProfileDisplayProjectionInput,

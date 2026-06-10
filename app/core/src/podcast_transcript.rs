@@ -43,6 +43,19 @@ pub struct PodcastTranscriptLoadSnapshot {
     pub error: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PodcastTranscriptLoadApplyInput {
+    pub snapshot: PodcastTranscriptLoadSnapshot,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PodcastTranscriptLoadApplyProjection {
+    pub segments: Vec<TranscriptSegment>,
+    pub availability: PodcastTranscriptAvailability,
+    pub should_log_error: bool,
+    pub log_message: String,
+}
+
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct PodcastClipSelection {
     pub clip_start_seconds: Option<f64>,
@@ -108,6 +121,19 @@ pub struct PodcastClipComposerPublishInput {
 pub struct PodcastClipPublishSnapshot {
     pub highlight: Option<HighlightRecord>,
     pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PodcastClipPublishResultInput {
+    pub snapshot: PodcastClipPublishSnapshot,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PodcastClipPublishResultProjection {
+    pub did_publish: bool,
+    pub error_message: Option<String>,
+    pub share_toast: Option<String>,
+    pub should_dismiss: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -261,6 +287,22 @@ pub fn transcript_load_snapshot(
     }
 }
 
+pub fn transcript_load_apply_projection(
+    input: PodcastTranscriptLoadApplyInput,
+) -> PodcastTranscriptLoadApplyProjection {
+    let error = input.snapshot.error.trim().to_string();
+    PodcastTranscriptLoadApplyProjection {
+        segments: input.snapshot.segments,
+        availability: input.snapshot.availability,
+        should_log_error: !error.is_empty(),
+        log_message: if error.is_empty() {
+            String::new()
+        } else {
+            format!("transcript load failed: {error}")
+        },
+    }
+}
+
 pub fn clip_publish_snapshot(
     result: Result<HighlightRecord, CoreError>,
 ) -> PodcastClipPublishSnapshot {
@@ -273,6 +315,27 @@ pub fn clip_publish_snapshot(
             highlight: None,
             error: error.to_string(),
         },
+    }
+}
+
+pub fn clip_publish_result_projection(
+    input: PodcastClipPublishResultInput,
+) -> PodcastClipPublishResultProjection {
+    let error = input.snapshot.error.trim().to_string();
+    if error.is_empty() {
+        PodcastClipPublishResultProjection {
+            did_publish: true,
+            error_message: None,
+            share_toast: Some("Clip shared".into()),
+            should_dismiss: true,
+        }
+    } else {
+        PodcastClipPublishResultProjection {
+            did_publish: false,
+            error_message: Some(error),
+            share_toast: None,
+            should_dismiss: false,
+        }
     }
 }
 
@@ -1291,6 +1354,35 @@ mod tests {
     }
 
     #[test]
+    fn transcript_load_apply_projection_maps_segments_and_error_logging() {
+        let available = transcript_load_snapshot(Ok(vec![segment("s1", 1.0, "hello")]));
+        let applied = transcript_load_apply_projection(PodcastTranscriptLoadApplyInput {
+            snapshot: available,
+        });
+        assert_eq!(
+            applied.availability,
+            PodcastTranscriptAvailability::Available
+        );
+        assert_eq!(applied.segments.len(), 1);
+        assert!(!applied.should_log_error);
+        assert!(applied.log_message.is_empty());
+
+        let failed = transcript_load_snapshot(Err(CoreError::Network("offline".to_string())));
+        let applied =
+            transcript_load_apply_projection(PodcastTranscriptLoadApplyInput { snapshot: failed });
+        assert_eq!(
+            applied.availability,
+            PodcastTranscriptAvailability::Unavailable
+        );
+        assert!(applied.segments.is_empty());
+        assert!(applied.should_log_error);
+        assert_eq!(
+            applied.log_message,
+            "transcript load failed: network error: offline"
+        );
+    }
+
+    #[test]
     fn clip_publish_snapshot_projects_highlight_or_error_state() {
         let highlight = HighlightRecord {
             event_id: "event123".into(),
@@ -1323,6 +1415,34 @@ mod tests {
         let err = clip_publish_snapshot(Err(CoreError::Relay("offline".into())));
         assert!(err.highlight.is_none());
         assert_eq!(err.error, "relay error: offline");
+    }
+
+    #[test]
+    fn clip_publish_result_projection_maps_ui_effects() {
+        let ok = clip_publish_result_projection(PodcastClipPublishResultInput {
+            snapshot: PodcastClipPublishSnapshot {
+                highlight: None,
+                error: String::new(),
+            },
+        });
+        assert!(ok.did_publish);
+        assert_eq!(ok.error_message, None);
+        assert_eq!(ok.share_toast.as_deref(), Some("Clip shared"));
+        assert!(ok.should_dismiss);
+
+        let failed = clip_publish_result_projection(PodcastClipPublishResultInput {
+            snapshot: PodcastClipPublishSnapshot {
+                highlight: None,
+                error: " relay error: offline ".into(),
+            },
+        });
+        assert!(!failed.did_publish);
+        assert_eq!(
+            failed.error_message.as_deref(),
+            Some("relay error: offline")
+        );
+        assert_eq!(failed.share_toast, None);
+        assert!(!failed.should_dismiss);
     }
 
     #[test]

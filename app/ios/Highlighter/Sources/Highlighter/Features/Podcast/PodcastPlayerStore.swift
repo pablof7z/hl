@@ -87,13 +87,19 @@ final class PodcastPlayerStore {
                 hasLoadedPlayer: player != nil
             )
         )
-        guard plan.error.isEmpty, let url = URL(string: plan.audioUrl) else {
-            logger.warning("load: no usable audio URL for artifact \(artifact.shareEventId, privacy: .public)")
+        let playback = core.projectPodcastPlaybackSessionApply(
+            input: PodcastPlaybackSessionApplyInput(plan: plan)
+        )
+        guard playback.canLoad, let url = URL(string: playback.audioUrl) else {
+            let warning = playback.warningMessage.isEmpty
+                ? "load: no usable audio URL for artifact \(artifact.shareEventId)"
+                : playback.warningMessage
+            logger.warning("\(warning, privacy: .public)")
             return
         }
 
         // If same episode is already loaded, just play.
-        if plan.shouldReuseLoadedPlayer {
+        if playback.shouldReuseLoadedPlayer {
             play()
             return
         }
@@ -134,9 +140,9 @@ final class PodcastPlayerStore {
         configureRemoteCommandCenter()
         updateNowPlayingInfo()
         fetchAndApplyArtwork(from: artifact.preview.image)
-        beginPlayback(using: plan, shareEventId: artifact.shareEventId)
+        beginPlayback(using: playback, shareEventId: artifact.shareEventId)
 
-        let transcriptUrl = plan.transcriptUrl
+        let transcriptUrl = playback.transcriptUrl
         if !transcriptUrl.isEmpty {
             transcriptAvailability = .loading
             transcriptTask = Task { await loadTranscript(from: transcriptUrl) }
@@ -147,7 +153,7 @@ final class PodcastPlayerStore {
         // present, so playback isn't blocked by this work.
         waveformPeaks = []
         waveformTask?.cancel()
-        let dur = plan.previewDurationSeconds
+        let dur = playback.previewDurationSeconds
         let safeCore = core
         waveformTask = Task(priority: .background) { [weak self, url, safeCore] in
             let peaks = await WaveformExtractor.peaks(
@@ -334,8 +340,11 @@ final class PodcastPlayerStore {
             clipEndSeconds: clipEnd,
             clipSpeaker: speaker
         ))
-        guard outcome.error.isEmpty else {
-            publishError = outcome.error
+        let result = core.projectPodcastClipPublishResult(
+            input: PodcastClipPublishResultInput(snapshot: outcome)
+        )
+        guard result.didPublish else {
+            publishError = result.errorMessage
             return outcome
         }
         return outcome
@@ -346,11 +355,14 @@ final class PodcastPlayerStore {
     func loadTranscript(from url: String) async {
         transcriptAvailability = .loading
         let snapshot = await core.loadPodcastTranscript(url: url)
-        if !snapshot.error.isEmpty {
-            logger.error("transcript load failed: \(snapshot.error, privacy: .public)")
+        let projection = core.projectPodcastTranscriptLoadApply(
+            input: PodcastTranscriptLoadApplyInput(snapshot: snapshot)
+        )
+        if projection.shouldLogError {
+            logger.error("\(projection.logMessage, privacy: .public)")
         }
-        transcriptSegments = snapshot.segments
-        transcriptAvailability = snapshot.availability
+        transcriptSegments = projection.segments
+        transcriptAvailability = projection.availability
     }
 
     // MARK: - Position persistence
@@ -366,15 +378,15 @@ final class PodcastPlayerStore {
         }
     }
 
-    private func beginPlayback(using plan: PodcastPlaybackSessionPlan, shareEventId: String) {
-        Task { @MainActor [weak self, plan, shareEventId] in
+    private func beginPlayback(using playback: PodcastPlaybackSessionApplyProjection, shareEventId: String) {
+        Task { @MainActor [weak self, playback, shareEventId] in
             guard let self, self.currentArtifact?.shareEventId == shareEventId else { return }
-            if let position = plan.resumePositionSeconds {
+            if let position = playback.resumePositionSeconds {
                 let seekTime = CMTime(seconds: position, preferredTimescale: 600)
                 _ = await self.player?.seek(to: seekTime, toleranceBefore: .zero, toleranceAfter: .zero)
                 self.currentTime = position
             }
-            if plan.shouldAutoplay {
+            if playback.shouldAutoplay {
                 self.player?.play()
                 self.isPlaying = true
                 self.updateNowPlayingInfo()

@@ -85,6 +85,12 @@ actor SafeHighlighterCore {
         core.planPodcastPlaybackSession(input: input)
     }
 
+    nonisolated func projectPodcastPlaybackSessionApply(
+        input: PodcastPlaybackSessionApplyInput
+    ) -> PodcastPlaybackSessionApplyProjection {
+        core.projectPodcastPlaybackSessionApply(input: input)
+    }
+
     func recordPodcastPlaybackPosition(
         artifact: ArtifactRecord,
         positionSeconds: Double
@@ -117,6 +123,12 @@ actor SafeHighlighterCore {
 
     func loadPodcastTranscript(url: String) async -> PodcastTranscriptLoadSnapshot {
         await core.loadPodcastTranscript(url: url)
+    }
+
+    nonisolated func projectPodcastTranscriptLoadApply(
+        input: PodcastTranscriptLoadApplyInput
+    ) -> PodcastTranscriptLoadApplyProjection {
+        core.projectPodcastTranscriptLoadApply(input: input)
     }
 
     nonisolated func getPodcastClipComposerProjection(
@@ -1526,6 +1538,12 @@ actor SafeHighlighterCore {
         input: PodcastClipPublishInput
     ) async -> PodcastClipPublishSnapshot {
         await core.publishPodcastClipHighlight(input: input)
+    }
+
+    nonisolated func projectPodcastClipPublishResult(
+        input: PodcastClipPublishResultInput
+    ) -> PodcastClipPublishResultProjection {
+        core.projectPodcastClipPublishResult(input: input)
     }
 
     func publishPodcastComposerClip(

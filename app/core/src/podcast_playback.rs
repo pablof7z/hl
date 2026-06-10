@@ -27,6 +27,23 @@ pub struct PodcastPlaybackSessionPlan {
     pub error: String,
 }
 
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct PodcastPlaybackSessionApplyInput {
+    pub plan: PodcastPlaybackSessionPlan,
+}
+
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct PodcastPlaybackSessionApplyProjection {
+    pub can_load: bool,
+    pub audio_url: String,
+    pub should_reuse_loaded_player: bool,
+    pub should_autoplay: bool,
+    pub resume_position_seconds: Option<f64>,
+    pub transcript_url: String,
+    pub preview_duration_seconds: f64,
+    pub warning_message: String,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct PodcastPlaybackPositionInput {
     pub artifact: ArtifactRecord,
@@ -121,6 +138,48 @@ pub(crate) fn session_plan(
             .map(|duration| duration as f64)
             .unwrap_or(0.0),
         error: String::new(),
+    }
+}
+
+pub(crate) fn session_apply_projection(
+    input: PodcastPlaybackSessionApplyInput,
+) -> PodcastPlaybackSessionApplyProjection {
+    let plan = input.plan;
+    let error = plan.error.trim().to_string();
+    let has_valid_audio_url =
+        !plan.audio_url.trim().is_empty() && ::url::Url::parse(plan.audio_url.trim()).is_ok();
+    let can_load = error.is_empty() && has_valid_audio_url;
+    PodcastPlaybackSessionApplyProjection {
+        can_load,
+        audio_url: if can_load {
+            plan.audio_url.trim().to_string()
+        } else {
+            String::new()
+        },
+        should_reuse_loaded_player: can_load && plan.should_reuse_loaded_player,
+        should_autoplay: can_load && plan.should_autoplay,
+        resume_position_seconds: if can_load {
+            plan.resume_position_seconds
+        } else {
+            None
+        },
+        transcript_url: if can_load {
+            plan.transcript_url
+        } else {
+            String::new()
+        },
+        preview_duration_seconds: if can_load {
+            plan.preview_duration_seconds
+        } else {
+            0.0
+        },
+        warning_message: if can_load {
+            String::new()
+        } else if error.is_empty() {
+            "load: no usable audio URL for artifact".into()
+        } else {
+            error
+        },
     }
 }
 
@@ -308,6 +367,44 @@ mod tests {
         assert!(!plan.error.is_empty());
         assert!(!plan.should_autoplay);
         assert!(!plan.should_reuse_loaded_player);
+    }
+
+    #[test]
+    fn session_apply_projection_accepts_valid_plan_and_rejects_errors() {
+        let plan = PodcastPlaybackSessionPlan {
+            audio_url: " https://cdn.example/full.mp3 ".into(),
+            should_reuse_loaded_player: true,
+            should_autoplay: true,
+            resume_position_seconds: Some(42.0),
+            transcript_url: "https://cdn.example/transcript.vtt".into(),
+            preview_duration_seconds: 3600.0,
+            error: String::new(),
+        };
+        let ok = session_apply_projection(PodcastPlaybackSessionApplyInput { plan });
+        assert!(ok.can_load);
+        assert_eq!(ok.audio_url, "https://cdn.example/full.mp3");
+        assert!(ok.should_reuse_loaded_player);
+        assert!(ok.should_autoplay);
+        assert_eq!(ok.resume_position_seconds, Some(42.0));
+        assert_eq!(ok.warning_message, "");
+
+        let failed = session_apply_projection(PodcastPlaybackSessionApplyInput {
+            plan: PodcastPlaybackSessionPlan {
+                audio_url: "not a url".into(),
+                should_reuse_loaded_player: true,
+                should_autoplay: true,
+                resume_position_seconds: Some(42.0),
+                transcript_url: "ignored".into(),
+                preview_duration_seconds: 3600.0,
+                error: " no audio ".into(),
+            },
+        });
+        assert!(!failed.can_load);
+        assert_eq!(failed.audio_url, "");
+        assert!(!failed.should_reuse_loaded_player);
+        assert!(!failed.should_autoplay);
+        assert_eq!(failed.resume_position_seconds, None);
+        assert_eq!(failed.warning_message, "no audio");
     }
 
     #[test]
