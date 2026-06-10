@@ -34,10 +34,13 @@ final class FeedbackThreadStore {
         loadError = nil
 
         let snapshot = await core.getFeedbackThreadSnapshot(rootEventId: rootEventId)
-        if snapshot.error.isEmpty {
+        let applyProjection = core.projectFeedbackSnapshotApply(
+            input: FeedbackSnapshotApplyInput(error: snapshot.error)
+        )
+        if applyProjection.shouldApplySnapshot {
             apply(snapshot: snapshot)
         } else {
-            loadError = snapshot.error
+            loadError = applyProjection.loadError
         }
         isLoading = false
 
@@ -65,14 +68,20 @@ final class FeedbackThreadStore {
     func refreshThread() async {
         guard let core, let rootEventId else { return }
         let snapshot = await core.getFeedbackThreadSnapshot(rootEventId: rootEventId)
-        if snapshot.error.isEmpty {
+        let applyProjection = core.projectFeedbackSnapshotApply(
+            input: FeedbackSnapshotApplyInput(error: snapshot.error)
+        )
+        if applyProjection.shouldApplySnapshot {
             apply(snapshot: snapshot)
         }
     }
 
     func apply(snapshot: FeedbackThreadSnapshot) {
+        let applyProjection = core?.projectFeedbackSnapshotApply(
+            input: FeedbackSnapshotApplyInput(error: snapshot.error)
+        )
         rows = snapshot.rows
-        loadError = snapshot.error.isEmpty ? nil : snapshot.error
+        loadError = applyProjection?.loadError
     }
 
     /// Send a reply into the open thread. Rust resolves feedback agent

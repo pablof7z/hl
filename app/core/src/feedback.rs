@@ -80,6 +80,17 @@ pub struct FeedbackPublishResultProjection {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeedbackSnapshotApplyInput {
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeedbackSnapshotApplyProjection {
+    pub should_apply_snapshot: bool,
+    pub load_error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct FeedbackThreadPresentationProjection {
     pub navigation_title: String,
     pub row_title: String,
@@ -122,6 +133,21 @@ pub fn feedback_publish_result_projection(
     FeedbackPublishResultProjection {
         did_publish: error_message.is_empty(),
         error_message,
+    }
+}
+
+pub fn feedback_snapshot_apply_projection(
+    input: FeedbackSnapshotApplyInput,
+) -> FeedbackSnapshotApplyProjection {
+    let error_message = input.error.trim().to_string();
+    let load_error = if error_message.is_empty() {
+        None
+    } else {
+        Some(error_message)
+    };
+    FeedbackSnapshotApplyProjection {
+        should_apply_snapshot: load_error.is_none(),
+        load_error,
     }
 }
 
@@ -1110,6 +1136,21 @@ mod tests {
         });
         assert!(!failed.did_publish);
         assert_eq!(failed.error_message, "publish failed");
+    }
+
+    #[test]
+    fn feedback_snapshot_apply_projection_blocks_error_snapshots() {
+        let success = feedback_snapshot_apply_projection(FeedbackSnapshotApplyInput {
+            error: String::new(),
+        });
+        assert!(success.should_apply_snapshot);
+        assert_eq!(success.load_error, None);
+
+        let failed = feedback_snapshot_apply_projection(FeedbackSnapshotApplyInput {
+            error: " refresh failed ".into(),
+        });
+        assert!(!failed.should_apply_snapshot);
+        assert_eq!(failed.load_error.as_deref(), Some("refresh failed"));
     }
 
     #[test]

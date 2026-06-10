@@ -26,10 +26,13 @@ final class FeedbackStore {
         loadError = nil
 
         let snapshot = await core.getFeedbackThreadsSnapshot(coordinate: coordinate)
-        if snapshot.error.isEmpty {
+        let applyProjection = core.projectFeedbackSnapshotApply(
+            input: FeedbackSnapshotApplyInput(error: snapshot.error)
+        )
+        if applyProjection.shouldApplySnapshot {
             apply(snapshot: snapshot)
         } else {
-            loadError = snapshot.error
+            loadError = applyProjection.loadError
         }
         isLoading = false
 
@@ -59,14 +62,20 @@ final class FeedbackStore {
     func refreshThreads() async {
         guard let core, let coordinate else { return }
         let snapshot = await core.getFeedbackThreadsSnapshot(coordinate: coordinate)
-        if snapshot.error.isEmpty {
+        let applyProjection = core.projectFeedbackSnapshotApply(
+            input: FeedbackSnapshotApplyInput(error: snapshot.error)
+        )
+        if applyProjection.shouldApplySnapshot {
             apply(snapshot: snapshot)
         }
     }
 
     func apply(snapshot: FeedbackThreadsSnapshot) {
+        let applyProjection = core?.projectFeedbackSnapshotApply(
+            input: FeedbackSnapshotApplyInput(error: snapshot.error)
+        )
         threads = snapshot.threads
-        loadError = snapshot.error.isEmpty ? nil : snapshot.error
+        loadError = applyProjection?.loadError
     }
 
 }

@@ -1348,6 +1348,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectFeedbackPublishResult(input: FeedbackPublishResultInput)  -> FeedbackPublishResultProjection
 
     /**
+     * Feedback snapshot apply projection shared by list and thread stores.
+     * Rust owns success/error classification; native shells decide whether
+     * the current lifecycle should surface or ignore the projected error.
+     */
+    func projectFeedbackSnapshotApply(input: FeedbackSnapshotApplyInput)  -> FeedbackSnapshotApplyProjection
+
+    /**
      * Feedback thread row/detail presentation projection. Rust owns title,
      * preview, summary, and status fallback rules; native shells keep
      * localized relative-time formatting and rendering.
@@ -3948,6 +3955,19 @@ open func projectFeedbackPublishResult(input: FeedbackPublishResultInput) -> Fee
     return try!  FfiConverterTypeFeedbackPublishResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_feedback_publish_result(self.uniffiClonePointer(),
         FfiConverterTypeFeedbackPublishResultInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Feedback snapshot apply projection shared by list and thread stores.
+     * Rust owns success/error classification; native shells decide whether
+     * the current lifecycle should surface or ignore the projected error.
+     */
+open func projectFeedbackSnapshotApply(input: FeedbackSnapshotApplyInput) -> FeedbackSnapshotApplyProjection  {
+    return try!  FfiConverterTypeFeedbackSnapshotApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_feedback_snapshot_apply(self.uniffiClonePointer(),
+        FfiConverterTypeFeedbackSnapshotApplyInput_lower(input),$0
     )
 })
 }
@@ -17461,6 +17481,138 @@ public func FfiConverterTypeFeedbackRootPublishSnapshot_lift(_ buf: RustBuffer) 
 #endif
 public func FfiConverterTypeFeedbackRootPublishSnapshot_lower(_ value: FeedbackRootPublishSnapshot) -> RustBuffer {
     return FfiConverterTypeFeedbackRootPublishSnapshot.lower(value)
+}
+
+
+public struct FeedbackSnapshotApplyInput {
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(error: String) {
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension FeedbackSnapshotApplyInput: Sendable {}
+#endif
+
+
+extension FeedbackSnapshotApplyInput: Equatable, Hashable {
+    public static func ==(lhs: FeedbackSnapshotApplyInput, rhs: FeedbackSnapshotApplyInput) -> Bool {
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeedbackSnapshotApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackSnapshotApplyInput {
+        return
+            try FeedbackSnapshotApplyInput(
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FeedbackSnapshotApplyInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackSnapshotApplyInput_lift(_ buf: RustBuffer) throws -> FeedbackSnapshotApplyInput {
+    return try FfiConverterTypeFeedbackSnapshotApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackSnapshotApplyInput_lower(_ value: FeedbackSnapshotApplyInput) -> RustBuffer {
+    return FfiConverterTypeFeedbackSnapshotApplyInput.lower(value)
+}
+
+
+public struct FeedbackSnapshotApplyProjection {
+    public var shouldApplySnapshot: Bool
+    public var loadError: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldApplySnapshot: Bool, loadError: String?) {
+        self.shouldApplySnapshot = shouldApplySnapshot
+        self.loadError = loadError
+    }
+}
+
+#if compiler(>=6)
+extension FeedbackSnapshotApplyProjection: Sendable {}
+#endif
+
+
+extension FeedbackSnapshotApplyProjection: Equatable, Hashable {
+    public static func ==(lhs: FeedbackSnapshotApplyProjection, rhs: FeedbackSnapshotApplyProjection) -> Bool {
+        if lhs.shouldApplySnapshot != rhs.shouldApplySnapshot {
+            return false
+        }
+        if lhs.loadError != rhs.loadError {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldApplySnapshot)
+        hasher.combine(loadError)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeedbackSnapshotApplyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackSnapshotApplyProjection {
+        return
+            try FeedbackSnapshotApplyProjection(
+                shouldApplySnapshot: FfiConverterBool.read(from: &buf),
+                loadError: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FeedbackSnapshotApplyProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldApplySnapshot, into: &buf)
+        FfiConverterOptionString.write(value.loadError, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackSnapshotApplyProjection_lift(_ buf: RustBuffer) throws -> FeedbackSnapshotApplyProjection {
+    return try FfiConverterTypeFeedbackSnapshotApplyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackSnapshotApplyProjection_lower(_ value: FeedbackSnapshotApplyProjection) -> RustBuffer {
+    return FfiConverterTypeFeedbackSnapshotApplyProjection.lower(value)
 }
 
 
@@ -42551,6 +42703,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_publish_result() != 4889) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_snapshot_apply() != 57712) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_feedback_thread_presentation() != 19722) {

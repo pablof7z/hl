@@ -120,8 +120,8 @@ pub use feedback::{
     FeedbackComposerProjection, FeedbackComposerProjectionInput, FeedbackMessagePresentationInput,
     FeedbackMessagePresentationProjection, FeedbackMessageRowProjection,
     FeedbackPublishResultInput, FeedbackPublishResultProjection, FeedbackReplyPublishSnapshot,
-    FeedbackRootPublishSnapshot, FeedbackThreadPresentationProjection, FeedbackThreadSnapshot,
-    FeedbackThreadsSnapshot,
+    FeedbackRootPublishSnapshot, FeedbackSnapshotApplyInput, FeedbackSnapshotApplyProjection,
+    FeedbackThreadPresentationProjection, FeedbackThreadSnapshot, FeedbackThreadsSnapshot,
 };
 pub use groups::{
     CommunityRowProjection, CommunityRowProjectionInput, CreateRoomProjection,

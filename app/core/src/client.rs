@@ -2722,6 +2722,16 @@ impl HighlighterCore {
         feedback::feedback_publish_result_projection(input)
     }
 
+    /// Feedback snapshot apply projection shared by list and thread stores.
+    /// Rust owns success/error classification; native shells decide whether
+    /// the current lifecycle should surface or ignore the projected error.
+    pub fn project_feedback_snapshot_apply(
+        &self,
+        input: feedback::FeedbackSnapshotApplyInput,
+    ) -> feedback::FeedbackSnapshotApplyProjection {
+        feedback::feedback_snapshot_apply_projection(input)
+    }
+
     /// Feedback thread row/detail presentation projection. Rust owns title,
     /// preview, summary, and status fallback rules; native shells keep
     /// localized relative-time formatting and rendering.
