@@ -373,8 +373,8 @@ struct RoomInviteView: View {
         )
         let previousCount = selected.count
         selected = projection.selected.map(Candidate.init(core:))
-        if !projection.errorMessage.isEmpty {
-            error = projection.errorMessage
+        if let errorMessage = projection.errorMessage {
+            error = errorMessage
         }
         if projection.selectionChanged, projection.selected.count > previousCount {
             UISelectionFeedbackGenerator().selectionChanged()

@@ -34368,12 +34368,12 @@ public func FfiConverterTypeRoomInviteSelectionInput_lower(_ value: RoomInviteSe
 
 public struct RoomInviteSelectionProjection {
     public var selected: [RoomInviteCandidate]
-    public var errorMessage: String
+    public var errorMessage: String?
     public var selectionChanged: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(selected: [RoomInviteCandidate], errorMessage: String, selectionChanged: Bool) {
+    public init(selected: [RoomInviteCandidate], errorMessage: String?, selectionChanged: Bool) {
         self.selected = selected
         self.errorMessage = errorMessage
         self.selectionChanged = selectionChanged
@@ -34416,14 +34416,14 @@ public struct FfiConverterTypeRoomInviteSelectionProjection: FfiConverterRustBuf
         return
             try RoomInviteSelectionProjection(
                 selected: FfiConverterSequenceTypeRoomInviteCandidate.read(from: &buf), 
-                errorMessage: FfiConverterString.read(from: &buf), 
+                errorMessage: FfiConverterOptionString.read(from: &buf), 
                 selectionChanged: FfiConverterBool.read(from: &buf)
         )
     }
 
     public static func write(_ value: RoomInviteSelectionProjection, into buf: inout [UInt8]) {
         FfiConverterSequenceTypeRoomInviteCandidate.write(value.selected, into: &buf)
-        FfiConverterString.write(value.errorMessage, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
         FfiConverterBool.write(value.selectionChanged, into: &buf)
     }
 }

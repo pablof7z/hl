@@ -100,7 +100,7 @@ pub struct RoomInviteResolvedCandidate {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RoomInviteAddDecision {
     should_add: bool,
-    error_message: String,
+    error_message: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
@@ -121,7 +121,7 @@ pub struct RoomInviteSelectionInput {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RoomInviteSelectionProjection {
     pub selected: Vec<RoomInviteCandidate>,
-    pub error_message: String,
+    pub error_message: Option<String>,
     pub selection_changed: bool,
 }
 
@@ -301,20 +301,20 @@ fn add_decision(
     {
         return RoomInviteAddDecision {
             should_add: false,
-            error_message: String::new(),
+            error_message: None,
         };
     }
 
     if !current_user_pubkey.is_empty() && pubkey_hex.eq_ignore_ascii_case(current_user_pubkey) {
         return RoomInviteAddDecision {
             should_add: false,
-            error_message: "You're already in this room.".into(),
+            error_message: Some("You're already in this room.".into()),
         };
     }
 
     RoomInviteAddDecision {
         should_add: true,
-        error_message: String::new(),
+        error_message: None,
     }
 }
 
@@ -338,13 +338,13 @@ pub fn project_selection(input: RoomInviteSelectionInput) -> RoomInviteSelection
                 selected.remove(index);
                 RoomInviteSelectionProjection {
                     selected,
-                    error_message: String::new(),
+                    error_message: None,
                     selection_changed: true,
                 }
             } else {
                 RoomInviteSelectionProjection {
                     selected,
-                    error_message: String::new(),
+                    error_message: None,
                     selection_changed: false,
                 }
             }
@@ -353,7 +353,7 @@ pub fn project_selection(input: RoomInviteSelectionInput) -> RoomInviteSelection
             selected.remove(selected_index.expect("checked"));
             RoomInviteSelectionProjection {
                 selected,
-                error_message: String::new(),
+                error_message: None,
                 selection_changed: true,
             }
         }
@@ -376,7 +376,7 @@ pub fn project_selection(input: RoomInviteSelectionInput) -> RoomInviteSelection
             });
             RoomInviteSelectionProjection {
                 selected,
-                error_message: String::new(),
+                error_message: None,
                 selection_changed: true,
             }
         }
@@ -817,14 +817,14 @@ mod tests {
             add_decision(&hex("01"), &selected, ""),
             RoomInviteAddDecision {
                 should_add: false,
-                error_message: String::new()
+                error_message: None
             }
         );
         assert_eq!(
             add_decision(&hex("02"), &selected, &hex("02")),
             RoomInviteAddDecision {
                 should_add: false,
-                error_message: "You're already in this room.".into()
+                error_message: Some("You're already in this room.".into())
             }
         );
         assert!(add_decision(&hex("03"), &selected, &hex("02")).should_add);
@@ -843,7 +843,7 @@ mod tests {
         });
         assert!(added.selection_changed);
         assert_eq!(added.selected, vec![first.clone()]);
-        assert!(added.error_message.is_empty());
+        assert_eq!(added.error_message, None);
 
         let duplicate = project_selection(RoomInviteSelectionInput {
             selected: added.selected.clone(),
@@ -853,7 +853,7 @@ mod tests {
         });
         assert!(!duplicate.selection_changed);
         assert_eq!(duplicate.selected, vec![first.clone()]);
-        assert!(duplicate.error_message.is_empty());
+        assert_eq!(duplicate.error_message, None);
 
         let toggled_off = project_selection(RoomInviteSelectionInput {
             selected: added.selected.clone(),
@@ -875,7 +875,10 @@ mod tests {
         });
         assert!(!self_add.selection_changed);
         assert!(self_add.selected.is_empty());
-        assert_eq!(self_add.error_message, "You're already in this room.");
+        assert_eq!(
+            self_add.error_message.as_deref(),
+            Some("You're already in this room.")
+        );
 
         let removed = project_selection(RoomInviteSelectionInput {
             selected: added.selected,
