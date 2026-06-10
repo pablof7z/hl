@@ -91,10 +91,9 @@ final class PodcastPlayerStore {
             input: PodcastPlaybackSessionApplyInput(plan: plan)
         )
         guard playback.canLoad, let url = URL(string: playback.audioUrl) else {
-            let warning = playback.warningMessage.isEmpty
-                ? "load: no usable audio URL for artifact \(artifact.shareEventId)"
-                : playback.warningMessage
-            logger.warning("\(warning, privacy: .public)")
+            if let warning = playback.warningMessage {
+                logger.warning("\(warning, privacy: .public)")
+            }
             return
         }
 

@@ -27870,11 +27870,11 @@ public struct PodcastPlaybackSessionApplyProjection {
     public var resumePositionSeconds: Double?
     public var transcriptUrl: String
     public var previewDurationSeconds: Double
-    public var warningMessage: String
+    public var warningMessage: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(canLoad: Bool, audioUrl: String, shouldReuseLoadedPlayer: Bool, shouldAutoplay: Bool, resumePositionSeconds: Double?, transcriptUrl: String, previewDurationSeconds: Double, warningMessage: String) {
+    public init(canLoad: Bool, audioUrl: String, shouldReuseLoadedPlayer: Bool, shouldAutoplay: Bool, resumePositionSeconds: Double?, transcriptUrl: String, previewDurationSeconds: Double, warningMessage: String?) {
         self.canLoad = canLoad
         self.audioUrl = audioUrl
         self.shouldReuseLoadedPlayer = shouldReuseLoadedPlayer
@@ -27948,7 +27948,7 @@ public struct FfiConverterTypePodcastPlaybackSessionApplyProjection: FfiConverte
                 resumePositionSeconds: FfiConverterOptionDouble.read(from: &buf), 
                 transcriptUrl: FfiConverterString.read(from: &buf), 
                 previewDurationSeconds: FfiConverterDouble.read(from: &buf), 
-                warningMessage: FfiConverterString.read(from: &buf)
+                warningMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -27960,7 +27960,7 @@ public struct FfiConverterTypePodcastPlaybackSessionApplyProjection: FfiConverte
         FfiConverterOptionDouble.write(value.resumePositionSeconds, into: &buf)
         FfiConverterString.write(value.transcriptUrl, into: &buf)
         FfiConverterDouble.write(value.previewDurationSeconds, into: &buf)
-        FfiConverterString.write(value.warningMessage, into: &buf)
+        FfiConverterOptionString.write(value.warningMessage, into: &buf)
     }
 }
 

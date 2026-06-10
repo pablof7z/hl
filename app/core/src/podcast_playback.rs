@@ -41,7 +41,7 @@ pub struct PodcastPlaybackSessionApplyProjection {
     pub resume_position_seconds: Option<f64>,
     pub transcript_url: String,
     pub preview_duration_seconds: f64,
-    pub warning_message: String,
+    pub warning_message: Option<String>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -174,11 +174,11 @@ pub(crate) fn session_apply_projection(
             0.0
         },
         warning_message: if can_load {
-            String::new()
+            None
         } else if error.is_empty() {
-            "load: no usable audio URL for artifact".into()
+            Some("load: no usable audio URL for artifact".into())
         } else {
-            error
+            Some(error)
         },
     }
 }
@@ -386,7 +386,7 @@ mod tests {
         assert!(ok.should_reuse_loaded_player);
         assert!(ok.should_autoplay);
         assert_eq!(ok.resume_position_seconds, Some(42.0));
-        assert_eq!(ok.warning_message, "");
+        assert_eq!(ok.warning_message, None);
 
         let failed = session_apply_projection(PodcastPlaybackSessionApplyInput {
             plan: PodcastPlaybackSessionPlan {
@@ -404,7 +404,7 @@ mod tests {
         assert!(!failed.should_reuse_loaded_player);
         assert!(!failed.should_autoplay);
         assert_eq!(failed.resume_position_seconds, None);
-        assert_eq!(failed.warning_message, "no audio");
+        assert_eq!(failed.warning_message.as_deref(), Some("no audio"));
     }
 
     #[test]
