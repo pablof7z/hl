@@ -108,11 +108,16 @@ struct BookmarkMenuButton: View {
     }
 
     private func apply(_ snapshot: CurationMenuSnapshot, errorPrefix: String? = nil) {
-        curationItems = snapshot.items
-        if snapshot.error.isEmpty {
-            errorMessage = nil
-        } else if let errorPrefix {
-            errorMessage = "\(errorPrefix) — \(snapshot.error)"
+        let projection = app.safeCore.projectCurationMenuSnapshotApply(
+            input: CurationMenuSnapshotApplyInput(
+                items: snapshot.items,
+                error: snapshot.error,
+                errorPrefix: errorPrefix
+            )
+        )
+        curationItems = projection.items
+        if projection.shouldApplyErrorMessage {
+            errorMessage = projection.errorMessage
         }
     }
 }

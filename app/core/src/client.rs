@@ -2208,6 +2208,13 @@ impl HighlighterCore {
         }
     }
 
+    pub fn project_curation_menu_snapshot_apply(
+        &self,
+        input: crate::lists::CurationMenuSnapshotApplyInput,
+    ) -> crate::lists::CurationMenuSnapshotApplyProjection {
+        crate::lists::curation_menu_snapshot_apply_projection(input)
+    }
+
     /// Toggle a menu row and return the refreshed menu snapshot. Rust owns the
     /// membership mutation and applies the returned state over the cached
     /// snapshot so native shells do not sequence a follow-up read.

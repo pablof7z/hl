@@ -1320,6 +1320,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectCreateRoom(input: CreateRoomProjectionInput)  -> CreateRoomProjection
 
+    func projectCurationMenuSnapshotApply(input: CurationMenuSnapshotApplyInput)  -> CurationMenuSnapshotApplyProjection
+
     /**
      * Project create-collection sheet state. Rust owns title normalization
      * and create eligibility; native shells render the returned state.
@@ -3930,6 +3932,14 @@ open func projectCreateRoom(input: CreateRoomProjectionInput) -> CreateRoomProje
     return try!  FfiConverterTypeCreateRoomProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_create_room(self.uniffiClonePointer(),
         FfiConverterTypeCreateRoomProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectCurationMenuSnapshotApply(input: CurationMenuSnapshotApplyInput) -> CurationMenuSnapshotApplyProjection  {
+    return try!  FfiConverterTypeCurationMenuSnapshotApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_curation_menu_snapshot_apply(self.uniffiClonePointer(),
+        FfiConverterTypeCurationMenuSnapshotApplyInput_lower(input),$0
     )
 })
 }
@@ -16240,6 +16250,162 @@ public func FfiConverterTypeCurationMenuSnapshot_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeCurationMenuSnapshot_lower(_ value: CurationMenuSnapshot) -> RustBuffer {
     return FfiConverterTypeCurationMenuSnapshot.lower(value)
+}
+
+
+public struct CurationMenuSnapshotApplyInput {
+    public var items: [CurationMenuItem]
+    public var error: String
+    public var errorPrefix: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(items: [CurationMenuItem], error: String, errorPrefix: String?) {
+        self.items = items
+        self.error = error
+        self.errorPrefix = errorPrefix
+    }
+}
+
+#if compiler(>=6)
+extension CurationMenuSnapshotApplyInput: Sendable {}
+#endif
+
+
+extension CurationMenuSnapshotApplyInput: Equatable, Hashable {
+    public static func ==(lhs: CurationMenuSnapshotApplyInput, rhs: CurationMenuSnapshotApplyInput) -> Bool {
+        if lhs.items != rhs.items {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        if lhs.errorPrefix != rhs.errorPrefix {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(items)
+        hasher.combine(error)
+        hasher.combine(errorPrefix)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCurationMenuSnapshotApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurationMenuSnapshotApplyInput {
+        return
+            try CurationMenuSnapshotApplyInput(
+                items: FfiConverterSequenceTypeCurationMenuItem.read(from: &buf),
+                error: FfiConverterString.read(from: &buf),
+                errorPrefix: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CurationMenuSnapshotApplyInput, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCurationMenuItem.write(value.items, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+        FfiConverterOptionString.write(value.errorPrefix, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurationMenuSnapshotApplyInput_lift(_ buf: RustBuffer) throws -> CurationMenuSnapshotApplyInput {
+    return try FfiConverterTypeCurationMenuSnapshotApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurationMenuSnapshotApplyInput_lower(_ value: CurationMenuSnapshotApplyInput) -> RustBuffer {
+    return FfiConverterTypeCurationMenuSnapshotApplyInput.lower(value)
+}
+
+
+public struct CurationMenuSnapshotApplyProjection {
+    public var items: [CurationMenuItem]
+    public var shouldApplyErrorMessage: Bool
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(items: [CurationMenuItem], shouldApplyErrorMessage: Bool, errorMessage: String?) {
+        self.items = items
+        self.shouldApplyErrorMessage = shouldApplyErrorMessage
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension CurationMenuSnapshotApplyProjection: Sendable {}
+#endif
+
+
+extension CurationMenuSnapshotApplyProjection: Equatable, Hashable {
+    public static func ==(lhs: CurationMenuSnapshotApplyProjection, rhs: CurationMenuSnapshotApplyProjection) -> Bool {
+        if lhs.items != rhs.items {
+            return false
+        }
+        if lhs.shouldApplyErrorMessage != rhs.shouldApplyErrorMessage {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(items)
+        hasher.combine(shouldApplyErrorMessage)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCurationMenuSnapshotApplyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurationMenuSnapshotApplyProjection {
+        return
+            try CurationMenuSnapshotApplyProjection(
+                items: FfiConverterSequenceTypeCurationMenuItem.read(from: &buf),
+                shouldApplyErrorMessage: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CurationMenuSnapshotApplyProjection, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCurationMenuItem.write(value.items, into: &buf)
+        FfiConverterBool.write(value.shouldApplyErrorMessage, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurationMenuSnapshotApplyProjection_lift(_ buf: RustBuffer) throws -> CurationMenuSnapshotApplyProjection {
+    return try FfiConverterTypeCurationMenuSnapshotApplyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurationMenuSnapshotApplyProjection_lower(_ value: CurationMenuSnapshotApplyProjection) -> RustBuffer {
+    return FfiConverterTypeCurationMenuSnapshotApplyProjection.lower(value)
 }
 
 
@@ -43715,6 +43881,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_create_room() != 12904) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_curation_menu_snapshot_apply() != 35320) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_curation_set_create() != 8394) {

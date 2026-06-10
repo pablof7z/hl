@@ -159,7 +159,8 @@ pub use lists::{
     BookmarkLibraryProjection, BookmarkLibraryProjectionInput, BookmarkLibraryScope,
     BookmarkLibraryScopeOptionProjection, BookmarkLibrarySnapshot, BookmarkSetDetailSnapshot,
     BookmarkSetRowProjection, BookmarkSetRowProjectionInput, BookmarkedArticleRowProjection,
-    BookmarkedArticleRowProjectionInput, CurationMenuSnapshot, CurationSetCreateProjection,
+    BookmarkedArticleRowProjectionInput, CurationMenuSnapshot, CurationMenuSnapshotApplyInput,
+    CurationMenuSnapshotApplyProjection, CurationSetCreateProjection,
     CurationSetCreateProjectionInput, WebBookmarkRowProjection, WebBookmarkRowProjectionInput,
 };
 pub use models::{

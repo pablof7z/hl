@@ -138,6 +138,20 @@ pub struct CurationMenuSnapshot {
     pub error: String,
 }
 
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CurationMenuSnapshotApplyInput {
+    pub items: Vec<CurationMenuItem>,
+    pub error: String,
+    pub error_prefix: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CurationMenuSnapshotApplyProjection {
+    pub items: Vec<CurationMenuItem>,
+    pub should_apply_error_message: bool,
+    pub error_message: Option<String>,
+}
+
 /// Native create-collection sheet input. Rust owns title normalization.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CurationSetCreateProjectionInput {
@@ -425,6 +439,28 @@ pub fn curation_menu_error_snapshot(error: impl ToString) -> CurationMenuSnapsho
     CurationMenuSnapshot {
         items: Vec::new(),
         error: error.to_string(),
+    }
+}
+
+pub fn curation_menu_snapshot_apply_projection(
+    input: CurationMenuSnapshotApplyInput,
+) -> CurationMenuSnapshotApplyProjection {
+    let error = input.error.trim().to_string();
+    if error.is_empty() {
+        return CurationMenuSnapshotApplyProjection {
+            items: input.items,
+            should_apply_error_message: true,
+            error_message: None,
+        };
+    }
+    let error_prefix = input
+        .error_prefix
+        .map(|prefix| prefix.trim().to_string())
+        .filter(|prefix| !prefix.is_empty());
+    CurationMenuSnapshotApplyProjection {
+        items: input.items,
+        should_apply_error_message: error_prefix.is_some(),
+        error_message: error_prefix.map(|prefix| format!("{prefix} — {error}")),
     }
 }
 
@@ -941,14 +977,15 @@ mod tests {
     use super::{
         bookmark_library_projection, bookmark_set_row_projection,
         bookmarked_article_row_projection, curation_menu_error_snapshot,
-        curation_menu_items_for_address, curation_menu_snapshot_for_address,
-        curation_set_create_projection, filter_explorable_curation_sets,
-        query_bookmark_library_snapshot, query_bookmark_set_detail_snapshot,
-        web_bookmark_row_projection, BookmarkLibraryFilter, BookmarkLibraryFilterChipProjection,
-        BookmarkLibraryPane, BookmarkLibraryProjectionInput, BookmarkLibraryScope,
-        BookmarkLibraryScopeOptionProjection, BookmarkSetRowProjectionInput,
-        BookmarkedArticleRowProjectionInput, CurationSetCreateProjectionInput,
-        WebBookmarkRowProjectionInput, KIND_BOOKMARK_SETS, KIND_CURATION_SETS, KIND_WEB_BOOKMARK,
+        curation_menu_items_for_address, curation_menu_snapshot_apply_projection,
+        curation_menu_snapshot_for_address, curation_set_create_projection,
+        filter_explorable_curation_sets, query_bookmark_library_snapshot,
+        query_bookmark_set_detail_snapshot, web_bookmark_row_projection, BookmarkLibraryFilter,
+        BookmarkLibraryFilterChipProjection, BookmarkLibraryPane, BookmarkLibraryProjectionInput,
+        BookmarkLibraryScope, BookmarkLibraryScopeOptionProjection, BookmarkSetRowProjectionInput,
+        BookmarkedArticleRowProjectionInput, CurationMenuSnapshotApplyInput,
+        CurationSetCreateProjectionInput, WebBookmarkRowProjectionInput, KIND_BOOKMARK_SETS,
+        KIND_CURATION_SETS, KIND_WEB_BOOKMARK,
     };
     use crate::models::{ArticleRecord, BookmarkSetRecord, WebBookmarkRecord};
     use crate::test_ndb::process_event_and_wait;
@@ -1041,6 +1078,43 @@ mod tests {
 
         assert!(snapshot.items.is_empty());
         assert_eq!(snapshot.error, "cache unavailable");
+    }
+
+    #[test]
+    fn curation_menu_snapshot_apply_projects_rows_and_error_state() {
+        let item = curation_menu_items_for_address(
+            vec![set("first", "First", vec!["30023:abc:one"])],
+            "30023:abc:one",
+        );
+
+        let success = curation_menu_snapshot_apply_projection(CurationMenuSnapshotApplyInput {
+            items: item.clone(),
+            error: String::new(),
+            error_prefix: None,
+        });
+        assert_eq!(success.items, item);
+        assert!(success.should_apply_error_message);
+        assert_eq!(success.error_message, None);
+
+        let failed_mutation =
+            curation_menu_snapshot_apply_projection(CurationMenuSnapshotApplyInput {
+                items: Vec::new(),
+                error: " relay failed ".into(),
+                error_prefix: Some("Couldn't update collection".into()),
+            });
+        assert!(failed_mutation.should_apply_error_message);
+        assert_eq!(
+            failed_mutation.error_message.as_deref(),
+            Some("Couldn't update collection — relay failed")
+        );
+
+        let failed_load = curation_menu_snapshot_apply_projection(CurationMenuSnapshotApplyInput {
+            items: Vec::new(),
+            error: " cache failed ".into(),
+            error_prefix: None,
+        });
+        assert!(!failed_load.should_apply_error_message);
+        assert_eq!(failed_load.error_message, None);
     }
 
     #[test]

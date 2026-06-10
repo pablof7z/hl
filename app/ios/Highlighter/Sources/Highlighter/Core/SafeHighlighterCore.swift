@@ -419,6 +419,12 @@ actor SafeHighlighterCore {
         await core.getCurationMenuSnapshot(address: address)
     }
 
+    nonisolated func projectCurationMenuSnapshotApply(
+        input: CurationMenuSnapshotApplyInput
+    ) -> CurationMenuSnapshotApplyProjection {
+        core.projectCurationMenuSnapshotApply(input: input)
+    }
+
     func createCurationSetWithAddressSnapshot(
         title: String,
         address: String
