@@ -62,6 +62,19 @@ pub struct CapturePublishProjection {
     pub can_publish: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CapturePublishResultProjectionInput {
+    pub event_id: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CapturePublishResultProjection {
+    pub phase: CapturePublishPhase,
+    pub event_id: String,
+    pub error_message: String,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CaptureUploadProjectionInput {
     pub snapshot: BlossomUploadSnapshot,
@@ -213,6 +226,25 @@ pub fn publish_snapshot(result: Result<String, CoreError>) -> CapturePublishSnap
             event_id: String::new(),
             error: error.to_string(),
         },
+    }
+}
+
+pub fn publish_result_projection(
+    input: CapturePublishResultProjectionInput,
+) -> CapturePublishResultProjection {
+    let error_message = input.error.trim().to_string();
+    if error_message.is_empty() {
+        CapturePublishResultProjection {
+            phase: CapturePublishPhase::Done,
+            event_id: input.event_id,
+            error_message,
+        }
+    } else {
+        CapturePublishResultProjection {
+            phase: CapturePublishPhase::Error,
+            event_id: String::new(),
+            error_message,
+        }
     }
 }
 
@@ -431,6 +463,25 @@ mod tests {
         let err = publish_snapshot(Err(CoreError::InvalidInput("bad capture".into())));
         assert!(err.event_id.is_empty());
         assert_eq!(err.error, "invalid input: bad capture");
+    }
+
+    #[test]
+    fn publish_result_projection_projects_next_phase() {
+        let ok = publish_result_projection(CapturePublishResultProjectionInput {
+            event_id: "event123".into(),
+            error: String::new(),
+        });
+        assert_eq!(ok.phase, CapturePublishPhase::Done);
+        assert_eq!(ok.event_id, "event123");
+        assert_eq!(ok.error_message, "");
+
+        let err = publish_result_projection(CapturePublishResultProjectionInput {
+            event_id: "ignored".into(),
+            error: " publish failed ".into(),
+        });
+        assert_eq!(err.phase, CapturePublishPhase::Error);
+        assert_eq!(err.event_id, "");
+        assert_eq!(err.error_message, "publish failed");
     }
 
     #[test]

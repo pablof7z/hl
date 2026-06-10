@@ -94,7 +94,8 @@ pub use capture::{
     CaptureBookDisplayProjection, CaptureBookDisplayProjectionInput,
     CaptureCommunitySelectionProjection, CaptureCommunitySelectionProjectionInput,
     CapturePublishInput, CapturePublishPhase, CapturePublishProjection,
-    CapturePublishProjectionInput, CapturePublishSnapshot, CaptureStashProjection,
+    CapturePublishProjectionInput, CapturePublishResultProjection,
+    CapturePublishResultProjectionInput, CapturePublishSnapshot, CaptureStashProjection,
     CaptureStashProjectionInput, CaptureUploadProjection, CaptureUploadProjectionInput,
 };
 pub use chat::{

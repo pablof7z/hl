@@ -269,11 +269,13 @@ final class CaptureStore {
                     targetGroupId: groupId
                 )
             )
-            if outcome.error.isEmpty {
-                self.phase = .done(outcome.eventId)
-            } else {
-                self.phase = .error(outcome.error)
-            }
+            let projection = safeCore.projectCapturePublishResult(
+                input: CapturePublishResultProjectionInput(
+                    eventId: outcome.eventId,
+                    error: outcome.error
+                )
+            )
+            self.phase = phase(from: projection)
         }
     }
 
@@ -410,6 +412,23 @@ final class CaptureStore {
             return .done
         case .error:
             return .error
+        }
+    }
+
+    private func phase(from projection: CapturePublishResultProjection) -> Phase {
+        switch projection.phase {
+        case .idle:
+            return .idle
+        case .processing:
+            return .processing
+        case .reviewing:
+            return .reviewing
+        case .publishing:
+            return .publishing
+        case .done:
+            return .done(projection.eventId)
+        case .error:
+            return .error(projection.errorMessage)
         }
     }
 }

@@ -1261,6 +1261,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     
     func projectCapturePublish(input: CapturePublishProjectionInput)  -> CapturePublishProjection
     
+    func projectCapturePublishResult(input: CapturePublishResultProjectionInput)  -> CapturePublishResultProjection
+    
     func projectCaptureStash(input: CaptureStashProjectionInput)  -> CaptureStashProjection
     
     func projectCaptureUpload(input: CaptureUploadProjectionInput)  -> CaptureUploadProjection
@@ -3793,6 +3795,14 @@ open func projectCapturePublish(input: CapturePublishProjectionInput) -> Capture
     return try!  FfiConverterTypeCapturePublishProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_capture_publish(self.uniffiClonePointer(),
         FfiConverterTypeCapturePublishProjectionInput_lower(input),$0
+    )
+})
+}
+    
+open func projectCapturePublishResult(input: CapturePublishResultProjectionInput) -> CapturePublishResultProjection  {
+    return try!  FfiConverterTypeCapturePublishResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_capture_publish_result(self.uniffiClonePointer(),
+        FfiConverterTypeCapturePublishResultProjectionInput_lower(input),$0
     )
 })
 }
@@ -12032,6 +12042,154 @@ public func FfiConverterTypeCapturePublishProjectionInput_lift(_ buf: RustBuffer
 #endif
 public func FfiConverterTypeCapturePublishProjectionInput_lower(_ value: CapturePublishProjectionInput) -> RustBuffer {
     return FfiConverterTypeCapturePublishProjectionInput.lower(value)
+}
+
+
+public struct CapturePublishResultProjection {
+    public var phase: CapturePublishPhase
+    public var eventId: String
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(phase: CapturePublishPhase, eventId: String, errorMessage: String) {
+        self.phase = phase
+        self.eventId = eventId
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension CapturePublishResultProjection: Sendable {}
+#endif
+
+
+extension CapturePublishResultProjection: Equatable, Hashable {
+    public static func ==(lhs: CapturePublishResultProjection, rhs: CapturePublishResultProjection) -> Bool {
+        if lhs.phase != rhs.phase {
+            return false
+        }
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(phase)
+        hasher.combine(eventId)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCapturePublishResultProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CapturePublishResultProjection {
+        return
+            try CapturePublishResultProjection(
+                phase: FfiConverterTypeCapturePublishPhase.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf), 
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CapturePublishResultProjection, into buf: inout [UInt8]) {
+        FfiConverterTypeCapturePublishPhase.write(value.phase, into: &buf)
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCapturePublishResultProjection_lift(_ buf: RustBuffer) throws -> CapturePublishResultProjection {
+    return try FfiConverterTypeCapturePublishResultProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCapturePublishResultProjection_lower(_ value: CapturePublishResultProjection) -> RustBuffer {
+    return FfiConverterTypeCapturePublishResultProjection.lower(value)
+}
+
+
+public struct CapturePublishResultProjectionInput {
+    public var eventId: String
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(eventId: String, error: String) {
+        self.eventId = eventId
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension CapturePublishResultProjectionInput: Sendable {}
+#endif
+
+
+extension CapturePublishResultProjectionInput: Equatable, Hashable {
+    public static func ==(lhs: CapturePublishResultProjectionInput, rhs: CapturePublishResultProjectionInput) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCapturePublishResultProjectionInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CapturePublishResultProjectionInput {
+        return
+            try CapturePublishResultProjectionInput(
+                eventId: FfiConverterString.read(from: &buf), 
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CapturePublishResultProjectionInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCapturePublishResultProjectionInput_lift(_ buf: RustBuffer) throws -> CapturePublishResultProjectionInput {
+    return try FfiConverterTypeCapturePublishResultProjectionInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCapturePublishResultProjectionInput_lower(_ value: CapturePublishResultProjectionInput) -> RustBuffer {
+    return FfiConverterTypeCapturePublishResultProjectionInput.lower(value)
 }
 
 
@@ -44578,6 +44736,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_capture_publish() != 57762) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_capture_publish_result() != 21519) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_capture_stash() != 52039) {
