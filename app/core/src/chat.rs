@@ -57,6 +57,17 @@ pub struct ChatComposerProjection {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatPublishResultInput {
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChatPublishResultProjection {
+    pub did_publish: bool,
+    pub error_message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ChatLoadMoreProjectionInput {
     pub is_loading_more: bool,
     pub has_more: bool,
@@ -91,6 +102,16 @@ pub fn chat_composer_projection(input: ChatComposerProjectionInput) -> ChatCompo
     ChatComposerProjection {
         can_send: !submit_body.is_empty(),
         submit_body,
+    }
+}
+
+pub fn chat_publish_result_projection(
+    input: ChatPublishResultInput,
+) -> ChatPublishResultProjection {
+    let error_message = input.error.trim().to_string();
+    ChatPublishResultProjection {
+        did_publish: error_message.is_empty(),
+        error_message,
     }
 }
 
@@ -616,6 +637,21 @@ mod tests {
 
         assert_eq!(projection.submit_body, "");
         assert!(!projection.can_send);
+    }
+
+    #[test]
+    fn chat_publish_result_projection_classifies_success_and_error() {
+        let success = chat_publish_result_projection(ChatPublishResultInput {
+            error: String::new(),
+        });
+        assert!(success.did_publish);
+        assert_eq!(success.error_message, "");
+
+        let failed = chat_publish_result_projection(ChatPublishResultInput {
+            error: " send failed ".into(),
+        });
+        assert!(!failed.did_publish);
+        assert_eq!(failed.error_message, "send failed");
     }
 
     #[test]

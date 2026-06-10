@@ -98,7 +98,8 @@ pub use capture::{
 pub use chat::{
     ChatActivityReloadProjection, ChatActivityReloadProjectionInput, ChatComposerProjection,
     ChatComposerProjectionInput, ChatLoadMoreProjection, ChatLoadMoreProjectionInput,
-    ChatMessageRowProjection, ChatPresenceSnapshot, ChatPublishSnapshot, ChatSnapshot,
+    ChatMessageRowProjection, ChatPresenceSnapshot, ChatPublishResultInput,
+    ChatPublishResultProjection, ChatPublishSnapshot, ChatSnapshot,
 };
 pub use client::HighlighterCore;
 pub use comments::{

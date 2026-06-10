@@ -2824,6 +2824,13 @@ impl HighlighterCore {
         crate::chat::chat_composer_projection(input)
     }
 
+    pub fn project_chat_publish_result(
+        &self,
+        input: crate::chat::ChatPublishResultInput,
+    ) -> crate::chat::ChatPublishResultProjection {
+        crate::chat::chat_publish_result_projection(input)
+    }
+
     /// Publish a NIP-29 kind:9 chat message and return the refreshed bounded
     /// chat snapshot. Rust owns the optimistic merge of the signed record so
     /// native shells never fabricate chat rows.

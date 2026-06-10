@@ -1273,6 +1273,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectChatLoadMore(input: ChatLoadMoreProjectionInput)  -> ChatLoadMoreProjection
 
+    func projectChatPublishResult(input: ChatPublishResultInput)  -> ChatPublishResultProjection
+
     /**
      * Project comment row reaction/bookmark chrome.
      */
@@ -3803,6 +3805,14 @@ open func projectChatLoadMore(input: ChatLoadMoreProjectionInput) -> ChatLoadMor
     return try!  FfiConverterTypeChatLoadMoreProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_chat_load_more(self.uniffiClonePointer(),
         FfiConverterTypeChatLoadMoreProjectionInput_lower(input),$0
+    )
+})
+}
+
+open func projectChatPublishResult(input: ChatPublishResultInput) -> ChatPublishResultProjection  {
+    return try!  FfiConverterTypeChatPublishResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_chat_publish_result(self.uniffiClonePointer(),
+        FfiConverterTypeChatPublishResultInput_lower(input),$0
     )
 })
 }
@@ -12894,6 +12904,138 @@ public func FfiConverterTypeChatPresenceSnapshot_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeChatPresenceSnapshot_lower(_ value: ChatPresenceSnapshot) -> RustBuffer {
     return FfiConverterTypeChatPresenceSnapshot.lower(value)
+}
+
+
+public struct ChatPublishResultInput {
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(error: String) {
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension ChatPublishResultInput: Sendable {}
+#endif
+
+
+extension ChatPublishResultInput: Equatable, Hashable {
+    public static func ==(lhs: ChatPublishResultInput, rhs: ChatPublishResultInput) -> Bool {
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatPublishResultInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatPublishResultInput {
+        return
+            try ChatPublishResultInput(
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatPublishResultInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatPublishResultInput_lift(_ buf: RustBuffer) throws -> ChatPublishResultInput {
+    return try FfiConverterTypeChatPublishResultInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatPublishResultInput_lower(_ value: ChatPublishResultInput) -> RustBuffer {
+    return FfiConverterTypeChatPublishResultInput.lower(value)
+}
+
+
+public struct ChatPublishResultProjection {
+    public var didPublish: Bool
+    public var errorMessage: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(didPublish: Bool, errorMessage: String) {
+        self.didPublish = didPublish
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension ChatPublishResultProjection: Sendable {}
+#endif
+
+
+extension ChatPublishResultProjection: Equatable, Hashable {
+    public static func ==(lhs: ChatPublishResultProjection, rhs: ChatPublishResultProjection) -> Bool {
+        if lhs.didPublish != rhs.didPublish {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(didPublish)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatPublishResultProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatPublishResultProjection {
+        return
+            try ChatPublishResultProjection(
+                didPublish: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatPublishResultProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.didPublish, into: &buf)
+        FfiConverterString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatPublishResultProjection_lift(_ buf: RustBuffer) throws -> ChatPublishResultProjection {
+    return try FfiConverterTypeChatPublishResultProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatPublishResultProjection_lower(_ value: ChatPublishResultProjection) -> RustBuffer {
+    return FfiConverterTypeChatPublishResultProjection.lower(value)
 }
 
 
@@ -42664,6 +42806,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_chat_load_more() != 40844) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_chat_publish_result() != 28990) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_action_chrome() != 20671) {

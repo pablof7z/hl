@@ -644,6 +644,12 @@ actor SafeHighlighterCore {
         core.projectChatComposer(input: input)
     }
 
+    nonisolated func projectChatPublishResult(
+        input: ChatPublishResultInput
+    ) -> ChatPublishResultProjection {
+        core.projectChatPublishResult(input: input)
+    }
+
     func publishChatMessageSnapshot(
         groupId: String,
         content: String,

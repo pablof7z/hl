@@ -168,8 +168,11 @@ final class ChatStore {
             replyToEventId: replyTo?.eventId,
             pageCount: loadedPageCount
         )
-        guard outcome.error.isEmpty else {
-            sendError = outcome.error
+        let result = core.projectChatPublishResult(
+            input: ChatPublishResultInput(error: outcome.error)
+        )
+        guard result.didPublish else {
+            sendError = result.errorMessage
             return
         }
         apply(snapshot: outcome.snapshot)
