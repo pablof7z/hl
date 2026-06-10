@@ -111,10 +111,11 @@ final class ProfileStore {
         followError = nil
         isFollowing = action.optimisticIsFollowing
         let snapshot = await safeCore.applyProfileFollowMutation(input: mutation)
-        isFollowing = snapshot.isFollowing
-        if !snapshot.error.isEmpty {
-            followError = snapshot.error
-        }
+        let projection = safeCore.projectProfileFollowMutationApply(
+            input: ProfileFollowMutationApplyInput(snapshot: snapshot)
+        )
+        isFollowing = projection.isFollowing
+        followError = projection.errorMessage
         isMutatingFollow = false
     }
 

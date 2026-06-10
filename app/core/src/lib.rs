@@ -208,9 +208,12 @@ pub use podcast_transcript::{
 pub use profile::{
     ProfileDisplayFallback, ProfileDisplayProjection, ProfileDisplayProjectionInput,
     ProfileDisplayWithLabelProjectionInput, ProfileFollowActionInput,
-    ProfileFollowActionProjection, ProfileFollowMutationInput, ProfileFollowMutationSnapshot,
-    ProfileIdentityProjection, ProfileIdentityProjectionInput, ProfileRelationshipProjection,
-    ProfileRelationshipProjectionInput, ProfileUpdateProjection, ProfileUpdateProjectionInput,
+    ProfileFollowActionProjection, ProfileFollowMutationApplyInput,
+    ProfileFollowMutationApplyProjection, ProfileFollowMutationInput,
+    ProfileFollowMutationSnapshot, ProfileIdentityProjection, ProfileIdentityProjectionInput,
+    ProfileImageUploadResultInput, ProfileImageUploadResultProjection,
+    ProfileRelationshipProjection, ProfileRelationshipProjectionInput, ProfileUpdateProjection,
+    ProfileUpdateProjectionInput, ProfileUpdateResultInput, ProfileUpdateResultProjection,
     ProfileUpdateSnapshot,
 };
 pub use profile_page::ProfilePageSnapshot;

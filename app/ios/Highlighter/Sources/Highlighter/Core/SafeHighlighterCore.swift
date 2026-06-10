@@ -839,10 +839,28 @@ actor SafeHighlighterCore {
         await core.applyProfileFollowMutation(input: input)
     }
 
+    nonisolated func projectProfileFollowMutationApply(
+        input: ProfileFollowMutationApplyInput
+    ) -> ProfileFollowMutationApplyProjection {
+        core.projectProfileFollowMutationApply(input: input)
+    }
+
     nonisolated func projectProfileUpdate(
         input: ProfileUpdateProjectionInput
     ) -> ProfileUpdateProjection {
         core.projectProfileUpdate(input: input)
+    }
+
+    nonisolated func projectProfileImageUploadResult(
+        input: ProfileImageUploadResultInput
+    ) -> ProfileImageUploadResultProjection {
+        core.projectProfileImageUploadResult(input: input)
+    }
+
+    nonisolated func projectProfileUpdateResult(
+        input: ProfileUpdateResultInput
+    ) -> ProfileUpdateResultProjection {
+        core.projectProfileUpdateResult(input: input)
     }
 
     nonisolated func decodeNostrEntity(_ input: String) -> NostrEntityRefSnapshot {

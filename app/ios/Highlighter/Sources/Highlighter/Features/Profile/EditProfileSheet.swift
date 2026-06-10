@@ -410,11 +410,14 @@ struct EditProfileSheet: View {
                 height: UInt32(prepared.height),
                 alt: ""
             )
-            guard outcome.error.isEmpty, let upload = outcome.upload else {
-                error = "Upload failed: \(outcome.error)"
+            let projection = appStore.safeCore.projectProfileImageUploadResult(
+                input: ProfileImageUploadResultInput(snapshot: outcome)
+            )
+            guard let imageURL = projection.imageUrl else {
+                error = projection.errorMessage
                 return
             }
-            commit(upload.url)
+            commit(imageURL)
         } catch {
             self.error = "Upload failed: \(error.localizedDescription)"
         }
@@ -439,16 +442,23 @@ struct EditProfileSheet: View {
         Task {
             defer { Task { @MainActor in saving = false } }
             let outcome = await appStore.safeCore.updateProfile(draft: projection.draft)
-            guard outcome.error.isEmpty, let updated = outcome.profile else {
-                await MainActor.run {
-                    self.error = outcome.error.isEmpty ? "Unable to update profile." : outcome.error
-                }
-                return
-            }
+            let result = appStore.safeCore.projectProfileUpdateResult(
+                input: ProfileUpdateResultInput(snapshot: outcome)
+            )
             await MainActor.run {
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                onSaved(updated)
-                dismiss()
+                if let errorMessage = result.errorMessage {
+                    self.error = errorMessage
+                    return
+                }
+                if result.shouldEmitSuccessFeedback {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                }
+                if let updated = result.profile {
+                    onSaved(updated)
+                }
+                if result.shouldDismiss {
+                    dismiss()
+                }
             }
         }
     }

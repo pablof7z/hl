@@ -8,6 +8,7 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use crate::blossom::BlossomUploadSnapshot;
 use crate::errors::CoreError;
 use crate::models::{ProfileMetadata, ProfileUpdateDraft};
 use crate::nostr_runtime::{mirror_social_trio_to_purple, NostrRuntime};
@@ -202,6 +203,17 @@ pub struct ProfileFollowMutationSnapshot {
     pub error: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ProfileFollowMutationApplyInput {
+    pub snapshot: ProfileFollowMutationSnapshot,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ProfileFollowMutationApplyProjection {
+    pub is_following: bool,
+    pub error_message: Option<String>,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct ProfileUpdateProjectionInput {
     pub initial: Option<ProfileMetadata>,
@@ -229,6 +241,30 @@ pub struct ProfileUpdateProjection {
 pub struct ProfileUpdateSnapshot {
     pub profile: Option<ProfileMetadata>,
     pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ProfileImageUploadResultInput {
+    pub snapshot: BlossomUploadSnapshot,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ProfileImageUploadResultProjection {
+    pub image_url: Option<String>,
+    pub error_message: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ProfileUpdateResultInput {
+    pub snapshot: ProfileUpdateSnapshot,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ProfileUpdateResultProjection {
+    pub profile: Option<ProfileMetadata>,
+    pub should_emit_success_feedback: bool,
+    pub should_dismiss: bool,
+    pub error_message: Option<String>,
 }
 
 /// Pure profile presentation projection. Rust owns profile-name precedence,
@@ -426,6 +462,16 @@ pub fn profile_follow_mutation_snapshot(
     }
 }
 
+pub fn profile_follow_mutation_apply_projection(
+    input: ProfileFollowMutationApplyInput,
+) -> ProfileFollowMutationApplyProjection {
+    let error = input.snapshot.error.trim().to_string();
+    ProfileFollowMutationApplyProjection {
+        is_following: input.snapshot.is_following,
+        error_message: if error.is_empty() { None } else { Some(error) },
+    }
+}
+
 fn profile_display_fallback_name(pubkey: &str, fallback: ProfileDisplayFallback) -> String {
     match fallback {
         ProfileDisplayFallback::Pubkey6 => pubkey.chars().take(6).collect(),
@@ -491,6 +537,51 @@ pub fn profile_update_snapshot(
             profile: None,
             error: error.to_string(),
         },
+    }
+}
+
+pub fn profile_image_upload_result_projection(
+    input: ProfileImageUploadResultInput,
+) -> ProfileImageUploadResultProjection {
+    if let Some(upload) = input.snapshot.upload {
+        return ProfileImageUploadResultProjection {
+            image_url: Some(upload.url),
+            error_message: None,
+        };
+    }
+
+    ProfileImageUploadResultProjection {
+        image_url: None,
+        error_message: Some(format!("Upload failed: {}", input.snapshot.error.trim())),
+    }
+}
+
+pub fn profile_update_result_projection(
+    input: ProfileUpdateResultInput,
+) -> ProfileUpdateResultProjection {
+    let error = input.snapshot.error.trim().to_string();
+    if error.is_empty() {
+        if let Some(profile) = input.snapshot.profile {
+            return ProfileUpdateResultProjection {
+                profile: Some(profile),
+                should_emit_success_feedback: true,
+                should_dismiss: true,
+                error_message: None,
+            };
+        }
+        return ProfileUpdateResultProjection {
+            profile: None,
+            should_emit_success_feedback: false,
+            should_dismiss: false,
+            error_message: Some("Unable to update profile.".into()),
+        };
+    }
+
+    ProfileUpdateResultProjection {
+        profile: None,
+        should_emit_success_feedback: false,
+        should_dismiss: false,
+        error_message: Some(error),
     }
 }
 
@@ -1098,6 +1189,27 @@ mod tests {
     }
 
     #[test]
+    fn profile_follow_mutation_apply_projection_surfaces_error_state() {
+        let ok = profile_follow_mutation_apply_projection(ProfileFollowMutationApplyInput {
+            snapshot: ProfileFollowMutationSnapshot {
+                is_following: true,
+                error: String::new(),
+            },
+        });
+        assert!(ok.is_following);
+        assert_eq!(ok.error_message, None);
+
+        let failed = profile_follow_mutation_apply_projection(ProfileFollowMutationApplyInput {
+            snapshot: ProfileFollowMutationSnapshot {
+                is_following: false,
+                error: " relay error ".into(),
+            },
+        });
+        assert!(!failed.is_following);
+        assert_eq!(failed.error_message.as_deref(), Some("relay error"));
+    }
+
+    #[test]
     fn profile_update_projection_trims_draft_and_preserves_raw_dirty_policy() {
         let projection = profile_update_projection(ProfileUpdateProjectionInput {
             initial: Some(ProfileMetadata {
@@ -1217,5 +1329,95 @@ mod tests {
         let err = profile_update_snapshot(Err(CoreError::Signer("locked".into())));
         assert!(err.profile.is_none());
         assert_eq!(err.error, "signer error: locked");
+    }
+
+    #[test]
+    fn profile_image_upload_result_projection_projects_url_or_error() {
+        let ok = profile_image_upload_result_projection(ProfileImageUploadResultInput {
+            snapshot: BlossomUploadSnapshot {
+                upload: Some(crate::models::BlossomUpload {
+                    url: "https://blossom.example/profile.jpg".into(),
+                    sha256_hex: "abc".into(),
+                    mime: "image/jpeg".into(),
+                    size_bytes: 123,
+                    width: 640,
+                    height: 480,
+                    alt: String::new(),
+                }),
+                error: String::new(),
+            },
+        });
+        assert_eq!(
+            ok.image_url.as_deref(),
+            Some("https://blossom.example/profile.jpg")
+        );
+        assert_eq!(ok.error_message, None);
+
+        let failed = profile_image_upload_result_projection(ProfileImageUploadResultInput {
+            snapshot: BlossomUploadSnapshot {
+                upload: None,
+                error: " offline ".into(),
+            },
+        });
+        assert_eq!(failed.image_url, None);
+        assert_eq!(
+            failed.error_message.as_deref(),
+            Some("Upload failed: offline")
+        );
+    }
+
+    #[test]
+    fn profile_update_result_projection_projects_success_and_fallback_error() {
+        let profile = ProfileMetadata {
+            pubkey: "abcdef123456".to_string(),
+            name: "alice".to_string(),
+            display_name: "Alice".to_string(),
+            about: String::new(),
+            picture: String::new(),
+            banner: String::new(),
+            nip05: String::new(),
+            website: String::new(),
+            lud16: String::new(),
+            created_at: None,
+        };
+        let ok = profile_update_result_projection(ProfileUpdateResultInput {
+            snapshot: ProfileUpdateSnapshot {
+                profile: Some(profile),
+                error: String::new(),
+            },
+        });
+        assert!(ok.should_emit_success_feedback);
+        assert!(ok.should_dismiss);
+        assert_eq!(
+            ok.profile
+                .as_ref()
+                .map(|profile| profile.display_name.as_str()),
+            Some("Alice")
+        );
+        assert_eq!(ok.error_message, None);
+
+        let missing_profile = profile_update_result_projection(ProfileUpdateResultInput {
+            snapshot: ProfileUpdateSnapshot {
+                profile: None,
+                error: String::new(),
+            },
+        });
+        assert!(!missing_profile.should_emit_success_feedback);
+        assert!(!missing_profile.should_dismiss);
+        assert_eq!(
+            missing_profile.error_message.as_deref(),
+            Some("Unable to update profile.")
+        );
+
+        let failed = profile_update_result_projection(ProfileUpdateResultInput {
+            snapshot: ProfileUpdateSnapshot {
+                profile: None,
+                error: " signer locked ".into(),
+            },
+        });
+        assert!(!failed.should_emit_success_feedback);
+        assert!(!failed.should_dismiss);
+        assert!(failed.profile.is_none());
+        assert_eq!(failed.error_message.as_deref(), Some("signer locked"));
     }
 }

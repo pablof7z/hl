@@ -1450,6 +1450,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectProfileFollowAction(relationship: ProfileRelationshipProjection, input: ProfileFollowActionInput)  -> ProfileFollowActionProjection
     
+    func projectProfileFollowMutationApply(input: ProfileFollowMutationApplyInput)  -> ProfileFollowMutationApplyProjection
+    
     /**
      * Compact profile handle projection for social proof surfaces. Rust owns
      * handle precedence and pubkey fallback length; native shells render it.
@@ -1462,6 +1464,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func projectProfileIdentity(input: ProfileIdentityProjectionInput)  -> ProfileIdentityProjection
     
+    func projectProfileImageUploadResult(input: ProfileImageUploadResultInput)  -> ProfileImageUploadResultProjection
+    
     /**
      * Profile relationship projection. Rust owns own-profile detection and
      * follow-action visibility; native shells render and execute taps only.
@@ -1473,6 +1477,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * eligibility; native shells bind controls to the returned projection.
      */
     func projectProfileUpdate(input: ProfileUpdateProjectionInput)  -> ProfileUpdateProjection
+    
+    func projectProfileUpdateResult(input: ProfileUpdateResultInput)  -> ProfileUpdateResultProjection
     
     func projectPublicKeyDisplay(input: PublicKeyDisplayProjectionInput)  -> PublicKeyDisplayProjection
     
@@ -4288,6 +4294,14 @@ open func projectProfileFollowAction(relationship: ProfileRelationshipProjection
 })
 }
     
+open func projectProfileFollowMutationApply(input: ProfileFollowMutationApplyInput) -> ProfileFollowMutationApplyProjection  {
+    return try!  FfiConverterTypeProfileFollowMutationApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_profile_follow_mutation_apply(self.uniffiClonePointer(),
+        FfiConverterTypeProfileFollowMutationApplyInput_lower(input),$0
+    )
+})
+}
+    
     /**
      * Compact profile handle projection for social proof surfaces. Rust owns
      * handle precedence and pubkey fallback length; native shells render it.
@@ -4312,6 +4326,14 @@ open func projectProfileIdentity(input: ProfileIdentityProjectionInput) -> Profi
 })
 }
     
+open func projectProfileImageUploadResult(input: ProfileImageUploadResultInput) -> ProfileImageUploadResultProjection  {
+    return try!  FfiConverterTypeProfileImageUploadResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_profile_image_upload_result(self.uniffiClonePointer(),
+        FfiConverterTypeProfileImageUploadResultInput_lower(input),$0
+    )
+})
+}
+    
     /**
      * Profile relationship projection. Rust owns own-profile detection and
      * follow-action visibility; native shells render and execute taps only.
@@ -4332,6 +4354,14 @@ open func projectProfileUpdate(input: ProfileUpdateProjectionInput) -> ProfileUp
     return try!  FfiConverterTypeProfileUpdateProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_profile_update(self.uniffiClonePointer(),
         FfiConverterTypeProfileUpdateProjectionInput_lower(input),$0
+    )
+})
+}
+    
+open func projectProfileUpdateResult(input: ProfileUpdateResultInput) -> ProfileUpdateResultProjection  {
+    return try!  FfiConverterTypeProfileUpdateResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_profile_update_result(self.uniffiClonePointer(),
+        FfiConverterTypeProfileUpdateResultInput_lower(input),$0
     )
 })
 }
@@ -27486,6 +27516,138 @@ public func FfiConverterTypeProfileFollowActionProjection_lower(_ value: Profile
 }
 
 
+public struct ProfileFollowMutationApplyInput {
+    public var snapshot: ProfileFollowMutationSnapshot
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: ProfileFollowMutationSnapshot) {
+        self.snapshot = snapshot
+    }
+}
+
+#if compiler(>=6)
+extension ProfileFollowMutationApplyInput: Sendable {}
+#endif
+
+
+extension ProfileFollowMutationApplyInput: Equatable, Hashable {
+    public static func ==(lhs: ProfileFollowMutationApplyInput, rhs: ProfileFollowMutationApplyInput) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileFollowMutationApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileFollowMutationApplyInput {
+        return
+            try ProfileFollowMutationApplyInput(
+                snapshot: FfiConverterTypeProfileFollowMutationSnapshot.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileFollowMutationApplyInput, into buf: inout [UInt8]) {
+        FfiConverterTypeProfileFollowMutationSnapshot.write(value.snapshot, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileFollowMutationApplyInput_lift(_ buf: RustBuffer) throws -> ProfileFollowMutationApplyInput {
+    return try FfiConverterTypeProfileFollowMutationApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileFollowMutationApplyInput_lower(_ value: ProfileFollowMutationApplyInput) -> RustBuffer {
+    return FfiConverterTypeProfileFollowMutationApplyInput.lower(value)
+}
+
+
+public struct ProfileFollowMutationApplyProjection {
+    public var isFollowing: Bool
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(isFollowing: Bool, errorMessage: String?) {
+        self.isFollowing = isFollowing
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension ProfileFollowMutationApplyProjection: Sendable {}
+#endif
+
+
+extension ProfileFollowMutationApplyProjection: Equatable, Hashable {
+    public static func ==(lhs: ProfileFollowMutationApplyProjection, rhs: ProfileFollowMutationApplyProjection) -> Bool {
+        if lhs.isFollowing != rhs.isFollowing {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(isFollowing)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileFollowMutationApplyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileFollowMutationApplyProjection {
+        return
+            try ProfileFollowMutationApplyProjection(
+                isFollowing: FfiConverterBool.read(from: &buf), 
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileFollowMutationApplyProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.isFollowing, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileFollowMutationApplyProjection_lift(_ buf: RustBuffer) throws -> ProfileFollowMutationApplyProjection {
+    return try FfiConverterTypeProfileFollowMutationApplyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileFollowMutationApplyProjection_lower(_ value: ProfileFollowMutationApplyProjection) -> RustBuffer {
+    return FfiConverterTypeProfileFollowMutationApplyProjection.lower(value)
+}
+
+
 public struct ProfileFollowMutationInput {
     public var targetPubkey: String
     public var requestedFollowState: Bool
@@ -27803,6 +27965,138 @@ public func FfiConverterTypeProfileIdentityProjectionInput_lift(_ buf: RustBuffe
 #endif
 public func FfiConverterTypeProfileIdentityProjectionInput_lower(_ value: ProfileIdentityProjectionInput) -> RustBuffer {
     return FfiConverterTypeProfileIdentityProjectionInput.lower(value)
+}
+
+
+public struct ProfileImageUploadResultInput {
+    public var snapshot: BlossomUploadSnapshot
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: BlossomUploadSnapshot) {
+        self.snapshot = snapshot
+    }
+}
+
+#if compiler(>=6)
+extension ProfileImageUploadResultInput: Sendable {}
+#endif
+
+
+extension ProfileImageUploadResultInput: Equatable, Hashable {
+    public static func ==(lhs: ProfileImageUploadResultInput, rhs: ProfileImageUploadResultInput) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileImageUploadResultInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileImageUploadResultInput {
+        return
+            try ProfileImageUploadResultInput(
+                snapshot: FfiConverterTypeBlossomUploadSnapshot.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileImageUploadResultInput, into buf: inout [UInt8]) {
+        FfiConverterTypeBlossomUploadSnapshot.write(value.snapshot, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileImageUploadResultInput_lift(_ buf: RustBuffer) throws -> ProfileImageUploadResultInput {
+    return try FfiConverterTypeProfileImageUploadResultInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileImageUploadResultInput_lower(_ value: ProfileImageUploadResultInput) -> RustBuffer {
+    return FfiConverterTypeProfileImageUploadResultInput.lower(value)
+}
+
+
+public struct ProfileImageUploadResultProjection {
+    public var imageUrl: String?
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(imageUrl: String?, errorMessage: String?) {
+        self.imageUrl = imageUrl
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension ProfileImageUploadResultProjection: Sendable {}
+#endif
+
+
+extension ProfileImageUploadResultProjection: Equatable, Hashable {
+    public static func ==(lhs: ProfileImageUploadResultProjection, rhs: ProfileImageUploadResultProjection) -> Bool {
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(imageUrl)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileImageUploadResultProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileImageUploadResultProjection {
+        return
+            try ProfileImageUploadResultProjection(
+                imageUrl: FfiConverterOptionString.read(from: &buf), 
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileImageUploadResultProjection, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.imageUrl, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileImageUploadResultProjection_lift(_ buf: RustBuffer) throws -> ProfileImageUploadResultProjection {
+    return try FfiConverterTypeProfileImageUploadResultProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileImageUploadResultProjection_lower(_ value: ProfileImageUploadResultProjection) -> RustBuffer {
+    return FfiConverterTypeProfileImageUploadResultProjection.lower(value)
 }
 
 
@@ -28548,6 +28842,154 @@ public func FfiConverterTypeProfileUpdateProjectionInput_lift(_ buf: RustBuffer)
 #endif
 public func FfiConverterTypeProfileUpdateProjectionInput_lower(_ value: ProfileUpdateProjectionInput) -> RustBuffer {
     return FfiConverterTypeProfileUpdateProjectionInput.lower(value)
+}
+
+
+public struct ProfileUpdateResultInput {
+    public var snapshot: ProfileUpdateSnapshot
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(snapshot: ProfileUpdateSnapshot) {
+        self.snapshot = snapshot
+    }
+}
+
+#if compiler(>=6)
+extension ProfileUpdateResultInput: Sendable {}
+#endif
+
+
+extension ProfileUpdateResultInput: Equatable, Hashable {
+    public static func ==(lhs: ProfileUpdateResultInput, rhs: ProfileUpdateResultInput) -> Bool {
+        if lhs.snapshot != rhs.snapshot {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(snapshot)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileUpdateResultInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileUpdateResultInput {
+        return
+            try ProfileUpdateResultInput(
+                snapshot: FfiConverterTypeProfileUpdateSnapshot.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileUpdateResultInput, into buf: inout [UInt8]) {
+        FfiConverterTypeProfileUpdateSnapshot.write(value.snapshot, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileUpdateResultInput_lift(_ buf: RustBuffer) throws -> ProfileUpdateResultInput {
+    return try FfiConverterTypeProfileUpdateResultInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileUpdateResultInput_lower(_ value: ProfileUpdateResultInput) -> RustBuffer {
+    return FfiConverterTypeProfileUpdateResultInput.lower(value)
+}
+
+
+public struct ProfileUpdateResultProjection {
+    public var profile: ProfileMetadata?
+    public var shouldEmitSuccessFeedback: Bool
+    public var shouldDismiss: Bool
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(profile: ProfileMetadata?, shouldEmitSuccessFeedback: Bool, shouldDismiss: Bool, errorMessage: String?) {
+        self.profile = profile
+        self.shouldEmitSuccessFeedback = shouldEmitSuccessFeedback
+        self.shouldDismiss = shouldDismiss
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension ProfileUpdateResultProjection: Sendable {}
+#endif
+
+
+extension ProfileUpdateResultProjection: Equatable, Hashable {
+    public static func ==(lhs: ProfileUpdateResultProjection, rhs: ProfileUpdateResultProjection) -> Bool {
+        if lhs.profile != rhs.profile {
+            return false
+        }
+        if lhs.shouldEmitSuccessFeedback != rhs.shouldEmitSuccessFeedback {
+            return false
+        }
+        if lhs.shouldDismiss != rhs.shouldDismiss {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(profile)
+        hasher.combine(shouldEmitSuccessFeedback)
+        hasher.combine(shouldDismiss)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileUpdateResultProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileUpdateResultProjection {
+        return
+            try ProfileUpdateResultProjection(
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf), 
+                shouldEmitSuccessFeedback: FfiConverterBool.read(from: &buf), 
+                shouldDismiss: FfiConverterBool.read(from: &buf), 
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileUpdateResultProjection, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeProfileMetadata.write(value.profile, into: &buf)
+        FfiConverterBool.write(value.shouldEmitSuccessFeedback, into: &buf)
+        FfiConverterBool.write(value.shouldDismiss, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileUpdateResultProjection_lift(_ buf: RustBuffer) throws -> ProfileUpdateResultProjection {
+    return try FfiConverterTypeProfileUpdateResultProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileUpdateResultProjection_lower(_ value: ProfileUpdateResultProjection) -> RustBuffer {
+    return FfiConverterTypeProfileUpdateResultProjection.lower(value)
 }
 
 
@@ -45193,16 +45635,25 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_follow_action() != 10930) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_follow_mutation_apply() != 41373) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_handle() != 16948) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_identity() != 18652) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_image_upload_result() != 40968) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_relationship() != 24727) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_update() != 16047) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_profile_update_result() != 63930) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_public_key_display() != 35557) {

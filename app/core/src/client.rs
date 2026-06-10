@@ -1332,6 +1332,20 @@ impl HighlighterCore {
         profile::profile_update_projection(input)
     }
 
+    pub fn project_profile_image_upload_result(
+        &self,
+        input: profile::ProfileImageUploadResultInput,
+    ) -> profile::ProfileImageUploadResultProjection {
+        profile::profile_image_upload_result_projection(input)
+    }
+
+    pub fn project_profile_update_result(
+        &self,
+        input: profile::ProfileUpdateResultInput,
+    ) -> profile::ProfileUpdateResultProjection {
+        profile::profile_update_result_projection(input)
+    }
+
     /// Publish a new kind:0 metadata event for the current user. Preserves
     /// any unknown JSON fields the user had set via other clients —
     /// only the canonical fields the edit form drives get overwritten.
@@ -1879,6 +1893,13 @@ impl HighlighterCore {
         }
         .await;
         profile::profile_follow_mutation_snapshot(input, result)
+    }
+
+    pub fn project_profile_follow_mutation_apply(
+        &self,
+        input: profile::ProfileFollowMutationApplyInput,
+    ) -> profile::ProfileFollowMutationApplyProjection {
+        profile::profile_follow_mutation_apply_projection(input)
     }
 
     /// Screen-shaped snapshot for the capture book picker. Rust owns recent
