@@ -1294,6 +1294,8 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectCommentPublishResult(input: CommentPublishResultInput)  -> CommentPublishResultProjection
 
+    func projectCommentSnapshotApply(input: CommentSnapshotApplyInput)  -> CommentSnapshotApplyProjection
+
     /**
      * Project a comment thread screen. Rust owns focused-node lookup,
      * visible child selection, and thread chrome labels.
@@ -3858,6 +3860,14 @@ open func projectCommentPublishResult(input: CommentPublishResultInput) -> Comme
     return try!  FfiConverterTypeCommentPublishResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_comment_publish_result(self.uniffiClonePointer(),
         FfiConverterTypeCommentPublishResultInput_lower(input),$0
+    )
+})
+}
+
+open func projectCommentSnapshotApply(input: CommentSnapshotApplyInput) -> CommentSnapshotApplyProjection  {
+    return try!  FfiConverterTypeCommentSnapshotApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_comment_snapshot_apply(self.uniffiClonePointer(),
+        FfiConverterTypeCommentSnapshotApplyInput_lower(input),$0
     )
 })
 }
@@ -14516,6 +14526,138 @@ public func FfiConverterTypeCommentScopeSnapshot_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeCommentScopeSnapshot_lower(_ value: CommentScopeSnapshot) -> RustBuffer {
     return FfiConverterTypeCommentScopeSnapshot.lower(value)
+}
+
+
+public struct CommentSnapshotApplyInput {
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(error: String) {
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension CommentSnapshotApplyInput: Sendable {}
+#endif
+
+
+extension CommentSnapshotApplyInput: Equatable, Hashable {
+    public static func ==(lhs: CommentSnapshotApplyInput, rhs: CommentSnapshotApplyInput) -> Bool {
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentSnapshotApplyInput: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentSnapshotApplyInput {
+        return
+            try CommentSnapshotApplyInput(
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentSnapshotApplyInput, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentSnapshotApplyInput_lift(_ buf: RustBuffer) throws -> CommentSnapshotApplyInput {
+    return try FfiConverterTypeCommentSnapshotApplyInput.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentSnapshotApplyInput_lower(_ value: CommentSnapshotApplyInput) -> RustBuffer {
+    return FfiConverterTypeCommentSnapshotApplyInput.lower(value)
+}
+
+
+public struct CommentSnapshotApplyProjection {
+    public var shouldApplySnapshot: Bool
+    public var loadError: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shouldApplySnapshot: Bool, loadError: String?) {
+        self.shouldApplySnapshot = shouldApplySnapshot
+        self.loadError = loadError
+    }
+}
+
+#if compiler(>=6)
+extension CommentSnapshotApplyProjection: Sendable {}
+#endif
+
+
+extension CommentSnapshotApplyProjection: Equatable, Hashable {
+    public static func ==(lhs: CommentSnapshotApplyProjection, rhs: CommentSnapshotApplyProjection) -> Bool {
+        if lhs.shouldApplySnapshot != rhs.shouldApplySnapshot {
+            return false
+        }
+        if lhs.loadError != rhs.loadError {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shouldApplySnapshot)
+        hasher.combine(loadError)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentSnapshotApplyProjection: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentSnapshotApplyProjection {
+        return
+            try CommentSnapshotApplyProjection(
+                shouldApplySnapshot: FfiConverterBool.read(from: &buf),
+                loadError: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentSnapshotApplyProjection, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.shouldApplySnapshot, into: &buf)
+        FfiConverterOptionString.write(value.loadError, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentSnapshotApplyProjection_lift(_ buf: RustBuffer) throws -> CommentSnapshotApplyProjection {
+    return try FfiConverterTypeCommentSnapshotApplyProjection.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentSnapshotApplyProjection_lower(_ value: CommentSnapshotApplyProjection) -> RustBuffer {
+    return FfiConverterTypeCommentSnapshotApplyProjection.lower(value)
 }
 
 
@@ -42963,6 +43105,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_publish_result() != 60245) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_snapshot_apply() != 6796) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_comment_thread_view() != 58541) {

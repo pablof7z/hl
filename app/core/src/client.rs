@@ -1648,6 +1648,13 @@ impl HighlighterCore {
         comments::comment_publish_result_projection(input)
     }
 
+    pub fn project_comment_snapshot_apply(
+        &self,
+        input: comments::CommentSnapshotApplyInput,
+    ) -> comments::CommentSnapshotApplyProjection {
+        comments::comment_snapshot_apply_projection(input)
+    }
+
     /// Project a comment thread screen. Rust owns focused-node lookup,
     /// visible child selection, and thread chrome labels.
     pub fn project_comment_thread_view(

@@ -1081,6 +1081,12 @@ actor SafeHighlighterCore {
         core.projectCommentPublishResult(input: input)
     }
 
+    nonisolated func projectCommentSnapshotApply(
+        input: CommentSnapshotApplyInput
+    ) -> CommentSnapshotApplyProjection {
+        core.projectCommentSnapshotApply(input: input)
+    }
+
     nonisolated func projectCommentThreadView(
         input: CommentThreadViewProjectionInput
     ) -> CommentThreadViewProjection {

@@ -45,6 +45,17 @@ pub struct CommentPublishResultProjection {
     pub error_message: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommentSnapshotApplyInput {
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommentSnapshotApplyProjection {
+    pub should_apply_snapshot: bool,
+    pub load_error: Option<String>,
+}
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct CommentThreadViewProjectionInput {
     pub tree: Vec<CommentThreadNode>,
@@ -171,6 +182,21 @@ pub fn comment_publish_result_projection(
     CommentPublishResultProjection {
         did_publish: error_message.is_empty(),
         error_message,
+    }
+}
+
+pub fn comment_snapshot_apply_projection(
+    input: CommentSnapshotApplyInput,
+) -> CommentSnapshotApplyProjection {
+    let error_message = input.error.trim().to_string();
+    let load_error = if error_message.is_empty() {
+        None
+    } else {
+        Some(error_message)
+    };
+    CommentSnapshotApplyProjection {
+        should_apply_snapshot: load_error.is_none(),
+        load_error,
     }
 }
 
@@ -1560,6 +1586,21 @@ mod tests {
         });
         assert!(!failed.did_publish);
         assert_eq!(failed.error_message, "publish failed");
+    }
+
+    #[test]
+    fn comment_snapshot_apply_projection_blocks_error_snapshots() {
+        let success = comment_snapshot_apply_projection(CommentSnapshotApplyInput {
+            error: String::new(),
+        });
+        assert!(success.should_apply_snapshot);
+        assert_eq!(success.load_error, None);
+
+        let failed = comment_snapshot_apply_projection(CommentSnapshotApplyInput {
+            error: " refresh failed ".into(),
+        });
+        assert!(!failed.should_apply_snapshot);
+        assert_eq!(failed.load_error.as_deref(), Some("refresh failed"));
     }
 
     fn comment(event_id: &str, parent_tag_value: &str, created_at: Option<u64>) -> CommentRecord {

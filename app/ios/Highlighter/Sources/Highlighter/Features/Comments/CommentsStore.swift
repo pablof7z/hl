@@ -50,19 +50,25 @@ final class CommentsStore {
         isLoading = true
         loadError = nil
         let snapshot = await core.getCommentThreadSnapshot(scope: scope)
-        if snapshot.error.isEmpty {
-            apply(snapshot: snapshot)
+        let applyProjection = core.projectCommentSnapshotApply(
+            input: CommentSnapshotApplyInput(error: snapshot.error)
+        )
+        if applyProjection.shouldApplySnapshot {
+            apply(snapshot: snapshot, projection: applyProjection)
         } else {
-            loadError = snapshot.error
+            loadError = applyProjection.loadError
         }
         isLoading = false
     }
 
-    private func apply(snapshot: CommentThreadSnapshot) {
+    private func apply(
+        snapshot: CommentThreadSnapshot,
+        projection: CommentSnapshotApplyProjection
+    ) {
         records = snapshot.records
         tree = snapshot.tree
         apply(interactions: snapshot.interactions)
-        loadError = snapshot.error.isEmpty ? nil : snapshot.error
+        loadError = projection.loadError
     }
 
     private func apply(interactions snapshot: CommentInteractionSnapshot) {
@@ -108,7 +114,11 @@ final class CommentsStore {
             input: CommentPublishResultInput(error: outcome.error)
         )
         guard result.didPublish else { return outcome }
-        apply(snapshot: outcome.snapshot)
+        let applyProjection = core.projectCommentSnapshotApply(
+            input: CommentSnapshotApplyInput(error: outcome.snapshot.error)
+        )
+        guard applyProjection.shouldApplySnapshot else { return outcome }
+        apply(snapshot: outcome.snapshot, projection: applyProjection)
         setDraft("", forParent: parentEventId)
         return outcome
     }
