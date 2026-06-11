@@ -1020,6 +1020,7 @@ dependencies = [
  "dirs",
  "futures",
  "hex",
+ "nmp-feedback",
  "nostr",
  "nostr-ndb",
  "nostr-sdk",
@@ -1592,6 +1593,15 @@ name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
+
+[[package]]
+name = "nmp-feedback"
+version = "0.1.0"
+source = "git+https://github.com/pablof7z/nmp-feedback.git?rev=3d238e6e3750ca4473ea24c5f29d26c9faa3ccd6#3d238e6e3750ca4473ea24c5f29d26c9faa3ccd6"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "no_std_io2"

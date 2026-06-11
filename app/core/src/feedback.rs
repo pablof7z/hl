@@ -8,6 +8,10 @@
 
 use std::collections::HashMap;
 
+use nmp_feedback::{
+    FeedbackConfig, DEFAULT_FEEDBACK_RELAY, KIND_FEEDBACK_NOTE as NMP_KIND_FEEDBACK_NOTE,
+    KIND_FEEDBACK_THREAD_METADATA as NMP_KIND_FEEDBACK_THREAD_METADATA,
+};
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
@@ -22,10 +26,10 @@ pub const HIGHLIGHTER_PROJECT_COORDINATE: &str =
 /// are scoped to this relay only — they do NOT fan out to the user's general
 /// relay set. Both publishes and subscriptions for kind:1/513 with the
 /// project `a` tag are pinned here.
-pub const FEEDBACK_RELAY: &str = "wss://relay.tenex.chat";
+pub const FEEDBACK_RELAY: &str = DEFAULT_FEEDBACK_RELAY;
 
-pub const KIND_FEEDBACK_NOTE: u16 = 1;
-pub const KIND_FEEDBACK_THREAD_META: u16 = 513;
+pub const KIND_FEEDBACK_NOTE: u16 = NMP_KIND_FEEDBACK_NOTE as u16;
+pub const KIND_FEEDBACK_THREAD_META: u16 = NMP_KIND_FEEDBACK_THREAD_METADATA as u16;
 pub const KIND_PROJECT_DEFINITION: u16 = 31933;
 
 /// Threads authored by `current_user_pubkey` that `a`-tag `coordinate`. Each
@@ -272,14 +276,12 @@ pub async fn publish_note(
         None => None,
     };
 
-    let mut tags: Vec<Tag> = Vec::with_capacity(3);
-    tags.push(parse_tag(&["a", coordinate])?);
+    let parent_root_hex = parent_root.as_ref().map(EventId::to_hex);
+    let mut feedback_config = FeedbackConfig::new(coordinate).with_relay(FEEDBACK_RELAY);
     if let Some(agent) = &agent_pubkey {
-        tags.push(parse_tag(&["p", agent])?);
+        feedback_config = feedback_config.with_agent_pubkey(agent.clone());
     }
-    if let Some(parent) = parent_root {
-        tags.push(parse_tag(&["e", &parent.to_hex(), "", "root"])?);
-    }
+    let tags = build_feedback_tags(&feedback_config, "bug", parent_root_hex.as_deref(), None)?;
 
     let builder = EventBuilder::new(Kind::Custom(KIND_FEEDBACK_NOTE), body).tags(tags);
     let client = runtime.client();
@@ -411,6 +413,19 @@ fn parse_coordinate(coordinate: &str) -> Result<(u16, String, String), CoreError
 fn parse_tag(parts: &[&str]) -> Result<Tag, CoreError> {
     Tag::parse(parts.iter().map(|s| s.to_string()).collect::<Vec<_>>())
         .map_err(|e| CoreError::Other(format!("build tag: {e}")))
+}
+
+fn build_feedback_tags(
+    config: &FeedbackConfig,
+    category: &str,
+    parent_event_id: Option<&str>,
+    reply_to_pubkey: Option<&str>,
+) -> Result<Vec<Tag>, CoreError> {
+    config
+        .tags(category, parent_event_id, reply_to_pubkey)
+        .into_iter()
+        .map(|parts| Tag::parse(parts).map_err(|e| CoreError::Other(format!("build tag: {e}"))))
+        .collect()
 }
 
 fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
