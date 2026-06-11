@@ -23,16 +23,23 @@ enum BookmarkFilter: CaseIterable, Identifiable {
     }
 }
 
+enum BookmarkScope {
+    case mine, explore
+}
+
 struct BookmarksView: View {
     @Environment(HighlighterStore.self) private var app
     @Environment(\.dismiss) private var dismiss
-    @State private var store = BookmarkStore()
+    @State private var scope: BookmarkScope = .mine
     @State private var filter: BookmarkFilter = .articles
 
     var body: some View {
         NavigationStack {
             Group {
-                if store.isLoading && store.myArticles.isEmpty && store.myBookmarkSets.isEmpty {
+                if app.bookmarks.isLoading
+                    && app.bookmarks.articles.isEmpty
+                    && app.bookmarks.myBookmarkSets.isEmpty
+                    && app.bookmarks.myCurationSets.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -57,19 +64,17 @@ struct BookmarksView: View {
                 SetDetailView(record: rec)
             }
         }
-        .task(id: app.bookmarkedArticleAddresses) {
-            guard let bridge = app.eventBridge else { return }
-            await store.start(
-                addresses: app.bookmarkedArticleAddresses,
-                core: app.safeCore,
-                bridge: bridge
-            )
+        .task {
+            app.openBookmarks()
         }
-        .onDisappear { store.stop() }
+        .refreshable {
+            app.refreshBookmarks()
+        }
+        .onDisappear { app.closeBookmarks() }
     }
 
     private var scopePicker: some View {
-        Picker("Scope", selection: $store.scope) {
+        Picker("Scope", selection: $scope) {
             Text("Mine").tag(BookmarkScope.mine)
             Text("Explore").tag(BookmarkScope.explore)
         }
@@ -80,7 +85,15 @@ struct BookmarksView: View {
     private var scrollContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if store.scope == .mine {
+                if let errorMessage = app.bookmarks.errorMessage, !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                }
+
+                if scope == .mine {
                     filterChipRail
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
@@ -137,7 +150,7 @@ struct BookmarksView: View {
             articlesContent
         case .collections:
             collectionsContent(
-                sets: store.myBookmarkSets + store.myCurationSets,
+                sets: app.bookmarks.myBookmarkSets + app.bookmarks.myCurationSets,
                 emptyTitle: "No collections yet",
                 emptyMessage: "Create bookmark or curation sets to organise your saved content."
             )
@@ -148,7 +161,7 @@ struct BookmarksView: View {
 
     @ViewBuilder
     private var articlesContent: some View {
-        if store.myArticles.isEmpty {
+        if app.bookmarks.articles.isEmpty {
             unavailableState(
                 icon: "bookmark",
                 title: "No bookmarks yet",
@@ -156,7 +169,7 @@ struct BookmarksView: View {
             )
         } else {
             LazyVStack(spacing: 0) {
-                ForEach(store.myArticles, id: \.eventId) { article in
+                ForEach(app.bookmarks.articles, id: \.eventId) { article in
                     NavigationLink(value: ArticleReaderTarget(pubkey: article.pubkey, dTag: article.identifier, seed: article)) {
                         BookmarkedArticleRow(article: article)
                             .padding(.horizontal, 16)
@@ -171,7 +184,7 @@ struct BookmarksView: View {
 
     @ViewBuilder
     private var webContent: some View {
-        if store.myWebBookmarks.isEmpty {
+        if app.bookmarks.webBookmarks.isEmpty {
             unavailableState(
                 icon: "globe",
                 title: "No web bookmarks yet",
@@ -179,7 +192,7 @@ struct BookmarksView: View {
             )
         } else {
             LazyVStack(spacing: 0) {
-                ForEach(store.myWebBookmarks, id: \.url) { bookmark in
+                ForEach(app.bookmarks.webBookmarks, id: \.url) { bookmark in
                     WebBookmarkRow(bookmark: bookmark)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
@@ -191,7 +204,7 @@ struct BookmarksView: View {
 
     @ViewBuilder
     private var exploreContent: some View {
-        if store.followingCurationSets.isEmpty {
+        if app.bookmarks.followingCurationSets.isEmpty {
             unavailableState(
                 icon: "rectangle.stack",
                 title: "Nothing to explore",
@@ -199,7 +212,7 @@ struct BookmarksView: View {
             )
         } else {
             collectionsContent(
-                sets: store.followingCurationSets,
+                sets: app.bookmarks.followingCurationSets,
                 emptyTitle: "Nothing to explore",
                 emptyMessage: "People you follow haven't created any curation sets yet."
             )
@@ -284,7 +297,7 @@ struct BookmarkedArticleRow: View {
                 .foregroundStyle(Color.highlighterInkMuted.opacity(0.5))
         }
         .task(id: article.pubkey) {
-            await app.requestProfile(pubkeyHex: article.pubkey)
+            app.requestProfile(pubkeyHex: article.pubkey)
         }
     }
 
@@ -314,7 +327,7 @@ struct BookmarkedArticleRow: View {
     }
 
     private var authorName: String {
-        let profile = app.profileCache[article.pubkey]
+        let profile = app.profile(pubkeyHex: article.pubkey)
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return String(article.pubkey.prefix(10))
@@ -352,7 +365,7 @@ struct CollectionRow: View {
     }
 
     private var curatorName: String {
-        let profile = app.profileCache[record.pubkey]
+        let profile = app.profile(pubkeyHex: record.pubkey)
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return String(record.pubkey.prefix(10))
@@ -382,7 +395,7 @@ struct CollectionRow: View {
                 HStack(spacing: 6) {
                     AuthorAvatar(
                         pubkey: record.pubkey,
-                        pictureURL: app.profileCache[record.pubkey]?.picture ?? "",
+                        pictureURL: app.profile(pubkeyHex: record.pubkey)?.picture ?? "",
                         displayInitial: curatorInitial,
                         size: 16
                     )
@@ -415,7 +428,7 @@ struct CollectionRow: View {
                 .foregroundStyle(Color.highlighterInkMuted.opacity(0.5))
         }
         .task(id: record.pubkey) {
-            await app.requestProfile(pubkeyHex: record.pubkey)
+            app.requestProfile(pubkeyHex: record.pubkey)
         }
     }
 }
@@ -499,4 +512,3 @@ struct WebBookmarkRow: View {
         }
     }
 }
-

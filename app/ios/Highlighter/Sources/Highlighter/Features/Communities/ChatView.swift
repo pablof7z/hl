@@ -92,7 +92,7 @@ struct ChatView: View {
                         ForEach(Array(store.messages.enumerated()), id: \.element.eventId) { index, message in
                             ChatMessageRow(
                                 message: message,
-                                profile: app.profileCache[message.authorPubkey],
+                                profile: app.profile(pubkeyHex: message.authorPubkey),
                                 showHeader: shouldShowHeader(at: index),
                                 replyToMessage: parentMessage(for: message),
                                 replyToProfile: parentProfile(for: message),
@@ -100,7 +100,7 @@ struct ChatView: View {
                             )
                             .id(message.eventId)
                             .task(id: message.authorPubkey) {
-                                await app.requestProfile(pubkeyHex: message.authorPubkey)
+                                app.requestProfile(pubkeyHex: message.authorPubkey)
                             }
                             .onAppear {
                                 if index == store.messages.count - 1 {
@@ -284,11 +284,11 @@ struct ChatView: View {
 
     private func parentProfile(for message: ChatMessageRecord) -> ProfileMetadata? {
         guard let parent = parentMessage(for: message) else { return nil }
-        return app.profileCache[parent.authorPubkey]
+        return app.profile(pubkeyHex: parent.authorPubkey)
     }
 
     private func displayName(for pubkey: String) -> String {
-        if let p = app.profileCache[pubkey] {
+        if let p = app.profile(pubkeyHex: pubkey) {
             if !p.displayName.isEmpty { return p.displayName }
             if !p.name.isEmpty { return p.name }
         }

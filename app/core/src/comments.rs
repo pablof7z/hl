@@ -26,8 +26,7 @@ pub fn query_for_reference(
     if tag_value.is_empty() {
         return Ok(Vec::new());
     }
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let ndb_cap = limit.max(32) as i32;
     let filter = NdbFilter::new()
@@ -41,9 +40,13 @@ pub fn query_for_reference(
 
     let mut records: Vec<CommentRecord> = Vec::with_capacity(results.len());
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
         if let Some(rec) = record_from_event(&event) {
             records.push(rec);
         }
@@ -60,8 +63,8 @@ fn record_from_event(event: &Event) -> Option<CommentRecord> {
 
     // Root scope — one of uppercase A/E/I. Whichever appears first wins;
     // NIP-22 allows multiple for redundancy but typically only one applies.
-    let (root_tag_name, root_tag_value) = first_scope_tag(event, &["A", "E", "I"])
-        .unwrap_or((String::new(), String::new()));
+    let (root_tag_name, root_tag_value) =
+        first_scope_tag(event, &["A", "E", "I"]).unwrap_or((String::new(), String::new()));
 
     // Parent scope — lowercase a/e/i. Missing on top-level comments where
     // parent is the root itself; fall back to root in that case so callers
@@ -87,7 +90,9 @@ fn record_from_event(event: &Event) -> Option<CommentRecord> {
 fn first_scope_tag(event: &Event, names: &[&str]) -> Option<(String, String)> {
     for tag in event.tags.iter() {
         let s = tag.as_slice();
-        let Some(name) = s.first().map(String::as_str) else { continue };
+        let Some(name) = s.first().map(String::as_str) else {
+            continue;
+        };
         if names.contains(&name) {
             if let Some(value) = s.get(1).map(String::as_str) {
                 if !value.is_empty() {
@@ -135,11 +140,15 @@ pub async fn publish_comment(
 ) -> Result<CommentRecord, CoreError> {
     let content = content.trim();
     if content.is_empty() {
-        return Err(CoreError::InvalidInput("comment body must not be empty".into()));
+        return Err(CoreError::InvalidInput(
+            "comment body must not be empty".into(),
+        ));
     }
     let root_value = root_tag_value.trim();
     if root_value.is_empty() {
-        return Err(CoreError::InvalidInput("root tag value must not be empty".into()));
+        return Err(CoreError::InvalidInput(
+            "root tag value must not be empty".into(),
+        ));
     }
     let upper = root_tag_name.to_ascii_uppercase();
     let lower = root_tag_name.to_ascii_lowercase();

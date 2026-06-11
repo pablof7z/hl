@@ -21,7 +21,8 @@ struct AddRelaySheet: View {
     @State private var probeResult: Nip11Document?
     @State private var probeError: String?
     @State private var probeInFlight = false
-    @State private var debounceTask: Task<Void, Never>?
+    @State private var probeTask: Task<Void, Never>?
+    @FocusState private var urlFieldFocused: Bool
 
     /// Whether the URL looks like a wss:// or ws:// URL.
     private var isValid: Bool {
@@ -41,7 +42,14 @@ struct AddRelaySheet: View {
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .onChange(of: urlText) { _, _ in scheduleProbe() }
+                        .focused($urlFieldFocused)
+                        .onSubmit { startProbeForCurrentURL() }
+                        .onChange(of: urlText) { _, _ in resetProbe() }
+                        .onChange(of: urlFieldFocused) { _, focused in
+                            if !focused {
+                                startProbeForCurrentURL()
+                            }
+                        }
                     if isUnencrypted {
                         Label("Unencrypted connection — use wss:// when possible.", systemImage: "exclamationmark.triangle")
                             .font(.caption)
@@ -50,7 +58,7 @@ struct AddRelaySheet: View {
                     if let paste = clipboardURL, paste != urlText {
                         Button {
                             urlText = paste
-                            scheduleProbe()
+                            startProbeForCurrentURL()
                         } label: {
                             HStack {
                                 Image(systemName: "doc.on.clipboard")
@@ -81,6 +89,9 @@ struct AddRelaySheet: View {
             }
             .navigationTitle("Add Relay")
             .navigationBarTitleDisplayMode(.inline)
+            .onDisappear {
+                probeTask?.cancel()
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
@@ -167,18 +178,25 @@ struct AddRelaySheet: View {
         return joined.isEmpty ? "Reachable (no NIP-11 metadata)" : joined
     }
 
-    /// Debounce the probe so it runs at most once per 600ms of idle typing.
+    /// Clears stale NIP-11 output when the field changes. A new probe runs
+    /// when the user submits the field or moves focus away.
+    private func resetProbe() {
+        probeTask?.cancel()
+        probeTask = nil
+        probeResult = nil
+        probeError = nil
+        probeInFlight = false
+    }
+
     /// Cancels an in-flight probe if the URL changes before it resolves.
-    private func scheduleProbe() {
-        debounceTask?.cancel()
+    private func startProbeForCurrentURL() {
+        probeTask?.cancel()
         probeResult = nil
         probeError = nil
         guard isValid else { return }
         let url = urlText.trimmingCharacters(in: .whitespaces)
         let core = appStore.safeCore
-        debounceTask = Task { [url] in
-            try? await Task.sleep(for: .milliseconds(600))
-            guard !Task.isCancelled else { return }
+        probeTask = Task { [url] in
             probeInFlight = true
             defer { probeInFlight = false }
             do {

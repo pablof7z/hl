@@ -33,7 +33,7 @@ pub struct CommunitySummary {
 }
 
 /// Mirrors `ArtifactPreview` in `web/src/lib/ndk/artifacts.ts:19-53`.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, uniffi::Record)]
 pub struct ArtifactPreview {
     pub id: String,
     pub url: String,
@@ -75,7 +75,7 @@ pub struct ArtifactPreview {
     pub chapters: Vec<Chapter>,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, uniffi::Record)]
 pub struct Chapter {
     pub start_seconds: f64,
     pub title: String,

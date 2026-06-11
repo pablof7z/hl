@@ -55,8 +55,7 @@ pub fn query_rooms_with_friends(
         return Ok(Vec::new());
     }
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let user_hex_lower = user_pubkey_hex.to_ascii_lowercase();
 
@@ -141,9 +140,7 @@ pub fn query_rooms_with_friends(
     // care about which follows appear, the union across all 39002s for the
     // group is fine — a follow listed in the newest alone OR in an older
     // one still counts. We do prefer the newest when there's a conflict.
-    let members_filter = NdbFilter::new()
-        .kinds([KIND_GROUP_MEMBERS as u64])
-        .build();
+    let members_filter = NdbFilter::new().kinds([KIND_GROUP_MEMBERS as u64]).build();
     let member_results = ndb
         .query(&txn, &[members_filter], 4096)
         .map_err(|e| CoreError::Cache(format!("query members: {e}")))?;
@@ -193,9 +190,8 @@ pub fn query_rooms_with_friends(
 
     // Drop rooms the user is already in and anything below the 2-follow
     // threshold.
-    friends_in_group.retain(|group_id, pubkeys| {
-        !user_is_in.contains(group_id) && pubkeys.len() >= 2
-    });
+    friends_in_group
+        .retain(|group_id, pubkeys| !user_is_in.contains(group_id) && pubkeys.len() >= 2);
     if friends_in_group.is_empty() {
         return Ok(Vec::new());
     }
@@ -278,8 +274,8 @@ pub fn query_rooms_from_read_authors(
     // First pass: read highlights + shares inside one txn, then drop it so
     // downstream helpers can open their own (nostrdb doesn't nest).
     {
-        let txn = Transaction::new(ndb)
-            .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+        let txn =
+            Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
         // 1. User's kind:9802 → collect author pubkeys from `a` tags.
         let pk_bytes: [u8; 32] = user.to_bytes();
@@ -315,8 +311,7 @@ pub fn query_rooms_from_read_authors(
                 if kind_str != "30023" {
                     continue;
                 }
-                let Some(author_hex) = parts.next().map(|s| s.trim().to_ascii_lowercase())
-                else {
+                let Some(author_hex) = parts.next().map(|s| s.trim().to_ascii_lowercase()) else {
                     continue;
                 };
                 if author_hex.is_empty() || author_hex == user_hex_lower {
@@ -349,8 +344,7 @@ pub fn query_rooms_from_read_authors(
             if !authors_lower.contains(&author_hex) {
                 continue;
             }
-            let Some(group_id) = first_tag_value(&event, "h").map(|s| s.trim().to_string())
-            else {
+            let Some(group_id) = first_tag_value(&event, "h").map(|s| s.trim().to_string()) else {
                 continue;
             };
             if group_id.is_empty() {
@@ -370,16 +364,14 @@ pub fn query_rooms_from_read_authors(
     }
 
     // 3. Exclude groups the user is already a member of.
-    let joined_ids: HashSet<String> = crate::groups::query_joined_communities_from_ndb(
-        ndb,
-        user_pubkey_hex,
-    )?
-    .into_iter()
-    .map(|c| c.id)
-    .collect();
+    let joined_ids: HashSet<String> =
+        crate::groups::query_joined_communities_from_ndb(ndb, user_pubkey_hex)?
+            .into_iter()
+            .map(|c| c.id)
+            .collect();
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("reopen ndb txn: {e}")))?;
+    let txn =
+        Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("reopen ndb txn: {e}")))?;
 
     // 4. Fetch metadata for candidate groups.
     let candidate_ids: Vec<String> = groups_to_authors
@@ -484,7 +476,10 @@ mod tests {
     }
 
     fn contacts(me: &Keys, follows: &[&Keys]) -> Event {
-        let tags: Vec<Tag> = follows.iter().map(|k| Tag::public_key(k.public_key())).collect();
+        let tags: Vec<Tag> = follows
+            .iter()
+            .map(|k| Tag::public_key(k.public_key()))
+            .collect();
         sign(me, 3, tags, "")
     }
 
@@ -621,7 +616,10 @@ mod tests {
         wait_for_ndb();
 
         let out = query_rooms_with_friends(&ndb, &me.public_key().to_hex(), 32).unwrap();
-        assert!(out.is_empty(), "rooms the user is already in must be excluded");
+        assert!(
+            out.is_empty(),
+            "rooms the user is already in must be excluded"
+        );
     }
 
     #[test]

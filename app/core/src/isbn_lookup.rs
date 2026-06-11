@@ -7,14 +7,181 @@
 //! 4. On any network / parse failure, fall through to a partial preview so
 //!    the user can fill the rest in manually.
 
-use std::time::Duration;
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
+use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tokio::sync::Notify;
 
 use crate::errors::CoreError;
 use crate::models::ArtifactPreview;
 
 const OPEN_LIBRARY_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Rust-owned ISBN preview cache. Durable entries are enriched previews from
+/// Open Library; partial previews from transient misses stay in memory only
+/// for the current core session so a network blip cannot permanently poison
+/// the user's library.
+pub struct IsbnPreviewStore {
+    path: PathBuf,
+    state: Mutex<IsbnCacheState>,
+    inflight: Mutex<HashMap<String, Arc<Notify>>>,
+}
+
+#[derive(Default)]
+struct IsbnCacheState {
+    entries: HashMap<String, IsbnCacheEntry>,
+}
+
+#[derive(Clone)]
+struct IsbnCacheEntry {
+    preview: ArtifactPreview,
+    durable: bool,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+struct IsbnCacheFile {
+    entries: HashMap<String, ArtifactPreview>,
+}
+
+impl IsbnPreviewStore {
+    /// Open the ISBN preview store rooted at the core data directory. Missing
+    /// or unreadable cache files are treated as empty.
+    pub fn open(data_dir: &std::path::Path) -> Self {
+        let path = data_dir.join("isbn_previews.json");
+        let file = match std::fs::read(&path) {
+            Ok(bytes) => serde_json::from_slice::<IsbnCacheFile>(&bytes).unwrap_or_default(),
+            Err(_) => IsbnCacheFile::default(),
+        };
+        let entries = file
+            .entries
+            .into_iter()
+            .map(|(isbn, preview)| {
+                (
+                    isbn,
+                    IsbnCacheEntry {
+                        preview,
+                        durable: true,
+                    },
+                )
+            })
+            .collect();
+        Self {
+            path,
+            state: Mutex::new(IsbnCacheState { entries }),
+            inflight: Mutex::new(HashMap::new()),
+        }
+    }
+
+    fn get(&self, isbn13: &str) -> Option<ArtifactPreview> {
+        let guard = self.state.lock();
+        guard.entries.get(isbn13).map(|entry| entry.preview.clone())
+    }
+
+    fn put(&self, isbn13: String, preview: ArtifactPreview) {
+        let durable = is_durable_preview(&preview);
+        let entry = IsbnCacheEntry { preview, durable };
+        let snapshot = {
+            let mut guard = self.state.lock();
+            guard.entries.insert(isbn13, entry);
+            if durable {
+                let entries = guard
+                    .entries
+                    .iter()
+                    .filter_map(|(isbn, entry)| {
+                        entry.durable.then(|| (isbn.clone(), entry.preview.clone()))
+                    })
+                    .collect();
+                serde_json::to_vec(&IsbnCacheFile { entries }).ok()
+            } else {
+                None
+            }
+        };
+        if let Some(bytes) = snapshot {
+            if let Err(e) = std::fs::write(&self.path, &bytes) {
+                tracing::warn!(error = %e, path = ?self.path, "persist ISBN preview cache");
+            }
+        }
+    }
+
+    fn acquire(self: &Arc<Self>, isbn13: &str) -> IsbnInflightSlot {
+        let mut guard = self.inflight.lock();
+        if let Some(notify) = guard.get(isbn13) {
+            return IsbnInflightSlot::Follower(IsbnInflightFollower {
+                notify: notify.clone(),
+            });
+        }
+        let notify = Arc::new(Notify::new());
+        guard.insert(isbn13.to_string(), notify.clone());
+        IsbnInflightSlot::Lead(IsbnInflightLead {
+            store: Arc::clone(self),
+            isbn13: isbn13.to_string(),
+            notify,
+        })
+    }
+}
+
+enum IsbnInflightSlot {
+    Lead(IsbnInflightLead),
+    Follower(IsbnInflightFollower),
+}
+
+struct IsbnInflightLead {
+    store: Arc<IsbnPreviewStore>,
+    isbn13: String,
+    notify: Arc<Notify>,
+}
+
+impl IsbnInflightLead {
+    fn done(self) {
+        {
+            let mut guard = self.store.inflight.lock();
+            guard.remove(&self.isbn13);
+        }
+        self.notify.notify_waiters();
+    }
+}
+
+struct IsbnInflightFollower {
+    notify: Arc<Notify>,
+}
+
+impl IsbnInflightFollower {
+    async fn wait(self) {
+        self.notify.notified().await;
+    }
+}
+
+/// Cached entry point used by `HighlighterCore`. Native platforms call the
+/// same FFI method and therefore share normalization, fetch, cache, and
+/// fallback semantics.
+pub async fn lookup_isbn_cached(
+    store: Arc<IsbnPreviewStore>,
+    isbn: &str,
+) -> Result<ArtifactPreview, CoreError> {
+    let isbn13 = normalize_isbn(isbn)?;
+    if let Some(hit) = store.get(&isbn13) {
+        return Ok(hit);
+    }
+
+    match store.acquire(&isbn13) {
+        IsbnInflightSlot::Lead(lead) => {
+            let result = lookup_isbn(&isbn13).await;
+            if let Ok(preview) = &result {
+                store.put(isbn13, preview.clone());
+            }
+            lead.done();
+            result
+        }
+        IsbnInflightSlot::Follower(follower) => {
+            follower.wait().await;
+            store
+                .get(&isbn13)
+                .ok_or_else(|| CoreError::Other("ISBN lookup completed without preview".into()))
+        }
+    }
+}
 
 /// Normalize, validate, and look up an ISBN via Open Library. On any failure,
 /// returns a partial `ArtifactPreview` with only `catalog_id=isbn:{digits}`,
@@ -34,20 +201,24 @@ pub async fn lookup_isbn(isbn: &str) -> Result<ArtifactPreview, CoreError> {
     }
 }
 
-/// Strip dashes/whitespace, require either 10 or 13 digits, canonicalize to
-/// 13-digit. Anything else → `CoreError::InvalidInput`.
-fn normalize_isbn(raw: &str) -> Result<String, CoreError> {
+/// Strip dashes/whitespace, require either a valid 10-digit ISBN or a valid
+/// Bookland ISBN-13, and canonicalize to 13 digits.
+pub fn normalize_isbn(raw: &str) -> Result<String, CoreError> {
     let digits: String = raw
         .chars()
         .filter(|c| !c.is_whitespace() && *c != '-')
         .collect();
 
-    if digits.chars().all(|c| c.is_ascii_digit()) && digits.len() == 13 {
+    if digits.chars().all(|c| c.is_ascii_digit())
+        && digits.len() == 13
+        && (digits.starts_with("978") || digits.starts_with("979"))
+        && has_valid_isbn13_checksum(&digits)
+    {
         return Ok(digits);
     }
 
-    // ISBN-10 may end in 'X' (check digit). We accept it as a single trailing
-    // 'X' after 9 digits and then convert to ISBN-13.
+    // ISBN-10 may end in 'X' (check digit). It must pass the ISBN-10 checksum
+    // before conversion so every platform rejects the same false positives.
     if digits.len() == 10
         && digits[..9].chars().all(|c| c.is_ascii_digit())
         && digits
@@ -55,19 +226,54 @@ fn normalize_isbn(raw: &str) -> Result<String, CoreError> {
             .nth(9)
             .map(|c| c.is_ascii_digit() || c == 'X' || c == 'x')
             .unwrap_or(false)
+        && has_valid_isbn10_checksum(&digits)
     {
         return Ok(isbn10_to_13(&digits));
     }
 
     Err(CoreError::InvalidInput(format!(
-        "ISBN must be 10 or 13 digits, got {:?}",
+        "ISBN must be a valid 10-digit ISBN or Bookland ISBN-13, got {:?}",
         raw
     )))
 }
 
-/// Convert a 10-digit ISBN to 13-digit by prepending "978" and recomputing
-/// the final check digit per the standard rule. We don't validate the
-/// incoming check digit — Open Library will reject malformed inputs.
+fn has_valid_isbn13_checksum(digits: &str) -> bool {
+    if digits.len() != 13 {
+        return false;
+    }
+    let mut sum = 0u32;
+    for (i, c) in digits.chars().enumerate() {
+        let Some(d) = c.to_digit(10) else {
+            return false;
+        };
+        sum += if i % 2 == 0 { d } else { d * 3 };
+    }
+    sum % 10 == 0
+}
+
+fn has_valid_isbn10_checksum(digits: &str) -> bool {
+    if digits.len() != 10 {
+        return false;
+    }
+    let mut sum = 0u32;
+    for (i, c) in digits.chars().enumerate() {
+        let value = if c == 'X' || c == 'x' {
+            if i != 9 {
+                return false;
+            }
+            10
+        } else if let Some(d) = c.to_digit(10) {
+            d
+        } else {
+            return false;
+        };
+        sum += value * (10 - i as u32);
+    }
+    sum % 11 == 0
+}
+
+/// Convert a valid 10-digit ISBN to 13 digits by prepending "978" and
+/// recomputing the final ISBN-13 check digit.
 fn isbn10_to_13(isbn10: &str) -> String {
     let prefix = format!("978{}", &isbn10[..9]);
     let check = compute_isbn13_check_digit(&prefix);
@@ -99,10 +305,7 @@ async fn fetch_open_library(isbn13: &str) -> Result<ArtifactPreview, String> {
     if !resp.status().is_success() {
         return Err(format!("HTTP {}", resp.status()));
     }
-    let body: Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("parse json: {e}"))?;
+    let body: Value = resp.json().await.map_err(|e| format!("parse json: {e}"))?;
 
     let title = body
         .get("title")
@@ -287,6 +490,17 @@ fn fnv1a(value: &str) -> u32 {
     hash
 }
 
+fn is_durable_preview(preview: &ArtifactPreview) -> bool {
+    [
+        preview.title.as_str(),
+        preview.author.as_str(),
+        preview.image.as_str(),
+        preview.description.as_str(),
+    ]
+    .iter()
+    .any(|value| !value.trim().is_empty())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,11 +513,20 @@ mod tests {
 
     #[test]
     fn normalize_isbn_converts_10_to_13() {
-        // ISBN-10 0-7352-1129-X (fictional check) → 978-0-7352-1129-? with
-        // recomputed check digit.
+        // ISBN-10 0-7352-1129-9 -> ISBN-13 with a recomputed check digit.
         let n = normalize_isbn("0735211299").unwrap();
-        assert!(n.starts_with("9780735211"));
-        assert_eq!(n.len(), 13);
+        assert_eq!(n, "9780735211292");
+    }
+
+    #[test]
+    fn normalize_isbn_rejects_non_bookland_ean13() {
+        assert!(normalize_isbn("1234567890128").is_err());
+    }
+
+    #[test]
+    fn normalize_isbn_rejects_bad_checksums() {
+        assert!(normalize_isbn("9780735211293").is_err());
+        assert!(normalize_isbn("073521129X").is_err());
     }
 
     #[test]
@@ -343,6 +566,52 @@ mod tests {
         assert!(!p.highlight_reference_key.is_empty());
     }
 
+    #[test]
+    fn isbn_preview_store_persists_enriched_previews() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let store = IsbnPreviewStore::open(tmp.path());
+        let preview = build_preview(
+            "9780735211292",
+            "The Pragmatic Programmer".into(),
+            "Andrew Hunt, David Thomas".into(),
+            "https://covers.openlibrary.org/b/isbn/9780735211292-L.jpg".into(),
+            "A practical software book.".into(),
+        );
+
+        store.put("9780735211292".into(), preview.clone());
+        let reopened = IsbnPreviewStore::open(tmp.path());
+        let cached = reopened
+            .get("9780735211292")
+            .expect("enriched preview should persist");
+
+        assert_eq!(cached.catalog_id, preview.catalog_id);
+        assert_eq!(cached.title, preview.title);
+        assert_eq!(cached.author, preview.author);
+        assert_eq!(
+            cached.highlight_reference_key,
+            preview.highlight_reference_key
+        );
+    }
+
+    #[test]
+    fn isbn_preview_store_keeps_partial_previews_session_only() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let store = IsbnPreviewStore::open(tmp.path());
+        let preview = partial_preview("9999999999994");
+
+        store.put("9999999999994".into(), preview);
+        assert!(
+            store.get("9999999999994").is_some(),
+            "partial preview should satisfy same-session callers"
+        );
+
+        let reopened = IsbnPreviewStore::open(tmp.path());
+        assert!(
+            reopened.get("9999999999994").is_none(),
+            "partial preview must not become durable cache state"
+        );
+    }
+
     /// End-to-end hit against the real Open Library API. Ignored by default
     /// — CI should not depend on a public service being up.
     #[ignore = "hits live Open Library API"]
@@ -366,14 +635,14 @@ mod tests {
     #[ignore = "hits live Open Library API"]
     #[tokio::test]
     async fn lookup_isbn_returns_partial_on_unknown_isbn() {
-        let preview = lookup_isbn("9999999999994")
+        let preview = lookup_isbn("9780000000002")
             .await
             .expect("partial preview on unknown ISBN, not error");
         assert_eq!(preview.source, "book");
-        assert_eq!(preview.catalog_id, "isbn:9999999999994");
+        assert_eq!(preview.catalog_id, "isbn:9780000000002");
         assert_eq!(preview.catalog_kind, "isbn");
         assert_eq!(preview.reference_tag_name, "i");
-        assert_eq!(preview.reference_tag_value, "isbn:9999999999994");
+        assert_eq!(preview.reference_tag_value, "isbn:9780000000002");
         assert!(preview.title.is_empty());
         assert!(preview.author.is_empty());
         assert!(preview.image.is_empty());

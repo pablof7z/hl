@@ -29,8 +29,7 @@ pub fn query_article(
     let author = PublicKey::from_hex(pubkey_hex)
         .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let pk_bytes: [u8; 32] = author.to_bytes();
     let filter = NdbFilter::new()
@@ -72,8 +71,7 @@ pub fn query_articles_by_author(
     let author = PublicKey::from_hex(pubkey_hex)
         .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let pk_bytes: [u8; 32] = author.to_bytes();
     // Fetch generously so the dedupe step has enough history to pick newest
@@ -137,18 +135,29 @@ pub fn build_articles(events: &[Event], limit: usize) -> Vec<ArticleRecord> {
 
 fn record_from_event(event: &Event) -> ArticleRecord {
     let identifier = first_tag_value(event, "d").unwrap_or("").trim().to_string();
-    let title = first_tag_value(event, "title").unwrap_or("").trim().to_string();
-    let summary = first_tag_value(event, "summary").unwrap_or("").trim().to_string();
-    let image = first_tag_value(event, "image").unwrap_or("").trim().to_string();
-    let published_at = first_tag_value(event, "published_at")
-        .and_then(|s| s.trim().parse::<u64>().ok());
+    let title = first_tag_value(event, "title")
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let summary = first_tag_value(event, "summary")
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let image = first_tag_value(event, "image")
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let published_at =
+        first_tag_value(event, "published_at").and_then(|s| s.trim().parse::<u64>().ok());
     let hashtags: Vec<String> = event
         .tags
         .iter()
         .filter_map(|tag| {
             let s = tag.as_slice();
             if s.first().map(String::as_str) == Some("t") {
-                s.get(1).map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+                s.get(1)
+                    .map(|v| v.trim().to_string())
+                    .filter(|v| !v.is_empty())
             } else {
                 None
             }
@@ -200,8 +209,20 @@ mod tests {
     #[test]
     fn dedupes_by_d_keeping_newest() {
         let keys = Keys::generate();
-        let older = sign_article(&keys, "post-1", vec![named("title", "Old")], 1_000, "old body");
-        let newer = sign_article(&keys, "post-1", vec![named("title", "New")], 2_000, "new body");
+        let older = sign_article(
+            &keys,
+            "post-1",
+            vec![named("title", "Old")],
+            1_000,
+            "old body",
+        );
+        let newer = sign_article(
+            &keys,
+            "post-1",
+            vec![named("title", "New")],
+            2_000,
+            "new body",
+        );
         let distinct = sign_article(&keys, "post-2", vec![named("title", "Other")], 1_500, "x");
         let out = build_articles(&[older, newer, distinct], 10);
         assert_eq!(out.len(), 2);
@@ -275,8 +296,8 @@ mod tests {
 
         let tmp = tempdir().expect("tempdir");
         let db_path = tmp.path().to_str().unwrap();
-        let ndb = Ndb::new(db_path, &NdbConfig::new().set_mapsize(64 * 1024 * 1024))
-            .expect("open ndb");
+        let ndb =
+            Ndb::new(db_path, &NdbConfig::new().set_mapsize(64 * 1024 * 1024)).expect("open ndb");
 
         let keys = Keys::generate();
         let older = sign_article(&keys, "post-x", vec![named("title", "Older")], 1_000, "v1");

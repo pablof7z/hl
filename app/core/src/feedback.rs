@@ -44,7 +44,9 @@ pub fn query_threads(
     let coordinate = coordinate.trim();
     let current_user_pubkey = current_user_pubkey.trim();
     if coordinate.is_empty() {
-        return Err(CoreError::InvalidInput("coordinate must not be empty".into()));
+        return Err(CoreError::InvalidInput(
+            "coordinate must not be empty".into(),
+        ));
     }
     if current_user_pubkey.is_empty() {
         return Ok(Vec::new());
@@ -54,8 +56,7 @@ pub fn query_threads(
         .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
     let pk_bytes: [u8; 32] = author.to_bytes();
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let roots_filter = NdbFilter::new()
         .kinds([KIND_FEEDBACK_NOTE as u64])
@@ -130,23 +131,20 @@ pub fn query_thread_events(
 ) -> Result<Vec<FeedbackEventRecord>, CoreError> {
     let root_event_id = root_event_id.trim();
     if root_event_id.is_empty() {
-        return Err(CoreError::InvalidInput("root_event_id must not be empty".into()));
+        return Err(CoreError::InvalidInput(
+            "root_event_id must not be empty".into(),
+        ));
     }
     let root_id = EventId::from_hex(root_event_id)
         .map_err(|e| CoreError::InvalidInput(format!("invalid event id: {e}")))?;
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     // ndb's `e` tag index is unreliable in this codebase (see the `h`-tag
     // note in subscriptions.rs::build_ndb_filters), so the replies filter is
     // kind-only and we post-filter by `e` tag in Rust.
-    let root_filter = NdbFilter::new()
-        .ids([root_id.as_bytes()])
-        .build();
-    let replies_filter = NdbFilter::new()
-        .kinds([KIND_FEEDBACK_NOTE as u64])
-        .build();
+    let root_filter = NdbFilter::new().ids([root_id.as_bytes()]).build();
+    let replies_filter = NdbFilter::new().kinds([KIND_FEEDBACK_NOTE as u64]).build();
 
     let mut events: Vec<Event> = Vec::new();
     let root_results = ndb
@@ -198,17 +196,13 @@ pub fn query_thread_events(
 /// Look up the project's kind:31933 by addressable coordinate and return the
 /// hex of its first `p` tag. None if the project event isn't cached or has
 /// no `p` tags.
-pub fn query_first_agent_pubkey(
-    ndb: &Ndb,
-    coordinate: &str,
-) -> Result<Option<String>, CoreError> {
+pub fn query_first_agent_pubkey(ndb: &Ndb, coordinate: &str) -> Result<Option<String>, CoreError> {
     let (kind, pubkey_hex, d_tag) = parse_coordinate(coordinate)?;
     let project_pubkey = PublicKey::from_hex(&pubkey_hex)
         .map_err(|e| CoreError::InvalidInput(format!("invalid project pubkey: {e}")))?;
     let pk_bytes: [u8; 32] = project_pubkey.to_bytes();
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let filter = NdbFilter::new()
         .kinds([kind as u64])
@@ -254,10 +248,14 @@ pub async fn publish_note(
     let coordinate = coordinate.trim();
     let body = body.trim();
     if coordinate.is_empty() {
-        return Err(CoreError::InvalidInput("coordinate must not be empty".into()));
+        return Err(CoreError::InvalidInput(
+            "coordinate must not be empty".into(),
+        ));
     }
     if body.is_empty() {
-        return Err(CoreError::InvalidInput("feedback body must not be empty".into()));
+        return Err(CoreError::InvalidInput(
+            "feedback body must not be empty".into(),
+        ));
     }
     parse_coordinate(coordinate)?;
     let agent_pubkey = match agent_pubkey.map(str::trim).filter(|s| !s.is_empty()) {
@@ -382,8 +380,7 @@ fn trim_preview(content: &str) -> String {
 fn has_root_e_marker(event: &Event) -> bool {
     event.tags.iter().any(|tag| {
         let s = tag.as_slice();
-        s.first().map(String::as_str) == Some("e")
-            && s.get(3).map(String::as_str) == Some("root")
+        s.first().map(String::as_str) == Some("e") && s.get(3).map(String::as_str) == Some("root")
     })
 }
 
@@ -444,7 +441,8 @@ mod tests {
     use nostrdb::{Config as NdbConfig, Ndb};
     use tempfile::tempdir;
 
-    const TEST_COORD: &str = "31933:0000000000000000000000000000000000000000000000000000000000000001:demo";
+    const TEST_COORD: &str =
+        "31933:0000000000000000000000000000000000000000000000000000000000000001:demo";
 
     fn open_ndb() -> (Ndb, tempfile::TempDir) {
         let tmp = tempdir().expect("tempdir");
@@ -545,13 +543,19 @@ mod tests {
             2_000,
         );
 
-        for e in [&root, &other_root, &other_project_root, &earlier_meta, &later_meta] {
+        for e in [
+            &root,
+            &other_root,
+            &other_project_root,
+            &earlier_meta,
+            &later_meta,
+        ] {
             process(&ndb, e);
         }
         flush();
 
-        let threads = query_threads(&ndb, TEST_COORD, &me.public_key().to_hex())
-            .expect("query_threads");
+        let threads =
+            query_threads(&ndb, TEST_COORD, &me.public_key().to_hex()).expect("query_threads");
         assert_eq!(threads.len(), 1, "only the user's root for this project");
         let t = &threads[0];
         assert_eq!(t.root_event_id, root.id.to_hex());
@@ -593,8 +597,8 @@ mod tests {
         process(&ndb, &reply);
         flush();
 
-        let threads = query_threads(&ndb, TEST_COORD, &me.public_key().to_hex())
-            .expect("query_threads");
+        let threads =
+            query_threads(&ndb, TEST_COORD, &me.public_key().to_hex()).expect("query_threads");
         assert_eq!(threads.len(), 1);
         assert_eq!(threads[0].root_event_id, root.id.to_hex());
     }
@@ -639,7 +643,12 @@ mod tests {
         let unrelated = sign(
             &agent,
             KIND_FEEDBACK_NOTE,
-            vec![tag(&["e", &Keys::generate().public_key().to_hex(), "", "root"])],
+            vec![tag(&[
+                "e",
+                &Keys::generate().public_key().to_hex(),
+                "",
+                "root",
+            ])],
             "different thread",
             2_500,
         );
@@ -800,9 +809,7 @@ mod tests {
     #[ignore]
     async fn live_full_ios_flow_returns_all_thread_events() {
         let tmp = tempdir().expect("tempdir");
-        let core = crate::client::HighlighterCore::new_with_data_dir(
-            tmp.path().to_path_buf(),
-        );
+        let core = crate::client::HighlighterCore::new_with_data_dir(tmp.path().to_path_buf());
 
         let root_hex =
             "4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949".to_string();
@@ -839,5 +846,4 @@ mod tests {
             after.len()
         );
     }
-
 }

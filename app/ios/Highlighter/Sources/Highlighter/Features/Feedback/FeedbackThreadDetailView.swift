@@ -50,11 +50,11 @@ struct FeedbackThreadDetailView: View {
                             event: event,
                             isFromMe: event.authorPubkey == app.currentUser?.pubkey,
                             showHeader: shouldShowHeader(at: index),
-                            profile: app.profileCache[event.authorPubkey]
+                            profile: app.profile(pubkeyHex: event.authorPubkey)
                         )
                         .id(event.eventId)
                         .task(id: event.authorPubkey) {
-                            await app.requestProfile(pubkeyHex: event.authorPubkey)
+                            app.requestProfile(pubkeyHex: event.authorPubkey)
                         }
                     }
                     if detailStore.isLoading && detailStore.events.isEmpty {

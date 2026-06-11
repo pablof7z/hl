@@ -7,15 +7,15 @@ import SwiftUI
 /// `ProfileDestination`.
 struct ProfileView: View {
     @Environment(HighlighterStore.self) private var appStore
-    @State private var store: ProfileStore?
     @State private var editPresented = false
+    @State private var activeTab: ProfileTab = .articles
 
     let pubkey: String
 
     var body: some View {
         Group {
-            if let store {
-                content(store: store)
+            if isActiveProfile {
+                content(profile: appStore.profileView)
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -24,39 +24,37 @@ struct ProfileView: View {
         .background(Color.highlighterPaper.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .task(id: pubkey) {
-            if store == nil {
-                store = ProfileStore(
-                    pubkey: pubkey,
-                    viewerPubkey: appStore.currentUser?.pubkey,
-                    safeCore: appStore.safeCore,
-                    eventBridge: appStore.eventBridge
-                )
-                await store?.start()
-            }
+            appStore.openProfile(pubkeyHex: pubkey)
         }
         .onDisappear {
-            store?.stop()
+            appStore.closeProfile()
         }
     }
 
-    private func content(store: ProfileStore) -> some View {
+    private var isActiveProfile: Bool {
+        appStore.profileView.pubkeyHex.caseInsensitiveCompare(
+            pubkey.trimmingCharacters(in: .whitespacesAndNewlines)
+        ) == .orderedSame
+    }
+
+    private func content(profile: HighlighterProfileViewSnapshot) -> some View {
         ScrollView {
             VStack(spacing: 0) {
-                HeroBanner(bannerURL: store.profile?.banner ?? "")
+                HeroBanner(bannerURL: profile.profile?.banner ?? "")
                 VStack(spacing: 20) {
-                    IdentityBlock(store: store, pubkey: pubkey)
+                    IdentityBlock(profile: profile, pubkey: pubkey)
                         .padding(.horizontal, 24)
-                    ActionRow(store: store, onEdit: { editPresented = true })
+                    ActionRow(profile: profile, onEdit: { editPresented = true })
                         .padding(.horizontal, 24)
-                    StatsStrip(store: store)
+                    StatsStrip(profile: profile)
                         .padding(.horizontal, 24)
                     TabBar(activeTab: Binding(
-                        get: { store.activeTab },
-                        set: { store.activeTab = $0 }
+                        get: { activeTab },
+                        set: { activeTab = $0 }
                     ))
                     .padding(.horizontal, 24)
                     .padding(.top, 8)
-                    TabContent(store: store)
+                    TabContent(profile: profile, activeTab: activeTab)
                         .padding(.horizontal, 24)
                         .padding(.bottom, 32)
                 }
@@ -67,18 +65,18 @@ struct ProfileView: View {
         }
         .ignoresSafeArea(edges: .top)
         .sheet(isPresented: $editPresented) {
-            EditProfileSheet(initial: store.profile) { updated in
-                store.profile = updated
-                appStore.profileCache[pubkey] = updated
+            EditProfileSheet(initial: profile.profile) { _ in
                 if pubkey == appStore.currentUser?.pubkey {
-                    appStore.currentUserProfile = updated
+                    appStore.nmpApp.dispatch(action: .refreshAppChrome)
                 }
+                appStore.refreshProfile()
+                appStore.requestProfile(pubkeyHex: pubkey)
             }
             .environment(appStore)
             .presentationDetents([.large])
         }
         .safeAreaInset(edge: .bottom) {
-            if let message = store.followError {
+            if let message = profile.errorMessage {
                 Text(message)
                     .font(.footnote)
                     .foregroundStyle(.white)
@@ -91,6 +89,10 @@ struct ProfileView: View {
             }
         }
     }
+}
+
+private enum ProfileTab: Hashable {
+    case articles, highlights, communities
 }
 
 // MARK: - Hero banner
@@ -140,14 +142,14 @@ private struct HeroBanner: View {
 // MARK: - Identity block
 
 private struct IdentityBlock: View {
-    let store: ProfileStore
+    let profile: HighlighterProfileViewSnapshot
     let pubkey: String
 
     var body: some View {
         VStack(spacing: 12) {
             AuthorAvatar(
                 pubkey: pubkey,
-                pictureURL: store.profile?.picture ?? "",
+                pictureURL: profile.profile?.picture ?? "",
                 displayInitial: displayName.first.map { String($0) } ?? "",
                 size: 88,
                 ringWidth: 4
@@ -179,19 +181,19 @@ private struct IdentityBlock: View {
     }
 
     private var displayName: String {
-        let dn = store.profile?.displayName ?? ""
+        let dn = profile.profile?.displayName ?? ""
         if !dn.isEmpty { return dn }
-        let n = store.profile?.name ?? ""
+        let n = profile.profile?.name ?? ""
         if !n.isEmpty { return n }
         return String(pubkey.prefix(12))
     }
 
     private var bio: String {
-        store.profile?.about ?? ""
+        profile.profile?.about ?? ""
     }
 
     private var verifiedNip05: String? {
-        let raw = store.profile?.nip05 ?? ""
+        let raw = profile.profile?.nip05 ?? ""
         guard !raw.isEmpty else { return nil }
         // Strip leading `_@` the spec permits for root-level identifiers.
         return raw.hasPrefix("_@") ? String(raw.dropFirst(2)) : raw
@@ -201,17 +203,18 @@ private struct IdentityBlock: View {
 // MARK: - Action row
 
 private struct ActionRow: View {
-    let store: ProfileStore
+    @Environment(HighlighterStore.self) private var appStore
+    let profile: HighlighterProfileViewSnapshot
     let onEdit: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
-            if store.isOwnProfile {
+            if profile.isOwnProfile {
                 editButton
-            } else if store.viewerPubkey != nil {
+            } else if profile.viewerPubkeyHex != nil {
                 followButton
             }
-            if let website = store.profile?.website, !website.isEmpty,
+            if let website = profile.profile?.website, !website.isEmpty,
                let url = URL(string: website) {
                 Link(destination: url) {
                     Label(url.host ?? website, systemImage: "link")
@@ -236,28 +239,28 @@ private struct ActionRow: View {
     @ViewBuilder
     private var followButton: some View {
         let action: () -> Void = {
-            Task { await store.toggleFollow() }
+            appStore.toggleProfileFollow()
         }
-        if store.isFollowing {
+        if profile.isFollowing {
             Button(action: action) { followButtonLabel }
                 .buttonStyle(.glass)
                 .tint(Color.highlighterAccent)
-                .disabled(store.isMutatingFollow)
+                .disabled(profile.isMutatingFollow)
         } else {
             Button(action: action) { followButtonLabel }
                 .buttonStyle(.glassProminent)
                 .tint(Color.highlighterAccent)
-                .disabled(store.isMutatingFollow)
+                .disabled(profile.isMutatingFollow)
         }
     }
 
     private var followButtonLabel: some View {
         HStack(spacing: 6) {
-            if store.isMutatingFollow {
+            if profile.isMutatingFollow {
                 ProgressView()
                     .controlSize(.small)
             }
-            Text(store.isFollowing ? "Following" : "Follow")
+            Text(profile.isFollowing ? "Following" : "Follow")
                 .font(.subheadline.weight(.semibold))
         }
         .frame(minWidth: 96)
@@ -267,15 +270,15 @@ private struct ActionRow: View {
 // MARK: - Stats strip
 
 private struct StatsStrip: View {
-    let store: ProfileStore
+    let profile: HighlighterProfileViewSnapshot
 
     var body: some View {
         HStack(spacing: 18) {
-            stat("\(store.articles.count)", label: "articles")
+            stat("\(profile.articleCount)", label: "articles")
             divider
-            stat("\(store.highlights.count)", label: "highlights")
+            stat("\(profile.highlightCount)", label: "highlights")
             divider
-            stat("\(store.communities.count)", label: "communities")
+            stat("\(profile.communityCount)", label: "communities")
         }
         .frame(maxWidth: .infinity)
     }
@@ -302,7 +305,7 @@ private struct StatsStrip: View {
 // MARK: - Tab bar
 
 private struct TabBar: View {
-    @Binding var activeTab: ProfileStore.Tab
+    @Binding var activeTab: ProfileTab
 
     var body: some View {
         HStack(spacing: 28) {
@@ -317,7 +320,7 @@ private struct TabBar: View {
         }
     }
 
-    private func tab(_ value: ProfileStore.Tab, label: String) -> some View {
+    private func tab(_ value: ProfileTab, label: String) -> some View {
         let isActive = activeTab == value
         return Button {
             withAnimation(.easeOut(duration: 0.15)) {
@@ -342,14 +345,15 @@ private struct TabBar: View {
 // MARK: - Tab content
 
 private struct TabContent: View {
-    let store: ProfileStore
+    let profile: HighlighterProfileViewSnapshot
+    let activeTab: ProfileTab
     @Environment(HighlighterStore.self) private var appStore
     @State private var previewRoom: CommunitySummary?
     @State private var pendingOpenRoomId: String?
     @State private var openRoomGroupId: String?
 
     var body: some View {
-        switch store.activeTab {
+        switch activeTab {
         case .articles:
             articlesList
         case .highlights:
@@ -361,15 +365,15 @@ private struct TabContent: View {
 
     @ViewBuilder
     private var articlesList: some View {
-        if store.articles.isEmpty {
+        if profile.articles.isEmpty {
             emptyState(
                 systemImage: "text.alignleft",
                 title: "No articles yet",
-                message: store.isLoadingInitial ? "Loading…" : "This author hasn't published any long-form writing."
+                message: profile.isLoading ? "Loading..." : "This author hasn't published any long-form writing."
             )
         } else {
             LazyVStack(spacing: 0) {
-                ForEach(Array(store.articles.enumerated()), id: \.element.eventId) { index, article in
+                ForEach(Array(profile.articles.enumerated()), id: \.element.eventId) { index, article in
                     NavigationLink(value: ArticleReaderTarget(
                         pubkey: article.pubkey,
                         dTag: article.identifier,
@@ -379,7 +383,7 @@ private struct TabContent: View {
                     }
                     .buttonStyle(.plain)
                     .articleRowActions(article: article)
-                    if index < store.articles.count - 1 {
+                    if index < profile.articles.count - 1 {
                         Divider().foregroundStyle(Color.highlighterRule)
                     }
                 }
@@ -389,15 +393,15 @@ private struct TabContent: View {
 
     @ViewBuilder
     private var highlightsList: some View {
-        if store.highlights.isEmpty {
+        if profile.highlights.isEmpty {
             emptyState(
                 systemImage: "quote.bubble",
                 title: "No highlights yet",
-                message: store.isLoadingInitial ? "Loading…" : "Passages this person saves will appear here."
+                message: profile.isLoading ? "Loading..." : "Passages this person saves will appear here."
             )
         } else {
             LazyVStack(spacing: 16) {
-                ForEach(store.highlights, id: \.eventId) { highlight in
+                ForEach(profile.highlights, id: \.eventId) { highlight in
                     HighlightFeedCardView(items: [
                         HydratedHighlight(
                             highlight: highlight,
@@ -414,22 +418,22 @@ private struct TabContent: View {
 
     @ViewBuilder
     private var communitiesList: some View {
-        if store.communities.isEmpty {
+        if profile.communities.isEmpty {
             emptyState(
                 systemImage: "square.grid.2x2",
                 title: "No communities",
-                message: store.isLoadingInitial ? "Loading…" : "Not a member of any Highlighter communities yet."
+                message: profile.isLoading ? "Loading..." : "Not a member of any Highlighter communities yet."
             )
         } else {
             LazyVStack(spacing: 0) {
-                ForEach(Array(store.communities.enumerated()), id: \.element.id) { index, community in
+                ForEach(Array(profile.communities.enumerated()), id: \.element.id) { index, community in
                     Button {
                         previewRoom = community
                     } label: {
                         CommunityRowView(community: community)
                     }
                     .buttonStyle(.plain)
-                    if index < store.communities.count - 1 {
+                    if index < profile.communities.count - 1 {
                         Divider().foregroundStyle(Color.highlighterRule)
                     }
                 }
@@ -444,10 +448,7 @@ private struct TabContent: View {
                     RoomPreviewSheet(
                         room: room,
                         onJoin: {
-                            Task {
-                                appStore.noteJoinRequested(groupId: room.id, roomName: room.name)
-                                _ = try? await appStore.safeCore.requestJoinRoom(groupId: room.id)
-                            }
+                            appStore.requestJoinRoom(groupId: room.id, roomName: room.name)
                             previewRoom = nil
                         },
                         onOpenRoom: {
@@ -481,4 +482,3 @@ private struct TabContent: View {
         .padding(.vertical, 48)
     }
 }
-

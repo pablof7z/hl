@@ -20,7 +20,14 @@ struct CommentComposer: View {
     private var draft: Binding<String> {
         Binding(
             get: { store.draft(forParent: parentEventId) },
-            set: { store.setDraft($0, forParent: parentEventId) }
+            set: { value in
+                store.setDraft(value, forParent: parentEventId)
+                if errorMessage != nil {
+                    withAnimation(.easeIn(duration: 0.18)) {
+                        errorMessage = nil
+                    }
+                }
+            }
         )
     }
 
@@ -106,10 +113,6 @@ struct CommentComposer: View {
                 let msg = (error as? CoreError).map { "\($0)" } ?? error.localizedDescription
                 withAnimation(.easeOut(duration: 0.18)) {
                     errorMessage = "Couldn't publish — \(msg)"
-                }
-                try? await Task.sleep(nanoseconds: 2_400_000_000)
-                withAnimation(.easeIn(duration: 0.18)) {
-                    errorMessage = nil
                 }
             }
         }

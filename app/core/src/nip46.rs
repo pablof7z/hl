@@ -52,9 +52,7 @@ impl BunkerSigner {
 
         let relays: Vec<RelayUrl> = uri.relays().to_vec();
         if relays.is_empty() {
-            return Err(CoreError::InvalidInput(
-                "NIP-46 URI missing relay".into(),
-            ));
+            return Err(CoreError::InvalidInput("NIP-46 URI missing relay".into()));
         }
 
         // `bunker://` URIs embed the remote signer pubkey directly. For
@@ -63,9 +61,7 @@ impl BunkerSigner {
         // not `pair`. Pasting a client URI and expecting pair to work is a
         // user error.
         let remote_signer_pubkey = *uri.remote_signer_public_key().ok_or_else(|| {
-            CoreError::InvalidInput(
-                "expected bunker:// URI with remote signer pubkey".into(),
-            )
+            CoreError::InvalidInput("expected bunker:// URI with remote signer pubkey".into())
         })?;
 
         let local_keys = Keys::generate();
@@ -171,9 +167,7 @@ impl BunkerSigner {
             };
 
             if let Some(err) = error {
-                return Err(CoreError::Signer(format!(
-                    "signer rejected pairing: {err}"
-                )));
+                return Err(CoreError::Signer(format!("signer rejected pairing: {err}")));
             }
 
             let result_str = result.unwrap_or_default();
@@ -244,22 +238,15 @@ impl BunkerSigner {
             .map_err(|e| CoreError::Signer(format!("get_public_key failed: {e}")))
     }
 
-    async fn send_request(
-        &self,
-        req: NostrConnectRequest,
-    ) -> Result<ResponseResult, CoreError> {
+    async fn send_request(&self, req: NostrConnectRequest) -> Result<ResponseResult, CoreError> {
         let msg = NostrConnectMessage::request(&req);
         let req_id = msg.id().to_string();
         let method = req.method();
 
-        let event = EventBuilder::nostr_connect(
-            &self.local_keys,
-            self.remote_signer_pubkey,
-            msg,
-        )
-        .map_err(|e| CoreError::Signer(format!("build nip46 event: {e}")))?
-        .sign_with_keys(&self.local_keys)
-        .map_err(|e| CoreError::Signer(format!("sign nip46 event: {e}")))?;
+        let event = EventBuilder::nostr_connect(&self.local_keys, self.remote_signer_pubkey, msg)
+            .map_err(|e| CoreError::Signer(format!("build nip46 event: {e}")))?
+            .sign_with_keys(&self.local_keys)
+            .map_err(|e| CoreError::Signer(format!("sign nip46 event: {e}")))?;
 
         let mut notifications = self.client.notifications();
 
@@ -330,11 +317,7 @@ impl BunkerSigner {
             .map_err(|e| CoreError::Signer(format!("sign_event: {e}")))
     }
 
-    async fn nip04_encrypt(
-        &self,
-        peer: PublicKey,
-        text: String,
-    ) -> Result<String, CoreError> {
+    async fn nip04_encrypt(&self, peer: PublicKey, text: String) -> Result<String, CoreError> {
         let res = self
             .send_request(NostrConnectRequest::Nip04Encrypt {
                 public_key: peer,
@@ -360,11 +343,7 @@ impl BunkerSigner {
             .map_err(|e| CoreError::Signer(format!("nip04_decrypt: {e}")))
     }
 
-    async fn nip44_encrypt_req(
-        &self,
-        peer: PublicKey,
-        text: String,
-    ) -> Result<String, CoreError> {
+    async fn nip44_encrypt_req(&self, peer: PublicKey, text: String) -> Result<String, CoreError> {
         let res = self
             .send_request(NostrConnectRequest::Nip44Encrypt {
                 public_key: peer,

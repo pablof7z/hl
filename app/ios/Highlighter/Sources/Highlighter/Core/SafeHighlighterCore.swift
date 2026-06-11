@@ -6,43 +6,11 @@ import Foundation
 actor SafeHighlighterCore {
     private let core: HighlighterCore
 
-    // Persistent ISBN metadata cache — avoids re-fetching Open Library for
-    // books the user has already scanned, even across app launches.
-    private struct CachedISBNPreview: Codable {
-        var id: String
-        var url: String
-        var title: String
-        var author: String
-        var image: String
-        var description: String
-        var domain: String
-        var publishedAt: String
-    }
-    private static let isbnCacheKey = "app.highlighter.isbn_cache_v1"
-    private var isbnCache: [String: CachedISBNPreview] = [:]
-    private var isbnCacheLoaded = false
-
     init(core: HighlighterCore) {
         self.core = core
     }
 
     // MARK: - Auth
-
-    func loginNsec(_ nsec: String) throws -> CurrentUser {
-        try core.loginNsec(nsec: nsec)
-    }
-
-    func startNostrConnect(_ options: NostrConnectOptions) async throws -> String {
-        try await core.startNostrConnect(options: options)
-    }
-
-    func pairBunker(_ uri: String) async throws -> CurrentUser {
-        try await core.pairBunker(uri: uri)
-    }
-
-    func generateAccount() throws -> GeneratedAccount {
-        try core.generateAccount()
-    }
 
     func currentUser() -> CurrentUser? {
         core.currentUser()
@@ -97,24 +65,6 @@ actor SafeHighlighterCore {
         try await core.subscribeArticleSearch(query: query)
     }
 
-    // MARK: - Bookmarks (NIP-51 kind:10003)
-
-    func getBookmarkedArticleAddresses() async throws -> [String] {
-        try await core.getBookmarkedArticleAddresses()
-    }
-
-    func isArticleBookmarked(address: String) async throws -> Bool {
-        try await core.isArticleBookmarked(address: address)
-    }
-
-    func toggleArticleBookmark(address: String) async throws -> Bool {
-        try await core.toggleArticleBookmark(address: address)
-    }
-
-    func subscribeBookmarks() async throws -> UInt64 {
-        try await core.subscribeBookmarks()
-    }
-
     // MARK: - Reactions (kind:7)
 
     func getReactionsForEvent(targetEventId: String, limit: UInt32) async throws -> [ReactionRecord] {
@@ -139,113 +89,8 @@ actor SafeHighlighterCore {
         try await core.toggleEventBookmark(eventIdHex: eventIdHex)
     }
 
-    // MARK: - Bookmark sets (kind:30003/30004) + NIP-B0 (kind:39701)
-
-    func getMyBookmarkSets() async throws -> [BookmarkSetRecord] {
-        try await core.getMyBookmarkSets()
-    }
-
-    func getMyCurationSets() async throws -> [BookmarkSetRecord] {
-        try await core.getMyCurationSets()
-    }
-
-    func getFollowingCurationSets() async throws -> [BookmarkSetRecord] {
-        try await core.getFollowingCurationSets()
-    }
-
-    func createCurationSet(title: String) async throws -> BookmarkSetRecord {
-        try await core.createCurationSet(title: title)
-    }
-
-    @discardableResult
-    func setAddressInCurationSet(
-        dTag: String,
-        address: String,
-        member: Bool
-    ) async throws -> Bool {
-        try await core.setAddressInCurationSet(dTag: dTag, address: address, member: member)
-    }
-
-    func getMyWebBookmarks() async throws -> [WebBookmarkRecord] {
-        try await core.getMyWebBookmarks()
-    }
-
-    func subscribeBookmarkSets() async throws -> UInt64 {
-        try await core.subscribeBookmarkSets()
-    }
-
-    func subscribeFollowingCurationSets() async throws -> UInt64 {
-        try await core.subscribeFollowingCurationSets()
-    }
-
-    func subscribeWebBookmarks() async throws -> UInt64 {
-        try await core.subscribeWebBookmarks()
-    }
-
     func lookupIsbn(_ isbn: String) async throws -> ArtifactPreview {
-        loadIsbnCacheIfNeeded()
-        if let hit = isbnCache[isbn] {
-            return makePreview(from: hit, isbn: isbn)
-        }
-        let preview = try await core.lookupIsbn(isbn: isbn)
-        isbnCache[isbn] = CachedISBNPreview(
-            id: preview.id,
-            url: preview.url,
-            title: preview.title,
-            author: preview.author,
-            image: preview.image,
-            description: preview.description,
-            domain: preview.domain,
-            publishedAt: preview.publishedAt
-        )
-        persistIsbnCache()
-        return preview
-    }
-
-    private func loadIsbnCacheIfNeeded() {
-        guard !isbnCacheLoaded else { return }
-        isbnCacheLoaded = true
-        guard let data = UserDefaults.standard.data(forKey: Self.isbnCacheKey),
-              let dict = try? JSONDecoder().decode([String: CachedISBNPreview].self, from: data)
-        else { return }
-        isbnCache = dict
-    }
-
-    private func persistIsbnCache() {
-        guard let data = try? JSONEncoder().encode(isbnCache) else { return }
-        UserDefaults.standard.set(data, forKey: Self.isbnCacheKey)
-    }
-
-    private func makePreview(from cached: CachedISBNPreview, isbn: String) -> ArtifactPreview {
-        let catalogId = "isbn:\(isbn)"
-        return ArtifactPreview(
-            id: cached.id,
-            url: cached.url,
-            title: cached.title,
-            author: cached.author,
-            image: cached.image,
-            description: cached.description,
-            source: "book",
-            domain: cached.domain,
-            catalogId: catalogId,
-            catalogKind: "isbn",
-            podcastGuid: "",
-            podcastItemGuid: "",
-            podcastShowTitle: "",
-            audioUrl: "",
-            audioPreviewUrl: "",
-            transcriptUrl: "",
-            feedUrl: "",
-            publishedAt: cached.publishedAt,
-            durationSeconds: nil,
-            referenceTagName: "i",
-            referenceTagValue: catalogId,
-            referenceKind: "isbn",
-            highlightTagName: "i",
-            highlightTagValue: catalogId,
-            highlightReferenceKey: "i:\(catalogId)",
-            chapters: []
-        )
+        try await core.lookupIsbn(isbn: isbn)
     }
 
     func buildPreviewFromUrl(_ url: String) async throws -> ArtifactPreview {
@@ -328,29 +173,20 @@ actor SafeHighlighterCore {
         try core.decodeNostrEntity(input: input)
     }
 
-    /// Mint a NIP-19 `nevent` for an event id with optional author / kind / relay
-    /// hints. Used to build shareable highlight URLs (e.g. for the
-    /// `https://highlighter.com/highlight/<nevent>` social-card flow).
-    func encodeNevent(
+    /// Canonical public URL for a kind:9802 highlight share. Rust owns the
+    /// route, event kind, and relay hint; Swift only renders the share control.
+    func highlightShareURL(
         eventIdHex: String,
-        authorPubkeyHex: String?,
-        relayHints: [String],
-        kind: UInt32?
-    ) throws -> String {
-        try core.encodeEventToNevent(
+        authorPubkeyHex: String?
+    ) -> String? {
+        core.highlightShareUrl(
             eventIdHex: eventIdHex,
-            authorPubkeyHex: authorPubkeyHex,
-            relayHints: relayHints,
-            kind: kind
+            authorPubkeyHex: authorPubkeyHex
         )
     }
 
     func resolveNostrEntity(_ entity: NostrEntityRef) async throws -> NostrEntityEvent? {
         try await core.resolveNostrEntity(entity: entity)
-    }
-
-    func subscribeNostrEntity(_ entity: NostrEntityRef) async throws {
-        try await core.subscribeNostrEntity(entity: entity)
     }
 
     func updateProfile(
@@ -421,48 +257,6 @@ actor SafeHighlighterCore {
         try await core.getUserCommunities(pubkeyHex: pubkeyHex)
     }
 
-    // MARK: - Rooms explorer
-
-    func startRoomDiscovery() async {
-        await core.startRoomDiscovery()
-    }
-
-    func startFriendsRoomsDiscovery() async throws {
-        try await core.startFriendsRoomsDiscovery()
-    }
-
-    func startFeaturedRooms(curatorPubkeyHex: String) async throws {
-        try await core.startFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex)
-    }
-
-    func getFeaturedRooms(curatorPubkeyHex: String) async throws -> [CommunitySummary] {
-        try await core.getFeaturedRooms(curatorPubkeyHex: curatorPubkeyHex).filter(\.isPublicOpenRoom)
-    }
-
-    func getAllRooms(limit: UInt32 = 120) async throws -> [CommunitySummary] {
-        let candidates = try await core.getAllRooms(limit: publicRoomCandidateLimit(limit))
-        return Array(candidates.filter(\.isPublicOpenRoom).prefix(Int(limit)))
-    }
-
-    func getNewRooms(limit: UInt32 = 24) async throws -> [CommunitySummary] {
-        let candidates = try await core.getNewRooms(limit: publicRoomCandidateLimit(limit))
-        return Array(candidates.filter(\.isPublicOpenRoom).prefix(Int(limit)))
-    }
-
-    func getRoomsWithFriends(limit: UInt32 = 16) async throws -> [RoomRecommendation] {
-        let candidates = try await core.getRoomsWithFriends(limit: publicRoomCandidateLimit(limit))
-        return Array(candidates.filter { $0.summary.isPublicOpenRoom }.prefix(Int(limit)))
-    }
-
-    func getRoomsFromReadAuthors(limit: UInt32 = 16) async throws -> [RoomRecommendation] {
-        let candidates = try await core.getRoomsFromReadAuthors(limit: publicRoomCandidateLimit(limit))
-        return Array(candidates.filter { $0.summary.isPublicOpenRoom }.prefix(Int(limit)))
-    }
-
-    func requestJoinRoom(groupId: String) async throws -> String {
-        try await core.requestJoinRoom(groupId: groupId)
-    }
-
     func createRoom(
         name: String,
         about: String,
@@ -503,27 +297,7 @@ actor SafeHighlighterCore {
         try await core.setFollow(targetPubkeyHex: targetPubkeyHex, follow: follow)
     }
 
-    // MARK: - Following Reads
-
-    func getFollowingReads(limit: UInt32 = 40) async throws -> [ReadingFeedItem] {
-        try await core.getFollowingReads(limit: limit)
-    }
-
-    // MARK: - Following Highlights
-
-    func getFollowingHighlights(limit: UInt32 = 120) async throws -> [HydratedHighlight] {
-        try await core.getFollowingHighlights(limit: limit)
-    }
-
     // MARK: - Subscriptions
-
-    func subscribeFollowingReads() async throws -> UInt64 {
-        try await core.subscribeFollowingReads()
-    }
-
-    func subscribeFollowingHighlights() async throws -> UInt64 {
-        try await core.subscribeFollowingHighlights()
-    }
 
     func subscribeJoinedCommunities() async throws -> UInt64 {
         try await core.subscribeJoinedCommunities()
@@ -619,16 +393,8 @@ actor SafeHighlighterCore {
         try await core.setBlossomServers(servers: servers)
     }
 
-    func initDefaultBlossomServers() async throws {
-        try await core.initDefaultBlossomServers()
-    }
-
     func signNip98Auth(url: String, method: String, payloadHash: String?) async throws -> String {
         try await core.signNip98Auth(url: url, method: method, payloadHash: payloadHash)
-    }
-
-    func signNip05RegistrationAuth(name: String, domain: String) async throws -> String {
-        try await core.signNip05RegistrationAuth(name: name, domain: domain)
     }
 
     // MARK: - Capture (Blossom upload + kind:20 picture)
@@ -687,6 +453,10 @@ actor SafeHighlighterCore {
 
     func getRelayDiagnostics() async throws -> [RelayDiagnostic] {
         try await core.getRelayDiagnostics()
+    }
+
+    func getAutoConnectedRelays() async throws -> [RelayConfig] {
+        try await core.getAutoConnectedRelays()
     }
 
     func subscribeRelayStatus() async throws -> UInt64 {

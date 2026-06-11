@@ -7,20 +7,12 @@ import SwiftUI
 /// signals fall through to the existing `ReadingFeedCardView`.
 struct HighlightsTabView: View {
     @Environment(HighlighterStore.self) private var app
-    @State private var store: HomeFeedStore?
     @State private var shareTarget: ShareToCommunityTarget?
     @State private var capturePresented: Bool = false
 
     var body: some View {
         NavigationStack {
-            Group {
-                if let store {
-                    content(store: store)
-                } else {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
+            content(feed: app.homeFeed)
             .navigationTitle("Highlights")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -57,34 +49,34 @@ struct HighlightsTabView: View {
         }
         .captureFlow(isPresented: $capturePresented)
         .task {
-            guard store == nil else { return }
-            let s = HomeFeedStore(safeCore: app.safeCore, eventBridge: app.eventBridge)
-            store = s
-            await s.start()
+            app.openHomeFeed()
+        }
+        .refreshable {
+            app.refreshHomeFeed()
         }
         .onDisappear {
-            store?.stop()
+            app.closeHomeFeed()
         }
     }
 
     @ViewBuilder
-    private func content(store: HomeFeedStore) -> some View {
-        if store.isLoadingInitial {
+    private func content(feed: HighlighterHomeFeedSnapshot) -> some View {
+        if feed.isLoading && feed.items.isEmpty {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if store.items.isEmpty {
+        } else if feed.items.isEmpty {
             emptyState
         } else {
-            feedList(store: store)
+            feedList(feed: feed)
         }
     }
 
-    private func feedList(store: HomeFeedStore) -> some View {
+    private func feedList(feed: HighlighterHomeFeedSnapshot) -> some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(Array(store.items.enumerated()), id: \.element.stableId) { index, item in
+                ForEach(Array(feed.items.enumerated()), id: \.element.stableId) { index, item in
                     row(for: item)
-                    if index < store.items.count - 1 {
+                    if index < feed.items.count - 1 {
                         Rectangle()
                             .fill(Color.highlighterRule)
                             .frame(height: 1)
@@ -118,11 +110,11 @@ struct HighlightsTabView: View {
     }
 
     @ViewBuilder
-    private func row(for item: HomeFeedStore.Item) -> some View {
+    private func row(for item: HighlighterHomeFeedItem) -> some View {
         switch item {
-        case .highlights(let hs):
+        case .highlights(stableId: _, sortKey: _, highlights: let hs, highlightCount: _):
             highlightRow(hs)
-        case .read(let r):
+        case .read(stableId: _, sortKey: _, item: let r):
             readRow(r)
         }
     }
@@ -225,5 +217,16 @@ struct HighlightsTabView: View {
             displaySubtitle: item.highlight.quote,
             imageURL: nil
         )
+    }
+}
+
+private extension HighlighterHomeFeedItem {
+    var stableId: String {
+        switch self {
+        case .highlights(stableId: let stableId, sortKey: _, highlights: _, highlightCount: _):
+            stableId
+        case .read(stableId: let stableId, sortKey: _, item: _):
+            stableId
+        }
     }
 }

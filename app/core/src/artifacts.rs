@@ -12,13 +12,7 @@ use crate::nostr_runtime::NostrRuntime;
 const KIND_ARTIFACT_SHARE: u16 = 11;
 
 const TRACKING_PARAMS: &[&str] = &[
-    "fbclid",
-    "gclid",
-    "mc_cid",
-    "mc_eid",
-    "ref",
-    "ref_src",
-    "ref_url",
+    "fbclid", "gclid", "mc_cid", "mc_eid", "ref", "ref_src", "ref_url",
 ];
 
 /// Port of `buildArtifactPreview` (`web/src/lib/ndk/artifacts.ts:170-236`).
@@ -125,8 +119,7 @@ pub fn build_preview_with(input: PreviewInput) -> Result<ArtifactPreview, CoreEr
     ]);
 
     let reference_key = reference_key_for_tag(&reference_tag_name, &reference_tag_value);
-    let highlight_reference_key =
-        reference_key_for_tag(&highlight_tag_name, &highlight_tag_value);
+    let highlight_reference_key = reference_key_for_tag(&highlight_tag_name, &highlight_tag_value);
     if reference_key.is_empty() {
         return Err(CoreError::InvalidInput(
             "artifact reference key is empty".into(),
@@ -228,10 +221,7 @@ pub async fn publish(
 /// Port of `fetchArtifactSharesForGroup`. MVP leaves this to the live
 /// subscription — stub returns empty and lets the Room pump hydrate via
 /// deltas.
-pub async fn fetch_shares(
-    _group_id: &str,
-    _limit: u32,
-) -> Result<Vec<ArtifactRecord>, CoreError> {
+pub async fn fetch_shares(_group_id: &str, _limit: u32) -> Result<Vec<ArtifactRecord>, CoreError> {
     Ok(Vec::new())
 }
 
@@ -247,13 +237,10 @@ pub fn query_for_group(
     if group_id.is_empty() {
         return Ok(Vec::new());
     }
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let cap = (limit.saturating_mul(4)).max(128) as i32;
-    let filter = NdbFilter::new()
-        .kinds([KIND_ARTIFACT_SHARE as u64])
-        .build();
+    let filter = NdbFilter::new().kinds([KIND_ARTIFACT_SHARE as u64]).build();
 
     let results = ndb
         .query(&txn, &[filter], cap)
@@ -261,10 +248,16 @@ pub fn query_for_group(
 
     let mut records: Vec<ArtifactRecord> = Vec::new();
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
-        let Some(h) = first_tag_value(&event, "h") else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
+        let Some(h) = first_tag_value(&event, "h") else {
+            continue;
+        };
         if h != group_id {
             continue;
         }
@@ -282,10 +275,7 @@ pub fn query_for_group(
 }
 
 /// Simple title/author substring search over cached artifacts.
-pub fn search_cached(
-    _query: &str,
-    _limit: u32,
-) -> Result<Vec<ArtifactRecord>, CoreError> {
+pub fn search_cached(_query: &str, _limit: u32) -> Result<Vec<ArtifactRecord>, CoreError> {
     Ok(Vec::new())
 }
 
@@ -389,7 +379,11 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
         description: summary,
         source,
         domain: String::new(),
-        catalog_id: if ref_name == "i" { ref_value.clone() } else { String::new() },
+        catalog_id: if ref_name == "i" {
+            ref_value.clone()
+        } else {
+            String::new()
+        },
         catalog_kind: k.clone(),
         podcast_guid,
         podcast_item_guid,
@@ -397,10 +391,16 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
             .unwrap_or("")
             .to_string(),
         audio_url: first_tag_value(event, "audio").unwrap_or("").to_string(),
-        audio_preview_url: first_tag_value(event, "audio_preview").unwrap_or("").to_string(),
-        transcript_url: first_tag_value(event, "transcript").unwrap_or("").to_string(),
+        audio_preview_url: first_tag_value(event, "audio_preview")
+            .unwrap_or("")
+            .to_string(),
+        transcript_url: first_tag_value(event, "transcript")
+            .unwrap_or("")
+            .to_string(),
         feed_url: first_tag_value(event, "feed").unwrap_or("").to_string(),
-        published_at: first_tag_value(event, "published_at").unwrap_or("").to_string(),
+        published_at: first_tag_value(event, "published_at")
+            .unwrap_or("")
+            .to_string(),
         duration_seconds: first_tag_value(event, "duration").and_then(|v| v.parse::<i64>().ok()),
         reference_tag_name: ref_name.clone(),
         reference_tag_value: ref_value,
@@ -458,7 +458,11 @@ pub fn normalize_artifact_url(value: &str) -> Option<String> {
     // Strip trailing slashes except the root.
     if url.path() != "/" {
         let trimmed_path = url.path().trim_end_matches('/');
-        let new_path = if trimmed_path.is_empty() { "/" } else { trimmed_path };
+        let new_path = if trimmed_path.is_empty() {
+            "/"
+        } else {
+            trimmed_path
+        };
         let owned = new_path.to_string();
         url.set_path(&owned);
     }
@@ -532,7 +536,10 @@ pub fn detect_artifact_source(url: &str) -> &'static str {
 fn domain_label(url: &str) -> String {
     url::Url::parse(url)
         .ok()
-        .and_then(|u| u.host_str().map(|h| h.trim_start_matches("www.").to_string()))
+        .and_then(|u| {
+            u.host_str()
+                .map(|h| h.trim_start_matches("www.").to_string())
+        })
         .unwrap_or_else(|| url.to_string())
 }
 
@@ -556,9 +563,7 @@ fn title_case(value: &str) -> String {
         .map(|word| {
             let mut chars = word.chars();
             match chars.next() {
-                Some(first) => {
-                    first.to_uppercase().collect::<String>() + chars.as_str()
-                }
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
                 None => String::new(),
             }
         })
@@ -652,7 +657,11 @@ fn build_share_event(
     match preview.reference_tag_name.as_str() {
         "i" => {
             if !preview.url.is_empty() {
-                tags.push(parse_tag(&["i", &preview.reference_tag_value, &preview.url])?);
+                tags.push(parse_tag(&[
+                    "i",
+                    &preview.reference_tag_value,
+                    &preview.url,
+                ])?);
             } else {
                 tags.push(parse_tag(&["i", &preview.reference_tag_value])?);
             }
@@ -696,7 +705,10 @@ fn build_share_event(
         tags.push(parse_tag(&["podcast_guid", &preview.podcast_guid])?);
     }
     if !preview.podcast_show_title.is_empty() {
-        tags.push(parse_tag(&["podcast_show_title", &preview.podcast_show_title])?);
+        tags.push(parse_tag(&[
+            "podcast_show_title",
+            &preview.podcast_show_title,
+        ])?);
     }
     if !preview.audio_url.is_empty() {
         tags.push(parse_tag(&["audio", &preview.audio_url])?);
@@ -750,7 +762,10 @@ mod tests {
 
     #[test]
     fn detect_source_podcast_for_overcast() {
-        assert_eq!(detect_artifact_source("https://overcast.fm/+abc123"), "podcast");
+        assert_eq!(
+            detect_artifact_source("https://overcast.fm/+abc123"),
+            "podcast"
+        );
         assert_eq!(
             detect_artifact_source("https://podcasts.apple.com/us/ep/123"),
             "podcast"
@@ -767,7 +782,10 @@ mod tests {
 
     #[test]
     fn detect_source_fallback_is_article() {
-        assert_eq!(detect_artifact_source("https://example.com/post"), "article");
+        assert_eq!(
+            detect_artifact_source("https://example.com/post"),
+            "article"
+        );
     }
 
     #[test]
@@ -837,7 +855,11 @@ mod tests {
             .tags(vec![
                 Tag::parse(vec!["h".to_string(), "signal-over-noise".to_string()]).unwrap(),
                 Tag::identifier("ccc5hrs"),
-                Tag::parse(vec!["title".to_string(), "Tucker Debates Biotech CEO".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "title".to_string(),
+                    "Tucker Debates Biotech CEO".to_string(),
+                ])
+                .unwrap(),
                 Tag::parse(vec!["source".to_string(), "podcast".to_string()]).unwrap(),
                 Tag::parse(vec![
                     "i".to_string(),
@@ -846,7 +868,11 @@ mod tests {
                 ])
                 .unwrap(),
                 Tag::parse(vec!["k".to_string(), "podcast:guid".to_string()]).unwrap(),
-                Tag::parse(vec!["r".to_string(), "http://www.tuckercarlson.com/".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "r".to_string(),
+                    "http://www.tuckercarlson.com/".to_string(),
+                ])
+                .unwrap(),
                 Tag::parse(vec![
                     "podcast_guid".to_string(),
                     "D27CDB6E-AE6D-11cf-96B8-444553540000".to_string(),
@@ -867,7 +893,10 @@ mod tests {
             record.preview.audio_url,
             "https://www.podtrac.com/pts/redirect.mp3/example/TCN.mp3"
         );
-        assert_eq!(record.preview.podcast_guid, "D27CDB6E-AE6D-11cf-96B8-444553540000");
+        assert_eq!(
+            record.preview.podcast_guid,
+            "D27CDB6E-AE6D-11cf-96B8-444553540000"
+        );
         assert_eq!(record.preview.duration_seconds, Some(3742));
         assert_eq!(record.preview.catalog_kind, "podcast:guid");
         assert_eq!(record.preview.reference_kind, "podcast:guid");
@@ -882,14 +911,34 @@ mod tests {
                 Tag::identifier("ep1"),
                 Tag::parse(vec!["title".to_string(), "Ep 1".to_string()]).unwrap(),
                 Tag::parse(vec!["source".to_string(), "podcast".to_string()]).unwrap(),
-                Tag::parse(vec!["chapter".to_string(), "0".to_string(), "Cold open".to_string()]).unwrap(),
-                Tag::parse(vec!["chapter".to_string(), "245".to_string(), "First guest".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "chapter".to_string(),
+                    "0".to_string(),
+                    "Cold open".to_string(),
+                ])
+                .unwrap(),
+                Tag::parse(vec![
+                    "chapter".to_string(),
+                    "245".to_string(),
+                    "First guest".to_string(),
+                ])
+                .unwrap(),
                 // Out of order: should sort.
-                Tag::parse(vec!["chapter".to_string(), "120".to_string(), "Setup".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "chapter".to_string(),
+                    "120".to_string(),
+                    "Setup".to_string(),
+                ])
+                .unwrap(),
                 // Malformed: missing title — should be dropped.
                 Tag::parse(vec!["chapter".to_string(), "999".to_string()]).unwrap(),
                 // Malformed: non-numeric start — should be dropped.
-                Tag::parse(vec!["chapter".to_string(), "junk".to_string(), "Ignored".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "chapter".to_string(),
+                    "junk".to_string(),
+                    "Ignored".to_string(),
+                ])
+                .unwrap(),
             ])
             .sign_with_keys(&keys)
             .expect("sign");
@@ -972,7 +1021,11 @@ mod tests {
                 Tag::identifier(d),
                 Tag::parse(vec!["title".to_string(), title.to_string()]).unwrap(),
                 Tag::parse(vec!["source".to_string(), "article".to_string()]).unwrap(),
-                Tag::parse(vec!["r".to_string(), "https://example.com/post".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "r".to_string(),
+                    "https://example.com/post".to_string(),
+                ])
+                .unwrap(),
             ])
             .sign_with_keys(keys)
             .expect("sign")
@@ -1037,7 +1090,10 @@ mod tests {
         let (ndb, _tmp) = isolated_ndb();
         let keys = Keys::generate();
         for i in 0..5u64 {
-            ingest(&ndb, &make_share(&keys, "alpha", &format!("a{i}"), &format!("T{i}")));
+            ingest(
+                &ndb,
+                &make_share(&keys, "alpha", &format!("a{i}"), &format!("T{i}")),
+            );
         }
         wait_for_ndb();
         let records = query_for_group(&ndb, "alpha", 3).expect("query");

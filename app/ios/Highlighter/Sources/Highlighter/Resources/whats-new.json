@@ -2,6 +2,60 @@
   "schema_version": 1,
   "entries": [
     {
+      "shipped_at": "2026-06-11T00:13:00Z",
+      "lines": [
+        "Article reading and highlight publishing now use the same Rust-owned state on iOS and Android."
+      ]
+    },
+    {
+      "shipped_at": "2026-06-11T00:12:00Z",
+      "lines": [
+        "Profile pages and follow buttons now use the same Rust-owned state on iOS and Android."
+      ]
+    },
+    {
+      "shipped_at": "2026-06-11T00:11:00Z",
+      "lines": [
+        "Recent searches now sync through the same Rust-owned search state on iOS and Android."
+      ]
+    },
+    {
+      "shipped_at": "2026-06-11T00:10:00Z",
+      "lines": [
+        "Bookmarks, collections, and web bookmarks now render from Rust-owned library snapshots on iOS and Android."
+      ]
+    },
+    {
+      "shipped_at": "2026-06-11T00:09:00Z",
+      "lines": [
+        "Room discovery and the highlights home feed now use the same Rust-owned snapshots on iOS and Android."
+      ]
+    },
+    {
+      "shipped_at": "2026-06-11T00:07:00Z",
+      "lines": [
+        "Account creation now validates usernames consistently across iOS and Android."
+      ]
+    },
+    {
+      "shipped_at": "2026-06-11T00:06:00Z",
+      "lines": [
+        "Discussion posts now keep valid URL attachments instead of dropping them."
+      ]
+    },
+    {
+      "shipped_at": "2026-06-11T00:05:00Z",
+      "lines": [
+        "Book lookups now use the same cached ISBN metadata across iOS and Android."
+      ]
+    },
+    {
+      "shipped_at": "2026-06-11T00:04:00Z",
+      "lines": [
+        "Onboarding interest setup now stays consistent across app launches and platform shells."
+      ]
+    },
+    {
       "shipped_at": "2026-05-14T21:45:00Z",
       "lines": [
         "Tapping 'Open room' from a profile's Communities tab now navigates to the room properly instead of dismissing immediately."

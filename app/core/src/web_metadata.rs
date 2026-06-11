@@ -123,7 +123,11 @@ impl WebMetadataStore {
         let now = unix_now();
         let guard = self.state.lock();
         let entry = guard.entries.get(url)?;
-        let ttl = if entry.metadata.is_negative() { NEGATIVE_TTL } else { HIT_TTL };
+        let ttl = if entry.metadata.is_negative() {
+            NEGATIVE_TTL
+        } else {
+            HIT_TTL
+        };
         if now.saturating_sub(entry.last_attempt) > ttl.as_secs() {
             None
         } else {
@@ -296,7 +300,8 @@ async fn fetch_and_parse(url: &str) -> Result<WebMetadata, CoreError> {
     }
 
     let html = String::from_utf8_lossy(&buffer);
-    let final_url = Url::parse(url).map_err(|e| CoreError::InvalidInput(format!("parse url: {e}")))?;
+    let final_url =
+        Url::parse(url).map_err(|e| CoreError::InvalidInput(format!("parse url: {e}")))?;
     Ok(parse_metadata(&html, &final_url))
 }
 
@@ -443,19 +448,20 @@ fn pick_favicon(doc: &Html, base: &Url) -> String {
             .and_then(largest_size_dimension)
             .unwrap_or(0);
 
-        if rel.split_ascii_whitespace().any(|tok| {
-            tok == "apple-touch-icon" || tok == "apple-touch-icon-precomposed"
-        }) {
+        if rel
+            .split_ascii_whitespace()
+            .any(|tok| tok == "apple-touch-icon" || tok == "apple-touch-icon-precomposed")
+        {
             apple_candidates.push((sizes_score, absolute));
-        } else if rel.split_ascii_whitespace().any(|tok| tok == "icon" || tok == "shortcut") {
+        } else if rel
+            .split_ascii_whitespace()
+            .any(|tok| tok == "icon" || tok == "shortcut")
+        {
             icon_candidates.push(absolute);
         }
     }
 
-    if let Some((_, url)) = apple_candidates
-        .into_iter()
-        .max_by_key(|(score, _)| *score)
-    {
+    if let Some((_, url)) = apple_candidates.into_iter().max_by_key(|(score, _)| *score) {
         return url;
     }
     if let Some(url) = icon_candidates.into_iter().next() {
@@ -477,7 +483,10 @@ fn largest_size_dimension(value: &str) -> Option<u32> {
         }
         let mut parts = token.split(|c: char| c == 'x' || c == 'X');
         let w = parts.next()?.parse::<u32>().ok()?;
-        let h = parts.next().and_then(|s| s.parse::<u32>().ok()).unwrap_or(w);
+        let h = parts
+            .next()
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(w);
         let dim = w.max(h);
         best = Some(best.map(|b| b.max(dim)).unwrap_or(dim));
     }

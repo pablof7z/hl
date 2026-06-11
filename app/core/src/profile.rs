@@ -28,8 +28,7 @@ pub fn query_profile_from_ndb(
     let author = PublicKey::from_hex(pubkey_hex)
         .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let pk_bytes: [u8; 32] = author.to_bytes();
     let filter = NdbFilter::new()
@@ -82,7 +81,12 @@ pub fn parse_metadata(event: &Event) -> ProfileMetadata {
             .trim()
             .to_string(),
         about: raw.about.unwrap_or_default().trim().to_string(),
-        picture: raw.picture.or(raw.image).unwrap_or_default().trim().to_string(),
+        picture: raw
+            .picture
+            .or(raw.image)
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
         banner: raw.banner.unwrap_or_default().trim().to_string(),
         nip05: raw.nip05.unwrap_or_default().trim().to_string(),
         website: raw.website.unwrap_or_default().trim().to_string(),
@@ -200,8 +204,7 @@ fn query_raw_metadata_json(ndb: &Ndb, pubkey_hex: &str) -> Result<Option<Value>,
     }
     let author = PublicKey::from_hex(pubkey_hex)
         .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
     let pk_bytes: [u8; 32] = author.to_bytes();
     let filter = NdbFilter::new()
         .kinds([KIND_METADATA as u64])

@@ -32,8 +32,7 @@ pub fn query_recent_books(
     if user.is_empty() {
         return Ok(Vec::new());
     }
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let joined: HashSet<String> = joined_group_ids(ndb, &txn, user)?;
 
@@ -50,19 +49,23 @@ pub fn query_recent_books(
     //    `metadata_by_ref` collects every book share for later backfill.
     {
         let cap = (limit.saturating_mul(8)).max(256) as i32;
-        let filter = NdbFilter::new()
-            .kinds([KIND_ARTIFACT_SHARE as u64])
-            .build();
+        let filter = NdbFilter::new().kinds([KIND_ARTIFACT_SHARE as u64]).build();
         let results = ndb
             .query(&txn, &[filter], cap)
             .map_err(|e| CoreError::Cache(format!("query artifacts: {e}")))?;
 
         for r in &results {
-            let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+            let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+                continue;
+            };
             let Ok(json) = note.json() else { continue };
-            let Ok(event) = Event::from_json(&json) else { continue };
+            let Ok(event) = Event::from_json(&json) else {
+                continue;
+            };
 
-            let Some(group_id) = first_tag_value(&event, "h") else { continue };
+            let Some(group_id) = first_tag_value(&event, "h") else {
+                continue;
+            };
             if crate::discussions::is_discussion(&event) {
                 continue;
             }
@@ -70,7 +73,9 @@ pub fn query_recent_books(
                 continue;
             }
 
-            let Some(rec) = artifact_record_from_event(&event, group_id) else { continue };
+            let Some(rec) = artifact_record_from_event(&event, group_id) else {
+                continue;
+            };
             let key = reference_key(&rec);
             if key.is_empty() {
                 continue;
@@ -113,9 +118,13 @@ pub fn query_recent_books(
 
         if let Ok(results) = ndb.query(&txn, &[filter], cap) {
             for r in &results {
-                let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+                let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+                    continue;
+                };
                 let Ok(json) = note.json() else { continue };
-                let Ok(event) = Event::from_json(&json) else { continue };
+                let Ok(event) = Event::from_json(&json) else {
+                    continue;
+                };
 
                 let Some(catalog_id) = book_catalog_id_from_highlight(&event) else {
                     continue;
@@ -227,9 +236,13 @@ fn joined_group_ids(
 
     let mut ids: HashSet<String> = HashSet::new();
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
 
         let has_user = event.tags.iter().any(|tag| {
             let s = tag.as_slice();
@@ -345,9 +358,11 @@ mod tests {
 
     fn book_highlight(keys: &Keys, isbn: &str, ts: u64) -> Event {
         EventBuilder::new(Kind::Custom(KIND_HIGHLIGHT), "quote")
-            .tags(vec![
-                Tag::parse(vec!["i".to_string(), format!("isbn:{isbn}")]).unwrap(),
+            .tags(vec![Tag::parse(vec![
+                "i".to_string(),
+                format!("isbn:{isbn}"),
             ])
+            .unwrap()])
             .custom_created_at(Timestamp::from(ts))
             .sign_with_keys(keys)
             .expect("sign highlight")
@@ -369,7 +384,10 @@ mod tests {
         let admin = Keys::generate();
 
         ingest(&ndb, &membership(&admin, "alpha", &user, 1));
-        ingest(&ndb, &book_share(&admin, "alpha", "b1", "isbn:111", "Book A", 100));
+        ingest(
+            &ndb,
+            &book_share(&admin, "alpha", "b1", "isbn:111", "Book A", 100),
+        );
         ingest(&ndb, &article_share(&admin, "alpha", "a1", 200));
         wait_for_ndb();
 
@@ -388,8 +406,14 @@ mod tests {
         ingest(&ndb, &membership(&admin, "alpha", &user, 1));
         ingest(&ndb, &membership(&admin, "bravo", &user, 1));
         // Same book (isbn:111) shared in two groups, bravo is newer.
-        ingest(&ndb, &book_share(&admin, "alpha", "b1", "isbn:111", "Old Title", 100));
-        ingest(&ndb, &book_share(&admin, "bravo", "b2", "isbn:111", "New Title", 200));
+        ingest(
+            &ndb,
+            &book_share(&admin, "alpha", "b1", "isbn:111", "Old Title", 100),
+        );
+        ingest(
+            &ndb,
+            &book_share(&admin, "bravo", "b2", "isbn:111", "New Title", 200),
+        );
         wait_for_ndb();
 
         let out = query_recent_books(&ndb, &user, 10).expect("query");
@@ -406,8 +430,14 @@ mod tests {
         let admin = Keys::generate();
 
         ingest(&ndb, &membership(&admin, "alpha", &user, 1));
-        ingest(&ndb, &book_share(&admin, "alpha", "b1", "isbn:111", "Mine", 100));
-        ingest(&ndb, &book_share(&admin, "other", "b2", "isbn:222", "Theirs", 200));
+        ingest(
+            &ndb,
+            &book_share(&admin, "alpha", "b1", "isbn:111", "Mine", 100),
+        );
+        ingest(
+            &ndb,
+            &book_share(&admin, "other", "b2", "isbn:222", "Theirs", 200),
+        );
         wait_for_ndb();
 
         let out = query_recent_books(&ndb, &user, 10).expect("query");
@@ -446,7 +476,10 @@ mod tests {
         let user = user_keys.public_key().to_hex();
         let other = Keys::generate();
 
-        ingest(&ndb, &book_share(&other, "elsewhere", "b1", "isbn:111", "Real Title", 100));
+        ingest(
+            &ndb,
+            &book_share(&other, "elsewhere", "b1", "isbn:111", "Real Title", 100),
+        );
         ingest(&ndb, &book_highlight(&user_keys, "111", 500));
         wait_for_ndb();
 
@@ -467,8 +500,14 @@ mod tests {
         let admin = Keys::generate();
 
         ingest(&ndb, &membership(&admin, "alpha", &user, 1));
-        ingest(&ndb, &book_share(&admin, "alpha", "b1", "isbn:111", "Older Share", 100));
-        ingest(&ndb, &book_share(&admin, "alpha", "b2", "isbn:222", "Newer Share", 200));
+        ingest(
+            &ndb,
+            &book_share(&admin, "alpha", "b1", "isbn:111", "Older Share", 100),
+        );
+        ingest(
+            &ndb,
+            &book_share(&admin, "alpha", "b2", "isbn:222", "Newer Share", 200),
+        );
         ingest(&ndb, &book_highlight(&user_keys, "111", 300));
         wait_for_ndb();
 

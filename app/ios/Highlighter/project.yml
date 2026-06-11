@@ -115,6 +115,12 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.highlighter.app.tests
         GENERATE_INFOPLIST_FILE: "YES"
+        HEADER_SEARCH_PATHS:
+          - $(inherited)
+          - $(SRCROOT)/Vendor
+        SWIFT_INCLUDE_PATHS:
+          - $(inherited)
+          - $(SRCROOT)/Vendor
         BUNDLE_LOADER: "$(TEST_HOST)"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Highlighter.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Highlighter"
 

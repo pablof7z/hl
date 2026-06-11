@@ -19,12 +19,8 @@ use crate::models::CommunitySummary;
 /// Return every cached kind:39000 as a `CommunitySummary`, newest first,
 /// truncated to `limit`. Dedup by group id with the newest `created_at`
 /// winning.
-pub fn query_all_rooms_from_ndb(
-    ndb: &Ndb,
-    limit: u32,
-) -> Result<Vec<CommunitySummary>, CoreError> {
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+pub fn query_all_rooms_from_ndb(ndb: &Ndb, limit: u32) -> Result<Vec<CommunitySummary>, CoreError> {
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     // Cap the raw scan at 4x the requested limit — metadata events can collide
     // on `d` (same group, newer supersession), and we want enough headroom to
@@ -143,7 +139,10 @@ mod tests {
         let (ndb, _tmp) = isolated_ndb();
         let author = Keys::generate();
         for i in 0..10u64 {
-            ingest(&ndb, &meta(&author, &format!("room{i}"), &format!("R{i}"), 100 + i));
+            ingest(
+                &ndb,
+                &meta(&author, &format!("room{i}"), &format!("R{i}"), 100 + i),
+            );
         }
         wait_for_ndb();
 

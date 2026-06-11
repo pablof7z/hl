@@ -19,24 +19,24 @@ final class BookScannerModel: NSObject {
     private(set) var torchOn = false
     private(set) var locked = false
     private(set) var notABookFlash = false
-    /// Seconds that *some* barcode has been visible without decoding to a
-    /// valid ISBN. Drives the "Hold steady" tip at ~3s.
-    private(set) var visibleButUndecodedSeconds: Double = 0
+    /// True when some barcode has been visible for long enough that the user is
+    /// likely aiming correctly but needs to hold steady or move closer.
+    private(set) var holdSteadyTipVisible = false
 
     let session = AVCaptureSession()
 
     private let sessionQueue = DispatchQueue(label: "app.highlighter.scanner.session")
     private let metadataQueue = DispatchQueue(label: "app.highlighter.scanner.metadata")
     private var metadataOutput: AVCaptureMetadataOutput?
-    private var previewLayerBounds: CGRect = .zero
-    private var firstVisibleAt: Date?
-    private var tipTimer: Timer?
+    private var firstVisibleAt: ContinuousClock.Instant?
     private var resultHandler: ((String) -> Void)?
+    private let visibilityClock = ContinuousClock()
+    private let holdSteadyDelay: Duration = .seconds(3)
 
     /// Returns once the camera session is started (or permission is resolved
     /// as denied). `onPayload` fires on the main actor with the raw EAN-13
-    /// string for every detection — the caller validates and decides whether
-    /// to accept or flash a "not a book" toast.
+    /// string for every detection; callers normalize it through Rust-owned ISBN
+    /// validation before accepting or rejecting the scan.
     func start(onPayload: @escaping @MainActor (String) -> Void) async {
         resultHandler = { payload in
             Task { @MainActor in onPayload(payload) }
@@ -58,12 +58,13 @@ final class BookScannerModel: NSObject {
         guard permission == .granted else { return }
 
         await configureAndStart()
-        startTipTimer()
     }
 
     func stop() {
-        tipTimer?.invalidate()
-        tipTimer = nil
+        firstVisibleAt = nil
+        holdSteadyTipVisible = false
+        notABookFlash = false
+        detectedBoxes = []
         let session = self.session
         sessionQueue.async {
             if session.isRunning { session.stopRunning() }
@@ -119,11 +120,9 @@ final class BookScannerModel: NSObject {
         if !notABookFlash {
             UINotificationFeedbackGenerator().notificationOccurred(.warning)
         }
+        firstVisibleAt = nil
+        holdSteadyTipVisible = false
         notABookFlash = true
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_800_000_000)
-            notABookFlash = false
-        }
     }
 
     // MARK: - Session configuration
@@ -162,25 +161,25 @@ final class BookScannerModel: NSObject {
         }
     }
 
-    // MARK: - Tip timer
+    // MARK: - Event-driven scanner affordances
 
-    /// Accumulates seconds-since-first-barcode-seen. Resets whenever nothing
-    /// has been visible for a while — the tip only shows when the user IS
-    /// trying, just not succeeding.
-    private func startTipTimer() {
-        tipTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                if self.detectedBoxes.isEmpty {
-                    self.firstVisibleAt = nil
-                    self.visibleButUndecodedSeconds = 0
-                } else {
-                    if self.firstVisibleAt == nil { self.firstVisibleAt = Date() }
-                    if let since = self.firstVisibleAt {
-                        self.visibleButUndecodedSeconds = Date().timeIntervalSince(since)
-                    }
-                }
-            }
+    /// Updates user-facing scanner hints only when AVCapture reports metadata.
+    /// No polling is needed: a visible barcode produces metadata callbacks, and
+    /// an empty callback clears the transient scanner affordances.
+    private func recordBarcodeVisibility(hasVisibleBarcode: Bool) {
+        guard hasVisibleBarcode else {
+            firstVisibleAt = nil
+            holdSteadyTipVisible = false
+            notABookFlash = false
+            return
+        }
+
+        let now = visibilityClock.now
+        if let firstVisibleAt {
+            holdSteadyTipVisible = firstVisibleAt.duration(to: now) >= holdSteadyDelay
+        } else {
+            firstVisibleAt = now
+            holdSteadyTipVisible = false
         }
     }
 }
@@ -202,10 +201,10 @@ extension BookScannerModel: AVCaptureMetadataOutputObjectsDelegate {
         Task { @MainActor in
             guard !self.locked else { return }
             self.detectedBoxes = codes.map(\.bounds)
+            self.recordBarcodeVisibility(hasVisibleBarcode: !codes.isEmpty)
             if let first = codes.first {
-                // The raw payload goes to the view; it decides whether it's
-                // a book (and calls `lock()` + stop) or a false positive
-                // that should flash "not a book".
+                // The raw payload goes to the view; Rust-owned ISBN
+                // normalization decides whether it is accepted or rejected.
                 self.resultHandler?(first.payload)
             }
         }

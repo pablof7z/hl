@@ -20,8 +20,6 @@ struct BookScannerView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var model = BookScannerModel()
     @State private var showManualEntry = false
-    @State private var tipVisible = false
-    @State private var tipTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -59,7 +57,6 @@ struct BookScannerView: View {
             }
         }
         .onDisappear {
-            tipTask?.cancel()
             model.stop()
         }
     }
@@ -89,7 +86,7 @@ struct BookScannerView: View {
             VStack {
                 topBar
                 Spacer()
-                if tipVisible {
+                if model.holdSteadyTipVisible {
                     tip
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -102,11 +99,8 @@ struct BookScannerView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .onChange(of: model.visibleButUndecodedSeconds) { _, seconds in
-            withAnimation(.easeInOut(duration: 0.2)) {
-                tipVisible = seconds >= 3
-            }
-        }
+        .animation(.easeInOut(duration: 0.2), value: model.holdSteadyTipVisible)
+        .animation(.easeInOut(duration: 0.2), value: model.notABookFlash)
     }
 
     private var topBar: some View {

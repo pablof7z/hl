@@ -117,9 +117,7 @@ async fn main() -> anyhow::Result<()> {
 
 async fn learn_follows(client: &Client, pk: PublicKey) -> anyhow::Result<Vec<PublicKey>> {
     let filter = Filter::new().kinds([Kind::ContactList]).author(pk);
-    let events = client
-        .fetch_events(filter, Duration::from_secs(15))
-        .await?;
+    let events = client.fetch_events(filter, Duration::from_secs(15)).await?;
     let Some(ev) = events.into_iter().max_by_key(|e| e.created_at) else {
         return Ok(Vec::new());
     };
@@ -158,9 +156,7 @@ async fn bench_req(relay: &str, filter: Filter) -> anyhow::Result<(usize, Durati
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let started = Instant::now();
-    let events = client
-        .fetch_events(filter, Duration::from_secs(45))
-        .await?;
+    let events = client.fetch_events(filter, Duration::from_secs(45)).await?;
     let elapsed = started.elapsed();
     Ok((events.len(), elapsed))
 }

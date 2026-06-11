@@ -24,7 +24,7 @@ struct RoomLibraryArticleCardView: View {
                 let pubkey = articleAuthorPubkey ?? artifact.pubkey
                 AuthorAvatar(
                     pubkey: pubkey,
-                    pictureURL: app.profileCache[pubkey]?.picture ?? "",
+                    pictureURL: app.profile(pubkeyHex: pubkey)?.picture ?? "",
                     displayInitial: authorInitial,
                     size: 22
                 )
@@ -33,7 +33,7 @@ struct RoomLibraryArticleCardView: View {
         )
         .task(id: articleAuthorPubkey ?? "") {
             guard let pk = articleAuthorPubkey else { return }
-            await app.requestProfile(pubkeyHex: pk)
+            app.requestProfile(pubkeyHex: pk)
         }
     }
 
@@ -62,7 +62,7 @@ struct RoomLibraryArticleCardView: View {
     }
 
     private var authorDisplayName: String {
-        let profile = articleAuthorPubkey.flatMap { app.profileCache[$0] }
+        let profile = articleAuthorPubkey.flatMap { app.profile(pubkeyHex: $0) }
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         if !artifact.preview.author.isEmpty { return artifact.preview.author }

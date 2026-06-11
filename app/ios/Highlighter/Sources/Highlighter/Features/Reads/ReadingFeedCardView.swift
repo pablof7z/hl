@@ -21,7 +21,7 @@ struct ReadingFeedCardView: View {
             avatar: {
                 AuthorAvatar(
                     pubkey: item.article.pubkey,
-                    pictureURL: app.profileCache[item.article.pubkey]?.picture ?? "",
+                    pictureURL: app.profile(pubkeyHex: item.article.pubkey)?.picture ?? "",
                     displayInitial: authorInitial,
                     size: 22
                 )
@@ -29,11 +29,11 @@ struct ReadingFeedCardView: View {
             trailing: { socialBadge }
         )
         .task(id: item.article.pubkey) {
-            await app.requestProfile(pubkeyHex: item.article.pubkey)
+            app.requestProfile(pubkeyHex: item.article.pubkey)
         }
         .task(id: primaryInteractor ?? "") {
             guard let pk = primaryInteractor else { return }
-            await app.requestProfile(pubkeyHex: pk)
+            app.requestProfile(pubkeyHex: pk)
         }
     }
 
@@ -97,7 +97,7 @@ struct ReadingFeedCardView: View {
     // MARK: - Author name / initial resolution
 
     private var authorDisplayName: String {
-        let profile = app.profileCache[item.article.pubkey]
+        let profile = app.profile(pubkeyHex: item.article.pubkey)
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return shortPubkey(item.article.pubkey)
@@ -109,7 +109,7 @@ struct ReadingFeedCardView: View {
 
     private var firstInteractorName: String {
         guard let pk = primaryInteractor else { return "Someone" }
-        let profile = app.profileCache[pk]
+        let profile = app.profile(pubkeyHex: pk)
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return shortPubkey(pk)

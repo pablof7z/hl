@@ -4,17 +4,24 @@
 //! `subscription_id`, so Swift can route the change to the view-scoped store
 //! that installed the subscription.
 
+use crate::models::RelayStatus;
 use crate::models::{
     ArtifactRecord, ChatMessageRecord, CommunitySummary, CurrentUser, DiscussionRecord,
     FeedbackEventRecord, HighlightRecord, HydratedHighlight,
 };
-use crate::models::RelayStatus;
 
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum DataChangeType {
-    CommunityUpserted { community: CommunitySummary },
-    MembershipChanged { group_id: String },
-    ArtifactUpserted { group_id: String, artifact: ArtifactRecord },
+    CommunityUpserted {
+        community: CommunitySummary,
+    },
+    MembershipChanged {
+        group_id: String,
+    },
+    ArtifactUpserted {
+        group_id: String,
+        artifact: ArtifactRecord,
+    },
     DiscussionUpserted {
         group_id: String,
         discussion: DiscussionRecord,
@@ -35,17 +42,25 @@ pub enum DataChangeType {
         highlight_id: String,
         shared_by_pubkey: String,
     },
-    MyHighlightUpserted { highlight: HighlightRecord },
+    MyHighlightUpserted {
+        highlight: HighlightRecord,
+    },
     /// Something that affects the profile view for `pubkey` arrived. `kind`
     /// is the event kind (0 metadata, 3 contacts, 30023 article, 9802
     /// highlight, 39001/39002 membership) so the Swift store can re-query
     /// just the affected slice.
-    UserProfileUpdated { pubkey: String, kind: u32 },
+    UserProfileUpdated {
+        pubkey: String,
+        kind: u32,
+    },
     /// Something that affects the article reader for `address`
     /// (`30023:<pubkey>:<d>`) arrived. `kind` is `30023` when the article
     /// body/metadata itself changed (replaceable supersession) or `9802`
     /// when a new highlight was published against it.
-    ArticleUpdated { address: String, kind: u32 },
+    ArticleUpdated {
+        address: String,
+        kind: u32,
+    },
     /// The Following Reads feed has a new data point — either a follow
     /// published a new article, or a follow interacted with one. The Swift
     /// store re-queries the full feed on each delta (dedupe + sort is
@@ -62,37 +77,48 @@ pub enum DataChangeType {
     FeedbackThreadsUpdated,
     /// A kind:1 message inside an open feedback thread arrived. The Swift
     /// store inserts/upserts it into the chat view ordered by `created_at`.
-    FeedbackThreadEventUpserted { event: FeedbackEventRecord },
+    FeedbackThreadEventUpserted {
+        event: FeedbackEventRecord,
+    },
     /// A NIP-50 relay search returned new kind:30023 events. The Swift store
     /// re-queries its local article substring match on receipt; payload is the
     /// query the subscription was opened with (so a stale pump can't update a
     /// newer query's bucket).
-    SearchArticlesUpdated { query: String },
+    SearchArticlesUpdated {
+        query: String,
+    },
     /// The current user's NIP-51 kind:10003 bookmark list was updated
     /// (either by us via `toggle_bookmark` or by another client relaying a
     /// newer event). App-scope delta — Swift re-queries the authoritative
     /// list from nostrdb.
     BookmarksUpdated,
     /// One of the current user's kind:30003 / kind:30004 sets changed.
-    /// View-scoped — the BookmarkStore re-queries on receipt.
+    /// View-scoped — Rust-owned bookmark snapshots re-query on receipt.
     BookmarkSetsUpdated,
     /// A kind:30004 curation set from a followed author arrived.
-    /// View-scoped — the BookmarkStore re-queries the explore list.
+    /// View-scoped — Rust-owned bookmark snapshots re-query the explore list.
     FollowingCurationSetsUpdated,
     /// A NIP-B0 kind:39701 web bookmark from the current user changed.
-    /// View-scoped — the BookmarkStore re-queries on receipt.
+    /// View-scoped — Rust-owned bookmark snapshots re-query on receipt.
     WebBookmarksUpdated,
     /// NIP-46 signer connected — fires after a remote signer completes the
     /// `nostrconnect://` or `bunker://` handshake.
-    SignerConnected { user: CurrentUser },
+    SignerConnected {
+        user: CurrentUser,
+    },
     /// NIP-46 signer is requesting user approval to sign an event (for the
     /// rare case our own core is acting as a signer — MVP does not act as
     /// one, but keeping the variant here matches TENEX's shape).
-    BunkerSignRequest { request_id: String },
+    BunkerSignRequest {
+        request_id: String,
+    },
     /// A relay in the user's pool changed connection state. Swift re-reads
     /// `get_relay_diagnostics` on receipt to refresh per-row status dots,
     /// latency, and traffic counters.
-    RelayStatusChanged { url: String, state: RelayStatus },
+    RelayStatusChanged {
+        url: String,
+        state: RelayStatus,
+    },
 }
 
 /// Every delta delivered to Swift. The `subscription_id` routes the change

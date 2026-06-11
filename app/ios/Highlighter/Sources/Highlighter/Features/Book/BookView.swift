@@ -12,7 +12,7 @@ struct BookView: View {
         catalogId.hasPrefix("isbn:") ? String(catalogId.dropFirst("isbn:".count)) : catalogId
     }
 
-    private var preview: ArtifactPreview? { app.isbnPreviewCache[isbn] }
+    private var preview: ArtifactPreview? { app.isbnPreview(isbn: isbn) }
 
     var body: some View {
         ScrollView {
@@ -216,7 +216,7 @@ struct BookView: View {
         HStack(spacing: 6) {
             AuthorAvatar(
                 pubkey: h.pubkey,
-                pictureURL: app.profileCache[h.pubkey]?.picture ?? "",
+                pictureURL: app.profile(pubkeyHex: h.pubkey)?.picture ?? "",
                 displayInitial: displayName(h.pubkey).prefix(1).description.uppercased(),
                 size: 16,
                 ringWidth: 0
@@ -230,13 +230,13 @@ struct BookView: View {
                 Text(rel).font(.caption2).foregroundStyle(Color.highlighterInkMuted)
             }
         }
-        .task(id: h.pubkey) { await app.requestProfile(pubkeyHex: h.pubkey) }
+        .task(id: h.pubkey) { app.requestProfile(pubkeyHex: h.pubkey) }
     }
 
     // MARK: - Data loading
 
     private func load() async {
-        await app.requestIsbnPreview(isbn: isbn)
+        app.requestIsbnPreview(isbn: isbn)
         let tagValue = catalogId.hasPrefix("isbn:") ? catalogId : "isbn:\(catalogId)"
         if let hs = try? await app.safeCore.getHighlightsForReference(
             tagName: "i",
@@ -250,7 +250,7 @@ struct BookView: View {
     // MARK: - Helpers
 
     private func displayName(_ pubkey: String) -> String {
-        let p = app.profileCache[pubkey]
+        let p = app.profile(pubkeyHex: pubkey)
         if let dn = p?.displayName, !dn.isEmpty { return dn }
         if let n = p?.name, !n.isEmpty { return n }
         return String(pubkey.prefix(8))

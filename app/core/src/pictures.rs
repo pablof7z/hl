@@ -28,12 +28,8 @@ pub async fn publish_picture(
         .map(str::trim)
         .filter(|s| !s.is_empty());
 
-    let builder = build_picture_event(
-        group_id,
-        &draft.image,
-        draft.artifact.as_ref(),
-        &draft.note,
-    )?;
+    let builder =
+        build_picture_event(group_id, &draft.image, draft.artifact.as_ref(), &draft.note)?;
     let client = runtime.client();
     let event = client
         .sign_event_builder(builder)
@@ -173,8 +169,8 @@ mod tests {
 
     #[test]
     fn picture_event_has_h_and_imeta() {
-        let builder = build_picture_event(Some("group-a"), &sample_image(), None, "hello")
-            .expect("build");
+        let builder =
+            build_picture_event(Some("group-a"), &sample_image(), None, "hello").expect("build");
         let tags = tag_pairs(&builder);
 
         assert!(
@@ -201,32 +197,31 @@ mod tests {
             .expect("build");
         let tags = tag_pairs(&builder);
         assert!(
-            tags.iter().any(|t| t.first().map(String::as_str) == Some("i")
-                && t.get(1).map(String::as_str) == Some("isbn:9781234567890")),
+            tags.iter()
+                .any(|t| t.first().map(String::as_str) == Some("i")
+                    && t.get(1).map(String::as_str) == Some("isbn:9781234567890")),
             "artifact ref tag missing: {tags:?}"
         );
     }
 
     #[test]
     fn picture_event_omits_artifact_reference_when_none() {
-        let builder = build_picture_event(Some("group-a"), &sample_image(), None, "")
-            .expect("build");
+        let builder =
+            build_picture_event(Some("group-a"), &sample_image(), None, "").expect("build");
         let tags = tag_pairs(&builder);
         assert!(
-            !tags
-                .iter()
-                .any(|t| matches!(
-                    t.first().map(String::as_str),
-                    Some("i") | Some("a") | Some("e") | Some("r")
-                )),
+            !tags.iter().any(|t| matches!(
+                t.first().map(String::as_str),
+                Some("i") | Some("a") | Some("e") | Some("r")
+            )),
             "no artifact ref tag expected: {tags:?}"
         );
     }
 
     #[test]
     fn picture_event_content_is_trimmed_note() {
-        let builder = build_picture_event(Some("group-a"), &sample_image(), None, "  hi  ")
-            .expect("build");
+        let builder =
+            build_picture_event(Some("group-a"), &sample_image(), None, "  hi  ").expect("build");
         let event = builder.sign_with_keys(&Keys::generate()).expect("sign");
         assert_eq!(event.content, "hi");
     }

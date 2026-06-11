@@ -28,8 +28,7 @@ pub fn query_for_group(
         return Err(CoreError::InvalidInput("group_id must not be empty".into()));
     }
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let filter = NdbFilter::new()
         .kinds([KIND_DISCUSSION as u64])
@@ -91,9 +90,8 @@ pub async fn publish(
         .await
         .map_err(|e| CoreError::Relay(format!("publish discussion: {e}")))?;
 
-    record_from_event(&event).ok_or_else(|| {
-        CoreError::Other("signed discussion event failed to parse back".into())
-    })
+    record_from_event(&event)
+        .ok_or_else(|| CoreError::Other("signed discussion event failed to parse back".into()))
 }
 
 pub fn is_discussion(event: &Event) -> bool {
@@ -109,7 +107,10 @@ pub(crate) fn record_from_event(event: &Event) -> Option<DiscussionRecord> {
     if !is_discussion(event) {
         return None;
     }
-    let title = first_tag_value(event, "title").unwrap_or("").trim().to_string();
+    let title = first_tag_value(event, "title")
+        .unwrap_or("")
+        .trim()
+        .to_string();
     let group_id = first_tag_value(event, "h")?.to_string();
     let slug = first_tag_value(event, "d")
         .map(str::to_string)
@@ -137,10 +138,18 @@ pub(crate) fn record_from_event(event: &Event) -> Option<DiscussionRecord> {
 }
 
 fn read_attachment(event: &Event) -> Option<DiscussionAttachment> {
-    let a = first_tag_value(event, "a").map(str::to_string).unwrap_or_default();
-    let e = first_tag_value(event, "e").map(str::to_string).unwrap_or_default();
-    let i = first_tag_value(event, "i").map(str::to_string).unwrap_or_default();
-    let r = first_tag_value(event, "r").map(str::to_string).unwrap_or_default();
+    let a = first_tag_value(event, "a")
+        .map(str::to_string)
+        .unwrap_or_default();
+    let e = first_tag_value(event, "e")
+        .map(str::to_string)
+        .unwrap_or_default();
+    let i = first_tag_value(event, "i")
+        .map(str::to_string)
+        .unwrap_or_default();
+    let r = first_tag_value(event, "r")
+        .map(str::to_string)
+        .unwrap_or_default();
     if a.is_empty() && e.is_empty() && i.is_empty() && r.is_empty() {
         return None;
     }
@@ -183,7 +192,11 @@ fn build_event(
         match preview.reference_tag_name.as_str() {
             "i" => {
                 if !preview.url.is_empty() {
-                    tags.push(parse_tag(&["i", &preview.reference_tag_value, &preview.url])?);
+                    tags.push(parse_tag(&[
+                        "i",
+                        &preview.reference_tag_value,
+                        &preview.url,
+                    ])?);
                 } else {
                     tags.push(parse_tag(&["i", &preview.reference_tag_value])?);
                 }
@@ -276,11 +289,7 @@ mod tests {
             ],
             "hi",
         );
-        let without = sign(
-            &keys,
-            vec![parse_tag(&["h", "room-a"]).unwrap()],
-            "hi",
-        );
+        let without = sign(&keys, vec![parse_tag(&["h", "room-a"]).unwrap()], "hi");
         assert!(is_discussion(&with_marker));
         assert!(!is_discussion(&without));
     }

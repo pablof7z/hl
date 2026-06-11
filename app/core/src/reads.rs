@@ -70,8 +70,7 @@ pub fn query_following_reads(
         .map(|pk| pk.to_hex().to_ascii_lowercase())
         .collect();
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     // Pull generously per stream so dedupe has headroom. The final slice
     // honors `limit` after sort.
@@ -134,10 +133,7 @@ pub fn query_following_reads(
 
     for article in direct_articles {
         let address = format!("30023:{}:{}", article.pubkey, article.identifier);
-        let activity_at = article
-            .published_at
-            .or(article.created_at)
-            .unwrap_or(0);
+        let activity_at = article.published_at.or(article.created_at).unwrap_or(0);
         by_address
             .entry(address)
             .and_modify(|item| {
@@ -303,8 +299,7 @@ fn parse_article_address(address: &str) -> Option<(String, String)> {
 fn references_article_kind(event: &Event) -> bool {
     event.tags.iter().any(|tag| {
         let s = tag.as_slice();
-        s.first().map(String::as_str) == Some("k")
-            && s.get(1).map(String::as_str) == Some("30023")
+        s.first().map(String::as_str) == Some("k") && s.get(1).map(String::as_str) == Some("30023")
     })
 }
 
@@ -356,11 +351,7 @@ mod tests {
             vec![
                 Tag::identifier(d),
                 Tag::parse(vec!["title".to_string(), title.to_string()]).unwrap(),
-                Tag::parse(vec![
-                    "published_at".to_string(),
-                    published_at.to_string(),
-                ])
-                .unwrap(),
+                Tag::parse(vec!["published_at".to_string(), published_at.to_string()]).unwrap(),
             ],
             ts,
             "body",
@@ -368,7 +359,10 @@ mod tests {
     }
 
     fn contact_list(me: &Keys, follows: &[&Keys], ts: u64) -> Event {
-        let tags: Vec<Tag> = follows.iter().map(|k| Tag::public_key(k.public_key())).collect();
+        let tags: Vec<Tag> = follows
+            .iter()
+            .map(|k| Tag::public_key(k.public_key()))
+            .collect();
         sign(me, 3, tags, ts, "")
     }
 
@@ -396,8 +390,7 @@ mod tests {
         let (ndb, _tmp) = isolated_ndb();
         let me = Keys::generate();
         // Don't publish a contact list.
-        let feed =
-            query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
+        let feed = query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
         assert!(feed.is_empty());
     }
 
@@ -420,8 +413,7 @@ mod tests {
         ingest(&ndb, &s1);
         wait_for_ndb();
 
-        let feed =
-            query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
+        let feed = query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
         assert_eq!(feed.len(), 2, "only follow-authored articles surface");
         assert!(feed.iter().all(|item| item.author_followed));
         assert!(feed.iter().all(|item| item.interactor_pubkeys.is_empty()));
@@ -441,26 +433,18 @@ mod tests {
         ingest(&ndb, &contact_list(&me, &[&alice], 1));
 
         // Article authored by someone the user does NOT follow.
-        let outsider_post =
-            article_event(&outsider, "gem", "Gem Article", 500, 500);
+        let outsider_post = article_event(&outsider, "gem", "Gem Article", 500, 500);
         ingest(&ndb, &outsider_post);
         let address = format!("30023:{}:gem", outsider.public_key().to_hex());
 
         // Alice (a follow) reacts + comments. Each should surface the article.
         let reaction = interaction_event(&alice, KIND_REACTION, &address, 1_000, "+");
-        let comment = interaction_event(
-            &alice,
-            KIND_NIP22_COMMENT,
-            &address,
-            1_500,
-            "great read",
-        );
+        let comment = interaction_event(&alice, KIND_NIP22_COMMENT, &address, 1_500, "great read");
         ingest(&ndb, &reaction);
         ingest(&ndb, &comment);
         wait_for_ndb();
 
-        let feed =
-            query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
+        let feed = query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
         assert_eq!(feed.len(), 1);
         let item = &feed[0];
         assert_eq!(item.article.title, "Gem Article");
@@ -494,8 +478,7 @@ mod tests {
         ingest(&ndb, &reaction);
         wait_for_ndb();
 
-        let feed =
-            query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
+        let feed = query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
         assert_eq!(feed.len(), 1);
         let item = &feed[0];
         assert!(item.author_followed);
@@ -526,8 +509,7 @@ mod tests {
         );
         ingest(&ndb, &orphan);
 
-        let feed =
-            query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
+        let feed = query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
         assert!(feed.is_empty());
     }
 
@@ -545,8 +527,7 @@ mod tests {
         let reaction = interaction_event(&alice, KIND_REACTION, &address, 1_000, "+");
         ingest(&ndb, &reaction);
 
-        let feed =
-            query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
+        let feed = query_following_reads(&ndb, &me.public_key().to_hex(), 20).expect("query");
         // Article isn't cached yet; surfacing a blank card is worse than
         // showing nothing. Expect empty until backfill lands.
         assert!(feed.is_empty());
@@ -571,8 +552,7 @@ mod tests {
             );
         }
         wait_for_ndb();
-        let feed =
-            query_following_reads(&ndb, &me.public_key().to_hex(), 2).expect("query");
+        let feed = query_following_reads(&ndb, &me.public_key().to_hex(), 2).expect("query");
         assert_eq!(feed.len(), 2);
         assert_eq!(feed[0].article.identifier, "p4");
         assert_eq!(feed[1].article.identifier, "p3");

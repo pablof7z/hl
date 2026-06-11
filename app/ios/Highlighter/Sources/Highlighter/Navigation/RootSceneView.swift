@@ -8,13 +8,13 @@ struct RootSceneView: View {
     /// iOS often delivers two within ~250ms.
     @State private var lastShakeAt: Date = .distantPast
 
-    @AppStorage("onboardingComplete") private var isOnboardingComplete: Bool = false
-
     var body: some View {
         Group {
-            if store.isLoggedIn {
+            if store.isLoggedIn && store.nmpState.onboarding.isComplete {
                 MainTabView()
-            } else if isOnboardingComplete {
+            } else if store.isLoggedIn {
+                NavigationStack { OnboardingInterestsView() }
+            } else if store.nmpState.onboarding.isComplete {
                 NavigationStack { LoginView() }
             } else {
                 NavigationStack { OnboardingView() }
@@ -26,22 +26,13 @@ struct RootSceneView: View {
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 Task { await ShareQueueProcessor.drain(app: store) }
-                // iOS suspends WebSockets while we're backgrounded; nostr-sdk's
-                // `connect()` is idempotent and skips relays it still believes
-                // are connected, so disconnect first to force a fresh socket
-                // and subscription re-issue. Without this the NIP-46
-                // nostrconnect:// flow misses Primal's response when the user
-                // comes back from the signer app.
-                Task {
-                    try? await store.safeCore.disconnectAll()
-                    try? await store.safeCore.reconnectAll()
-                }
+                store.appForegrounded()
             }
         }
         .overlay(alignment: .top) {
             if let toast = store.shareToast {
                 ShareToastBanner(text: toast) {
-                    store.shareToast = nil
+                    store.clearToast()
                 }
                 .padding(.top, 8)
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -76,14 +67,17 @@ private struct ShareToastBanner: View {
             Text(text)
                 .foregroundStyle(.white)
                 .font(.subheadline.weight(.medium))
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .accessibilityLabel("Dismiss")
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(Color.green.opacity(0.9), in: .capsule)
         .shadow(radius: 6)
-        .task {
-            try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
-            onDismiss()
-        }
     }
 }

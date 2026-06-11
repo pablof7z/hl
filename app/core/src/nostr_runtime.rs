@@ -49,9 +49,8 @@ pub type EventCallbackSlot = Arc<parking_lot::RwLock<Option<Arc<dyn EventCallbac
 /// the runtime.
 const DIAGNOSTICS_POLL_INTERVAL: Duration = Duration::from_secs(1);
 
-/// LMDB map size for the iOS cache. 2 GiB gives plenty of headroom for a
-/// highlights/artifacts cache while staying well below iOS's per-app storage
-/// caps. Matches the order of magnitude TENEX uses (8 GiB on desktop).
+/// Local nostrdb map size. LMDB reserves address space, not disk, and the
+/// cache grows on demand as events arrive.
 const NDB_MAPSIZE_BYTES: usize = 2 * 1024 * 1024 * 1024;
 
 pub struct NostrRuntime {
@@ -101,10 +100,10 @@ impl NostrRuntime {
         std::fs::create_dir_all(&data_dir)
             .map_err(|e| CoreError::Cache(format!("create data dir: {e}")))?;
 
-        let ndb_config = NdbConfig::new().set_mapsize(NDB_MAPSIZE_BYTES);
         let db_path_str = data_dir
             .to_str()
             .ok_or_else(|| CoreError::Cache("data dir is not valid UTF-8".into()))?;
+        let ndb_config = NdbConfig::new().set_mapsize(NDB_MAPSIZE_BYTES);
         let ndb = Ndb::new(db_path_str, &ndb_config)
             .map_err(|e| CoreError::Cache(format!("open nostrdb: {e}")))?;
         let ndb = Arc::new(ndb);
@@ -203,7 +202,10 @@ impl NostrRuntime {
             // stage 2 by `spawn_group_metadata_subscription` once the pump
             // sees a membership event for each group.
             let filter = Filter::new()
-                .kinds([Kind::Custom(KIND_GROUP_ADMINS), Kind::Custom(KIND_GROUP_MEMBERS)])
+                .kinds([
+                    Kind::Custom(KIND_GROUP_ADMINS),
+                    Kind::Custom(KIND_GROUP_MEMBERS),
+                ])
                 .pubkey(pubkey);
             subscribe_routed(&client, id_clone, filter, urls, "rooms/membership").await;
         });
@@ -245,73 +247,6 @@ impl NostrRuntime {
                 .custom_tag(SingleLetterTag::lowercase(Alphabet::D), d_tag);
             subscribe_routed(&client, id, filter, urls, "indexer/article-backfill").await;
         });
-    }
-
-    /// Backfill the event behind a [`NostrEntityRef`] from the network.
-    /// Routes to whatever relay hints the entity carried (set by the
-    /// publisher of an `nevent1…` / `naddr1…`) plus the indexer pool,
-    /// so a hot relay hint hits first and the indexer is the safety net.
-    /// Fire-and-forget; the event lands in nostrdb via the NdbDatabase
-    /// bridge and the next `resolve_nostr_entity` returns it. No-op
-    /// when no relays are available (e.g. the indexer pool isn't
-    /// configured yet — `purplepag.es` is hardcoded so this is rare).
-    pub fn spawn_nostr_entity_backfill(
-        &self,
-        entity: crate::nostr_entities::NostrEntityRef,
-    ) -> Result<(), crate::errors::CoreError> {
-        use crate::nostr_entities::NostrEntityRef;
-
-        let mut hint_relays: Vec<String> = match &entity {
-            NostrEntityRef::Profile { relays, .. }
-            | NostrEntityRef::Event { relays, .. }
-            | NostrEntityRef::Address { relays, .. } => relays.clone(),
-        };
-        for u in self.indexer_urls() {
-            if !hint_relays.iter().any(|r| r == &u) {
-                hint_relays.push(u);
-            }
-        }
-        if hint_relays.is_empty() {
-            tracing::warn!("nostr-entity backfill: no relays available");
-            return Ok(());
-        }
-
-        let filter = match entity {
-            NostrEntityRef::Profile { pubkey_hex, .. } => {
-                let pk = PublicKey::from_hex(&pubkey_hex)
-                    .map_err(|e| crate::errors::CoreError::InvalidInput(e.to_string()))?;
-                Filter::new().kinds([Kind::Custom(0)]).author(pk).limit(1)
-            }
-            NostrEntityRef::Event { event_id_hex, .. } => {
-                let id = EventId::from_hex(&event_id_hex)
-                    .map_err(|e| crate::errors::CoreError::InvalidInput(e.to_string()))?;
-                Filter::new().id(id).limit(1)
-            }
-            NostrEntityRef::Address {
-                kind,
-                pubkey_hex,
-                d_tag,
-                ..
-            } => {
-                let pk = PublicKey::from_hex(&pubkey_hex)
-                    .map_err(|e| crate::errors::CoreError::InvalidInput(e.to_string()))?;
-                Filter::new()
-                    .kinds([Kind::Custom(kind as u16)])
-                    .author(pk)
-                    .custom_tag(SingleLetterTag::lowercase(Alphabet::D), d_tag)
-                    .limit(1)
-            }
-        };
-
-        let id = SubscriptionId::generate();
-        let client = self.client.clone();
-        self.rt().spawn(async move {
-            for url in &hint_relays {
-                pin_relay_for_read(&client, url).await;
-            }
-            subscribe_routed(&client, id, filter, hint_relays, "nostr-entity-backfill").await;
-        });
-        Ok(())
     }
 
     /// Stage 2 of the join-set query: fetch metadata for the supplied
@@ -503,9 +438,7 @@ impl NostrRuntime {
         let id_clone = id.clone();
         let urls = self.indexer_urls();
         self.rt().spawn(async move {
-            let filter = Filter::new()
-                .kinds([Kind::Custom(10002)])
-                .authors(follows);
+            let filter = Filter::new().kinds([Kind::Custom(10002)]).authors(follows);
             subscribe_routed(&client, id_clone, filter, urls, "indexer/follows-nip65").await;
         });
         Some(id)
@@ -727,7 +660,8 @@ impl NostrRuntime {
             loop {
                 ticker.tick().await;
                 let relays = client.relays().await;
-                let mut next: HashMap<String, RelayDiagnostic> = HashMap::with_capacity(relays.len());
+                let mut next: HashMap<String, RelayDiagnostic> =
+                    HashMap::with_capacity(relays.len());
                 let mut changed_urls: Vec<(String, AppRelayStatus)> = Vec::new();
 
                 {
@@ -842,9 +776,7 @@ pub async fn pin_relay_for_read(client: &Client, url: &str) {
     let refreshed = client.relays().await;
     if let Some((_, relay)) = refreshed.iter().find(|(u, _)| u.to_string() == url) {
         let flags = relay.flags();
-        flags.remove(
-            RelayServiceFlags::READ | RelayServiceFlags::WRITE | RelayServiceFlags::PING,
-        );
+        flags.remove(RelayServiceFlags::READ | RelayServiceFlags::WRITE | RelayServiceFlags::PING);
         flags.add(RelayServiceFlags::READ | RelayServiceFlags::PING);
     }
     if let Err(e) = client.connect_relay(url).await {
@@ -1132,7 +1064,11 @@ mod tests {
         apply_relay_config(&client, &initial).await;
 
         let after = client.relays().await;
-        assert_eq!(after.len(), 2, "pool should have exactly the two configured relays");
+        assert_eq!(
+            after.len(),
+            2,
+            "pool should have exactly the two configured relays"
+        );
 
         let one = after
             .iter()
@@ -1298,13 +1234,19 @@ mod tests {
         reads.sort();
         assert_eq!(
             reads,
-            vec!["wss://r.example".to_string(), "wss://rw.example".to_string()]
+            vec![
+                "wss://r.example".to_string(),
+                "wss://rw.example".to_string()
+            ]
         );
         let mut writes = rt.write_urls();
         writes.sort();
         assert_eq!(
             writes,
-            vec!["wss://rw.example".to_string(), "wss://w.example".to_string()]
+            vec![
+                "wss://rw.example".to_string(),
+                "wss://w.example".to_string()
+            ]
         );
     }
 
@@ -1316,8 +1258,10 @@ mod tests {
         // Cache starts empty until `apply_relay_config` populates it. The
         // background `spawn_connect` will eventually fill it; the accessor
         // contract is "empty until reconcile completes".
-        assert!(runtime.current_relays().is_empty() || !runtime.current_relays().is_empty(),
-                "accessor must not panic even when cache is unpopulated");
+        assert!(
+            runtime.current_relays().is_empty() || !runtime.current_relays().is_empty(),
+            "accessor must not panic even when cache is unpopulated"
+        );
         // Role accessors on a freshly-built runtime return empty vecs
         // without hitting any async state.
         let _ = runtime.rooms_urls();

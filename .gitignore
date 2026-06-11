@@ -11,3 +11,9 @@ node_modules/
 public/output.css
 .playwright-cli/
 relay/croissant-linux-amd64
+app/core/target/
+app/android/.gradle/
+app/android/.kotlin/
+app/android/**/build/
+app/android/app/src/main/jniLibs/
+app/ios/DerivedData*/

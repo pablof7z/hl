@@ -65,20 +65,21 @@ pub fn search_highlights(
     if q.is_empty() {
         return Ok(Vec::new());
     }
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
-    let filter = NdbFilter::new()
-        .kinds([KIND_HIGHLIGHT as u64])
-        .build();
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let filter = NdbFilter::new().kinds([KIND_HIGHLIGHT as u64]).build();
     let results = ndb
         .query(&txn, &[filter], scan_cap(limit))
         .map_err(|e| CoreError::Cache(format!("query highlights: {e}")))?;
 
     let mut records: Vec<HighlightRecord> = Vec::new();
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
         let note_text = first_tag_value(&event, "comment").unwrap_or("");
         if !(contains_ci(&event.content, q) || contains_ci(note_text, q)) {
             continue;
@@ -104,11 +105,8 @@ pub fn search_articles(
     if q.is_empty() {
         return Ok(Vec::new());
     }
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
-    let filter = NdbFilter::new()
-        .kinds([KIND_LONG_FORM as u64])
-        .build();
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let filter = NdbFilter::new().kinds([KIND_LONG_FORM as u64]).build();
     let results = ndb
         .query(&txn, &[filter], scan_cap(limit))
         .map_err(|e| CoreError::Cache(format!("query articles: {e}")))?;
@@ -116,9 +114,13 @@ pub fn search_articles(
     // Collect into addressable-event dedupe map (newest per (pubkey, d) wins).
     let mut best_per_addr: BTreeMap<(String, String), Event> = BTreeMap::new();
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
         let title = first_tag_value(&event, "title").unwrap_or("");
         let summary = first_tag_value(&event, "summary").unwrap_or("");
         let d_tag = first_tag_value(&event, "d").unwrap_or("");
@@ -165,11 +167,8 @@ pub fn search_communities(
     if q.is_empty() {
         return Ok(Vec::new());
     }
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
-    let filter = NdbFilter::new()
-        .kinds([KIND_GROUP_METADATA as u64])
-        .build();
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let filter = NdbFilter::new().kinds([KIND_GROUP_METADATA as u64]).build();
     let results = ndb
         .query(&txn, &[filter], scan_cap(limit))
         .map_err(|e| CoreError::Cache(format!("query communities: {e}")))?;
@@ -177,9 +176,13 @@ pub fn search_communities(
     // Dedupe per `d` tag — kind:39000 is replaceable; newest wins.
     let mut best_per_d: BTreeMap<String, Event> = BTreeMap::new();
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
         let name = first_tag_value(&event, "name").unwrap_or("");
         let about = first_tag_value(&event, "about").unwrap_or("");
         let d_tag = first_tag_value(&event, "d").unwrap_or("");
@@ -214,11 +217,8 @@ pub fn search_profiles(
     if q.is_empty() {
         return Ok(Vec::new());
     }
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
-    let filter = NdbFilter::new()
-        .kinds([KIND_METADATA as u64])
-        .build();
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let filter = NdbFilter::new().kinds([KIND_METADATA as u64]).build();
     let results = ndb
         .query(&txn, &[filter], scan_cap(limit))
         .map_err(|e| CoreError::Cache(format!("query profiles: {e}")))?;
@@ -226,9 +226,13 @@ pub fn search_profiles(
     // Dedupe per author — kind:0 is replaceable; newest wins.
     let mut best_per_author: BTreeMap<String, Event> = BTreeMap::new();
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
         let author = event.pubkey.to_hex();
         match best_per_author.get(&author) {
             Some(prev) if prev.created_at >= event.created_at => {}
@@ -311,8 +315,7 @@ pub fn query_search_relays(ndb: &Ndb, user_hex: &str) -> Result<Vec<String>, Cor
     let Ok(author) = PublicKey::from_hex(user_hex) else {
         return Ok(out);
     };
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
     let pk_bytes: [u8; 32] = author.to_bytes();
     let filter = NdbFilter::new()
         .kinds([KIND_SEARCH_RELAYS as u64])
@@ -324,9 +327,13 @@ pub fn query_search_relays(ndb: &Ndb, user_hex: &str) -> Result<Vec<String>, Cor
 
     let mut newest: Option<Event> = None;
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
         newest = Some(match newest {
             Some(prev) if prev.created_at >= event.created_at => prev,
             _ => event,
@@ -471,7 +478,11 @@ mod tests {
             .sign_with_keys(&keys)
             .unwrap();
         let match_note = EventBuilder::new(Kind::Custom(KIND_HIGHLIGHT), "an unrelated quote")
-            .tags([Tag::parse(vec!["comment".to_string(), "dostoevsky fan club".to_string()]).unwrap()])
+            .tags([Tag::parse(vec![
+                "comment".to_string(),
+                "dostoevsky fan club".to_string(),
+            ])
+            .unwrap()])
             .sign_with_keys(&keys)
             .unwrap();
         let no_match = EventBuilder::new(Kind::Custom(KIND_HIGHLIGHT), "Proust is the best")
@@ -505,7 +516,11 @@ mod tests {
         let newer = EventBuilder::new(Kind::Custom(KIND_LONG_FORM), "new body")
             .tags([
                 Tag::parse(vec!["d".to_string(), "essay".to_string()]).unwrap(),
-                Tag::parse(vec!["title".to_string(), "On Attention (revised)".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "title".to_string(),
+                    "On Attention (revised)".to_string(),
+                ])
+                .unwrap(),
             ])
             .custom_created_at(Timestamp::from(2_000u64))
             .sign_with_keys(&keys)
@@ -555,7 +570,10 @@ mod tests {
 
         let hits = search_profiles(&ndb, "huxley", 20).unwrap();
         assert_eq!(hits.len(), 2);
-        assert_eq!(hits[0].display_name, "Huxley's Fan", "prefix match ranks first");
+        assert_eq!(
+            hits[0].display_name, "Huxley's Fan",
+            "prefix match ranks first"
+        );
     }
 
     #[test]
@@ -565,7 +583,11 @@ mod tests {
 
         let event = EventBuilder::new(Kind::Custom(KIND_SEARCH_RELAYS), "")
             .tags([
-                Tag::parse(vec!["relay".to_string(), "wss://relay.nostr.band".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "relay".to_string(),
+                    "wss://relay.nostr.band".to_string(),
+                ])
+                .unwrap(),
                 Tag::parse(vec!["relay".to_string(), HIGHLIGHTER_RELAY.to_string()]).unwrap(),
             ])
             .sign_with_keys(&user)

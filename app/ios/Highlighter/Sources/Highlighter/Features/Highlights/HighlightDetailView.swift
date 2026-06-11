@@ -72,11 +72,11 @@ struct HighlightDetailView: View {
                 currentUserPubkey: app.currentUser?.pubkey
             )
         }
-        .task(id: highlight.eventId) {
-            await refreshShareURL()
+        .task(id: "\(highlight.eventId):\(highlight.pubkey)") {
+            refreshShareURL()
         }
         .task(id: highlight.pubkey) {
-            await app.requestProfile(pubkeyHex: highlight.pubkey)
+            app.requestProfile(pubkeyHex: highlight.pubkey)
         }
     }
 
@@ -174,7 +174,7 @@ struct HighlightDetailView: View {
             HStack(spacing: 10) {
                 AuthorAvatar(
                     pubkey: highlight.pubkey,
-                    pictureURL: app.profileCache[highlight.pubkey]?.picture ?? "",
+                    pictureURL: app.profile(pubkeyHex: highlight.pubkey)?.picture ?? "",
                     displayInitial: initial(for: highlight.pubkey),
                     size: 32
                 )
@@ -317,23 +317,18 @@ struct HighlightDetailView: View {
         .event(id: highlight.eventId, kind: 9802)
     }
 
-    /// Public web URL that the share sheet hands to other apps. The
-    /// route at `/highlight/<nevent>` on `beta.highlighter.com` is
-    /// server-rendered with full Open Graph + Twitter Card meta so the
-    /// link unfurls into a social card built around the quote.
-    private func refreshShareURL() async {
+    private func refreshShareURL() {
         guard
-            let nevent = try? await app.safeCore.encodeNevent(
+            let urlString = app.safeCore.highlightShareURL(
                 eventIdHex: highlight.eventId,
-                authorPubkeyHex: highlight.pubkey,
-                relayHints: ["wss://relay.highlighter.com"],
-                kind: 9802
-            )
+                authorPubkeyHex: highlight.pubkey
+            ),
+            let url = URL(string: urlString)
         else {
             shareURL = nil
             return
         }
-        shareURL = URL(string: "https://beta.highlighter.com/highlight/\(nevent)")
+        shareURL = url
     }
 
     // MARK: - Reader-target dispatch (mirror of HighlightsTabView)
@@ -456,7 +451,7 @@ struct HighlightDetailView: View {
     // MARK: - Profile helpers
 
     private func displayName(for pubkey: String) -> String {
-        let profile = app.profileCache[pubkey]
+        let profile = app.profile(pubkeyHex: pubkey)
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return String(pubkey.prefix(10))

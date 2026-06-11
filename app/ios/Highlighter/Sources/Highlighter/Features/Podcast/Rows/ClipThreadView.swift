@@ -111,7 +111,7 @@ private struct CommentRowView: View {
         HStack(alignment: .top, spacing: 10) {
             AuthorAvatar(
                 pubkey: comment.pubkey,
-                pictureURL: app.profileCache[comment.pubkey]?.picture ?? "",
+                pictureURL: app.profile(pubkeyHex: comment.pubkey)?.picture ?? "",
                 displayInitial: initial,
                 size: 26
             )
@@ -139,12 +139,12 @@ private struct CommentRowView: View {
             }
         }
         .task(id: comment.pubkey) {
-            await app.requestProfile(pubkeyHex: comment.pubkey)
+            app.requestProfile(pubkeyHex: comment.pubkey)
         }
     }
 
     private var name: String {
-        let profile = app.profileCache[comment.pubkey]
+        let profile = app.profile(pubkeyHex: comment.pubkey)
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return String(comment.pubkey.prefix(10))

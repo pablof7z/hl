@@ -60,7 +60,7 @@ struct DiscussionDetailView: View {
             HStack(alignment: .top, spacing: 10) {
                 AuthorAvatar(
                     pubkey: discussion.pubkey,
-                    pictureURL: app.profileCache[discussion.pubkey]?.picture ?? "",
+                    pictureURL: app.profile(pubkeyHex: discussion.pubkey)?.picture ?? "",
                     displayInitial: displayInitial,
                     size: 38
                 )
@@ -95,7 +95,7 @@ struct DiscussionDetailView: View {
             }
         }
         .task(id: discussion.pubkey) {
-            await app.requestProfile(pubkeyHex: discussion.pubkey)
+            app.requestProfile(pubkeyHex: discussion.pubkey)
         }
     }
 
@@ -225,14 +225,14 @@ struct DiscussionDetailView: View {
     // MARK: - Helpers
 
     private var authorName: String {
-        let profile = app.profileCache[discussion.pubkey]
+        let profile = app.profile(pubkeyHex: discussion.pubkey)
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return String(discussion.pubkey.prefix(8))
     }
 
     private var displayInitial: String {
-        let profile = app.profileCache[discussion.pubkey]
+        let profile = app.profile(pubkeyHex: discussion.pubkey)
         let name = profile?.displayName ?? profile?.name ?? ""
         return name.first.map { String($0).uppercased() } ?? String(discussion.pubkey.prefix(1).uppercased())
     }

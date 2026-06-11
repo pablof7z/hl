@@ -2,12 +2,10 @@ import SwiftUI
 
 /// Full-bleed "all results of this kind" sub-screen. Pushed when the user
 /// taps "See all" on a section header in `SearchView`. Reads directly from
-/// the active `SearchStore` so the list stays in sync with the live query —
-/// if relay results stream in while this screen is open, they appear here
-/// too.
+/// the Rust-owned search snapshot so relay results stay in sync across
+/// platforms.
 struct SearchSeeAllView: View {
     let target: SearchSeeAllTarget
-    let store: SearchStore
     @Environment(HighlighterStore.self) private var app
 
     var body: some View {
@@ -33,9 +31,9 @@ struct SearchSeeAllView: View {
     private var highlightsList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(store.highlights.enumerated()), id: \.element.eventId) { idx, h in
+                ForEach(Array(app.search.highlights.enumerated()), id: \.element.eventId) { idx, h in
                     row(for: h)
-                    if idx < store.highlights.count - 1 {
+                    if idx < app.search.highlights.count - 1 {
                         Rectangle()
                             .fill(Color.highlighterRule)
                             .frame(height: 0.5)
@@ -51,11 +49,11 @@ struct SearchSeeAllView: View {
     private func row(for h: HighlightRecord) -> some View {
         if let target = articleReaderTarget(for: h) {
             NavigationLink(value: target) {
-                SeeAllHighlightRow(highlight: h, query: target.dTag.isEmpty ? store.query : store.query)
+                SeeAllHighlightRow(highlight: h, query: app.search.query)
             }
             .buttonStyle(.plain)
         } else {
-            SeeAllHighlightRow(highlight: h, query: store.query)
+            SeeAllHighlightRow(highlight: h, query: app.search.query)
         }
     }
 
@@ -66,7 +64,7 @@ struct SearchSeeAllView: View {
         // `articleRowActions` activates. Styled heavily to preserve the
         // editorial look of the rest of the app.
         List {
-            ForEach(store.articles, id: \.eventId) { a in
+            ForEach(app.search.articles, id: \.eventId) { a in
                 NavigationLink(value: ArticleReaderTarget(pubkey: a.pubkey, dTag: a.identifier, seed: nil)) {
                     ArticleCardView(article: a)
                 }
@@ -86,12 +84,12 @@ struct SearchSeeAllView: View {
     private var communitiesList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(store.communities.enumerated()), id: \.element.id) { idx, c in
+                ForEach(Array(app.search.communities.enumerated()), id: \.element.id) { idx, c in
                     NavigationLink(value: c.id) {
                         SeeAllCommunityRow(community: c)
                     }
                     .buttonStyle(.plain)
-                    if idx < store.communities.count - 1 {
+                    if idx < app.search.communities.count - 1 {
                         Rectangle()
                             .fill(Color.highlighterRule)
                             .frame(height: 0.5)
@@ -108,12 +106,12 @@ struct SearchSeeAllView: View {
     private var peopleList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(store.profiles.enumerated()), id: \.element.pubkey) { idx, p in
+                ForEach(Array(app.search.profiles.enumerated()), id: \.element.pubkey) { idx, p in
                     NavigationLink(value: ProfileDestination.pubkey(p.pubkey)) {
                         SeeAllPersonRow(profile: p)
                     }
                     .buttonStyle(.plain)
-                    if idx < store.profiles.count - 1 {
+                    if idx < app.search.profiles.count - 1 {
                         Rectangle()
                             .fill(Color.highlighterRule)
                             .frame(height: 0.5)

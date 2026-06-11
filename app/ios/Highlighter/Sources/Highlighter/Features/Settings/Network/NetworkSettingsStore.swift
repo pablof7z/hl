@@ -1,11 +1,5 @@
 import Foundation
-import Network
 import Observation
-
-/// UserDefaults key for the Wi-Fi-only toggle. Persisted outside the
-/// @Observable store so it survives process restarts and the `WifiMonitor`
-/// can read the initial value before the Store is constructed.
-private let wifiOnlyDefaultsKey = "hl.network.wifiOnly"
 
 /// App-scope store for the Network Settings screen. Owns the user's relay
 /// rows (config) + the live diagnostics snapshot.
@@ -19,16 +13,16 @@ private let wifiOnlyDefaultsKey = "hl.network.wifiOnly"
 @Observable
 final class NetworkSettingsStore {
     var relays: [RelayConfig] = []
+    var autoConnectedRelays: [RelayConfig] = []
     var diagnostics: [String: RelayDiagnostic] = [:]
     var nip11ByUrl: [String: Nip11Document] = [:]
     var cacheStats: CacheStats?
     var isLoading: Bool = true
     var lastError: String?
-    private(set) var wifiOnlyEnabled: Bool = UserDefaults.standard.bool(forKey: wifiOnlyDefaultsKey)
 
     @ObservationIgnored private let core: SafeHighlighterCore
-    @ObservationIgnored private var pollTask: Task<Void, Never>?
-    @ObservationIgnored private var pathMonitor: NWPathMonitor?
+    @ObservationIgnored private var diagnosticsRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var diagnosticsRefreshPending = false
     @ObservationIgnored private var inFlightNip11: Set<String> = []
 
     init(core: SafeHighlighterCore) {
@@ -46,16 +40,11 @@ final class NetworkSettingsStore {
         nip11ByUrl[url]
     }
 
-    /// URLs of relays in the live pool that the user *didn't* configure —
-    /// added by the outbox planner, NIP-77 sync, or the hardcoded purple
-    /// indexer pin. We surface them in their own section so the
-    /// connected-count math reflects every relay we're actually talking
-    /// to (configured + auto-pinned).
+    /// URLs of relays in the live pool that the user didn't configure. Rust
+    /// owns why each relay is present; Swift only renders the bounded display
+    /// projection.
     var autoConnectedUrls: [String] {
-        let configured = Set(relays.map { $0.url })
-        return diagnostics.keys
-            .filter { !configured.contains($0) }
-            .sorted()
+        autoConnectedRelays.map(\.url)
     }
 
     /// Diagnostics rows for the auto-connected URLs, in the same order.
@@ -92,32 +81,6 @@ final class NetworkSettingsStore {
     /// no-outbox banner.
     var hasOutbox: Bool { relays.contains { $0.write } }
 
-    /// Kick the pool to attempt a reconnect on every disconnected relay.
-    func reconnectAll() async {
-        do {
-            try await core.reconnectAll()
-        } catch {
-            lastError = "Couldn't reconnect — \(error)"
-        }
-    }
-
-    /// Toggle Wi-Fi-only mode. When on, an `NWPathMonitor` suspends the
-    /// relay pool on cellular and resumes it when Wi-Fi comes back. The
-    /// setting persists in UserDefaults.
-    func setWifiOnly(_ on: Bool) {
-        wifiOnlyEnabled = on
-        UserDefaults.standard.set(on, forKey: wifiOnlyDefaultsKey)
-        if on {
-            startPathMonitor()
-        } else {
-            pathMonitor?.cancel()
-            pathMonitor = nil
-            // Leaving Wi-Fi-only mode → ensure the pool is reconnected
-            // regardless of current path state.
-            Task { await reconnectAll() }
-        }
-    }
-
     // MARK: - Lifecycle
 
     func load() async {
@@ -147,26 +110,13 @@ final class NetworkSettingsStore {
     }
 
     func startLiveUpdates() {
-        // Already running
-        guard pollTask == nil else { return }
-        pollTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2))
-                guard let self else { return }
-                await self.refreshDiagnostics()
-            }
-        }
-        if wifiOnlyEnabled && pathMonitor == nil {
-            startPathMonitor()
-        }
         Task { await self.refreshCacheStats() }
     }
 
     func stopLiveUpdates() {
-        pollTask?.cancel()
-        pollTask = nil
-        // Leave the path monitor running — Wi-Fi-only enforcement should
-        // keep working after the user leaves the Network screen.
+        diagnosticsRefreshTask?.cancel()
+        diagnosticsRefreshTask = nil
+        diagnosticsRefreshPending = false
     }
 
     // MARK: - Cache
@@ -175,26 +125,6 @@ final class NetworkSettingsStore {
         if let stats = try? await core.getCacheStats() {
             cacheStats = stats
         }
-    }
-
-    // MARK: - NWPathMonitor
-
-    private func startPathMonitor() {
-        let monitor = NWPathMonitor()
-        monitor.pathUpdateHandler = { [weak self] path in
-            guard let self else { return }
-            let isWifi = path.usesInterfaceType(.wifi)
-            Task { @MainActor in
-                guard self.wifiOnlyEnabled else { return }
-                if isWifi {
-                    try? await self.core.reconnectAll()
-                } else {
-                    try? await self.core.disconnectAll()
-                }
-            }
-        }
-        monitor.start(queue: .global(qos: .utility))
-        pathMonitor = monitor
     }
 
     // MARK: - Writes
@@ -231,7 +161,9 @@ final class NetworkSettingsStore {
     // MARK: - Delta hook
 
     /// Called by `EventBridge` on `RelayStatusChanged`. Updates the local
-    /// diagnostic for the single relay without reloading the whole list.
+    /// diagnostic for the single relay immediately, then coalesces a Rust
+    /// snapshot refresh so derived auto-connected rows and metrics catch up
+    /// without a native polling loop.
     func applyStatus(url: String, state: RelayStatus) {
         if var existing = diagnostics[url] {
             existing.state = state
@@ -246,9 +178,25 @@ final class NetworkSettingsStore {
                 connectedSinceTs: nil
             )
         }
+        scheduleDiagnosticsRefresh()
     }
 
     // MARK: - Private
+
+    private func scheduleDiagnosticsRefresh() {
+        if diagnosticsRefreshTask != nil {
+            diagnosticsRefreshPending = true
+            return
+        }
+        diagnosticsRefreshTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            repeat {
+                self.diagnosticsRefreshPending = false
+                await self.refreshDiagnostics()
+            } while self.diagnosticsRefreshPending && !Task.isCancelled
+            self.diagnosticsRefreshTask = nil
+        }
+    }
 
     private func refreshDiagnostics() async {
         do {
@@ -257,6 +205,12 @@ final class NetworkSettingsStore {
         } catch {
             // Diagnostics failures are non-fatal — the config rows are still
             // accurate; we just can't show live state this tick.
+        }
+        do {
+            autoConnectedRelays = try await core.getAutoConnectedRelays()
+        } catch {
+            // Auto-connected display roles are derived from the same Rust relay
+            // state. Keep the last projection when the transient read fails.
         }
     }
 }

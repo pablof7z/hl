@@ -82,11 +82,12 @@ struct DiscussionComposerView: View {
         let trimmedURL = attachmentURL.trimmingCharacters(in: .whitespaces)
         var attachment: ArtifactPreview? = nil
         if !trimmedURL.isEmpty {
-            // build_preview isn't implemented in the core yet (Phase 3 work),
-            // so we can't build a rich preview from a bare URL today. Swallow
-            // the attachment silently rather than block publish — the room
-            // still gets the discussion; the attachment field just stays
-            // empty. Once build_preview lands, wire it here.
+            do {
+                attachment = try await app.safeCore.buildPreviewFromUrl(trimmedURL)
+            } catch {
+                errorMessage = "Enter a valid attachment URL."
+                return
+            }
         }
 
         do {

@@ -150,11 +150,12 @@ final class PodcastPlayerStore {
     @ObservationIgnored private nonisolated(unsafe) var rangesObserver: NSKeyValueObservation?
     @ObservationIgnored private nonisolated(unsafe) var errorObserver: NSKeyValueObservation?
     @ObservationIgnored private nonisolated(unsafe) var playbackEndObserver: NSObjectProtocol?
-    @ObservationIgnored private var positionPersistenceTask: Task<Void, Never>?
     @ObservationIgnored private var transcriptTask: Task<Void, Never>?
     @ObservationIgnored private var waveformTask: Task<Void, Never>?
+    @ObservationIgnored private var lastPersistedPosition: TimeInterval?
 
     private static let positionDefaultsKey = "highlighter.podcast.lastPosition"
+    private static let positionPersistenceStride: TimeInterval = 5
 
     // MARK: - Lifecycle
 
@@ -206,6 +207,7 @@ final class PodcastPlayerStore {
         publishError = nil
         currentTime = 0
         duration = 0
+        lastPersistedPosition = nil
 
         logger.info("load artifact=\(artifact.shareEventId, privacy: .public) url=\(url.absoluteString, privacy: .public)")
 
@@ -243,8 +245,6 @@ final class PodcastPlayerStore {
         configureRemoteCommandCenter()
         updateNowPlayingInfo()
         fetchAndApplyArtwork(from: artifact.preview.image)
-
-        startPositionPersistence()
 
         let transcriptUrl = artifact.preview.transcriptUrl
         if !transcriptUrl.isEmpty, let tUrl = URL(string: transcriptUrl) {
@@ -323,6 +323,7 @@ final class PodcastPlayerStore {
     func pause() {
         logger.info("pause")
         player?.pause()
+        persistPosition(force: true)
         isPlaying = false
         updateNowPlayingInfo()
     }
@@ -336,6 +337,7 @@ final class PodcastPlayerStore {
         let time = CMTime(seconds: clamped, preferredTimescale: 600)
         player?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
         currentTime = clamped
+        persistPosition(force: true)
     }
 
     func skip(by delta: TimeInterval) {
@@ -452,19 +454,8 @@ final class PodcastPlayerStore {
 
     // MARK: - Position persistence
 
-    private func startPositionPersistence() {
-        positionPersistenceTask?.cancel()
-        positionPersistenceTask = Task {
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5 * 1_000_000_000)
-                guard !Task.isCancelled else { break }
-                persistPosition()
-            }
-        }
-    }
-
-    private func persistPosition() {
-        guard let artifact = currentArtifact, isPlaying else { return }
+    private func persistPosition(force: Bool = false) {
+        guard let artifact = currentArtifact, force || isPlaying else { return }
         let guid = artifact.preview.podcastItemGuid
         guard !guid.isEmpty else { return }
         let record = PositionRecord(
@@ -475,7 +466,18 @@ final class PodcastPlayerStore {
         )
         if let data = try? JSONEncoder().encode(record) {
             UserDefaults.standard.set(data, forKey: Self.positionDefaultsKey)
+            lastPersistedPosition = currentTime
         }
+    }
+
+    private func persistPositionIfNeeded(at seconds: TimeInterval) {
+        guard isPlaying else { return }
+        guard let lastPersistedPosition else {
+            persistPosition()
+            return
+        }
+        guard abs(seconds - lastPersistedPosition) >= Self.positionPersistenceStride else { return }
+        persistPosition()
     }
 
     private func loadPositionRecord() -> PositionRecord? {
@@ -510,6 +512,7 @@ final class PodcastPlayerStore {
                 let seconds = time.seconds.isFinite ? time.seconds : 0
                 let previousWhole = Int(self.currentTime)
                 self.currentTime = seconds
+                self.persistPositionIfNeeded(at: seconds)
                 // Update Now Playing elapsed time once per second to keep the
                 // lock screen scrubber accurate without excessive churn.
                 if Int(seconds) != previousWhole {
@@ -586,6 +589,7 @@ final class PodcastPlayerStore {
                     let msg = error.localizedDescription
                     self.logger.error("playback error: \(msg, privacy: .public)")
                     self.lastError = msg
+                    self.persistPosition(force: true)
                     self.isPlaying = false
                 }
             }
@@ -599,6 +603,7 @@ final class PodcastPlayerStore {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
+                self?.persistPosition(force: true)
                 self?.isPlaying = false
             }
         }
@@ -725,8 +730,7 @@ final class PodcastPlayerStore {
     }
 
     private func tearDownPlayer() {
-        positionPersistenceTask?.cancel()
-        positionPersistenceTask = nil
+        persistPosition(force: true)
         transcriptTask?.cancel()
         transcriptTask = nil
         waveformTask?.cancel()

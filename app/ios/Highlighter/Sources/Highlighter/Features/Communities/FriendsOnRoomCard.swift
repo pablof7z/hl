@@ -45,7 +45,7 @@ struct FriendsOnRoomCard: View {
             // Warm the profile cache for the friends shown in the cluster
             // so avatars render with actual pictures, not initials.
             for pubkey in recommendation.reasonPubkeys.prefix(3) {
-                await store.requestProfile(pubkeyHex: pubkey)
+                store.requestProfile(pubkeyHex: pubkey)
             }
         }
     }
@@ -64,7 +64,7 @@ struct FriendsOnRoomCard: View {
     }
 
     private func handle(for pubkey: String) -> String {
-        if let profile = store.profileCache[pubkey] {
+        if let profile = store.profile(pubkeyHex: pubkey) {
             if !profile.name.isEmpty { return profile.name }
             if !profile.displayName.isEmpty { return profile.displayName }
         }
@@ -101,7 +101,7 @@ struct FriendsOnRoomCard: View {
             ForEach(Array(show.enumerated()), id: \.offset) { item in
                 AuthorAvatar(
                     pubkey: item.element,
-                    pictureURL: store.profileCache[item.element]?.picture ?? "",
+                    pictureURL: store.profile(pubkeyHex: item.element)?.picture ?? "",
                     displayInitial: String(item.element.prefix(1)),
                     size: 26
                 )

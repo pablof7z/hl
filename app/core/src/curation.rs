@@ -41,8 +41,7 @@ pub fn fetch_curated_rooms_from_ndb(
     let curator = PublicKey::from_hex(curator_pubkey_hex)
         .map_err(|e| CoreError::InvalidInput(format!("invalid curator pubkey: {e}")))?;
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let pk_bytes: [u8; 32] = curator.to_bytes();
     let list_filter = NdbFilter::new()
@@ -150,7 +149,9 @@ pub(crate) fn extract_group_ids(event: &Event) -> Vec<String> {
                     continue;
                 };
                 let mut parts = coord.splitn(3, ':');
-                let Some(kind_str) = parts.next() else { continue };
+                let Some(kind_str) = parts.next() else {
+                    continue;
+                };
                 if kind_str != "39000" {
                     continue;
                 }
@@ -220,12 +221,7 @@ mod tests {
         )
     }
 
-    fn list_event(
-        keys: &Keys,
-        group_ids: &[&str],
-        relay_url: &str,
-        created_at: u64,
-    ) -> Event {
+    fn list_event(keys: &Keys, group_ids: &[&str], relay_url: &str, created_at: u64) -> Event {
         let mut tags: Vec<Tag> = Vec::new();
         for id in group_ids {
             tags.push(
@@ -268,8 +264,7 @@ mod tests {
         );
         wait_for_ndb();
 
-        let out =
-            fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
+        let out = fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
         let ids: Vec<_> = out.iter().map(|c| c.id.as_str()).collect();
         assert_eq!(ids, vec!["bravo", "alpha"], "curator order preserved");
     }
@@ -288,8 +283,7 @@ mod tests {
         );
         wait_for_ndb();
 
-        let out =
-            fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
+        let out = fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].id, "alpha");
     }
@@ -314,8 +308,7 @@ mod tests {
         );
         wait_for_ndb();
 
-        let out =
-            fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
+        let out = fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
         assert_eq!(out.len(), 2);
     }
 
@@ -328,21 +321,18 @@ mod tests {
         ingest(&ndb, &meta(&author, "alpha", "Alpha"));
         // Use `a` tag instead of `group` tag.
         let list = EventBuilder::new(Kind::Custom(KIND_CURATED_COMMUNITIES), "")
-            .tags(vec![
-                Tag::parse(vec![
-                    "a".to_string(),
-                    format!("39000:{}:alpha", author.public_key().to_hex()),
-                ])
-                .unwrap(),
+            .tags(vec![Tag::parse(vec![
+                "a".to_string(),
+                format!("39000:{}:alpha", author.public_key().to_hex()),
             ])
+            .unwrap()])
             .custom_created_at(Timestamp::from(100))
             .sign_with_keys(&curator)
             .expect("sign");
         ingest(&ndb, &list);
         wait_for_ndb();
 
-        let out =
-            fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
+        let out = fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].id, "alpha");
     }
@@ -360,8 +350,7 @@ mod tests {
         );
         wait_for_ndb();
 
-        let out =
-            fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
+        let out = fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
         assert_eq!(out.len(), 1);
     }
 }

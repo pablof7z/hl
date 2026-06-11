@@ -28,7 +28,7 @@ struct HighlightFeedCardView: View {
 
     private var bookPreview: ArtifactPreview? {
         guard let isbn = isbnFromLead else { return nil }
-        return app.isbnPreviewCache[isbn]
+        return app.isbnPreview(isbn: isbn)
     }
 
     private var isbnFromLead: String? {
@@ -49,14 +49,14 @@ struct HighlightFeedCardView: View {
         }
         .padding(.vertical, 18)
         .task(id: lead.highlight.pubkey) {
-            await app.requestProfile(pubkeyHex: lead.highlight.pubkey)
+            app.requestProfile(pubkeyHex: lead.highlight.pubkey)
         }
         .task(id: lead.highlight.artifactAddress + lead.highlight.externalReference) {
             await resolveSource()
         }
         .task(id: webMetadataURL) {
             if let url = webMetadataURL {
-                await app.requestWebMetadata(url: url)
+                app.requestWebMetadata(url: url)
             }
         }
     }
@@ -155,7 +155,7 @@ struct HighlightFeedCardView: View {
                 ForEach(uniqueHighlighters.prefix(3), id: \.highlight.pubkey) { h in
                     AuthorAvatar(
                         pubkey: h.highlight.pubkey,
-                        pictureURL: app.profileCache[h.highlight.pubkey]?.picture ?? "",
+                        pictureURL: app.profile(pubkeyHex: h.highlight.pubkey)?.picture ?? "",
                         displayInitial: initial(for: h.highlight.pubkey),
                         size: 20
                     )
@@ -163,7 +163,7 @@ struct HighlightFeedCardView: View {
                         Circle().stroke(Color.highlighterPaperTint, lineWidth: 1.5)
                     )
                     .task(id: h.highlight.pubkey) {
-                        await app.requestProfile(pubkeyHex: h.highlight.pubkey)
+                        app.requestProfile(pubkeyHex: h.highlight.pubkey)
                     }
                 }
                 if uniqueHighlighters.count > 3 {
@@ -324,7 +324,7 @@ struct HighlightFeedCardView: View {
         HStack(spacing: 8) {
             AuthorAvatar(
                 pubkey: h.highlight.pubkey,
-                pictureURL: app.profileCache[h.highlight.pubkey]?.picture ?? "",
+                pictureURL: app.profile(pubkeyHex: h.highlight.pubkey)?.picture ?? "",
                 displayInitial: initial(for: h.highlight.pubkey),
                 size: 22
             )
@@ -342,7 +342,7 @@ struct HighlightFeedCardView: View {
             Spacer(minLength: 0)
         }
         .task(id: h.highlight.pubkey) {
-            await app.requestProfile(pubkeyHex: h.highlight.pubkey)
+            app.requestProfile(pubkeyHex: h.highlight.pubkey)
         }
     }
 
@@ -483,15 +483,11 @@ struct HighlightFeedCardView: View {
         return raw.isEmpty ? nil : raw
     }
 
-    /// Cached enrichment for the web URL (if any). Returns nil for
-    /// non-web kinds. The cache key is whatever URL was passed to
-    /// `requestWebMetadata` — Rust canonicalizes it, but stores the entry
-    /// under the canonical key, so we reach in with the canonical URL too.
-    /// In practice the artifact preview URL is already canonical (built
-    /// by `normalize_artifact_url`), so this lookup is a direct hit.
+    /// Rust-owned enrichment for the web URL (if any). Returns nil for
+    /// non-web kinds until the NMP snapshot carries the resolved metadata.
     private var webMetadata: WebMetadata? {
         guard let url = webMetadataURL else { return nil }
-        return app.webMetadataCache[url]
+        return app.webMetadata(url: url)
     }
 
     // MARK: - Derived: profile / article resolution
@@ -500,7 +496,7 @@ struct HighlightFeedCardView: View {
     /// Returns nil for non-article kinds or unresolved profiles.
     private var articleAuthorDisplayName: String? {
         guard let pubkey = articleAuthorPubkey else { return nil }
-        let profile = app.profileCache[pubkey]
+        let profile = app.profile(pubkeyHex: pubkey)
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return nil
@@ -549,7 +545,7 @@ struct HighlightFeedCardView: View {
     // MARK: - Derived: profile helpers
 
     private func displayName(for pubkey: String) -> String {
-        let profile = app.profileCache[pubkey]
+        let profile = app.profile(pubkeyHex: pubkey)
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return String(pubkey.prefix(10))
@@ -578,7 +574,7 @@ struct HighlightFeedCardView: View {
         sourceArticle = nil
 
         if let isbn = isbnFromLead {
-            await app.requestIsbnPreview(isbn: isbn)
+            app.requestIsbnPreview(isbn: isbn)
             return
         }
 
@@ -592,7 +588,7 @@ struct HighlightFeedCardView: View {
         guard !pubkey.isEmpty, !dTag.isEmpty else { return }
 
         sourceArticle = try? await app.safeCore.getArticle(pubkeyHex: pubkey, dTag: dTag)
-        await app.requestProfile(pubkeyHex: pubkey)
+        app.requestProfile(pubkeyHex: pubkey)
     }
 }
 
@@ -643,7 +639,7 @@ private struct HighlightQuoteCard: View {
                 .fill(Color.highlighterPaper)
         )
         .task(id: highlight.highlight.pubkey) {
-            await app.requestProfile(pubkeyHex: highlight.highlight.pubkey)
+            app.requestProfile(pubkeyHex: highlight.highlight.pubkey)
         }
     }
 
@@ -679,7 +675,7 @@ private struct HighlightQuoteCard: View {
         HStack(spacing: 7) {
             AuthorAvatar(
                 pubkey: highlight.highlight.pubkey,
-                pictureURL: app.profileCache[highlight.highlight.pubkey]?.picture ?? "",
+                pictureURL: app.profile(pubkeyHex: highlight.highlight.pubkey)?.picture ?? "",
                 displayInitial: initial,
                 size: 22
             )
@@ -701,7 +697,7 @@ private struct HighlightQuoteCard: View {
     }
 
     private var name: String {
-        let profile = app.profileCache[highlight.highlight.pubkey]
+        let profile = app.profile(pubkeyHex: highlight.highlight.pubkey)
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return String(highlight.highlight.pubkey.prefix(10))

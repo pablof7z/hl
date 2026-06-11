@@ -4,7 +4,6 @@ pub mod articles;
 pub mod artifacts;
 pub mod blossom;
 pub mod bookmarks;
-pub mod lists;
 pub mod cache;
 pub mod chat;
 pub mod client;
@@ -19,8 +18,10 @@ pub mod follows;
 pub mod groups;
 pub mod highlights;
 pub mod isbn_lookup;
+pub mod lists;
 pub mod models;
 pub mod nip46;
+pub mod nmp_app;
 pub mod nostr_entities;
 pub mod nostr_runtime;
 pub mod outbox;
@@ -34,6 +35,7 @@ pub mod relay_polish;
 pub mod relays;
 pub mod search;
 pub mod session;
+pub mod share_links;
 pub mod subscriptions;
 pub mod web_metadata;
 
@@ -48,5 +50,19 @@ pub use models::{
     ProfileMetadata, ReadingFeedItem, RoomRecommendation, RoomRecommendationReason,
     WebBookmarkRecord,
 };
+pub use nmp_app::{
+    HighlighterAppAction, HighlighterAppConfig, HighlighterAppReconciler, HighlighterAppState,
+    HighlighterAppUpdate, HighlighterArticleReaderSnapshot,
+    HighlighterBookmarkCollectionDetailSnapshot, HighlighterBookmarksSnapshot,
+    HighlighterChromeSnapshot, HighlighterConnectionState, HighlighterCurationMenuSnapshot,
+    HighlighterIsbnPreview, HighlighterNetworkSnapshot, HighlighterNmpApp,
+    HighlighterOnboardingInterest, HighlighterOnboardingSnapshot, HighlighterProfile,
+    HighlighterProfileViewSnapshot, HighlighterToast, HighlighterToastKind, HighlighterWebMetadata,
+};
 pub use reactions::ReactionRecord;
 pub use web_metadata::WebMetadata;
+
+#[uniffi::export]
+pub fn normalize_isbn(raw: String) -> Result<String, CoreError> {
+    isbn_lookup::normalize_isbn(&raw)
+}

@@ -18,26 +18,20 @@ import SwiftUI
 struct SearchView: View {
     @Environment(HighlighterStore.self) private var app
 
-    @State private var store: SearchStore?
     @FocusState private var focusedField: Bool
-    @State private var recentQueries: [String] = RecentSearches.all()
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.highlighterPaper.ignoresSafeArea()
-                if let store {
-                    content(store: store)
-                } else {
-                    Color.clear
-                }
+                content(search: app.search)
             }
             .navigationTitle("Search")
             .navigationBarTitleDisplayMode(.large)
             .searchable(
                 text: Binding(
-                    get: { store?.query ?? "" },
-                    set: { new in store?.query = new }
+                    get: { app.search.query },
+                    set: { app.setSearchQuery($0) }
                 ),
                 placement: .navigationBarDrawer(displayMode: .always),
                 prompt: Text("Quotes, essays, people, rooms")
@@ -61,48 +55,42 @@ struct SearchView: View {
                 RoomHomeView(groupId: groupId)
             }
             .navigationDestination(for: SearchSeeAllTarget.self) { target in
-                if let store {
-                    SearchSeeAllView(target: target, store: store)
-                }
+                SearchSeeAllView(target: target)
             }
             .globalUserToolbar()
         }
         .task {
-            if store == nil {
-                let s = SearchStore(safeCore: app.safeCore, eventBridge: app.eventBridge)
-                store = s
-                await s.start()
-            }
+            app.openSearch()
         }
         .onDisappear {
-            store?.stop()
+            app.closeSearch()
         }
     }
 
     // MARK: - Content switcher
 
     @ViewBuilder
-    private func content(store: SearchStore) -> some View {
-        let q = store.query.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func content(search: HighlighterSearchSnapshot) -> some View {
+        let q = search.query.trimmingCharacters(in: .whitespacesAndNewlines)
         if q.isEmpty {
-            emptyState(store: store)
+            emptyState(search: search)
         } else {
-            results(store: store)
+            results(search: search)
         }
     }
 
     // MARK: - Empty (discovery) state
 
-    private func emptyState(store: SearchStore) -> some View {
+    private func emptyState(search: HighlighterSearchSnapshot) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                if !recentQueries.isEmpty {
-                    recentSection
+                if !search.recentQueries.isEmpty {
+                    recentSection(search: search)
                 }
-                suggestedSection(store: store)
+                suggestedSection
                 browseRoomsSection
-                browseHighlightsPreviewSection(store: store)
-                browseRelaysFootnote(store: store)
+                browseHighlightsPreviewSection
+                browseRelaysFootnote(search: search)
             }
             .padding(.horizontal, 20)
             .padding(.top, 8)
@@ -111,22 +99,21 @@ struct SearchView: View {
         .scrollDismissesKeyboard(.interactively)
     }
 
-    private var recentSection: some View {
+    private func recentSection(search: HighlighterSearchSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 SectionKicker(text: "Recent")
                 Spacer()
                 Button("Clear") {
-                    RecentSearches.clear()
-                    recentQueries = []
+                    app.clearRecentSearches()
                 }
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.highlighterInkMuted)
             }
             VStack(spacing: 0) {
-                ForEach(Array(recentQueries.enumerated()), id: \.element) { index, q in
+                ForEach(Array(search.recentQueries.enumerated()), id: \.element) { index, q in
                     Button {
-                        store?.submit(q)
+                        app.submitSearch(q)
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "clock")
@@ -145,7 +132,7 @@ struct SearchView: View {
                     }
                     .buttonStyle(.plain)
 
-                    if index < recentQueries.count - 1 {
+                    if index < search.recentQueries.count - 1 {
                         Rectangle()
                             .fill(Color.highlighterRule)
                             .frame(height: 0.5)
@@ -156,7 +143,7 @@ struct SearchView: View {
     }
 
     @ViewBuilder
-    private func suggestedSection(store: SearchStore) -> some View {
+    private var suggestedSection: some View {
         let suggestions = suggestedQueries()
         if !suggestions.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
@@ -164,7 +151,7 @@ struct SearchView: View {
                 FlowLayout(spacing: 10, runSpacing: 10) {
                     ForEach(suggestions, id: \.self) { term in
                         Button {
-                            store.submit(term)
+                            app.submitSearch(term)
                         } label: {
                             Text(term)
                                 .font(.callout.weight(.medium))
@@ -212,7 +199,7 @@ struct SearchView: View {
     }
 
     @ViewBuilder
-    private func browseHighlightsPreviewSection(store: SearchStore) -> some View {
+    private var browseHighlightsPreviewSection: some View {
         SectionKicker(text: "The library")
         Text("Your nostrdb cache holds every highlight, article, community, and profile you've ever loaded. Search finds them instantly. Anything not yet on your device — searched across your configured search relays.")
             .font(.system(.subheadline, design: .default))
@@ -222,11 +209,11 @@ struct SearchView: View {
     }
 
     @ViewBuilder
-    private func browseRelaysFootnote(store: SearchStore) -> some View {
-        if !store.searchRelays.isEmpty {
+    private func browseRelaysFootnote(search: HighlighterSearchSnapshot) -> some View {
+        if !search.searchRelays.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 SectionKicker(text: "Search relays")
-                ForEach(store.searchRelays, id: \.self) { url in
+                ForEach(search.searchRelays, id: \.self) { url in
                     HStack(spacing: 10) {
                         Circle()
                             .fill(Color.highlighterAccent.opacity(0.7))
@@ -243,19 +230,19 @@ struct SearchView: View {
 
     // MARK: - Results state
 
-    private func results(store: SearchStore) -> some View {
+    private func results(search: HighlighterSearchSnapshot) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
-                if store.isLocalLoading && allEmpty(store: store) {
+                if search.isLocalLoading && allEmpty(search: search) {
                     loadingSkeleton
-                } else if allEmpty(store: store) && !store.isRelayLoading {
-                    noResults(store: store)
+                } else if allEmpty(search: search) && !search.isRelayLoading {
+                    noResults(search: search)
                 } else {
-                    highlightsResultsSection(store: store)
-                    articlesResultsSection(store: store)
-                    communitiesResultsSection(store: store)
-                    peopleResultsSection(store: store)
-                    if store.isRelayLoading {
+                    highlightsResultsSection(search: search)
+                    articlesResultsSection(search: search)
+                    communitiesResultsSection(search: search)
+                    peopleResultsSection(search: search)
+                    if search.isRelayLoading {
                         relayLoadingHint
                     }
                 }
@@ -280,13 +267,13 @@ struct SearchView: View {
         .padding(.vertical, 20)
     }
 
-    private func noResults(store: SearchStore) -> some View {
+    private func noResults(search: HighlighterSearchSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Rectangle()
                 .fill(Color.highlighterAccent.opacity(0.6))
                 .frame(width: 3, height: 24)
                 .clipShape(RoundedRectangle(cornerRadius: 1.5))
-            Text("Nothing yet for \u{201C}\(store.query)\u{201D}")
+            Text("Nothing yet for \u{201C}\(search.query)\u{201D}")
                 .font(.system(.title3, design: .default).weight(.semibold))
                 .foregroundStyle(Color.highlighterInkStrong)
             Text("Relay search is still running in the background — results may arrive in a moment.")
@@ -310,18 +297,18 @@ struct SearchView: View {
     // MARK: - Sections
 
     @ViewBuilder
-    private func highlightsResultsSection(store: SearchStore) -> some View {
-        if !store.highlights.isEmpty {
+    private func highlightsResultsSection(search: HighlighterSearchSnapshot) -> some View {
+        if !search.highlights.isEmpty {
             SearchSectionHeader(
                 title: "Highlights",
-                count: store.highlights.count,
-                target: store.highlights.count > 4
-                    ? .highlights(query: store.query) : nil
+                count: Int(search.highlightCount),
+                target: search.highlights.count > 4
+                    ? .highlights(query: search.query) : nil
             )
             VStack(spacing: 0) {
-                ForEach(Array(store.highlights.prefix(4).enumerated()), id: \.element.eventId) { idx, highlight in
+                ForEach(Array(search.highlights.prefix(4).enumerated()), id: \.element.eventId) { idx, highlight in
                     highlightRow(highlight)
-                    if idx < min(store.highlights.count, 4) - 1 {
+                    if idx < min(search.highlights.count, 4) - 1 {
                         Rectangle()
                             .fill(Color.highlighterRule)
                             .frame(height: 0.5)
@@ -332,18 +319,18 @@ struct SearchView: View {
     }
 
     @ViewBuilder
-    private func articlesResultsSection(store: SearchStore) -> some View {
-        if !store.articles.isEmpty {
+    private func articlesResultsSection(search: HighlighterSearchSnapshot) -> some View {
+        if !search.articles.isEmpty {
             SearchSectionHeader(
                 title: "Articles",
-                count: store.articles.count,
-                target: store.articles.count > 4
-                    ? .articles(query: store.query) : nil
+                count: Int(search.articleCount),
+                target: search.articles.count > 4
+                    ? .articles(query: search.query) : nil
             )
             VStack(spacing: 0) {
-                ForEach(Array(store.articles.prefix(4).enumerated()), id: \.element.eventId) { idx, article in
+                ForEach(Array(search.articles.prefix(4).enumerated()), id: \.element.eventId) { idx, article in
                     articleRow(article)
-                    if idx < min(store.articles.count, 4) - 1 {
+                    if idx < min(search.articles.count, 4) - 1 {
                         Rectangle()
                             .fill(Color.highlighterRule)
                             .frame(height: 0.5)
@@ -354,21 +341,21 @@ struct SearchView: View {
     }
 
     @ViewBuilder
-    private func communitiesResultsSection(store: SearchStore) -> some View {
-        if !store.communities.isEmpty {
+    private func communitiesResultsSection(search: HighlighterSearchSnapshot) -> some View {
+        if !search.communities.isEmpty {
             SearchSectionHeader(
                 title: "Communities",
-                count: store.communities.count,
-                target: store.communities.count > 3
-                    ? .communities(query: store.query) : nil
+                count: Int(search.communityCount),
+                target: search.communities.count > 3
+                    ? .communities(query: search.query) : nil
             )
             VStack(spacing: 0) {
-                ForEach(Array(store.communities.prefix(3).enumerated()), id: \.element.id) { idx, c in
+                ForEach(Array(search.communities.prefix(3).enumerated()), id: \.element.id) { idx, c in
                     NavigationLink(value: c.id) {
                         SearchCommunityRow(community: c)
                     }
                     .buttonStyle(.plain)
-                    if idx < min(store.communities.count, 3) - 1 {
+                    if idx < min(search.communities.count, 3) - 1 {
                         Rectangle()
                             .fill(Color.highlighterRule)
                             .frame(height: 0.5)
@@ -379,21 +366,21 @@ struct SearchView: View {
     }
 
     @ViewBuilder
-    private func peopleResultsSection(store: SearchStore) -> some View {
-        if !store.profiles.isEmpty {
+    private func peopleResultsSection(search: HighlighterSearchSnapshot) -> some View {
+        if !search.profiles.isEmpty {
             SearchSectionHeader(
                 title: "People",
-                count: store.profiles.count,
-                target: store.profiles.count > 5
-                    ? .people(query: store.query) : nil
+                count: Int(search.profileCount),
+                target: search.profiles.count > 5
+                    ? .people(query: search.query) : nil
             )
             VStack(spacing: 0) {
-                ForEach(Array(store.profiles.prefix(5).enumerated()), id: \.element.pubkey) { idx, profile in
+                ForEach(Array(search.profiles.prefix(5).enumerated()), id: \.element.pubkey) { idx, profile in
                     NavigationLink(value: ProfileDestination.pubkey(profile.pubkey)) {
                         SearchProfileRow(profile: profile)
                     }
                     .buttonStyle(.plain)
-                    if idx < min(store.profiles.count, 5) - 1 {
+                    if idx < min(search.profiles.count, 5) - 1 {
                         Rectangle()
                             .fill(Color.highlighterRule)
                             .frame(height: 0.5)
@@ -409,11 +396,11 @@ struct SearchView: View {
     private func highlightRow(_ h: HighlightRecord) -> some View {
         if let target = articleReaderTarget(for: h) {
             NavigationLink(value: target) {
-                SearchHighlightRow(highlight: h, query: store?.query ?? "")
+                SearchHighlightRow(highlight: h, query: app.search.query)
             }
             .buttonStyle(.plain)
         } else {
-            SearchHighlightRow(highlight: h, query: store?.query ?? "")
+            SearchHighlightRow(highlight: h, query: app.search.query)
         }
     }
 
@@ -429,17 +416,16 @@ struct SearchView: View {
     // MARK: - Helpers
 
     private func commitRecentQuery() {
-        let q = (store?.query ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let q = app.search.query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
-        RecentSearches.record(q)
-        recentQueries = RecentSearches.all()
+        app.submitSearch(q)
     }
 
-    private func allEmpty(store: SearchStore) -> Bool {
-        store.highlights.isEmpty
-            && store.articles.isEmpty
-            && store.communities.isEmpty
-            && store.profiles.isEmpty
+    private func allEmpty(search: HighlighterSearchSnapshot) -> Bool {
+        search.highlights.isEmpty
+            && search.articles.isEmpty
+            && search.communities.isEmpty
+            && search.profiles.isEmpty
     }
 
     private func articleReaderTarget(for h: HighlightRecord) -> ArticleReaderTarget? {
@@ -854,4 +840,3 @@ private struct FlowLayout: Layout {
         }
     }
 }
-

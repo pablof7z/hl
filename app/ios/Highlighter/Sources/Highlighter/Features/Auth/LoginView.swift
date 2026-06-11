@@ -14,6 +14,18 @@ struct LoginView: View {
     @State private var isWorking: Bool = false
     @State private var errorMessage: String?
 
+    private var isBusy: Bool { isWorking || store.isAuthenticating }
+
+    private var displayedError: String? {
+        if let errorMessage {
+            return errorMessage
+        }
+        if let toast = store.nmpState.toast, toast.kind == .error {
+            return toast.message
+        }
+        return nil
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -28,8 +40,8 @@ struct LoginView: View {
 
                     manualEntry
 
-                    if let errorMessage {
-                        Text(errorMessage)
+                    if let displayedError {
+                        Text(displayedError)
                             .font(.footnote)
                             .foregroundStyle(.red)
                     }
@@ -38,6 +50,18 @@ struct LoginView: View {
             }
             .task {
                 detectedSigner = KnownSigner.detect()
+            }
+            .onAppear {
+                store.setExternalUrlHandler { urlString, completion in
+                    guard let url = URL(string: urlString) else {
+                        completion(false)
+                        return
+                    }
+                    openURL(url, completion: completion)
+                }
+            }
+            .onDisappear {
+                store.clearExternalUrlHandler()
             }
             .navigationTitle("")
         }
@@ -80,7 +104,7 @@ struct LoginView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.glass)
-            .disabled(isWorking)
+            .disabled(isBusy)
         }
     }
 
@@ -98,7 +122,7 @@ struct LoginView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.glass)
-        .disabled(isWorking)
+        .disabled(isBusy)
     }
 
     private var manualEntry: some View {
@@ -118,12 +142,12 @@ struct LoginView: View {
             Button {
                 Task { await submitManualInput() }
             } label: {
-                Text(isWorking ? "Signing in…" : "Sign in")
+                Text(isBusy ? "Signing in…" : "Sign in")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
             }
             .buttonStyle(.glassProminent)
-            .disabled(isWorking || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(isBusy || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
             NavigationLink {
                 OnboardingCreateAccountView()
@@ -148,51 +172,17 @@ struct LoginView: View {
         errorMessage = nil
         defer { isWorking = false }
 
-        do {
-            if normalized.hasPrefix("nsec1") {
-                let user = try await store.safeCore.loginNsec(normalized)
-                AppSessionStore.shared.persistNsec(normalized)
-                await store.completeLogin(user: user)
-            } else if normalized.hasPrefix("bunker://") || normalized.hasPrefix("nostrconnect://") {
-                let user = try await store.safeCore.pairBunker(normalized)
-                AppSessionStore.shared.persistBunkerURI(normalized)
-                await store.completeLogin(user: user)
-            } else {
-                errorMessage = "Enter an nsec1… or bunker:// URI."
-            }
-        } catch {
-            errorMessage = error.localizedDescription
+        if normalized.hasPrefix("nsec1") {
+            store.signInNsec(normalized)
+        } else if normalized.hasPrefix("bunker://") || normalized.hasPrefix("nostrconnect://") {
+            store.pairBunker(normalized)
+        } else {
+            errorMessage = "Enter an nsec1… or bunker:// URI."
         }
     }
 
     private func connectViaPrimalApp() async {
-        isWorking = true
         errorMessage = nil
-        defer { isWorking = false }
-
-        do {
-            let options = NostrConnectOptions(
-                name: "Highlighter",
-                url: "https://highlighter.com",
-                image: "https://highlighter.com/icon.png",
-                perms: "sign_event:11,sign_event:1111,sign_event:9802,sign_event:16,nip04_encrypt,nip04_decrypt,nip44_encrypt,nip44_decrypt"
-            )
-            let uri = try await store.safeCore.startNostrConnect(options)
-
-            // Attach a return-to-foreground callback; actual pairing happens
-            // over the relay that the Rust core is already subscribed to.
-            let callback = "highlighter://nip46"
-            let encodedCallback = callback.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? callback
-            let separator = uri.contains("?") ? "&" : "?"
-            let urlWithCallback = "\(uri)\(separator)callback=\(encodedCallback)"
-
-            if let url = URL(string: urlWithCallback) {
-                openURL(url)
-            }
-            // `EventBridge` receives `.signerConnected(user)` once the remote
-            // signer responds on the relay and `completeLogin` runs from there.
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        store.startNostrConnect(callbackUrl: "highlighter://nip46")
     }
 }

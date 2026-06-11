@@ -7,18 +7,14 @@ import SwiftUI
 /// one shot.
 ///
 /// Uses SwiftUI's `Menu(primaryAction:)` so a tap stays one-tap-fast and
-/// long-press surfaces the curation choices. Loads curations lazily on
-/// the first appear; refreshes after every membership change so the
-/// checkmark state is always accurate without a full BookmarkStore.
+/// long-press surfaces the Rust-owned curation choices.
 struct BookmarkMenuButton: View {
     /// NIP-33 a-tag value — `"30023:<pubkey>:<d>"`.
     let articleAddress: String
 
     @Environment(HighlighterStore.self) private var app
 
-    @State private var curationSets: [BookmarkSetRecord] = []
     @State private var newCollectionPresented: Bool = false
-    @State private var errorMessage: String?
 
     var body: some View {
         Menu {
@@ -36,13 +32,18 @@ struct BookmarkMenuButton: View {
             Task { await app.toggleBookmark(articleAddress: articleAddress) }
         }
         .accessibilityLabel(isBookmarked ? "Remove bookmark" : "Bookmark article")
-        .task { await loadCurations() }
+        .task(id: articleAddress) {
+            app.openCurationMenu(articleAddress: articleAddress)
+        }
+        .onDisappear {
+            app.closeCurationMenu()
+        }
         .sheet(isPresented: $newCollectionPresented) {
             NewCollectionSheet(
                 onCancel: { newCollectionPresented = false },
                 onCreate: { title in
                     newCollectionPresented = false
-                    Task { await createAndAdd(title: title) }
+                    createAndAdd(title: title)
                 }
             )
             .presentationDetents([.medium])
@@ -51,7 +52,15 @@ struct BookmarkMenuButton: View {
 
     @ViewBuilder
     private var curationsSection: some View {
-        if curationSets.isEmpty {
+        let curationSets = app.curationMenu.articleAddress == articleAddress ? app.curationMenu.curationSets : []
+
+        if app.curationMenu.isLoading {
+            Text("Loading collections")
+                .font(.footnote)
+        } else if let errorMessage = app.curationMenu.errorMessage, !errorMessage.isEmpty {
+            Text(errorMessage)
+                .font(.footnote)
+        } else if curationSets.isEmpty {
             // Header-only section so the menu still reads as the
             // collection picker before any sets exist.
             Text("No collections yet")
@@ -60,7 +69,7 @@ struct BookmarkMenuButton: View {
             Section("Add to collection") {
                 ForEach(curationSets, id: \.id) { set in
                     Button {
-                        Task { await toggleInCuration(set) }
+                        toggleInCuration(set)
                     } label: {
                         if set.articleAddresses.contains(articleAddress) {
                             Label(displayTitle(set), systemImage: "checkmark")
@@ -85,38 +94,17 @@ struct BookmarkMenuButton: View {
 
     // MARK: - Actions
 
-    private func loadCurations() async {
-        if let sets = try? await app.safeCore.getMyCurationSets() {
-            curationSets = sets.sorted { ($0.createdAt ?? 0) > ($1.createdAt ?? 0) }
-        }
-    }
-
-    private func toggleInCuration(_ set: BookmarkSetRecord) async {
+    private func toggleInCuration(_ set: BookmarkSetRecord) {
         let nowMember = !set.articleAddresses.contains(articleAddress)
-        do {
-            try await app.safeCore.setAddressInCurationSet(
-                dTag: set.id,
-                address: articleAddress,
-                member: nowMember
-            )
-            await loadCurations()
-        } catch {
-            errorMessage = "Couldn't update collection — \(error.localizedDescription)"
-        }
+        app.setAddressInCurationSet(
+            dTag: set.id,
+            address: articleAddress,
+            member: nowMember
+        )
     }
 
-    private func createAndAdd(title: String) async {
-        do {
-            let newSet = try await app.safeCore.createCurationSet(title: title)
-            try await app.safeCore.setAddressInCurationSet(
-                dTag: newSet.id,
-                address: articleAddress,
-                member: true
-            )
-            await loadCurations()
-        } catch {
-            errorMessage = "Couldn't create collection — \(error.localizedDescription)"
-        }
+    private func createAndAdd(title: String) {
+        app.createCurationSetAndAdd(title: title, address: articleAddress)
     }
 }
 

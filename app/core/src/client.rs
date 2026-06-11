@@ -12,29 +12,31 @@ use parking_lot::RwLock;
 
 use crate::articles;
 use crate::blossom;
+use crate::comments;
 use crate::curation;
 use crate::discovery;
 use crate::errors::CoreError;
 use crate::events::{DataChangeType, Delta, EventCallback};
 use crate::feedback;
-use crate::comments;
 use crate::follows;
 use crate::groups;
 use crate::highlights;
-use crate::isbn_lookup;
+use crate::isbn_lookup::{self, IsbnPreviewStore};
 use crate::models::{
     ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, ChatMessageRecord,
     CommentRecord, CommunitySummary, CurrentUser, DiscussionRecord, FeedbackEventRecord,
     FeedbackThreadRecord, HighlightDraft, HighlightRecord, HydratedHighlight, NostrConnectOptions,
     PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
 };
+use crate::nip46::{self, BunkerSigner};
+use crate::nostr_runtime::{pin_relay_for_read, NostrRuntime};
+use crate::profile;
 use crate::reads;
 use crate::recommendations;
-use crate::nip46::{self, BunkerSigner};
-use crate::nostr_runtime::NostrRuntime;
-use crate::profile;
+use crate::relays::RelayConfig;
 use crate::relays::NOSTR_CONNECT_RELAY;
 use crate::session::{current_user_from_pubkey, Session};
+use crate::share_links;
 use crate::subscriptions::{SubscriptionKind, SubscriptionRegistry};
 use crate::web_metadata::{self, WebMetadata, WebMetadataStore};
 
@@ -49,6 +51,8 @@ pub struct HighlighterCore {
     /// OG/favicon cache shared across all `get_web_metadata` calls. Lives
     /// on the core so concurrent fetches for the same URL coalesce.
     web_metadata: Arc<WebMetadataStore>,
+    /// Rust-owned ISBN preview cache shared by every native shell.
+    isbn_previews: Arc<IsbnPreviewStore>,
 }
 
 struct Inner {
@@ -87,11 +91,8 @@ impl HighlighterCore {
             // fetch the user's actual NIP-65 from the network and re-apply
             // — without it, a fresh install with cold cache stays on
             // seed_defaults forever.
-            self.runtime
-                .spawn_apply_user_relay_config(pubkey.to_hex());
-            let user_relay_config_id = self
-                .runtime
-                .spawn_user_relay_config_bootstrap(pubkey);
+            self.runtime.spawn_apply_user_relay_config(pubkey.to_hex());
+            let user_relay_config_id = self.runtime.spawn_user_relay_config_bootstrap(pubkey);
             let sub_id = self.runtime.spawn_membership_subscription(pubkey);
             let contacts_id = self.runtime.spawn_contacts_subscription(pubkey);
             // Eagerly fetch 39000 metadata for any groups already in the
@@ -99,10 +100,8 @@ impl HighlighterCore {
             // call on a warm cache would return summaries with name=id because
             // the stage-2 metadata sub would only be installed after the pump
             // sees a live membership delta.
-            let cached_ids = crate::subscriptions::collect_cached_group_ids(
-                self.runtime.ndb(),
-                &pubkey,
-            );
+            let cached_ids =
+                crate::subscriptions::collect_cached_group_ids(self.runtime.ndb(), &pubkey);
             if !cached_ids.is_empty() {
                 self.runtime
                     .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
@@ -224,50 +223,48 @@ impl HighlighterCore {
         let inner = self.inner.clone();
         let runtime = self.runtime.clone();
         let callback_slot = self.callback_slot.clone();
-        self.runtime
-            .runtime_handle()
-            .spawn(async move {
-                let result =
-                    BunkerSigner::await_inbound(client.clone(), local_keys, Some(secret)).await;
-                match result {
-                    Ok((signer, user_pubkey)) => {
-                        let user = match current_user_from_pubkey(&user_pubkey) {
-                            Ok(u) => u,
-                            Err(e) => {
-                                tracing::warn!(error = %e, "npub encode after bunker pair");
-                                return;
-                            }
-                        };
-                        let signer = Arc::new(signer);
-                        // We're inside NostrRuntime's tokio runtime here
-                        // (spawned via `runtime_handle().spawn`). The sync
-                        // `runtime.set_signer` wrapper uses `block_on`, which
-                        // panics ("Cannot start a runtime from within a
-                        // runtime") when called from inside that same
-                        // runtime — talk to the client directly instead.
-                        client.set_signer((*signer).clone()).await;
-                        runtime.spawn_apply_user_relay_config(user_pubkey.to_hex());
-                        let sub_id = runtime.spawn_membership_subscription(user_pubkey);
-                        let contacts_id = runtime.spawn_contacts_subscription(user_pubkey);
-                        {
-                            let mut guard = inner.write();
-                            guard.session.set_bunker(signer, user.clone());
-                            guard.session.set_membership_subscription(sub_id);
-                            guard.session.set_contacts_subscription(contacts_id);
+        self.runtime.runtime_handle().spawn(async move {
+            let result =
+                BunkerSigner::await_inbound(client.clone(), local_keys, Some(secret)).await;
+            match result {
+                Ok((signer, user_pubkey)) => {
+                    let user = match current_user_from_pubkey(&user_pubkey) {
+                        Ok(u) => u,
+                        Err(e) => {
+                            tracing::warn!(error = %e, "npub encode after bunker pair");
+                            return;
                         }
-                        let cb = { callback_slot.read().clone() };
-                        if let Some(cb) = cb {
-                            cb.on_data_changed(Delta {
-                                subscription_id: 0,
-                                change: DataChangeType::SignerConnected { user },
-                            });
-                        }
+                    };
+                    let signer = Arc::new(signer);
+                    // We're inside NostrRuntime's tokio runtime here
+                    // (spawned via `runtime_handle().spawn`). The sync
+                    // `runtime.set_signer` wrapper uses `block_on`, which
+                    // panics ("Cannot start a runtime from within a
+                    // runtime") when called from inside that same
+                    // runtime — talk to the client directly instead.
+                    client.set_signer((*signer).clone()).await;
+                    runtime.spawn_apply_user_relay_config(user_pubkey.to_hex());
+                    let sub_id = runtime.spawn_membership_subscription(user_pubkey);
+                    let contacts_id = runtime.spawn_contacts_subscription(user_pubkey);
+                    {
+                        let mut guard = inner.write();
+                        guard.session.set_bunker(signer, user.clone());
+                        guard.session.set_membership_subscription(sub_id);
+                        guard.session.set_contacts_subscription(contacts_id);
                     }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "nostrconnect inbound pairing failed");
+                    let cb = { callback_slot.read().clone() };
+                    if let Some(cb) = cb {
+                        cb.on_data_changed(Delta {
+                            subscription_id: 0,
+                            change: DataChangeType::SignerConnected { user },
+                        });
                     }
                 }
-            });
+                Err(e) => {
+                    tracing::warn!(error = %e, "nostrconnect inbound pairing failed");
+                }
+            }
+        });
 
         Ok(uri)
     }
@@ -287,14 +284,10 @@ impl HighlighterCore {
         self.runtime
             .spawn_apply_user_relay_config(user_pubkey.to_hex());
 
-        let sub_id = self
-            .runtime
-            .spawn_membership_subscription(user_pubkey);
+        let sub_id = self.runtime.spawn_membership_subscription(user_pubkey);
         let contacts_id = self.runtime.spawn_contacts_subscription(user_pubkey);
-        let cached_ids = crate::subscriptions::collect_cached_group_ids(
-            self.runtime.ndb(),
-            &user_pubkey,
-        );
+        let cached_ids =
+            crate::subscriptions::collect_cached_group_ids(self.runtime.ndb(), &user_pubkey);
         if !cached_ids.is_empty() {
             self.runtime
                 .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
@@ -364,8 +357,10 @@ impl HighlighterCore {
         if group_id.trim().is_empty() {
             return Err(CoreError::InvalidInput("group_id must not be empty".into()));
         }
-        self.subscriptions
-            .register(&self.runtime, SubscriptionKind::RoomDiscussions { group_id })
+        self.subscriptions.register(
+            &self.runtime,
+            SubscriptionKind::RoomDiscussions { group_id },
+        )
     }
 
     /// Per-room Chat view-scope subscription. Returns a handle; fires
@@ -403,8 +398,7 @@ impl HighlighterCore {
     /// Install on tab appearance; `unsubscribe(handle)` on disappearance.
     pub async fn subscribe_following_reads(&self) -> Result<u64, CoreError> {
         let user_pubkey = self.require_user_pubkey()?;
-        let follow_hex_strings =
-            follows::query_follows(self.runtime.ndb(), &user_pubkey.to_hex())?;
+        let follow_hex_strings = follows::query_follows(self.runtime.ndb(), &user_pubkey.to_hex())?;
         let follows_pks: Vec<PublicKey> = follow_hex_strings
             .iter()
             .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
@@ -425,8 +419,7 @@ impl HighlighterCore {
     /// set or tagged into any joined room.
     pub async fn subscribe_following_highlights(&self) -> Result<u64, CoreError> {
         let user_pubkey = self.require_user_pubkey()?;
-        let follow_hex_strings =
-            follows::query_follows(self.runtime.ndb(), &user_pubkey.to_hex())?;
+        let follow_hex_strings = follows::query_follows(self.runtime.ndb(), &user_pubkey.to_hex())?;
         let mut follows_pks: Vec<PublicKey> = follow_hex_strings
             .iter()
             .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
@@ -435,10 +428,8 @@ impl HighlighterCore {
             follows_pks.push(user_pubkey);
         }
         self.refresh_follows_nip65_subscription(&follows_pks);
-        let joined = groups::query_joined_communities_from_ndb(
-            self.runtime.ndb(),
-            &user_pubkey.to_hex(),
-        )?;
+        let joined =
+            groups::query_joined_communities_from_ndb(self.runtime.ndb(), &user_pubkey.to_hex())?;
         let group_ids: Vec<String> = joined.into_iter().map(|c| c.id).collect();
         self.subscriptions.register(
             &self.runtime,
@@ -482,13 +473,12 @@ impl HighlighterCore {
     /// `FeedbackThreadsUpdated` deltas whenever a kind:1 root authored by
     /// the current user (with the project `a` tag) or any kind:513 metadata
     /// for the same project arrives. Swift re-queries on each.
-    pub async fn subscribe_feedback_threads(
-        &self,
-        coordinate: String,
-    ) -> Result<u64, CoreError> {
+    pub async fn subscribe_feedback_threads(&self, coordinate: String) -> Result<u64, CoreError> {
         let coordinate = coordinate.trim();
         if coordinate.is_empty() {
-            return Err(CoreError::InvalidInput("coordinate must not be empty".into()));
+            return Err(CoreError::InvalidInput(
+                "coordinate must not be empty".into(),
+            ));
         }
         let user_pubkey = self.require_user_pubkey()?;
         self.subscriptions.register(
@@ -502,10 +492,7 @@ impl HighlighterCore {
 
     /// Per-thread feedback subscription. Fires `FeedbackThreadEventUpserted`
     /// deltas for every kind:1 `e`-tagged to the root (regardless of author).
-    pub async fn subscribe_feedback_thread(
-        &self,
-        root_event_id: String,
-    ) -> Result<u64, CoreError> {
+    pub async fn subscribe_feedback_thread(&self, root_event_id: String) -> Result<u64, CoreError> {
         let root_event_id = root_event_id.trim();
         if root_event_id.is_empty() {
             return Err(CoreError::InvalidInput(
@@ -514,8 +501,12 @@ impl HighlighterCore {
         }
         let root = EventId::from_hex(root_event_id)
             .map_err(|e| CoreError::InvalidInput(format!("invalid event id: {e}")))?;
-        self.subscriptions
-            .register(&self.runtime, SubscriptionKind::FeedbackThread { root_event_id: root })
+        self.subscriptions.register(
+            &self.runtime,
+            SubscriptionKind::FeedbackThread {
+                root_event_id: root,
+            },
+        )
     }
 
     /// Drop a subscription by handle. Idempotent.
@@ -558,10 +549,7 @@ impl HighlighterCore {
     /// Following Reads feed — articles surfaced through the user's follow
     /// graph. See `reads::query_following_reads` for semantics. Returns an
     /// empty list if the user isn't logged in or has no follows cached yet.
-    pub async fn get_following_reads(
-        &self,
-        limit: u32,
-    ) -> Result<Vec<ReadingFeedItem>, CoreError> {
+    pub async fn get_following_reads(&self, limit: u32) -> Result<Vec<ReadingFeedItem>, CoreError> {
         let Some(user) = self.inner.read().session.current_user() else {
             return Err(CoreError::NotAuthenticated);
         };
@@ -578,15 +566,9 @@ impl HighlighterCore {
         let Some(user) = self.inner.read().session.current_user() else {
             return Err(CoreError::NotAuthenticated);
         };
-        let joined =
-            groups::query_joined_communities_from_ndb(self.runtime.ndb(), &user.pubkey)?;
+        let joined = groups::query_joined_communities_from_ndb(self.runtime.ndb(), &user.pubkey)?;
         let group_ids: Vec<String> = joined.into_iter().map(|c| c.id).collect();
-        highlights::query_following_highlights(
-            self.runtime.ndb(),
-            &user.pubkey,
-            &group_ids,
-            limit,
-        )
+        highlights::query_following_highlights(self.runtime.ndb(), &user.pubkey, &group_ids, limit)
     }
 
     // -- Profile reads (per-pubkey, no auth required) --
@@ -811,13 +793,8 @@ impl HighlighterCore {
                 .ok_or(CoreError::NotAuthenticated)?
                 .pubkey
         };
-        follows::publish_follow_toggle(
-            &self.runtime,
-            &follower,
-            target_pubkey_hex.trim(),
-            follow,
-        )
-        .await
+        follows::publish_follow_toggle(&self.runtime, &follower, target_pubkey_hex.trim(), follow)
+            .await
     }
 
     /// Recent books across the user's joined communities — drives the
@@ -894,7 +871,9 @@ impl HighlighterCore {
     pub async fn subscribe_article_search(&self, query: String) -> Result<u64, CoreError> {
         let trimmed = query.trim().to_string();
         if trimmed.is_empty() {
-            return Err(CoreError::InvalidInput("search query must not be empty".into()));
+            return Err(CoreError::InvalidInput(
+                "search query must not be empty".into(),
+            ));
         }
         let relays = self.get_search_relays().await?;
         if relays.is_empty() {
@@ -1007,23 +986,52 @@ impl HighlighterCore {
     // -- NIP-51 Bookmark sets (kind:30003) / Curation sets (kind:30004) -----
 
     /// Return all kind:30003 bookmark sets authored by the current user.
-    pub async fn get_my_bookmark_sets(&self) -> Result<Vec<crate::models::BookmarkSetRecord>, CoreError> {
-        let user_hex = self.inner.read().session.current_user()
-            .map(|u| u.pubkey).unwrap_or_default();
-        crate::lists::query_user_sets(self.runtime.ndb(), &user_hex, crate::lists::KIND_BOOKMARK_SETS)
+    pub async fn get_my_bookmark_sets(
+        &self,
+    ) -> Result<Vec<crate::models::BookmarkSetRecord>, CoreError> {
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .unwrap_or_default();
+        crate::lists::query_user_sets(
+            self.runtime.ndb(),
+            &user_hex,
+            crate::lists::KIND_BOOKMARK_SETS,
+        )
     }
 
     /// Return all kind:30004 curation sets authored by the current user.
-    pub async fn get_my_curation_sets(&self) -> Result<Vec<crate::models::BookmarkSetRecord>, CoreError> {
-        let user_hex = self.inner.read().session.current_user()
-            .map(|u| u.pubkey).unwrap_or_default();
-        crate::lists::query_user_sets(self.runtime.ndb(), &user_hex, crate::lists::KIND_CURATION_SETS)
+    pub async fn get_my_curation_sets(
+        &self,
+    ) -> Result<Vec<crate::models::BookmarkSetRecord>, CoreError> {
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .unwrap_or_default();
+        crate::lists::query_user_sets(
+            self.runtime.ndb(),
+            &user_hex,
+            crate::lists::KIND_CURATION_SETS,
+        )
     }
 
     /// Return kind:30004 curation sets from users the current user follows.
-    pub async fn get_following_curation_sets(&self) -> Result<Vec<crate::models::BookmarkSetRecord>, CoreError> {
-        let user_hex = self.inner.read().session.current_user()
-            .map(|u| u.pubkey).unwrap_or_default();
+    pub async fn get_following_curation_sets(
+        &self,
+    ) -> Result<Vec<crate::models::BookmarkSetRecord>, CoreError> {
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .unwrap_or_default();
         let follows = crate::follows::query_follows(self.runtime.ndb(), &user_hex)?;
         crate::lists::query_following_curation_sets(self.runtime.ndb(), &follows)
     }
@@ -1035,8 +1043,13 @@ impl HighlighterCore {
         &self,
         title: String,
     ) -> Result<crate::models::BookmarkSetRecord, CoreError> {
-        let user_hex = self.inner.read().session.current_user()
-            .map(|u| u.pubkey).ok_or(CoreError::NotAuthenticated)?;
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .ok_or(CoreError::NotAuthenticated)?;
         crate::lists::create_curation_set(&self.runtime, &user_hex, title.trim()).await
     }
 
@@ -1050,8 +1063,13 @@ impl HighlighterCore {
         address: String,
         member: bool,
     ) -> Result<bool, CoreError> {
-        let user_hex = self.inner.read().session.current_user()
-            .map(|u| u.pubkey).ok_or(CoreError::NotAuthenticated)?;
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .ok_or(CoreError::NotAuthenticated)?;
         crate::lists::set_address_in_curation_set(
             &self.runtime,
             &user_hex,
@@ -1065,55 +1083,84 @@ impl HighlighterCore {
     /// Open a live subscription for the current user's kind:30003/30004 sets.
     /// Delivers `BookmarkSetsUpdated` (view-scoped) on each delta.
     pub async fn subscribe_bookmark_sets(&self) -> Result<u64, CoreError> {
-        let user_hex = self.inner.read().session.current_user()
-            .map(|u| u.pubkey).ok_or(CoreError::NotInitialized)?;
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .ok_or(CoreError::NotInitialized)?;
         let pk = PublicKey::from_hex(&user_hex)
             .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
-        self.subscriptions.register(&self.runtime, SubscriptionKind::BookmarkSets { user_pubkey: pk })
+        self.subscriptions.register(
+            &self.runtime,
+            SubscriptionKind::BookmarkSets { user_pubkey: pk },
+        )
     }
 
     /// Open a live subscription for kind:30004 sets from followed authors.
     /// Delivers `FollowingCurationSetsUpdated` (view-scoped) on each delta.
     pub async fn subscribe_following_curation_sets(&self) -> Result<u64, CoreError> {
-        let user_hex = self.inner.read().session.current_user()
-            .map(|u| u.pubkey).ok_or(CoreError::NotInitialized)?;
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .ok_or(CoreError::NotInitialized)?;
         let follow_hexes = crate::follows::query_follows(self.runtime.ndb(), &user_hex)?;
-        let follows: Vec<PublicKey> = follow_hexes.iter()
+        let follows: Vec<PublicKey> = follow_hexes
+            .iter()
             .filter_map(|h| PublicKey::from_hex(h).ok())
             .collect();
-        self.subscriptions.register(&self.runtime, SubscriptionKind::FollowingCurationSets { follows })
+        self.subscriptions.register(
+            &self.runtime,
+            SubscriptionKind::FollowingCurationSets { follows },
+        )
     }
 
     // -- NIP-B0 Web bookmarks (kind:39701) -----------------------------------
 
     /// Return all NIP-B0 kind:39701 web bookmarks authored by the current user.
-    pub async fn get_my_web_bookmarks(&self) -> Result<Vec<crate::models::WebBookmarkRecord>, CoreError> {
-        let user_hex = self.inner.read().session.current_user()
-            .map(|u| u.pubkey).unwrap_or_default();
+    pub async fn get_my_web_bookmarks(
+        &self,
+    ) -> Result<Vec<crate::models::WebBookmarkRecord>, CoreError> {
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .unwrap_or_default();
         crate::lists::query_user_web_bookmarks(self.runtime.ndb(), &user_hex)
     }
 
     /// Open a live subscription for the current user's NIP-B0 kind:39701 events.
     /// Delivers `WebBookmarksUpdated` (view-scoped) on each delta.
     pub async fn subscribe_web_bookmarks(&self) -> Result<u64, CoreError> {
-        let user_hex = self.inner.read().session.current_user()
-            .map(|u| u.pubkey).ok_or(CoreError::NotInitialized)?;
+        let user_hex = self
+            .inner
+            .read()
+            .session
+            .current_user()
+            .map(|u| u.pubkey)
+            .ok_or(CoreError::NotInitialized)?;
         let pk = PublicKey::from_hex(&user_hex)
             .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
-        self.subscriptions.register(&self.runtime, SubscriptionKind::WebBookmarks { user_pubkey: pk })
+        self.subscriptions.register(
+            &self.runtime,
+            SubscriptionKind::WebBookmarks { user_pubkey: pk },
+        )
     }
 
     pub async fn lookup_isbn(&self, isbn: String) -> Result<ArtifactPreview, CoreError> {
-        isbn_lookup::lookup_isbn(&isbn).await
+        isbn_lookup::lookup_isbn_cached(self.isbn_previews.clone(), &isbn).await
     }
 
     /// Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
     /// Extension flow — the main app drains the share queue, normalizes each
     /// URL through this, then calls `publish_artifact` to post the kind:11.
-    pub async fn build_preview_from_url(
-        &self,
-        url: String,
-    ) -> Result<ArtifactPreview, CoreError> {
+    pub async fn build_preview_from_url(&self, url: String) -> Result<ArtifactPreview, CoreError> {
         crate::artifacts::build_preview(&url)
     }
 
@@ -1252,13 +1299,8 @@ impl HighlighterCore {
     ) -> Result<Vec<HighlightRecord>, CoreError> {
         // Guard: user must be logged in.
         let _ = self.require_user_pubkey()?;
-        crate::highlights::publish_and_share(
-            &self.runtime,
-            artifact,
-            drafts,
-            &target_group_id,
-        )
-        .await
+        crate::highlights::publish_and_share(&self.runtime, artifact, drafts, &target_group_id)
+            .await
     }
 
     /// Re-share an existing kind:9802 highlight into a NIP-29 room as a
@@ -1377,20 +1419,14 @@ impl HighlighterCore {
     /// spawns a metadata backfill for every group the list references, so a
     /// subsequent `get_featured_rooms` returns rich summaries rather than
     /// bare ids. Idempotent; the sub rides until logout.
-    pub async fn start_featured_rooms(
-        &self,
-        curator_pubkey_hex: String,
-    ) -> Result<(), CoreError> {
+    pub async fn start_featured_rooms(&self, curator_pubkey_hex: String) -> Result<(), CoreError> {
         let curator = PublicKey::from_hex(curator_pubkey_hex.trim())
             .map_err(|e| CoreError::InvalidInput(format!("invalid curator pubkey: {e}")))?;
 
         let already = self.inner.read().session.has_curation_subscription();
         if !already {
             let sub_id = self.runtime.spawn_curated_list_subscription(curator);
-            self.inner
-                .write()
-                .session
-                .set_curation_subscription(sub_id);
+            self.inner.write().session.set_curation_subscription(sub_id);
         }
 
         // Even if the sub was already installed, ensure any groups the
@@ -1425,20 +1461,14 @@ impl HighlighterCore {
 
     /// Every cached room, newest first, truncated to `limit`. Powers the
     /// explorer's "Browse all" grid.
-    pub async fn get_all_rooms(
-        &self,
-        limit: u32,
-    ) -> Result<Vec<CommunitySummary>, CoreError> {
+    pub async fn get_all_rooms(&self, limit: u32) -> Result<Vec<CommunitySummary>, CoreError> {
         discovery::query_all_rooms_from_ndb(self.runtime.ndb(), limit)
     }
 
     /// The N most-recently-seen rooms. Same underlying query as
     /// `get_all_rooms` with a tighter limit — kept as a distinct method so
     /// the Swift explorer store's shelves remain single-purpose.
-    pub async fn get_new_rooms(
-        &self,
-        limit: u32,
-    ) -> Result<Vec<CommunitySummary>, CoreError> {
+    pub async fn get_new_rooms(&self, limit: u32) -> Result<Vec<CommunitySummary>, CoreError> {
         discovery::query_all_rooms_from_ndb(self.runtime.ndb(), limit)
     }
 
@@ -1562,49 +1592,72 @@ impl HighlighterCore {
         crate::nostr_entities::decode_nostr_entity(&input)
     }
 
-    /// Mint a NIP-19 `nevent` bech32 reference for an event id with
-    /// optional author / kind / relay hints. Used to build shareable
-    /// highlight URLs (e.g. the `https://highlighter.com/highlight/<nevent>`
-    /// social-card flow). Bad relay URLs are silently dropped.
-    pub fn encode_event_to_nevent(
+    /// Build the canonical public share URL for a kind:9802 highlight.
+    ///
+    /// The shell receives only the final route. Rust owns the NIP-19 event
+    /// reference, kind hint, and relay hint so platform UI cannot choose relay
+    /// routing policy.
+    pub fn highlight_share_url(
         &self,
         event_id_hex: String,
         author_pubkey_hex: Option<String>,
-        relay_hints: Vec<String>,
-        kind: Option<u32>,
-    ) -> Result<String, CoreError> {
-        crate::nostr_entities::encode_event_to_nevent(
-            event_id_hex,
-            author_pubkey_hex,
-            relay_hints,
-            kind,
-        )
+    ) -> Option<String> {
+        share_links::highlight_share_url(event_id_hex, author_pubkey_hex).ok()
     }
 
-    /// Best-effort cache lookup for a [`NostrEntityRef`]. Returns the
-    /// resolved event when nostrdb already has it, `None` otherwise.
-    /// The caller should pair this with `subscribe_nostr_entity` so a
-    /// cold-cache reference warms up over the wire.
+    /// Resolve a [`NostrEntityRef`] from nostrdb, fetching once from relay hints
+    /// plus the indexer pool when the local cache is cold.
     pub async fn resolve_nostr_entity(
         &self,
         entity: crate::nostr_entities::NostrEntityRef,
     ) -> Result<Option<crate::nostr_entities::NostrEntityEvent>, CoreError> {
-        crate::nostr_entities::resolve_from_cache(self.runtime.ndb(), &entity)
-    }
+        if let Some(cached) =
+            crate::nostr_entities::resolve_from_cache(self.runtime.ndb(), &entity)?
+        {
+            return Ok(Some(cached));
+        }
 
-    /// Install a one-shot REQ for the missing event behind an entity.
-    /// Routes to relay hints first (when the bech32 carried any) plus
-    /// the indexer pool. Events received are persisted to nostrdb via
-    /// the `NdbDatabase` bridge; the caller polls
-    /// `resolve_nostr_entity` again to pick them up. Fire-and-forget —
-    /// no handle returned, no need to unsubscribe (the relay closes
-    /// the REQ on EOSE).
-    pub async fn subscribe_nostr_entity(
-        &self,
-        entity: crate::nostr_entities::NostrEntityRef,
-    ) -> Result<(), CoreError> {
-        let _ = self.require_user_pubkey()?;
-        self.runtime.spawn_nostr_entity_backfill(entity)
+        let mut urls = crate::nostr_entities::relay_hints(&entity);
+        for url in self.runtime.indexer_urls() {
+            if !urls.iter().any(|existing| existing == &url) {
+                urls.push(url);
+            }
+        }
+
+        let filter = crate::nostr_entities::fetch_filter(&entity)?;
+        let fetched = if urls.is_empty() {
+            self.runtime
+                .client()
+                .fetch_events(filter, crate::nostr_entities::NOSTR_ENTITY_FETCH_TIMEOUT)
+                .await
+        } else {
+            for url in &urls {
+                pin_relay_for_read(self.runtime.client(), url).await;
+            }
+            self.runtime
+                .client()
+                .fetch_events_from(
+                    urls,
+                    filter,
+                    crate::nostr_entities::NOSTR_ENTITY_FETCH_TIMEOUT,
+                )
+                .await
+        };
+
+        match fetched {
+            Ok(events) => {
+                if let Some(cached) =
+                    crate::nostr_entities::resolve_from_cache(self.runtime.ndb(), &entity)?
+                {
+                    return Ok(Some(cached));
+                }
+                crate::nostr_entities::resolve_from_events(events.iter(), &entity)
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "resolve nostr entity fetch");
+                Ok(None)
+            }
+        }
     }
 
     /// Pubkeys (hex) the current user follows per their cached kind:3 contact
@@ -1700,10 +1753,7 @@ impl HighlighterCore {
     /// Used by the capture flow when the user opts not to (or can't) extract
     /// a highlight quote — the photo still ships to the community with all
     /// the imeta metadata.
-    pub async fn publish_picture(
-        &self,
-        draft: PictureDraft,
-    ) -> Result<PictureRecord, CoreError> {
+    pub async fn publish_picture(&self, draft: PictureDraft) -> Result<PictureRecord, CoreError> {
         let _ = self.require_user_pubkey()?;
         crate::pictures::publish_picture(&self.runtime, draft).await
     }
@@ -1726,10 +1776,7 @@ impl HighlighterCore {
     /// Insert-or-update a single relay. Replaces the row with matching URL or
     /// appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
     /// the live relay pool so the change takes effect immediately.
-    pub async fn upsert_relay(
-        &self,
-        cfg: crate::relays::RelayConfig,
-    ) -> Result<(), CoreError> {
+    pub async fn upsert_relay(&self, cfg: crate::relays::RelayConfig) -> Result<(), CoreError> {
         let user = self
             .inner
             .read()
@@ -1788,8 +1835,33 @@ impl HighlighterCore {
     /// Snapshot of the live per-relay diagnostics map. One row per URL
     /// currently in the client's pool. Refreshed by the background
     /// diagnostics poller at least once per second.
-    pub async fn get_relay_diagnostics(&self) -> Result<Vec<crate::models::RelayDiagnostic>, CoreError> {
+    pub async fn get_relay_diagnostics(
+        &self,
+    ) -> Result<Vec<crate::models::RelayDiagnostic>, CoreError> {
         Ok(self.runtime.relay_diagnostics_snapshot())
+    }
+
+    /// Display-only configs for live pool relays that are not in the user's
+    /// editable config. Rust owns canonical app relay roles; native settings UI
+    /// renders these rows without comparing relay URLs.
+    pub async fn get_auto_connected_relays(&self) -> Result<Vec<RelayConfig>, CoreError> {
+        use std::collections::BTreeSet;
+
+        let configured: BTreeSet<String> = self
+            .get_relays()
+            .await?
+            .into_iter()
+            .map(|r| r.url)
+            .collect();
+        let mut rows: Vec<RelayConfig> = self
+            .runtime
+            .relay_diagnostics_snapshot()
+            .into_iter()
+            .filter(|diag| !configured.contains(&diag.url))
+            .map(|diag| crate::relays::auto_connected_display_config(&diag.url))
+            .collect();
+        rows.sort_by(|a, b| a.url.cmp(&b.url));
+        Ok(rows)
     }
 
     /// Handle the Swift side uses to match `RelayStatusChanged` deltas on the
@@ -1875,6 +1947,7 @@ impl HighlighterCore {
         // via `set_event_callback`.
         runtime.spawn_diagnostics_poller(callback_slot.clone());
         let web_metadata = Arc::new(WebMetadataStore::open(runtime.data_dir()));
+        let isbn_previews = Arc::new(IsbnPreviewStore::open(runtime.data_dir()));
         Arc::new(Self {
             inner: Arc::new(RwLock::new(Inner {
                 session: Session::new(),
@@ -1883,6 +1956,7 @@ impl HighlighterCore {
             callback_slot,
             subscriptions,
             web_metadata,
+            isbn_previews,
         })
     }
 
@@ -1930,10 +2004,7 @@ impl HighlighterCore {
 /// Read the cached kind:3 contact list for `user_pubkey` and return the
 /// `p`-tag pubkeys that successfully parse. Used at login to seed the
 /// follows-NIP-65 subscription before the user touches a home feed.
-fn current_followed_pubkeys(
-    ndb: &nostrdb::Ndb,
-    user_pubkey: &PublicKey,
-) -> Vec<PublicKey> {
+fn current_followed_pubkeys(ndb: &nostrdb::Ndb, user_pubkey: &PublicKey) -> Vec<PublicKey> {
     let user_hex = user_pubkey.to_hex();
     let hexes = match crate::follows::query_follows(ndb, &user_hex) {
         Ok(v) => v,

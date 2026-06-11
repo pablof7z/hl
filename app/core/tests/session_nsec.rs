@@ -36,7 +36,9 @@ fn nsec_login_accepts_hex_secret_key() {
     let hex = keys.secret_key().to_secret_hex();
 
     let (core, _tmp) = isolated_core();
-    let user = core.login_nsec(hex).expect("login_nsec should accept a hex secret key");
+    let user = core
+        .login_nsec(hex)
+        .expect("login_nsec should accept a hex secret key");
     assert_eq!(user.pubkey, keys.public_key().to_hex());
 }
 
@@ -70,6 +72,8 @@ fn nsec_login_trims_surrounding_whitespace() {
     let padded = format!("  {nsec}\n");
 
     let (core, _tmp) = isolated_core();
-    let user = core.login_nsec(padded).expect("surrounding whitespace should be tolerated");
+    let user = core
+        .login_nsec(padded)
+        .expect("surrounding whitespace should be tolerated");
     assert_eq!(user.pubkey, keys.public_key().to_hex());
 }

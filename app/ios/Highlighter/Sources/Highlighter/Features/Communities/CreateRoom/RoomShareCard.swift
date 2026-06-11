@@ -21,6 +21,7 @@ struct RoomShareCard: View {
     @State private var qrShown = false
     @State private var copied = false
     @State private var inviteCode: String?
+    @State private var mintedGroupId: String?
     @State private var mintError: String?
 
     var body: some View {
@@ -123,7 +124,7 @@ struct RoomShareCard: View {
     }
 
     private var shareURL: String? {
-        guard let code = inviteCode else { return nil }
+        guard mintedGroupId == groupId, let code = inviteCode else { return nil }
         return "https://highlighter.com/r/\(groupId)/join/\(code)"
     }
 
@@ -134,6 +135,12 @@ struct RoomShareCard: View {
     }
 
     private func mintInviteIfNeeded() async {
+        if mintedGroupId != groupId {
+            inviteCode = nil
+            mintedGroupId = nil
+            copied = false
+            mintError = nil
+        }
         guard inviteCode == nil else { return }
         do {
             let codes = try await appStore.safeCore.createRoomInviteCodes(
@@ -142,10 +149,15 @@ struct RoomShareCard: View {
             )
             await MainActor.run {
                 inviteCode = codes.first
+                mintedGroupId = inviteCode == nil ? nil : groupId
+                copied = false
                 mintError = inviteCode == nil ? "No code returned." : nil
             }
         } catch {
             await MainActor.run {
+                inviteCode = nil
+                mintedGroupId = nil
+                copied = false
                 mintError = "Couldn't mint invite link. Add people directly below."
             }
         }
@@ -156,10 +168,6 @@ struct RoomShareCard: View {
         UIPasteboard.general.string = url
         UISelectionFeedbackGenerator().selectionChanged()
         copied = true
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            await MainActor.run { copied = false }
-        }
     }
 
     @ViewBuilder

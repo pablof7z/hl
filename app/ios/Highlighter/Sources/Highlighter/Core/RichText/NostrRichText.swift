@@ -77,11 +77,11 @@ struct NostrRichText: View {
     }
 
     private func mentionLabel(for pubkeyHex: String) -> String {
-        let cached = appStore.profileCache[pubkeyHex]
+        let cached = appStore.profile(pubkeyHex: pubkeyHex)
         if let display = cached?.displayName, !display.isEmpty { return display }
         if let name = cached?.name, !name.isEmpty { return name }
         // Warm the cache so the next render swaps in a real name.
-        Task { await appStore.requestProfile(pubkeyHex: pubkeyHex) }
+        Task { appStore.requestProfile(pubkeyHex: pubkeyHex) }
         return String(pubkeyHex.prefix(8))
     }
 
@@ -349,19 +349,10 @@ struct NostrEntityCard: View {
     }
 
     private func load() async {
-        if let cached = try? await appStore.safeCore.resolveNostrEntity(entity) {
-            await MainActor.run { resolved = cached }
-        }
-        if resolved == nil && !attempted {
-            attempted = true
-            try? await appStore.safeCore.subscribeNostrEntity(entity)
-            // Brief poll-back so a fast arrival populates without a view
-            // re-create. The subscription terminates on EOSE so this is
-            // bounded.
-            try? await Task.sleep(for: .milliseconds(800))
-            if let cached = try? await appStore.safeCore.resolveNostrEntity(entity) {
-                await MainActor.run { resolved = cached }
-            }
+        guard !attempted else { return }
+        attempted = true
+        if let event = try? await appStore.safeCore.resolveNostrEntity(entity) {
+            await MainActor.run { resolved = event }
         }
     }
 }
@@ -436,10 +427,10 @@ private struct ArticleEntityCard: View {
         }
         .buttonStyle(.plain)
         .task {
-            profile = appStore.profileCache[event.pubkeyHex]
+            profile = appStore.profile(pubkeyHex: event.pubkeyHex)
             if profile == nil {
-                await appStore.requestProfile(pubkeyHex: event.pubkeyHex)
-                profile = appStore.profileCache[event.pubkeyHex]
+                appStore.requestProfile(pubkeyHex: event.pubkeyHex)
+                profile = appStore.profile(pubkeyHex: event.pubkeyHex)
             }
         }
     }
@@ -480,10 +471,10 @@ private struct NoteEntityCard: View {
                 .stroke(Color.highlighterRule, lineWidth: 1)
         )
         .task {
-            profile = appStore.profileCache[event.pubkeyHex]
+            profile = appStore.profile(pubkeyHex: event.pubkeyHex)
             if profile == nil {
-                await appStore.requestProfile(pubkeyHex: event.pubkeyHex)
-                profile = appStore.profileCache[event.pubkeyHex]
+                appStore.requestProfile(pubkeyHex: event.pubkeyHex)
+                profile = appStore.profile(pubkeyHex: event.pubkeyHex)
             }
         }
     }
@@ -513,10 +504,10 @@ private struct HighlightEntityCard: View {
         .padding(.vertical, 10)
         .padding(.horizontal, 4)
         .task {
-            profile = appStore.profileCache[event.pubkeyHex]
+            profile = appStore.profile(pubkeyHex: event.pubkeyHex)
             if profile == nil {
-                await appStore.requestProfile(pubkeyHex: event.pubkeyHex)
-                profile = appStore.profileCache[event.pubkeyHex]
+                appStore.requestProfile(pubkeyHex: event.pubkeyHex)
+                profile = appStore.profile(pubkeyHex: event.pubkeyHex)
             }
         }
     }
@@ -527,9 +518,8 @@ private struct ProfileCalloutCard: View {
     let event: NostrEntityEvent
 
     var body: some View {
-        // The content is JSON; we let the upstream profileCache supply
-        // the parsed data via NavigationLink. Render the avatar +
-        // name from the cache if present.
+        // The content is JSON; the Rust-owned profile projection supplies
+        // the parsed data. Render the avatar and name when present.
         ProfileCalloutFromCache(pubkey: event.pubkeyHex)
     }
 }
@@ -573,10 +563,10 @@ private struct ProfileCalloutFromCache: View {
         }
         .buttonStyle(.plain)
         .task {
-            profile = appStore.profileCache[pubkey]
+            profile = appStore.profile(pubkeyHex: pubkey)
             if profile == nil {
-                await appStore.requestProfile(pubkeyHex: pubkey)
-                profile = appStore.profileCache[pubkey]
+                appStore.requestProfile(pubkeyHex: pubkey)
+                profile = appStore.profile(pubkeyHex: pubkey)
             }
         }
     }

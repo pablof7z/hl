@@ -5,7 +5,9 @@ use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
-use crate::models::{ArtifactRecord, BlossomUpload, HighlightDraft, HighlightRecord, HydratedHighlight};
+use crate::models::{
+    ArtifactRecord, BlossomUpload, HighlightDraft, HighlightRecord, HydratedHighlight,
+};
 use crate::nostr_runtime::NostrRuntime;
 use crate::relays::HIGHLIGHTER_RELAY;
 
@@ -128,9 +130,7 @@ pub async fn share_to_community(
 
 /// Port of `hydrateHighlights`. Given a set of highlights, look up the
 /// artifact each references and return joined records.
-pub fn hydrate(
-    _highlights: Vec<HighlightRecord>,
-) -> Result<Vec<HydratedHighlight>, CoreError> {
+pub fn hydrate(_highlights: Vec<HighlightRecord>) -> Result<Vec<HydratedHighlight>, CoreError> {
     todo!()
 }
 
@@ -146,8 +146,7 @@ pub fn query_for_article(
     if address.is_empty() {
         return Ok(Vec::new());
     }
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let ndb_cap = limit.max(32) as i32;
     let filter = NdbFilter::new()
@@ -212,8 +211,7 @@ pub fn query_for_reference(
     if tag_value.is_empty() {
         return Ok(Vec::new());
     }
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let ndb_cap = limit.max(32) as i32;
     let filter = NdbFilter::new()
@@ -227,9 +225,13 @@ pub fn query_for_reference(
 
     let mut records: Vec<HighlightRecord> = Vec::with_capacity(results.len());
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
         if let Some(rec) = record_from_cached_event(&event) {
             records.push(rec);
         }
@@ -251,13 +253,10 @@ pub fn query_for_group(
     if group_id.is_empty() {
         return Ok(Vec::new());
     }
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let cap = (limit.saturating_mul(4)).max(128) as i32;
-    let filter = NdbFilter::new()
-        .kinds([KIND_HIGHLIGHT as u64])
-        .build();
+    let filter = NdbFilter::new().kinds([KIND_HIGHLIGHT as u64]).build();
 
     let results = ndb
         .query(&txn, &[filter], cap)
@@ -265,10 +264,16 @@ pub fn query_for_group(
 
     let mut hydrated: Vec<HydratedHighlight> = Vec::new();
     for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
         let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else { continue };
-        let Some(h) = first_tag_value(&event, "h") else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
+        let Some(h) = first_tag_value(&event, "h") else {
+            continue;
+        };
         if h != group_id {
             continue;
         }
@@ -283,7 +288,10 @@ pub fn query_for_group(
     }
 
     hydrated.sort_by(|a, b| {
-        b.highlight.created_at.unwrap_or(0).cmp(&a.highlight.created_at.unwrap_or(0))
+        b.highlight
+            .created_at
+            .unwrap_or(0)
+            .cmp(&a.highlight.created_at.unwrap_or(0))
     });
     hydrated.truncate(limit as usize);
     Ok(hydrated)
@@ -302,8 +310,7 @@ pub fn query_highlights_by_author(
     let author = PublicKey::from_hex(pubkey_hex)
         .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let pk_bytes: [u8; 32] = author.to_bytes();
     let ndb_cap = limit.max(32) as i32;
@@ -369,8 +376,7 @@ pub fn query_following_highlights(
         }
     }
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let mut by_event_id: std::collections::BTreeMap<String, HydratedHighlight> =
         std::collections::BTreeMap::new();
@@ -386,10 +392,16 @@ pub fn query_following_highlights(
             .query(&txn, &[filter], per_stream_cap)
             .map_err(|e| CoreError::Cache(format!("query follow highlights: {e}")))?;
         for r in &results {
-            let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+            let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+                continue;
+            };
             let Ok(json) = note.json() else { continue };
-            let Ok(event) = Event::from_json(&json) else { continue };
-            let Some(rec) = record_from_cached_event(&event) else { continue };
+            let Ok(event) = Event::from_json(&json) else {
+                continue;
+            };
+            let Some(rec) = record_from_cached_event(&event) else {
+                continue;
+            };
             by_event_id.insert(
                 rec.event_id.clone(),
                 HydratedHighlight {
@@ -412,14 +424,22 @@ pub fn query_following_highlights(
             .query(&txn, &[filter], per_stream_cap)
             .map_err(|e| CoreError::Cache(format!("query room highlights: {e}")))?;
         for r in &results {
-            let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else { continue };
+            let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+                continue;
+            };
             let Ok(json) = note.json() else { continue };
-            let Ok(event) = Event::from_json(&json) else { continue };
-            let Some(h) = first_tag_value(&event, "h") else { continue };
+            let Ok(event) = Event::from_json(&json) else {
+                continue;
+            };
+            let Some(h) = first_tag_value(&event, "h") else {
+                continue;
+            };
             if !group_set.contains(h) {
                 continue;
             }
-            let Some(rec) = record_from_cached_event(&event) else { continue };
+            let Some(rec) = record_from_cached_event(&event) else {
+                continue;
+            };
             by_event_id
                 .entry(rec.event_id.clone())
                 .or_insert(HydratedHighlight {
@@ -709,10 +729,30 @@ fn record_from_event(
     let ref_value = artifact.preview.highlight_tag_value.as_str();
 
     let (artifact_address, event_reference, external_reference, source_url) = match ref_name {
-        "a" => (ref_value.to_string(), String::new(), String::new(), String::new()),
-        "e" => (String::new(), ref_value.to_string(), String::new(), String::new()),
-        "i" => (String::new(), String::new(), ref_value.to_string(), String::new()),
-        "r" => (String::new(), String::new(), String::new(), ref_value.to_string()),
+        "a" => (
+            ref_value.to_string(),
+            String::new(),
+            String::new(),
+            String::new(),
+        ),
+        "e" => (
+            String::new(),
+            ref_value.to_string(),
+            String::new(),
+            String::new(),
+        ),
+        "i" => (
+            String::new(),
+            String::new(),
+            ref_value.to_string(),
+            String::new(),
+        ),
+        "r" => (
+            String::new(),
+            String::new(),
+            String::new(),
+            ref_value.to_string(),
+        ),
         _ => (String::new(), String::new(), String::new(), String::new()),
     };
 
@@ -847,11 +887,7 @@ mod tests {
             .clone()
             .sign_with_keys(&keys)
             .expect("sign for inspection");
-        event
-            .tags
-            .iter()
-            .map(|t| t.as_slice().to_vec())
-            .collect()
+        event.tags.iter().map(|t| t.as_slice().to_vec()).collect()
     }
 
     fn artifact_for_isbn(isbn: &str) -> ArtifactRecord {
@@ -951,7 +987,8 @@ mod tests {
             "primary `a` reference present"
         );
         assert!(
-            tags.iter().any(|t| t.as_slice() == ["i", "isbn:9780735211292"]),
+            tags.iter()
+                .any(|t| t.as_slice() == ["i", "isbn:9780735211292"]),
             "NIP-73 `i` catalog tag present alongside"
         );
     }
@@ -960,8 +997,7 @@ mod tests {
     fn audio_clip_tags_use_3_decimal_format() {
         let artifact = artifact_for_podcast("https://example.com/ep1");
         let draft = draft_with_clip();
-        let builder =
-            build_highlight_event(&draft, &artifact).expect("build highlight event");
+        let builder = build_highlight_event(&draft, &artifact).expect("build highlight event");
         let tags = tags_as_vec(&builder);
 
         let starts: Vec<_> = tags
@@ -984,8 +1020,7 @@ mod tests {
         let artifact = artifact_for_podcast("https://example.com/ep1");
         let mut draft = draft_with_clip();
         draft.clip_speaker = String::new();
-        let builder =
-            build_highlight_event(&draft, &artifact).expect("build highlight event");
+        let builder = build_highlight_event(&draft, &artifact).expect("build highlight event");
         let tags = tags_as_vec(&builder);
 
         assert!(
@@ -1000,10 +1035,8 @@ mod tests {
     fn multiple_segment_ids_produce_multiple_tags() {
         let artifact = artifact_for_podcast("https://example.com/ep1");
         let mut draft = draft_with_clip();
-        draft.clip_transcript_segment_ids =
-            vec!["a".into(), "b".into(), "c".into()];
-        let builder =
-            build_highlight_event(&draft, &artifact).expect("build highlight event");
+        draft.clip_transcript_segment_ids = vec!["a".into(), "b".into(), "c".into()];
+        let builder = build_highlight_event(&draft, &artifact).expect("build highlight event");
         let tags = tags_as_vec(&builder);
 
         let segments: Vec<_> = tags
@@ -1030,8 +1063,7 @@ mod tests {
             clip_transcript_segment_ids: vec![],
             image: None,
         };
-        let builder =
-            build_highlight_event(&draft, &artifact).expect("build highlight event");
+        let builder = build_highlight_event(&draft, &artifact).expect("build highlight event");
         let tags = tags_as_vec(&builder);
 
         // NIP-73: podcast highlights use `i podcast:item:guid:<episode-guid>`.
@@ -1047,10 +1079,12 @@ mod tests {
             "first i-tag must be the canonical episode identifier, got: {tags:?}"
         );
         let has_r_url = tags.iter().any(|t| {
-            t.first().map(String::as_str) == Some("r")
-                && t.get(1).map(String::as_str) == Some(url)
+            t.first().map(String::as_str) == Some("r") && t.get(1).map(String::as_str) == Some(url)
         });
-        assert!(!has_r_url, "r:<url> must not appear on a canonical podcast highlight, got: {tags:?}");
+        assert!(
+            !has_r_url,
+            "r:<url> must not appear on a canonical podcast highlight, got: {tags:?}"
+        );
     }
 
     #[test]
@@ -1060,7 +1094,9 @@ mod tests {
         let builder = build_highlight_event(&draft, &artifact).expect("build");
         let tags = tags_as_vec(&builder);
         assert!(
-            !tags.iter().any(|t| t.first().map(String::as_str) == Some("imeta")),
+            !tags
+                .iter()
+                .any(|t| t.first().map(String::as_str) == Some("imeta")),
             "no imeta tag when draft.image is None: {tags:?}"
         );
     }
@@ -1132,12 +1168,11 @@ mod tests {
             clip_transcript_segment_ids: vec![],
             image: None,
         };
-        let builder =
-            build_highlight_event(&draft, &artifact).expect("build highlight event");
+        let builder = build_highlight_event(&draft, &artifact).expect("build highlight event");
         let tags = tags_as_vec(&builder);
         assert!(
-            tags.iter().any(|t| t.as_slice()
-                == ["comment".to_string(), "a note".to_string()]),
+            tags.iter()
+                .any(|t| t.as_slice() == ["comment".to_string(), "a note".to_string()]),
             "comment tag missing: {tags:?}"
         );
     }
@@ -1155,8 +1190,7 @@ mod tests {
             clip_transcript_segment_ids: vec![],
             image: None,
         };
-        let builder =
-            build_highlight_event(&draft, &artifact).expect("build highlight event");
+        let builder = build_highlight_event(&draft, &artifact).expect("build highlight event");
         let tags = tags_as_vec(&builder);
         assert!(
             !tags
@@ -1184,8 +1218,7 @@ mod tests {
         .expect("build repost");
         let event = builder.sign_with_keys(&reposter).expect("sign");
 
-        let tags: Vec<Vec<String>> =
-            event.tags.iter().map(|t| t.as_slice().to_vec()).collect();
+        let tags: Vec<Vec<String>> = event.tags.iter().map(|t| t.as_slice().to_vec()).collect();
 
         assert_eq!(event.kind, Kind::Custom(KIND_GENERIC_REPOST));
         assert_eq!(event.content, "");
@@ -1224,23 +1257,27 @@ mod tests {
 
         let tmp = tempdir().expect("tempdir");
         let db_path = tmp.path().to_str().unwrap();
-        let ndb = Ndb::new(db_path, &NdbConfig::new().set_mapsize(64 * 1024 * 1024))
-            .expect("open ndb");
+        let ndb =
+            Ndb::new(db_path, &NdbConfig::new().set_mapsize(64 * 1024 * 1024)).expect("open ndb");
 
         let keys = Keys::generate();
         let target_address = "30023:aabb:post-1";
         let other_address = "30023:aabb:post-2";
 
         let matching = EventBuilder::new(Kind::Custom(KIND_HIGHLIGHT), "matching quote")
-            .tags(vec![
-                Tag::parse(vec!["a".to_string(), target_address.to_string()]).unwrap(),
+            .tags(vec![Tag::parse(vec![
+                "a".to_string(),
+                target_address.to_string(),
             ])
+            .unwrap()])
             .sign_with_keys(&keys)
             .expect("sign");
         let other = EventBuilder::new(Kind::Custom(KIND_HIGHLIGHT), "other quote")
-            .tags(vec![
-                Tag::parse(vec!["a".to_string(), other_address.to_string()]).unwrap(),
+            .tags(vec![Tag::parse(vec![
+                "a".to_string(),
+                other_address.to_string(),
             ])
+            .unwrap()])
             .sign_with_keys(&keys)
             .expect("sign");
 
@@ -1331,9 +1368,11 @@ mod tests {
         let keys = Keys::generate();
         // Highlight without any h tag — must be excluded from group queries.
         let no_h = EventBuilder::new(Kind::Custom(KIND_HIGHLIGHT), "no group")
-            .tags(vec![
-                Tag::parse(vec!["r".to_string(), "https://example.com".to_string()]).unwrap(),
+            .tags(vec![Tag::parse(vec![
+                "r".to_string(),
+                "https://example.com".to_string(),
             ])
+            .unwrap()])
             .sign_with_keys(&keys)
             .expect("sign");
         ingest(&ndb, &no_h);

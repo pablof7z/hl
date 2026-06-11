@@ -22,8 +22,7 @@ fn latest_contact_list(ndb: &Ndb, follower_hex: &str) -> Result<Option<Event>, C
     let author = PublicKey::from_hex(follower_hex)
         .map_err(|e| CoreError::InvalidInput(format!("invalid follower pubkey: {e}")))?;
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let pk_bytes: [u8; 32] = author.to_bytes();
     let filter = NdbFilter::new()
@@ -61,11 +60,7 @@ pub fn query_follows(ndb: &Ndb, follower_hex: &str) -> Result<Vec<String>, CoreE
 }
 
 /// Does `follower_hex`'s cached contact list include `target_hex`?
-pub fn is_following(
-    ndb: &Ndb,
-    follower_hex: &str,
-    target_hex: &str,
-) -> Result<bool, CoreError> {
+pub fn is_following(ndb: &Ndb, follower_hex: &str, target_hex: &str) -> Result<bool, CoreError> {
     if follower_hex.is_empty() || target_hex.is_empty() {
         return Ok(false);
     }
@@ -242,8 +237,7 @@ mod tests {
         let me = Keys::generate();
         let other = Keys::generate();
         let target = Keys::generate();
-        let existing =
-            sign_contacts(&me, &[other.public_key(), target.public_key()], "blob", 1);
+        let existing = sign_contacts(&me, &[other.public_key(), target.public_key()], "blob", 1);
         let (tags, content, changed) =
             next_contact_tags(Some(&existing), target.public_key(), false);
         assert!(changed);

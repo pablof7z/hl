@@ -1,31 +1,16 @@
 import SwiftUI
 
-private let nip05BaseURL = URL(string: "https://beta.highlighter.com")!
-
-private enum UsernameState: Equatable {
-    case idle
-    case checking
-    case available(identifier: String, domain: String)
-    case taken
-    case invalid
-}
-
 struct OnboardingCreateAccountView: View {
     @Environment(HighlighterStore.self) private var store
 
-    @State private var displayName: String = ""
-    @State private var username: String = ""
-    @State private var usernameState: UsernameState = .idle
-    @State private var isWorking = false
-    @State private var errorMessage: String?
-    @State private var createdAccount: GeneratedAccount?
     @State private var navigateToInterests = false
-
     @FocusState private var focusedField: Field?
 
     private enum Field { case displayName, username }
 
-    private var checkTask: Task<Void, Never>? = nil
+    private var account: HighlighterCreateAccountSnapshot {
+        store.nmpState.createAccount
+    }
 
     var body: some View {
         ZStack {
@@ -48,7 +33,7 @@ struct OnboardingCreateAccountView: View {
                 .padding(.bottom, 32)
 
                 VStack(spacing: 12) {
-                    TextField("Display name", text: $displayName)
+                    TextField("Display name", text: displayNameBinding)
                         .font(.title3)
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
@@ -58,21 +43,12 @@ struct OnboardingCreateAccountView: View {
                         .padding(.horizontal, 32)
                         .focused($focusedField, equals: .displayName)
                         .onSubmit { focusedField = .username }
-                        .onChange(of: displayName) { _, new in
-                            if username.isEmpty {
-                                let suggested = slugify(new)
-                                if !suggested.isEmpty {
-                                    username = suggested
-                                    scheduleCheck(for: suggested)
-                                }
-                            }
-                        }
 
                     usernameField
                 }
 
-                if let msg = errorMessage {
-                    Text(msg)
+                if let message = account.errorMessage {
+                    Text(message)
                         .font(.footnote)
                         .foregroundStyle(.red)
                         .padding(.horizontal, 32)
@@ -84,7 +60,7 @@ struct OnboardingCreateAccountView: View {
                 VStack(spacing: 12) {
                     Button(action: createAccount) {
                         Group {
-                            if isWorking {
+                            if account.isCreating {
                                 ProgressView().tint(.white)
                             } else {
                                 Text("Continue")
@@ -95,7 +71,7 @@ struct OnboardingCreateAccountView: View {
                         .padding(.vertical, 14)
                     }
                     .buttonStyle(.glassProminent)
-                    .disabled(isWorking || displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !usernameAllowsContinue)
+                    .disabled(!account.canSubmit || account.isCreating || account.usernameStatus == .checking)
                     .padding(.horizontal, 32)
 
                     NavigationLink {
@@ -110,27 +86,39 @@ struct OnboardingCreateAccountView: View {
             }
         }
         .navigationDestination(isPresented: $navigateToInterests) {
-            if let account = createdAccount {
-                OnboardingInterestsView(account: account)
-            }
+            OnboardingInterestsView()
         }
         .onAppear { focusedField = .displayName }
+        .onChange(of: account.createdUser?.pubkey) { _, pubkey in
+            if pubkey != nil {
+                navigateToInterests = true
+            }
+        }
+    }
+
+    private var displayNameBinding: Binding<String> {
+        Binding(
+            get: { account.displayName },
+            set: { store.setCreateAccountDisplayName($0) }
+        )
+    }
+
+    private var usernameBinding: Binding<String> {
+        Binding(
+            get: { account.username },
+            set: { store.setCreateAccountUsername($0) }
+        )
     }
 
     private var usernameField: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 0) {
-                TextField("username", text: $username)
+                TextField("username", text: usernameBinding)
                     .font(.title3)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.asciiCapable)
                     .focused($focusedField, equals: .username)
-                    .onChange(of: username) { _, new in
-                        let normalized = new.lowercased()
-                        if normalized != new { username = normalized }
-                        scheduleCheck(for: normalized)
-                    }
                     .onSubmit { createAccount() }
 
                 usernameTrailingIndicator
@@ -143,13 +131,13 @@ struct OnboardingCreateAccountView: View {
 
             usernameCaption
                 .padding(.horizontal, 36)
-                .animation(.easeInOut(duration: 0.15), value: usernameState)
+                .animation(.easeInOut(duration: 0.15), value: account.usernameStatus)
         }
     }
 
     @ViewBuilder
     private var usernameTrailingIndicator: some View {
-        switch usernameState {
+        switch account.usernameStatus {
         case .checking:
             ProgressView().scaleEffect(0.7)
         case .available:
@@ -158,7 +146,7 @@ struct OnboardingCreateAccountView: View {
         case .taken:
             Image(systemName: "xmark.circle.fill")
                 .foregroundStyle(.red)
-        case .invalid:
+        case .invalid, .error:
             Image(systemName: "exclamationmark.circle.fill")
                 .foregroundStyle(.orange)
         case .idle:
@@ -168,9 +156,9 @@ struct OnboardingCreateAccountView: View {
 
     @ViewBuilder
     private var usernameCaption: some View {
-        switch usernameState {
-        case .available(let identifier, _):
-            Text("\(identifier)")
+        switch account.usernameStatus {
+        case .available:
+            Text(account.usernameIdentifier)
                 .font(.caption)
                 .foregroundStyle(.green)
         case .taken:
@@ -186,162 +174,8 @@ struct OnboardingCreateAccountView: View {
         }
     }
 
-    private var usernameAllowsContinue: Bool {
-        if username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
-        if case .available = usernameState { return true }
-        return false
-    }
-
-    private func scheduleCheck(for name: String) {
-        usernameState = .idle
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        guard isValidUsername(trimmed) else {
-            usernameState = .invalid
-            return
-        }
-
-        usernameState = .checking
-
-        Task {
-            try? await Task.sleep(nanoseconds: 400_000_000)
-            guard username == trimmed else { return }
-            await checkAvailability(name: trimmed)
-        }
-    }
-
-    private func checkAvailability(name: String) async {
-        var components = URLComponents(url: nip05BaseURL.appendingPathComponent("api/nip05"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "name", value: name)]
-        guard let url = components.url else { return }
-
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            let decoded = try JSONDecoder().decode(Nip05AvailabilityResponse.self, from: data)
-            guard username == name else { return }
-            if decoded.available {
-                let domain = decoded.identifier.components(separatedBy: "@").last ?? "highlighter.com"
-                usernameState = .available(identifier: decoded.identifier, domain: domain)
-            } else {
-                usernameState = .taken
-            }
-        } catch {
-            guard username == name else { return }
-            usernameState = .idle
-        }
-    }
-
     private func createAccount() {
-        let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, !isWorking else { return }
-        guard usernameAllowsContinue else { return }
-
-        isWorking = true
-        errorMessage = nil
-
-        Task {
-            defer { isWorking = false }
-            do {
-                let account = try await store.safeCore.generateAccount()
-                AppSessionStore.shared.persistNsec(account.nsec)
-
-                let claimedUsername: String
-                if case .available(let identifier, let domain) = usernameState, !username.isEmpty {
-                    let eventJson = try await store.safeCore.signNip05RegistrationAuth(
-                        name: username,
-                        domain: domain
-                    )
-                    let authEvent = try JSONDecoder().decode(RawNostrEvent.self, from: Data(eventJson.utf8))
-                    try await registerNip05(name: username, auth: authEvent)
-                    claimedUsername = identifier
-                } else {
-                    claimedUsername = ""
-                }
-
-                Task {
-                    try? await store.safeCore.updateProfile(
-                        name: "",
-                        displayName: name,
-                        about: "",
-                        picture: "",
-                        banner: "",
-                        nip05: claimedUsername,
-                        website: "",
-                        lud16: ""
-                    )
-                }
-
-                createdAccount = account
-                navigateToInterests = true
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    private func registerNip05(name: String, auth: RawNostrEvent) async throws {
-        let url = nip05BaseURL.appendingPathComponent("api/nip05")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let body = Nip05RegisterRequest(name: name, auth: auth)
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-        if statusCode < 200 || statusCode >= 300 {
-            let msg = (try? JSONDecoder().decode(ErrorResponse.self, from: data))?.error ?? "Registration failed (\(statusCode))"
-            throw RegistrationError.server(msg)
-        }
-    }
-
-    private func isValidUsername(_ value: String) -> Bool {
-        let re = try! NSRegularExpression(pattern: "^[a-z0-9_-]{1,64}$")
-        let range = NSRange(value.startIndex..., in: value)
-        return re.firstMatch(in: value, range: range) != nil
-    }
-
-    private func slugify(_ text: String) -> String {
-        text
-            .lowercased()
-            .components(separatedBy: .whitespacesAndNewlines)
-            .joined(separator: "_")
-            .filter { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }
-    }
-}
-
-// MARK: - Supporting types
-
-private struct Nip05AvailabilityResponse: Decodable {
-    let available: Bool
-    let identifier: String
-}
-
-private struct RawNostrEvent: Codable {
-    let id: String
-    let pubkey: String
-    let created_at: Int
-    let kind: Int
-    let tags: [[String]]
-    let content: String
-    let sig: String
-}
-
-private struct Nip05RegisterRequest: Encodable {
-    let name: String
-    let auth: RawNostrEvent
-}
-
-private struct ErrorResponse: Decodable {
-    let error: String
-}
-
-private enum RegistrationError: LocalizedError {
-    case server(String)
-    var errorDescription: String? {
-        if case .server(let msg) = self { return msg }
-        return nil
+        guard account.canSubmit, !account.isCreating else { return }
+        store.submitCreateAccount()
     }
 }

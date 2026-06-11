@@ -74,9 +74,18 @@ struct InputCap {
     cap: usize,
 }
 const INPUT_CAPS: &[InputCap] = &[
-    InputCap { label: "top_n=2  ", cap: 2 },
-    InputCap { label: "top_n=5  ", cap: 5 },
-    InputCap { label: "top_n=all", cap: usize::MAX },
+    InputCap {
+        label: "top_n=2  ",
+        cap: 2,
+    },
+    InputCap {
+        label: "top_n=5  ",
+        cap: 5,
+    },
+    InputCap {
+        label: "top_n=all",
+        cap: usize::MAX,
+    },
 ];
 
 /// Detail mode: production-correct (all write relays).
@@ -99,7 +108,10 @@ async fn main() -> anyhow::Result<()> {
     client.connect().await;
     tokio::time::sleep(Duration::from_secs(2)).await;
 
-    println!("Connected to {PURPLE} (primary) + {} fallback relays.\n", FALLBACK.len());
+    println!(
+        "Connected to {PURPLE} (primary) + {} fallback relays.\n",
+        FALLBACK.len()
+    );
 
     for (name, pk_hex) in TEST_USERS {
         let pk = match PublicKey::from_hex(pk_hex) {
@@ -169,7 +181,10 @@ async fn analyze(client: &Client, name: &str, pk: PublicKey) -> anyhow::Result<(
             }
         }
     }
-    let with_nip65 = follows.iter().filter(|pk| nip65_by_author.contains_key(pk)).count();
+    let with_nip65 = follows
+        .iter()
+        .filter(|pk| nip65_by_author.contains_key(pk))
+        .count();
     println!(
         "  follows with kind:10002 cached: {} ({:.1}%)",
         with_nip65,
@@ -215,17 +230,12 @@ async fn analyze(client: &Client, name: &str, pk: PublicKey) -> anyhow::Result<(
         "  output_cap | {} | {} | {}",
         INPUT_CAPS[0].label, INPUT_CAPS[1].label, INPUT_CAPS[2].label
     );
-    println!(
-        "             | relays  covered     | relays  covered     | relays  covered"
-    );
-    println!(
-        "  -----------+----------------------+----------------------+--------------------"
-    );
+    println!("             | relays  covered     | relays  covered     | relays  covered");
+    println!("  -----------+----------------------+----------------------+--------------------");
     for &out_cap in OUTPUT_CAPS {
         print!("  {:>10} |", out_cap);
         for ic in INPUT_CAPS {
-            let plan =
-                outbox::compute_outbox_plan(per_pubkey_by_cap[&ic.cap].clone(), out_cap);
+            let plan = outbox::compute_outbox_plan(per_pubkey_by_cap[&ic.cap].clone(), out_cap);
             let covered = follows.len() - plan.uncovered.len();
             print!(
                 " {:>2}     {:>4} ({:>5.1}%) |",
@@ -239,9 +249,7 @@ async fn analyze(client: &Client, name: &str, pk: PublicKey) -> anyhow::Result<(
 
     // 5. Detailed plan at production-correct settings
     println!();
-    println!(
-        "  Plan @ output_cap={DETAIL_OUTPUT_CAP}, input_cap=ALL (production-correct):"
-    );
+    println!("  Plan @ output_cap={DETAIL_OUTPUT_CAP}, input_cap=ALL (production-correct):");
     let plan = outbox::compute_outbox_plan(
         per_pubkey_by_cap[&DETAIL_INPUT_CAP].clone(),
         DETAIL_OUTPUT_CAP,

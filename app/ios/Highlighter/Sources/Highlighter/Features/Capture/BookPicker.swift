@@ -434,10 +434,10 @@ struct BookPicker: View {
             return
         }
         searching = true
-        // Short debounce — we don't want to spam searches on every keystroke.
-        try? await Task.sleep(nanoseconds: 180_000_000)
-        guard query.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed else { return }
         let results = (try? await appStore.safeCore.searchArtifacts(query: trimmed)) ?? []
+        guard !Task.isCancelled,
+              query.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed
+        else { return }
         searchResults = results
         searching = false
     }

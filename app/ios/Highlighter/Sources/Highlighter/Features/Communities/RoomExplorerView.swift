@@ -6,9 +6,12 @@ import SwiftUI
 /// toggles — "Your rooms" is just the first shelf among many.
 struct RoomExplorerView: View {
     @Environment(HighlighterStore.self) private var appStore
-    @State private var explorer: RoomExplorerStore?
     @State private var previewRoom: CommunitySummary?
     @State private var createSheetPresented = false
+
+    private var explorer: HighlighterRoomExplorerSnapshot {
+        appStore.roomExplorer
+    }
 
     var body: some View {
         NavigationStack {
@@ -17,6 +20,7 @@ struct RoomExplorerView: View {
                     heroSection
                         .padding(.bottom, 32)
 
+                    errorBanner
                     yourRoomsShelf
                     friendsShelf
                     featuredShelf
@@ -62,7 +66,7 @@ struct RoomExplorerView: View {
                     RoomPreviewSheet(
                         room: room,
                         onJoin: {
-                            Task { await explorer?.requestJoin(room: room) }
+                            appStore.requestJoinRoom(groupId: room.id, roomName: room.name)
                             previewRoom = nil
                         }
                     )
@@ -76,16 +80,10 @@ struct RoomExplorerView: View {
             }
         }
         .task {
-            if explorer == nil {
-                explorer = RoomExplorerStore(appStore: appStore)
-            }
-            if let e = explorer {
-                appStore.eventBridge?.registerExplorer(e)
-            }
-            await explorer?.refresh()
+            appStore.openRoomExplorer()
         }
         .refreshable {
-            await explorer?.refresh()
+            appStore.refreshRoomExplorer()
         }
     }
 
@@ -93,14 +91,26 @@ struct RoomExplorerView: View {
 
     @ViewBuilder
     private var heroSection: some View {
-        if let featured = explorer?.featured, !featured.isEmpty {
-            ExplorerHeroView(rooms: featured) { room in
+        if !explorer.featured.isEmpty {
+            ExplorerHeroView(rooms: explorer.featured) { room in
                 previewRoom = room
             }
             .padding(.top, 4)
-        } else if explorer?.isFirstLoad == true {
+        } else if explorer.isLoading {
             ExplorerHeroPlaceholder()
                 .padding(.top, 4)
+        }
+    }
+
+    @ViewBuilder
+    private var errorBanner: some View {
+        if let message = explorer.errorMessage, !message.isEmpty {
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(Color.highlighterInkMuted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 18)
         }
     }
 
@@ -128,12 +138,12 @@ struct RoomExplorerView: View {
 
     @ViewBuilder
     private var friendsShelf: some View {
-        if let friends = explorer?.friendsShelf, !friends.isEmpty {
+        if !explorer.friendsShelf.isEmpty {
             shelf(
                 title: "Friends are here",
                 rationale: "People you follow are members",
                 content: {
-                    ForEach(friends, id: \.summary.id) { rec in
+                    ForEach(explorer.friendsShelf, id: \.summary.id) { rec in
                         Button {
                             previewRoom = rec.summary
                         } label: {
@@ -148,7 +158,7 @@ struct RoomExplorerView: View {
 
     @ViewBuilder
     private var featuredShelf: some View {
-        if let featured = explorer?.featured, featured.count > 1 {
+        if explorer.featured.count > 1 {
             // After the hero, show the rest of the featured list as a
             // regular-sized shelf so the curator's full picks remain
             // accessible below the hero.
@@ -156,7 +166,7 @@ struct RoomExplorerView: View {
                 title: "Featured",
                 rationale: "Curated by Highlighter",
                 content: {
-                    ForEach(Array(featured.dropFirst()), id: \.id) { room in
+                    ForEach(Array(explorer.featured.dropFirst()), id: \.id) { room in
                         Button {
                             previewRoom = room
                         } label: {
@@ -171,12 +181,12 @@ struct RoomExplorerView: View {
 
     @ViewBuilder
     private var authorsShelf: some View {
-        if let authors = explorer?.authorsShelf, !authors.isEmpty {
+        if !explorer.authorsShelf.isEmpty {
             shelf(
                 title: "Writers you read",
                 rationale: "Authors you've highlighted post here",
                 content: {
-                    ForEach(authors, id: \.summary.id) { rec in
+                    ForEach(explorer.authorsShelf, id: \.summary.id) { rec in
                         Button {
                             previewRoom = rec.summary
                         } label: {
@@ -191,12 +201,12 @@ struct RoomExplorerView: View {
 
     @ViewBuilder
     private var newShelf: some View {
-        if let new = explorer?.newNoteworthy, !new.isEmpty {
+        if !explorer.newNoteworthy.isEmpty {
             shelf(
                 title: "New & noteworthy",
                 rationale: "Recently added rooms",
                 content: {
-                    ForEach(new, id: \.id) { room in
+                    ForEach(explorer.newNoteworthy, id: \.id) { room in
                         Button {
                             previewRoom = room
                         } label: {

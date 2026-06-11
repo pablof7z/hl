@@ -36,7 +36,7 @@ struct MemberClipRow: View {
                         HStack(alignment: .top, spacing: 10) {
                             AuthorAvatar(
                                 pubkey: highlight.pubkey,
-                                pictureURL: app.profileCache[highlight.pubkey]?.picture ?? "",
+                                pictureURL: app.profile(pubkeyHex: highlight.pubkey)?.picture ?? "",
                                 displayInitial: authorInitial,
                                 size: 28
                             )
@@ -99,7 +99,7 @@ struct MemberClipRow: View {
             }
         }
         .task(id: highlight.pubkey) {
-            await app.requestProfile(pubkeyHex: highlight.pubkey)
+            app.requestProfile(pubkeyHex: highlight.pubkey)
         }
         .onChange(of: isExpanded) { _, expanded in
             guard expanded else { return }
@@ -125,7 +125,7 @@ struct MemberClipRow: View {
     }
 
     private var authorName: String {
-        let profile = app.profileCache[highlight.pubkey]
+        let profile = app.profile(pubkeyHex: highlight.pubkey)
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
         return String(highlight.pubkey.prefix(10))

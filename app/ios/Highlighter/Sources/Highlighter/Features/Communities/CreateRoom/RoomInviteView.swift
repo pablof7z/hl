@@ -90,12 +90,23 @@ struct RoomInviteView: View {
         }, message: { if let error { Text(error) } })
         .overlay(alignment: .top) {
             if let toast = sentToast {
-                Text(toast)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(Color.highlighterInkStrong, in: Capsule())
+                HStack(spacing: 10) {
+                    Text(toast)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.white)
+                    Button {
+                        withAnimation(.easeIn(duration: 0.2)) { sentToast = nil }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white.opacity(0.9))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Dismiss")
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.highlighterInkStrong, in: Capsule())
                     .padding(.top, 8)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
@@ -283,7 +294,7 @@ struct RoomInviteView: View {
         .buttonStyle(.plain)
         .task {
             if profile == nil {
-                await appStore.requestProfile(pubkeyHex: pubkeyHex)
+                appStore.requestProfile(pubkeyHex: pubkeyHex)
             }
         }
     }
@@ -295,7 +306,7 @@ struct RoomInviteView: View {
     }
 
     private func profile(for pubkey: String) -> ProfileMetadata? {
-        appStore.profileCache[pubkey]
+        appStore.profile(pubkeyHex: pubkey)
     }
 
     private func isSelected(_ pubkey: String) -> Bool {
@@ -367,7 +378,7 @@ struct RoomInviteView: View {
             // Warm the profile cache for the first chunk so suggestions
             // render with names rather than truncated hex.
             for pubkey in result.prefix(40) {
-                await appStore.requestProfile(pubkeyHex: pubkey)
+                appStore.requestProfile(pubkeyHex: pubkey)
             }
         } catch {
             await MainActor.run { followsLoaded = true }
@@ -388,7 +399,7 @@ struct RoomInviteView: View {
             if trimmed.lowercased().hasPrefix("npub") { kind = .npub }
             else if trimmed.lowercased().hasPrefix("nprofile") { kind = .nprofile }
             else { kind = .hex }
-            await appStore.requestProfile(pubkeyHex: hex)
+            appStore.requestProfile(pubkeyHex: hex)
             await MainActor.run {
                 pasteResolution = ResolvedCandidate(pubkeyHex: hex, kind: kind)
             }
@@ -408,6 +419,7 @@ struct RoomInviteView: View {
     private func send() {
         guard !sending, !selected.isEmpty else { return }
         sending = true
+        sentToast = nil
         let toAdd = selected
         Task {
             defer { Task { @MainActor in sending = false } }
@@ -428,10 +440,6 @@ struct RoomInviteView: View {
                     selected.removeAll()
                     sentToast = added == 1 ? "Added 1 person" : "Added \(added) people"
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    Task {
-                        try? await Task.sleep(for: .seconds(2))
-                        sentToast = nil
-                    }
                 } else if failures.count == toAdd.count {
                     error = "Couldn't add anyone. Are you a moderator of this room?"
                 } else {

@@ -65,8 +65,7 @@ pub fn write_relays_for_pubkey(
     }
     let author = PublicKey::from_hex(pubkey_hex)
         .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let pk_bytes: [u8; 32] = author.to_bytes();
     let filter = NdbFilter::new()
@@ -285,10 +284,7 @@ mod tests {
         let me = Keys::generate();
         let event = sign_relay_list(
             &me,
-            vec![
-                ("wss://r1", Some("read")),
-                ("wss://r2", Some("write")),
-            ],
+            vec![("wss://r1", Some("read")), ("wss://r2", Some("write"))],
         );
         let out = write_relays_from_event(&event, 5);
         assert_eq!(out, vec!["wss://r2".to_string()]);
@@ -296,8 +292,14 @@ mod tests {
 
     #[test]
     fn normalize_collapses_trailing_slash_and_case() {
-        assert_eq!(normalize_relay_url("WSS://Relay.EXAMPLE.com/"), "wss://relay.example.com");
-        assert_eq!(normalize_relay_url("wss://relay.example.com"), "wss://relay.example.com");
+        assert_eq!(
+            normalize_relay_url("WSS://Relay.EXAMPLE.com/"),
+            "wss://relay.example.com"
+        );
+        assert_eq!(
+            normalize_relay_url("wss://relay.example.com"),
+            "wss://relay.example.com"
+        );
     }
 
     #[test]

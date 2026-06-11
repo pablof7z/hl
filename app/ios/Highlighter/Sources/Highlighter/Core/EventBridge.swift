@@ -28,36 +28,18 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         var discussions: [UInt64: WeakBox<DiscussionStore>] = [:]
         var chats: [UInt64: WeakBox<ChatStore>] = [:]
         var chatPresence: [UInt64: WeakBox<ChatPresenceProbe>] = [:]
-        var profiles: [UInt64: WeakBox<ProfileStore>] = [:]
-        var articles: [UInt64: WeakBox<ArticleReaderStore>] = [:]
-        var reads: [UInt64: WeakBox<ReadsStore>] = [:]
-        var highlights: [UInt64: WeakBox<HighlightsStore>] = [:]
         var feedbackThreads: [UInt64: WeakBox<FeedbackStore>] = [:]
         var feedbackThreadDetails: [UInt64: WeakBox<FeedbackThreadStore>] = [:]
-        var searches: [UInt64: WeakBox<SearchStore>] = [:]
-        var bookmarks: [UInt64: WeakBox<BookmarkStore>] = [:]
         /// App-scoped Network Settings store (subscription_id == 0). Weak
         /// so it goes away when the screen is dismissed.
         var networkStore: WeakBox<NetworkSettingsStore>? = nil
-        /// Explorer store — notified on CommunityUpserted so new rooms appear
-        /// without requiring a pull-to-refresh.
-        var explorerStore: WeakBox<RoomExplorerStore>? = nil
-        /// Maps subscription handles → pubkey for app-scoped profile cache subscriptions.
-        var profileCacheHandles: [UInt64: String] = [:]
-
         mutating func prune() {
             rooms = rooms.filter { $0.value.value != nil }
             discussions = discussions.filter { $0.value.value != nil }
             chats = chats.filter { $0.value.value != nil }
             chatPresence = chatPresence.filter { $0.value.value != nil }
-            profiles = profiles.filter { $0.value.value != nil }
-            articles = articles.filter { $0.value.value != nil }
-            reads = reads.filter { $0.value.value != nil }
-            highlights = highlights.filter { $0.value.value != nil }
             feedbackThreads = feedbackThreads.filter { $0.value.value != nil }
             feedbackThreadDetails = feedbackThreadDetails.filter { $0.value.value != nil }
-            searches = searches.filter { $0.value.value != nil }
-            bookmarks = bookmarks.filter { $0.value.value != nil }
         }
     }
     private let registry = OSAllocatedUnfairLock(initialState: Registry())
@@ -96,34 +78,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         }
     }
 
-    func registerProfile(_ store: ProfileStore, handle: UInt64) {
-        registry.withLock { reg in
-            reg.profiles[handle] = WeakBox(store)
-            reg.prune()
-        }
-    }
-
-    func registerArticle(_ store: ArticleReaderStore, handle: UInt64) {
-        registry.withLock { reg in
-            reg.articles[handle] = WeakBox(store)
-            reg.prune()
-        }
-    }
-
-    func registerReads(_ store: ReadsStore, handle: UInt64) {
-        registry.withLock { reg in
-            reg.reads[handle] = WeakBox(store)
-            reg.prune()
-        }
-    }
-
-    func registerHighlights(_ store: HighlightsStore, handle: UInt64) {
-        registry.withLock { reg in
-            reg.highlights[handle] = WeakBox(store)
-            reg.prune()
-        }
-    }
-
     func registerFeedbackThreads(_ store: FeedbackStore, handle: UInt64) {
         registry.withLock { reg in
             reg.feedbackThreads[handle] = WeakBox(store)
@@ -138,36 +92,9 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         }
     }
 
-    func registerSearch(_ store: SearchStore, handle: UInt64) {
-        registry.withLock { reg in
-            reg.searches[handle] = WeakBox(store)
-            reg.prune()
-        }
-    }
-
-    func registerBookmarkStore(_ store: BookmarkStore, handle: UInt64) {
-        registry.withLock { reg in
-            reg.bookmarks[handle] = WeakBox(store)
-            reg.prune()
-        }
-    }
-
-    func registerProfileCache(pubkeyHex: String, handle: UInt64) {
-        registry.withLock { reg in
-            reg.profileCacheHandles[handle] = pubkeyHex
-            reg.prune()
-        }
-    }
-
     func registerNetworkStore(_ store: NetworkSettingsStore) {
         registry.withLock { reg in
             reg.networkStore = WeakBox(store)
-        }
-    }
-
-    func registerExplorer(_ store: RoomExplorerStore) {
-        registry.withLock { reg in
-            reg.explorerStore = WeakBox(store)
         }
     }
 
@@ -177,15 +104,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             _ = reg.discussions.removeValue(forKey: handle)
             _ = reg.chats.removeValue(forKey: handle)
             _ = reg.chatPresence.removeValue(forKey: handle)
-            _ = reg.profiles.removeValue(forKey: handle)
-            _ = reg.articles.removeValue(forKey: handle)
-            _ = reg.reads.removeValue(forKey: handle)
-            _ = reg.highlights.removeValue(forKey: handle)
             _ = reg.feedbackThreads.removeValue(forKey: handle)
             _ = reg.feedbackThreadDetails.removeValue(forKey: handle)
-            _ = reg.searches.removeValue(forKey: handle)
-            _ = reg.bookmarks.removeValue(forKey: handle)
-            _ = reg.profileCacheHandles.removeValue(forKey: handle)
         }
     }
 
@@ -207,15 +127,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                     discussion: reg.discussions[id]?.value,
                     chat: reg.chats[id]?.value,
                     chatPresence: reg.chatPresence[id]?.value,
-                    profile: reg.profiles[id]?.value,
-                    article: reg.articles[id]?.value,
-                    reads: reg.reads[id]?.value,
-                    highlights: reg.highlights[id]?.value,
                     feedback: reg.feedbackThreads[id]?.value,
-                    feedbackThread: reg.feedbackThreadDetails[id]?.value,
-                    search: reg.searches[id]?.value,
-                    bookmark: reg.bookmarks[id]?.value,
-                    profileCachePubkey: reg.profileCacheHandles[id]
+                    feedbackThread: reg.feedbackThreadDetails[id]?.value
                 )
             }
 
@@ -227,24 +140,10 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 self.dispatchChat(change, store: store)
             } else if let probe = routed.chatPresence {
                 self.dispatchChatPresence(change, probe: probe)
-            } else if let store = routed.profile {
-                self.dispatchProfile(change, store: store)
-            } else if let store = routed.article {
-                self.dispatchArticle(change, store: store)
-            } else if let store = routed.reads {
-                self.dispatchReads(change, store: store)
-            } else if let store = routed.highlights {
-                self.dispatchHighlights(change, store: store)
             } else if let store = routed.feedback {
                 self.dispatchFeedbackThreads(change, store: store)
             } else if let store = routed.feedbackThread {
                 self.dispatchFeedbackThread(change, store: store)
-            } else if let store = routed.search {
-                self.dispatchSearch(change, store: store)
-            } else if let store = routed.bookmark {
-                self.dispatchBookmarkStore(change, store: store)
-            } else if let pubkey = routed.profileCachePubkey {
-                self.dispatchProfileCache(change, pubkey: pubkey)
             }
         }
     }
@@ -257,15 +156,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         let discussion: DiscussionStore?
         let chat: ChatStore?
         let chatPresence: ChatPresenceProbe?
-        let profile: ProfileStore?
-        let article: ArticleReaderStore?
-        let reads: ReadsStore?
-        let highlights: HighlightsStore?
         let feedback: FeedbackStore?
         let feedbackThread: FeedbackThreadStore?
-        let search: SearchStore?
-        let bookmark: BookmarkStore?
-        let profileCachePubkey: String?
     }
 
     @MainActor
@@ -283,47 +175,15 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     }
 
     @MainActor
-    private func dispatchArticle(_ change: DataChangeType, store: ArticleReaderStore) {
-        if case .articleUpdated(_, let kind) = change {
-            Task { await store.applyUpdate(kind: kind) }
-        }
-    }
-
-    @MainActor
-    private func dispatchProfile(_ change: DataChangeType, store: ProfileStore) {
-        if case .userProfileUpdated(_, let kind) = change {
-            Task { await store.applyUpdate(kind: kind) }
-        }
-    }
-
-    @MainActor
-    private func dispatchProfileCache(_ change: DataChangeType, pubkey: String) {
-        guard case .userProfileUpdated(_, 0) = change else { return }
-        if let appStore { Task { await appStore.applyProfileCacheUpdate(pubkeyHex: pubkey) } }
-    }
-
-    @MainActor
     private func dispatchAppScope(_ change: DataChangeType) {
         switch change {
-        case .signerConnected(let user):
-            if let appStore { Task { await appStore.completeLogin(user: user) } }
+        case .signerConnected:
+            if let appStore { Task { await appStore.completeLogin() } }
         case .relayStatusChanged(let url, let state):
             let store = registry.withLock { reg in reg.networkStore?.value }
             store?.applyStatus(url: url, state: state)
-        case .communityUpserted, .membershipChanged:
-            // Any group-related event arrived — re-query nostrdb for the
-            // authoritative joined set. A single refresh path eliminates the
-            // race where incremental upserts (CommunityUpserted) and
-            // full-replace refreshes (MembershipChanged) contradicted each
-            // other. The query is now membership-driven so missing metadata
-            // never wipes the list.
-            if let appStore { Task { await appStore.refreshJoinedCommunities() } }
-            // Also notify the explorer so newly-discovered rooms appear
-            // without requiring a pull-to-refresh.
-            let explorer = registry.withLock { reg in reg.explorerStore?.value }
-            if let explorer { Task { await explorer.reloadFromCache() } }
         case .bookmarksUpdated:
-            if let appStore { Task { await appStore.refreshBookmarks() } }
+            break
         case .bunkerSignRequest:
             break
         default:
@@ -372,37 +232,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     private func dispatchChatPresence(_ change: DataChangeType, probe: ChatPresenceProbe) {
         if case .chatMessageUpserted = change {
             probe.notifyActivity()
-        }
-    }
-
-    @MainActor
-    private func dispatchReads(_ change: DataChangeType, store: ReadsStore) {
-        if case .followingReadsUpdated = change {
-            Task { await store.refresh() }
-        }
-    }
-
-    @MainActor
-    private func dispatchHighlights(_ change: DataChangeType, store: HighlightsStore) {
-        if case .followingHighlightsUpdated = change {
-            Task { await store.refresh() }
-        }
-    }
-
-    @MainActor
-    private func dispatchSearch(_ change: DataChangeType, store: SearchStore) {
-        if case .searchArticlesUpdated(let query) = change {
-            store.applyRelaySearchUpdate(query: query)
-        }
-    }
-
-    @MainActor
-    private func dispatchBookmarkStore(_ change: DataChangeType, store: BookmarkStore) {
-        switch change {
-        case .bookmarkSetsUpdated, .followingCurationSetsUpdated, .webBookmarksUpdated:
-            Task { await store.reload() }
-        default:
-            break
         }
     }
 

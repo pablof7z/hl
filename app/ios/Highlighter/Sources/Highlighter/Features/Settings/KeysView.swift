@@ -3,9 +3,13 @@ import SwiftUI
 struct KeysView: View {
     @State private var nsec: String? = KeychainService.loadNsec()
     @State private var isRevealed = false
-    @State private var copiedNsec = false
-    @State private var copiedNpub = false
+    @State private var copiedKey: CopiedKey?
     @Environment(HighlighterStore.self) private var store
+
+    private enum CopiedKey {
+        case nsec
+        case npub
+    }
 
     var body: some View {
         List {
@@ -51,22 +55,19 @@ struct KeysView: View {
 
                     Button {
                         UIPasteboard.general.string = nsec
-                        copiedNsec = true
-                        Task {
-                            try? await Task.sleep(for: .seconds(2))
-                            copiedNsec = false
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            copiedKey = .nsec
                         }
                     } label: {
                         Label(
-                            copiedNsec ? "Copied!" : "Copy Secret Key",
-                            systemImage: copiedNsec ? "checkmark" : "doc.on.doc"
+                            copiedKey == .nsec ? "Copied" : "Copy Secret Key",
+                            systemImage: copiedKey == .nsec ? "checkmark" : "doc.on.doc"
                         )
                         .font(.subheadline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                     }
                     .buttonStyle(.glassProminent)
-                    .disabled(copiedNsec)
                 }
                 .padding(.vertical, 6)
             } else {
@@ -97,22 +98,19 @@ struct KeysView: View {
 
                     Button {
                         UIPasteboard.general.string = user.npub
-                        copiedNpub = true
-                        Task {
-                            try? await Task.sleep(for: .seconds(2))
-                            copiedNpub = false
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            copiedKey = .npub
                         }
                     } label: {
                         Label(
-                            copiedNpub ? "Copied!" : "Copy Public Key",
-                            systemImage: copiedNpub ? "checkmark" : "doc.on.doc"
+                            copiedKey == .npub ? "Copied" : "Copy Public Key",
+                            systemImage: copiedKey == .npub ? "checkmark" : "doc.on.doc"
                         )
                         .font(.subheadline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                     }
                     .buttonStyle(.glass)
-                    .disabled(copiedNpub)
                 }
                 .padding(.vertical, 6)
             } header: {

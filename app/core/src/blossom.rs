@@ -37,8 +37,7 @@ fn latest_server_list(ndb: &Ndb, user_hex: &str) -> Result<Option<Event>, CoreEr
     let author = PublicKey::from_hex(user_hex)
         .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
 
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
 
     let pk_bytes: [u8; 32] = author.to_bytes();
     let filter = NdbFilter::new()
@@ -166,10 +165,7 @@ pub async fn sign_nip98_auth(
     method: &str,
     payload_hash: Option<&str>,
 ) -> Result<String, CoreError> {
-    let mut tags = vec![
-        parse_tag(&["u", url])?,
-        parse_tag(&["method", method])?,
-    ];
+    let mut tags = vec![parse_tag(&["u", url])?, parse_tag(&["method", method])?];
     if let Some(hash) = payload_hash {
         tags.push(parse_tag(&["payload", hash])?);
     }
@@ -354,8 +350,11 @@ mod tests {
         let keys = Keys::generate();
         let tags = vec![
             Tag::parse(vec!["t".to_string(), "blossom".to_string()]).unwrap(),
-            Tag::parse(vec!["server".to_string(), "https://blossom.primal.net".to_string()])
-                .unwrap(),
+            Tag::parse(vec![
+                "server".to_string(),
+                "https://blossom.primal.net".to_string(),
+            ])
+            .unwrap(),
         ];
         let event = EventBuilder::new(Kind::Custom(KIND_BLOSSOM_SERVERS), "")
             .tags(tags)
@@ -378,7 +377,9 @@ mod tests {
     fn sha256_hex_is_lowercase_64_chars() {
         let h = sha256_hex(b"hello");
         assert_eq!(h.len(), 64);
-        assert!(h.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+        assert!(h
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
         // Known vector for "hello".
         assert_eq!(
             h,

@@ -25,7 +25,7 @@ struct NetworkSettingsView: View {
                 autoConnectedSection(store)
                 actionsSection(store)
                 cacheSection(store)
-                connectivitySection(store)
+                connectivitySection
                 footerSection
             } else {
                 ProgressView()
@@ -153,35 +153,21 @@ struct NetworkSettingsView: View {
 
     @ViewBuilder
     private func autoConnectedSection(_ store: NetworkSettingsStore) -> some View {
-        if !store.autoConnectedUrls.isEmpty {
+        if !store.autoConnectedRelays.isEmpty {
             Section {
-                ForEach(store.autoConnectedUrls, id: \.self) { url in
+                ForEach(store.autoConnectedRelays, id: \.url) { config in
                     RelayRowView(
-                        config: autoConfig(for: url),
-                        diagnostic: store.diagnostic(for: url),
-                        nip11: store.nip11(for: url)
+                        config: config,
+                        diagnostic: store.diagnostic(for: config.url),
+                        nip11: store.nip11(for: config.url)
                     )
                 }
             } header: {
                 Text("Auto-connected")
             } footer: {
-                Text("Connected to support outbox routing for the people you follow and the hardcoded `purplepag.es` indexer. Not part of your published NIP-65.")
+                Text("Connected automatically for outbox routing and app indexer coverage. Not part of your published NIP-65.")
             }
         }
-    }
-
-    /// Synthesise a display-only `RelayConfig` for an auto-connected
-    /// relay. Outbox-pinned relays carry only Read at the FFI layer, but
-    /// the role chips are display-only here anyway — the user can't
-    /// toggle them from this section.
-    private func autoConfig(for url: String) -> RelayConfig {
-        RelayConfig(
-            url: url,
-            read: true,
-            write: false,
-            rooms: false,
-            indexer: url == "wss://purplepag.es"
-        )
     }
 
     @ViewBuilder
@@ -196,15 +182,14 @@ struct NetworkSettingsView: View {
                 )
             }
         }
-        // No indexer banner — `purplepag.es` is hardcoded into the
-        // indexer pool by the core (see `relays.rs::PURPLE_PAGES_RELAY`),
+        // No indexer banner: the Rust relay policy guarantees indexer coverage,
         // so profile / follow-list lookups always have somewhere to go.
     }
 
     private func actionsSection(_ store: NetworkSettingsStore) -> some View {
         Section {
             Button {
-                Task { await store.reconnectAll() }
+                appStore.reconnectNetwork()
             } label: {
                 Label("Reconnect All", systemImage: "arrow.clockwise")
             }
@@ -236,11 +221,11 @@ struct NetworkSettingsView: View {
     }
 
     @ViewBuilder
-    private func connectivitySection(_ store: NetworkSettingsStore) -> some View {
+    private var connectivitySection: some View {
         Section {
             Toggle(isOn: Binding(
-                get: { store.wifiOnlyEnabled },
-                set: { store.setWifiOnly($0) }
+                get: { appStore.network.wifiOnlyEnabled },
+                set: { appStore.setNetworkWifiOnly($0) }
             )) {
                 Label("Wi-Fi only", systemImage: "wifi")
             }

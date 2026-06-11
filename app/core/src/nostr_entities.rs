@@ -24,6 +24,9 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
 
+pub(crate) const NOSTR_ENTITY_FETCH_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(4);
+
 /// Parsed reference to a Nostr entity encoded as a NIP-19 bech32.
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum NostrEntityRef {
@@ -192,9 +195,7 @@ pub fn resolve_from_cache(
     entity: &NostrEntityRef,
 ) -> Result<Option<NostrEntityEvent>, CoreError> {
     match entity {
-        NostrEntityRef::Profile { pubkey_hex, .. } => {
-            resolve_replaceable(ndb, 0, pubkey_hex, None)
-        }
+        NostrEntityRef::Profile { pubkey_hex, .. } => resolve_replaceable(ndb, 0, pubkey_hex, None),
         NostrEntityRef::Event { event_id_hex, .. } => resolve_by_event_id(ndb, event_id_hex),
         NostrEntityRef::Address {
             kind,
@@ -205,11 +206,99 @@ pub fn resolve_from_cache(
     }
 }
 
+pub(crate) fn relay_hints(entity: &NostrEntityRef) -> Vec<String> {
+    match entity {
+        NostrEntityRef::Profile { relays, .. }
+        | NostrEntityRef::Event { relays, .. }
+        | NostrEntityRef::Address { relays, .. } => relays.clone(),
+    }
+}
+
+pub(crate) fn fetch_filter(entity: &NostrEntityRef) -> Result<Filter, CoreError> {
+    match entity {
+        NostrEntityRef::Profile { pubkey_hex, .. } => {
+            let author = PublicKey::from_hex(pubkey_hex)
+                .map_err(|e| CoreError::InvalidInput(format!("bad pubkey: {e}")))?;
+            Ok(Filter::new()
+                .kinds([Kind::Custom(0)])
+                .author(author)
+                .limit(16))
+        }
+        NostrEntityRef::Event { event_id_hex, .. } => {
+            let id = EventId::from_hex(event_id_hex)
+                .map_err(|e| CoreError::InvalidInput(format!("bad event id: {e}")))?;
+            Ok(Filter::new().id(id).limit(1))
+        }
+        NostrEntityRef::Address {
+            kind,
+            pubkey_hex,
+            d_tag,
+            ..
+        } => {
+            let author = PublicKey::from_hex(pubkey_hex)
+                .map_err(|e| CoreError::InvalidInput(format!("bad pubkey: {e}")))?;
+            Ok(Filter::new()
+                .kinds([Kind::Custom(*kind as u16)])
+                .author(author)
+                .custom_tag(SingleLetterTag::lowercase(Alphabet::D), d_tag.clone())
+                .limit(16))
+        }
+    }
+}
+
+pub(crate) fn resolve_from_events<'a>(
+    events: impl IntoIterator<Item = &'a Event>,
+    entity: &NostrEntityRef,
+) -> Result<Option<NostrEntityEvent>, CoreError> {
+    match entity {
+        NostrEntityRef::Profile { pubkey_hex, .. } => {
+            let author = PublicKey::from_hex(pubkey_hex)
+                .map_err(|e| CoreError::InvalidInput(format!("bad pubkey: {e}")))?;
+            Ok(newest_matching(events, |event| {
+                event.kind.as_u16() == 0 && event.pubkey == author
+            })
+            .map(to_entity_event))
+        }
+        NostrEntityRef::Event { event_id_hex, .. } => {
+            let id = EventId::from_hex(event_id_hex)
+                .map_err(|e| CoreError::InvalidInput(format!("bad event id: {e}")))?;
+            Ok(events
+                .into_iter()
+                .find(|event| event.id == id)
+                .map(to_entity_event))
+        }
+        NostrEntityRef::Address {
+            kind,
+            pubkey_hex,
+            d_tag,
+            ..
+        } => {
+            let author = PublicKey::from_hex(pubkey_hex)
+                .map_err(|e| CoreError::InvalidInput(format!("bad pubkey: {e}")))?;
+            Ok(newest_matching(events, |event| {
+                event.kind.as_u16() == *kind as u16
+                    && event.pubkey == author
+                    && event_d_tag(event).as_deref() == Some(d_tag.as_str())
+            })
+            .map(to_entity_event))
+        }
+    }
+}
+
+fn newest_matching<'a>(
+    events: impl IntoIterator<Item = &'a Event>,
+    matches: impl Fn(&Event) -> bool,
+) -> Option<&'a Event> {
+    events
+        .into_iter()
+        .filter(|event| matches(event))
+        .max_by_key(|event| event.created_at)
+}
+
 fn resolve_by_event_id(ndb: &Ndb, id_hex: &str) -> Result<Option<NostrEntityEvent>, CoreError> {
     let id = EventId::from_hex(id_hex)
         .map_err(|e| CoreError::InvalidInput(format!("bad event id: {e}")))?;
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
     let id_bytes: [u8; 32] = id.to_bytes();
     let filter = NdbFilter::new().ids([&id_bytes]).build();
     let results = ndb
@@ -233,12 +322,9 @@ fn resolve_replaceable(
 ) -> Result<Option<NostrEntityEvent>, CoreError> {
     let author = PublicKey::from_hex(pubkey_hex)
         .map_err(|e| CoreError::InvalidInput(format!("bad pubkey: {e}")))?;
-    let txn = Transaction::new(ndb)
-        .map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
     let pk_bytes: [u8; 32] = author.to_bytes();
-    let mut builder = NdbFilter::new()
-        .kinds([kind as u64])
-        .authors([&pk_bytes]);
+    let mut builder = NdbFilter::new().kinds([kind as u64]).authors([&pk_bytes]);
     if let Some(d) = d_tag {
         builder = builder.tags([d], 'd');
     }
@@ -266,11 +352,7 @@ fn resolve_replaceable(
     Ok(newest.as_ref().map(to_entity_event))
 }
 
-fn event_from_note(
-    ndb: &Ndb,
-    txn: &Transaction,
-    key: nostrdb::NoteKey,
-) -> Option<Event> {
+fn event_from_note(ndb: &Ndb, txn: &Transaction, key: nostrdb::NoteKey) -> Option<Event> {
     let note = ndb.get_note_by_key(txn, key).ok()?;
     let json = note.json().ok()?;
     Event::from_json(&json).ok()
@@ -328,18 +410,16 @@ mod tests {
 
     #[test]
     fn bare_form_works_without_nostr_prefix() {
-        let out = decode_nostr_entity(
-            "npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6",
-        )
-        .expect("decode");
+        let out =
+            decode_nostr_entity("npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6")
+                .expect("decode");
         matches!(out, NostrEntityRef::Profile { .. });
     }
 
     #[test]
     fn rejects_nsec() {
-        let err = decode_nostr_entity(
-            "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5",
-        );
+        let err =
+            decode_nostr_entity("nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5");
         assert!(err.is_err());
     }
 
