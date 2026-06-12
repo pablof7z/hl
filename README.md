@@ -42,7 +42,7 @@ Reading libraries are decades-long investments, and platforms are not. Highlight
 
 ```
 highlighter/
-├── app/              # iOS app (SwiftUI) + Rust core (shared via UniFFI)
+├── app/              # iOS (SwiftUI) + Android (Compose) + Rust core (shared via UniFFI)
 ├── web/              # SvelteKit web application
 ├── relay/            # NIP-29 relay implementation
 ├── docs/             # Product specs, architecture, research
@@ -58,6 +58,15 @@ cd web
 bun install
 bun run dev
 ```
+
+### Android App
+
+```bash
+cd app/android
+./gradlew assembleDebug   # builds the Rust core + Kotlin bindings automatically
+```
+
+See [app/android/README.md](app/android/README.md) for requirements and release builds.
 
 ### Build for Production
 
@@ -84,6 +93,7 @@ bun run deploy:web:prod
 ## Tech Stack
 
 - **iOS**: SwiftUI + Rust core via UniFFI
+- **Android**: Jetpack Compose + the same Rust core via UniFFI
 - **Web**: SvelteKit, TailwindCSS, DaisyUI
 - **Nostr**: NDK, NIP-29 groups, NIP-22 threaded comments
 - **Deployment**: Vercel

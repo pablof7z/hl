@@ -4,7 +4,10 @@
 
     <application
         android:allowBackup="false"
+        android:enableOnBackInvokedCallback="true"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Highlighter">
         <activity
@@ -23,6 +26,41 @@
                 <data
                     android:host="nip46"
                     android:scheme="highlighter" />
+            </intent-filter>
+            <!--
+                Verified App Link for canonical highlight share URLs minted by the
+                core (https://beta.highlighter.com/highlight/{nevent}; see
+                app/core/src/share_links.rs). autoVerify requires a matching
+                /.well-known/assetlinks.json hosted on beta.highlighter.com that
+                lists this app's package + signing-cert SHA-256 — that is a
+                SERVER-SIDE prerequisite outside this repo.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="beta.highlighter.com" />
+                <data android:pathPrefix="/highlight/" />
+            </intent-filter>
+            <!--
+                Custom-scheme fallback for the same highlight links, so the app
+                still resolves them even before App Link verification succeeds
+                (or on devices/launchers that bypass it).
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="highlight"
+                    android:scheme="highlighter" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
     </application>
