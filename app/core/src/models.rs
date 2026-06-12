@@ -433,10 +433,11 @@ pub struct RelayDiagnostic {
 }
 
 /// Minimal projection of a relay's NIP-11 information document. Populated
-/// by `probe_relay_nip11` via a one-shot HTTPS GET to the relay's base URL
-/// with `Accept: application/nostr+json`. All fields are optional because
-/// relay operators configure NIP-11 loosely — many skip most fields.
-#[derive(Debug, Clone, uniffi::Record)]
+/// entirely by NMP (ADR-0051): fetched automatically when a relay connects
+/// and carried on the `relay_diagnostics` projection, or via NMP's on-demand
+/// probe for not-yet-added relays. All fields are optional because relay
+/// operators configure NIP-11 loosely — many skip most fields.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Nip11Document {
     pub url: String,
     pub name: Option<String>,

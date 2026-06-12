@@ -46,7 +46,7 @@ use zeroize::Zeroizing;
 
 use crate::errors::CoreError;
 use crate::events::{DataChangeType, Delta, EventCallback};
-use crate::models::{NostrConnectOptions, RelayDiagnostic, RelayStatus};
+use crate::models::{Nip11Document, NostrConnectOptions, RelayDiagnostic, RelayStatus};
 use crate::relays::{nostr_connect_relay, RelayConfig};
 
 const NMP_PUBLISH_NAMESPACE: &str = "nmp.publish";
@@ -130,6 +130,11 @@ struct NmpIdentitySnapshot {
 
 struct NmpRelayDiagnosticsState {
     relays: RwLock<HashMap<String, RelayDiagnostic>>,
+    /// Per-relay NIP-11 documents, fetched and parsed entirely inside NMP
+    /// (ADR-0051) and carried on the `relay_diagnostics` projection's `info`
+    /// child. Keyed by the projection's relay URL. Highlighter never issues
+    /// an HTTP request or parses JSON for these.
+    infos: RwLock<HashMap<String, Nip11Document>>,
     callback_slot: RwLock<Option<EventCallbackSlot>>,
 }
 
@@ -231,6 +236,7 @@ impl Default for NmpRelayDiagnosticsState {
     fn default() -> Self {
         Self {
             relays: RwLock::new(HashMap::new()),
+            infos: RwLock::new(HashMap::new()),
             callback_slot: RwLock::new(None),
         }
     }
@@ -243,6 +249,59 @@ impl NmpRelayDiagnosticsState {
 
     fn snapshot(&self) -> Vec<RelayDiagnostic> {
         self.relays.read().values().cloned().collect()
+    }
+
+    fn info_snapshot(&self) -> Vec<Nip11Document> {
+        self.infos.read().values().cloned().collect()
+    }
+
+    fn info_for(&self, url: &str) -> Option<Nip11Document> {
+        let infos = self.infos.read();
+        if let Some(doc) = infos.get(url) {
+            return Some(doc.clone());
+        }
+        // NMP normalises relay URLs (e.g. strips a trailing slash); accept
+        // either spelling so the add-relay preview hits the cache too.
+        let trimmed = url.trim_end_matches('/');
+        infos.get(trimmed).cloned()
+    }
+
+    fn apply_infos(&self, docs: Vec<Nip11Document>) {
+        let mut arrived = Vec::new();
+        {
+            let mut infos = self.infos.write();
+            for doc in docs {
+                let url = doc.url.clone();
+                if infos.get(&url) != Some(&doc) {
+                    arrived.push(url.clone());
+                }
+                infos.insert(url, doc);
+            }
+        }
+        if arrived.is_empty() {
+            return;
+        }
+        // A document arriving (or changing) after the relay connected does
+        // not move the connection state, so it would never re-emit through
+        // `apply`. Re-announce the relay's current state so the app layer
+        // re-reads the row and picks up the new document.
+        let Some(slot) = self.callback_slot.read().clone() else {
+            return;
+        };
+        let Some(callback) = slot.read().clone() else {
+            return;
+        };
+        let relays = self.relays.read();
+        for url in arrived {
+            let state = relays
+                .get(&url)
+                .map(|diag| diag.state)
+                .unwrap_or(RelayStatus::Connected);
+            callback.on_data_changed(Delta {
+                subscription_id: 0,
+                change: DataChangeType::RelayStatusChanged { url, state },
+            });
+        }
     }
 
     fn apply(&self, rows: Vec<RelayDiagnostic>) {
@@ -775,6 +834,20 @@ impl HighlighterNmpRuntime {
         self.diagnostics.snapshot()
     }
 
+    /// All NIP-11 documents NMP has fetched for pool relays (ADR-0051).
+    /// Sourced from the `relay_diagnostics` projection's `info` child —
+    /// no HTTP or parsing happens on the Highlighter side.
+    pub(crate) fn relay_info_documents(&self) -> Vec<Nip11Document> {
+        let typed = self.drain_typed_snapshot_projections();
+        apply_typed_projection_sidecars(&typed, &self.action_results, &self.diagnostics);
+        self.diagnostics.info_snapshot()
+    }
+
+    /// The cached NIP-11 document for one relay URL, if NMP has fetched it.
+    pub(crate) fn relay_info(&self, url: &str) -> Option<Nip11Document> {
+        self.diagnostics.info_for(url)
+    }
+
     pub(crate) fn publish_signed_auto(&self, source: &str, event: &Event) -> Result<(), CoreError> {
         self.dispatch_publish(source, event, PublishTarget::Auto)
     }
@@ -992,7 +1065,8 @@ fn apply_typed_projection_sidecars(
     if let Some(rows) = action_results_from_typed_projections(typed) {
         action_results.apply(rows);
     }
-    if let Some(rows) = relay_diagnostics_from_typed_projections(typed) {
+    if let Some((rows, infos)) = relay_diagnostics_from_typed_projections(typed) {
+        diagnostics.apply_infos(infos);
         diagnostics.apply(rows);
     }
 }
@@ -1110,25 +1184,37 @@ fn unsigned_event_for_nmp(event: &UnsignedEvent) -> NmpUnsignedEvent {
 
 fn relay_diagnostics_from_typed_projections(
     typed: &[TypedProjectionData],
-) -> Option<Vec<RelayDiagnostic>> {
+) -> Option<(Vec<RelayDiagnostic>, Vec<Nip11Document>)> {
     let entry = typed.iter().find(|entry| {
         entry.key == RELAY_DIAGNOSTICS_SCHEMA_ID || entry.schema_id == RELAY_DIAGNOSTICS_SCHEMA_ID
     })?;
     let decoded = decode_relay_diagnostics(&entry.payload).ok()?;
-    Some(
-        decoded
-            .relays
-            .into_iter()
-            .map(|row| RelayDiagnostic {
-                url: row.relay_url,
-                state: relay_status_from_nmp(&row.connection_label, &row.connection_tone),
-                rtt_ms: None,
-                bytes_sent: parse_bytes_display(row.bytes_tx_display.as_deref()),
-                bytes_received: parse_bytes_display(row.bytes_rx_display.as_deref()),
-                connected_since_ts: None,
-            })
-            .collect(),
-    )
+    let mut diagnostics = Vec::with_capacity(decoded.relays.len());
+    let mut infos = Vec::new();
+    for row in decoded.relays {
+        if let Some(info) = &row.info {
+            infos.push(Nip11Document {
+                url: row.relay_url.clone(),
+                name: info.name.clone(),
+                description: info.description.clone(),
+                pubkey: info.pubkey.clone(),
+                contact: info.contact.clone(),
+                software: info.software.clone(),
+                version: info.version.clone(),
+                supported_nips: info.supported_nips.clone(),
+                icon: info.icon.clone(),
+            });
+        }
+        diagnostics.push(RelayDiagnostic {
+            url: row.relay_url,
+            state: relay_status_from_nmp(&row.connection_label, &row.connection_tone),
+            rtt_ms: None,
+            bytes_sent: parse_bytes_display(row.bytes_tx_display.as_deref()),
+            bytes_received: parse_bytes_display(row.bytes_rx_display.as_deref()),
+            connected_since_ts: None,
+        });
+    }
+    Some((diagnostics, infos))
 }
 
 fn apply_nostrconnect_options(
