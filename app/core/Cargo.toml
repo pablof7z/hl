@@ -18,7 +18,7 @@ nostr-sdk = { version = "0.44.1", features = ["nip49", "nip04", "nip44"] }
 nostr = { version = "0.44", default-features = false, features = ["std", "nip46"] }
 nostr-ndb = "0.44.0"
 nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", branch = "master" }
-nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "d4debb16798d99dadfd6a89a8871da5614f88d50", default-features = false }
+nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "41fd4b4e4de945481ed7e6d9b6a941d0775b7fd6", default-features = false }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["json"] }
 futures = "0.3"
