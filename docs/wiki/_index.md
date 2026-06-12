@@ -37,8 +37,14 @@ Last updated: 2026-06-12
 | [android-relay-settings](android-relay-settings.md) | Android Relay Settings | Android Settings â Network lists all configured relays with live status dots and roles, with add/remove capability | capture | warm | 2026-06-12 | nmp-app |
 | [android-session-persistence](android-session-persistence.md) | Android Session Persistence | Android session credentials are persisted via EncryptedSharedPreferences, surviving force-stop/relaunch with the same user identity restored from cache. | capture | warm | 2026-06-12 | nmp-app |
 | [ios-testing](ios-testing.md) | iOS Testing | The iOS first unit test suite contains 22 tests in 2 suites (TranscriptParserTests with 14 tests and CommentTreeBuilderTests with 8 tests) using the Swift Testi | capture | warm | 2026-06-12 | nmp-app |
-| [nmp-app-facade](nmp-app-facade.md) | NMP App Facade | The app uses the NMP app facade (nmp_app.rs) from core, with HighlighterStore holding a HighlighterNmpApp instance and a HighlighterAppStateReconciler that rece | capture | warm | 2026-06-11 | nmp-app |
+| [nmp-app-facade](nmp-app-facade.md) | NMP App Facade | The app uses the NMP app facade (nmp_app.rs) from core, with HighlighterStore conforming to the NostrProfileHost protocol via an adapter file (HighlighterStore+ | capture | warm | 2026-06-11 | nmp-app |
 | [platform-local-state](platform-local-state.md) | Platform-Local State | iOS retains PodcastPlayerStore (AVPlayer position) and CaptureStore (local OCR pipeline) as transient device-local state outside the Rust core. | capture | warm | 2026-06-12 | nmp-app |
+
+## nostr-protocol (1 guide)
+
+| Slug | Title | Summary | Tags | Volatility | Verified | Topic |
+|------|-------|---------|------|------------|----------|-------|
+| [nmp-nip11-relay-info](nmp-nip11-relay-info.md) | NMP NIP-11 Relay Info | NMP (nostr-multi-platform) provides first-class NIP-11 relay info (name, icon, description, pubkey, contact, software, version, supported_nips, payment_required | capture | warm | 2026-06-12 | nostr-protocol |
 
 ## ui-components (5 guides)
 
@@ -48,7 +54,7 @@ Last updated: 2026-06-12
 | [android-navigation](android-navigation.md) | Android Navigation & Back Stack | System back navigation closes the innermost open overlay (comments → invite → room → article → profile → feedback thread) before exiting, with predictive back e | capture | warm | 2026-06-12 | ui-components |
 | [android-theming](android-theming.md) | Android Theming & Brand Palette | The brand palette maps to Material theme tokens as Paperâbackground, InkâonSurface, MutedâonSurfaceVariant, Lineâoutline, Mossâprimary, Goldâseconda | capture | warm | 2026-06-12 | ui-components |
 | [ios-safety-and-navigation](ios-safety-and-navigation.md) | iOS Safety & Navigation | iOS fixes five crash risks: BookScannerView layer cast, MarkdownRenderer attributedString cast and three URL(string:) force-unwraps, OCRStructureReconstructor m | capture | warm | 2026-06-12 | ui-components |
-| [ui-components](ui-components.md) | UI Components | The AuthorAvatar view (Profile/AuthorAvatar.swift) is a custom SwiftUI component, not sourced from an nmp UI library | capture | warm | 2026-06-11 | ui-components |
+| [ui-components](ui-components.md) | UI Components | The AuthorAvatar view (Profile/AuthorAvatar.swift) is a custom SwiftUI component, not sourced from an NMP UI library | capture | warm | 2026-06-11 | ui-components |
 
 ## Research Records (4 records)
 
@@ -59,7 +65,7 @@ Last updated: 2026-06-12
 | [2026-06-12-1-phase-2-oprunner-migration-report-26](research/2026-06-12-1-phase-2-oprunner-migration-report-26.md) | 2026-06-12 | Phase 2 OpRunner migration report: 26 publish handlers migrated to OpRunner, five verification gates green, zero Class-B blocking sites remaining, with test results and deviation analysis | OpRunner Phase 2 publishes subagent |
 | [2026-06-12-2-adversarial-review-of-actor-blocking-fix](research/2026-06-12-2-adversarial-review-of-actor-blocking-fix.md) | 2026-06-12 | Adversarial review of actor-blocking fix: verdict SHIP with two should-fix UX gaps (JoinRoom and CurationWrite missing busy flags), systematic 9-dimension code audit with line-number citations | Adversarial review of OpRunner work subagent |
 
-## Episode Cards (61 cards)
+## Episode Cards (71 cards)
 
 | Card | Date | Title | Salience | Status |
 |------|------|-------|----------|--------|
@@ -72,14 +78,20 @@ Last updated: 2026-06-12
 | [2026-06-12-1-android-rebuilt-from-single-file-skeleton](episodes/2026-06-12-1-android-rebuilt-from-single-file-skeleton.md) | 2026-06-12 | Android rebuilt from single-file skeleton to real Compose app | architecture | active |
 | [2026-06-12-1-android-reference-skeleton-production-track](episodes/2026-06-12-1-android-reference-skeleton-production-track.md) | 2026-06-12 | Android: Reference Skeleton → Production Track | reversal | active |
 | [2026-06-12-1-apk-crash-from-unlinked-libsodium-dependency](episodes/2026-06-12-1-apk-crash-from-unlinked-libsodium-dependency.md) | 2026-06-12 | APK crash from unlinked libsodium dependency in Rust core | root-cause | active |
+| [2026-06-12-1-highlights-feed-migrated-from-custom-authoravatar](episodes/2026-06-12-1-highlights-feed-migrated-from-custom-authoravatar.md) | 2026-06-12 | Highlights feed migrated from custom AuthorAvatar to NMP registry components | architecture | active |
 | [2026-06-12-1-ios-share-links-minted-but-never](episodes/2026-06-12-1-ios-share-links-minted-but-never.md) | 2026-06-12 | iOS share links minted but never consumed | reversal | active |
+| [2026-06-12-1-keyed-relay-probes-fix-supersession-bug](episodes/2026-06-12-1-keyed-relay-probes-fix-supersession-bug.md) | 2026-06-12 | Keyed relay probes fix supersession bug | root-cause | superseded |
+| [2026-06-12-1-nip-11-relay-info-ownership-moves](episodes/2026-06-12-1-nip-11-relay-info-ownership-moves.md) | 2026-06-12 | NIP-11 relay info ownership moves from app layer to platform | architecture | active |
 | [2026-06-12-1-nmp-actor-thread-blocking-defect-diagnosed](episodes/2026-06-12-1-nmp-actor-thread-blocking-defect-diagnosed.md) | 2026-06-12 | NMP Actor-Thread Blocking Defect Diagnosed | root-cause | superseded |
 | [2026-06-12-1-nmp-facade-actor-thread-blocks-on](episodes/2026-06-12-1-nmp-facade-actor-thread-blocks-on.md) | 2026-06-12 | NMP facade actor thread blocks on network calls, wedging UI indefinitely | architecture | superseded |
 | [2026-06-12-1-nmp-typed-projection-drain-was-unwired](episodes/2026-06-12-1-nmp-typed-projection-drain-was-unwired.md) | 2026-06-12 | NMP typed-projection drain was unwired, starving relay status on both platforms | root-cause | superseded |
+| [2026-06-12-1-opdomain-relayprobe-must-be-keyed-per](episodes/2026-06-12-1-opdomain-relayprobe-must-be-keyed-per.md) | 2026-06-12 | OpDomain::RelayProbe must be keyed per-URL to avoid mutual cancellation | root-cause | active |
 | [2026-06-12-1-oprunner-actor-architecture-eliminates-nmp-blocking](episodes/2026-06-12-1-oprunner-actor-architecture-eliminates-nmp-blocking.md) | 2026-06-12 | OpRunner actor architecture eliminates NMP blocking | architecture | active |
 | [2026-06-12-1-oprunner-pattern-adopted-to-eliminate-actor](episodes/2026-06-12-1-oprunner-pattern-adopted-to-eliminate-actor.md) | 2026-06-12 | OpRunner pattern adopted to eliminate actor-thread blocking | architecture | superseded |
 | [2026-06-12-1-relay-diagnostics-never-reached-native-platforms](episodes/2026-06-12-1-relay-diagnostics-never-reached-native-platforms.md) | 2026-06-12 | Relay diagnostics never reached native platforms — snapshot frame decoding gap | root-cause | superseded |
 | [2026-06-12-1-relay-diagnostics-starved-by-undecoded-snapshot](episodes/2026-06-12-1-relay-diagnostics-starved-by-undecoded-snapshot.md) | 2026-06-12 | Relay diagnostics starved by undecoded snapshot frames | root-cause | superseded |
+| [2026-06-12-1-relayprobe-unkeyed-slot-caused-mutual-abort](episodes/2026-06-12-1-relayprobe-unkeyed-slot-caused-mutual-abort.md) | 2026-06-12 | RelayProbe unkeyed slot caused mutual abort of concurrent NIP-11 probes | root-cause | superseded |
+| [2026-06-12-1-replace-custom-authoravatar-with-nmp-registry](episodes/2026-06-12-1-replace-custom-authoravatar-with-nmp-registry.md) | 2026-06-12 | Replace custom AuthorAvatar with NMP registry UI components for profile rendering | product | superseded |
 | [2026-06-12-2-account-creation-bricked-by-failed-nip](episodes/2026-06-12-2-account-creation-bricked-by-failed-nip.md) | 2026-06-12 | Account creation bricked by failed NIP-05 availability check | product | superseded |
 | [2026-06-12-2-account-creation-bricked-when-nip-05](episodes/2026-06-12-2-account-creation-bricked-when-nip-05.md) | 2026-06-12 | Account creation bricked when NIP-05 API is unreachable | root-cause | superseded |
 | [2026-06-12-2-android-app-rebuilt-from-single-file](episodes/2026-06-12-2-android-app-rebuilt-from-single-file.md) | 2026-06-12 | Android app rebuilt from single-file reference to production quality | product | active |
@@ -91,6 +103,10 @@ Last updated: 2026-06-12
 | [2026-06-12-2-android-monolithic-to-modular-architecture](episodes/2026-06-12-2-android-monolithic-to-modular-architecture.md) | 2026-06-12 | Android: Monolithic to Modular Architecture | architecture | active |
 | [2026-06-12-2-android-nmp-event-bridge-missing-relay](episodes/2026-06-12-2-android-nmp-event-bridge-missing-relay.md) | 2026-06-12 | Android NMP event bridge missing — relay state and login deltas silently dropped | root-cause | active |
 | [2026-06-12-2-ios-never-consumed-its-own-share](episodes/2026-06-12-2-ios-never-consumed-its-own-share.md) | 2026-06-12 | iOS never consumed its own share links — Android became first, then iOS caught up | product | active |
+| [2026-06-12-2-nip-11-ownership-moves-from-highlighter](episodes/2026-06-12-2-nip-11-ownership-moves-from-highlighter.md) | 2026-06-12 | NIP-11 ownership moves from Highlighter to NMP | architecture | superseded |
+| [2026-06-12-2-nip-11-ownership-shifts-from-highlighter](episodes/2026-06-12-2-nip-11-ownership-shifts-from-highlighter.md) | 2026-06-12 | NIP-11 ownership shifts from Highlighter app to NMP platform layer | architecture | superseded |
+| [2026-06-12-2-nip-11-relay-info-ownership-migrates](episodes/2026-06-12-2-nip-11-relay-info-ownership-migrates.md) | 2026-06-12 | NIP-11 relay info ownership migrates from app to platform | architecture | superseded |
+| [2026-06-12-2-nmp-registry-nostravatar-standardized-on-kingfisher](episodes/2026-06-12-2-nmp-registry-nostravatar-standardized-on-kingfisher.md) | 2026-06-12 | NMP registry NostrAvatar standardized on Kingfisher instead of AsyncImage | architecture | active |
 | [2026-06-12-2-share-link-routing-android-first-platform](episodes/2026-06-12-2-share-link-routing-android-first-platform.md) | 2026-06-12 | Share link routing — Android first platform to consume bech32 links end-to-end | product | active |
 | [2026-06-12-2-signup-blocked-on-nip-05-api](episodes/2026-06-12-2-signup-blocked-on-nip-05-api.md) | 2026-06-12 | Signup Blocked on NIP-05 API Failure | product | superseded |
 | [2026-06-12-3-cross-platform-relay-status-stuck-at](episodes/2026-06-12-3-cross-platform-relay-status-stuck-at.md) | 2026-06-12 | Cross-platform relay status stuck at UNKNOWN: core never decoded diagnostics from snapshot frames | root-cause | superseded |

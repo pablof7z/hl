@@ -13,6 +13,7 @@ verified: 2026-06-12
 compiled-from: conversation
 sources:
   - session:0c7b6c09-7d1f-4cb2-b178-1adf69cd09ef
+  - session:f54b4a16-dacb-41e6-b32f-b737d606254f
 ---
 
 # OpRunner & Async Migration
@@ -24,9 +25,9 @@ The OpRunner primitive uses a shared 2-thread tokio runtime, a domain-keyed in-f
 <!-- citations: [^0c7b6-167] [^0c7b6-151] [^0c7b6-152] [^0c7b6-153] [^0c7b6-154] [^0c7b6-166] [^0c7b6-188] -->
 ## Domain Keying
 
-Login nsec sign-in and bunker sign-in share a single OpDomain::Auth slot, so a nsec→bunker supersession correctly aborts the stale in-flight resolution. CommentInteraction and ArticleBookmarkToggle use per-target hashed OpDomain keys so rapid double-taps supersede on the same target but don't cross-abort different targets. CommentInteraction and ArticleBookmarkToggle submit without a busy flag under an intentional optimistic-UI carve-out: success re-hydrates, failure toasts, and no busy concept exists by design. NetworkRelayWrite uses a single OpDomain slot for all four relay-list writes (upsert, remove, set-roles, import-apply) since they mutate one list; supersession serializes them and the apply-arm refresh reconciles.
+Login nsec sign-in and bunker sign-in share a single OpDomain::Auth slot, so a nsec→bunker supersession correctly aborts the stale in-flight resolution. RelayProbe uses a stable hash of the relay URL as its OpDomain key, so different relays probe independently while re-probing the same URL still supersedes. CommentInteraction and ArticleBookmarkToggle use per-target hashed OpDomain keys so rapid double-taps supersede on the same target but don't cross-abort different targets. CommentInteraction and ArticleBookmarkToggle submit without a busy flag under an intentional optimistic-UI carve-out: success re-hydrates, failure toasts, and no busy concept exists by design. NetworkRelayWrite uses a single OpDomain slot for all four relay-list writes (upsert, remove, set-roles, import-apply) since they mutate one list; supersession serializes them and the apply-arm refresh reconciles.
 
-<!-- citations: [^0c7b6-155] [^0c7b6-156] [^0c7b6-168] [^0c7b6-189] -->
+<!-- citations: [^0c7b6-155] [^0c7b6-156] [^0c7b6-168] [^0c7b6-189] [^f54b4-24] -->
 ## Optimistic Revert
 
 FollowToggle uses a single unkeyed slot with a self-timeout that carries the real revert state (previous_following) so optimistic revert is correct even on timeout, since the generic op_timed_out fallback cannot know previous_following.
