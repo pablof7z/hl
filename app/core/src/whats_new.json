@@ -2,6 +2,13 @@
   "schema_version": 1,
   "entries": [
     {
+      "shipped_at": "2026-06-12T18:45:00Z",
+      "lines": [
+        "Share links now open directly in Highlighter, with native logging and relay diagnostics wired across app surfaces.",
+        "Android now includes the full native shell: tabs, settings, dark mode, persisted sessions, relay status, edit profile, curation, and podcast playback."
+      ]
+    },
+    {
       "shipped_at": "2026-06-12T01:50:00Z",
       "lines": [
         "Capture publishing, clip sharing, and book picker search now use the same Rust-owned app state across iOS and Android."
