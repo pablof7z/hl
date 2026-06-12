@@ -80,7 +80,8 @@ enum MarkdownRenderer {
         var highlightsById: [String: HighlightRecord] = [:]
         let segments: [BodySegment] = rawSegments.map { segment in
             guard case .text(let attrStr) = segment else { return segment }
-            let mutable = attrStr.mutableCopy() as! NSMutableAttributedString
+            let mutable = (attrStr.mutableCopy() as? NSMutableAttributedString)
+                ?? NSMutableAttributedString(attributedString: attrStr)
             for highlight in highlights {
                 let quote = highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !quote.isEmpty, quote.count >= 4 else { continue }
@@ -168,16 +169,17 @@ enum MarkdownRenderer {
             }
             out.append(innerString)
 
-            // Back-arrow — tappable.
-            let back = NSAttributedString(
-                string: " ↩",
-                attributes: [
-                    .font: UIFont.systemFont(ofSize: smallSize),
-                    .foregroundColor: accent,
-                    footnoteBackAttribute: def.number,
-                    .link: URL(string: "highlighter://footnote-back/\(def.number)")!
-                ]
-            )
+            // Back-arrow — tappable. Skip the link attachment (rather than
+            // crash) if the synthetic URL ever fails to parse.
+            var backAttributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: smallSize),
+                .foregroundColor: accent,
+                footnoteBackAttribute: def.number
+            ]
+            if let backURL = URL(string: "highlighter://footnote-back/\(def.number)") {
+                backAttributes[.link] = backURL
+            }
+            let back = NSAttributedString(string: " ↩", attributes: backAttributes)
             out.append(back)
             out.append(NSAttributedString(string: "\n"))
         }
@@ -559,13 +561,16 @@ private struct BodyWalker {
                     let marker = "[\(def.number)]"
                     let rangeStart = out.length
                     let superSize = max(10, bodyPointSize - 6)
-                    out.append(NSAttributedString(string: marker, attributes: [
+                    var markerAttributes: [NSAttributedString.Key: Any] = [
                         .font: UIFont.systemFont(ofSize: superSize, weight: .semibold),
                         .foregroundColor: accent,
                         .baselineOffset: bodyPointSize * 0.35,
-                        MarkdownRenderer.footnoteReferenceAttribute: def.number,
-                        .link: URL(string: "highlighter://footnote/\(def.number)")!
-                    ]))
+                        MarkdownRenderer.footnoteReferenceAttribute: def.number
+                    ]
+                    if let footnoteURL = URL(string: "highlighter://footnote/\(def.number)") {
+                        markerAttributes[.link] = footnoteURL
+                    }
+                    out.append(NSAttributedString(string: marker, attributes: markerAttributes))
                     footnoteAnchors[def.number] = NSRange(location: rangeStart, length: marker.utf16.count)
                 } else {
                     appendPlain("[^\(id)]", to: out)
@@ -591,11 +596,14 @@ private struct BodyWalker {
                     case .profile(let pk, _):
                         let label = profileNames[pk] ?? "@" + String(pk.prefix(8))
                         let atLabel = label.hasPrefix("@") ? label : "@\(label)"
-                        out.append(NSAttributedString(string: atLabel, attributes: [
+                        var profileAttributes: [NSAttributedString.Key: Any] = [
                             .font: serifBold,
-                            .foregroundColor: accent,
-                            .link: URL(string: "highlighter://profile/\(pk)")!
-                        ]))
+                            .foregroundColor: accent
+                        ]
+                        if let profileURL = URL(string: "highlighter://profile/\(pk)") {
+                            profileAttributes[.link] = profileURL
+                        }
+                        out.append(NSAttributedString(string: atLabel, attributes: profileAttributes))
                     case .event, .address:
                         // Inline event refs are unlikely in body paragraphs;
                         // standalone ones become .nostrEntity segments above.

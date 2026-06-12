@@ -213,6 +213,7 @@ struct ChatView: View {
                     .foregroundStyle(Color.highlighterInkMuted)
                     .padding(4)
             }
+            .accessibilityLabel("Cancel reply")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)

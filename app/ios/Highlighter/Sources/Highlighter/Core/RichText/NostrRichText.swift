@@ -1,4 +1,5 @@
 import Kingfisher
+import os
 import SwiftUI
 
 /// Renders plain text that may contain `nostr:` URI mentions and event
@@ -604,7 +605,12 @@ private struct GenericEntityCard: View {
 
 private func parseTags(_ json: String) -> [[String]] {
     guard let data = json.data(using: .utf8) else { return [] }
-    return (try? JSONDecoder().decode([[String]].self, from: data)) ?? []
+    do {
+        return try JSONDecoder().decode([[String]].self, from: data)
+    } catch {
+        Logger.highlighter(category: "RichText").error("Failed to decode nostr event tags JSON: \(error.localizedDescription, privacy: .public)")
+        return []
+    }
 }
 
 private func tagValue(_ tags: [[String]], _ name: String) -> String {

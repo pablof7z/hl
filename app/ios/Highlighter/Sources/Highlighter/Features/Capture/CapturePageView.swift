@@ -165,6 +165,7 @@ struct CapturePageView: View {
                     .frame(width: 36, height: 36)
                     .background(.ultraThinMaterial, in: Circle())
             }
+            .accessibilityLabel("Close")
             Spacer()
             if store.phase == .processing {
                 HStack(spacing: 6) {
@@ -199,6 +200,7 @@ struct CapturePageView: View {
                         .frame(width: 36, height: 36)
                         .background(.ultraThinMaterial, in: Circle())
                 }
+                .accessibilityLabel("Reset zoom")
             } else {
                 Color.clear.frame(width: 36, height: 36)
             }

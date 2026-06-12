@@ -432,6 +432,7 @@ struct PodcastListeningView: View {
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("now playing")
@@ -464,6 +465,9 @@ struct PodcastListeningView: View {
                     let seekFraction = location.x / max(1, geo.size.width)
                     player.seek(to: seekFraction * player.duration)
                 }
+                .accessibilityAddTraits(.isButton)
+                .accessibilityLabel("Playback position")
+                .accessibilityHint("Tap to seek")
             }
             .frame(width: 80, height: 4)
         }
@@ -501,6 +505,7 @@ struct PodcastListeningView: View {
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(clipArmed ? "Mark clip point" : "Clip this moment")
 
             Text(fabLabel)
                 .font(.system(size: 9, weight: .semibold))

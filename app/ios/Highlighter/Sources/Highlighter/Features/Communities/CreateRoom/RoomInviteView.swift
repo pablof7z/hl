@@ -157,6 +157,7 @@ struct RoomInviteView: View {
                         .foregroundStyle(Color.highlighterInkMuted)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
             }
         }
         .padding(.horizontal, 14)
@@ -282,6 +283,7 @@ struct RoomInviteView: View {
             .padding(.vertical, 12)
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .task {
             if profile == nil {
                 appStore.requestProfile(pubkeyHex: pubkeyHex)
@@ -428,6 +430,7 @@ private struct Chip: View {
                     .foregroundStyle(Color.highlighterInkMuted)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Remove \(displayName)")
         }
         .padding(.leading, 6)
         .padding(.trailing, 10)

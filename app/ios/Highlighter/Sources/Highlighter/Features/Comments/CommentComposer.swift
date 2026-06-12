@@ -84,6 +84,7 @@ struct CommentComposer: View {
         .buttonStyle(.plain)
         .disabled(!canSubmit || app.comments.isPublishing)
         .animation(.easeInOut(duration: 0.18), value: canSubmit)
+        .accessibilityLabel("Send comment")
     }
 
     private var canSubmit: Bool {

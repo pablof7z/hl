@@ -38,6 +38,7 @@ struct WaveformTickRow: View {
             .opacity(state == .future ? 0.55 : 1.0)
         }
         .buttonStyle(.plain)
+        .accessibilityHint("Seek to this point")
     }
 
     private var timePeg: some View {

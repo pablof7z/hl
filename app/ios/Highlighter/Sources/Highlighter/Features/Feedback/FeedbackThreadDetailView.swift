@@ -91,6 +91,7 @@ struct FeedbackThreadDetailView: View {
                         .background(Color.accentColor.opacity(canSend ? 1 : 0.4), in: .circle)
                         .foregroundStyle(.white)
                 }
+                .accessibilityLabel("Send reply")
                 .disabled(!canSend)
             }
         }

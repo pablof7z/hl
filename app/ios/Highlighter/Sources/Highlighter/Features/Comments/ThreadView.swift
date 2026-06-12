@@ -15,6 +15,7 @@ struct ThreadView: View {
     @Environment(HighlighterStore.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var focusedNode: CommentNode? = nil
+    @State private var profileDestination: ProfileDestination? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,7 +38,8 @@ struct ThreadView: View {
                                     node: child,
                                     depth: 0,
                                     isAuthorReply: false,
-                                    onTap: { focusOn(child) }
+                                    onTap: { focusOn(child) },
+                                    onViewProfile: { profileDestination = .pubkey($0) }
                                 )
                                 inlineReplyPreview(for: child)
                                 Divider()
@@ -69,6 +71,12 @@ struct ThreadView: View {
                 artifactHeader: nil,
                 artifactAuthorPubkey: artifactAuthorPubkey
             )
+        }
+        .navigationDestination(item: $profileDestination) { destination in
+            switch destination {
+            case .pubkey(let pk):
+                ProfileView(pubkey: pk)
+            }
         }
     }
 
@@ -105,7 +113,8 @@ struct ThreadView: View {
                 node: mostRecent,
                 depth: 1,
                 isAuthorReply: isAuthorReply,
-                onTap: { focusOn(mostRecent) }
+                onTap: { focusOn(mostRecent) },
+                onViewProfile: { profileDestination = .pubkey($0) }
             )
             .padding(.leading, 18)
             .padding(.trailing, 18)

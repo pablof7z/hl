@@ -149,6 +149,7 @@ struct CreateRoomSheet: View {
                         .background(.black.opacity(0.45), in: Circle())
                 }
                 .padding(12)
+                .accessibilityLabel("Remove cover")
             }
         }
         .overlay {
@@ -157,6 +158,7 @@ struct CreateRoomSheet: View {
                 Color.clear
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Choose a cover photo")
         }
     }
 

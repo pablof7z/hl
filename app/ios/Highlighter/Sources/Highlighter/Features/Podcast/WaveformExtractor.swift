@@ -184,7 +184,13 @@ enum WaveformCache {
         guard let path = filePath(for: url), FileManager.default.fileExists(atPath: path.path) else {
             return nil
         }
-        guard let data = try? Data(contentsOf: path) else { return nil }
+        let data: Data
+        do {
+            data = try Data(contentsOf: path)
+        } catch {
+            logger.error("waveform cache read failed for \(path.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
         let count = data.count / MemoryLayout<Float>.size
         var peaks = [Float](repeating: 0, count: count)
         _ = peaks.withUnsafeMutableBytes { dst in

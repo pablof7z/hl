@@ -160,8 +160,11 @@ enum OCRStructureReconstructor {
             let bucket = Int(v / binSize)
             buckets[bucket, default: []].append(v)
         }
-        let bestBucket = buckets.max(by: { $0.value.count < $1.value.count })!
+        guard let bestBucket = buckets.max(by: { $0.value.count < $1.value.count }) else {
+            return 0
+        }
         let bucketValues = bestBucket.value
+        guard !bucketValues.isEmpty else { return 0 }
         return bucketValues.reduce(0, +) / Double(bucketValues.count)
     }
 

@@ -138,6 +138,7 @@ struct BookPicker: View {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(Color.highlighterInkMuted.opacity(0.7))
                     }
+                    .accessibilityLabel("Clear search")
                 }
             }
             .padding(.horizontal, 12)

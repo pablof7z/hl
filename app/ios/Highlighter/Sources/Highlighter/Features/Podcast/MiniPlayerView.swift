@@ -30,6 +30,9 @@ struct MiniPlayerView: View {
         }
         .contentShape(.capsule)
         .onTapGesture { playerSheetPresented = true }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel("Now playing")
+        .accessibilityHint("Opens the full player")
         .contextMenu {
             Button {
                 player.skip(by: 30)
@@ -122,6 +125,7 @@ struct MiniPlayerView: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
     }
 
     @ViewBuilder

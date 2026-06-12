@@ -5,6 +5,7 @@ struct DiscussionDetailView: View {
 
     @Environment(HighlighterStore.self) private var app
     @State private var focusedNode: CommentNode? = nil
+    @State private var profileDestination: ProfileDestination? = nil
 
     private var artifactRef: ArtifactRef { .event(id: discussion.eventId, kind: 11) }
 
@@ -42,6 +43,12 @@ struct DiscussionDetailView: View {
                 artifactHeader: nil,
                 artifactAuthorPubkey: discussion.pubkey
             )
+        }
+        .navigationDestination(item: $profileDestination) { destination in
+            switch destination {
+            case .pubkey(let pk):
+                ProfileView(pubkey: pk)
+            }
         }
     }
 
@@ -170,7 +177,8 @@ struct DiscussionDetailView: View {
                         node: node,
                         depth: 0,
                         isAuthorReply: node.record.pubkey == discussion.pubkey,
-                        onTap: { focusedNode = node }
+                        onTap: { focusedNode = node },
+                        onViewProfile: { profileDestination = .pubkey($0) }
                     )
                     inlineReplyPreview(for: node)
                     Divider()
@@ -187,7 +195,8 @@ struct DiscussionDetailView: View {
                 node: mostRecent,
                 depth: 1,
                 isAuthorReply: mostRecent.record.pubkey == discussion.pubkey,
-                onTap: { focusedNode = mostRecent }
+                onTap: { focusedNode = mostRecent },
+                onViewProfile: { profileDestination = .pubkey($0) }
             )
             .padding(.leading, 18)
             .padding(.trailing, 18)

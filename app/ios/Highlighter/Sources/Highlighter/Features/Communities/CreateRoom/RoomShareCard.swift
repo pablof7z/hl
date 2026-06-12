@@ -91,6 +91,7 @@ struct RoomShareCard: View {
                             )
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(qrShown ? "Hide QR code" : "Show QR code")
                     .disabled(shareURL == nil)
                     .opacity(shareURL == nil ? 0.4 : 1)
                     .accessibilityLabel(qrShown ? "Hide QR" : "Show QR")

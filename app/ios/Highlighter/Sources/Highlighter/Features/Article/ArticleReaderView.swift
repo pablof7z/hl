@@ -382,6 +382,9 @@ private struct InlineArticleImage: View {
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .contentShape(Rectangle())
             .onTapGesture { showFullScreen = true }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel("Article image")
+            .accessibilityHint("View full screen")
             .padding(.horizontal, 20)
             .padding(.vertical, 8)
             .fullScreenCover(isPresented: $showFullScreen) {
@@ -410,6 +413,9 @@ private struct HeroImage: View {
                 .frame(width: proxy.size.width, height: proxy.size.height)
                 .clipped()
                 .onTapGesture { showFullScreen = true }
+                .accessibilityAddTraits(.isButton)
+                .accessibilityLabel("Cover image")
+                .accessibilityHint("View full screen")
         }
         .frame(height: 320)
         .fullScreenCover(isPresented: $showFullScreen) {

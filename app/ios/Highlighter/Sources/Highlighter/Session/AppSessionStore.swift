@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Keychain capability for session credentials. Rust owns authentication
 /// policy; Swift only loads, stores, and clears raw credentials.
@@ -22,10 +23,18 @@ final class AppSessionStore {
     func persist(_ credential: HighlighterSessionCredential) {
         switch credential {
         case .nsec(let nsec):
-            try? KeychainService.saveNsec(nsec)
+            do {
+                try KeychainService.saveNsec(nsec)
+            } catch {
+                Logger.highlighter.error("Failed to persist nsec credential to keychain: \(error.localizedDescription, privacy: .public)")
+            }
             KeychainService.deleteBunkerURI()
         case .bunkerUri(let uri):
-            try? KeychainService.saveBunkerURI(uri)
+            do {
+                try KeychainService.saveBunkerURI(uri)
+            } catch {
+                Logger.highlighter.error("Failed to persist bunker URI credential to keychain: \(error.localizedDescription, privacy: .public)")
+            }
             KeychainService.deleteNsec()
         }
     }

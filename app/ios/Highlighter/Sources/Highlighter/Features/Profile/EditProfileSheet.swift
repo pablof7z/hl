@@ -316,6 +316,7 @@ struct EditProfileSheet: View {
                 .padding(8)
                 .background(.black.opacity(0.55), in: Circle())
         }
+        .accessibilityLabel("Remove banner")
     }
 
     private var stickyCTA: some View {

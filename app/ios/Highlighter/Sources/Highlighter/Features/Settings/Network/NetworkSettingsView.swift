@@ -42,6 +42,7 @@ struct NetworkSettingsView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
+                .accessibilityLabel("Add relay")
                 .disabled(appStore.network.isLoading || appStore.network.isSaving)
             }
         }

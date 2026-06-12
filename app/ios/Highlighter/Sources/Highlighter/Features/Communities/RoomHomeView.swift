@@ -34,18 +34,22 @@ struct RoomHomeView: View {
                         Button { capturePresented = true } label: {
                             Image(systemName: "camera")
                         }
+                        .accessibilityLabel("Capture a highlight")
                     } else if selectedTab == .library {
                         Button { suggestPresented = true } label: {
                             Image(systemName: "plus")
                         }
+                        .accessibilityLabel("Suggest to library")
                     } else if selectedTab == .discussions {
                         Button { composerPresented = true } label: {
                             Image(systemName: "square.and.pencil")
                         }
+                        .accessibilityLabel("New discussion")
                     }
                     Button { inviteSheetPresented = true } label: {
                         Image(systemName: "person.badge.plus")
                     }
+                    .accessibilityLabel("Invite people")
                 }
             }
             .onChange(of: selectedTab) { _, tab in

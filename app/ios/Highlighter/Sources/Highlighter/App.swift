@@ -20,9 +20,20 @@ struct HighlighterApp: App {
                         Task { await ShareQueueProcessor.drain(app: store) }
                         return
                     }
+                    if ShareLinkRouter.route(url, store: store) {
+                        return
+                    }
                     // highlighter://nip46 callback brings us back from a signer app.
                     // Nothing to do — the actual pairing happens on the relay
                     // subscription started in the login view.
+                }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    // Universal link (https://beta.highlighter.com/highlight/…).
+                    // Requires the associated-domains entitlement plus an
+                    // apple-app-site-association file served by the domain.
+                    if let url = activity.webpageURL {
+                        ShareLinkRouter.route(url, store: store)
+                    }
                 }
         }
     }

@@ -52,6 +52,10 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.com.highlighter.app
+        # Universal links for share URLs. Requires an
+        # apple-app-site-association file on the domain.
+        com.apple.developer.associated-domains:
+          - applinks:beta.highlighter.com
     info:
       path: Sources/Highlighter/Info.plist
       properties:

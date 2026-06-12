@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 import UIKit
 
 /// Orchestrates capture → OCR + upload → review → publish.
@@ -114,8 +115,16 @@ final class CaptureStore {
 
                 let processed: ImageProcessing.Result
                 let lines: [OCRLine]
-                if let detection = PageSegmentation.detectActivePage(lines: initialLines),
-                   let cropped = try? ImageProcessing.cropToPage(initial, pageRect: detection.pageRect) {
+                let detection = PageSegmentation.detectActivePage(lines: initialLines)
+                var croppedResult: ImageProcessing.Result?
+                if let detection {
+                    do {
+                        croppedResult = try ImageProcessing.cropToPage(initial, pageRect: detection.pageRect)
+                    } catch {
+                        Logger.highlighter(category: "Capture").error("Page crop failed, using uncropped image: \(error.localizedDescription, privacy: .public)")
+                    }
+                }
+                if let detection, let cropped = croppedResult {
                     processed = cropped
                     lines = PageSegmentation.cropLines(initialLines, to: detection.pageRect)
                     if let croppedThumb = UIImage(data: cropped.data) {
@@ -319,7 +328,12 @@ final class CaptureStore {
               ) else {
             return []
         }
-        return (try? await OCRService.recognizeLines(in: cgImage)) ?? []
+        do {
+            return try await OCRService.recognizeLines(in: cgImage)
+        } catch {
+            Logger.highlighter(category: "Capture").error("OCR line recognition failed: \(error.localizedDescription, privacy: .public)")
+            return []
+        }
     }
 
     private func prepareHighlightedCrop(reupload: Bool) {

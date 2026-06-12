@@ -47,6 +47,7 @@ struct MediaSettingsView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
+                .accessibilityLabel("Add media server")
                 .disabled(store.mediaSettings.isSaving || store.mediaSettings.isLoading)
             }
             ToolbarItem(placement: .topBarLeading) {

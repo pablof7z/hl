@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// A single cue in a podcast transcript. Times are seconds from stream start.
 struct TranscriptSegment: Hashable, Identifiable, Sendable {
@@ -165,9 +166,14 @@ enum TranscriptParser {
     // MARK: - JSON
 
     private static func parseJson(source: String) -> [TranscriptSegment] {
-        guard let data = source.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data, options: [])
-        else { return [] }
+        guard let data = source.data(using: .utf8) else { return [] }
+        let json: Any
+        do {
+            json = try JSONSerialization.jsonObject(with: data, options: [])
+        } catch {
+            Logger.highlighter(category: "Transcript").error("Failed to parse JSON transcript: \(error.localizedDescription, privacy: .public)")
+            return []
+        }
         return findJsonSegments(json)
     }
 

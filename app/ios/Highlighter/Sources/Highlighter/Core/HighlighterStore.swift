@@ -115,6 +115,9 @@ final class HighlighterStore {
     }
 
     init() {
+        // Install the core's tracing subscriber before anything can log.
+        // Without this every tracing event in Rust is silently dropped.
+        initPlatformLogging()
         let nmpApp = HighlighterNmpApp(
             config: HighlighterAppConfig(dataDir: nil, visibleLimit: 250, emitHz: 30)
         )

@@ -51,6 +51,7 @@ struct KeysView: View {
                                 .frame(width: 28, height: 28)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(isRevealed ? "Hide secret key" : "Reveal secret key")
                     }
 
                     Button {

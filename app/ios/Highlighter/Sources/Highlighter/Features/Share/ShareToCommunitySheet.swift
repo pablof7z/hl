@@ -90,9 +90,9 @@ struct ShareToCommunityTarget: Identifiable {
         let image = metadata?.image.trimmingCharacters(in: .whitespacesAndNewlines)
         return ShareToCommunityTarget(
             kind: .urlShare(url: url.absoluteString),
-            displayTitle: title?.isEmpty == false ? title! : (url.host ?? url.absoluteString),
+            displayTitle: (title?.isEmpty == false ? title : nil) ?? url.host ?? url.absoluteString,
             displaySubtitle: description ?? "",
-            imageURL: image?.isEmpty == false ? URL(string: image!) : nil
+            imageURL: (image?.isEmpty == false ? image : nil).flatMap(URL.init(string:))
         )
     }
 

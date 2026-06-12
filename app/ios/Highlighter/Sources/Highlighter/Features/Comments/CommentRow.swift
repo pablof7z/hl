@@ -16,6 +16,10 @@ struct CommentRow: View {
     /// own author (article author, podcaster, …).
     let isAuthorReply: Bool
     let onTap: () -> Void
+    /// Pushes the comment author's profile. Owned by the parent so the push
+    /// lives in the enclosing NavigationStack (same contract as `onTap`).
+    /// When `nil` the "View profile" menu item is hidden.
+    var onViewProfile: ((String) -> Void)? = nil
 
     @Environment(HighlighterStore.self) private var app
 
@@ -119,6 +123,8 @@ struct CommentRow: View {
             }
             .padding(.top, 2)
             .opacity(liked ? 1.0 : 0.65)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(liked ? "Liked, \(count) likes" : "\(count) likes")
         }
     }
 
@@ -162,7 +168,13 @@ struct CommentRow: View {
         } label: {
             Label("Copy text", systemImage: "doc.on.doc")
         }
-        // Profile / mute hooks stub — no plumbing for v1.
+        if let onViewProfile {
+            Button {
+                onViewProfile(node.record.pubkey)
+            } label: {
+                Label("View profile", systemImage: "person.crop.circle")
+            }
+        }
     }
 
     // MARK: - Helpers

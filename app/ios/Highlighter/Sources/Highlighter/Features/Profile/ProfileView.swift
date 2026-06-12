@@ -109,6 +109,9 @@ private struct HeroBanner: View {
                         .resizable()
                         .scaledToFill()
                         .onTapGesture { showFullScreen = true }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityLabel("Profile banner")
+                        .accessibilityHint("View full screen")
                 } else {
                     fallback
                 }

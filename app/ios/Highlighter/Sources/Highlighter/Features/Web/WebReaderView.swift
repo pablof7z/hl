@@ -1,3 +1,4 @@
+import os
 import SwiftUI
 @preconcurrency import WebKit
 
@@ -151,9 +152,15 @@ private struct WebView: UIViewRepresentable {
 
     private static func loadReadabilitySource() -> String? {
         guard let url = Bundle.main.url(forResource: "Readability", withExtension: "js") else {
+            Logger.highlighter(category: "WebReader").error("Readability.js resource missing from bundle")
             return nil
         }
-        return try? String(contentsOf: url, encoding: .utf8)
+        do {
+            return try String(contentsOf: url, encoding: .utf8)
+        } catch {
+            Logger.highlighter(category: "WebReader").error("Failed to read bundled Readability.js: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 
     @MainActor
@@ -342,7 +349,13 @@ private struct WebView: UIViewRepresentable {
         /// Handles quotes that span multiple text nodes and elements. Works
         /// in both the original page and the reader-mode DOM.
         private static func buildHighlightScript(quote: String) -> String {
-            let encoded = try? JSONEncoder().encode(quote)
+            let encoded: Data?
+            do {
+                encoded = try JSONEncoder().encode(quote)
+            } catch {
+                Logger.highlighter(category: "WebReader").error("Failed to JSON-encode highlight quote for injection: \(error.localizedDescription, privacy: .public)")
+                encoded = nil
+            }
             let needleLiteral = encoded.flatMap { String(data: $0, encoding: .utf8) } ?? "\"\""
             return """
             (function() {

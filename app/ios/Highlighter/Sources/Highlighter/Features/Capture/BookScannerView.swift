@@ -115,6 +115,7 @@ struct BookScannerView: View {
                     .frame(width: 40, height: 40)
                     .background(.ultraThinMaterial, in: Circle())
             }
+            .accessibilityLabel("Cancel scan")
             Spacer()
             Text("Scan a book")
                 .font(.footnote.weight(.semibold))
@@ -253,7 +254,15 @@ struct CameraPreviewLayer: UIViewRepresentable {
         var onTap: ((CGPoint) -> Void)?
 
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
-        var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
+        var previewLayer: AVCaptureVideoPreviewLayer {
+            // `layerClass` guarantees this cast on the happy path; fall back to
+            // a detached layer rather than trapping if UIKit ever hands us
+            // something unexpected.
+            guard let layer = layer as? AVCaptureVideoPreviewLayer else {
+                return AVCaptureVideoPreviewLayer()
+            }
+            return layer
+        }
 
         override init(frame: CGRect) {
             super.init(frame: frame)

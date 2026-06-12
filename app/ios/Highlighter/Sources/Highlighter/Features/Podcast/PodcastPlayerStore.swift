@@ -419,9 +419,12 @@ final class PodcastPlayerStore {
             lastPlayedAt: Date(),
             snapshot: ArtifactSnapshot(from: artifact)
         )
-        if let data = try? JSONEncoder().encode(record) {
+        do {
+            let data = try JSONEncoder().encode(record)
             UserDefaults.standard.set(data, forKey: Self.positionDefaultsKey)
             lastPersistedPosition = currentTime
+        } catch {
+            logger.error("Failed to encode podcast position record for guid \(guid, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -437,7 +440,12 @@ final class PodcastPlayerStore {
 
     private func loadPositionRecord() -> PositionRecord? {
         guard let data = UserDefaults.standard.data(forKey: Self.positionDefaultsKey) else { return nil }
-        return try? JSONDecoder().decode(PositionRecord.self, from: data)
+        do {
+            return try JSONDecoder().decode(PositionRecord.self, from: data)
+        } catch {
+            logger.error("Failed to decode persisted podcast position record: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 
     /// Cold-launch rehydration. Surfaces the MiniPlayer in a paused state with
