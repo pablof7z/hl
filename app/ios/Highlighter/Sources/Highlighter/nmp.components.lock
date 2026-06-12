@@ -1,0 +1,38 @@
+schema_version = 1
+
+[[components]]
+id = "swiftui/user-avatar"
+version = "0.1.0"
+registry = "nmp-local"
+target = "swiftui"
+
+[[components.files]]
+path = "Components/NostrUser/ProfileWire.swift"
+role = "source"
+source = "swiftui/user-avatar/ProfileWire.swift"
+source_sha256 = "407e25e00b4a05d6eb7d4d7b11221e3c4dcd1591f7f07d3a81aabb161aa76c46"
+
+[[components.files]]
+path = "Components/NostrUser/NostrProfileHost.swift"
+role = "source"
+source = "swiftui/user-avatar/NostrProfileHost.swift"
+source_sha256 = "c619939b5158324e428e95ad9638cf48f74b4df3f95158eca61fe8c9b453b81b"
+
+[[components.files]]
+path = "Components/NostrUser/NostrAvatar.swift"
+role = "source"
+source = "swiftui/user-avatar/NostrAvatar.swift"
+source_sha256 = "be3a4fe36868e30d64742df622050062e5513e76484366d7890320a55cc86c32"
+
+[[components]]
+id = "swiftui/user-name"
+version = "0.1.0"
+registry = "nmp-local"
+target = "swiftui"
+
+[[components.files]]
+path = "Components/NostrUser/NostrProfileName.swift"
+role = "source"
+source = "swiftui/user-name/NostrProfileName.swift"
+source_sha256 = "e6b2c28fb949cde89954add01e5f6e11ad8a72b270d1fde9ba20e09ed932dddf"
+

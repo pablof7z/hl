@@ -48,9 +48,6 @@ struct HighlightFeedCardView: View {
             highlightsBody
         }
         .padding(.vertical, 18)
-        .task(id: lead.highlight.pubkey) {
-            app.requestProfile(pubkeyHex: lead.highlight.pubkey)
-        }
         .task(id: lead.highlight.artifactAddress + lead.highlight.externalReference) {
             await resolveSource()
         }
@@ -154,18 +151,10 @@ struct HighlightFeedCardView: View {
         HStack(spacing: 8) {
             HStack(spacing: -6) {
                 ForEach(uniqueHighlighters.prefix(3), id: \.highlight.pubkey) { h in
-                    AuthorAvatar(
-                        pubkey: h.highlight.pubkey,
-                        pictureURL: app.profile(pubkeyHex: h.highlight.pubkey)?.picture ?? "",
-                        displayInitial: initial(for: h.highlight.pubkey),
-                        size: 20
-                    )
-                    .overlay(
-                        Circle().stroke(Color.highlighterPaperTint, lineWidth: 1.5)
-                    )
-                    .task(id: h.highlight.pubkey) {
-                        app.requestProfile(pubkeyHex: h.highlight.pubkey)
-                    }
+                    NostrAvatar(pubkey: h.highlight.pubkey, size: 20)
+                        .overlay(
+                            Circle().stroke(Color.highlighterPaperTint, lineWidth: 1.5)
+                        )
                 }
                 if uniqueHighlighters.count > 3 {
                     ZStack {
@@ -323,16 +312,12 @@ struct HighlightFeedCardView: View {
 
     private func highlighterByline(for h: HydratedHighlight) -> some View {
         HStack(spacing: 8) {
-            AuthorAvatar(
-                pubkey: h.highlight.pubkey,
-                pictureURL: app.profile(pubkeyHex: h.highlight.pubkey)?.picture ?? "",
-                displayInitial: initial(for: h.highlight.pubkey),
-                size: 22
+            NostrAvatar(pubkey: h.highlight.pubkey, size: 22)
+            NostrProfileName(
+                profile: profileWire(for: h.highlight.pubkey),
+                font: .footnote.weight(.semibold),
+                color: Color.highlighterInkStrong
             )
-            Text(displayName(for: h.highlight.pubkey))
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.highlighterInkStrong)
-                .lineLimit(1)
             if let rel = relativeDate(h.highlight.createdAt) {
                 Text("·").foregroundStyle(Color.highlighterInkMuted)
                 Text(rel)
@@ -341,9 +326,6 @@ struct HighlightFeedCardView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
-        }
-        .task(id: h.highlight.pubkey) {
-            app.requestProfile(pubkeyHex: h.highlight.pubkey)
         }
     }
 
@@ -552,8 +534,14 @@ struct HighlightFeedCardView: View {
         return String(pubkey.prefix(10))
     }
 
-    private func initial(for pubkey: String) -> String {
-        displayName(for: pubkey).first.map { String($0).uppercased() } ?? "?"
+    /// `ProfileWire` for the NMP name/avatar components. Falls back to the
+    /// pubkey-hex `npubShort` when the kernel hasn't resolved a kind:0 yet, so
+    /// the label matches the legacy rendering until the profile lands.
+    private func profileWire(for pubkey: String) -> ProfileWire {
+        if let meta = app.profile(pubkeyHex: pubkey) {
+            return HighlighterStore.profileWire(from: meta, pubkeyHex: pubkey)
+        }
+        return ProfileWire(pubkey: pubkey, npub: pubkey, npubShort: String(pubkey.prefix(10)))
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
@@ -639,9 +627,6 @@ private struct HighlightQuoteCard: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.highlighterPaper)
         )
-        .task(id: highlight.highlight.pubkey) {
-            app.requestProfile(pubkeyHex: highlight.highlight.pubkey)
-        }
     }
 
     private var quoteBlock: some View {
@@ -674,16 +659,12 @@ private struct HighlightQuoteCard: View {
 
     private var byline: some View {
         HStack(spacing: 7) {
-            AuthorAvatar(
-                pubkey: highlight.highlight.pubkey,
-                pictureURL: app.profile(pubkeyHex: highlight.highlight.pubkey)?.picture ?? "",
-                displayInitial: initial,
-                size: 22
+            NostrAvatar(pubkey: highlight.highlight.pubkey, size: 22)
+            NostrProfileName(
+                profile: profileWire,
+                font: .caption.weight(.semibold),
+                color: Color.highlighterInkStrong
             )
-            Text(name)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.highlighterInkStrong)
-                .lineLimit(1)
             if let rel = relative {
                 Text("·")
                     .font(.caption2)
@@ -697,15 +678,12 @@ private struct HighlightQuoteCard: View {
         }
     }
 
-    private var name: String {
-        let profile = app.profile(pubkeyHex: highlight.highlight.pubkey)
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(highlight.highlight.pubkey.prefix(10))
-    }
-
-    private var initial: String {
-        name.first.map { String($0).uppercased() } ?? "?"
+    private var profileWire: ProfileWire {
+        let pubkey = highlight.highlight.pubkey
+        if let meta = app.profile(pubkeyHex: pubkey) {
+            return HighlighterStore.profileWire(from: meta, pubkeyHex: pubkey)
+        }
+        return ProfileWire(pubkey: pubkey, npub: pubkey, npubShort: String(pubkey.prefix(10)))
     }
 
     private var relative: String? {

@@ -8,6 +8,7 @@ struct HighlighterApp: App {
         WindowGroup {
             RootSceneView()
                 .environment(store)
+                .environment(\.nostrProfileHost, store)
                 .sheet(isPresented: whatsNewPresented) {
                     WhatsNewSheet(
                         entries: store.nmpState.whatsNew.entries,
