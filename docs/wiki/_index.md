@@ -11,11 +11,12 @@ Last updated: 2026-06-12
 | [android-build](android-build.md) | Android Build & CI | The Android app targets only the arm64-v8a ABI | capture | warm | 2026-06-12 | android-build |
 | [android-professionalization](android-professionalization.md) | Android App Professionalization | The Android app must be professionalized from a single-file reference implementation into a real, production-quality app, fixed properly and completely with no | capture | warm | 2026-06-12 | android-build |
 
-## build-system (1 guide)
+## build-system (2 guides)
 
 | Slug | Title | Summary | Tags | Volatility | Verified | Topic |
 |------|-------|---------|------|------------|----------|-------|
 | [build-system](build-system.md) | Build System | Debug APKs are placed at ~/Builds/app-debug.apk | capture | warm | 2026-06-12 | build-system |
+| [build-system-baseline-refresh](build-system-baseline-refresh.md) | Build System Baseline Refresh | File-size baseline violations caused by master's own drift are resolved by a separate post-merge baseline-refresh PR, following the precedent of PR #1196 for #1 | capture | warm | 2026-06-12 | build-system |
 
 ## native-dependencies (5 guides)
 

@@ -19,14 +19,14 @@ sources:
 
 ## Purpose
 
-NMP (nostr-multi-platform) provides first-class NIP-11 relay info (name, icon, description, pubkey, contact, software, version, supported_nips, payment_required, auth_required, restricted_writes) through the relay_diagnostics projection, eliminating the need for apps to perform their own HTTP fetching or NIP-11 parsing. Relay list rows display the relay icon from the NIP-11 document. NIP-11 fetching and parsing is implemented entirely within NMP, not in Highlighter; Highlighter apps receive relay info through NMP's diagnostics surface with zero awareness of NIP-11.
+NMP (nostr-multi-platform) provides first-class NIP-11 relay info (name, icon, description, pubkey, contact, software, version, supported_nips, payment_required, auth_required, restricted_writes) through the relay_diagnostics projection, eliminating the need for apps to perform their own HTTP fetching or NIP-11 parsing. Relay list rows display the relay icon from the NIP-11 document, falling back to a monogram when no icon is available. NIP-11 fetching and parsing is implemented entirely within NMP, not in Highlighter; Highlighter apps receive relay info through NMP's diagnostics surface with zero awareness of NIP-11.
 
-<!-- citations: [^f54b4-3] [^f54b4-10] [^f54b4-20] -->
+<!-- citations: [^f54b4-3] [^f54b4-10] [^f54b4-20] [^f54b4-26] -->
 ## Highlighter Integration
 
-After NMP PR #1195 merges and releases, Highlighter deletes relay_polish.rs and the ProbeNetworkRelayNip11 action plumbing, maps NMP-provided row.info into the existing network.nip11 projection, and routes the add-relay preview through NMP's probe API. The FFI-visible shape of relay info stays identical across the integration, so iOS and Android need zero app-side changes to display NIP-11 data.
+After NMP PR #1195 merges and releases, Highlighter deletes relay_polish.rs and the ProbeNetworkRelayNip11 action plumbing, maps NMP-provided row.info into the existing network.nip11 projection, and routes the add-relay preview through NMP's probe API. The Highlighter runtime re-emits a relay delta when a NIP-11 document arrives so the UI updates live. The FFI-visible shape of relay info stays identical across the integration, so iOS and Android need zero app-side changes to display NIP-11 data.
 
-<!-- citations: [^f54b4-4] [^f54b4-11] [^f54b4-21] -->
+<!-- citations: [^f54b4-4] [^f54b4-11] [^f54b4-21] [^f54b4-27] -->
 ## Fetching & Caching
 
 NIP-11 data is automatically fetched when a relay connects, cached with a 5-minute per-URL TTL, and also available via an on-demand C-ABI probe API for add-relay preview flows (URLs not yet in the pool). The HTTP fetch runs off-thread with a 64 KiB response cap and a 10-second timeout, keeping the actor non-blocking. Relay probe operations are keyed by a stable hash of the relay URL so that different relays probe independently while re-probing the same URL supersedes the previous in-flight probe.
@@ -44,9 +44,9 @@ The C-ABI probe function (nmp_app_probe_relay_info) uses the borrowed-during-cal
 <!-- citations: [^f54b4-7] [^f54b4-15] [^f54b4-23] -->
 ## Release Packaging
 
-The nmp-nip11 crate is registered in the release manifest (release/nmp-release.toml) in NIP-number order, and the Cargo.lock version for nmp-nip11 inherits from the workspace (0.6.0).
+The nmp-nip11 crate is registered as a public crate in the release manifest (release/nmp-release.toml), placed between nip02 and nip17 in NIP-number order. The Cargo.lock version for nmp-nip11 inherits from the workspace (0.6.0). NMP version nmp-v0.6.1 is released with the NIP-11 feature, tagged on master after version bump, CHANGELOG, and all release gates passed.
 
-<!-- citations: [^f54b4-8] [^f54b4-16] -->
+<!-- citations: [^f54b4-8] [^f54b4-16] [^f54b4-28] -->
 ## Codegen & Schema Gating
 
 The RelayStatus.info field (of type Option<RelayInfoDoc>) is gated out of the codegen-schema JSON schema with schemars(skip), because iOS consumes relay info via the diagnostics projection and FlatBuffers sidecar, not through the flat KernelTypes.generated.swift mirror; thus zero Swift types change. <!-- [^f54b4-14] -->
