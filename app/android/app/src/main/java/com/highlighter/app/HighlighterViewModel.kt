@@ -103,6 +103,17 @@ class HighlighterViewModel(application: Application) :
                             clearStoredOnFailure = true,
                         ),
                     )
+                is HighlighterSessionCredential.Nip55SignerPackage ->
+                    // Restore NIP-55: pass the stored signer_package so Rust can
+                    // re-issue get_public_key without prompting for app selection.
+                    // persist=false (already stored); clearStoredOnFailure=true so
+                    // a revoked package doesn't retry forever.
+                    app.dispatch(
+                        HighlighterAppAction.SignInNip55(
+                            signerPackage = credential.signerPackage,
+                            persist = false,
+                        ),
+                    )
             }
         }
     }
@@ -113,6 +124,22 @@ class HighlighterViewModel(application: Application) :
 
     fun dispatch(action: HighlighterAppAction) {
         app.dispatch(action)
+    }
+
+    /**
+     * Drain one pending signer request from Rust. Returns JSON-serialised
+     * `ExternalSignerRequest` or null when the channel is empty.
+     * Called by the signer-request drain thread in MainActivity.
+     */
+    fun nextSignerRequest(): String? = app.nextSignerRequest()
+
+    /**
+     * Deliver a raw `ExternalSignerResponse` JSON back to Rust.
+     * Called by `ExternalSignerCapabilityBridge` after the Intent/ContentResolver
+     * round-trip completes. D7: the host never interprets the payload.
+     */
+    fun deliverExternalSignerResponse(responseJson: String) {
+        app.dispatch(HighlighterAppAction.DeliverExternalSignerResponse(responseJson))
     }
 
     /**

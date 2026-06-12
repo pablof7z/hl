@@ -12,7 +12,7 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -34,9 +34,11 @@ use nmp_core::{
 };
 use nmp_defaults::{NmpAppBuilder, RunConfig};
 use nmp_ffi::{
-    nmp_app_add_relay, nmp_app_dispatch_action, nmp_app_free, nmp_app_lifecycle_background,
-    nmp_app_lifecycle_foreground, nmp_app_nostrconnect_uri, nmp_app_remove_relay,
-    nmp_app_set_update_callback, nmp_free_string, nmp_signer_broker_init, NmpApp,
+    nmp_app_add_relay, nmp_app_deliver_external_signer_response, nmp_app_dispatch_action,
+    nmp_app_free, nmp_app_lifecycle_background, nmp_app_lifecycle_foreground,
+    nmp_app_nostrconnect_uri, nmp_app_remove_relay, nmp_app_set_capability_callback,
+    nmp_app_set_update_callback, nmp_app_signin_nip55, nmp_external_signer_init, nmp_free_string,
+    nmp_signer_broker_init, NmpApp,
 };
 use nostr_sdk::prelude::*;
 use nostrdb::Ndb;
@@ -57,6 +59,16 @@ const NMP_ACTION_RESULT_CACHE_LIMIT: usize = 128;
 
 type EventCallbackSlot = Arc<RwLock<Option<Arc<dyn EventCallback>>>>;
 
+/// NIP-55 external-signer request channel capacity. Deep enough that the
+/// Kotlin reader never drops a request under normal interaction latencies
+/// (one request per user action), tight enough to backpressure a runaway
+/// dispatch loop.
+const NMP_SIGNER_REQUEST_CAPACITY: usize = 16;
+
+/// Wire constant — matches `nmp_signer_iface::EXTERNAL_SIGNER_NAMESPACE`.
+/// Used in the capability trampoline without importing `nmp-signer-iface`.
+const EXTERNAL_SIGNER_NAMESPACE: &str = "external_signer";
+
 /// Thin owner for the actor-backed NMP runtime.
 pub(crate) struct HighlighterNmpRuntime {
     app: NonNull<NmpApp>,
@@ -75,6 +87,21 @@ pub(crate) struct HighlighterNmpRuntime {
     typed_projection_drain_lock: Arc<Mutex<()>>,
     raw_mirror_id: RawEventObserverId,
     raw_mirror_worker: Option<JoinHandle<()>>,
+    /// Outbound channel for NIP-55 `ExternalSignerRequest` JSON payloads.
+    ///
+    /// The C capability trampoline (registered with the kernel's capability
+    /// socket) pushes the `payload_json` of every `external_signer`
+    /// `CapabilityRequest` here. The Kotlin side drains it via
+    /// `next_signer_request` and routes each payload through
+    /// `ExternalSignerCapabilityBridge.handleJson`. The `SyncSender` is
+    /// held by the trampoline context (see `ExternalSignerContext`); this
+    /// receiver is the Kotlin-drain end.
+    signer_request_rx: Mutex<Receiver<String>>,
+    /// Keep-alive for the C capability callback context pointer.
+    /// The trampoline reads this Arc via raw pointer; it must remain valid
+    /// until `nmp_app_set_capability_callback(app, null, None)` is called
+    /// in `Drop` before this field is released.
+    _external_signer_ctx: Arc<ExternalSignerContext>,
 }
 
 // SAFETY: `NmpApp` is actor-backed and explicitly designed for cross-thread
@@ -89,6 +116,11 @@ impl Drop for HighlighterNmpRuntime {
         // guarantees no in-flight invocation after it returns, so the context
         // pointer (`update_frames`) can never be used past this point.
         nmp_app_set_update_callback(self.app.as_ptr(), std::ptr::null_mut(), None);
+        // Unregister the capability callback (NIP-55 trampoline) before
+        // releasing `_external_signer_ctx` — same quiescence guarantee as
+        // the update callback: no in-flight trampoline invocation can race
+        // against the context Arc's destructor.
+        nmp_app_set_capability_callback(self.app.as_ptr(), std::ptr::null_mut(), None);
         self.action_result_stop.store(true, Ordering::Release);
         let _ = self.action_result_wake.try_send(());
         if let Some(worker) = self.action_result_worker.take() {
@@ -102,6 +134,116 @@ impl Drop for HighlighterNmpRuntime {
         }
         nmp_app_free(self.app.as_ptr());
     }
+}
+
+/// Context for the NIP-55 capability trampoline.
+///
+/// The trampoline `extern "C"` fn cannot capture state, so it accesses
+/// this struct via the `context` pointer registered alongside the callback.
+/// The Arc is kept alive by `HighlighterNmpRuntime::_external_signer_ctx`;
+/// `Drop` unregisters the callback (with quiescence) before releasing it.
+struct ExternalSignerContext {
+    /// Bounded channel into which the trampoline pushes `ExternalSignerRequest`
+    /// JSON payloads. The Kotlin side drains via `next_signer_request`.
+    tx: SyncSender<String>,
+}
+
+/// Capability trampoline registered with the NMP kernel for NIP-55.
+///
+/// Runs on whichever Rust thread dispatches the capability (D6: never
+/// panics, never returns NULL for non-NULL inputs; errors are data).
+/// Non-`external_signer` namespaces return an error envelope — hl does
+/// not use any other capability namespace today (no Android keyring yet).
+///
+/// # Safety
+///
+/// `context` is the `Arc<ExternalSignerContext>` registered in
+/// `HighlighterNmpRuntime::new`. The runtime clears the registration (with
+/// quiescence) in Drop before releasing the Arc, so the pointer is always
+/// valid while this function can be called.
+extern "C" fn on_capability_request(
+    context: *mut std::ffi::c_void,
+    request_json: *const std::ffi::c_char,
+) -> *mut std::ffi::c_char {
+    use std::ffi::CString;
+
+    if context.is_null() || request_json.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    // SAFETY: guaranteed by the Drop quiescence contract above.
+    let ctx = unsafe { &*(context as *const ExternalSignerContext) };
+
+    // SAFETY: caller (nmp-ffi dispatcher) guarantees valid NUL-terminated
+    // string for the duration of the call.
+    let request = unsafe { std::ffi::CStr::from_ptr(request_json) }
+        .to_string_lossy()
+        .into_owned();
+
+    let parsed: serde_json::Value = serde_json::from_str(&request).unwrap_or_default();
+    let namespace = parsed
+        .get("namespace")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let correlation_id = parsed
+        .get("correlation_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    if namespace != EXTERNAL_SIGNER_NAMESPACE {
+        // hl has no other capability namespace today — report the gap as an
+        // error envelope so Rust surfaces it as `signer_state: unavailable`
+        // (D6: errors are data, not exceptions).
+        let envelope = serde_json::json!({
+            "namespace": namespace,
+            "correlation_id": correlation_id,
+            "result_json": r#"{"status":"error","reason":"no-capability-handler"}"#,
+        });
+        return CString::new(envelope.to_string())
+            .unwrap_or_else(|_| c"{}".to_owned())
+            .into_raw();
+    }
+
+    let Some(payload) = parsed.get("payload_json").and_then(|v| v.as_str()) else {
+        let envelope = serde_json::json!({
+            "namespace": EXTERNAL_SIGNER_NAMESPACE,
+            "correlation_id": correlation_id,
+            "result_json": r#"{"status":"error","reason":"missing-payload"}"#,
+        });
+        return CString::new(envelope.to_string())
+            .unwrap_or_else(|_| c"{}".to_owned())
+            .into_raw();
+    };
+
+    // Push onto the outbound channel (best-effort; a full channel — more than
+    // NMP_SIGNER_REQUEST_CAPACITY concurrent requests — is a backpressure
+    // signal and degrades to timeout on the Rust side, D6).
+    match ctx.tx.try_send(payload.to_string()) {
+        Ok(()) | Err(TrySendError::Full(_)) => {}
+        Err(TrySendError::Disconnected(_)) => {
+            // Receiver dropped (runtime shutting down) — error envelope.
+            let envelope = serde_json::json!({
+                "namespace": EXTERNAL_SIGNER_NAMESPACE,
+                "correlation_id": correlation_id,
+                "result_json": r#"{"status":"error","reason":"session-closed"}"#,
+            });
+            return CString::new(envelope.to_string())
+                .unwrap_or_else(|_| c"{}".to_owned())
+                .into_raw();
+        }
+    }
+
+    // Ack: the dispatch is queued; the actual IPC result comes later via
+    // `deliver_external_signer_response` (D7: the host fires and reports).
+    let ack = serde_json::json!({
+        "namespace": EXTERNAL_SIGNER_NAMESPACE,
+        "correlation_id": correlation_id,
+        "result_json": r#"{"status":"dispatched"}"#,
+    });
+    CString::new(ack.to_string())
+        .unwrap_or_else(|_| c"{}".to_owned())
+        .into_raw()
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -548,6 +690,21 @@ impl HighlighterNmpRuntime {
             ));
         }
 
+        // NIP-55 external-signer (ADR-0048 Stage 2).
+        // Register the capability trampoline before `nmp_external_signer_init`
+        // so the first `get_public_key` dispatch has a handler.
+        let (signer_request_tx, signer_request_rx) =
+            sync_channel::<String>(NMP_SIGNER_REQUEST_CAPACITY);
+        let external_signer_ctx = Arc::new(ExternalSignerContext {
+            tx: signer_request_tx,
+        });
+        nmp_app_set_capability_callback(
+            app.as_ptr(),
+            Arc::as_ptr(&external_signer_ctx) as *mut std::ffi::c_void,
+            Some(on_capability_request),
+        );
+        nmp_external_signer_init(app.as_ptr());
+
         Ok(Self {
             app,
             storage_dir,
@@ -562,6 +719,8 @@ impl HighlighterNmpRuntime {
             typed_projection_drain_lock,
             raw_mirror_id,
             raw_mirror_worker: Some(raw_mirror_worker),
+            signer_request_rx: Mutex::new(signer_request_rx),
+            _external_signer_ctx: external_signer_ctx,
         })
     }
 
@@ -666,6 +825,56 @@ impl HighlighterNmpRuntime {
         self.app_ref()
             .add_signer(SignerSource::BunkerUri(uri.to_string()), true);
         Ok(())
+    }
+
+    /// Begin a NIP-55 sign-in (ADR-0048 D2).
+    ///
+    /// Triggers the `Nip55Driver` to build and dispatch a `get_public_key`
+    /// + permission-batch `ExternalSignerRequest` through the registered
+    /// capability callback (the `on_capability_request` trampoline). The
+    /// trampoline pushes the payload onto `signer_request_rx`; the Kotlin
+    /// side drains it via `next_signer_request` and routes it to
+    /// `ExternalSignerCapabilityBridge.handleJson`.
+    ///
+    /// `signer_package` is the Android package name of the signer app (e.g.
+    /// `com.greenart7c3.nostrsigner` for Amber). `None` lets the OS resolver
+    /// pick any installed NIP-55 signer.
+    pub(crate) fn sign_in_nip55(&self, signer_package: Option<&str>) {
+        let package = signer_package
+            .filter(|s| !s.trim().is_empty())
+            .and_then(|s| CString::new(s).ok());
+        nmp_app_signin_nip55(
+            self.app.as_ptr(),
+            package.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+        );
+    }
+
+    /// Deliver a raw `ExternalSignerResponse` JSON back to the NIP-55 driver
+    /// (D7 — verbatim; the driver owns correlation routing and all policy).
+    ///
+    /// Called by the Kotlin `ExternalSignerCapabilityBridge` after the Intent
+    /// round-trip or ContentResolver query completes.
+    pub(crate) fn deliver_external_signer_response(&self, response_json: &str) {
+        let response = match CString::new(response_json) {
+            Ok(c) => c,
+            Err(_) => return, // interior NUL — D6: silently drop
+        };
+        nmp_app_deliver_external_signer_response(self.app.as_ptr(), response.as_ptr());
+    }
+
+    /// Drain the next outbound `ExternalSignerRequest` JSON payload (D7 —
+    /// raw bytes from Rust; Kotlin decides nothing).
+    ///
+    /// - Returns `Some(json)` when a request is available immediately.
+    /// - Returns `None` on idle tick (no request pending).
+    ///
+    /// Designed for a Kotlin worker thread that loops calling this method
+    /// and routing each payload to `ExternalSignerCapabilityBridge.handleJson`.
+    pub(crate) fn next_signer_request(&self) -> Option<String> {
+        self.signer_request_rx
+            .lock()
+            .try_recv()
+            .ok()
     }
 
     pub(crate) async fn sign_unsigned_event(

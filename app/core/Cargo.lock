@@ -1673,7 +1673,7 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
 name = "nmp-blossom"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "base64",
  "nmp-core",
@@ -1688,7 +1688,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-content"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "flatbuffers 25.12.19",
  "nmp-core",
@@ -1701,7 +1701,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-core"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "bech32",
  "chrono",
@@ -1725,11 +1725,11 @@ dependencies = [
 
 [[package]]
 name = "nmp-coverage-gate"
-version = "0.5.0"
+version = "0.6.1"
 
 [[package]]
 name = "nmp-defaults"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "nmp-content",
  "nmp-core",
@@ -1738,7 +1738,9 @@ dependencies = [
  "nmp-ffi",
  "nmp-nip01",
  "nmp-nip02",
+ "nmp-nip11",
  "nmp-nip17",
+ "nmp-nip51",
  "nmp-nip57",
  "nmp-nip77",
  "nmp-router",
@@ -1750,7 +1752,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-feed"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "flatbuffers 25.12.19",
  "nmp-core",
@@ -1762,7 +1764,7 @@ dependencies = [
 [[package]]
 name = "nmp-feedback"
 version = "0.1.0"
-source = "git+https://github.com/pablof7z/nmp-feedback.git?rev=3d238e6e3750ca4473ea24c5f29d26c9faa3ccd6#3d238e6e3750ca4473ea24c5f29d26c9faa3ccd6"
+source = "git+https://github.com/pablof7z/nmp-feedback.git?rev=fc0589fc88d61912779741fcce7d4e7176cf9a30#fc0589fc88d61912779741fcce7d4e7176cf9a30"
 dependencies = [
  "serde",
  "serde_json",
@@ -1770,7 +1772,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-ffi"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "nmp-core",
  "nmp-feed",
@@ -1785,11 +1787,11 @@ dependencies = [
 
 [[package]]
 name = "nmp-kinds"
-version = "0.5.0"
+version = "0.6.1"
 
 [[package]]
 name = "nmp-network"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "js-sys",
  "mio",
@@ -1803,7 +1805,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-nip01"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "flatbuffers 25.12.19",
  "nmp-content",
@@ -1818,7 +1820,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-nip02"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "flatbuffers 25.12.19",
  "nmp-core",
@@ -1828,8 +1830,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "nmp-nip11"
+version = "0.6.1"
+dependencies = [
+ "nmp-core",
+ "serde",
+ "serde_json",
+ "tracing",
+ "ureq 2.12.1",
+]
+
+[[package]]
 name = "nmp-nip17"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "flatbuffers 25.12.19",
  "nmp-core",
@@ -1843,7 +1856,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-nip18"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "nmp-core",
  "serde",
@@ -1852,7 +1865,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-nip29"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "flatbuffers 25.12.19",
  "nmp-core",
@@ -1863,7 +1876,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-nip42-types"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -1871,7 +1884,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-nip47"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "flatbuffers 25.12.19",
  "nmp-core",
@@ -1884,8 +1897,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nmp-nip51"
+version = "0.6.1"
+dependencies = [
+ "nmp-core",
+ "nmp-kinds",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "nmp-nip57"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "bech32",
  "flatbuffers 25.12.19",
@@ -1901,7 +1924,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-nip59"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "futures",
  "nmp-kinds",
@@ -1911,7 +1934,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-nip77"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "negentropy",
  "nmp-core",
@@ -1922,7 +1945,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-nostr-lmdb"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "async-utility",
  "flume",
@@ -1935,7 +1958,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-nwc"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "base64",
  "nostr",
@@ -1946,7 +1969,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-planner"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -1954,7 +1977,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-router"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "nmp-core",
  "nmp-kinds",
@@ -1964,7 +1987,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-signer-broker"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "nmp-network",
  "nmp-signer-iface",
@@ -1977,14 +2000,14 @@ dependencies = [
 
 [[package]]
 name = "nmp-signer-iface"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "nmp-signers"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "js-sys",
  "nmp-core",
@@ -2001,7 +2024,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-store"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "heed",
  "nmp-nostr-lmdb",
@@ -2010,11 +2033,12 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "web-time",
 ]
 
 [[package]]
 name = "nmp-threading"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "nmp-core",
  "serde",
@@ -2023,7 +2047,7 @@ dependencies = [
 
 [[package]]
 name = "nmp-wot"
-version = "0.5.0"
+version = "0.6.1"
 dependencies = [
  "flatbuffers 25.12.19",
  "nmp-core",

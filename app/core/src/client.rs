@@ -226,6 +226,30 @@ impl HighlighterCore {
         Ok(user)
     }
 
+    /// Begin a NIP-55 (Amber / external signer) sign-in (ADR-0048 Stage 2).
+    ///
+    /// Delegates to `HighlighterNmpRuntime::sign_in_nip55`; does not block.
+    /// The `SignerConnected` delta fires once the NIP-55 driver resolves the
+    /// `get_public_key` handshake and issues `AddSigner` into the actor.
+    pub fn nmp_sign_in_nip55(&self, signer_package: Option<&str>) {
+        self.runtime.nmp_sign_in_nip55(signer_package);
+    }
+
+    /// Deliver a raw `ExternalSignerResponse` JSON to the NIP-55 driver (D7).
+    pub fn nmp_deliver_external_signer_response(&self, response_json: &str) {
+        self.runtime.nmp_deliver_external_signer_response(response_json);
+    }
+
+    /// Drain the next outbound `ExternalSignerRequest` JSON payload from the
+    /// capability trampoline channel. Returns `None` when no request is
+    /// pending (idle tick).
+    ///
+    /// The Kotlin side calls this in a polling loop from a background thread
+    /// and routes each payload to `ExternalSignerCapabilityBridge.handleJson`.
+    pub fn nmp_next_signer_request(&self) -> Option<String> {
+        self.runtime.nmp_next_signer_request()
+    }
+
     // -- Subscriptions --
 
     pub fn set_event_callback(&self, callback: Arc<dyn EventCallback>) {

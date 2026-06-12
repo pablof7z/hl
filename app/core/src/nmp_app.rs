@@ -1164,6 +1164,21 @@ pub enum HighlighterAppAction {
         persist: bool,
         clear_stored_on_failure: bool,
     },
+    /// Begin a NIP-55 (Amber / external signer) sign-in (ADR-0048).
+    ///
+    /// `signer_package` is the Android package name of the signer app (e.g.
+    /// `com.greenart7c3.nostrsigner` for Amber). `None` lets the OS resolver
+    /// pick any installed NIP-55 signer. `persist` controls whether the
+    /// `Nip55SignerPackage` credential is persisted after a successful sign-in.
+    SignInNip55 {
+        signer_package: Option<String>,
+        persist: bool,
+    },
+    /// Deliver a raw `ExternalSignerResponse` JSON from the Kotlin
+    /// `ExternalSignerCapabilityBridge` back to the NIP-55 driver (D7).
+    DeliverExternalSignerResponse {
+        response_json: String,
+    },
     SetCreateAccountDisplayName {
         display_name: String,
     },
@@ -1515,6 +1530,8 @@ impl HighlighterAppAction {
             Self::AppForegrounded => "app_foregrounded",
             Self::SignInNsec { .. } => "sign_in_nsec",
             Self::PairBunker { .. } => "pair_bunker",
+            Self::SignInNip55 { .. } => "sign_in_nip55",
+            Self::DeliverExternalSignerResponse { .. } => "deliver_external_signer_response",
             Self::SetCreateAccountDisplayName { .. } => "set_create_account_display_name",
             Self::SetCreateAccountUsername { .. } => "set_create_account_username",
             Self::SubmitCreateAccount => "submit_create_account",
@@ -1667,6 +1684,12 @@ impl HighlighterAppAction {
 pub enum HighlighterSessionCredential {
     Nsec { nsec: String },
     BunkerUri { uri: String },
+    /// NIP-55 external-signer (Amber). Persists only the signer app's
+    /// package name; no key material ever enters the Rust process (ADR-0048
+    /// D4). On next launch the host restores this credential and calls
+    /// `signInNip55` so NMP reconstructs the `Nip55Signer` without a
+    /// fresh user interaction.
+    Nip55SignerPackage { signer_package: String },
 }
 
 #[uniffi::export(with_foreign)]
@@ -1832,6 +1855,16 @@ impl HighlighterNmpApp {
 
     pub fn clear_core_event_callback(&self) {
         *self.core_event_callback.write() = None;
+    }
+
+    /// Drain the next outbound `ExternalSignerRequest` JSON payload from the
+    /// NIP-55 capability trampoline channel (ADR-0048 Stage 2).
+    ///
+    /// Returns `None` when no request is pending (idle tick). The Kotlin side
+    /// calls this in a polling loop from a background thread and routes each
+    /// payload to `ExternalSignerCapabilityBridge.handleJson`.
+    pub fn next_signer_request(&self) -> Option<String> {
+        self.core.nmp_next_signer_request()
     }
 }
 
@@ -3463,6 +3496,48 @@ fn handle_action(
                     }
                 },
             );
+        }
+        HighlighterAppAction::SignInNip55 {
+            signer_package,
+            persist,
+        } => {
+            // NIP-55 sign-in (ADR-0048 Stage 2). Fire-and-forget: the
+            // `Nip55Driver` inside nmp-ffi drives the `get_public_key`
+            // handshake through the registered capability callback trampoline.
+            // The host Kotlin layer drains the signer-request channel
+            // (`next_signer_request`) and delivers results back via
+            // `DeliverExternalSignerResponse`.
+            //
+            // `is_signing_in` is set to true so the login UI shows a spinner
+            // while the Amber Intent round-trip is in progress.
+            set_signing_in(state, true);
+            emit(state, reconciler);
+            let package = signer_package.as_deref();
+            core.nmp_sign_in_nip55(package);
+            // The signer-connected delta (`SignerConnected` from the identity
+            // observer) will fire once NMP resolves the `AddSigner` command
+            // from the NIP-55 driver. At that point the EventBridge notifies
+            // the ViewModel, which dispatches `RefreshAppChrome` to finalize
+            // the login — identical to the NIP-46 flow.
+            //
+            // If `persist` is true we emit the `Nip55SignerPackage` credential
+            // so the host can store it; the restored package is used on next
+            // launch to call `SignInNip55` again without a user interaction.
+            if persist {
+                if let Some(pkg) = signer_package.filter(|s| !s.trim().is_empty()) {
+                    emit_session_credential(
+                        reconciler,
+                        HighlighterSessionCredential::Nip55SignerPackage {
+                            signer_package: pkg,
+                        },
+                    );
+                }
+            }
+        }
+        HighlighterAppAction::DeliverExternalSignerResponse { response_json } => {
+            // Route the host's raw result back to the NIP-55 driver (D7 —
+            // verbatim; the driver owns correlation routing and all policy).
+            core.nmp_deliver_external_signer_response(&response_json);
         }
         HighlighterAppAction::SetCreateAccountDisplayName { display_name } => {
             let next_username =

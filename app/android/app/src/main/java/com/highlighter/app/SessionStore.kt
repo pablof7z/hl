@@ -30,6 +30,9 @@ class SessionStore(context: Context) {
         prefs.getString(KEY_BUNKER, null)?.takeIf { it.isNotBlank() }?.let {
             return HighlighterSessionCredential.BunkerUri(it)
         }
+        prefs.getString(KEY_NIP55_PACKAGE, null)?.takeIf { it.isNotBlank() }?.let {
+            return HighlighterSessionCredential.Nip55SignerPackage(it)
+        }
         return null
     }
 
@@ -39,11 +42,19 @@ class SessionStore(context: Context) {
                 prefs.edit()
                     .putString(KEY_NSEC, credential.nsec)
                     .remove(KEY_BUNKER)
+                    .remove(KEY_NIP55_PACKAGE)
                     .apply()
             is HighlighterSessionCredential.BunkerUri ->
                 prefs.edit()
                     .putString(KEY_BUNKER, credential.uri)
                     .remove(KEY_NSEC)
+                    .remove(KEY_NIP55_PACKAGE)
+                    .apply()
+            is HighlighterSessionCredential.Nip55SignerPackage ->
+                prefs.edit()
+                    .putString(KEY_NIP55_PACKAGE, credential.signerPackage)
+                    .remove(KEY_NSEC)
+                    .remove(KEY_BUNKER)
                     .apply()
         }
     }
@@ -52,6 +63,7 @@ class SessionStore(context: Context) {
         prefs.edit()
             .remove(KEY_NSEC)
             .remove(KEY_BUNKER)
+            .remove(KEY_NIP55_PACKAGE)
             .apply()
     }
 
@@ -59,6 +71,7 @@ class SessionStore(context: Context) {
         const val PREFS_FILE = "highlighter_session"
         const val KEY_NSEC = "nsec"
         const val KEY_BUNKER = "bunker_uri"
+        const val KEY_NIP55_PACKAGE = "nip55_signer_package"
 
         fun openEncryptedPrefs(context: Context): SharedPreferences {
             val masterKey = MasterKey.Builder(context)

@@ -17,6 +17,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.highlighter.app.nip55.ExternalSignerCapabilityBridge
 import com.highlighter.app.ui.RootScene
 import com.highlighter.app.ui.theme.HighlighterTheme
 import com.highlighter.app.util.LocalDispatch
@@ -25,6 +26,14 @@ import com.highlighter.app.util.LocalWebMetadata
 
 class MainActivity : ComponentActivity() {
     private val viewModel: HighlighterViewModel by viewModels()
+
+    // NIP-55 external signer bridge. Registered in onCreate (before onStart),
+    // unregistered in onDestroy. The drain thread polls nextSignerRequest() and
+    // hands each JSON string to the bridge for Intent/ContentResolver dispatch.
+    private lateinit var signerBridge: ExternalSignerCapabilityBridge
+
+    @Volatile private var drainRunning = false
+    private var drainThread: Thread? = null
 
     // Re-emitted whenever a new ACTION_SEND arrives (initial launch or while the
     // app is already running via singleTop -> onNewIntent), so Compose can pick
@@ -39,6 +48,37 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // NIP-55 bridge must be registered before the first onStart (Android
+        // Activity Result API requirement). The bridge fires onResult on the
+        // main thread; we forward it to Rust on the main thread too (safe
+        // because deliverExternalSignerResponse posts onto the actor inbox).
+        signerBridge = ExternalSignerCapabilityBridge(
+            activity = this,
+            onResult = { responseJson ->
+                viewModel.deliverExternalSignerResponse(responseJson)
+            },
+        )
+        signerBridge.register()
+
+        // Drain thread: polls nextSignerRequest() in a tight spin with a short
+        // park when the channel is empty. Rust's sync_channel has capacity 16,
+        // so a 20 ms poll period adds at most ~20 ms of latency per request.
+        // No-polling rule applies to production data paths; this is the
+        // OS-IPC boundary which has no blocking-recv equivalent across the
+        // UniFFI boundary. Park duration is bounded; it does not grow.
+        drainRunning = true
+        drainThread = Thread {
+            while (drainRunning) {
+                val requestJson = viewModel.nextSignerRequest()
+                if (requestJson != null) {
+                    runOnUiThread { signerBridge.handleJson(requestJson) }
+                } else {
+                    Thread.sleep(20)
+                }
+            }
+        }.also { it.name = "nip55-drain"; it.isDaemon = true; it.start() }
+
         enableEdgeToEdge()
         handleShareIntent(intent)
         handleViewIntent(intent)
@@ -91,6 +131,14 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        drainRunning = false
+        drainThread?.interrupt()
+        drainThread = null
+        signerBridge.unregister()
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {

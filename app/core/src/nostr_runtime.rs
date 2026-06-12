@@ -414,6 +414,21 @@ impl NostrRuntime {
         self.wait_for_bunker_pair_after(previous).await
     }
 
+    /// Begin a NIP-55 sign-in (ADR-0048 Stage 2). Fire-and-forget.
+    pub fn nmp_sign_in_nip55(&self, signer_package: Option<&str>) {
+        self.nmp.sign_in_nip55(signer_package);
+    }
+
+    /// Deliver a raw `ExternalSignerResponse` JSON back to the NIP-55 driver (D7).
+    pub fn nmp_deliver_external_signer_response(&self, response_json: &str) {
+        self.nmp.deliver_external_signer_response(response_json);
+    }
+
+    /// Drain the next outbound `ExternalSignerRequest` JSON payload.
+    pub fn nmp_next_signer_request(&self) -> Option<String> {
+        self.nmp.next_signer_request()
+    }
+
     /// Remove the active account from the NMP identity reducer.
     pub fn remove_nmp_account(&self, pubkey_hex: &str) {
         self.nmp.remove_account(pubkey_hex);
