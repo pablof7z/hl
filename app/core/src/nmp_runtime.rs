@@ -1,7 +1,7 @@
 //! Highlighter's NMP composition root.
 //!
 //! Native shells must not drive NMP directly. This module owns the one live
-//! `nmp_ffi::NmpApp`, wires the canonical `nmp-app-template` defaults before
+//! `nmp_ffi::NmpApp`, wires the canonical `nmp-defaults` composition before
 //! start, and exposes the app-core operations Highlighter still needs while
 //! feature projections are being rendered from the existing Rust read model.
 
@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use nmp_app_template::{NmpAppBuilder, RunConfig};
+use nmp_defaults::{NmpAppBuilder, RunConfig};
 use nmp_core::planner::{
     InterestId, InterestLifecycle, InterestScope, InterestShape, LogicalInterest,
 };
@@ -443,7 +443,7 @@ impl HighlighterNmpRuntime {
         let applied_relays: HashMap<String, String> = relay_roles.iter().cloned().collect();
 
         let mut builder = NmpAppBuilder::new().with_relays(relay_roles);
-        nmp_app_template::register_defaults(&mut builder);
+        nmp_defaults::register_defaults(&mut builder);
         register_nmp_protocol_actions(&mut builder);
         nmp_blossom::register_actions(&mut builder);
         builder.set_nostrconnect_bootstrap_relay(nostr_connect_relay().to_string());

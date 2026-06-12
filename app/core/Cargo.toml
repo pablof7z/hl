@@ -21,7 +21,7 @@ nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", rev = "2619b9bc4cbd7
 nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "3d238e6e3750ca4473ea24c5f29d26c9faa3ccd6", default-features = false }
 nmp-core = { path = "../../../nostr-multi-platform/crates/nmp-core" }
 nmp-ffi = { path = "../../../nostr-multi-platform/crates/nmp-ffi", features = ["signer-broker"] }
-nmp-app-template = { path = "../../../nostr-multi-platform/crates/nmp-app-template" }
+nmp-defaults = { path = "../../../nostr-multi-platform/crates/nmp-defaults" }
 nmp-signers = { path = "../../../nostr-multi-platform/crates/nmp-signers" }
 nmp-nip29 = { path = "../../../nostr-multi-platform/crates/nmp-nip29" }
 nmp-blossom = { path = "../../../nostr-multi-platform/crates/nmp-blossom" }
