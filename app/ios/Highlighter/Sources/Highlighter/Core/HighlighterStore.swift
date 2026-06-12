@@ -35,6 +35,7 @@ final class HighlighterStore {
     var isBootstrapping: Bool { nmpState.isBootstrapping }
     var isAuthenticating: Bool { nmpState.auth.isSigningIn }
     var isLoggedIn: Bool { currentUser != nil }
+    var whatsNew: HighlighterWhatsNewSnapshot { nmpState.whatsNew }
     var createRoom: HighlighterCreateRoomSnapshot { nmpState.createRoom }
     var roomInvite: HighlighterRoomInviteSnapshot { nmpState.roomInvite }
     var comments: HighlighterCommentsSnapshot { nmpState.comments }
@@ -59,6 +60,10 @@ final class HighlighterStore {
 
     func article(pubkeyHex: String, dTag: String) async -> ArticleRecord? {
         await nmpApp.article(pubkeyHex: pubkeyHex, dTag: dTag)
+    }
+
+    func dismissWhatsNew() {
+        nmpApp.dispatch(action: .dismissWhatsNew)
     }
 
     func publishArtifactShare(preview: ArtifactPreview, groupId: String, note: String?) {

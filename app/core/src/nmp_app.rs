@@ -73,6 +73,8 @@ const PROFILE_HIGHLIGHT_LIMIT: usize = 64;
 const PROFILE_COMMUNITY_LIMIT: usize = 64;
 const ARTICLE_READER_HIGHLIGHT_LIMIT: usize = 128;
 const RELAY_REMOVAL_ROOM_NAME_LIMIT: usize = 5;
+const WHATS_NEW_VISIBLE_LIMIT: usize = 8;
+const WHATS_NEW_JSON: &str = include_str!("whats_new.json");
 
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct HighlighterAppConfig {
@@ -435,6 +437,29 @@ pub struct HighlighterChromeSnapshot {
     pub bookmarked_article_addresses: Vec<String>,
     pub bookmarked_article_address_count: u64,
     pub connection_state: HighlighterConnectionState,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HighlighterWhatsNewEntry {
+    pub shipped_at: String,
+    pub lines: Vec<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HighlighterWhatsNewSnapshot {
+    pub entries: Vec<HighlighterWhatsNewEntry>,
+    pub entry_count: u64,
+    pub last_seen_at: Option<String>,
+}
+
+impl HighlighterWhatsNewSnapshot {
+    fn empty() -> Self {
+        Self {
+            entries: Vec::new(),
+            entry_count: 0,
+            last_seen_at: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -1020,6 +1045,7 @@ pub struct HighlighterAppState {
     pub edit_profile: HighlighterEditProfileSnapshot,
     pub auth: HighlighterAuthSnapshot,
     pub chrome: HighlighterChromeSnapshot,
+    pub whats_new: HighlighterWhatsNewSnapshot,
     pub share_extension: HighlighterShareExtensionSnapshot,
     pub share_composer: HighlighterShareComposerSnapshot,
     pub capture: HighlighterCaptureSnapshot,
@@ -1069,6 +1095,7 @@ impl HighlighterAppState {
                 bookmarked_article_address_count: 0,
                 connection_state: HighlighterConnectionState::Unknown,
             },
+            whats_new: HighlighterWhatsNewSnapshot::empty(),
             share_extension: HighlighterShareExtensionSnapshot {
                 communities: Vec::new(),
                 community_count: 0,
@@ -1453,6 +1480,7 @@ pub enum HighlighterAppAction {
         is_wifi: bool,
     },
     ReconnectNetwork,
+    DismissWhatsNew,
     ToggleOnboardingInterest {
         interest_id: String,
     },
@@ -1608,6 +1636,7 @@ impl HighlighterAppAction {
             Self::SetNetworkWifiOnly { .. } => "set_network_wifi_only",
             Self::NetworkPathChanged { .. } => "network_path_changed",
             Self::ReconnectNetwork => "reconnect_network",
+            Self::DismissWhatsNew => "dismiss_whats_new",
             Self::ToggleOnboardingInterest { .. } => "toggle_onboarding_interest",
             Self::CompleteOnboarding => "complete_onboarding",
             Self::ClearToast => "clear_toast",
@@ -1656,11 +1685,17 @@ impl HighlighterNmpApp {
         };
 
         let local_state_path = core.runtime().data_dir().join("highlighter_app_state.json");
-        let local_state = load_local_state(&local_state_path);
+        let mut local_state = load_local_state(&local_state_path);
         let (tx, rx) = sync_channel(ACTION_QUEUE_CAPACITY);
         let mut initial_state = HighlighterAppState::empty(local_state.onboarding_complete);
-        apply_recent_searches_to_snapshot(&mut initial_state.search, local_state.recent_searches);
+        apply_recent_searches_to_snapshot(
+            &mut initial_state.search,
+            local_state.recent_searches.clone(),
+        );
         initial_state.network.wifi_only_enabled = local_state.network_wifi_only;
+        if apply_whats_new_to_snapshot(&mut initial_state.whats_new, &mut local_state) {
+            save_local_state(&local_state_path, &local_state);
+        }
         let state = Arc::new(RwLock::new(initial_state));
         let reconciler = Arc::new(RwLock::new(None));
         let core_event_callback = Arc::new(RwLock::new(None));
@@ -3377,6 +3412,10 @@ fn handle_action(
         }
         HighlighterAppAction::ReconnectNetwork => {
             runtime.block_on(apply_network_connectivity_policy(core, state));
+            emit(state, reconciler);
+        }
+        HighlighterAppAction::DismissWhatsNew => {
+            dismiss_whats_new(state, local_state_path);
             emit(state, reconciler);
         }
         HighlighterAppAction::ToggleOnboardingInterest { interest_id } => {
@@ -10213,6 +10252,20 @@ struct LocalAppState {
     recent_searches: Vec<String>,
     #[serde(default)]
     network_wifi_only: bool,
+    #[serde(default)]
+    whats_new_last_seen_at: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct WhatsNewPayload {
+    schema_version: u32,
+    entries: Vec<WhatsNewEntryJson>,
+}
+
+#[derive(serde::Deserialize)]
+struct WhatsNewEntryJson {
+    shipped_at: String,
+    lines: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -10411,6 +10464,73 @@ fn onboarding_pubkeys_for(selected: &BTreeSet<String>) -> Vec<String> {
     out
 }
 
+fn apply_whats_new_to_snapshot(
+    snapshot: &mut HighlighterWhatsNewSnapshot,
+    local_state: &mut LocalAppState,
+) -> bool {
+    let entries = bundled_whats_new_entries();
+    let mut mutated_local_state = false;
+    if local_state.whats_new_last_seen_at.is_none() {
+        local_state.whats_new_last_seen_at = entries.first().map(|entry| entry.shipped_at.clone());
+        mutated_local_state = local_state.whats_new_last_seen_at.is_some();
+    }
+
+    let last_seen = local_state.whats_new_last_seen_at.clone();
+    let visible_entries = last_seen
+        .as_deref()
+        .map(|marker| {
+            entries
+                .into_iter()
+                .filter(|entry| entry.shipped_at.as_str() > marker)
+                .take(WHATS_NEW_VISIBLE_LIMIT)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    snapshot.entries = visible_entries;
+    snapshot.entry_count = snapshot.entries.len() as u64;
+    snapshot.last_seen_at = last_seen;
+    mutated_local_state
+}
+
+fn dismiss_whats_new(state: &Arc<RwLock<HighlighterAppState>>, local_state_path: &Path) {
+    let mut current = state.write();
+    let newest = current
+        .whats_new
+        .entries
+        .first()
+        .map(|entry| entry.shipped_at.clone());
+    if let Some(newest) = newest {
+        current.whats_new.last_seen_at = Some(newest);
+    }
+    current.whats_new.entries.clear();
+    current.whats_new.entry_count = 0;
+    current.bump();
+    let local = local_state_from_current(&current);
+    drop(current);
+    save_local_state(local_state_path, &local);
+}
+
+fn bundled_whats_new_entries() -> Vec<HighlighterWhatsNewEntry> {
+    let Ok(payload) = serde_json::from_str::<WhatsNewPayload>(WHATS_NEW_JSON) else {
+        return Vec::new();
+    };
+    if payload.schema_version != 1 {
+        return Vec::new();
+    }
+    let mut entries = payload
+        .entries
+        .into_iter()
+        .filter(|entry| !entry.shipped_at.trim().is_empty() && !entry.lines.is_empty())
+        .map(|entry| HighlighterWhatsNewEntry {
+            shipped_at: entry.shipped_at,
+            lines: entry.lines,
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| right.shipped_at.cmp(&left.shipped_at));
+    entries
+}
+
 fn load_local_state(path: &Path) -> LocalAppState {
     let Ok(bytes) = std::fs::read(path) else {
         return LocalAppState::default();
@@ -10433,6 +10553,7 @@ fn local_state_for_snapshot(
         onboarding_complete,
         recent_searches: current.search.recent_queries.clone(),
         network_wifi_only: current.network.wifi_only_enabled,
+        whats_new_last_seen_at: current.whats_new.last_seen_at.clone(),
     }
 }
 
@@ -10441,6 +10562,7 @@ fn local_state_from_current(current: &HighlighterAppState) -> LocalAppState {
         onboarding_complete: current.onboarding.is_complete,
         recent_searches: current.search.recent_queries.clone(),
         network_wifi_only: current.network.wifi_only_enabled,
+        whats_new_last_seen_at: current.whats_new.last_seen_at.clone(),
     }
 }
 
@@ -10520,6 +10642,79 @@ mod tests {
             visible_limit: 8,
             emit_hz: 30,
         })
+    }
+
+    #[test]
+    fn whats_new_entries_are_rust_owned_and_sorted_newest_first() {
+        let entries = bundled_whats_new_entries();
+        assert!(!entries.is_empty());
+        assert!(entries.iter().all(|entry| !entry.shipped_at.is_empty()));
+        assert!(entries.iter().all(|entry| !entry.lines.is_empty()));
+        let dates = entries
+            .iter()
+            .map(|entry| entry.shipped_at.clone())
+            .collect::<Vec<_>>();
+        let mut sorted = dates.clone();
+        sorted.sort_by(|left, right| right.cmp(left));
+        assert_eq!(dates, sorted);
+    }
+
+    #[test]
+    fn whats_new_first_install_seeds_marker_without_presenting_history() {
+        let mut local = LocalAppState::default();
+        let mut snapshot = HighlighterWhatsNewSnapshot::empty();
+        let mutated = apply_whats_new_to_snapshot(&mut snapshot, &mut local);
+        assert!(mutated);
+        assert!(local.whats_new_last_seen_at.is_some());
+        assert!(snapshot.entries.is_empty());
+        assert_eq!(snapshot.entry_count, 0);
+        assert_eq!(snapshot.last_seen_at, local.whats_new_last_seen_at);
+    }
+
+    #[test]
+    fn whats_new_presents_entries_newer_than_marker() {
+        let entries = bundled_whats_new_entries();
+        assert!(entries.len() > 1);
+        let mut local = LocalAppState {
+            whats_new_last_seen_at: Some(entries[1].shipped_at.clone()),
+            ..LocalAppState::default()
+        };
+        let mut snapshot = HighlighterWhatsNewSnapshot::empty();
+        let mutated = apply_whats_new_to_snapshot(&mut snapshot, &mut local);
+        assert!(!mutated);
+        assert_eq!(snapshot.entries.len(), 1);
+        assert_eq!(snapshot.entry_count, 1);
+        assert_eq!(snapshot.entries[0].shipped_at, entries[0].shipped_at);
+    }
+
+    #[test]
+    fn dismiss_whats_new_persists_newest_seen_marker() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("highlighter_app_state.json");
+        let entries = bundled_whats_new_entries();
+        let state = Arc::new(RwLock::new(HighlighterAppState::empty(false)));
+        {
+            let mut current = state.write();
+            current.whats_new.entries = entries[..2].to_vec();
+            current.whats_new.entry_count = 2;
+            current.whats_new.last_seen_at = Some(entries[2].shipped_at.clone());
+        }
+
+        dismiss_whats_new(&state, &path);
+
+        let current = state.read();
+        assert!(current.whats_new.entries.is_empty());
+        assert_eq!(current.whats_new.entry_count, 0);
+        assert_eq!(
+            current.whats_new.last_seen_at,
+            Some(entries[0].shipped_at.clone())
+        );
+        drop(current);
+        let local = load_local_state(&path);
+        assert_eq!(
+            local.whats_new_last_seen_at,
+            Some(entries[0].shipped_at.clone())
+        );
     }
 
     fn next_update(rx: &std::sync::mpsc::Receiver<TestUpdate>) -> TestUpdate {

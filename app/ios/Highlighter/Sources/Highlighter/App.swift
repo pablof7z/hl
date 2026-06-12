@@ -4,29 +4,15 @@ import SwiftUI
 struct HighlighterApp: App {
     @State private var store = HighlighterStore()
 
-    // MARK: - What's-new sheet wiring
-    //
-    // Evaluated once on cold launch. Uses `.sheet(item:)` rather than
-    // `.sheet(isPresented:)` so the entries are bundled with the trigger —
-    // avoids a SwiftUI render-race where a `fullScreenCover` (onboarding)
-    // sitting on top causes the sheet's content closure to read stale entries.
-    @State private var whatsNewPresentation: WhatsNewPresentation?
-
     var body: some Scene {
         WindowGroup {
             RootSceneView()
                 .environment(store)
-                .task {
-                    WhatsNewService.seedIfNeeded()
-                    let unseen = WhatsNewService.unseenEntries(
-                        lastSeenAt: WhatsNewService.lastSeenAt
+                .sheet(isPresented: whatsNewPresented) {
+                    WhatsNewSheet(
+                        entries: store.nmpState.whatsNew.entries,
+                        onDismiss: { store.dismissWhatsNew() }
                     )
-                    if !unseen.isEmpty {
-                        whatsNewPresentation = WhatsNewPresentation(entries: unseen)
-                    }
-                }
-                .sheet(item: $whatsNewPresentation) { presentation in
-                    WhatsNewSheet(entries: presentation.entries)
                 }
                 .onOpenURL { url in
                     if ShareURLScheme.isProcessShare(url) {
@@ -41,11 +27,14 @@ struct HighlighterApp: App {
         }
     }
 
-}
-
-/// Bundles entries with the trigger so the `.sheet(item:)` content closure
-/// receives them atomically — see the wiring note above.
-private struct WhatsNewPresentation: Identifiable {
-    let id = UUID()
-    let entries: [WhatsNewEntry]
+    private var whatsNewPresented: Binding<Bool> {
+        Binding(
+            get: { !store.nmpState.whatsNew.entries.isEmpty },
+            set: { isPresented in
+                if !isPresented {
+                    store.dismissWhatsNew()
+                }
+            }
+        )
+    }
 }

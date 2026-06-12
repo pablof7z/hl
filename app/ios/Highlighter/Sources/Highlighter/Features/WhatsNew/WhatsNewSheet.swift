@@ -3,12 +3,9 @@ import UIKit
 
 struct WhatsNewSheet: View {
 
-    let entries: [WhatsNewEntry]
+    let entries: [HighlighterWhatsNewEntry]
+    let onDismiss: () -> Void
     @Environment(\.dismiss) private var dismiss
-
-    /// Mirrors `WhatsNewService.lastSeenAtKey` so dismissal advances the
-    /// marker via the same UserDefaults key the service reads on next launch.
-    @AppStorage("whatsNew.lastSeenAt") private var lastSeenAtString: String = ""
 
     var body: some View {
         NavigationStack {
@@ -19,12 +16,7 @@ struct WhatsNewSheet: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .onDisappear {
-            // Swipe-dismiss path: write marker so entries don't re-surface.
-            // The "Got it" button writes the same value before dismiss(), so
-            // this is idempotent in that case.
-            if let newest = entries.first {
-                lastSeenAtString = Self.iso8601.string(from: newest.shippedAt)
-            }
+            onDismiss()
         }
     }
 
@@ -34,7 +26,7 @@ struct WhatsNewSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 subtitle
-                ForEach(entries) { entry in
+                ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
                     entrySection(entry)
                 }
                 gotItButton
@@ -53,7 +45,7 @@ struct WhatsNewSheet: View {
     }
 
     @ViewBuilder
-    private func entrySection(_ entry: WhatsNewEntry) -> some View {
+    private func entrySection(_ entry: HighlighterWhatsNewEntry) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(Self.dateline(for: entry.shippedAt))
                 .font(.caption2.weight(.semibold))
@@ -83,9 +75,7 @@ struct WhatsNewSheet: View {
         HStack {
             Spacer()
             Button("Got it") {
-                if let newest = entries.first {
-                    lastSeenAtString = Self.iso8601.string(from: newest.shippedAt)
-                }
+                onDismiss()
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 dismiss()
             }
@@ -103,7 +93,10 @@ struct WhatsNewSheet: View {
     // MARK: - Formatting
 
     /// "MAY 14 · 20:03" — uppercase short month, day no zero-pad, middle dot, 24h time.
-    private static func dateline(for date: Date) -> String {
+    private static func dateline(for shippedAt: String) -> String {
+        guard let date = iso8601.date(from: shippedAt) else {
+            return shippedAt
+        }
         let cal = Calendar.current
         let comps = cal.dateComponents([.month, .day, .hour, .minute], from: date)
         let monthSymbols = cal.shortMonthSymbols

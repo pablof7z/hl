@@ -45,6 +45,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -125,6 +126,7 @@ import uniffi.highlighter_core.HighlighterRoomInviteSnapshot
 import uniffi.highlighter_core.HighlighterSearchSnapshot
 import uniffi.highlighter_core.HighlighterSessionCredential
 import uniffi.highlighter_core.HighlighterUsernameStatus
+import uniffi.highlighter_core.HighlighterWhatsNewEntry
 import uniffi.highlighter_core.HydratedHighlight
 import uniffi.highlighter_core.ProfileMetadata
 import uniffi.highlighter_core.RelayConfig
@@ -204,6 +206,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onLogout = { viewModel.dispatch(HighlighterAppAction.Logout) },
                     onClearToast = { viewModel.dispatch(HighlighterAppAction.ClearToast) },
+                    onDismissWhatsNew = { viewModel.dispatch(HighlighterAppAction.DismissWhatsNew) },
                     onToggleOnboardingInterest = { id ->
                         viewModel.dispatch(HighlighterAppAction.ToggleOnboardingInterest(id))
                     },
@@ -582,6 +585,7 @@ private fun HighlighterAppScreen(
     onSubmitCreateAccount: () -> Unit,
     onLogout: () -> Unit,
     onClearToast: () -> Unit,
+    onDismissWhatsNew: () -> Unit,
     onToggleOnboardingInterest: (String) -> Unit,
     onCompleteOnboarding: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
@@ -855,6 +859,12 @@ private fun HighlighterAppScreen(
                 }
             }
         }
+    }
+    if (state.whatsNew.entries.isNotEmpty()) {
+        WhatsNewDialog(
+            entries = state.whatsNew.entries,
+            onDismiss = onDismissWhatsNew,
+        )
     }
 }
 
@@ -3100,6 +3110,84 @@ private fun EmptyPanel(message: String) {
             color = Muted,
         )
     }
+}
+
+@Composable
+private fun WhatsNewDialog(entries: List<HighlighterWhatsNewEntry>, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Got it")
+            }
+        },
+        title = { Text("What's new", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "SINCE YOU LAST OPENED HIGHLIGHTER",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Muted,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                entries.forEach { entry ->
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = whatsNewDateline(entry.shippedAt),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Muted,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        entry.lines.forEach { line ->
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Top,
+                            ) {
+                                Text("*", color = Gold, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    text = line,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Ink,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        containerColor = Paper,
+    )
+}
+
+private fun whatsNewDateline(shippedAt: String): String {
+    val month = shippedAt.substringOrNull(5, 7)?.toIntOrNull()
+    val day = shippedAt.substringOrNull(8, 10)?.toIntOrNull()
+    val time = shippedAt.substringOrNull(11, 16)
+    val monthLabel = month?.let { monthLabels.getOrNull(it - 1) }
+    return if (monthLabel != null && day != null && time != null) {
+        "$monthLabel $day - $time"
+    } else {
+        shippedAt
+    }
+}
+
+private val monthLabels = listOf(
+    "JAN",
+    "FEB",
+    "MAR",
+    "APR",
+    "MAY",
+    "JUN",
+    "JUL",
+    "AUG",
+    "SEP",
+    "OCT",
+    "NOV",
+    "DEC",
+)
+
+private fun String.substringOrNull(startIndex: Int, endIndex: Int): String? {
+    return if (length >= endIndex) substring(startIndex, endIndex) else null
 }
 
 @Composable

@@ -3879,6 +3879,7 @@ public struct HighlighterAppState {
     public var editProfile: HighlighterEditProfileSnapshot
     public var auth: HighlighterAuthSnapshot
     public var chrome: HighlighterChromeSnapshot
+    public var whatsNew: HighlighterWhatsNewSnapshot
     public var shareExtension: HighlighterShareExtensionSnapshot
     public var shareComposer: HighlighterShareComposerSnapshot
     public var capture: HighlighterCaptureSnapshot
@@ -3905,7 +3906,7 @@ public struct HighlighterAppState {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(rev: UInt64, isBootstrapping: Bool, createAccount: HighlighterCreateAccountSnapshot, createRoom: HighlighterCreateRoomSnapshot, roomInvite: HighlighterRoomInviteSnapshot, comments: HighlighterCommentsSnapshot, feedback: HighlighterFeedbackSnapshot, mediaSettings: HighlighterMediaSettingsSnapshot, editProfile: HighlighterEditProfileSnapshot, auth: HighlighterAuthSnapshot, chrome: HighlighterChromeSnapshot, shareExtension: HighlighterShareExtensionSnapshot, shareComposer: HighlighterShareComposerSnapshot, capture: HighlighterCaptureSnapshot, bookPicker: HighlighterBookPickerSnapshot, onboarding: HighlighterOnboardingSnapshot, isbnPreviews: [HighlighterIsbnPreview], isbnPreviewCount: UInt64, webMetadata: [HighlighterWebMetadata], webMetadataCount: UInt64, referenceHighlights: [HighlighterReferenceHighlightBucket], referenceHighlightCount: UInt64, profiles: [HighlighterProfile], profileCount: UInt64, profileView: HighlighterProfileViewSnapshot, articleReader: HighlighterArticleReaderSnapshot, roomDetail: HighlighterRoomDetailSnapshot, homeFeed: HighlighterHomeFeedSnapshot, bookmarks: HighlighterBookmarksSnapshot, curationMenu: HighlighterCurationMenuSnapshot, search: HighlighterSearchSnapshot, roomExplorer: HighlighterRoomExplorerSnapshot, network: HighlighterNetworkSnapshot, toast: HighlighterToast?) {
+    public init(rev: UInt64, isBootstrapping: Bool, createAccount: HighlighterCreateAccountSnapshot, createRoom: HighlighterCreateRoomSnapshot, roomInvite: HighlighterRoomInviteSnapshot, comments: HighlighterCommentsSnapshot, feedback: HighlighterFeedbackSnapshot, mediaSettings: HighlighterMediaSettingsSnapshot, editProfile: HighlighterEditProfileSnapshot, auth: HighlighterAuthSnapshot, chrome: HighlighterChromeSnapshot, whatsNew: HighlighterWhatsNewSnapshot, shareExtension: HighlighterShareExtensionSnapshot, shareComposer: HighlighterShareComposerSnapshot, capture: HighlighterCaptureSnapshot, bookPicker: HighlighterBookPickerSnapshot, onboarding: HighlighterOnboardingSnapshot, isbnPreviews: [HighlighterIsbnPreview], isbnPreviewCount: UInt64, webMetadata: [HighlighterWebMetadata], webMetadataCount: UInt64, referenceHighlights: [HighlighterReferenceHighlightBucket], referenceHighlightCount: UInt64, profiles: [HighlighterProfile], profileCount: UInt64, profileView: HighlighterProfileViewSnapshot, articleReader: HighlighterArticleReaderSnapshot, roomDetail: HighlighterRoomDetailSnapshot, homeFeed: HighlighterHomeFeedSnapshot, bookmarks: HighlighterBookmarksSnapshot, curationMenu: HighlighterCurationMenuSnapshot, search: HighlighterSearchSnapshot, roomExplorer: HighlighterRoomExplorerSnapshot, network: HighlighterNetworkSnapshot, toast: HighlighterToast?) {
         self.rev = rev
         self.isBootstrapping = isBootstrapping
         self.createAccount = createAccount
@@ -3917,6 +3918,7 @@ public struct HighlighterAppState {
         self.editProfile = editProfile
         self.auth = auth
         self.chrome = chrome
+        self.whatsNew = whatsNew
         self.shareExtension = shareExtension
         self.shareComposer = shareComposer
         self.capture = capture
@@ -3981,6 +3983,9 @@ extension HighlighterAppState: Equatable, Hashable {
             return false
         }
         if lhs.chrome != rhs.chrome {
+            return false
+        }
+        if lhs.whatsNew != rhs.whatsNew {
             return false
         }
         if lhs.shareExtension != rhs.shareExtension {
@@ -4067,6 +4072,7 @@ extension HighlighterAppState: Equatable, Hashable {
         hasher.combine(editProfile)
         hasher.combine(auth)
         hasher.combine(chrome)
+        hasher.combine(whatsNew)
         hasher.combine(shareExtension)
         hasher.combine(shareComposer)
         hasher.combine(capture)
@@ -4113,6 +4119,7 @@ public struct FfiConverterTypeHighlighterAppState: FfiConverterRustBuffer {
                 editProfile: FfiConverterTypeHighlighterEditProfileSnapshot.read(from: &buf),
                 auth: FfiConverterTypeHighlighterAuthSnapshot.read(from: &buf),
                 chrome: FfiConverterTypeHighlighterChromeSnapshot.read(from: &buf),
+                whatsNew: FfiConverterTypeHighlighterWhatsNewSnapshot.read(from: &buf),
                 shareExtension: FfiConverterTypeHighlighterShareExtensionSnapshot.read(from: &buf),
                 shareComposer: FfiConverterTypeHighlighterShareComposerSnapshot.read(from: &buf),
                 capture: FfiConverterTypeHighlighterCaptureSnapshot.read(from: &buf),
@@ -4151,6 +4158,7 @@ public struct FfiConverterTypeHighlighterAppState: FfiConverterRustBuffer {
         FfiConverterTypeHighlighterEditProfileSnapshot.write(value.editProfile, into: &buf)
         FfiConverterTypeHighlighterAuthSnapshot.write(value.auth, into: &buf)
         FfiConverterTypeHighlighterChromeSnapshot.write(value.chrome, into: &buf)
+        FfiConverterTypeHighlighterWhatsNewSnapshot.write(value.whatsNew, into: &buf)
         FfiConverterTypeHighlighterShareExtensionSnapshot.write(value.shareExtension, into: &buf)
         FfiConverterTypeHighlighterShareComposerSnapshot.write(value.shareComposer, into: &buf)
         FfiConverterTypeHighlighterCaptureSnapshot.write(value.capture, into: &buf)
@@ -8877,6 +8885,154 @@ public func FfiConverterTypeHighlighterWebMetadata_lower(_ value: HighlighterWeb
 }
 
 
+public struct HighlighterWhatsNewEntry {
+    public var shippedAt: String
+    public var lines: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(shippedAt: String, lines: [String]) {
+        self.shippedAt = shippedAt
+        self.lines = lines
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterWhatsNewEntry: Sendable {}
+#endif
+
+
+extension HighlighterWhatsNewEntry: Equatable, Hashable {
+    public static func ==(lhs: HighlighterWhatsNewEntry, rhs: HighlighterWhatsNewEntry) -> Bool {
+        if lhs.shippedAt != rhs.shippedAt {
+            return false
+        }
+        if lhs.lines != rhs.lines {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shippedAt)
+        hasher.combine(lines)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterWhatsNewEntry: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterWhatsNewEntry {
+        return
+            try HighlighterWhatsNewEntry(
+                shippedAt: FfiConverterString.read(from: &buf),
+                lines: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterWhatsNewEntry, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.shippedAt, into: &buf)
+        FfiConverterSequenceString.write(value.lines, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterWhatsNewEntry_lift(_ buf: RustBuffer) throws -> HighlighterWhatsNewEntry {
+    return try FfiConverterTypeHighlighterWhatsNewEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterWhatsNewEntry_lower(_ value: HighlighterWhatsNewEntry) -> RustBuffer {
+    return FfiConverterTypeHighlighterWhatsNewEntry.lower(value)
+}
+
+
+public struct HighlighterWhatsNewSnapshot {
+    public var entries: [HighlighterWhatsNewEntry]
+    public var entryCount: UInt64
+    public var lastSeenAt: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(entries: [HighlighterWhatsNewEntry], entryCount: UInt64, lastSeenAt: String?) {
+        self.entries = entries
+        self.entryCount = entryCount
+        self.lastSeenAt = lastSeenAt
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterWhatsNewSnapshot: Sendable {}
+#endif
+
+
+extension HighlighterWhatsNewSnapshot: Equatable, Hashable {
+    public static func ==(lhs: HighlighterWhatsNewSnapshot, rhs: HighlighterWhatsNewSnapshot) -> Bool {
+        if lhs.entries != rhs.entries {
+            return false
+        }
+        if lhs.entryCount != rhs.entryCount {
+            return false
+        }
+        if lhs.lastSeenAt != rhs.lastSeenAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(entries)
+        hasher.combine(entryCount)
+        hasher.combine(lastSeenAt)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterWhatsNewSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterWhatsNewSnapshot {
+        return
+            try HighlighterWhatsNewSnapshot(
+                entries: FfiConverterSequenceTypeHighlighterWhatsNewEntry.read(from: &buf),
+                entryCount: FfiConverterUInt64.read(from: &buf),
+                lastSeenAt: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterWhatsNewSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeHighlighterWhatsNewEntry.write(value.entries, into: &buf)
+        FfiConverterUInt64.write(value.entryCount, into: &buf)
+        FfiConverterOptionString.write(value.lastSeenAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterWhatsNewSnapshot_lift(_ buf: RustBuffer) throws -> HighlighterWhatsNewSnapshot {
+    return try FfiConverterTypeHighlighterWhatsNewSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterWhatsNewSnapshot_lower(_ value: HighlighterWhatsNewSnapshot) -> RustBuffer {
+    return FfiConverterTypeHighlighterWhatsNewSnapshot.lower(value)
+}
+
+
 /**
  * Highlight + its associated artifact (for feed rendering).
  */
@@ -11328,6 +11484,7 @@ public enum HighlighterAppAction {
     case networkPathChanged(isWifi: Bool
     )
     case reconnectNetwork
+    case dismissWhatsNew
     case toggleOnboardingInterest(interestId: String
     )
     case completeOnboarding
@@ -11711,12 +11868,14 @@ public struct FfiConverterTypeHighlighterAppAction: FfiConverterRustBuffer {
 
         case 145: return .reconnectNetwork
 
-        case 146: return .toggleOnboardingInterest(interestId: try FfiConverterString.read(from: &buf)
+        case 146: return .dismissWhatsNew
+
+        case 147: return .toggleOnboardingInterest(interestId: try FfiConverterString.read(from: &buf)
         )
 
-        case 147: return .completeOnboarding
+        case 148: return .completeOnboarding
 
-        case 148: return .clearToast
+        case 149: return .clearToast
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -12437,17 +12596,21 @@ public struct FfiConverterTypeHighlighterAppAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(145))
 
 
-        case let .toggleOnboardingInterest(interestId):
+        case .dismissWhatsNew:
             writeInt(&buf, Int32(146))
+
+
+        case let .toggleOnboardingInterest(interestId):
+            writeInt(&buf, Int32(147))
             FfiConverterString.write(interestId, into: &buf)
 
 
         case .completeOnboarding:
-            writeInt(&buf, Int32(147))
+            writeInt(&buf, Int32(148))
 
 
         case .clearToast:
-            writeInt(&buf, Int32(148))
+            writeInt(&buf, Int32(149))
 
         }
     }
@@ -14810,6 +14973,31 @@ fileprivate struct FfiConverterSequenceTypeHighlighterWebMetadata: FfiConverterR
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeHighlighterWebMetadata.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeHighlighterWhatsNewEntry: FfiConverterRustBuffer {
+    typealias SwiftType = [HighlighterWhatsNewEntry]
+
+    public static func write(_ value: [HighlighterWhatsNewEntry], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHighlighterWhatsNewEntry.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlighterWhatsNewEntry] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HighlighterWhatsNewEntry]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHighlighterWhatsNewEntry.read(from: &buf))
         }
         return seq
     }
