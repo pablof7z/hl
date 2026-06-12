@@ -52,6 +52,10 @@ rust_outputs_are_fresh() {
   return 0
 }
 
+strip_trailing_whitespace() {
+  perl -pi -e 's/[ \t]+$//' "$@"
+}
+
 swift_bindings_are_fresh() {
   local bindgen_lib="$1"
   rust_outputs_are_fresh \
@@ -139,6 +143,10 @@ fi
 mkdir -p "$SWIFT_OUT_DIR" "$VENDOR_DIR"
 
 if swift_bindings_are_fresh "$BINDGEN_LIB"; then
+  strip_trailing_whitespace \
+    "$SWIFT_OUT_DIR/highlighter_core.swift" \
+    "$VENDOR_DIR/highlighter_coreFFI.h" \
+    "$VENDOR_DIR/module.modulemap"
   echo "Swift bindings are up to date." >&2
   echo "  Swift:    $SWIFT_OUT_DIR/highlighter_core.swift" >&2
   echo "  FFI header: $VENDOR_DIR/highlighter_coreFFI.h" >&2
@@ -161,6 +169,10 @@ fi
 cp "$TEMP_OUT_DIR/highlighter_core.swift"       "$SWIFT_OUT_DIR/highlighter_core.swift"
 cp "$TEMP_OUT_DIR/highlighter_coreFFI.h"        "$VENDOR_DIR/highlighter_coreFFI.h"
 cp "$TEMP_OUT_DIR/highlighter_coreFFI.modulemap" "$VENDOR_DIR/module.modulemap"
+strip_trailing_whitespace \
+  "$SWIFT_OUT_DIR/highlighter_core.swift" \
+  "$VENDOR_DIR/highlighter_coreFFI.h" \
+  "$VENDOR_DIR/module.modulemap"
 
 echo "Swift bindings generated." >&2
 echo "  Swift:    $SWIFT_OUT_DIR/highlighter_core.swift" >&2

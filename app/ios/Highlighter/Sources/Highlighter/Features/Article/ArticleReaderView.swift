@@ -267,21 +267,16 @@ private struct ReaderScroll: View {
                 if let rendered {
                     bodySegments(rendered)
                 }
-
-                NavigationLink(
-                    destination: Group {
-                        if let pk = profileNavPubkey {
-                            ProfileView(pubkey: pk)
-                        }
-                    },
-                    isActive: $profileNavActive
-                ) { EmptyView() }
-                    .hidden()
             }
         }
         .ignoresSafeArea(edges: coverURL == nil ? [] : .top)
         .fullScreenCover(item: $imageToOpen) { item in
             ImageZoomView(url: item.url, onDismiss: { imageToOpen = nil })
+        }
+        .navigationDestination(isPresented: $profileNavActive) {
+            if let pk = profileNavPubkey {
+                ProfileView(pubkey: pk)
+            }
         }
         .task(id: "\(article.eventId)-\(highlights.count)-\(app.nmpState.profileCount)") {
             let profileSnapshot = Dictionary(
@@ -293,7 +288,7 @@ private struct ReaderScroll: View {
                     return (pk, name)
                 }
             )
-            let safeCore = app.safeCore
+            let nmpApp = app.nmpApp
             rendered = await Task.detached(priority: .userInitiated) {
                 MarkdownRenderer.render(
                     content: article.content,
@@ -302,7 +297,7 @@ private struct ReaderScroll: View {
                     tint: UIColor(Color.highlighterAccent),
                     ink: UIColor(Color.highlighterInkStrong),
                     muted: UIColor(Color.highlighterInkMuted),
-                    nostrDecoder: { input in try? safeCore.decodeNostrEntity(input) },
+                    nostrDecoder: { input in nmpApp.decodeNostrEntity(input: input) },
                     profileNames: profileSnapshot
                 )
             }.value
@@ -313,7 +308,7 @@ private struct ReaderScroll: View {
     private func bodySegments(_ output: MarkdownRenderer.Output) -> some View {
         ForEach(Array(output.segments.enumerated()), id: \.offset) { idx, segment in
             switch segment {
-            case .text(let attrStr):
+            case let .text(attrStr):
                 let isLast = idx == output.segments.count - 1
                 ArticleBodyView(
                     attributedText: isLast ? withFootnotes(attrStr, output) : attrStr,
@@ -333,9 +328,9 @@ private struct ReaderScroll: View {
                     }
                 )
                 .frame(maxWidth: .infinity)
-            case .image(let url, let alt):
+            case let .image(url, alt):
                 InlineArticleImage(url: url, alt: alt)
-            case .nostrEntity(let ref):
+            case let .nostrEntity(ref):
                 NostrEntityCard(entity: ref)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 4)
@@ -350,7 +345,7 @@ private struct ReaderScroll: View {
             string: "\n———\n\n",
             attributes: [
                 .font: UIFont.systemFont(ofSize: 14, weight: .semibold),
-                .foregroundColor: UIColor(Color.highlighterInkMuted)
+                .foregroundColor: UIColor(Color.highlighterInkMuted),
             ]
         ))
         out.append(NSAttributedString(
@@ -358,7 +353,7 @@ private struct ReaderScroll: View {
             attributes: [
                 .font: UIFont.systemFont(ofSize: 12, weight: .bold),
                 .foregroundColor: UIColor(Color.highlighterInkMuted),
-                .kern: 0.6
+                .kern: 0.6,
             ]
         ))
         out.append(output.footnotes)
@@ -554,7 +549,7 @@ private struct NoteComposerSheet: View {
                     .background(Color.highlighterAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
 
                 TextField("Add a note…", text: $note, axis: .vertical)
-                    .lineLimit(3...8)
+                    .lineLimit(3 ... 8)
                     .focused($focused)
                     .textFieldStyle(.roundedBorder)
 

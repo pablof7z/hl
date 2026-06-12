@@ -386,51 +386,6 @@ final class PodcastPlayerStore {
         clipEnd = next
     }
 
-    // MARK: - Publish
-
-    func publish(
-        artifact: ArtifactRecord,
-        targetGroupId: String,
-        note: String,
-        segments: [TranscriptSegment],
-        core: SafeHighlighterCore
-    ) async throws -> HighlightRecord {
-        isPublishing = true
-        publishError = nil
-        defer { isPublishing = false }
-
-        let selected = segments
-            .filter { selectedSegmentIds.contains($0.id) }
-            .sorted { $0.start < $1.start }
-        let quote = selected.map(\.text).joined(separator: " ")
-
-        let draft = HighlightDraft(
-            quote: quote,
-            context: "",
-            note: note,
-            clipStartSeconds: clipStart,
-            clipEndSeconds: clipEnd,
-            clipSpeaker: speaker,
-            clipTranscriptSegmentIds: Array(selectedSegmentIds),
-            image: nil
-        )
-
-        do {
-            let results = try await core.publishHighlightsAndShare(
-                artifact: artifact,
-                drafts: [draft],
-                targetGroupId: targetGroupId
-            )
-            guard let first = results.first else {
-                throw PodcastPlayerError.emptyResult
-            }
-            return first
-        } catch {
-            publishError = "\(error)"
-            throw error
-        }
-    }
-
     // MARK: - Transcript
 
     func loadTranscript(from url: URL) async {
@@ -762,14 +717,4 @@ final class PodcastPlayerStore {
 
 enum TranscriptAvailability {
     case loading, available, unavailable
-}
-
-enum PodcastPlayerError: Error, LocalizedError {
-    case emptyResult
-
-    var errorDescription: String? {
-        switch self {
-        case .emptyResult: return "No highlight returned from publish."
-        }
-    }
 }

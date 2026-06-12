@@ -24,8 +24,6 @@ struct HighlightDetailView: View {
 
     let item: HydratedHighlight
 
-    @State private var commentsStore = CommentsStore()
-    @State private var commentsStarted = false
     @State private var showComments = false
     @State private var shareTarget: ShareToCommunityTarget?
     @State private var shareURL: URL?
@@ -55,22 +53,15 @@ struct HighlightDetailView: View {
             CommentsView(
                 artifact: commentsArtifactRef,
                 artifactAuthorPubkey: highlight.pubkey,
-                artifactHeader: nil,
-                store: commentsStore
+                artifactHeader: nil
             )
         }
         .sheet(item: $shareTarget) { target in
             ShareToCommunitySheet(target: target)
                 .presentationDetents([.medium, .large])
         }
-        .task {
-            guard !commentsStarted else { return }
-            commentsStarted = true
-            await commentsStore.start(
-                artifact: commentsArtifactRef,
-                core: app.safeCore,
-                currentUserPubkey: app.currentUser?.pubkey
-            )
+        .task(id: highlight.eventId) {
+            app.openComments(artifact: commentsArtifactRef)
         }
         .task(id: "\(highlight.eventId):\(highlight.pubkey)") {
             refreshShareURL()
@@ -140,7 +131,8 @@ struct HighlightDetailView: View {
     private var resourceCover: some View {
         if let urlString = item.artifact?.preview.image,
            !urlString.isEmpty,
-           let url = URL(string: urlString) {
+           let url = URL(string: urlString)
+        {
             KFImage(url)
                 .placeholder { coverFallback }
                 .fade(duration: 0.15)
@@ -290,8 +282,8 @@ struct HighlightDetailView: View {
             HStack(spacing: 5) {
                 Image(systemName: "bubble.left")
                     .font(.system(size: 20, weight: .medium))
-                if commentsStore.totalCount > 0 {
-                    Text("\(commentsStore.totalCount)")
+                if commentsCount > 0 {
+                    Text("\(commentsCount)")
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                 }
@@ -299,9 +291,9 @@ struct HighlightDetailView: View {
             .foregroundStyle(Color.highlighterInkStrong)
         }
         .accessibilityLabel(
-            commentsStore.totalCount == 0
+            commentsCount == 0
                 ? "Start the thread"
-                : "\(commentsStore.totalCount) comments"
+                : "\(commentsCount) comments"
         )
     }
 
@@ -317,9 +309,16 @@ struct HighlightDetailView: View {
         .event(id: highlight.eventId, kind: 9802)
     }
 
+    private var commentsCount: Int {
+        guard app.comments.rootTagName == commentsArtifactRef.rootTagName,
+              app.comments.rootTagValue == commentsArtifactRef.rootTagValue
+        else { return 0 }
+        return Int(app.comments.recordCount)
+    }
+
     private func refreshShareURL() {
         guard
-            let urlString = app.safeCore.highlightShareURL(
+            let urlString = app.highlightShareURL(
                 eventIdHex: highlight.eventId,
                 authorPubkeyHex: highlight.pubkey
             ),
@@ -394,11 +393,11 @@ struct HighlightDetailView: View {
     private var resourceKindLabel: String {
         switch artifactKind {
         case .article: return "Article"
-        case .book:    return "Book"
+        case .book: return "Book"
         case .podcast: return "Podcast"
-        case .web:     return "Web"
-        case .video:   return "Video"
-        case .paper:   return "Paper"
+        case .web: return "Web"
+        case .video: return "Video"
+        case .paper: return "Paper"
         case .unknown: return "Source"
         }
     }
@@ -406,11 +405,11 @@ struct HighlightDetailView: View {
     private var kindIconName: String {
         switch artifactKind {
         case .article: return "doc.text"
-        case .web:     return "globe"
+        case .web: return "globe"
         case .podcast: return "waveform"
-        case .book:    return "book.closed"
-        case .video:   return "play.rectangle"
-        case .paper:   return "doc.richtext"
+        case .book: return "book.closed"
+        case .video: return "play.rectangle"
+        case .paper: return "doc.richtext"
         case .unknown: return "quote.bubble"
         }
     }
@@ -423,12 +422,12 @@ struct HighlightDetailView: View {
         if let source = item.artifact?.preview.source.lowercased(), !source.isEmpty {
             switch source {
             case "article": return .article
-            case "web":     return .web
+            case "web": return .web
             case "podcast": return .podcast
-            case "book":    return .book
-            case "video":   return .video
-            case "paper":   return .paper
-            default:        return .unknown
+            case "book": return .book
+            case "video": return .video
+            case "paper": return .paper
+            default: return .unknown
             }
         }
         let extRef = highlight.externalReference.trimmingCharacters(in: .whitespacesAndNewlines)

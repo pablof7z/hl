@@ -744,7 +744,13 @@ public func FfiConverterTypeEventCallback_lower(_ value: EventCallback) -> Unsaf
 
 public protocol HighlighterAppReconciler: AnyObject, Sendable {
 
-    func onUpdate(update: HighlighterAppUpdate)
+    func onState(state: HighlighterAppState)
+
+    func onPersistSessionCredential(credential: HighlighterSessionCredential)
+
+    func onClearSessionCredentials()
+
+    func onOpenExternalUrl(url: String)
 
 }
 open class HighlighterAppReconcilerImpl: HighlighterAppReconciler, @unchecked Sendable {
@@ -799,9 +805,29 @@ open class HighlighterAppReconcilerImpl: HighlighterAppReconciler, @unchecked Se
 
 
 
-open func onUpdate(update: HighlighterAppUpdate)  {try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlighterappreconciler_on_update(self.uniffiClonePointer(),
-        FfiConverterTypeHighlighterAppUpdate_lower(update),$0
+open func onState(state: HighlighterAppState)  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterappreconciler_on_state(self.uniffiClonePointer(),
+        FfiConverterTypeHighlighterAppState_lower(state),$0
+    )
+}
+}
+
+open func onPersistSessionCredential(credential: HighlighterSessionCredential)  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterappreconciler_on_persist_session_credential(self.uniffiClonePointer(),
+        FfiConverterTypeHighlighterSessionCredential_lower(credential),$0
+    )
+}
+}
+
+open func onClearSessionCredentials()  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterappreconciler_on_clear_session_credentials(self.uniffiClonePointer(),$0
+    )
+}
+}
+
+open func onOpenExternalUrl(url: String)  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterappreconciler_on_open_external_url(self.uniffiClonePointer(),
+        FfiConverterString.lower(url),$0
     )
 }
 }
@@ -819,9 +845,9 @@ fileprivate struct UniffiCallbackInterfaceHighlighterAppReconciler {
     // This creates 1-element array, since this seems to be the only way to construct a const
     // pointer that we can pass to the Rust code.
     static let vtable: [UniffiVTableCallbackInterfaceHighlighterAppReconciler] = [UniffiVTableCallbackInterfaceHighlighterAppReconciler(
-        onUpdate: { (
+        onState: { (
             uniffiHandle: UInt64,
-            update: RustBuffer,
+            state: RustBuffer,
             uniffiOutReturn: UnsafeMutableRawPointer,
             uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
         ) in
@@ -830,8 +856,78 @@ fileprivate struct UniffiCallbackInterfaceHighlighterAppReconciler {
                 guard let uniffiObj = try? FfiConverterTypeHighlighterAppReconciler.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return uniffiObj.onUpdate(
-                     update: try FfiConverterTypeHighlighterAppUpdate_lift(update)
+                return uniffiObj.onState(
+                     state: try FfiConverterTypeHighlighterAppState_lift(state)
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        onPersistSessionCredential: { (
+            uniffiHandle: UInt64,
+            credential: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeHighlighterAppReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.onPersistSessionCredential(
+                     credential: try FfiConverterTypeHighlighterSessionCredential_lift(credential)
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        onClearSessionCredentials: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeHighlighterAppReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.onClearSessionCredentials(
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        onOpenExternalUrl: { (
+            uniffiHandle: UInt64,
+            url: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeHighlighterAppReconciler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.onOpenExternalUrl(
+                     url: try FfiConverterString.lift(url)
                 )
             }
 
@@ -915,3148 +1011,27 @@ public func FfiConverterTypeHighlighterAppReconciler_lower(_ value: HighlighterA
 
 
 
-public protocol HighlighterCoreProtocol: AnyObject, Sendable {
-
-    /**
-     * Add a Nostr user (by hex pubkey) to a room as a member. Must be
-     * signed by a room admin — the relay enforces this. Returns the
-     * kind:9000 event id on success.
-     */
-    func addRoomMember(groupId: String, pubkeyHex: String) async throws  -> String
-
-    /**
-     * Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
-     * Extension flow — the main app drains the share queue, normalizes each
-     * URL through this, then calls `publish_artifact` to post the kind:11.
-     */
-    func buildPreviewFromUrl(url: String) async throws  -> ArtifactPreview
-
-    /**
-     * Create a new empty kind:30004 curation set with `title`. Returns
-     * the freshly published record so the UI can immediately use its
-     * `id` (d-tag) to add items.
-     */
-    func createCurationSet(title: String) async throws  -> BookmarkSetRecord
-
-    /**
-     * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
-     * kind:9002 (edit-metadata) signed by the current user. Returns the
-     * freshly-generated group id on success — the relay's 39000/39001/39002
-     * follow-up events drive the iOS membership stream automatically.
-     */
-    func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess) async throws  -> String
-
-    /**
-     * Mint `count` single-use invite codes for `group_id` by publishing a
-     * kind:9009 event. Must be signed by an admin — the relay rejects
-     * non-admin attempts. Returns the minted codes in order.
-     */
-    func createRoomInviteCodes(groupId: String, count: UInt32) async throws  -> [String]
-
-    func currentUser()  -> CurrentUser?
-
-    /**
-     * Classify a NIP-19 entity (`npub1…`, `nprofile1…`, `note1…`,
-     * `nevent1…`, `naddr1…`) into a renderable variant. Strips an
-     * optional `nostr:` URI prefix. Used by the iOS rich-text renderer
-     * to walk event content for inline mentions and event-ref cards.
-     */
-    func decodeNostrEntity(input: String) throws  -> NostrEntityRef
-
-    /**
-     * Decode a Nostr identifier (`npub1…`, `nprofile1…`, optionally with a
-     * `nostr:` URI prefix) to a 64-char hex pubkey. Returns
-     * `CoreError::InvalidInput` if the input isn't a recognised pubkey
-     * reference. Used by the room-invite picker to resolve a pasted handle.
-     */
-    func decodeNpub(input: String) throws  -> String
-
-    /**
-     * Close every WebSocket in the pool. Used by the Wi-Fi-only toggle
-     * when the device drops off Wi-Fi — the Swift side re-enables by
-     * calling `reconnect_all` once the path monitor reports Wi-Fi back.
-     */
-    func disconnectAll() async throws
-
-    func generateAccount() throws  -> GeneratedAccount
-
-    /**
-     * Every cached room, newest first, truncated to `limit`. Powers the
-     * explorer's "Browse all" grid.
-     */
-    func getAllRooms(limit: UInt32) async throws  -> [CommunitySummary]
-
-    /**
-     * Read a single NIP-23 article by author + `d` tag from nostrdb. `None`
-     * if ndb hasn't cached it yet — the reader's `subscribe_article` pump
-     * backfills via relays, and a later call returns `Some`.
-     */
-    func getArticle(pubkeyHex: String, dTag: String) async throws  -> ArticleRecord?
-
-    func getArtifacts(groupId: String, limit: UInt32) async throws  -> [ArtifactRecord]
-
-    /**
-     * Display-only configs for live pool relays that are not in the user's
-     * editable config. Rust owns canonical app relay roles; native settings UI
-     * renders these rows without comparing relay URLs.
-     */
-    func getAutoConnectedRelays() async throws  -> [RelayConfig]
-
-    /**
-     * Return the user's ordered Blossom server list from nostrdb. Empty if no
-     * kind:10063 has been cached yet (relay hasn't delivered it).
-     */
-    func getBlossomServers() async throws  -> [String]
-
-    /**
-     * Return the set of article addresses the user has bookmarked in their
-     * newest kind:10003 list (empty when not logged in or no list cached).
-     */
-    func getBookmarkedArticleAddresses() async throws  -> [String]
-
-    /**
-     * Size + event-count snapshot of the local nostrdb cache. Order-of-
-     * magnitude figures used by the Network Settings "Local cache" card.
-     */
-    func getCacheStats() async throws  -> CacheStats
-
-    /**
-     * NIP-29 chat messages (kind:9) cached for `group_id`, ordered ascending
-     * by `created_at`. UI can also peek with `limit=1` to detect chat
-     * activity and decide whether to expose the chat tab at all.
-     */
-    func getChatMessages(groupId: String, limit: UInt32) async throws  -> [ChatMessageRecord]
-
-    /**
-     * Read NIP-22 comments (kind:1111) rooted at the given uppercase
-     * scope tag — `("A", "30023:pk:d")` for articles, `("I", "isbn:…")` for
-     * books, etc. Newest first.
-     */
-    func getCommentsForReference(tagName: String, tagValue: String, limit: UInt32) async throws  -> [CommentRecord]
-
-    func getDiscussions(groupId: String, limit: UInt32) async throws  -> [DiscussionRecord]
-
-    /**
-     * Curator's latest kind:10012 list, resolved into `CommunitySummary`
-     * items in curator-chosen order. Rooms without cached metadata are
-     * dropped; the next call after `start_featured_rooms` has backfilled
-     * metadata returns the full list.
-     */
-    func getFeaturedRooms(curatorPubkeyHex: String) async throws  -> [CommunitySummary]
-
-    /**
-     * Every message in a feedback thread, ordered ascending by `created_at`.
-     */
-    func getFeedbackThreadEvents(rootEventId: String) async throws  -> [FeedbackEventRecord]
-
-    /**
-     * Threads scoped to `coordinate` authored by the current user. Returns
-     * an empty list if not logged in.
-     */
-    func getFeedbackThreads(coordinate: String) async throws  -> [FeedbackThreadRecord]
-
-    /**
-     * Return kind:30004 curation sets from users the current user follows.
-     */
-    func getFollowingCurationSets() async throws  -> [BookmarkSetRecord]
-
-    /**
-     * Highlights home feed — kind:9802 events authored by follows plus
-     * highlights tagged into joined rooms. See
-     * `highlights::query_following_highlights` for semantics.
-     */
-    func getFollowingHighlights(limit: UInt32) async throws  -> [HydratedHighlight]
-
-    /**
-     * Following Reads feed — articles surfaced through the user's follow
-     * graph. See `reads::query_following_reads` for semantics. Returns an
-     * empty list if the user isn't logged in or has no follows cached yet.
-     */
-    func getFollowingReads(limit: UInt32) async throws  -> [ReadingFeedItem]
-
-    /**
-     * Pubkeys (hex) the current user follows per their cached kind:3 contact
-     * list. Empty if the user isn't logged in or the cache hasn't seen a
-     * kind:3 yet. Used by the room-invite picker to surface "people you know"
-     * before any typing happens.
-     */
-    func getFollows() async throws  -> [String]
-
-    func getHighlights(groupId: String, limit: UInt32) async throws  -> [HydratedHighlight]
-
-    /**
-     * Read all highlights referencing the given NIP-23 article address
-     * (`30023:<pubkey>:<d>`) from nostrdb, newest first.
-     */
-    func getHighlightsForArticle(address: String, limit: UInt32) async throws  -> [HighlightRecord]
-
-    /**
-     * Read highlights whose `tag_name` tag holds `tag_value`, newest
-     * first. Generalizes `get_highlights_for_article`: pass `("a", "30023:pk:d")`
-     * for articles, `("i", "isbn:…")` for ISBN books, `("r", "<url>")` for
-     * podcasts. `tag_name` must be a single character.
-     */
-    func getHighlightsForReference(tagName: String, tagValue: String, limit: UInt32) async throws  -> [HighlightRecord]
-
-    func getJoinedCommunities() async throws  -> [CommunitySummary]
-
-    /**
-     * Return all kind:30003 bookmark sets authored by the current user.
-     */
-    func getMyBookmarkSets() async throws  -> [BookmarkSetRecord]
-
-    /**
-     * Return all kind:30004 curation sets authored by the current user.
-     */
-    func getMyCurationSets() async throws  -> [BookmarkSetRecord]
-
-    func getMyHighlights(limit: UInt32) async throws  -> [HighlightRecord]
-
-    /**
-     * Return all NIP-B0 kind:39701 web bookmarks authored by the current user.
-     */
-    func getMyWebBookmarks() async throws  -> [WebBookmarkRecord]
-
-    /**
-     * The N most-recently-seen rooms. Same underlying query as
-     * `get_all_rooms` with a tighter limit — kept as a distinct method so
-     * the Swift explorer store's shelves remain single-purpose.
-     */
-    func getNewRooms(limit: UInt32) async throws  -> [CommunitySummary]
-
-    /**
-     * First `p` tag of the project's kind:31933 event by addressable
-     * coordinate. The shake-to-share composer uses this to pick the agent
-     * pubkey for the root note's `p` tag. `None` if the project event isn't
-     * cached or has no agents.
-     */
-    func getProjectFirstAgentPubkey(coordinate: String) async throws  -> String?
-
-    /**
-     * All cached kind:7 reactions on `target_event_id`, newest first.
-     */
-    func getReactionsForEvent(targetEventId: String, limit: UInt32) async throws  -> [ReactionRecord]
-
-    /**
-     * Recent books across the user's joined communities — drives the
-     * capture-flow book picker. Returns `[]` if no books are cached or the
-     * user isn't logged in.
-     */
-    func getRecentBooks(limit: UInt32) async throws  -> [ArtifactRecord]
-
-    /**
-     * Snapshot of the live per-relay diagnostics map. One row per URL
-     * currently in the client's pool. Refreshed by the background
-     * diagnostics poller at least once per second.
-     */
-    func getRelayDiagnostics() async throws  -> [RelayDiagnostic]
-
-    /**
-     * Return the user's effective relay list, merging NIP-65 (read/write)
-     * with NIP-78 app-data (rooms/indexer). Falls back to `seed_defaults()`
-     * when neither has been cached yet (first login).
-     */
-    func getRelays() async throws  -> [RelayConfig]
-
-    /**
-     * Rooms where authors of articles the user has highlighted post
-     * artifacts. Empty when the user hasn't highlighted any articles yet.
-     */
-    func getRoomsFromReadAuthors(limit: UInt32) async throws  -> [RoomRecommendation]
-
-    /**
-     * Rooms where 2+ of the user's follows are members. Empty when the user
-     * isn't logged in, has no follows cached, or no room satisfies the
-     * threshold.
-     */
-    func getRoomsWithFriends(limit: UInt32) async throws  -> [RoomRecommendation]
-
-    /**
-     * Resolve the merged set of NIP-50 search relays for the current user —
-     * always includes `wss://relay.highlighter.com`, plus every `relay` tag
-     * from the newest cached kind:10007 (NIP-51 search relay list).
-     */
-    func getSearchRelays() async throws  -> [String]
-
-    func getUserArticles(pubkeyHex: String, limit: UInt32) async throws  -> [ArticleRecord]
-
-    func getUserCommunities(pubkeyHex: String) async throws  -> [CommunitySummary]
-
-    func getUserHighlights(pubkeyHex: String, limit: UInt32) async throws  -> [HighlightRecord]
-
-    func getUserProfile(pubkeyHex: String) async throws  -> ProfileMetadata?
-
-    /**
-     * Fetch OpenGraph + favicon metadata for a web URL. Backed by a
-     * JSON-on-disk cache (7-day positive TTL, 1-hour negative TTL) and
-     * in-flight coalescing — concurrent calls for the same URL share one
-     * HTTP request. Returns `CoreError::NotFound` when the page 404s,
-     * `CoreError::Network` on transport failure.
-     */
-    func getWebMetadata(url: String) async throws  -> WebMetadata
-
-    /**
-     * Build the canonical public share URL for a kind:9802 highlight.
-     *
-     * The shell receives only the final route. Rust owns the NIP-19 event
-     * reference, kind hint, and relay hint so platform UI cannot choose relay
-     * routing policy.
-     */
-    func highlightShareUrl(eventIdHex: String, authorPubkeyHex: String?)  -> String?
-
-    /**
-     * Fetch another user's kind:10002 via the indexer pool and return the
-     * parsed `RelayConfig` rows. Useful for "adopt someone else's relay
-     * setup" flows — the Swift caller shows the list with checkboxes
-     * and upserts the selected subset through `upsert_relay`.
-     */
-    func importRelaysFromNpub(npub: String) async throws  -> [RelayConfig]
-
-    /**
-     * Publish the default Blossom server list only if the user has no cached
-     * kind:10063. Called once after login; no-op when the list already exists.
-     */
-    func initDefaultBlossomServers() async throws
-
-    /**
-     * Read-only predicate: is `address` currently bookmarked for the logged-in
-     * user? Always `false` when no user is logged in.
-     */
-    func isArticleBookmarked(address: String) async throws  -> Bool
-
-    /**
-     * Read-only predicate: is `event_id_hex` currently bookmarked for
-     * the logged-in user? Always `false` when no user is logged in.
-     */
-    func isEventBookmarked(eventIdHex: String) async throws  -> Bool
-
-    /**
-     * Returns true if the logged-in user's cached contact list currently
-     * includes `target_pubkey_hex`.
-     */
-    func isFollowing(targetPubkeyHex: String) async throws  -> Bool
-
-    func loginNsec(nsec: String) throws  -> CurrentUser
-
-    func logout()
-
-    func lookupIsbn(isbn: String) async throws  -> ArtifactPreview
-
-    func pairBunker(uri: String) async throws  -> CurrentUser
-
-    /**
-     * Fetch the target relay's NIP-11 information document via an HTTPS
-     * GET to the `ws[s]://` URL's HTTP equivalent with
-     * `Accept: application/nostr+json`. Fails fast on timeout.
-     */
-    func probeRelayNip11(url: String) async throws  -> Nip11Document
-
-    func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async throws  -> ArtifactRecord
-
-    /**
-     * Publish a NIP-29 kind:9 chat message into `group_id`. When
-     * `reply_to_event_id` is set, the published event carries a marked
-     * NIP-10 `["e", <id>, "", "reply"]` tag.
-     */
-    func publishChatMessage(groupId: String, content: String, replyToEventId: String?) async throws  -> ChatMessageRecord
-
-    /**
-     * Publish a NIP-22 kind:1111 comment scoped to any artifact.
-     *
-     * `root_tag_name` is `"A"` (addressable, e.g. `30023:<pubkey>:<d>`),
-     * `"E"` (event id — a highlight, an event share), or `"I"` (external
-     * content like `url:…`, `podcast:item:guid:…`, `isbn:…`).
-     * `root_tag_value` is the corresponding scope value. `root_kind` is
-     * the kind of the root event (or 0 for purely external roots).
-     * `parent_event_id` is `None` for top-level comments and `Some(id)`
-     * for replies (the parent kind:1111 comment).
-     */
-    func publishComment(rootTagName: String, rootTagValue: String, rootKind: UInt16, parentEventId: String?, content: String) async throws  -> CommentRecord
-
-    func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?) async throws  -> DiscussionRecord
-
-    /**
-     * Publish a feedback note (kind:1) for the shake-to-share surface. When
-     * `parent_event_id` is `Some`, the note is a reply marked NIP-10 root;
-     * otherwise it's a brand-new thread. `agent_pubkey` is optional — pass
-     * `None` when the project event isn't cached yet (the note still ships,
-     * just without a `p` tag).
-     */
-    func publishFeedbackNote(coordinate: String, agentPubkey: String?, parentEventId: String?, body: String) async throws  -> FeedbackEventRecord
-
-    /**
-     * Publish a solo NIP-84 highlight without a NIP-29 repost. Used by the
-     * article reader's text-selection flow: user highlights → event lands in
-     * their vault; sharing into a community is a later explicit action.
-     */
-    func publishHighlight(draft: HighlightDraft, artifact: ArtifactRecord) async throws  -> HighlightRecord
-
-    func publishHighlightsAndShare(artifact: ArtifactRecord, drafts: [HighlightDraft], targetGroupId: String) async throws  -> [HighlightRecord]
-
-    /**
-     * Publish a NIP-68 `kind:20` picture event into a NIP-29 community.
-     * Used by the capture flow when the user opts not to (or can't) extract
-     * a highlight quote — the photo still ships to the community with all
-     * the imeta metadata.
-     */
-    func publishPicture(draft: PictureDraft) async throws  -> PictureRecord
-
-    /**
-     * Publish a kind:7 reaction targeting `event_id` authored by
-     * `author_pubkey_hex` of `target_kind`. `content` is the reaction
-     * body — pass `"+"` for a like.
-     */
-    func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: UInt16, content: String) async throws  -> ReactionRecord
-
-    /**
-     * Nudge the relay pool to attempt a reconnect on every disconnected
-     * relay. `Client::connect` is idempotent — already-connected relays
-     * are unaffected; disconnected / terminated / banned relays get a
-     * fresh WebSocket attempt.
-     */
-    func reconnectAll() async throws
-
-    /**
-     * Remove a relay by URL.
-     */
-    func removeRelay(url: String) async throws
-
-    /**
-     * Publish a NIP-29 kind:9021 join-request for `group_id`. Returns the
-     * event id on success. The UI treats this as fire-and-forget: a
-     * subsequent `MembershipChanged` delta for this group with the user's
-     * pubkey is the signal that the relay admitted the request.
-     */
-    func requestJoinRoom(groupId: String) async throws  -> String
-
-    /**
-     * Resolve a [`NostrEntityRef`] from nostrdb, fetching once from relay hints
-     * plus the indexer pool when the local cache is cold.
-     */
-    func resolveNostrEntity(entity: NostrEntityRef) async throws  -> NostrEntityEvent?
-
-    func searchArticles(query: String, limit: UInt32) async throws  -> [ArticleRecord]
-
-    func searchArtifacts(query: String, limit: UInt32) async throws  -> [ArtifactRecord]
-
-    func searchCommunities(query: String, limit: UInt32) async throws  -> [CommunitySummary]
-
-    func searchHighlights(query: String, limit: UInt32) async throws  -> [HighlightRecord]
-
-    func searchProfiles(query: String, limit: UInt32) async throws  -> [ProfileMetadata]
-
-    /**
-     * Idempotently set membership of `address` (NIP-33 a-tag value, e.g.
-     * `"30023:<pubkey>:<d>"`) in the current user's curation set keyed
-     * by `d_tag`. `member == true` ensures presence; `false` ensures
-     * absence. Returns the new membership state.
-     */
-    func setAddressInCurationSet(dTag: String, address: String, member: Bool) async throws  -> Bool
-
-    /**
-     * Replace the user's Blossom server list with `servers` (must be
-     * non-empty). Order is preserved — first server is the upload default.
-     */
-    func setBlossomServers(servers: [String]) async throws  -> String
-
-    func setEventCallback(callback: EventCallback)
-
-    /**
-     * Publish a new kind:3 that adds (`follow=true`) or removes
-     * (`follow=false`) `target_pubkey_hex` from the logged-in user's contact
-     * list. Returns the new event id, or `None` if already in the desired
-     * state (no republish).
-     */
-    func setFollow(targetPubkeyHex: String, follow: Bool) async throws  -> String?
-
-    /**
-     * Atomically update a single relay's role flags.
-     */
-    func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async throws
-
-    /**
-     * Re-share an existing kind:9802 highlight into a NIP-29 room as a
-     * kind:16 generic repost. Used to surface a friend's highlight (or
-     * your own old one) into a community without re-publishing the
-     * underlying highlight event. The repost carries `["e", id]`,
-     * `["k", "9802"]`, `["p", author]`, and `["h", target_group_id]`
-     * per NIP-18 + NIP-29 conventions. Empty `relay_url` falls back
-     * to the Highlighter relay as the e-tag relay hint.
-     */
-    func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String) async throws
-
-    /**
-     * Sign a NIP-05 registration authorization event (kind:27235) for
-     * claiming `name@domain` on the Highlighter managed NIP-05 service.
-     * Returns the raw JSON of the signed event for use in the `auth` field
-     * of the POST `/api/nip05` request body.
-     */
-    func signNip05RegistrationAuth(name: String, domain: String) async throws  -> String
-
-    /**
-     * Sign a NIP-98 HTTP auth event (kind:27235) for a Blossom upload
-     * request. Returns the raw JSON of the signed event; the Swift caller
-     * base64-encodes it and uses it as `Authorization: Nostr <base64>`.
-     * `payload_hash` is the hex SHA-256 of the file bytes (required for PUT).
-     */
-    func signNip98Auth(url: String, method: String, payloadHash: String?) async throws  -> String
-
-    /**
-     * Install (if not already installed) the kind:10012 curated-list sub for
-     * `curator_pubkey_hex`. Once the list lands in ndb, this method also
-     * spawns a metadata backfill for every group the list references, so a
-     * subsequent `get_featured_rooms` returns rich summaries rather than
-     * bare ids. Idempotent; the sub rides until logout.
-     */
-    func startFeaturedRooms(curatorPubkeyHex: String) async throws
-
-    /**
-     * Install (if not already installed) two relay subs that together
-     * power the "Friends are here" explorer shelf:
-     *
-     * 1. kind:10009 authored by any of the user's follows — NIP-51
-     * user-owned "simple groups" list (denser, always-public signal).
-     * 2. kind:39001 / 39002 where any follow appears in a `p` tag —
-     * relay-owned membership fallback for groups whose members haven't
-     * published a 10009 yet.
-     *
-     * No-op if the user isn't logged in or has no follows cached yet.
-     * Idempotent; both subs ride until logout.
-     */
-    func startFriendsRoomsDiscovery() async throws
-
-    func startNostrConnect(options: NostrConnectOptions) async throws  -> String
-
-    /**
-     * Install (if not already installed) a long-lived relay sub for every
-     * kind:39000 metadata event. Call once on explorer appear from iOS.
-     * Idempotent; the sub rides until logout.
-     */
-    func startRoomDiscovery() async
-
-    /**
-     * Article-reader view-scope subscription. Fires `ArticleUpdated` deltas
-     * whenever the article's replaceable body supersedes OR a new kind:9802
-     * highlighting this article's `a`-tag arrives. Install on reader view
-     * appearance; `unsubscribe(handle)` on disappearance.
-     */
-    func subscribeArticle(pubkeyHex: String, dTag: String) async throws  -> UInt64
-
-    /**
-     * Open a NIP-50 relay subscription for kind:30023 against the user's
-     * search relays. Returns a handle; the pump fires
-     * `SearchArticlesUpdated { query }` deltas as matching events ingest,
-     * and the Swift store responds by re-running `search_articles` locally
-     * to merge the new events into its Articles bucket.
-     */
-    func subscribeArticleSearch(query: String) async throws  -> UInt64
-
-    /**
-     * Open a live subscription for the current user's kind:30003/30004 sets.
-     * Delivers `BookmarkSetsUpdated` (view-scoped) on each delta.
-     */
-    func subscribeBookmarkSets() async throws  -> UInt64
-
-    /**
-     * Open a live subscription on the current user's kind:10003 bookmark
-     * events. Deltas land on the app-scope bus (`BookmarksUpdated`); the
-     * Swift bookmarks store re-queries on each.
-     */
-    func subscribeBookmarks() async throws  -> UInt64
-
-    /**
-     * Per-thread feedback subscription. Fires `FeedbackThreadEventUpserted`
-     * deltas for every kind:1 `e`-tagged to the root (regardless of author).
-     */
-    func subscribeFeedbackThread(rootEventId: String) async throws  -> UInt64
-
-    /**
-     * Feedback-threads subscription for the shake-to-share surface. Fires
-     * `FeedbackThreadsUpdated` deltas whenever a kind:1 root authored by
-     * the current user (with the project `a` tag) or any kind:513 metadata
-     * for the same project arrives. Swift re-queries on each.
-     */
-    func subscribeFeedbackThreads(coordinate: String) async throws  -> UInt64
-
-    /**
-     * Open a live subscription for kind:30004 sets from followed authors.
-     * Delivers `FollowingCurationSetsUpdated` (view-scoped) on each delta.
-     */
-    func subscribeFollowingCurationSets() async throws  -> UInt64
-
-    /**
-     * Highlights home-feed view-scope subscription. Snapshots the user's
-     * current follow list (plus self — nobody lists themselves in kind:3
-     * but we want our own highlights in the home feed) and joined-group
-     * ids, then listens for kind:9802 events authored by anyone in that
-     * set or tagged into any joined room.
-     */
-    func subscribeFollowingHighlights() async throws  -> UInt64
-
-    /**
-     * Following Reads view-scope subscription. Snapshots the user's current
-     * follow list, then listens for: (a) new articles authored by a follow,
-     * (b) interactions by a follow against any kind:30023 content. Fires
-     * `FollowingReadsUpdated` deltas; the Swift store re-queries the feed.
-     * Install on tab appearance; `unsubscribe(handle)` on disappearance.
-     */
-    func subscribeFollowingReads() async throws  -> UInt64
-
-    /**
-     * App-scope subscription for the joined-communities view. Returns a
-     * handle; fires CommunityUpserted / MembershipChanged deltas tagged
-     * with that handle. Re-uses the relay sub installed at login; this
-     * call is about setting up the nostrdb notification pump.
-     */
-    func subscribeJoinedCommunities() async throws  -> UInt64
-
-    /**
-     * Handle the Swift side uses to match `RelayStatusChanged` deltas on the
-     * event bus. Relay status changes are app-scoped and ride
-     * `subscription_id == 0`, so this returns `0` unconditionally — the
-     * value is a stable contract, not a unique sub id.
-     */
-    func subscribeRelayStatus() async throws  -> UInt64
-
-    /**
-     * Per-room view-scope subscription. Returns a handle; fires
-     * ArtifactUpserted / HighlightUpserted / HighlightShared for this
-     * specific group.
-     */
-    func subscribeRoom(groupId: String) async throws  -> UInt64
-
-    /**
-     * Per-room Chat view-scope subscription. Returns a handle; fires
-     * `ChatMessageUpserted` deltas for kind:9 messages tagged
-     * `#h=<group_id>`.
-     */
-    func subscribeRoomChat(groupId: String) async throws  -> UInt64
-
-    /**
-     * Per-room Discussions view-scope subscription. Returns a handle; fires
-     * `DiscussionUpserted` deltas for kind:11 threads in this group that
-     * carry the `t=discussion` marker.
-     */
-    func subscribeRoomDiscussions(groupId: String) async throws  -> UInt64
-
-    /**
-     * Profile view-scope subscription. Fires `UserProfileUpdated` deltas
-     * when any event relevant to `pubkey_hex`'s profile arrives. Install on
-     * profile view appearance; `unsubscribe(handle)` on disappearance.
-     */
-    func subscribeUserProfile(pubkeyHex: String) async throws  -> UInt64
-
-    /**
-     * Vault view-scope subscription for the current user's own highlights.
-     */
-    func subscribeVault() async throws  -> UInt64
-
-    /**
-     * Open a live subscription for the current user's NIP-B0 kind:39701 events.
-     * Delivers `WebBookmarksUpdated` (view-scoped) on each delta.
-     */
-    func subscribeWebBookmarks() async throws  -> UInt64
-
-    /**
-     * Toggle `address` in the user's kind:10003 list. Returns the new
-     * membership state — `true` if the address is now bookmarked, `false`
-     * if it was removed.
-     */
-    func toggleArticleBookmark(address: String) async throws  -> Bool
-
-    /**
-     * Toggle `event_id_hex` in the user's kind:10003 list (for comments
-     * and other event-id-addressed targets). Returns the new membership
-     * state.
-     */
-    func toggleEventBookmark(eventIdHex: String) async throws  -> Bool
-
-    /**
-     * Delete one of the user's own kind:7 reactions via NIP-09.
-     */
-    func unpublishReaction(reactionEventId: String) async throws  -> String
-
-    /**
-     * Drop a subscription by handle. Idempotent.
-     */
-    func unsubscribe(handle: UInt64)
-
-    /**
-     * Publish a new kind:0 metadata event for the current user. Preserves
-     * any unknown JSON fields the user had set via other clients —
-     * only the canonical fields the edit form drives get overwritten.
-     * Empty strings clear the corresponding field. Returns the parsed
-     * metadata so the caller's UI can swap to the new state without
-     * waiting for the relay echo.
-     */
-    func updateProfile(name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String) async throws  -> ProfileMetadata
-
-    /**
-     * Upload a photo to the default Blossom server (`blossom.primal.net`)
-     * using BUD-01 auth. The caller (iOS) is responsible for stripping EXIF
-     * metadata and recompressing the image before sending bytes — Rust does
-     * not decode the image. `width`/`height` are stamped onto the returned
-     * descriptor for use in the publishing event's `imeta` tag.
-     * `alt` is the recognized OCR text, or empty if none.
-     */
-    func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String) async throws  -> BlossomUpload
-
-    /**
-     * Insert-or-update a single relay. Replaces the row with matching URL or
-     * appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
-     * the live relay pool so the change takes effect immediately.
-     */
-    func upsertRelay(cfg: RelayConfig) async throws
-
-}
-open class HighlighterCore: HighlighterCoreProtocol, @unchecked Sendable {
-    fileprivate let pointer: UnsafeMutableRawPointer!
-
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoPointer {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noPointer: NoPointer) {
-        self.pointer = nil
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_highlighter_core_fn_clone_highlightercore(self.pointer, $0) }
-    }
-public convenience init() {
-    let pointer =
-        try! rustCall() {
-    uniffi_highlighter_core_fn_constructor_highlightercore_new($0
-    )
-}
-    self.init(unsafeFromRawPointer: pointer)
-}
-
-    deinit {
-        guard let pointer = pointer else {
-            return
-        }
-
-        try! rustCall { uniffi_highlighter_core_fn_free_highlightercore(pointer, $0) }
-    }
-
-
-
-
-    /**
-     * Add a Nostr user (by hex pubkey) to a room as a member. Must be
-     * signed by a room admin — the relay enforces this. Returns the
-     * kind:9000 event id on success.
-     */
-open func addRoomMember(groupId: String, pubkeyHex: String)async throws  -> String  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_add_room_member(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId),FfiConverterString.lower(pubkeyHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Build an `ArtifactPreview` from a bare URL. Used by the iOS Share
-     * Extension flow — the main app drains the share queue, normalizes each
-     * URL through this, then calls `publish_artifact` to post the kind:11.
-     */
-open func buildPreviewFromUrl(url: String)async throws  -> ArtifactPreview  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_build_preview_from_url(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(url)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArtifactPreview_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Create a new empty kind:30004 curation set with `title`. Returns
-     * the freshly published record so the UI can immediately use its
-     * `id` (d-tag) to add items.
-     */
-open func createCurationSet(title: String)async throws  -> BookmarkSetRecord  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_create_curation_set(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(title)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeBookmarkSetRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
-     * kind:9002 (edit-metadata) signed by the current user. Returns the
-     * freshly-generated group id on success — the relay's 39000/39001/39002
-     * follow-up events drive the iOS membership stream automatically.
-     */
-open func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess)async throws  -> String  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_create_room(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(name),FfiConverterString.lower(about),FfiConverterString.lower(picture),FfiConverterTypeRoomVisibility_lower(visibility),FfiConverterTypeRoomAccess_lower(access)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Mint `count` single-use invite codes for `group_id` by publishing a
-     * kind:9009 event. Must be signed by an admin — the relay rejects
-     * non-admin attempts. Returns the minted codes in order.
-     */
-open func createRoomInviteCodes(groupId: String, count: UInt32)async throws  -> [String]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_create_room_invite_codes(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId),FfiConverterUInt32.lower(count)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func currentUser() -> CurrentUser?  {
-    return try!  FfiConverterOptionTypeCurrentUser.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_current_user(self.uniffiClonePointer(),$0
-    )
-})
-}
-
-    /**
-     * Classify a NIP-19 entity (`npub1…`, `nprofile1…`, `note1…`,
-     * `nevent1…`, `naddr1…`) into a renderable variant. Strips an
-     * optional `nostr:` URI prefix. Used by the iOS rich-text renderer
-     * to walk event content for inline mentions and event-ref cards.
-     */
-open func decodeNostrEntity(input: String)throws  -> NostrEntityRef  {
-    return try  FfiConverterTypeNostrEntityRef_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
-    uniffi_highlighter_core_fn_method_highlightercore_decode_nostr_entity(self.uniffiClonePointer(),
-        FfiConverterString.lower(input),$0
-    )
-})
-}
-
-    /**
-     * Decode a Nostr identifier (`npub1…`, `nprofile1…`, optionally with a
-     * `nostr:` URI prefix) to a 64-char hex pubkey. Returns
-     * `CoreError::InvalidInput` if the input isn't a recognised pubkey
-     * reference. Used by the room-invite picker to resolve a pasted handle.
-     */
-open func decodeNpub(input: String)throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
-    uniffi_highlighter_core_fn_method_highlightercore_decode_npub(self.uniffiClonePointer(),
-        FfiConverterString.lower(input),$0
-    )
-})
-}
-
-    /**
-     * Close every WebSocket in the pool. Used by the Wi-Fi-only toggle
-     * when the device drops off Wi-Fi — the Swift side re-enables by
-     * calling `reconnect_all` once the path monitor reports Wi-Fi back.
-     */
-open func disconnectAll()async throws   {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_disconnect_all(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_void,
-            completeFunc: ffi_highlighter_core_rust_future_complete_void,
-            freeFunc: ffi_highlighter_core_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func generateAccount()throws  -> GeneratedAccount  {
-    return try  FfiConverterTypeGeneratedAccount_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
-    uniffi_highlighter_core_fn_method_highlightercore_generate_account(self.uniffiClonePointer(),$0
-    )
-})
-}
-
-    /**
-     * Every cached room, newest first, truncated to `limit`. Powers the
-     * explorer's "Browse all" grid.
-     */
-open func getAllRooms(limit: UInt32)async throws  -> [CommunitySummary]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_all_rooms(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeCommunitySummary.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Read a single NIP-23 article by author + `d` tag from nostrdb. `None`
-     * if ndb hasn't cached it yet — the reader's `subscribe_article` pump
-     * backfills via relays, and a later call returns `Some`.
-     */
-open func getArticle(pubkeyHex: String, dTag: String)async throws  -> ArticleRecord?  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_article(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(pubkeyHex),FfiConverterString.lower(dTag)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterOptionTypeArticleRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func getArtifacts(groupId: String, limit: UInt32)async throws  -> [ArtifactRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_artifacts(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeArtifactRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Display-only configs for live pool relays that are not in the user's
-     * editable config. Rust owns canonical app relay roles; native settings UI
-     * renders these rows without comparing relay URLs.
-     */
-open func getAutoConnectedRelays()async throws  -> [RelayConfig]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_auto_connected_relays(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeRelayConfig.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Return the user's ordered Blossom server list from nostrdb. Empty if no
-     * kind:10063 has been cached yet (relay hasn't delivered it).
-     */
-open func getBlossomServers()async throws  -> [String]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_blossom_servers(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Return the set of article addresses the user has bookmarked in their
-     * newest kind:10003 list (empty when not logged in or no list cached).
-     */
-open func getBookmarkedArticleAddresses()async throws  -> [String]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_bookmarked_article_addresses(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Size + event-count snapshot of the local nostrdb cache. Order-of-
-     * magnitude figures used by the Network Settings "Local cache" card.
-     */
-open func getCacheStats()async throws  -> CacheStats  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_cache_stats(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCacheStats_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * NIP-29 chat messages (kind:9) cached for `group_id`, ordered ascending
-     * by `created_at`. UI can also peek with `limit=1` to detect chat
-     * activity and decide whether to expose the chat tab at all.
-     */
-open func getChatMessages(groupId: String, limit: UInt32)async throws  -> [ChatMessageRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_chat_messages(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeChatMessageRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Read NIP-22 comments (kind:1111) rooted at the given uppercase
-     * scope tag — `("A", "30023:pk:d")` for articles, `("I", "isbn:…")` for
-     * books, etc. Newest first.
-     */
-open func getCommentsForReference(tagName: String, tagValue: String, limit: UInt32)async throws  -> [CommentRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_comments_for_reference(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(tagName),FfiConverterString.lower(tagValue),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeCommentRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func getDiscussions(groupId: String, limit: UInt32)async throws  -> [DiscussionRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_discussions(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeDiscussionRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Curator's latest kind:10012 list, resolved into `CommunitySummary`
-     * items in curator-chosen order. Rooms without cached metadata are
-     * dropped; the next call after `start_featured_rooms` has backfilled
-     * metadata returns the full list.
-     */
-open func getFeaturedRooms(curatorPubkeyHex: String)async throws  -> [CommunitySummary]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_featured_rooms(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(curatorPubkeyHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeCommunitySummary.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Every message in a feedback thread, ordered ascending by `created_at`.
-     */
-open func getFeedbackThreadEvents(rootEventId: String)async throws  -> [FeedbackEventRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_feedback_thread_events(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(rootEventId)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeFeedbackEventRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Threads scoped to `coordinate` authored by the current user. Returns
-     * an empty list if not logged in.
-     */
-open func getFeedbackThreads(coordinate: String)async throws  -> [FeedbackThreadRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_feedback_threads(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(coordinate)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeFeedbackThreadRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Return kind:30004 curation sets from users the current user follows.
-     */
-open func getFollowingCurationSets()async throws  -> [BookmarkSetRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_following_curation_sets(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeBookmarkSetRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Highlights home feed — kind:9802 events authored by follows plus
-     * highlights tagged into joined rooms. See
-     * `highlights::query_following_highlights` for semantics.
-     */
-open func getFollowingHighlights(limit: UInt32)async throws  -> [HydratedHighlight]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_following_highlights(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeHydratedHighlight.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Following Reads feed — articles surfaced through the user's follow
-     * graph. See `reads::query_following_reads` for semantics. Returns an
-     * empty list if the user isn't logged in or has no follows cached yet.
-     */
-open func getFollowingReads(limit: UInt32)async throws  -> [ReadingFeedItem]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_following_reads(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeReadingFeedItem.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Pubkeys (hex) the current user follows per their cached kind:3 contact
-     * list. Empty if the user isn't logged in or the cache hasn't seen a
-     * kind:3 yet. Used by the room-invite picker to surface "people you know"
-     * before any typing happens.
-     */
-open func getFollows()async throws  -> [String]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_follows(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func getHighlights(groupId: String, limit: UInt32)async throws  -> [HydratedHighlight]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_highlights(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeHydratedHighlight.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Read all highlights referencing the given NIP-23 article address
-     * (`30023:<pubkey>:<d>`) from nostrdb, newest first.
-     */
-open func getHighlightsForArticle(address: String, limit: UInt32)async throws  -> [HighlightRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_highlights_for_article(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(address),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeHighlightRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Read highlights whose `tag_name` tag holds `tag_value`, newest
-     * first. Generalizes `get_highlights_for_article`: pass `("a", "30023:pk:d")`
-     * for articles, `("i", "isbn:…")` for ISBN books, `("r", "<url>")` for
-     * podcasts. `tag_name` must be a single character.
-     */
-open func getHighlightsForReference(tagName: String, tagValue: String, limit: UInt32)async throws  -> [HighlightRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_highlights_for_reference(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(tagName),FfiConverterString.lower(tagValue),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeHighlightRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func getJoinedCommunities()async throws  -> [CommunitySummary]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_joined_communities(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeCommunitySummary.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Return all kind:30003 bookmark sets authored by the current user.
-     */
-open func getMyBookmarkSets()async throws  -> [BookmarkSetRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_my_bookmark_sets(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeBookmarkSetRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Return all kind:30004 curation sets authored by the current user.
-     */
-open func getMyCurationSets()async throws  -> [BookmarkSetRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_my_curation_sets(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeBookmarkSetRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func getMyHighlights(limit: UInt32)async throws  -> [HighlightRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_my_highlights(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeHighlightRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Return all NIP-B0 kind:39701 web bookmarks authored by the current user.
-     */
-open func getMyWebBookmarks()async throws  -> [WebBookmarkRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_my_web_bookmarks(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeWebBookmarkRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * The N most-recently-seen rooms. Same underlying query as
-     * `get_all_rooms` with a tighter limit — kept as a distinct method so
-     * the Swift explorer store's shelves remain single-purpose.
-     */
-open func getNewRooms(limit: UInt32)async throws  -> [CommunitySummary]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_new_rooms(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeCommunitySummary.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * First `p` tag of the project's kind:31933 event by addressable
-     * coordinate. The shake-to-share composer uses this to pick the agent
-     * pubkey for the root note's `p` tag. `None` if the project event isn't
-     * cached or has no agents.
-     */
-open func getProjectFirstAgentPubkey(coordinate: String)async throws  -> String?  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_project_first_agent_pubkey(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(coordinate)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterOptionString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * All cached kind:7 reactions on `target_event_id`, newest first.
-     */
-open func getReactionsForEvent(targetEventId: String, limit: UInt32)async throws  -> [ReactionRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_reactions_for_event(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(targetEventId),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeReactionRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Recent books across the user's joined communities — drives the
-     * capture-flow book picker. Returns `[]` if no books are cached or the
-     * user isn't logged in.
-     */
-open func getRecentBooks(limit: UInt32)async throws  -> [ArtifactRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_recent_books(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeArtifactRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Snapshot of the live per-relay diagnostics map. One row per URL
-     * currently in the client's pool. Refreshed by the background
-     * diagnostics poller at least once per second.
-     */
-open func getRelayDiagnostics()async throws  -> [RelayDiagnostic]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_relay_diagnostics(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeRelayDiagnostic.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Return the user's effective relay list, merging NIP-65 (read/write)
-     * with NIP-78 app-data (rooms/indexer). Falls back to `seed_defaults()`
-     * when neither has been cached yet (first login).
-     */
-open func getRelays()async throws  -> [RelayConfig]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_relays(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeRelayConfig.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Rooms where authors of articles the user has highlighted post
-     * artifacts. Empty when the user hasn't highlighted any articles yet.
-     */
-open func getRoomsFromReadAuthors(limit: UInt32)async throws  -> [RoomRecommendation]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_rooms_from_read_authors(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeRoomRecommendation.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Rooms where 2+ of the user's follows are members. Empty when the user
-     * isn't logged in, has no follows cached, or no room satisfies the
-     * threshold.
-     */
-open func getRoomsWithFriends(limit: UInt32)async throws  -> [RoomRecommendation]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_rooms_with_friends(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeRoomRecommendation.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Resolve the merged set of NIP-50 search relays for the current user —
-     * always includes `wss://relay.highlighter.com`, plus every `relay` tag
-     * from the newest cached kind:10007 (NIP-51 search relay list).
-     */
-open func getSearchRelays()async throws  -> [String]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_search_relays(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func getUserArticles(pubkeyHex: String, limit: UInt32)async throws  -> [ArticleRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_user_articles(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(pubkeyHex),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeArticleRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func getUserCommunities(pubkeyHex: String)async throws  -> [CommunitySummary]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_user_communities(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(pubkeyHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeCommunitySummary.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func getUserHighlights(pubkeyHex: String, limit: UInt32)async throws  -> [HighlightRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_user_highlights(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(pubkeyHex),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeHighlightRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func getUserProfile(pubkeyHex: String)async throws  -> ProfileMetadata?  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_user_profile(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(pubkeyHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterOptionTypeProfileMetadata.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Fetch OpenGraph + favicon metadata for a web URL. Backed by a
-     * JSON-on-disk cache (7-day positive TTL, 1-hour negative TTL) and
-     * in-flight coalescing — concurrent calls for the same URL share one
-     * HTTP request. Returns `CoreError::NotFound` when the page 404s,
-     * `CoreError::Network` on transport failure.
-     */
-open func getWebMetadata(url: String)async throws  -> WebMetadata  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_web_metadata(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(url)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeWebMetadata_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Build the canonical public share URL for a kind:9802 highlight.
-     *
-     * The shell receives only the final route. Rust owns the NIP-19 event
-     * reference, kind hint, and relay hint so platform UI cannot choose relay
-     * routing policy.
-     */
-open func highlightShareUrl(eventIdHex: String, authorPubkeyHex: String?) -> String?  {
-    return try!  FfiConverterOptionString.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_highlight_share_url(self.uniffiClonePointer(),
-        FfiConverterString.lower(eventIdHex),
-        FfiConverterOptionString.lower(authorPubkeyHex),$0
-    )
-})
-}
-
-    /**
-     * Fetch another user's kind:10002 via the indexer pool and return the
-     * parsed `RelayConfig` rows. Useful for "adopt someone else's relay
-     * setup" flows — the Swift caller shows the list with checkboxes
-     * and upserts the selected subset through `upsert_relay`.
-     */
-open func importRelaysFromNpub(npub: String)async throws  -> [RelayConfig]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_import_relays_from_npub(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(npub)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeRelayConfig.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Publish the default Blossom server list only if the user has no cached
-     * kind:10063. Called once after login; no-op when the list already exists.
-     */
-open func initDefaultBlossomServers()async throws   {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_init_default_blossom_servers(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_void,
-            completeFunc: ffi_highlighter_core_rust_future_complete_void,
-            freeFunc: ffi_highlighter_core_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Read-only predicate: is `address` currently bookmarked for the logged-in
-     * user? Always `false` when no user is logged in.
-     */
-open func isArticleBookmarked(address: String)async throws  -> Bool  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_is_article_bookmarked(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(address)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
-            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
-            freeFunc: ffi_highlighter_core_rust_future_free_i8,
-            liftFunc: FfiConverterBool.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Read-only predicate: is `event_id_hex` currently bookmarked for
-     * the logged-in user? Always `false` when no user is logged in.
-     */
-open func isEventBookmarked(eventIdHex: String)async throws  -> Bool  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_is_event_bookmarked(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(eventIdHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
-            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
-            freeFunc: ffi_highlighter_core_rust_future_free_i8,
-            liftFunc: FfiConverterBool.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Returns true if the logged-in user's cached contact list currently
-     * includes `target_pubkey_hex`.
-     */
-open func isFollowing(targetPubkeyHex: String)async throws  -> Bool  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_is_following(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(targetPubkeyHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
-            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
-            freeFunc: ffi_highlighter_core_rust_future_free_i8,
-            liftFunc: FfiConverterBool.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func loginNsec(nsec: String)throws  -> CurrentUser  {
-    return try  FfiConverterTypeCurrentUser_lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
-    uniffi_highlighter_core_fn_method_highlightercore_login_nsec(self.uniffiClonePointer(),
-        FfiConverterString.lower(nsec),$0
-    )
-})
-}
-
-open func logout()  {try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_logout(self.uniffiClonePointer(),$0
-    )
-}
-}
-
-open func lookupIsbn(isbn: String)async throws  -> ArtifactPreview  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_lookup_isbn(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(isbn)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArtifactPreview_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func pairBunker(uri: String)async throws  -> CurrentUser  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_pair_bunker(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(uri)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCurrentUser_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Fetch the target relay's NIP-11 information document via an HTTPS
-     * GET to the `ws[s]://` URL's HTTP equivalent with
-     * `Accept: application/nostr+json`. Fails fast on timeout.
-     */
-open func probeRelayNip11(url: String)async throws  -> Nip11Document  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_probe_relay_nip11(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(url)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeNip11Document_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?)async throws  -> ArtifactRecord  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_artifact(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeArtifactPreview_lower(preview),FfiConverterString.lower(groupId),FfiConverterOptionString.lower(note)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArtifactRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Publish a NIP-29 kind:9 chat message into `group_id`. When
-     * `reply_to_event_id` is set, the published event carries a marked
-     * NIP-10 `["e", <id>, "", "reply"]` tag.
-     */
-open func publishChatMessage(groupId: String, content: String, replyToEventId: String?)async throws  -> ChatMessageRecord  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_chat_message(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId),FfiConverterString.lower(content),FfiConverterOptionString.lower(replyToEventId)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeChatMessageRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Publish a NIP-22 kind:1111 comment scoped to any artifact.
-     *
-     * `root_tag_name` is `"A"` (addressable, e.g. `30023:<pubkey>:<d>`),
-     * `"E"` (event id — a highlight, an event share), or `"I"` (external
-     * content like `url:…`, `podcast:item:guid:…`, `isbn:…`).
-     * `root_tag_value` is the corresponding scope value. `root_kind` is
-     * the kind of the root event (or 0 for purely external roots).
-     * `parent_event_id` is `None` for top-level comments and `Some(id)`
-     * for replies (the parent kind:1111 comment).
-     */
-open func publishComment(rootTagName: String, rootTagValue: String, rootKind: UInt16, parentEventId: String?, content: String)async throws  -> CommentRecord  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_comment(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(rootTagName),FfiConverterString.lower(rootTagValue),FfiConverterUInt16.lower(rootKind),FfiConverterOptionString.lower(parentEventId),FfiConverterString.lower(content)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCommentRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?)async throws  -> DiscussionRecord  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_discussion(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId),FfiConverterString.lower(title),FfiConverterString.lower(body),FfiConverterOptionTypeArtifactPreview.lower(attachment)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeDiscussionRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Publish a feedback note (kind:1) for the shake-to-share surface. When
-     * `parent_event_id` is `Some`, the note is a reply marked NIP-10 root;
-     * otherwise it's a brand-new thread. `agent_pubkey` is optional — pass
-     * `None` when the project event isn't cached yet (the note still ships,
-     * just without a `p` tag).
-     */
-open func publishFeedbackNote(coordinate: String, agentPubkey: String?, parentEventId: String?, body: String)async throws  -> FeedbackEventRecord  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_feedback_note(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(coordinate),FfiConverterOptionString.lower(agentPubkey),FfiConverterOptionString.lower(parentEventId),FfiConverterString.lower(body)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeFeedbackEventRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Publish a solo NIP-84 highlight without a NIP-29 repost. Used by the
-     * article reader's text-selection flow: user highlights → event lands in
-     * their vault; sharing into a community is a later explicit action.
-     */
-open func publishHighlight(draft: HighlightDraft, artifact: ArtifactRecord)async throws  -> HighlightRecord  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_highlight(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeHighlightDraft_lower(draft),FfiConverterTypeArtifactRecord_lower(artifact)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHighlightRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func publishHighlightsAndShare(artifact: ArtifactRecord, drafts: [HighlightDraft], targetGroupId: String)async throws  -> [HighlightRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_highlights_and_share(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeArtifactRecord_lower(artifact),FfiConverterSequenceTypeHighlightDraft.lower(drafts),FfiConverterString.lower(targetGroupId)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeHighlightRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Publish a NIP-68 `kind:20` picture event into a NIP-29 community.
-     * Used by the capture flow when the user opts not to (or can't) extract
-     * a highlight quote — the photo still ships to the community with all
-     * the imeta metadata.
-     */
-open func publishPicture(draft: PictureDraft)async throws  -> PictureRecord  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_picture(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypePictureDraft_lower(draft)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypePictureRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Publish a kind:7 reaction targeting `event_id` authored by
-     * `author_pubkey_hex` of `target_kind`. `content` is the reaction
-     * body — pass `"+"` for a like.
-     */
-open func publishReaction(eventId: String, authorPubkeyHex: String, targetKind: UInt16, content: String)async throws  -> ReactionRecord  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_reaction(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(eventId),FfiConverterString.lower(authorPubkeyHex),FfiConverterUInt16.lower(targetKind),FfiConverterString.lower(content)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeReactionRecord_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Nudge the relay pool to attempt a reconnect on every disconnected
-     * relay. `Client::connect` is idempotent — already-connected relays
-     * are unaffected; disconnected / terminated / banned relays get a
-     * fresh WebSocket attempt.
-     */
-open func reconnectAll()async throws   {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_reconnect_all(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_void,
-            completeFunc: ffi_highlighter_core_rust_future_complete_void,
-            freeFunc: ffi_highlighter_core_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Remove a relay by URL.
-     */
-open func removeRelay(url: String)async throws   {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_remove_relay(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(url)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_void,
-            completeFunc: ffi_highlighter_core_rust_future_complete_void,
-            freeFunc: ffi_highlighter_core_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Publish a NIP-29 kind:9021 join-request for `group_id`. Returns the
-     * event id on success. The UI treats this as fire-and-forget: a
-     * subsequent `MembershipChanged` delta for this group with the user's
-     * pubkey is the signal that the relay admitted the request.
-     */
-open func requestJoinRoom(groupId: String)async throws  -> String  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_request_join_room(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Resolve a [`NostrEntityRef`] from nostrdb, fetching once from relay hints
-     * plus the indexer pool when the local cache is cold.
-     */
-open func resolveNostrEntity(entity: NostrEntityRef)async throws  -> NostrEntityEvent?  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_resolve_nostr_entity(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeNostrEntityRef_lower(entity)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterOptionTypeNostrEntityEvent.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func searchArticles(query: String, limit: UInt32)async throws  -> [ArticleRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_search_articles(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(query),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeArticleRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func searchArtifacts(query: String, limit: UInt32)async throws  -> [ArtifactRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_search_artifacts(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(query),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeArtifactRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func searchCommunities(query: String, limit: UInt32)async throws  -> [CommunitySummary]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_search_communities(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(query),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeCommunitySummary.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func searchHighlights(query: String, limit: UInt32)async throws  -> [HighlightRecord]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_search_highlights(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(query),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeHighlightRecord.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func searchProfiles(query: String, limit: UInt32)async throws  -> [ProfileMetadata]  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_search_profiles(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(query),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeProfileMetadata.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Idempotently set membership of `address` (NIP-33 a-tag value, e.g.
-     * `"30023:<pubkey>:<d>"`) in the current user's curation set keyed
-     * by `d_tag`. `member == true` ensures presence; `false` ensures
-     * absence. Returns the new membership state.
-     */
-open func setAddressInCurationSet(dTag: String, address: String, member: Bool)async throws  -> Bool  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_set_address_in_curation_set(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(dTag),FfiConverterString.lower(address),FfiConverterBool.lower(member)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
-            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
-            freeFunc: ffi_highlighter_core_rust_future_free_i8,
-            liftFunc: FfiConverterBool.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Replace the user's Blossom server list with `servers` (must be
-     * non-empty). Order is preserved — first server is the upload default.
-     */
-open func setBlossomServers(servers: [String])async throws  -> String  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_set_blossom_servers(
-                    self.uniffiClonePointer(),
-                    FfiConverterSequenceString.lower(servers)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func setEventCallback(callback: EventCallback)  {try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_set_event_callback(self.uniffiClonePointer(),
-        FfiConverterTypeEventCallback_lower(callback),$0
-    )
-}
-}
-
-    /**
-     * Publish a new kind:3 that adds (`follow=true`) or removes
-     * (`follow=false`) `target_pubkey_hex` from the logged-in user's contact
-     * list. Returns the new event id, or `None` if already in the desired
-     * state (no republish).
-     */
-open func setFollow(targetPubkeyHex: String, follow: Bool)async throws  -> String?  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_set_follow(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(targetPubkeyHex),FfiConverterBool.lower(follow)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterOptionString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Atomically update a single relay's role flags.
-     */
-open func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool)async throws   {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_set_relay_roles(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(url),FfiConverterBool.lower(read),FfiConverterBool.lower(write),FfiConverterBool.lower(rooms),FfiConverterBool.lower(indexer)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_void,
-            completeFunc: ffi_highlighter_core_rust_future_complete_void,
-            freeFunc: ffi_highlighter_core_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Re-share an existing kind:9802 highlight into a NIP-29 room as a
-     * kind:16 generic repost. Used to surface a friend's highlight (or
-     * your own old one) into a community without re-publishing the
-     * underlying highlight event. The repost carries `["e", id]`,
-     * `["k", "9802"]`, `["p", author]`, and `["h", target_group_id]`
-     * per NIP-18 + NIP-29 conventions. Empty `relay_url` falls back
-     * to the Highlighter relay as the e-tag relay hint.
-     */
-open func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String)async throws   {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_share_highlight_to_room(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(highlightId),FfiConverterString.lower(highlightAuthorPubkeyHex),FfiConverterString.lower(highlightRelayUrl),FfiConverterString.lower(targetGroupId)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_void,
-            completeFunc: ffi_highlighter_core_rust_future_complete_void,
-            freeFunc: ffi_highlighter_core_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Sign a NIP-05 registration authorization event (kind:27235) for
-     * claiming `name@domain` on the Highlighter managed NIP-05 service.
-     * Returns the raw JSON of the signed event for use in the `auth` field
-     * of the POST `/api/nip05` request body.
-     */
-open func signNip05RegistrationAuth(name: String, domain: String)async throws  -> String  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_sign_nip05_registration_auth(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(name),FfiConverterString.lower(domain)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Sign a NIP-98 HTTP auth event (kind:27235) for a Blossom upload
-     * request. Returns the raw JSON of the signed event; the Swift caller
-     * base64-encodes it and uses it as `Authorization: Nostr <base64>`.
-     * `payload_hash` is the hex SHA-256 of the file bytes (required for PUT).
-     */
-open func signNip98Auth(url: String, method: String, payloadHash: String?)async throws  -> String  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_sign_nip98_auth(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(url),FfiConverterString.lower(method),FfiConverterOptionString.lower(payloadHash)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Install (if not already installed) the kind:10012 curated-list sub for
-     * `curator_pubkey_hex`. Once the list lands in ndb, this method also
-     * spawns a metadata backfill for every group the list references, so a
-     * subsequent `get_featured_rooms` returns rich summaries rather than
-     * bare ids. Idempotent; the sub rides until logout.
-     */
-open func startFeaturedRooms(curatorPubkeyHex: String)async throws   {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_start_featured_rooms(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(curatorPubkeyHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_void,
-            completeFunc: ffi_highlighter_core_rust_future_complete_void,
-            freeFunc: ffi_highlighter_core_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Install (if not already installed) two relay subs that together
-     * power the "Friends are here" explorer shelf:
-     *
-     * 1. kind:10009 authored by any of the user's follows — NIP-51
-     * user-owned "simple groups" list (denser, always-public signal).
-     * 2. kind:39001 / 39002 where any follow appears in a `p` tag —
-     * relay-owned membership fallback for groups whose members haven't
-     * published a 10009 yet.
-     *
-     * No-op if the user isn't logged in or has no follows cached yet.
-     * Idempotent; both subs ride until logout.
-     */
-open func startFriendsRoomsDiscovery()async throws   {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_start_friends_rooms_discovery(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_void,
-            completeFunc: ffi_highlighter_core_rust_future_complete_void,
-            freeFunc: ffi_highlighter_core_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-open func startNostrConnect(options: NostrConnectOptions)async throws  -> String  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_start_nostr_connect(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeNostrConnectOptions_lower(options)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Install (if not already installed) a long-lived relay sub for every
-     * kind:39000 metadata event. Call once on explorer appear from iOS.
-     * Idempotent; the sub rides until logout.
-     */
-open func startRoomDiscovery()async   {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_start_room_discovery(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_void,
-            completeFunc: ffi_highlighter_core_rust_future_complete_void,
-            freeFunc: ffi_highlighter_core_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Article-reader view-scope subscription. Fires `ArticleUpdated` deltas
-     * whenever the article's replaceable body supersedes OR a new kind:9802
-     * highlighting this article's `a`-tag arrives. Install on reader view
-     * appearance; `unsubscribe(handle)` on disappearance.
-     */
-open func subscribeArticle(pubkeyHex: String, dTag: String)async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_article(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(pubkeyHex),FfiConverterString.lower(dTag)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Open a NIP-50 relay subscription for kind:30023 against the user's
-     * search relays. Returns a handle; the pump fires
-     * `SearchArticlesUpdated { query }` deltas as matching events ingest,
-     * and the Swift store responds by re-running `search_articles` locally
-     * to merge the new events into its Articles bucket.
-     */
-open func subscribeArticleSearch(query: String)async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_article_search(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(query)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Open a live subscription for the current user's kind:30003/30004 sets.
-     * Delivers `BookmarkSetsUpdated` (view-scoped) on each delta.
-     */
-open func subscribeBookmarkSets()async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_bookmark_sets(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Open a live subscription on the current user's kind:10003 bookmark
-     * events. Deltas land on the app-scope bus (`BookmarksUpdated`); the
-     * Swift bookmarks store re-queries on each.
-     */
-open func subscribeBookmarks()async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_bookmarks(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Per-thread feedback subscription. Fires `FeedbackThreadEventUpserted`
-     * deltas for every kind:1 `e`-tagged to the root (regardless of author).
-     */
-open func subscribeFeedbackThread(rootEventId: String)async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_feedback_thread(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(rootEventId)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Feedback-threads subscription for the shake-to-share surface. Fires
-     * `FeedbackThreadsUpdated` deltas whenever a kind:1 root authored by
-     * the current user (with the project `a` tag) or any kind:513 metadata
-     * for the same project arrives. Swift re-queries on each.
-     */
-open func subscribeFeedbackThreads(coordinate: String)async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_feedback_threads(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(coordinate)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Open a live subscription for kind:30004 sets from followed authors.
-     * Delivers `FollowingCurationSetsUpdated` (view-scoped) on each delta.
-     */
-open func subscribeFollowingCurationSets()async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_following_curation_sets(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Highlights home-feed view-scope subscription. Snapshots the user's
-     * current follow list (plus self — nobody lists themselves in kind:3
-     * but we want our own highlights in the home feed) and joined-group
-     * ids, then listens for kind:9802 events authored by anyone in that
-     * set or tagged into any joined room.
-     */
-open func subscribeFollowingHighlights()async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_following_highlights(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Following Reads view-scope subscription. Snapshots the user's current
-     * follow list, then listens for: (a) new articles authored by a follow,
-     * (b) interactions by a follow against any kind:30023 content. Fires
-     * `FollowingReadsUpdated` deltas; the Swift store re-queries the feed.
-     * Install on tab appearance; `unsubscribe(handle)` on disappearance.
-     */
-open func subscribeFollowingReads()async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_following_reads(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * App-scope subscription for the joined-communities view. Returns a
-     * handle; fires CommunityUpserted / MembershipChanged deltas tagged
-     * with that handle. Re-uses the relay sub installed at login; this
-     * call is about setting up the nostrdb notification pump.
-     */
-open func subscribeJoinedCommunities()async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_joined_communities(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Handle the Swift side uses to match `RelayStatusChanged` deltas on the
-     * event bus. Relay status changes are app-scoped and ride
-     * `subscription_id == 0`, so this returns `0` unconditionally — the
-     * value is a stable contract, not a unique sub id.
-     */
-open func subscribeRelayStatus()async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_relay_status(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Per-room view-scope subscription. Returns a handle; fires
-     * ArtifactUpserted / HighlightUpserted / HighlightShared for this
-     * specific group.
-     */
-open func subscribeRoom(groupId: String)async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_room(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Per-room Chat view-scope subscription. Returns a handle; fires
-     * `ChatMessageUpserted` deltas for kind:9 messages tagged
-     * `#h=<group_id>`.
-     */
-open func subscribeRoomChat(groupId: String)async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_room_chat(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Per-room Discussions view-scope subscription. Returns a handle; fires
-     * `DiscussionUpserted` deltas for kind:11 threads in this group that
-     * carry the `t=discussion` marker.
-     */
-open func subscribeRoomDiscussions(groupId: String)async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_room_discussions(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Profile view-scope subscription. Fires `UserProfileUpdated` deltas
-     * when any event relevant to `pubkey_hex`'s profile arrives. Install on
-     * profile view appearance; `unsubscribe(handle)` on disappearance.
-     */
-open func subscribeUserProfile(pubkeyHex: String)async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_user_profile(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(pubkeyHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Vault view-scope subscription for the current user's own highlights.
-     */
-open func subscribeVault()async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_vault(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Open a live subscription for the current user's NIP-B0 kind:39701 events.
-     * Delivers `WebBookmarksUpdated` (view-scoped) on each delta.
-     */
-open func subscribeWebBookmarks()async throws  -> UInt64  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_subscribe_web_bookmarks(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_u64,
-            completeFunc: ffi_highlighter_core_rust_future_complete_u64,
-            freeFunc: ffi_highlighter_core_rust_future_free_u64,
-            liftFunc: FfiConverterUInt64.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Toggle `address` in the user's kind:10003 list. Returns the new
-     * membership state — `true` if the address is now bookmarked, `false`
-     * if it was removed.
-     */
-open func toggleArticleBookmark(address: String)async throws  -> Bool  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_toggle_article_bookmark(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(address)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
-            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
-            freeFunc: ffi_highlighter_core_rust_future_free_i8,
-            liftFunc: FfiConverterBool.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Toggle `event_id_hex` in the user's kind:10003 list (for comments
-     * and other event-id-addressed targets). Returns the new membership
-     * state.
-     */
-open func toggleEventBookmark(eventIdHex: String)async throws  -> Bool  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_toggle_event_bookmark(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(eventIdHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
-            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
-            freeFunc: ffi_highlighter_core_rust_future_free_i8,
-            liftFunc: FfiConverterBool.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Delete one of the user's own kind:7 reactions via NIP-09.
-     */
-open func unpublishReaction(reactionEventId: String)async throws  -> String  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_unpublish_reaction(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(reactionEventId)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterString.lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Drop a subscription by handle. Idempotent.
-     */
-open func unsubscribe(handle: UInt64)  {try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_unsubscribe(self.uniffiClonePointer(),
-        FfiConverterUInt64.lower(handle),$0
-    )
-}
-}
-
-    /**
-     * Publish a new kind:0 metadata event for the current user. Preserves
-     * any unknown JSON fields the user had set via other clients —
-     * only the canonical fields the edit form drives get overwritten.
-     * Empty strings clear the corresponding field. Returns the parsed
-     * metadata so the caller's UI can swap to the new state without
-     * waiting for the relay echo.
-     */
-open func updateProfile(name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String)async throws  -> ProfileMetadata  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_update_profile(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(name),FfiConverterString.lower(displayName),FfiConverterString.lower(about),FfiConverterString.lower(picture),FfiConverterString.lower(banner),FfiConverterString.lower(nip05),FfiConverterString.lower(website),FfiConverterString.lower(lud16)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeProfileMetadata_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Upload a photo to the default Blossom server (`blossom.primal.net`)
-     * using BUD-01 auth. The caller (iOS) is responsible for stripping EXIF
-     * metadata and recompressing the image before sending bytes — Rust does
-     * not decode the image. `width`/`height` are stamped onto the returned
-     * descriptor for use in the publishing event's `imeta` tag.
-     * `alt` is the recognized OCR text, or empty if none.
-     */
-open func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String)async throws  -> BlossomUpload  {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_upload_photo(
-                    self.uniffiClonePointer(),
-                    FfiConverterData.lower(bytes),FfiConverterString.lower(mime),FfiConverterUInt32.lower(width),FfiConverterUInt32.lower(height),FfiConverterString.lower(alt)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeBlossomUpload_lift,
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-    /**
-     * Insert-or-update a single relay. Replaces the row with matching URL or
-     * appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
-     * the live relay pool so the change takes effect immediately.
-     */
-open func upsertRelay(cfg: RelayConfig)async throws   {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_upsert_relay(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeRelayConfig_lower(cfg)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_void,
-            completeFunc: ffi_highlighter_core_rust_future_complete_void,
-            freeFunc: ffi_highlighter_core_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeCoreError_lift
-        )
-}
-
-
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeHighlighterCore: FfiConverter {
-
-    typealias FfiType = UnsafeMutableRawPointer
-    typealias SwiftType = HighlighterCore
-
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> HighlighterCore {
-        return HighlighterCore(unsafeFromRawPointer: pointer)
-    }
-
-    public static func lower(_ value: HighlighterCore) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterCore {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
-    }
-
-    public static func write(_ value: HighlighterCore, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHighlighterCore_lift(_ pointer: UnsafeMutableRawPointer) throws -> HighlighterCore {
-    return try FfiConverterTypeHighlighterCore.lift(pointer)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHighlighterCore_lower(_ value: HighlighterCore) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeHighlighterCore.lower(value)
-}
-
-
-
-
-
-
 public protocol HighlighterNmpAppProtocol: AnyObject, Sendable {
 
-    func clearLegacyEventCallback()
+    func article(pubkeyHex: String, dTag: String) async  -> ArticleRecord?
+
+    func clearCoreEventCallback()
+
+    func decodeNostrEntity(input: String)  -> NostrEntityRef?
 
     func dispatch(action: HighlighterAppAction)
 
-    /**
-     * Compatibility handle for screens that have not yet moved to
-     * `dispatch` + `state`. New code should prefer the NMP facade.
-     */
-    func legacyCore()  -> HighlighterCore
+    func highlightShareUrl(eventIdHex: String, authorPubkeyHex: String?)  -> String?
 
     func listenForUpdates(reconciler: HighlighterAppReconciler)
 
-    func setLegacyEventCallback(callback: EventCallback)
+    func networkRemovalImpact(url: String)  -> HighlighterRelayRemovalImpact?
+
+    func publishUrlShare(url: String, groupId: String, note: String?) async  -> Bool
+
+    func resolveNostrEntity(entity: NostrEntityRef) async  -> NostrEntityEvent?
+
+    func setCoreEventCallback(callback: EventCallback)
 
     func state()  -> HighlighterAppState
 
@@ -4121,10 +1096,36 @@ public convenience init(config: HighlighterAppConfig) {
 
 
 
-open func clearLegacyEventCallback()  {try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlighternmpapp_clear_legacy_event_callback(self.uniffiClonePointer(),$0
+open func article(pubkeyHex: String, dTag: String)async  -> ArticleRecord?  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlighternmpapp_article(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(pubkeyHex),FfiConverterString.lower(dTag)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionTypeArticleRecord.lift,
+            errorHandler: nil
+
+        )
+}
+
+open func clearCoreEventCallback()  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighternmpapp_clear_core_event_callback(self.uniffiClonePointer(),$0
     )
 }
+}
+
+open func decodeNostrEntity(input: String) -> NostrEntityRef?  {
+    return try!  FfiConverterOptionTypeNostrEntityRef.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighternmpapp_decode_nostr_entity(self.uniffiClonePointer(),
+        FfiConverterString.lower(input),$0
+    )
+})
 }
 
 open func dispatch(action: HighlighterAppAction)  {try! rustCall() {
@@ -4134,13 +1135,11 @@ open func dispatch(action: HighlighterAppAction)  {try! rustCall() {
 }
 }
 
-    /**
-     * Compatibility handle for screens that have not yet moved to
-     * `dispatch` + `state`. New code should prefer the NMP facade.
-     */
-open func legacyCore() -> HighlighterCore  {
-    return try!  FfiConverterTypeHighlighterCore_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlighternmpapp_legacy_core(self.uniffiClonePointer(),$0
+open func highlightShareUrl(eventIdHex: String, authorPubkeyHex: String?) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighternmpapp_highlight_share_url(self.uniffiClonePointer(),
+        FfiConverterString.lower(eventIdHex),
+        FfiConverterOptionString.lower(authorPubkeyHex),$0
     )
 })
 }
@@ -4152,8 +1151,52 @@ open func listenForUpdates(reconciler: HighlighterAppReconciler)  {try! rustCall
 }
 }
 
-open func setLegacyEventCallback(callback: EventCallback)  {try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlighternmpapp_set_legacy_event_callback(self.uniffiClonePointer(),
+open func networkRemovalImpact(url: String) -> HighlighterRelayRemovalImpact?  {
+    return try!  FfiConverterOptionTypeHighlighterRelayRemovalImpact.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighternmpapp_network_removal_impact(self.uniffiClonePointer(),
+        FfiConverterString.lower(url),$0
+    )
+})
+}
+
+open func publishUrlShare(url: String, groupId: String, note: String?)async  -> Bool  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlighternmpapp_publish_url_share(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(url),FfiConverterString.lower(groupId),FfiConverterOptionString.lower(note)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_i8,
+            completeFunc: ffi_highlighter_core_rust_future_complete_i8,
+            freeFunc: ffi_highlighter_core_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: nil
+
+        )
+}
+
+open func resolveNostrEntity(entity: NostrEntityRef)async  -> NostrEntityEvent?  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlighternmpapp_resolve_nostr_entity(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeNostrEntityRef_lower(entity)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionTypeNostrEntityEvent.lift,
+            errorHandler: nil
+
+        )
+}
+
+open func setCoreEventCallback(callback: EventCallback)  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighternmpapp_set_core_event_callback(self.uniffiClonePointer(),
         FfiConverterTypeEventCallback_lower(callback),$0
     )
 }
@@ -6828,18 +3871,30 @@ public struct HighlighterAppState {
     public var rev: UInt64
     public var isBootstrapping: Bool
     public var createAccount: HighlighterCreateAccountSnapshot
+    public var createRoom: HighlighterCreateRoomSnapshot
+    public var roomInvite: HighlighterRoomInviteSnapshot
+    public var comments: HighlighterCommentsSnapshot
+    public var feedback: HighlighterFeedbackSnapshot
+    public var mediaSettings: HighlighterMediaSettingsSnapshot
+    public var editProfile: HighlighterEditProfileSnapshot
     public var auth: HighlighterAuthSnapshot
     public var chrome: HighlighterChromeSnapshot
     public var shareExtension: HighlighterShareExtensionSnapshot
+    public var shareComposer: HighlighterShareComposerSnapshot
+    public var capture: HighlighterCaptureSnapshot
+    public var bookPicker: HighlighterBookPickerSnapshot
     public var onboarding: HighlighterOnboardingSnapshot
     public var isbnPreviews: [HighlighterIsbnPreview]
     public var isbnPreviewCount: UInt64
     public var webMetadata: [HighlighterWebMetadata]
     public var webMetadataCount: UInt64
+    public var referenceHighlights: [HighlighterReferenceHighlightBucket]
+    public var referenceHighlightCount: UInt64
     public var profiles: [HighlighterProfile]
     public var profileCount: UInt64
     public var profileView: HighlighterProfileViewSnapshot
     public var articleReader: HighlighterArticleReaderSnapshot
+    public var roomDetail: HighlighterRoomDetailSnapshot
     public var homeFeed: HighlighterHomeFeedSnapshot
     public var bookmarks: HighlighterBookmarksSnapshot
     public var curationMenu: HighlighterCurationMenuSnapshot
@@ -6850,22 +3905,34 @@ public struct HighlighterAppState {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(rev: UInt64, isBootstrapping: Bool, createAccount: HighlighterCreateAccountSnapshot, auth: HighlighterAuthSnapshot, chrome: HighlighterChromeSnapshot, shareExtension: HighlighterShareExtensionSnapshot, onboarding: HighlighterOnboardingSnapshot, isbnPreviews: [HighlighterIsbnPreview], isbnPreviewCount: UInt64, webMetadata: [HighlighterWebMetadata], webMetadataCount: UInt64, profiles: [HighlighterProfile], profileCount: UInt64, profileView: HighlighterProfileViewSnapshot, articleReader: HighlighterArticleReaderSnapshot, homeFeed: HighlighterHomeFeedSnapshot, bookmarks: HighlighterBookmarksSnapshot, curationMenu: HighlighterCurationMenuSnapshot, search: HighlighterSearchSnapshot, roomExplorer: HighlighterRoomExplorerSnapshot, network: HighlighterNetworkSnapshot, toast: HighlighterToast?) {
+    public init(rev: UInt64, isBootstrapping: Bool, createAccount: HighlighterCreateAccountSnapshot, createRoom: HighlighterCreateRoomSnapshot, roomInvite: HighlighterRoomInviteSnapshot, comments: HighlighterCommentsSnapshot, feedback: HighlighterFeedbackSnapshot, mediaSettings: HighlighterMediaSettingsSnapshot, editProfile: HighlighterEditProfileSnapshot, auth: HighlighterAuthSnapshot, chrome: HighlighterChromeSnapshot, shareExtension: HighlighterShareExtensionSnapshot, shareComposer: HighlighterShareComposerSnapshot, capture: HighlighterCaptureSnapshot, bookPicker: HighlighterBookPickerSnapshot, onboarding: HighlighterOnboardingSnapshot, isbnPreviews: [HighlighterIsbnPreview], isbnPreviewCount: UInt64, webMetadata: [HighlighterWebMetadata], webMetadataCount: UInt64, referenceHighlights: [HighlighterReferenceHighlightBucket], referenceHighlightCount: UInt64, profiles: [HighlighterProfile], profileCount: UInt64, profileView: HighlighterProfileViewSnapshot, articleReader: HighlighterArticleReaderSnapshot, roomDetail: HighlighterRoomDetailSnapshot, homeFeed: HighlighterHomeFeedSnapshot, bookmarks: HighlighterBookmarksSnapshot, curationMenu: HighlighterCurationMenuSnapshot, search: HighlighterSearchSnapshot, roomExplorer: HighlighterRoomExplorerSnapshot, network: HighlighterNetworkSnapshot, toast: HighlighterToast?) {
         self.rev = rev
         self.isBootstrapping = isBootstrapping
         self.createAccount = createAccount
+        self.createRoom = createRoom
+        self.roomInvite = roomInvite
+        self.comments = comments
+        self.feedback = feedback
+        self.mediaSettings = mediaSettings
+        self.editProfile = editProfile
         self.auth = auth
         self.chrome = chrome
         self.shareExtension = shareExtension
+        self.shareComposer = shareComposer
+        self.capture = capture
+        self.bookPicker = bookPicker
         self.onboarding = onboarding
         self.isbnPreviews = isbnPreviews
         self.isbnPreviewCount = isbnPreviewCount
         self.webMetadata = webMetadata
         self.webMetadataCount = webMetadataCount
+        self.referenceHighlights = referenceHighlights
+        self.referenceHighlightCount = referenceHighlightCount
         self.profiles = profiles
         self.profileCount = profileCount
         self.profileView = profileView
         self.articleReader = articleReader
+        self.roomDetail = roomDetail
         self.homeFeed = homeFeed
         self.bookmarks = bookmarks
         self.curationMenu = curationMenu
@@ -6892,6 +3959,24 @@ extension HighlighterAppState: Equatable, Hashable {
         if lhs.createAccount != rhs.createAccount {
             return false
         }
+        if lhs.createRoom != rhs.createRoom {
+            return false
+        }
+        if lhs.roomInvite != rhs.roomInvite {
+            return false
+        }
+        if lhs.comments != rhs.comments {
+            return false
+        }
+        if lhs.feedback != rhs.feedback {
+            return false
+        }
+        if lhs.mediaSettings != rhs.mediaSettings {
+            return false
+        }
+        if lhs.editProfile != rhs.editProfile {
+            return false
+        }
         if lhs.auth != rhs.auth {
             return false
         }
@@ -6899,6 +3984,15 @@ extension HighlighterAppState: Equatable, Hashable {
             return false
         }
         if lhs.shareExtension != rhs.shareExtension {
+            return false
+        }
+        if lhs.shareComposer != rhs.shareComposer {
+            return false
+        }
+        if lhs.capture != rhs.capture {
+            return false
+        }
+        if lhs.bookPicker != rhs.bookPicker {
             return false
         }
         if lhs.onboarding != rhs.onboarding {
@@ -6916,6 +4010,12 @@ extension HighlighterAppState: Equatable, Hashable {
         if lhs.webMetadataCount != rhs.webMetadataCount {
             return false
         }
+        if lhs.referenceHighlights != rhs.referenceHighlights {
+            return false
+        }
+        if lhs.referenceHighlightCount != rhs.referenceHighlightCount {
+            return false
+        }
         if lhs.profiles != rhs.profiles {
             return false
         }
@@ -6926,6 +4026,9 @@ extension HighlighterAppState: Equatable, Hashable {
             return false
         }
         if lhs.articleReader != rhs.articleReader {
+            return false
+        }
+        if lhs.roomDetail != rhs.roomDetail {
             return false
         }
         if lhs.homeFeed != rhs.homeFeed {
@@ -6956,18 +4059,30 @@ extension HighlighterAppState: Equatable, Hashable {
         hasher.combine(rev)
         hasher.combine(isBootstrapping)
         hasher.combine(createAccount)
+        hasher.combine(createRoom)
+        hasher.combine(roomInvite)
+        hasher.combine(comments)
+        hasher.combine(feedback)
+        hasher.combine(mediaSettings)
+        hasher.combine(editProfile)
         hasher.combine(auth)
         hasher.combine(chrome)
         hasher.combine(shareExtension)
+        hasher.combine(shareComposer)
+        hasher.combine(capture)
+        hasher.combine(bookPicker)
         hasher.combine(onboarding)
         hasher.combine(isbnPreviews)
         hasher.combine(isbnPreviewCount)
         hasher.combine(webMetadata)
         hasher.combine(webMetadataCount)
+        hasher.combine(referenceHighlights)
+        hasher.combine(referenceHighlightCount)
         hasher.combine(profiles)
         hasher.combine(profileCount)
         hasher.combine(profileView)
         hasher.combine(articleReader)
+        hasher.combine(roomDetail)
         hasher.combine(homeFeed)
         hasher.combine(bookmarks)
         hasher.combine(curationMenu)
@@ -6990,18 +4105,30 @@ public struct FfiConverterTypeHighlighterAppState: FfiConverterRustBuffer {
                 rev: FfiConverterUInt64.read(from: &buf),
                 isBootstrapping: FfiConverterBool.read(from: &buf),
                 createAccount: FfiConverterTypeHighlighterCreateAccountSnapshot.read(from: &buf),
+                createRoom: FfiConverterTypeHighlighterCreateRoomSnapshot.read(from: &buf),
+                roomInvite: FfiConverterTypeHighlighterRoomInviteSnapshot.read(from: &buf),
+                comments: FfiConverterTypeHighlighterCommentsSnapshot.read(from: &buf),
+                feedback: FfiConverterTypeHighlighterFeedbackSnapshot.read(from: &buf),
+                mediaSettings: FfiConverterTypeHighlighterMediaSettingsSnapshot.read(from: &buf),
+                editProfile: FfiConverterTypeHighlighterEditProfileSnapshot.read(from: &buf),
                 auth: FfiConverterTypeHighlighterAuthSnapshot.read(from: &buf),
                 chrome: FfiConverterTypeHighlighterChromeSnapshot.read(from: &buf),
                 shareExtension: FfiConverterTypeHighlighterShareExtensionSnapshot.read(from: &buf),
+                shareComposer: FfiConverterTypeHighlighterShareComposerSnapshot.read(from: &buf),
+                capture: FfiConverterTypeHighlighterCaptureSnapshot.read(from: &buf),
+                bookPicker: FfiConverterTypeHighlighterBookPickerSnapshot.read(from: &buf),
                 onboarding: FfiConverterTypeHighlighterOnboardingSnapshot.read(from: &buf),
                 isbnPreviews: FfiConverterSequenceTypeHighlighterIsbnPreview.read(from: &buf),
                 isbnPreviewCount: FfiConverterUInt64.read(from: &buf),
                 webMetadata: FfiConverterSequenceTypeHighlighterWebMetadata.read(from: &buf),
                 webMetadataCount: FfiConverterUInt64.read(from: &buf),
+                referenceHighlights: FfiConverterSequenceTypeHighlighterReferenceHighlightBucket.read(from: &buf),
+                referenceHighlightCount: FfiConverterUInt64.read(from: &buf),
                 profiles: FfiConverterSequenceTypeHighlighterProfile.read(from: &buf),
                 profileCount: FfiConverterUInt64.read(from: &buf),
                 profileView: FfiConverterTypeHighlighterProfileViewSnapshot.read(from: &buf),
                 articleReader: FfiConverterTypeHighlighterArticleReaderSnapshot.read(from: &buf),
+                roomDetail: FfiConverterTypeHighlighterRoomDetailSnapshot.read(from: &buf),
                 homeFeed: FfiConverterTypeHighlighterHomeFeedSnapshot.read(from: &buf),
                 bookmarks: FfiConverterTypeHighlighterBookmarksSnapshot.read(from: &buf),
                 curationMenu: FfiConverterTypeHighlighterCurationMenuSnapshot.read(from: &buf),
@@ -7016,18 +4143,30 @@ public struct FfiConverterTypeHighlighterAppState: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.rev, into: &buf)
         FfiConverterBool.write(value.isBootstrapping, into: &buf)
         FfiConverterTypeHighlighterCreateAccountSnapshot.write(value.createAccount, into: &buf)
+        FfiConverterTypeHighlighterCreateRoomSnapshot.write(value.createRoom, into: &buf)
+        FfiConverterTypeHighlighterRoomInviteSnapshot.write(value.roomInvite, into: &buf)
+        FfiConverterTypeHighlighterCommentsSnapshot.write(value.comments, into: &buf)
+        FfiConverterTypeHighlighterFeedbackSnapshot.write(value.feedback, into: &buf)
+        FfiConverterTypeHighlighterMediaSettingsSnapshot.write(value.mediaSettings, into: &buf)
+        FfiConverterTypeHighlighterEditProfileSnapshot.write(value.editProfile, into: &buf)
         FfiConverterTypeHighlighterAuthSnapshot.write(value.auth, into: &buf)
         FfiConverterTypeHighlighterChromeSnapshot.write(value.chrome, into: &buf)
         FfiConverterTypeHighlighterShareExtensionSnapshot.write(value.shareExtension, into: &buf)
+        FfiConverterTypeHighlighterShareComposerSnapshot.write(value.shareComposer, into: &buf)
+        FfiConverterTypeHighlighterCaptureSnapshot.write(value.capture, into: &buf)
+        FfiConverterTypeHighlighterBookPickerSnapshot.write(value.bookPicker, into: &buf)
         FfiConverterTypeHighlighterOnboardingSnapshot.write(value.onboarding, into: &buf)
         FfiConverterSequenceTypeHighlighterIsbnPreview.write(value.isbnPreviews, into: &buf)
         FfiConverterUInt64.write(value.isbnPreviewCount, into: &buf)
         FfiConverterSequenceTypeHighlighterWebMetadata.write(value.webMetadata, into: &buf)
         FfiConverterUInt64.write(value.webMetadataCount, into: &buf)
+        FfiConverterSequenceTypeHighlighterReferenceHighlightBucket.write(value.referenceHighlights, into: &buf)
+        FfiConverterUInt64.write(value.referenceHighlightCount, into: &buf)
         FfiConverterSequenceTypeHighlighterProfile.write(value.profiles, into: &buf)
         FfiConverterUInt64.write(value.profileCount, into: &buf)
         FfiConverterTypeHighlighterProfileViewSnapshot.write(value.profileView, into: &buf)
         FfiConverterTypeHighlighterArticleReaderSnapshot.write(value.articleReader, into: &buf)
+        FfiConverterTypeHighlighterRoomDetailSnapshot.write(value.roomDetail, into: &buf)
         FfiConverterTypeHighlighterHomeFeedSnapshot.write(value.homeFeed, into: &buf)
         FfiConverterTypeHighlighterBookmarksSnapshot.write(value.bookmarks, into: &buf)
         FfiConverterTypeHighlighterCurationMenuSnapshot.write(value.curationMenu, into: &buf)
@@ -7255,6 +4394,124 @@ public func FfiConverterTypeHighlighterAuthSnapshot_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeHighlighterAuthSnapshot_lower(_ value: HighlighterAuthSnapshot) -> RustBuffer {
     return FfiConverterTypeHighlighterAuthSnapshot.lower(value)
+}
+
+
+public struct HighlighterBookPickerSnapshot {
+    public var recentBooks: [ArtifactRecord]
+    public var recentBookCount: UInt64
+    public var searchQuery: String
+    public var searchResults: [ArtifactRecord]
+    public var searchResultCount: UInt64
+    public var isLoadingRecents: Bool
+    public var isSearching: Bool
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(recentBooks: [ArtifactRecord], recentBookCount: UInt64, searchQuery: String, searchResults: [ArtifactRecord], searchResultCount: UInt64, isLoadingRecents: Bool, isSearching: Bool, errorMessage: String?) {
+        self.recentBooks = recentBooks
+        self.recentBookCount = recentBookCount
+        self.searchQuery = searchQuery
+        self.searchResults = searchResults
+        self.searchResultCount = searchResultCount
+        self.isLoadingRecents = isLoadingRecents
+        self.isSearching = isSearching
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterBookPickerSnapshot: Sendable {}
+#endif
+
+
+extension HighlighterBookPickerSnapshot: Equatable, Hashable {
+    public static func ==(lhs: HighlighterBookPickerSnapshot, rhs: HighlighterBookPickerSnapshot) -> Bool {
+        if lhs.recentBooks != rhs.recentBooks {
+            return false
+        }
+        if lhs.recentBookCount != rhs.recentBookCount {
+            return false
+        }
+        if lhs.searchQuery != rhs.searchQuery {
+            return false
+        }
+        if lhs.searchResults != rhs.searchResults {
+            return false
+        }
+        if lhs.searchResultCount != rhs.searchResultCount {
+            return false
+        }
+        if lhs.isLoadingRecents != rhs.isLoadingRecents {
+            return false
+        }
+        if lhs.isSearching != rhs.isSearching {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(recentBooks)
+        hasher.combine(recentBookCount)
+        hasher.combine(searchQuery)
+        hasher.combine(searchResults)
+        hasher.combine(searchResultCount)
+        hasher.combine(isLoadingRecents)
+        hasher.combine(isSearching)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterBookPickerSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterBookPickerSnapshot {
+        return
+            try HighlighterBookPickerSnapshot(
+                recentBooks: FfiConverterSequenceTypeArtifactRecord.read(from: &buf),
+                recentBookCount: FfiConverterUInt64.read(from: &buf),
+                searchQuery: FfiConverterString.read(from: &buf),
+                searchResults: FfiConverterSequenceTypeArtifactRecord.read(from: &buf),
+                searchResultCount: FfiConverterUInt64.read(from: &buf),
+                isLoadingRecents: FfiConverterBool.read(from: &buf),
+                isSearching: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterBookPickerSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeArtifactRecord.write(value.recentBooks, into: &buf)
+        FfiConverterUInt64.write(value.recentBookCount, into: &buf)
+        FfiConverterString.write(value.searchQuery, into: &buf)
+        FfiConverterSequenceTypeArtifactRecord.write(value.searchResults, into: &buf)
+        FfiConverterUInt64.write(value.searchResultCount, into: &buf)
+        FfiConverterBool.write(value.isLoadingRecents, into: &buf)
+        FfiConverterBool.write(value.isSearching, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterBookPickerSnapshot_lift(_ buf: RustBuffer) throws -> HighlighterBookPickerSnapshot {
+    return try FfiConverterTypeHighlighterBookPickerSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterBookPickerSnapshot_lower(_ value: HighlighterBookPickerSnapshot) -> RustBuffer {
+    return FfiConverterTypeHighlighterBookPickerSnapshot.lower(value)
 }
 
 
@@ -7518,6 +4775,108 @@ public func FfiConverterTypeHighlighterBookmarksSnapshot_lower(_ value: Highligh
 }
 
 
+public struct HighlighterCaptureSnapshot {
+    public var upload: BlossomUpload?
+    public var isUploading: Bool
+    public var uploadErrorMessage: String?
+    public var isPublishing: Bool
+    public var publishedEventId: String?
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(upload: BlossomUpload?, isUploading: Bool, uploadErrorMessage: String?, isPublishing: Bool, publishedEventId: String?, errorMessage: String?) {
+        self.upload = upload
+        self.isUploading = isUploading
+        self.uploadErrorMessage = uploadErrorMessage
+        self.isPublishing = isPublishing
+        self.publishedEventId = publishedEventId
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterCaptureSnapshot: Sendable {}
+#endif
+
+
+extension HighlighterCaptureSnapshot: Equatable, Hashable {
+    public static func ==(lhs: HighlighterCaptureSnapshot, rhs: HighlighterCaptureSnapshot) -> Bool {
+        if lhs.upload != rhs.upload {
+            return false
+        }
+        if lhs.isUploading != rhs.isUploading {
+            return false
+        }
+        if lhs.uploadErrorMessage != rhs.uploadErrorMessage {
+            return false
+        }
+        if lhs.isPublishing != rhs.isPublishing {
+            return false
+        }
+        if lhs.publishedEventId != rhs.publishedEventId {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(upload)
+        hasher.combine(isUploading)
+        hasher.combine(uploadErrorMessage)
+        hasher.combine(isPublishing)
+        hasher.combine(publishedEventId)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterCaptureSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterCaptureSnapshot {
+        return
+            try HighlighterCaptureSnapshot(
+                upload: FfiConverterOptionTypeBlossomUpload.read(from: &buf),
+                isUploading: FfiConverterBool.read(from: &buf),
+                uploadErrorMessage: FfiConverterOptionString.read(from: &buf),
+                isPublishing: FfiConverterBool.read(from: &buf),
+                publishedEventId: FfiConverterOptionString.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterCaptureSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeBlossomUpload.write(value.upload, into: &buf)
+        FfiConverterBool.write(value.isUploading, into: &buf)
+        FfiConverterOptionString.write(value.uploadErrorMessage, into: &buf)
+        FfiConverterBool.write(value.isPublishing, into: &buf)
+        FfiConverterOptionString.write(value.publishedEventId, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterCaptureSnapshot_lift(_ buf: RustBuffer) throws -> HighlighterCaptureSnapshot {
+    return try FfiConverterTypeHighlighterCaptureSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterCaptureSnapshot_lower(_ value: HighlighterCaptureSnapshot) -> RustBuffer {
+    return FfiConverterTypeHighlighterCaptureSnapshot.lower(value)
+}
+
+
 public struct HighlighterChromeSnapshot {
     public var currentUser: CurrentUser?
     public var currentUserProfile: ProfileMetadata?
@@ -7625,6 +4984,406 @@ public func FfiConverterTypeHighlighterChromeSnapshot_lift(_ buf: RustBuffer) th
 #endif
 public func FfiConverterTypeHighlighterChromeSnapshot_lower(_ value: HighlighterChromeSnapshot) -> RustBuffer {
     return FfiConverterTypeHighlighterChromeSnapshot.lower(value)
+}
+
+
+public struct HighlighterCommentChildLinks {
+    public var eventId: String
+    public var childEventIds: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(eventId: String, childEventIds: [String]) {
+        self.eventId = eventId
+        self.childEventIds = childEventIds
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterCommentChildLinks: Sendable {}
+#endif
+
+
+extension HighlighterCommentChildLinks: Equatable, Hashable {
+    public static func ==(lhs: HighlighterCommentChildLinks, rhs: HighlighterCommentChildLinks) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.childEventIds != rhs.childEventIds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(childEventIds)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterCommentChildLinks: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterCommentChildLinks {
+        return
+            try HighlighterCommentChildLinks(
+                eventId: FfiConverterString.read(from: &buf),
+                childEventIds: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterCommentChildLinks, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterSequenceString.write(value.childEventIds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterCommentChildLinks_lift(_ buf: RustBuffer) throws -> HighlighterCommentChildLinks {
+    return try FfiConverterTypeHighlighterCommentChildLinks.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterCommentChildLinks_lower(_ value: HighlighterCommentChildLinks) -> RustBuffer {
+    return FfiConverterTypeHighlighterCommentChildLinks.lower(value)
+}
+
+
+public struct HighlighterCommentDraft {
+    public var parentEventId: String?
+    public var body: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(parentEventId: String?, body: String) {
+        self.parentEventId = parentEventId
+        self.body = body
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterCommentDraft: Sendable {}
+#endif
+
+
+extension HighlighterCommentDraft: Equatable, Hashable {
+    public static func ==(lhs: HighlighterCommentDraft, rhs: HighlighterCommentDraft) -> Bool {
+        if lhs.parentEventId != rhs.parentEventId {
+            return false
+        }
+        if lhs.body != rhs.body {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(parentEventId)
+        hasher.combine(body)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterCommentDraft: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterCommentDraft {
+        return
+            try HighlighterCommentDraft(
+                parentEventId: FfiConverterOptionString.read(from: &buf),
+                body: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterCommentDraft, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.parentEventId, into: &buf)
+        FfiConverterString.write(value.body, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterCommentDraft_lift(_ buf: RustBuffer) throws -> HighlighterCommentDraft {
+    return try FfiConverterTypeHighlighterCommentDraft.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterCommentDraft_lower(_ value: HighlighterCommentDraft) -> RustBuffer {
+    return FfiConverterTypeHighlighterCommentDraft.lower(value)
+}
+
+
+public struct HighlighterCommentInteraction {
+    public var eventId: String
+    public var likeCount: UInt64
+    public var myLikeEventId: String?
+    public var isBookmarked: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(eventId: String, likeCount: UInt64, myLikeEventId: String?, isBookmarked: Bool) {
+        self.eventId = eventId
+        self.likeCount = likeCount
+        self.myLikeEventId = myLikeEventId
+        self.isBookmarked = isBookmarked
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterCommentInteraction: Sendable {}
+#endif
+
+
+extension HighlighterCommentInteraction: Equatable, Hashable {
+    public static func ==(lhs: HighlighterCommentInteraction, rhs: HighlighterCommentInteraction) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.likeCount != rhs.likeCount {
+            return false
+        }
+        if lhs.myLikeEventId != rhs.myLikeEventId {
+            return false
+        }
+        if lhs.isBookmarked != rhs.isBookmarked {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(likeCount)
+        hasher.combine(myLikeEventId)
+        hasher.combine(isBookmarked)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterCommentInteraction: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterCommentInteraction {
+        return
+            try HighlighterCommentInteraction(
+                eventId: FfiConverterString.read(from: &buf),
+                likeCount: FfiConverterUInt64.read(from: &buf),
+                myLikeEventId: FfiConverterOptionString.read(from: &buf),
+                isBookmarked: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterCommentInteraction, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterUInt64.write(value.likeCount, into: &buf)
+        FfiConverterOptionString.write(value.myLikeEventId, into: &buf)
+        FfiConverterBool.write(value.isBookmarked, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterCommentInteraction_lift(_ buf: RustBuffer) throws -> HighlighterCommentInteraction {
+    return try FfiConverterTypeHighlighterCommentInteraction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterCommentInteraction_lower(_ value: HighlighterCommentInteraction) -> RustBuffer {
+    return FfiConverterTypeHighlighterCommentInteraction.lower(value)
+}
+
+
+public struct HighlighterCommentsSnapshot {
+    public var rootTagName: String
+    public var rootTagValue: String
+    public var rootKind: UInt16
+    public var records: [CommentRecord]
+    public var recordCount: UInt64
+    public var topLevelEventIds: [String]
+    public var childLinks: [HighlighterCommentChildLinks]
+    public var interactions: [HighlighterCommentInteraction]
+    public var drafts: [HighlighterCommentDraft]
+    public var isLoading: Bool
+    public var errorMessage: String?
+    public var isPublishing: Bool
+    public var publishErrorMessage: String?
+    public var lastPublishedEventId: String?
+    public var interactionErrorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(rootTagName: String, rootTagValue: String, rootKind: UInt16, records: [CommentRecord], recordCount: UInt64, topLevelEventIds: [String], childLinks: [HighlighterCommentChildLinks], interactions: [HighlighterCommentInteraction], drafts: [HighlighterCommentDraft], isLoading: Bool, errorMessage: String?, isPublishing: Bool, publishErrorMessage: String?, lastPublishedEventId: String?, interactionErrorMessage: String?) {
+        self.rootTagName = rootTagName
+        self.rootTagValue = rootTagValue
+        self.rootKind = rootKind
+        self.records = records
+        self.recordCount = recordCount
+        self.topLevelEventIds = topLevelEventIds
+        self.childLinks = childLinks
+        self.interactions = interactions
+        self.drafts = drafts
+        self.isLoading = isLoading
+        self.errorMessage = errorMessage
+        self.isPublishing = isPublishing
+        self.publishErrorMessage = publishErrorMessage
+        self.lastPublishedEventId = lastPublishedEventId
+        self.interactionErrorMessage = interactionErrorMessage
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterCommentsSnapshot: Sendable {}
+#endif
+
+
+extension HighlighterCommentsSnapshot: Equatable, Hashable {
+    public static func ==(lhs: HighlighterCommentsSnapshot, rhs: HighlighterCommentsSnapshot) -> Bool {
+        if lhs.rootTagName != rhs.rootTagName {
+            return false
+        }
+        if lhs.rootTagValue != rhs.rootTagValue {
+            return false
+        }
+        if lhs.rootKind != rhs.rootKind {
+            return false
+        }
+        if lhs.records != rhs.records {
+            return false
+        }
+        if lhs.recordCount != rhs.recordCount {
+            return false
+        }
+        if lhs.topLevelEventIds != rhs.topLevelEventIds {
+            return false
+        }
+        if lhs.childLinks != rhs.childLinks {
+            return false
+        }
+        if lhs.interactions != rhs.interactions {
+            return false
+        }
+        if lhs.drafts != rhs.drafts {
+            return false
+        }
+        if lhs.isLoading != rhs.isLoading {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        if lhs.isPublishing != rhs.isPublishing {
+            return false
+        }
+        if lhs.publishErrorMessage != rhs.publishErrorMessage {
+            return false
+        }
+        if lhs.lastPublishedEventId != rhs.lastPublishedEventId {
+            return false
+        }
+        if lhs.interactionErrorMessage != rhs.interactionErrorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rootTagName)
+        hasher.combine(rootTagValue)
+        hasher.combine(rootKind)
+        hasher.combine(records)
+        hasher.combine(recordCount)
+        hasher.combine(topLevelEventIds)
+        hasher.combine(childLinks)
+        hasher.combine(interactions)
+        hasher.combine(drafts)
+        hasher.combine(isLoading)
+        hasher.combine(errorMessage)
+        hasher.combine(isPublishing)
+        hasher.combine(publishErrorMessage)
+        hasher.combine(lastPublishedEventId)
+        hasher.combine(interactionErrorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterCommentsSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterCommentsSnapshot {
+        return
+            try HighlighterCommentsSnapshot(
+                rootTagName: FfiConverterString.read(from: &buf),
+                rootTagValue: FfiConverterString.read(from: &buf),
+                rootKind: FfiConverterUInt16.read(from: &buf),
+                records: FfiConverterSequenceTypeCommentRecord.read(from: &buf),
+                recordCount: FfiConverterUInt64.read(from: &buf),
+                topLevelEventIds: FfiConverterSequenceString.read(from: &buf),
+                childLinks: FfiConverterSequenceTypeHighlighterCommentChildLinks.read(from: &buf),
+                interactions: FfiConverterSequenceTypeHighlighterCommentInteraction.read(from: &buf),
+                drafts: FfiConverterSequenceTypeHighlighterCommentDraft.read(from: &buf),
+                isLoading: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf),
+                isPublishing: FfiConverterBool.read(from: &buf),
+                publishErrorMessage: FfiConverterOptionString.read(from: &buf),
+                lastPublishedEventId: FfiConverterOptionString.read(from: &buf),
+                interactionErrorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterCommentsSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.rootTagName, into: &buf)
+        FfiConverterString.write(value.rootTagValue, into: &buf)
+        FfiConverterUInt16.write(value.rootKind, into: &buf)
+        FfiConverterSequenceTypeCommentRecord.write(value.records, into: &buf)
+        FfiConverterUInt64.write(value.recordCount, into: &buf)
+        FfiConverterSequenceString.write(value.topLevelEventIds, into: &buf)
+        FfiConverterSequenceTypeHighlighterCommentChildLinks.write(value.childLinks, into: &buf)
+        FfiConverterSequenceTypeHighlighterCommentInteraction.write(value.interactions, into: &buf)
+        FfiConverterSequenceTypeHighlighterCommentDraft.write(value.drafts, into: &buf)
+        FfiConverterBool.write(value.isLoading, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+        FfiConverterBool.write(value.isPublishing, into: &buf)
+        FfiConverterOptionString.write(value.publishErrorMessage, into: &buf)
+        FfiConverterOptionString.write(value.lastPublishedEventId, into: &buf)
+        FfiConverterOptionString.write(value.interactionErrorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterCommentsSnapshot_lift(_ buf: RustBuffer) throws -> HighlighterCommentsSnapshot {
+    return try FfiConverterTypeHighlighterCommentsSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterCommentsSnapshot_lower(_ value: HighlighterCommentsSnapshot) -> RustBuffer {
+    return FfiConverterTypeHighlighterCommentsSnapshot.lower(value)
 }
 
 
@@ -7754,6 +5513,100 @@ public func FfiConverterTypeHighlighterCreateAccountSnapshot_lower(_ value: High
 }
 
 
+public struct HighlighterCreateRoomSnapshot {
+    public var coverUpload: BlossomUpload?
+    public var isCoverUploading: Bool
+    public var isCreating: Bool
+    public var createdGroupId: String?
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(coverUpload: BlossomUpload?, isCoverUploading: Bool, isCreating: Bool, createdGroupId: String?, errorMessage: String?) {
+        self.coverUpload = coverUpload
+        self.isCoverUploading = isCoverUploading
+        self.isCreating = isCreating
+        self.createdGroupId = createdGroupId
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterCreateRoomSnapshot: Sendable {}
+#endif
+
+
+extension HighlighterCreateRoomSnapshot: Equatable, Hashable {
+    public static func ==(lhs: HighlighterCreateRoomSnapshot, rhs: HighlighterCreateRoomSnapshot) -> Bool {
+        if lhs.coverUpload != rhs.coverUpload {
+            return false
+        }
+        if lhs.isCoverUploading != rhs.isCoverUploading {
+            return false
+        }
+        if lhs.isCreating != rhs.isCreating {
+            return false
+        }
+        if lhs.createdGroupId != rhs.createdGroupId {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(coverUpload)
+        hasher.combine(isCoverUploading)
+        hasher.combine(isCreating)
+        hasher.combine(createdGroupId)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterCreateRoomSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterCreateRoomSnapshot {
+        return
+            try HighlighterCreateRoomSnapshot(
+                coverUpload: FfiConverterOptionTypeBlossomUpload.read(from: &buf),
+                isCoverUploading: FfiConverterBool.read(from: &buf),
+                isCreating: FfiConverterBool.read(from: &buf),
+                createdGroupId: FfiConverterOptionString.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterCreateRoomSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeBlossomUpload.write(value.coverUpload, into: &buf)
+        FfiConverterBool.write(value.isCoverUploading, into: &buf)
+        FfiConverterBool.write(value.isCreating, into: &buf)
+        FfiConverterOptionString.write(value.createdGroupId, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterCreateRoomSnapshot_lift(_ buf: RustBuffer) throws -> HighlighterCreateRoomSnapshot {
+    return try FfiConverterTypeHighlighterCreateRoomSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterCreateRoomSnapshot_lower(_ value: HighlighterCreateRoomSnapshot) -> RustBuffer {
+    return FfiConverterTypeHighlighterCreateRoomSnapshot.lower(value)
+}
+
+
 public struct HighlighterCurationMenuSnapshot {
     public var articleAddress: String
     public var curationSets: [BookmarkSetRecord]
@@ -7848,6 +5701,448 @@ public func FfiConverterTypeHighlighterCurationMenuSnapshot_lower(_ value: Highl
 }
 
 
+public struct HighlighterEditProfileSnapshot {
+    public var displayName: String
+    public var name: String
+    public var about: String
+    public var picture: String
+    public var banner: String
+    public var nip05: String
+    public var website: String
+    public var lud16: String
+    public var isPictureUploading: Bool
+    public var isBannerUploading: Bool
+    public var isSaving: Bool
+    public var errorMessage: String?
+    public var savedProfile: ProfileMetadata?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(displayName: String, name: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String, isPictureUploading: Bool, isBannerUploading: Bool, isSaving: Bool, errorMessage: String?, savedProfile: ProfileMetadata?) {
+        self.displayName = displayName
+        self.name = name
+        self.about = about
+        self.picture = picture
+        self.banner = banner
+        self.nip05 = nip05
+        self.website = website
+        self.lud16 = lud16
+        self.isPictureUploading = isPictureUploading
+        self.isBannerUploading = isBannerUploading
+        self.isSaving = isSaving
+        self.errorMessage = errorMessage
+        self.savedProfile = savedProfile
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterEditProfileSnapshot: Sendable {}
+#endif
+
+
+extension HighlighterEditProfileSnapshot: Equatable, Hashable {
+    public static func ==(lhs: HighlighterEditProfileSnapshot, rhs: HighlighterEditProfileSnapshot) -> Bool {
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.about != rhs.about {
+            return false
+        }
+        if lhs.picture != rhs.picture {
+            return false
+        }
+        if lhs.banner != rhs.banner {
+            return false
+        }
+        if lhs.nip05 != rhs.nip05 {
+            return false
+        }
+        if lhs.website != rhs.website {
+            return false
+        }
+        if lhs.lud16 != rhs.lud16 {
+            return false
+        }
+        if lhs.isPictureUploading != rhs.isPictureUploading {
+            return false
+        }
+        if lhs.isBannerUploading != rhs.isBannerUploading {
+            return false
+        }
+        if lhs.isSaving != rhs.isSaving {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        if lhs.savedProfile != rhs.savedProfile {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(displayName)
+        hasher.combine(name)
+        hasher.combine(about)
+        hasher.combine(picture)
+        hasher.combine(banner)
+        hasher.combine(nip05)
+        hasher.combine(website)
+        hasher.combine(lud16)
+        hasher.combine(isPictureUploading)
+        hasher.combine(isBannerUploading)
+        hasher.combine(isSaving)
+        hasher.combine(errorMessage)
+        hasher.combine(savedProfile)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterEditProfileSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterEditProfileSnapshot {
+        return
+            try HighlighterEditProfileSnapshot(
+                displayName: FfiConverterString.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
+                about: FfiConverterString.read(from: &buf),
+                picture: FfiConverterString.read(from: &buf),
+                banner: FfiConverterString.read(from: &buf),
+                nip05: FfiConverterString.read(from: &buf),
+                website: FfiConverterString.read(from: &buf),
+                lud16: FfiConverterString.read(from: &buf),
+                isPictureUploading: FfiConverterBool.read(from: &buf),
+                isBannerUploading: FfiConverterBool.read(from: &buf),
+                isSaving: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf),
+                savedProfile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterEditProfileSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.about, into: &buf)
+        FfiConverterString.write(value.picture, into: &buf)
+        FfiConverterString.write(value.banner, into: &buf)
+        FfiConverterString.write(value.nip05, into: &buf)
+        FfiConverterString.write(value.website, into: &buf)
+        FfiConverterString.write(value.lud16, into: &buf)
+        FfiConverterBool.write(value.isPictureUploading, into: &buf)
+        FfiConverterBool.write(value.isBannerUploading, into: &buf)
+        FfiConverterBool.write(value.isSaving, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+        FfiConverterOptionTypeProfileMetadata.write(value.savedProfile, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterEditProfileSnapshot_lift(_ buf: RustBuffer) throws -> HighlighterEditProfileSnapshot {
+    return try FfiConverterTypeHighlighterEditProfileSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterEditProfileSnapshot_lower(_ value: HighlighterEditProfileSnapshot) -> RustBuffer {
+    return FfiConverterTypeHighlighterEditProfileSnapshot.lower(value)
+}
+
+
+public struct HighlighterFeedbackSnapshot {
+    public var coordinate: String
+    public var threads: [FeedbackThreadRecord]
+    public var threadCount: UInt64
+    public var isLoadingThreads: Bool
+    public var threadsErrorMessage: String?
+    public var selectedRootEventId: String?
+    public var selectedEvents: [FeedbackEventRecord]
+    public var selectedEventCount: UInt64
+    public var isLoadingThread: Bool
+    public var threadErrorMessage: String?
+    public var newThreadDraft: String
+    public var replyDraft: String
+    public var isPublishingNewThread: Bool
+    public var isPublishingReply: Bool
+    public var publishErrorMessage: String?
+    public var lastPublishedRootEventId: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(coordinate: String, threads: [FeedbackThreadRecord], threadCount: UInt64, isLoadingThreads: Bool, threadsErrorMessage: String?, selectedRootEventId: String?, selectedEvents: [FeedbackEventRecord], selectedEventCount: UInt64, isLoadingThread: Bool, threadErrorMessage: String?, newThreadDraft: String, replyDraft: String, isPublishingNewThread: Bool, isPublishingReply: Bool, publishErrorMessage: String?, lastPublishedRootEventId: String?) {
+        self.coordinate = coordinate
+        self.threads = threads
+        self.threadCount = threadCount
+        self.isLoadingThreads = isLoadingThreads
+        self.threadsErrorMessage = threadsErrorMessage
+        self.selectedRootEventId = selectedRootEventId
+        self.selectedEvents = selectedEvents
+        self.selectedEventCount = selectedEventCount
+        self.isLoadingThread = isLoadingThread
+        self.threadErrorMessage = threadErrorMessage
+        self.newThreadDraft = newThreadDraft
+        self.replyDraft = replyDraft
+        self.isPublishingNewThread = isPublishingNewThread
+        self.isPublishingReply = isPublishingReply
+        self.publishErrorMessage = publishErrorMessage
+        self.lastPublishedRootEventId = lastPublishedRootEventId
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterFeedbackSnapshot: Sendable {}
+#endif
+
+
+extension HighlighterFeedbackSnapshot: Equatable, Hashable {
+    public static func ==(lhs: HighlighterFeedbackSnapshot, rhs: HighlighterFeedbackSnapshot) -> Bool {
+        if lhs.coordinate != rhs.coordinate {
+            return false
+        }
+        if lhs.threads != rhs.threads {
+            return false
+        }
+        if lhs.threadCount != rhs.threadCount {
+            return false
+        }
+        if lhs.isLoadingThreads != rhs.isLoadingThreads {
+            return false
+        }
+        if lhs.threadsErrorMessage != rhs.threadsErrorMessage {
+            return false
+        }
+        if lhs.selectedRootEventId != rhs.selectedRootEventId {
+            return false
+        }
+        if lhs.selectedEvents != rhs.selectedEvents {
+            return false
+        }
+        if lhs.selectedEventCount != rhs.selectedEventCount {
+            return false
+        }
+        if lhs.isLoadingThread != rhs.isLoadingThread {
+            return false
+        }
+        if lhs.threadErrorMessage != rhs.threadErrorMessage {
+            return false
+        }
+        if lhs.newThreadDraft != rhs.newThreadDraft {
+            return false
+        }
+        if lhs.replyDraft != rhs.replyDraft {
+            return false
+        }
+        if lhs.isPublishingNewThread != rhs.isPublishingNewThread {
+            return false
+        }
+        if lhs.isPublishingReply != rhs.isPublishingReply {
+            return false
+        }
+        if lhs.publishErrorMessage != rhs.publishErrorMessage {
+            return false
+        }
+        if lhs.lastPublishedRootEventId != rhs.lastPublishedRootEventId {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(coordinate)
+        hasher.combine(threads)
+        hasher.combine(threadCount)
+        hasher.combine(isLoadingThreads)
+        hasher.combine(threadsErrorMessage)
+        hasher.combine(selectedRootEventId)
+        hasher.combine(selectedEvents)
+        hasher.combine(selectedEventCount)
+        hasher.combine(isLoadingThread)
+        hasher.combine(threadErrorMessage)
+        hasher.combine(newThreadDraft)
+        hasher.combine(replyDraft)
+        hasher.combine(isPublishingNewThread)
+        hasher.combine(isPublishingReply)
+        hasher.combine(publishErrorMessage)
+        hasher.combine(lastPublishedRootEventId)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterFeedbackSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterFeedbackSnapshot {
+        return
+            try HighlighterFeedbackSnapshot(
+                coordinate: FfiConverterString.read(from: &buf),
+                threads: FfiConverterSequenceTypeFeedbackThreadRecord.read(from: &buf),
+                threadCount: FfiConverterUInt64.read(from: &buf),
+                isLoadingThreads: FfiConverterBool.read(from: &buf),
+                threadsErrorMessage: FfiConverterOptionString.read(from: &buf),
+                selectedRootEventId: FfiConverterOptionString.read(from: &buf),
+                selectedEvents: FfiConverterSequenceTypeFeedbackEventRecord.read(from: &buf),
+                selectedEventCount: FfiConverterUInt64.read(from: &buf),
+                isLoadingThread: FfiConverterBool.read(from: &buf),
+                threadErrorMessage: FfiConverterOptionString.read(from: &buf),
+                newThreadDraft: FfiConverterString.read(from: &buf),
+                replyDraft: FfiConverterString.read(from: &buf),
+                isPublishingNewThread: FfiConverterBool.read(from: &buf),
+                isPublishingReply: FfiConverterBool.read(from: &buf),
+                publishErrorMessage: FfiConverterOptionString.read(from: &buf),
+                lastPublishedRootEventId: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterFeedbackSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.coordinate, into: &buf)
+        FfiConverterSequenceTypeFeedbackThreadRecord.write(value.threads, into: &buf)
+        FfiConverterUInt64.write(value.threadCount, into: &buf)
+        FfiConverterBool.write(value.isLoadingThreads, into: &buf)
+        FfiConverterOptionString.write(value.threadsErrorMessage, into: &buf)
+        FfiConverterOptionString.write(value.selectedRootEventId, into: &buf)
+        FfiConverterSequenceTypeFeedbackEventRecord.write(value.selectedEvents, into: &buf)
+        FfiConverterUInt64.write(value.selectedEventCount, into: &buf)
+        FfiConverterBool.write(value.isLoadingThread, into: &buf)
+        FfiConverterOptionString.write(value.threadErrorMessage, into: &buf)
+        FfiConverterString.write(value.newThreadDraft, into: &buf)
+        FfiConverterString.write(value.replyDraft, into: &buf)
+        FfiConverterBool.write(value.isPublishingNewThread, into: &buf)
+        FfiConverterBool.write(value.isPublishingReply, into: &buf)
+        FfiConverterOptionString.write(value.publishErrorMessage, into: &buf)
+        FfiConverterOptionString.write(value.lastPublishedRootEventId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterFeedbackSnapshot_lift(_ buf: RustBuffer) throws -> HighlighterFeedbackSnapshot {
+    return try FfiConverterTypeHighlighterFeedbackSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterFeedbackSnapshot_lower(_ value: HighlighterFeedbackSnapshot) -> RustBuffer {
+    return FfiConverterTypeHighlighterFeedbackSnapshot.lower(value)
+}
+
+
+public struct HighlighterHomeFeedItem {
+    public var kind: HighlighterHomeFeedItemKind
+    public var stableId: String
+    public var sortKey: UInt64
+    public var highlights: [HydratedHighlight]
+    public var highlightCount: UInt64
+    public var read: HighlighterHomeReadItem?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(kind: HighlighterHomeFeedItemKind, stableId: String, sortKey: UInt64, highlights: [HydratedHighlight], highlightCount: UInt64, read: HighlighterHomeReadItem?) {
+        self.kind = kind
+        self.stableId = stableId
+        self.sortKey = sortKey
+        self.highlights = highlights
+        self.highlightCount = highlightCount
+        self.read = read
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterHomeFeedItem: Sendable {}
+#endif
+
+
+extension HighlighterHomeFeedItem: Equatable, Hashable {
+    public static func ==(lhs: HighlighterHomeFeedItem, rhs: HighlighterHomeFeedItem) -> Bool {
+        if lhs.kind != rhs.kind {
+            return false
+        }
+        if lhs.stableId != rhs.stableId {
+            return false
+        }
+        if lhs.sortKey != rhs.sortKey {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
+        if lhs.highlightCount != rhs.highlightCount {
+            return false
+        }
+        if lhs.read != rhs.read {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(kind)
+        hasher.combine(stableId)
+        hasher.combine(sortKey)
+        hasher.combine(highlights)
+        hasher.combine(highlightCount)
+        hasher.combine(read)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterHomeFeedItem: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterHomeFeedItem {
+        return
+            try HighlighterHomeFeedItem(
+                kind: FfiConverterTypeHighlighterHomeFeedItemKind.read(from: &buf),
+                stableId: FfiConverterString.read(from: &buf),
+                sortKey: FfiConverterUInt64.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf),
+                highlightCount: FfiConverterUInt64.read(from: &buf),
+                read: FfiConverterOptionTypeHighlighterHomeReadItem.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterHomeFeedItem, into buf: inout [UInt8]) {
+        FfiConverterTypeHighlighterHomeFeedItemKind.write(value.kind, into: &buf)
+        FfiConverterString.write(value.stableId, into: &buf)
+        FfiConverterUInt64.write(value.sortKey, into: &buf)
+        FfiConverterSequenceTypeHydratedHighlight.write(value.highlights, into: &buf)
+        FfiConverterUInt64.write(value.highlightCount, into: &buf)
+        FfiConverterOptionTypeHighlighterHomeReadItem.write(value.read, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterHomeFeedItem_lift(_ buf: RustBuffer) throws -> HighlighterHomeFeedItem {
+    return try FfiConverterTypeHighlighterHomeFeedItem.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterHomeFeedItem_lower(_ value: HighlighterHomeFeedItem) -> RustBuffer {
+    return FfiConverterTypeHighlighterHomeFeedItem.lower(value)
+}
+
+
 public struct HighlighterHomeFeedSnapshot {
     public var items: [HighlighterHomeFeedItem]
     public var itemCount: UInt64
@@ -7934,6 +6229,148 @@ public func FfiConverterTypeHighlighterHomeFeedSnapshot_lower(_ value: Highlight
 }
 
 
+public struct HighlighterHomeReadItem {
+    public var pubkey: String
+    public var identifier: String
+    public var title: String
+    public var summary: String
+    public var image: String
+    public var firstHashtag: String?
+    public var publishedAt: UInt64?
+    public var createdAt: UInt64?
+    public var authorFollowed: Bool
+    public var interactorPubkeys: [String]
+    public var readTimeMinutes: UInt32?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkey: String, identifier: String, title: String, summary: String, image: String, firstHashtag: String?, publishedAt: UInt64?, createdAt: UInt64?, authorFollowed: Bool, interactorPubkeys: [String], readTimeMinutes: UInt32?) {
+        self.pubkey = pubkey
+        self.identifier = identifier
+        self.title = title
+        self.summary = summary
+        self.image = image
+        self.firstHashtag = firstHashtag
+        self.publishedAt = publishedAt
+        self.createdAt = createdAt
+        self.authorFollowed = authorFollowed
+        self.interactorPubkeys = interactorPubkeys
+        self.readTimeMinutes = readTimeMinutes
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterHomeReadItem: Sendable {}
+#endif
+
+
+extension HighlighterHomeReadItem: Equatable, Hashable {
+    public static func ==(lhs: HighlighterHomeReadItem, rhs: HighlighterHomeReadItem) -> Bool {
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.identifier != rhs.identifier {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.summary != rhs.summary {
+            return false
+        }
+        if lhs.image != rhs.image {
+            return false
+        }
+        if lhs.firstHashtag != rhs.firstHashtag {
+            return false
+        }
+        if lhs.publishedAt != rhs.publishedAt {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.authorFollowed != rhs.authorFollowed {
+            return false
+        }
+        if lhs.interactorPubkeys != rhs.interactorPubkeys {
+            return false
+        }
+        if lhs.readTimeMinutes != rhs.readTimeMinutes {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkey)
+        hasher.combine(identifier)
+        hasher.combine(title)
+        hasher.combine(summary)
+        hasher.combine(image)
+        hasher.combine(firstHashtag)
+        hasher.combine(publishedAt)
+        hasher.combine(createdAt)
+        hasher.combine(authorFollowed)
+        hasher.combine(interactorPubkeys)
+        hasher.combine(readTimeMinutes)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterHomeReadItem: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterHomeReadItem {
+        return
+            try HighlighterHomeReadItem(
+                pubkey: FfiConverterString.read(from: &buf),
+                identifier: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                summary: FfiConverterString.read(from: &buf),
+                image: FfiConverterString.read(from: &buf),
+                firstHashtag: FfiConverterOptionString.read(from: &buf),
+                publishedAt: FfiConverterOptionUInt64.read(from: &buf),
+                createdAt: FfiConverterOptionUInt64.read(from: &buf),
+                authorFollowed: FfiConverterBool.read(from: &buf),
+                interactorPubkeys: FfiConverterSequenceString.read(from: &buf),
+                readTimeMinutes: FfiConverterOptionUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterHomeReadItem, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterString.write(value.identifier, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.summary, into: &buf)
+        FfiConverterString.write(value.image, into: &buf)
+        FfiConverterOptionString.write(value.firstHashtag, into: &buf)
+        FfiConverterOptionUInt64.write(value.publishedAt, into: &buf)
+        FfiConverterOptionUInt64.write(value.createdAt, into: &buf)
+        FfiConverterBool.write(value.authorFollowed, into: &buf)
+        FfiConverterSequenceString.write(value.interactorPubkeys, into: &buf)
+        FfiConverterOptionUInt32.write(value.readTimeMinutes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterHomeReadItem_lift(_ buf: RustBuffer) throws -> HighlighterHomeReadItem {
+    return try FfiConverterTypeHighlighterHomeReadItem.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterHomeReadItem_lower(_ value: HighlighterHomeReadItem) -> RustBuffer {
+    return FfiConverterTypeHighlighterHomeReadItem.lower(value)
+}
+
+
 public struct HighlighterIsbnPreview {
     public var isbn: String
     public var preview: ArtifactPreview
@@ -8004,15 +6441,253 @@ public func FfiConverterTypeHighlighterIsbnPreview_lower(_ value: HighlighterIsb
 }
 
 
-public struct HighlighterNetworkSnapshot {
-    public var wifiOnlyEnabled: Bool
-    public var currentPathIsWifi: Bool?
+public struct HighlighterMediaSettingsSnapshot {
+    public var blossomServers: [String]
+    public var blossomServerCount: UInt64
+    public var isLoading: Bool
+    public var isSaving: Bool
+    public var errorMessage: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(wifiOnlyEnabled: Bool, currentPathIsWifi: Bool?) {
+    public init(blossomServers: [String], blossomServerCount: UInt64, isLoading: Bool, isSaving: Bool, errorMessage: String?) {
+        self.blossomServers = blossomServers
+        self.blossomServerCount = blossomServerCount
+        self.isLoading = isLoading
+        self.isSaving = isSaving
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterMediaSettingsSnapshot: Sendable {}
+#endif
+
+
+extension HighlighterMediaSettingsSnapshot: Equatable, Hashable {
+    public static func ==(lhs: HighlighterMediaSettingsSnapshot, rhs: HighlighterMediaSettingsSnapshot) -> Bool {
+        if lhs.blossomServers != rhs.blossomServers {
+            return false
+        }
+        if lhs.blossomServerCount != rhs.blossomServerCount {
+            return false
+        }
+        if lhs.isLoading != rhs.isLoading {
+            return false
+        }
+        if lhs.isSaving != rhs.isSaving {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(blossomServers)
+        hasher.combine(blossomServerCount)
+        hasher.combine(isLoading)
+        hasher.combine(isSaving)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterMediaSettingsSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterMediaSettingsSnapshot {
+        return
+            try HighlighterMediaSettingsSnapshot(
+                blossomServers: FfiConverterSequenceString.read(from: &buf),
+                blossomServerCount: FfiConverterUInt64.read(from: &buf),
+                isLoading: FfiConverterBool.read(from: &buf),
+                isSaving: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterMediaSettingsSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.blossomServers, into: &buf)
+        FfiConverterUInt64.write(value.blossomServerCount, into: &buf)
+        FfiConverterBool.write(value.isLoading, into: &buf)
+        FfiConverterBool.write(value.isSaving, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterMediaSettingsSnapshot_lift(_ buf: RustBuffer) throws -> HighlighterMediaSettingsSnapshot {
+    return try FfiConverterTypeHighlighterMediaSettingsSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterMediaSettingsSnapshot_lower(_ value: HighlighterMediaSettingsSnapshot) -> RustBuffer {
+    return FfiConverterTypeHighlighterMediaSettingsSnapshot.lower(value)
+}
+
+
+public struct HighlighterNetworkImportSnapshot {
+    public var npub: String
+    public var candidates: [RelayConfig]
+    public var candidateCount: UInt64
+    public var selectedUrls: [String]
+    public var isFetching: Bool
+    public var isApplying: Bool
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(npub: String, candidates: [RelayConfig], candidateCount: UInt64, selectedUrls: [String], isFetching: Bool, isApplying: Bool, errorMessage: String?) {
+        self.npub = npub
+        self.candidates = candidates
+        self.candidateCount = candidateCount
+        self.selectedUrls = selectedUrls
+        self.isFetching = isFetching
+        self.isApplying = isApplying
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterNetworkImportSnapshot: Sendable {}
+#endif
+
+
+extension HighlighterNetworkImportSnapshot: Equatable, Hashable {
+    public static func ==(lhs: HighlighterNetworkImportSnapshot, rhs: HighlighterNetworkImportSnapshot) -> Bool {
+        if lhs.npub != rhs.npub {
+            return false
+        }
+        if lhs.candidates != rhs.candidates {
+            return false
+        }
+        if lhs.candidateCount != rhs.candidateCount {
+            return false
+        }
+        if lhs.selectedUrls != rhs.selectedUrls {
+            return false
+        }
+        if lhs.isFetching != rhs.isFetching {
+            return false
+        }
+        if lhs.isApplying != rhs.isApplying {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(npub)
+        hasher.combine(candidates)
+        hasher.combine(candidateCount)
+        hasher.combine(selectedUrls)
+        hasher.combine(isFetching)
+        hasher.combine(isApplying)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterNetworkImportSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterNetworkImportSnapshot {
+        return
+            try HighlighterNetworkImportSnapshot(
+                npub: FfiConverterString.read(from: &buf),
+                candidates: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
+                candidateCount: FfiConverterUInt64.read(from: &buf),
+                selectedUrls: FfiConverterSequenceString.read(from: &buf),
+                isFetching: FfiConverterBool.read(from: &buf),
+                isApplying: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterNetworkImportSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.npub, into: &buf)
+        FfiConverterSequenceTypeRelayConfig.write(value.candidates, into: &buf)
+        FfiConverterUInt64.write(value.candidateCount, into: &buf)
+        FfiConverterSequenceString.write(value.selectedUrls, into: &buf)
+        FfiConverterBool.write(value.isFetching, into: &buf)
+        FfiConverterBool.write(value.isApplying, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterNetworkImportSnapshot_lift(_ buf: RustBuffer) throws -> HighlighterNetworkImportSnapshot {
+    return try FfiConverterTypeHighlighterNetworkImportSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterNetworkImportSnapshot_lower(_ value: HighlighterNetworkImportSnapshot) -> RustBuffer {
+    return FfiConverterTypeHighlighterNetworkImportSnapshot.lower(value)
+}
+
+
+public struct HighlighterNetworkSnapshot {
+    public var wifiOnlyEnabled: Bool
+    public var currentPathIsWifi: Bool?
+    public var relays: [RelayConfig]
+    public var relayCount: UInt64
+    public var autoConnectedRelays: [RelayConfig]
+    public var autoConnectedRelayCount: UInt64
+    public var diagnostics: [RelayDiagnostic]
+    public var diagnosticCount: UInt64
+    public var nip11: [HighlighterRelayNip11Snapshot]
+    public var cacheStats: CacheStats?
+    public var connectedCount: UInt64
+    public var visibleRelayCount: UInt64
+    public var hasOutbox: Bool
+    public var isLoading: Bool
+    public var isSaving: Bool
+    public var errorMessage: String?
+    public var actionErrorMessage: String?
+    public var importRelays: HighlighterNetworkImportSnapshot
+    public var relayRemovalImpacts: [HighlighterRelayRemovalImpact]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(wifiOnlyEnabled: Bool, currentPathIsWifi: Bool?, relays: [RelayConfig], relayCount: UInt64, autoConnectedRelays: [RelayConfig], autoConnectedRelayCount: UInt64, diagnostics: [RelayDiagnostic], diagnosticCount: UInt64, nip11: [HighlighterRelayNip11Snapshot], cacheStats: CacheStats?, connectedCount: UInt64, visibleRelayCount: UInt64, hasOutbox: Bool, isLoading: Bool, isSaving: Bool, errorMessage: String?, actionErrorMessage: String?, importRelays: HighlighterNetworkImportSnapshot, relayRemovalImpacts: [HighlighterRelayRemovalImpact]) {
         self.wifiOnlyEnabled = wifiOnlyEnabled
         self.currentPathIsWifi = currentPathIsWifi
+        self.relays = relays
+        self.relayCount = relayCount
+        self.autoConnectedRelays = autoConnectedRelays
+        self.autoConnectedRelayCount = autoConnectedRelayCount
+        self.diagnostics = diagnostics
+        self.diagnosticCount = diagnosticCount
+        self.nip11 = nip11
+        self.cacheStats = cacheStats
+        self.connectedCount = connectedCount
+        self.visibleRelayCount = visibleRelayCount
+        self.hasOutbox = hasOutbox
+        self.isLoading = isLoading
+        self.isSaving = isSaving
+        self.errorMessage = errorMessage
+        self.actionErrorMessage = actionErrorMessage
+        self.importRelays = importRelays
+        self.relayRemovalImpacts = relayRemovalImpacts
     }
 }
 
@@ -8029,12 +6704,80 @@ extension HighlighterNetworkSnapshot: Equatable, Hashable {
         if lhs.currentPathIsWifi != rhs.currentPathIsWifi {
             return false
         }
+        if lhs.relays != rhs.relays {
+            return false
+        }
+        if lhs.relayCount != rhs.relayCount {
+            return false
+        }
+        if lhs.autoConnectedRelays != rhs.autoConnectedRelays {
+            return false
+        }
+        if lhs.autoConnectedRelayCount != rhs.autoConnectedRelayCount {
+            return false
+        }
+        if lhs.diagnostics != rhs.diagnostics {
+            return false
+        }
+        if lhs.diagnosticCount != rhs.diagnosticCount {
+            return false
+        }
+        if lhs.nip11 != rhs.nip11 {
+            return false
+        }
+        if lhs.cacheStats != rhs.cacheStats {
+            return false
+        }
+        if lhs.connectedCount != rhs.connectedCount {
+            return false
+        }
+        if lhs.visibleRelayCount != rhs.visibleRelayCount {
+            return false
+        }
+        if lhs.hasOutbox != rhs.hasOutbox {
+            return false
+        }
+        if lhs.isLoading != rhs.isLoading {
+            return false
+        }
+        if lhs.isSaving != rhs.isSaving {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        if lhs.actionErrorMessage != rhs.actionErrorMessage {
+            return false
+        }
+        if lhs.importRelays != rhs.importRelays {
+            return false
+        }
+        if lhs.relayRemovalImpacts != rhs.relayRemovalImpacts {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(wifiOnlyEnabled)
         hasher.combine(currentPathIsWifi)
+        hasher.combine(relays)
+        hasher.combine(relayCount)
+        hasher.combine(autoConnectedRelays)
+        hasher.combine(autoConnectedRelayCount)
+        hasher.combine(diagnostics)
+        hasher.combine(diagnosticCount)
+        hasher.combine(nip11)
+        hasher.combine(cacheStats)
+        hasher.combine(connectedCount)
+        hasher.combine(visibleRelayCount)
+        hasher.combine(hasOutbox)
+        hasher.combine(isLoading)
+        hasher.combine(isSaving)
+        hasher.combine(errorMessage)
+        hasher.combine(actionErrorMessage)
+        hasher.combine(importRelays)
+        hasher.combine(relayRemovalImpacts)
     }
 }
 
@@ -8048,13 +6791,47 @@ public struct FfiConverterTypeHighlighterNetworkSnapshot: FfiConverterRustBuffer
         return
             try HighlighterNetworkSnapshot(
                 wifiOnlyEnabled: FfiConverterBool.read(from: &buf),
-                currentPathIsWifi: FfiConverterOptionBool.read(from: &buf)
+                currentPathIsWifi: FfiConverterOptionBool.read(from: &buf),
+                relays: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
+                relayCount: FfiConverterUInt64.read(from: &buf),
+                autoConnectedRelays: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
+                autoConnectedRelayCount: FfiConverterUInt64.read(from: &buf),
+                diagnostics: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf),
+                diagnosticCount: FfiConverterUInt64.read(from: &buf),
+                nip11: FfiConverterSequenceTypeHighlighterRelayNip11Snapshot.read(from: &buf),
+                cacheStats: FfiConverterOptionTypeCacheStats.read(from: &buf),
+                connectedCount: FfiConverterUInt64.read(from: &buf),
+                visibleRelayCount: FfiConverterUInt64.read(from: &buf),
+                hasOutbox: FfiConverterBool.read(from: &buf),
+                isLoading: FfiConverterBool.read(from: &buf),
+                isSaving: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf),
+                actionErrorMessage: FfiConverterOptionString.read(from: &buf),
+                importRelays: FfiConverterTypeHighlighterNetworkImportSnapshot.read(from: &buf),
+                relayRemovalImpacts: FfiConverterSequenceTypeHighlighterRelayRemovalImpact.read(from: &buf)
         )
     }
 
     public static func write(_ value: HighlighterNetworkSnapshot, into buf: inout [UInt8]) {
         FfiConverterBool.write(value.wifiOnlyEnabled, into: &buf)
         FfiConverterOptionBool.write(value.currentPathIsWifi, into: &buf)
+        FfiConverterSequenceTypeRelayConfig.write(value.relays, into: &buf)
+        FfiConverterUInt64.write(value.relayCount, into: &buf)
+        FfiConverterSequenceTypeRelayConfig.write(value.autoConnectedRelays, into: &buf)
+        FfiConverterUInt64.write(value.autoConnectedRelayCount, into: &buf)
+        FfiConverterSequenceTypeRelayDiagnostic.write(value.diagnostics, into: &buf)
+        FfiConverterUInt64.write(value.diagnosticCount, into: &buf)
+        FfiConverterSequenceTypeHighlighterRelayNip11Snapshot.write(value.nip11, into: &buf)
+        FfiConverterOptionTypeCacheStats.write(value.cacheStats, into: &buf)
+        FfiConverterUInt64.write(value.connectedCount, into: &buf)
+        FfiConverterUInt64.write(value.visibleRelayCount, into: &buf)
+        FfiConverterBool.write(value.hasOutbox, into: &buf)
+        FfiConverterBool.write(value.isLoading, into: &buf)
+        FfiConverterBool.write(value.isSaving, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+        FfiConverterOptionString.write(value.actionErrorMessage, into: &buf)
+        FfiConverterTypeHighlighterNetworkImportSnapshot.write(value.importRelays, into: &buf)
+        FfiConverterSequenceTypeHighlighterRelayRemovalImpact.write(value.relayRemovalImpacts, into: &buf)
     }
 }
 
@@ -8506,6 +7283,588 @@ public func FfiConverterTypeHighlighterProfileViewSnapshot_lower(_ value: Highli
 }
 
 
+public struct HighlighterReferenceCommentBucket {
+    public var key: String
+    public var tagName: String
+    public var tagValue: String
+    public var comments: [CommentRecord]
+    public var commentCount: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(key: String, tagName: String, tagValue: String, comments: [CommentRecord], commentCount: UInt64) {
+        self.key = key
+        self.tagName = tagName
+        self.tagValue = tagValue
+        self.comments = comments
+        self.commentCount = commentCount
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterReferenceCommentBucket: Sendable {}
+#endif
+
+
+extension HighlighterReferenceCommentBucket: Equatable, Hashable {
+    public static func ==(lhs: HighlighterReferenceCommentBucket, rhs: HighlighterReferenceCommentBucket) -> Bool {
+        if lhs.key != rhs.key {
+            return false
+        }
+        if lhs.tagName != rhs.tagName {
+            return false
+        }
+        if lhs.tagValue != rhs.tagValue {
+            return false
+        }
+        if lhs.comments != rhs.comments {
+            return false
+        }
+        if lhs.commentCount != rhs.commentCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(key)
+        hasher.combine(tagName)
+        hasher.combine(tagValue)
+        hasher.combine(comments)
+        hasher.combine(commentCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterReferenceCommentBucket: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterReferenceCommentBucket {
+        return
+            try HighlighterReferenceCommentBucket(
+                key: FfiConverterString.read(from: &buf),
+                tagName: FfiConverterString.read(from: &buf),
+                tagValue: FfiConverterString.read(from: &buf),
+                comments: FfiConverterSequenceTypeCommentRecord.read(from: &buf),
+                commentCount: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterReferenceCommentBucket, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.key, into: &buf)
+        FfiConverterString.write(value.tagName, into: &buf)
+        FfiConverterString.write(value.tagValue, into: &buf)
+        FfiConverterSequenceTypeCommentRecord.write(value.comments, into: &buf)
+        FfiConverterUInt64.write(value.commentCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterReferenceCommentBucket_lift(_ buf: RustBuffer) throws -> HighlighterReferenceCommentBucket {
+    return try FfiConverterTypeHighlighterReferenceCommentBucket.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterReferenceCommentBucket_lower(_ value: HighlighterReferenceCommentBucket) -> RustBuffer {
+    return FfiConverterTypeHighlighterReferenceCommentBucket.lower(value)
+}
+
+
+public struct HighlighterReferenceHighlightBucket {
+    public var key: String
+    public var tagName: String
+    public var tagValue: String
+    public var highlights: [HighlightRecord]
+    public var highlightCount: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(key: String, tagName: String, tagValue: String, highlights: [HighlightRecord], highlightCount: UInt64) {
+        self.key = key
+        self.tagName = tagName
+        self.tagValue = tagValue
+        self.highlights = highlights
+        self.highlightCount = highlightCount
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterReferenceHighlightBucket: Sendable {}
+#endif
+
+
+extension HighlighterReferenceHighlightBucket: Equatable, Hashable {
+    public static func ==(lhs: HighlighterReferenceHighlightBucket, rhs: HighlighterReferenceHighlightBucket) -> Bool {
+        if lhs.key != rhs.key {
+            return false
+        }
+        if lhs.tagName != rhs.tagName {
+            return false
+        }
+        if lhs.tagValue != rhs.tagValue {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
+        if lhs.highlightCount != rhs.highlightCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(key)
+        hasher.combine(tagName)
+        hasher.combine(tagValue)
+        hasher.combine(highlights)
+        hasher.combine(highlightCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterReferenceHighlightBucket: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterReferenceHighlightBucket {
+        return
+            try HighlighterReferenceHighlightBucket(
+                key: FfiConverterString.read(from: &buf),
+                tagName: FfiConverterString.read(from: &buf),
+                tagValue: FfiConverterString.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
+                highlightCount: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterReferenceHighlightBucket, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.key, into: &buf)
+        FfiConverterString.write(value.tagName, into: &buf)
+        FfiConverterString.write(value.tagValue, into: &buf)
+        FfiConverterSequenceTypeHighlightRecord.write(value.highlights, into: &buf)
+        FfiConverterUInt64.write(value.highlightCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterReferenceHighlightBucket_lift(_ buf: RustBuffer) throws -> HighlighterReferenceHighlightBucket {
+    return try FfiConverterTypeHighlighterReferenceHighlightBucket.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterReferenceHighlightBucket_lower(_ value: HighlighterReferenceHighlightBucket) -> RustBuffer {
+    return FfiConverterTypeHighlighterReferenceHighlightBucket.lower(value)
+}
+
+
+public struct HighlighterRelayNip11Snapshot {
+    public var url: String
+    public var document: Nip11Document?
+    public var isLoading: Bool
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(url: String, document: Nip11Document?, isLoading: Bool, errorMessage: String?) {
+        self.url = url
+        self.document = document
+        self.isLoading = isLoading
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterRelayNip11Snapshot: Sendable {}
+#endif
+
+
+extension HighlighterRelayNip11Snapshot: Equatable, Hashable {
+    public static func ==(lhs: HighlighterRelayNip11Snapshot, rhs: HighlighterRelayNip11Snapshot) -> Bool {
+        if lhs.url != rhs.url {
+            return false
+        }
+        if lhs.document != rhs.document {
+            return false
+        }
+        if lhs.isLoading != rhs.isLoading {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(url)
+        hasher.combine(document)
+        hasher.combine(isLoading)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterRelayNip11Snapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterRelayNip11Snapshot {
+        return
+            try HighlighterRelayNip11Snapshot(
+                url: FfiConverterString.read(from: &buf),
+                document: FfiConverterOptionTypeNip11Document.read(from: &buf),
+                isLoading: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterRelayNip11Snapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterOptionTypeNip11Document.write(value.document, into: &buf)
+        FfiConverterBool.write(value.isLoading, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterRelayNip11Snapshot_lift(_ buf: RustBuffer) throws -> HighlighterRelayNip11Snapshot {
+    return try FfiConverterTypeHighlighterRelayNip11Snapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterRelayNip11Snapshot_lower(_ value: HighlighterRelayNip11Snapshot) -> RustBuffer {
+    return FfiConverterTypeHighlighterRelayNip11Snapshot.lower(value)
+}
+
+
+public struct HighlighterRelayRemovalImpact {
+    public var relayUrl: String
+    public var roomNames: [String]
+    public var roomCount: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(relayUrl: String, roomNames: [String], roomCount: UInt64) {
+        self.relayUrl = relayUrl
+        self.roomNames = roomNames
+        self.roomCount = roomCount
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterRelayRemovalImpact: Sendable {}
+#endif
+
+
+extension HighlighterRelayRemovalImpact: Equatable, Hashable {
+    public static func ==(lhs: HighlighterRelayRemovalImpact, rhs: HighlighterRelayRemovalImpact) -> Bool {
+        if lhs.relayUrl != rhs.relayUrl {
+            return false
+        }
+        if lhs.roomNames != rhs.roomNames {
+            return false
+        }
+        if lhs.roomCount != rhs.roomCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(relayUrl)
+        hasher.combine(roomNames)
+        hasher.combine(roomCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterRelayRemovalImpact: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterRelayRemovalImpact {
+        return
+            try HighlighterRelayRemovalImpact(
+                relayUrl: FfiConverterString.read(from: &buf),
+                roomNames: FfiConverterSequenceString.read(from: &buf),
+                roomCount: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterRelayRemovalImpact, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.relayUrl, into: &buf)
+        FfiConverterSequenceString.write(value.roomNames, into: &buf)
+        FfiConverterUInt64.write(value.roomCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterRelayRemovalImpact_lift(_ buf: RustBuffer) throws -> HighlighterRelayRemovalImpact {
+    return try FfiConverterTypeHighlighterRelayRemovalImpact.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterRelayRemovalImpact_lower(_ value: HighlighterRelayRemovalImpact) -> RustBuffer {
+    return FfiConverterTypeHighlighterRelayRemovalImpact.lower(value)
+}
+
+
+public struct HighlighterRoomDetailSnapshot {
+    public var groupId: String
+    public var artifacts: [ArtifactRecord]
+    public var artifactCount: UInt64
+    public var highlights: [HydratedHighlight]
+    public var highlightCount: UInt64
+    public var discussions: [DiscussionRecord]
+    public var discussionCount: UInt64
+    public var isPublishingDiscussion: Bool
+    public var discussionErrorMessage: String?
+    public var lastPublishedDiscussionId: String?
+    public var chatMessages: [ChatMessageRecord]
+    public var chatMessageCount: UInt64
+    public var chatHasMore: Bool
+    public var isChatLoadingMore: Bool
+    public var isSendingChatMessage: Bool
+    public var chatErrorMessage: String?
+    public var highlightsByReference: [HighlighterReferenceHighlightBucket]
+    public var referenceHighlightCount: UInt64
+    public var commentsByReference: [HighlighterReferenceCommentBucket]
+    public var referenceCommentCount: UInt64
+    public var isLoading: Bool
+    public var errorMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(groupId: String, artifacts: [ArtifactRecord], artifactCount: UInt64, highlights: [HydratedHighlight], highlightCount: UInt64, discussions: [DiscussionRecord], discussionCount: UInt64, isPublishingDiscussion: Bool, discussionErrorMessage: String?, lastPublishedDiscussionId: String?, chatMessages: [ChatMessageRecord], chatMessageCount: UInt64, chatHasMore: Bool, isChatLoadingMore: Bool, isSendingChatMessage: Bool, chatErrorMessage: String?, highlightsByReference: [HighlighterReferenceHighlightBucket], referenceHighlightCount: UInt64, commentsByReference: [HighlighterReferenceCommentBucket], referenceCommentCount: UInt64, isLoading: Bool, errorMessage: String?) {
+        self.groupId = groupId
+        self.artifacts = artifacts
+        self.artifactCount = artifactCount
+        self.highlights = highlights
+        self.highlightCount = highlightCount
+        self.discussions = discussions
+        self.discussionCount = discussionCount
+        self.isPublishingDiscussion = isPublishingDiscussion
+        self.discussionErrorMessage = discussionErrorMessage
+        self.lastPublishedDiscussionId = lastPublishedDiscussionId
+        self.chatMessages = chatMessages
+        self.chatMessageCount = chatMessageCount
+        self.chatHasMore = chatHasMore
+        self.isChatLoadingMore = isChatLoadingMore
+        self.isSendingChatMessage = isSendingChatMessage
+        self.chatErrorMessage = chatErrorMessage
+        self.highlightsByReference = highlightsByReference
+        self.referenceHighlightCount = referenceHighlightCount
+        self.commentsByReference = commentsByReference
+        self.referenceCommentCount = referenceCommentCount
+        self.isLoading = isLoading
+        self.errorMessage = errorMessage
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterRoomDetailSnapshot: Sendable {}
+#endif
+
+
+extension HighlighterRoomDetailSnapshot: Equatable, Hashable {
+    public static func ==(lhs: HighlighterRoomDetailSnapshot, rhs: HighlighterRoomDetailSnapshot) -> Bool {
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.artifacts != rhs.artifacts {
+            return false
+        }
+        if lhs.artifactCount != rhs.artifactCount {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
+        if lhs.highlightCount != rhs.highlightCount {
+            return false
+        }
+        if lhs.discussions != rhs.discussions {
+            return false
+        }
+        if lhs.discussionCount != rhs.discussionCount {
+            return false
+        }
+        if lhs.isPublishingDiscussion != rhs.isPublishingDiscussion {
+            return false
+        }
+        if lhs.discussionErrorMessage != rhs.discussionErrorMessage {
+            return false
+        }
+        if lhs.lastPublishedDiscussionId != rhs.lastPublishedDiscussionId {
+            return false
+        }
+        if lhs.chatMessages != rhs.chatMessages {
+            return false
+        }
+        if lhs.chatMessageCount != rhs.chatMessageCount {
+            return false
+        }
+        if lhs.chatHasMore != rhs.chatHasMore {
+            return false
+        }
+        if lhs.isChatLoadingMore != rhs.isChatLoadingMore {
+            return false
+        }
+        if lhs.isSendingChatMessage != rhs.isSendingChatMessage {
+            return false
+        }
+        if lhs.chatErrorMessage != rhs.chatErrorMessage {
+            return false
+        }
+        if lhs.highlightsByReference != rhs.highlightsByReference {
+            return false
+        }
+        if lhs.referenceHighlightCount != rhs.referenceHighlightCount {
+            return false
+        }
+        if lhs.commentsByReference != rhs.commentsByReference {
+            return false
+        }
+        if lhs.referenceCommentCount != rhs.referenceCommentCount {
+            return false
+        }
+        if lhs.isLoading != rhs.isLoading {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groupId)
+        hasher.combine(artifacts)
+        hasher.combine(artifactCount)
+        hasher.combine(highlights)
+        hasher.combine(highlightCount)
+        hasher.combine(discussions)
+        hasher.combine(discussionCount)
+        hasher.combine(isPublishingDiscussion)
+        hasher.combine(discussionErrorMessage)
+        hasher.combine(lastPublishedDiscussionId)
+        hasher.combine(chatMessages)
+        hasher.combine(chatMessageCount)
+        hasher.combine(chatHasMore)
+        hasher.combine(isChatLoadingMore)
+        hasher.combine(isSendingChatMessage)
+        hasher.combine(chatErrorMessage)
+        hasher.combine(highlightsByReference)
+        hasher.combine(referenceHighlightCount)
+        hasher.combine(commentsByReference)
+        hasher.combine(referenceCommentCount)
+        hasher.combine(isLoading)
+        hasher.combine(errorMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterRoomDetailSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterRoomDetailSnapshot {
+        return
+            try HighlighterRoomDetailSnapshot(
+                groupId: FfiConverterString.read(from: &buf),
+                artifacts: FfiConverterSequenceTypeArtifactRecord.read(from: &buf),
+                artifactCount: FfiConverterUInt64.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf),
+                highlightCount: FfiConverterUInt64.read(from: &buf),
+                discussions: FfiConverterSequenceTypeDiscussionRecord.read(from: &buf),
+                discussionCount: FfiConverterUInt64.read(from: &buf),
+                isPublishingDiscussion: FfiConverterBool.read(from: &buf),
+                discussionErrorMessage: FfiConverterOptionString.read(from: &buf),
+                lastPublishedDiscussionId: FfiConverterOptionString.read(from: &buf),
+                chatMessages: FfiConverterSequenceTypeChatMessageRecord.read(from: &buf),
+                chatMessageCount: FfiConverterUInt64.read(from: &buf),
+                chatHasMore: FfiConverterBool.read(from: &buf),
+                isChatLoadingMore: FfiConverterBool.read(from: &buf),
+                isSendingChatMessage: FfiConverterBool.read(from: &buf),
+                chatErrorMessage: FfiConverterOptionString.read(from: &buf),
+                highlightsByReference: FfiConverterSequenceTypeHighlighterReferenceHighlightBucket.read(from: &buf),
+                referenceHighlightCount: FfiConverterUInt64.read(from: &buf),
+                commentsByReference: FfiConverterSequenceTypeHighlighterReferenceCommentBucket.read(from: &buf),
+                referenceCommentCount: FfiConverterUInt64.read(from: &buf),
+                isLoading: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterRoomDetailSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterSequenceTypeArtifactRecord.write(value.artifacts, into: &buf)
+        FfiConverterUInt64.write(value.artifactCount, into: &buf)
+        FfiConverterSequenceTypeHydratedHighlight.write(value.highlights, into: &buf)
+        FfiConverterUInt64.write(value.highlightCount, into: &buf)
+        FfiConverterSequenceTypeDiscussionRecord.write(value.discussions, into: &buf)
+        FfiConverterUInt64.write(value.discussionCount, into: &buf)
+        FfiConverterBool.write(value.isPublishingDiscussion, into: &buf)
+        FfiConverterOptionString.write(value.discussionErrorMessage, into: &buf)
+        FfiConverterOptionString.write(value.lastPublishedDiscussionId, into: &buf)
+        FfiConverterSequenceTypeChatMessageRecord.write(value.chatMessages, into: &buf)
+        FfiConverterUInt64.write(value.chatMessageCount, into: &buf)
+        FfiConverterBool.write(value.chatHasMore, into: &buf)
+        FfiConverterBool.write(value.isChatLoadingMore, into: &buf)
+        FfiConverterBool.write(value.isSendingChatMessage, into: &buf)
+        FfiConverterOptionString.write(value.chatErrorMessage, into: &buf)
+        FfiConverterSequenceTypeHighlighterReferenceHighlightBucket.write(value.highlightsByReference, into: &buf)
+        FfiConverterUInt64.write(value.referenceHighlightCount, into: &buf)
+        FfiConverterSequenceTypeHighlighterReferenceCommentBucket.write(value.commentsByReference, into: &buf)
+        FfiConverterUInt64.write(value.referenceCommentCount, into: &buf)
+        FfiConverterBool.write(value.isLoading, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterRoomDetailSnapshot_lift(_ buf: RustBuffer) throws -> HighlighterRoomDetailSnapshot {
+    return try FfiConverterTypeHighlighterRoomDetailSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterRoomDetailSnapshot_lower(_ value: HighlighterRoomDetailSnapshot) -> RustBuffer {
+    return FfiConverterTypeHighlighterRoomDetailSnapshot.lower(value)
+}
+
+
 public struct HighlighterRoomExplorerSnapshot {
     public var featured: [CommunitySummary]
     public var featuredCount: UInt64
@@ -8669,6 +8028,304 @@ public func FfiConverterTypeHighlighterRoomExplorerSnapshot_lift(_ buf: RustBuff
 #endif
 public func FfiConverterTypeHighlighterRoomExplorerSnapshot_lower(_ value: HighlighterRoomExplorerSnapshot) -> RustBuffer {
     return FfiConverterTypeHighlighterRoomExplorerSnapshot.lower(value)
+}
+
+
+public struct HighlighterRoomInviteCandidate {
+    public var pubkeyHex: String
+    public var source: HighlighterRoomInviteCandidateSource
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkeyHex: String, source: HighlighterRoomInviteCandidateSource) {
+        self.pubkeyHex = pubkeyHex
+        self.source = source
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterRoomInviteCandidate: Sendable {}
+#endif
+
+
+extension HighlighterRoomInviteCandidate: Equatable, Hashable {
+    public static func ==(lhs: HighlighterRoomInviteCandidate, rhs: HighlighterRoomInviteCandidate) -> Bool {
+        if lhs.pubkeyHex != rhs.pubkeyHex {
+            return false
+        }
+        if lhs.source != rhs.source {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkeyHex)
+        hasher.combine(source)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterRoomInviteCandidate: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterRoomInviteCandidate {
+        return
+            try HighlighterRoomInviteCandidate(
+                pubkeyHex: FfiConverterString.read(from: &buf),
+                source: FfiConverterTypeHighlighterRoomInviteCandidateSource.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterRoomInviteCandidate, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkeyHex, into: &buf)
+        FfiConverterTypeHighlighterRoomInviteCandidateSource.write(value.source, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterRoomInviteCandidate_lift(_ buf: RustBuffer) throws -> HighlighterRoomInviteCandidate {
+    return try FfiConverterTypeHighlighterRoomInviteCandidate.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterRoomInviteCandidate_lower(_ value: HighlighterRoomInviteCandidate) -> RustBuffer {
+    return FfiConverterTypeHighlighterRoomInviteCandidate.lower(value)
+}
+
+
+public struct HighlighterRoomInviteResolvedCandidate {
+    public var pubkeyHex: String
+    public var kind: HighlighterRoomInvitePastedKind
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(pubkeyHex: String, kind: HighlighterRoomInvitePastedKind) {
+        self.pubkeyHex = pubkeyHex
+        self.kind = kind
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterRoomInviteResolvedCandidate: Sendable {}
+#endif
+
+
+extension HighlighterRoomInviteResolvedCandidate: Equatable, Hashable {
+    public static func ==(lhs: HighlighterRoomInviteResolvedCandidate, rhs: HighlighterRoomInviteResolvedCandidate) -> Bool {
+        if lhs.pubkeyHex != rhs.pubkeyHex {
+            return false
+        }
+        if lhs.kind != rhs.kind {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkeyHex)
+        hasher.combine(kind)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterRoomInviteResolvedCandidate: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterRoomInviteResolvedCandidate {
+        return
+            try HighlighterRoomInviteResolvedCandidate(
+                pubkeyHex: FfiConverterString.read(from: &buf),
+                kind: FfiConverterTypeHighlighterRoomInvitePastedKind.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterRoomInviteResolvedCandidate, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkeyHex, into: &buf)
+        FfiConverterTypeHighlighterRoomInvitePastedKind.write(value.kind, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterRoomInviteResolvedCandidate_lift(_ buf: RustBuffer) throws -> HighlighterRoomInviteResolvedCandidate {
+    return try FfiConverterTypeHighlighterRoomInviteResolvedCandidate.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterRoomInviteResolvedCandidate_lower(_ value: HighlighterRoomInviteResolvedCandidate) -> RustBuffer {
+    return FfiConverterTypeHighlighterRoomInviteResolvedCandidate.lower(value)
+}
+
+
+public struct HighlighterRoomInviteSnapshot {
+    public var groupId: String
+    public var query: String
+    public var visibleFollows: [String]
+    public var followCount: UInt64
+    public var pastedCandidate: HighlighterRoomInviteResolvedCandidate?
+    public var selected: [HighlighterRoomInviteCandidate]
+    public var isLoadingFollows: Bool
+    public var isMintingInviteLink: Bool
+    public var inviteUrl: String?
+    public var inviteLinkErrorMessage: String?
+    public var isAddingMembers: Bool
+    public var addErrorMessage: String?
+    public var toastMessage: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(groupId: String, query: String, visibleFollows: [String], followCount: UInt64, pastedCandidate: HighlighterRoomInviteResolvedCandidate?, selected: [HighlighterRoomInviteCandidate], isLoadingFollows: Bool, isMintingInviteLink: Bool, inviteUrl: String?, inviteLinkErrorMessage: String?, isAddingMembers: Bool, addErrorMessage: String?, toastMessage: String?) {
+        self.groupId = groupId
+        self.query = query
+        self.visibleFollows = visibleFollows
+        self.followCount = followCount
+        self.pastedCandidate = pastedCandidate
+        self.selected = selected
+        self.isLoadingFollows = isLoadingFollows
+        self.isMintingInviteLink = isMintingInviteLink
+        self.inviteUrl = inviteUrl
+        self.inviteLinkErrorMessage = inviteLinkErrorMessage
+        self.isAddingMembers = isAddingMembers
+        self.addErrorMessage = addErrorMessage
+        self.toastMessage = toastMessage
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterRoomInviteSnapshot: Sendable {}
+#endif
+
+
+extension HighlighterRoomInviteSnapshot: Equatable, Hashable {
+    public static func ==(lhs: HighlighterRoomInviteSnapshot, rhs: HighlighterRoomInviteSnapshot) -> Bool {
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.query != rhs.query {
+            return false
+        }
+        if lhs.visibleFollows != rhs.visibleFollows {
+            return false
+        }
+        if lhs.followCount != rhs.followCount {
+            return false
+        }
+        if lhs.pastedCandidate != rhs.pastedCandidate {
+            return false
+        }
+        if lhs.selected != rhs.selected {
+            return false
+        }
+        if lhs.isLoadingFollows != rhs.isLoadingFollows {
+            return false
+        }
+        if lhs.isMintingInviteLink != rhs.isMintingInviteLink {
+            return false
+        }
+        if lhs.inviteUrl != rhs.inviteUrl {
+            return false
+        }
+        if lhs.inviteLinkErrorMessage != rhs.inviteLinkErrorMessage {
+            return false
+        }
+        if lhs.isAddingMembers != rhs.isAddingMembers {
+            return false
+        }
+        if lhs.addErrorMessage != rhs.addErrorMessage {
+            return false
+        }
+        if lhs.toastMessage != rhs.toastMessage {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groupId)
+        hasher.combine(query)
+        hasher.combine(visibleFollows)
+        hasher.combine(followCount)
+        hasher.combine(pastedCandidate)
+        hasher.combine(selected)
+        hasher.combine(isLoadingFollows)
+        hasher.combine(isMintingInviteLink)
+        hasher.combine(inviteUrl)
+        hasher.combine(inviteLinkErrorMessage)
+        hasher.combine(isAddingMembers)
+        hasher.combine(addErrorMessage)
+        hasher.combine(toastMessage)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterRoomInviteSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterRoomInviteSnapshot {
+        return
+            try HighlighterRoomInviteSnapshot(
+                groupId: FfiConverterString.read(from: &buf),
+                query: FfiConverterString.read(from: &buf),
+                visibleFollows: FfiConverterSequenceString.read(from: &buf),
+                followCount: FfiConverterUInt64.read(from: &buf),
+                pastedCandidate: FfiConverterOptionTypeHighlighterRoomInviteResolvedCandidate.read(from: &buf),
+                selected: FfiConverterSequenceTypeHighlighterRoomInviteCandidate.read(from: &buf),
+                isLoadingFollows: FfiConverterBool.read(from: &buf),
+                isMintingInviteLink: FfiConverterBool.read(from: &buf),
+                inviteUrl: FfiConverterOptionString.read(from: &buf),
+                inviteLinkErrorMessage: FfiConverterOptionString.read(from: &buf),
+                isAddingMembers: FfiConverterBool.read(from: &buf),
+                addErrorMessage: FfiConverterOptionString.read(from: &buf),
+                toastMessage: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterRoomInviteSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterString.write(value.query, into: &buf)
+        FfiConverterSequenceString.write(value.visibleFollows, into: &buf)
+        FfiConverterUInt64.write(value.followCount, into: &buf)
+        FfiConverterOptionTypeHighlighterRoomInviteResolvedCandidate.write(value.pastedCandidate, into: &buf)
+        FfiConverterSequenceTypeHighlighterRoomInviteCandidate.write(value.selected, into: &buf)
+        FfiConverterBool.write(value.isLoadingFollows, into: &buf)
+        FfiConverterBool.write(value.isMintingInviteLink, into: &buf)
+        FfiConverterOptionString.write(value.inviteUrl, into: &buf)
+        FfiConverterOptionString.write(value.inviteLinkErrorMessage, into: &buf)
+        FfiConverterBool.write(value.isAddingMembers, into: &buf)
+        FfiConverterOptionString.write(value.addErrorMessage, into: &buf)
+        FfiConverterOptionString.write(value.toastMessage, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterRoomInviteSnapshot_lift(_ buf: RustBuffer) throws -> HighlighterRoomInviteSnapshot {
+    return try FfiConverterTypeHighlighterRoomInviteSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterRoomInviteSnapshot_lower(_ value: HighlighterRoomInviteSnapshot) -> RustBuffer {
+    return FfiConverterTypeHighlighterRoomInviteSnapshot.lower(value)
 }
 
 
@@ -8843,6 +8500,92 @@ public func FfiConverterTypeHighlighterSearchSnapshot_lift(_ buf: RustBuffer) th
 #endif
 public func FfiConverterTypeHighlighterSearchSnapshot_lower(_ value: HighlighterSearchSnapshot) -> RustBuffer {
     return FfiConverterTypeHighlighterSearchSnapshot.lower(value)
+}
+
+
+public struct HighlighterShareComposerSnapshot {
+    public var isPublishing: Bool
+    public var publishingGroupId: String?
+    public var errorMessage: String?
+    public var publishedGroupId: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(isPublishing: Bool, publishingGroupId: String?, errorMessage: String?, publishedGroupId: String?) {
+        self.isPublishing = isPublishing
+        self.publishingGroupId = publishingGroupId
+        self.errorMessage = errorMessage
+        self.publishedGroupId = publishedGroupId
+    }
+}
+
+#if compiler(>=6)
+extension HighlighterShareComposerSnapshot: Sendable {}
+#endif
+
+
+extension HighlighterShareComposerSnapshot: Equatable, Hashable {
+    public static func ==(lhs: HighlighterShareComposerSnapshot, rhs: HighlighterShareComposerSnapshot) -> Bool {
+        if lhs.isPublishing != rhs.isPublishing {
+            return false
+        }
+        if lhs.publishingGroupId != rhs.publishingGroupId {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        if lhs.publishedGroupId != rhs.publishedGroupId {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(isPublishing)
+        hasher.combine(publishingGroupId)
+        hasher.combine(errorMessage)
+        hasher.combine(publishedGroupId)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterShareComposerSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterShareComposerSnapshot {
+        return
+            try HighlighterShareComposerSnapshot(
+                isPublishing: FfiConverterBool.read(from: &buf),
+                publishingGroupId: FfiConverterOptionString.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf),
+                publishedGroupId: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlighterShareComposerSnapshot, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.isPublishing, into: &buf)
+        FfiConverterOptionString.write(value.publishingGroupId, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+        FfiConverterOptionString.write(value.publishedGroupId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterShareComposerSnapshot_lift(_ buf: RustBuffer) throws -> HighlighterShareComposerSnapshot {
+    return try FfiConverterTypeHighlighterShareComposerSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterShareComposerSnapshot_lower(_ value: HighlighterShareComposerSnapshot) -> RustBuffer {
+    return FfiConverterTypeHighlighterShareComposerSnapshot.lower(value)
 }
 
 
@@ -9377,7 +9120,6 @@ public func FfiConverterTypeNip11Document_lower(_ value: Nip11Document) -> RustB
 
 /**
  * Options for initiating a `nostrconnect://` outgoing pairing.
- * Matches Olas's `NDKBunkerSigner.NostrConnectOptions`.
  */
 public struct NostrConnectOptions {
     public var name: String
@@ -9983,6 +9725,124 @@ public func FfiConverterTypeProfileMetadata_lower(_ value: ProfileMetadata) -> R
 }
 
 
+public struct ProfileUpdateDraft {
+    public var name: String
+    public var displayName: String
+    public var about: String
+    public var picture: String
+    public var banner: String
+    public var nip05: String
+    public var website: String
+    public var lud16: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String) {
+        self.name = name
+        self.displayName = displayName
+        self.about = about
+        self.picture = picture
+        self.banner = banner
+        self.nip05 = nip05
+        self.website = website
+        self.lud16 = lud16
+    }
+}
+
+#if compiler(>=6)
+extension ProfileUpdateDraft: Sendable {}
+#endif
+
+
+extension ProfileUpdateDraft: Equatable, Hashable {
+    public static func ==(lhs: ProfileUpdateDraft, rhs: ProfileUpdateDraft) -> Bool {
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.about != rhs.about {
+            return false
+        }
+        if lhs.picture != rhs.picture {
+            return false
+        }
+        if lhs.banner != rhs.banner {
+            return false
+        }
+        if lhs.nip05 != rhs.nip05 {
+            return false
+        }
+        if lhs.website != rhs.website {
+            return false
+        }
+        if lhs.lud16 != rhs.lud16 {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+        hasher.combine(displayName)
+        hasher.combine(about)
+        hasher.combine(picture)
+        hasher.combine(banner)
+        hasher.combine(nip05)
+        hasher.combine(website)
+        hasher.combine(lud16)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileUpdateDraft: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileUpdateDraft {
+        return
+            try ProfileUpdateDraft(
+                name: FfiConverterString.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                about: FfiConverterString.read(from: &buf),
+                picture: FfiConverterString.read(from: &buf),
+                banner: FfiConverterString.read(from: &buf),
+                nip05: FfiConverterString.read(from: &buf),
+                website: FfiConverterString.read(from: &buf),
+                lud16: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileUpdateDraft, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterString.write(value.about, into: &buf)
+        FfiConverterString.write(value.picture, into: &buf)
+        FfiConverterString.write(value.banner, into: &buf)
+        FfiConverterString.write(value.nip05, into: &buf)
+        FfiConverterString.write(value.website, into: &buf)
+        FfiConverterString.write(value.lud16, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileUpdateDraft_lift(_ buf: RustBuffer) throws -> ProfileUpdateDraft {
+    return try FfiConverterTypeProfileUpdateDraft.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileUpdateDraft_lower(_ value: ProfileUpdateDraft) -> RustBuffer {
+    return FfiConverterTypeProfileUpdateDraft.lower(value)
+}
+
+
 /**
  * One row of cached reaction data — what the UI needs to render
  * "12 likes · I liked this".
@@ -10294,32 +10154,27 @@ public func FfiConverterTypeRelayConfig_lower(_ value: RelayConfig) -> RustBuffe
 
 
 /**
- * Live diagnostic snapshot for a single relay, polled from the nostr-sdk
- * connection pool. Updated by `NostrRuntime`'s diagnostics poller every
- * second; Swift reads via `get_relay_diagnostics` and listens for
- * `RelayStatusChanged` deltas to know when to re-render.
+ * Live diagnostic snapshot for a single relay, decoded from NMP's typed
+ * `relay_diagnostics` projection. Swift reads via `get_relay_diagnostics`
+ * and listens for `RelayStatusChanged` deltas to know when to re-render.
  */
 public struct RelayDiagnostic {
     public var url: String
     public var state: RelayStatus
     /**
-     * Round-trip time in milliseconds when the relay is connected. `None`
-     * until the first ping completes.
+     * Round-trip time in milliseconds when available from the runtime.
      */
     public var rttMs: UInt32?
     /**
-     * Cumulative bytes sent on this connection since it was first opened
-     * this session.
+     * Cumulative bytes sent on this connection when available.
      */
     public var bytesSent: UInt64
     /**
-     * Cumulative bytes received on this connection since it was first
-     * opened this session.
+     * Cumulative bytes received on this connection when available.
      */
     public var bytesReceived: UInt64
     /**
-     * Unix seconds of the most recent successful connect, `None` if never
-     * connected in this session.
+     * Unix seconds of the most recent successful connect when available.
      */
     public var connectedSinceTs: UInt64?
 
@@ -10327,20 +10182,16 @@ public struct RelayDiagnostic {
     // declare one manually.
     public init(url: String, state: RelayStatus,
         /**
-         * Round-trip time in milliseconds when the relay is connected. `None`
-         * until the first ping completes.
+         * Round-trip time in milliseconds when available from the runtime.
          */rttMs: UInt32?,
         /**
-         * Cumulative bytes sent on this connection since it was first opened
-         * this session.
+         * Cumulative bytes sent on this connection when available.
          */bytesSent: UInt64,
         /**
-         * Cumulative bytes received on this connection since it was first
-         * opened this session.
+         * Cumulative bytes received on this connection when available.
          */bytesReceived: UInt64,
         /**
-         * Unix seconds of the most recent successful connect, `None` if never
-         * connected in this session.
+         * Unix seconds of the most recent successful connect when available.
          */connectedSinceTs: UInt64?) {
         self.url = url
         self.state = state
@@ -10922,28 +10773,28 @@ extension CoreError: Foundation.LocalizedError {
 
 public enum DataChangeType {
 
-    case communityUpserted(community: CommunitySummary
+    case communityUpserted(groupId: String
     )
     case membershipChanged(groupId: String
     )
-    case artifactUpserted(groupId: String, artifact: ArtifactRecord
+    case artifactUpserted(groupId: String
     )
-    case discussionUpserted(groupId: String, discussion: DiscussionRecord
+    case discussionUpserted(groupId: String
     )
     /**
      * A NIP-29 kind:9 chat message arrived for `group_id`. The Swift
      * chat store appends it to its message list (ordered by `created_at`).
      */
-    case chatMessageUpserted(groupId: String, message: ChatMessageRecord
+    case chatMessageUpserted(groupId: String
     )
-    case highlightUpserted(groupId: String, highlight: HydratedHighlight
+    case highlightUpserted(groupId: String
     )
     /**
      * A kind:16 cross-community share of a highlight was received.
      */
     case highlightShared(groupId: String, highlightId: String, sharedByPubkey: String
     )
-    case myHighlightUpserted(highlight: HighlightRecord
+    case myHighlightUpserted(eventId: String
     )
     /**
      * Something that affects the profile view for `pubkey` arrived. `kind`
@@ -10985,7 +10836,7 @@ public enum DataChangeType {
      * A kind:1 message inside an open feedback thread arrived. The Swift
      * store inserts/upserts it into the chat view ordered by `created_at`.
      */
-    case feedbackThreadEventUpserted(event: FeedbackEventRecord
+    case feedbackThreadEventUpserted(eventId: String
     )
     /**
      * A NIP-50 relay search returned new kind:30023 events. The Swift store
@@ -11054,28 +10905,28 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        case 1: return .communityUpserted(community: try FfiConverterTypeCommunitySummary.read(from: &buf)
+        case 1: return .communityUpserted(groupId: try FfiConverterString.read(from: &buf)
         )
 
         case 2: return .membershipChanged(groupId: try FfiConverterString.read(from: &buf)
         )
 
-        case 3: return .artifactUpserted(groupId: try FfiConverterString.read(from: &buf), artifact: try FfiConverterTypeArtifactRecord.read(from: &buf)
+        case 3: return .artifactUpserted(groupId: try FfiConverterString.read(from: &buf)
         )
 
-        case 4: return .discussionUpserted(groupId: try FfiConverterString.read(from: &buf), discussion: try FfiConverterTypeDiscussionRecord.read(from: &buf)
+        case 4: return .discussionUpserted(groupId: try FfiConverterString.read(from: &buf)
         )
 
-        case 5: return .chatMessageUpserted(groupId: try FfiConverterString.read(from: &buf), message: try FfiConverterTypeChatMessageRecord.read(from: &buf)
+        case 5: return .chatMessageUpserted(groupId: try FfiConverterString.read(from: &buf)
         )
 
-        case 6: return .highlightUpserted(groupId: try FfiConverterString.read(from: &buf), highlight: try FfiConverterTypeHydratedHighlight.read(from: &buf)
+        case 6: return .highlightUpserted(groupId: try FfiConverterString.read(from: &buf)
         )
 
         case 7: return .highlightShared(groupId: try FfiConverterString.read(from: &buf), highlightId: try FfiConverterString.read(from: &buf), sharedByPubkey: try FfiConverterString.read(from: &buf)
         )
 
-        case 8: return .myHighlightUpserted(highlight: try FfiConverterTypeHighlightRecord.read(from: &buf)
+        case 8: return .myHighlightUpserted(eventId: try FfiConverterString.read(from: &buf)
         )
 
         case 9: return .userProfileUpdated(pubkey: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
@@ -11090,7 +10941,7 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
 
         case 13: return .feedbackThreadsUpdated
 
-        case 14: return .feedbackThreadEventUpserted(event: try FfiConverterTypeFeedbackEventRecord.read(from: &buf)
+        case 14: return .feedbackThreadEventUpserted(eventId: try FfiConverterString.read(from: &buf)
         )
 
         case 15: return .searchArticlesUpdated(query: try FfiConverterString.read(from: &buf)
@@ -11121,9 +10972,9 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
         switch value {
 
 
-        case let .communityUpserted(community):
+        case let .communityUpserted(groupId):
             writeInt(&buf, Int32(1))
-            FfiConverterTypeCommunitySummary.write(community, into: &buf)
+            FfiConverterString.write(groupId, into: &buf)
 
 
         case let .membershipChanged(groupId):
@@ -11131,28 +10982,24 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
             FfiConverterString.write(groupId, into: &buf)
 
 
-        case let .artifactUpserted(groupId,artifact):
+        case let .artifactUpserted(groupId):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(groupId, into: &buf)
-            FfiConverterTypeArtifactRecord.write(artifact, into: &buf)
 
 
-        case let .discussionUpserted(groupId,discussion):
+        case let .discussionUpserted(groupId):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(groupId, into: &buf)
-            FfiConverterTypeDiscussionRecord.write(discussion, into: &buf)
 
 
-        case let .chatMessageUpserted(groupId,message):
+        case let .chatMessageUpserted(groupId):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(groupId, into: &buf)
-            FfiConverterTypeChatMessageRecord.write(message, into: &buf)
 
 
-        case let .highlightUpserted(groupId,highlight):
+        case let .highlightUpserted(groupId):
             writeInt(&buf, Int32(6))
             FfiConverterString.write(groupId, into: &buf)
-            FfiConverterTypeHydratedHighlight.write(highlight, into: &buf)
 
 
         case let .highlightShared(groupId,highlightId,sharedByPubkey):
@@ -11162,9 +11009,9 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
             FfiConverterString.write(sharedByPubkey, into: &buf)
 
 
-        case let .myHighlightUpserted(highlight):
+        case let .myHighlightUpserted(eventId):
             writeInt(&buf, Int32(8))
-            FfiConverterTypeHighlightRecord.write(highlight, into: &buf)
+            FfiConverterString.write(eventId, into: &buf)
 
 
         case let .userProfileUpdated(pubkey,kind):
@@ -11191,9 +11038,9 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
             writeInt(&buf, Int32(13))
 
 
-        case let .feedbackThreadEventUpserted(event):
+        case let .feedbackThreadEventUpserted(eventId):
             writeInt(&buf, Int32(14))
-            FfiConverterTypeFeedbackEventRecord.write(event, into: &buf)
+            FfiConverterString.write(eventId, into: &buf)
 
 
         case let .searchArticlesUpdated(query):
@@ -11276,6 +11123,96 @@ public enum HighlighterAppAction {
     case setCreateAccountUsername(username: String
     )
     case submitCreateAccount
+    case uploadCreateRoomCover(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String
+    )
+    case createRoomCapabilityFailed(message: String
+    )
+    case clearCreateRoomCover
+    case submitCreateRoom(name: String, about: String, visibility: RoomVisibility, access: RoomAccess
+    )
+    case clearCreateRoomResult
+    case clearCreateRoomError
+    case openRoomInvite(groupId: String
+    )
+    case refreshRoomInvite
+    case setRoomInviteQuery(query: String
+    )
+    case toggleRoomInviteCandidate(pubkeyHex: String, source: HighlighterRoomInviteCandidateSource
+    )
+    case removeRoomInviteCandidate(pubkeyHex: String
+    )
+    case acceptRoomInvitePastedCandidate
+    case mintRoomInviteLink
+    case submitRoomInviteMembers
+    case clearRoomInviteAddError
+    case clearRoomInviteInviteLinkError
+    case clearRoomInviteToast
+    case closeRoomInvite
+    case openComments(rootTagName: String, rootTagValue: String, rootKind: UInt16
+    )
+    case refreshComments
+    case setCommentDraft(parentEventId: String?, body: String
+    )
+    case publishComment(parentEventId: String?
+    )
+    case clearCommentPublishError
+    case toggleCommentLike(eventId: String
+    )
+    case toggleCommentBookmark(eventId: String
+    )
+    case clearCommentInteractionError
+    case closeComments
+    case openFeedback(coordinate: String
+    )
+    case refreshFeedbackThreads
+    case setFeedbackNewThreadDraft(body: String
+    )
+    case publishFeedbackNewThread
+    case openFeedbackThread(rootEventId: String
+    )
+    case refreshFeedbackThread
+    case setFeedbackReplyDraft(body: String
+    )
+    case publishFeedbackReply
+    case clearFeedbackPublishError
+    case closeFeedbackThread
+    case closeFeedback
+    case openMediaSettings
+    case refreshMediaSettings
+    case addBlossomServer(url: String
+    )
+    case removeBlossomServer(url: String
+    )
+    case moveBlossomServers(fromIndices: [UInt32], toIndex: UInt32
+    )
+    case clearMediaSettingsError
+    case closeMediaSettings
+    case openEditProfile(seed: ProfileMetadata?
+    )
+    case setEditProfileDisplayName(value: String
+    )
+    case setEditProfileName(value: String
+    )
+    case setEditProfileAbout(value: String
+    )
+    case setEditProfilePicture(value: String
+    )
+    case setEditProfileBanner(value: String
+    )
+    case setEditProfileNip05(value: String
+    )
+    case setEditProfileWebsite(value: String
+    )
+    case setEditProfileLud16(value: String
+    )
+    case uploadEditProfileImage(target: HighlighterEditProfileImageTarget, bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String
+    )
+    case editProfileCapabilityFailed(message: String
+    )
+    case submitEditProfile
+    case clearEditProfileError
+    case clearEditProfileResult
+    case closeEditProfile
     case startNostrConnect(callbackUrl: String
     )
     case externalUrlOpenFailed(url: String
@@ -11305,6 +11242,24 @@ public enum HighlighterAppAction {
     )
     case requestWebMetadata(url: String
     )
+    case requestReferenceHighlights(tagName: String, tagValue: String, limit: UInt32
+    )
+    case requestBookPickerRecents(limit: UInt32
+    )
+    case searchBookPickerArtifacts(query: String, limit: UInt32
+    )
+    case clearBookPickerSearch
+    case uploadCapturePhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String
+    )
+    case clearCaptureUpload
+    case publishCaptureHighlight(selection: HighlighterCaptureArtifact, targetGroupId: String?, draft: HighlightDraft
+    )
+    case publishCapturePicture(selection: HighlighterCaptureArtifact?, targetGroupId: String?, image: BlossomUpload, note: String
+    )
+    case publishClipHighlight(artifact: ArtifactRecord, targetGroupId: String?, draft: HighlightDraft
+    )
+    case clearCaptureResult
+    case clearCaptureError
     case requestProfile(pubkeyHex: String
     )
     case openProfile(pubkeyHex: String
@@ -11318,6 +11273,25 @@ public enum HighlighterAppAction {
     case closeArticleReader
     case publishArticleHighlight(quote: String, context: String, note: String
     )
+    case publishArtifactShare(preview: ArtifactPreview, groupId: String, note: String?
+    )
+    case publishUrlShare(url: String, groupId: String, note: String?
+    )
+    case shareHighlightRepost(eventId: String, authorPubkeyHex: String, relayHint: String, targetGroupId: String
+    )
+    case clearShareComposerResult
+    case clearShareComposerError
+    case openRoom(groupId: String
+    )
+    case refreshRoom
+    case publishRoomDiscussion(title: String, body: String, attachmentUrl: String?
+    )
+    case clearRoomDiscussionError
+    case loadMoreRoomChat
+    case publishRoomChatMessage(content: String, replyToEventId: String?
+    )
+    case clearRoomChatError
+    case closeRoom
     case openHomeFeed
     case refreshHomeFeed
     case closeHomeFeed
@@ -11331,6 +11305,24 @@ public enum HighlighterAppAction {
     case recordRecentSearch(query: String
     )
     case clearRecentSearches
+    case openNetworkSettings
+    case refreshNetworkSettings
+    case upsertNetworkRelay(config: RelayConfig
+    )
+    case removeNetworkRelay(url: String
+    )
+    case setNetworkRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool
+    )
+    case probeNetworkRelayNip11(url: String
+    )
+    case setNetworkImportNpub(npub: String
+    )
+    case fetchNetworkImportRelays
+    case toggleNetworkImportRelay(url: String
+    )
+    case applyNetworkImportRelays
+    case clearNetworkError
+    case closeNetworkSettings
     case setNetworkWifiOnly(enabled: Bool
     )
     case networkPathChanged(isWifi: Bool
@@ -11377,113 +11369,354 @@ public struct FfiConverterTypeHighlighterAppAction: FfiConverterRustBuffer {
 
         case 8: return .submitCreateAccount
 
-        case 9: return .startNostrConnect(callbackUrl: try FfiConverterString.read(from: &buf)
+        case 9: return .uploadCreateRoomCover(bytes: try FfiConverterData.read(from: &buf), mime: try FfiConverterString.read(from: &buf), width: try FfiConverterUInt32.read(from: &buf), height: try FfiConverterUInt32.read(from: &buf), alt: try FfiConverterString.read(from: &buf)
         )
 
-        case 10: return .externalUrlOpenFailed(url: try FfiConverterString.read(from: &buf)
+        case 10: return .createRoomCapabilityFailed(message: try FfiConverterString.read(from: &buf)
         )
 
-        case 11: return .logout
+        case 11: return .clearCreateRoomCover
 
-        case 12: return .toggleArticleBookmark(address: try FfiConverterString.read(from: &buf)
+        case 12: return .submitCreateRoom(name: try FfiConverterString.read(from: &buf), about: try FfiConverterString.read(from: &buf), visibility: try FfiConverterTypeRoomVisibility.read(from: &buf), access: try FfiConverterTypeRoomAccess.read(from: &buf)
         )
 
-        case 13: return .openBookmarks
+        case 13: return .clearCreateRoomResult
 
-        case 14: return .refreshBookmarks
+        case 14: return .clearCreateRoomError
 
-        case 15: return .closeBookmarks
-
-        case 16: return .openBookmarkCollection(pubkeyHex: try FfiConverterString.read(from: &buf), dTag: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
+        case 15: return .openRoomInvite(groupId: try FfiConverterString.read(from: &buf)
         )
 
-        case 17: return .refreshBookmarkCollection
+        case 16: return .refreshRoomInvite
 
-        case 18: return .openCurationMenu(articleAddress: try FfiConverterString.read(from: &buf)
+        case 17: return .setRoomInviteQuery(query: try FfiConverterString.read(from: &buf)
         )
 
-        case 19: return .closeCurationMenu
-
-        case 20: return .setAddressInCurationSet(dTag: try FfiConverterString.read(from: &buf), address: try FfiConverterString.read(from: &buf), member: try FfiConverterBool.read(from: &buf)
+        case 18: return .toggleRoomInviteCandidate(pubkeyHex: try FfiConverterString.read(from: &buf), source: try FfiConverterTypeHighlighterRoomInviteCandidateSource.read(from: &buf)
         )
 
-        case 21: return .createCurationSetAndAdd(title: try FfiConverterString.read(from: &buf), address: try FfiConverterString.read(from: &buf)
+        case 19: return .removeRoomInviteCandidate(pubkeyHex: try FfiConverterString.read(from: &buf)
         )
 
-        case 22: return .openRoomExplorer
+        case 20: return .acceptRoomInvitePastedCandidate
 
-        case 23: return .refreshRoomExplorer
+        case 21: return .mintRoomInviteLink
 
-        case 24: return .refreshRoomBrowseAll
+        case 22: return .submitRoomInviteMembers
 
-        case 25: return .requestJoinRoom(groupId: try FfiConverterString.read(from: &buf), roomName: try FfiConverterString.read(from: &buf)
+        case 23: return .clearRoomInviteAddError
+
+        case 24: return .clearRoomInviteInviteLinkError
+
+        case 25: return .clearRoomInviteToast
+
+        case 26: return .closeRoomInvite
+
+        case 27: return .openComments(rootTagName: try FfiConverterString.read(from: &buf), rootTagValue: try FfiConverterString.read(from: &buf), rootKind: try FfiConverterUInt16.read(from: &buf)
         )
 
-        case 26: return .requestIsbnPreview(isbn: try FfiConverterString.read(from: &buf)
+        case 28: return .refreshComments
+
+        case 29: return .setCommentDraft(parentEventId: try FfiConverterOptionString.read(from: &buf), body: try FfiConverterString.read(from: &buf)
         )
 
-        case 27: return .requestWebMetadata(url: try FfiConverterString.read(from: &buf)
+        case 30: return .publishComment(parentEventId: try FfiConverterOptionString.read(from: &buf)
         )
 
-        case 28: return .requestProfile(pubkeyHex: try FfiConverterString.read(from: &buf)
+        case 31: return .clearCommentPublishError
+
+        case 32: return .toggleCommentLike(eventId: try FfiConverterString.read(from: &buf)
         )
 
-        case 29: return .openProfile(pubkeyHex: try FfiConverterString.read(from: &buf)
+        case 33: return .toggleCommentBookmark(eventId: try FfiConverterString.read(from: &buf)
         )
 
-        case 30: return .refreshProfile
+        case 34: return .clearCommentInteractionError
 
-        case 31: return .closeProfile
+        case 35: return .closeComments
 
-        case 32: return .toggleProfileFollow
-
-        case 33: return .openArticleReader(pubkeyHex: try FfiConverterString.read(from: &buf), dTag: try FfiConverterString.read(from: &buf), seed: try FfiConverterOptionTypeArticleRecord.read(from: &buf)
+        case 36: return .openFeedback(coordinate: try FfiConverterString.read(from: &buf)
         )
 
-        case 34: return .refreshArticleReader
+        case 37: return .refreshFeedbackThreads
 
-        case 35: return .closeArticleReader
-
-        case 36: return .publishArticleHighlight(quote: try FfiConverterString.read(from: &buf), context: try FfiConverterString.read(from: &buf), note: try FfiConverterString.read(from: &buf)
+        case 38: return .setFeedbackNewThreadDraft(body: try FfiConverterString.read(from: &buf)
         )
 
-        case 37: return .openHomeFeed
+        case 39: return .publishFeedbackNewThread
 
-        case 38: return .refreshHomeFeed
-
-        case 39: return .closeHomeFeed
-
-        case 40: return .searchOpened
-
-        case 41: return .searchClosed
-
-        case 42: return .setSearchQuery(query: try FfiConverterString.read(from: &buf)
+        case 40: return .openFeedbackThread(rootEventId: try FfiConverterString.read(from: &buf)
         )
 
-        case 43: return .submitSearch(query: try FfiConverterString.read(from: &buf)
+        case 41: return .refreshFeedbackThread
+
+        case 42: return .setFeedbackReplyDraft(body: try FfiConverterString.read(from: &buf)
         )
 
-        case 44: return .clearSearch
+        case 43: return .publishFeedbackReply
 
-        case 45: return .recordRecentSearch(query: try FfiConverterString.read(from: &buf)
+        case 44: return .clearFeedbackPublishError
+
+        case 45: return .closeFeedbackThread
+
+        case 46: return .closeFeedback
+
+        case 47: return .openMediaSettings
+
+        case 48: return .refreshMediaSettings
+
+        case 49: return .addBlossomServer(url: try FfiConverterString.read(from: &buf)
         )
 
-        case 46: return .clearRecentSearches
-
-        case 47: return .setNetworkWifiOnly(enabled: try FfiConverterBool.read(from: &buf)
+        case 50: return .removeBlossomServer(url: try FfiConverterString.read(from: &buf)
         )
 
-        case 48: return .networkPathChanged(isWifi: try FfiConverterBool.read(from: &buf)
+        case 51: return .moveBlossomServers(fromIndices: try FfiConverterSequenceUInt32.read(from: &buf), toIndex: try FfiConverterUInt32.read(from: &buf)
         )
 
-        case 49: return .reconnectNetwork
+        case 52: return .clearMediaSettingsError
 
-        case 50: return .toggleOnboardingInterest(interestId: try FfiConverterString.read(from: &buf)
+        case 53: return .closeMediaSettings
+
+        case 54: return .openEditProfile(seed: try FfiConverterOptionTypeProfileMetadata.read(from: &buf)
         )
 
-        case 51: return .completeOnboarding
+        case 55: return .setEditProfileDisplayName(value: try FfiConverterString.read(from: &buf)
+        )
 
-        case 52: return .clearToast
+        case 56: return .setEditProfileName(value: try FfiConverterString.read(from: &buf)
+        )
+
+        case 57: return .setEditProfileAbout(value: try FfiConverterString.read(from: &buf)
+        )
+
+        case 58: return .setEditProfilePicture(value: try FfiConverterString.read(from: &buf)
+        )
+
+        case 59: return .setEditProfileBanner(value: try FfiConverterString.read(from: &buf)
+        )
+
+        case 60: return .setEditProfileNip05(value: try FfiConverterString.read(from: &buf)
+        )
+
+        case 61: return .setEditProfileWebsite(value: try FfiConverterString.read(from: &buf)
+        )
+
+        case 62: return .setEditProfileLud16(value: try FfiConverterString.read(from: &buf)
+        )
+
+        case 63: return .uploadEditProfileImage(target: try FfiConverterTypeHighlighterEditProfileImageTarget.read(from: &buf), bytes: try FfiConverterData.read(from: &buf), mime: try FfiConverterString.read(from: &buf), width: try FfiConverterUInt32.read(from: &buf), height: try FfiConverterUInt32.read(from: &buf), alt: try FfiConverterString.read(from: &buf)
+        )
+
+        case 64: return .editProfileCapabilityFailed(message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 65: return .submitEditProfile
+
+        case 66: return .clearEditProfileError
+
+        case 67: return .clearEditProfileResult
+
+        case 68: return .closeEditProfile
+
+        case 69: return .startNostrConnect(callbackUrl: try FfiConverterString.read(from: &buf)
+        )
+
+        case 70: return .externalUrlOpenFailed(url: try FfiConverterString.read(from: &buf)
+        )
+
+        case 71: return .logout
+
+        case 72: return .toggleArticleBookmark(address: try FfiConverterString.read(from: &buf)
+        )
+
+        case 73: return .openBookmarks
+
+        case 74: return .refreshBookmarks
+
+        case 75: return .closeBookmarks
+
+        case 76: return .openBookmarkCollection(pubkeyHex: try FfiConverterString.read(from: &buf), dTag: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
+        )
+
+        case 77: return .refreshBookmarkCollection
+
+        case 78: return .openCurationMenu(articleAddress: try FfiConverterString.read(from: &buf)
+        )
+
+        case 79: return .closeCurationMenu
+
+        case 80: return .setAddressInCurationSet(dTag: try FfiConverterString.read(from: &buf), address: try FfiConverterString.read(from: &buf), member: try FfiConverterBool.read(from: &buf)
+        )
+
+        case 81: return .createCurationSetAndAdd(title: try FfiConverterString.read(from: &buf), address: try FfiConverterString.read(from: &buf)
+        )
+
+        case 82: return .openRoomExplorer
+
+        case 83: return .refreshRoomExplorer
+
+        case 84: return .refreshRoomBrowseAll
+
+        case 85: return .requestJoinRoom(groupId: try FfiConverterString.read(from: &buf), roomName: try FfiConverterString.read(from: &buf)
+        )
+
+        case 86: return .requestIsbnPreview(isbn: try FfiConverterString.read(from: &buf)
+        )
+
+        case 87: return .requestWebMetadata(url: try FfiConverterString.read(from: &buf)
+        )
+
+        case 88: return .requestReferenceHighlights(tagName: try FfiConverterString.read(from: &buf), tagValue: try FfiConverterString.read(from: &buf), limit: try FfiConverterUInt32.read(from: &buf)
+        )
+
+        case 89: return .requestBookPickerRecents(limit: try FfiConverterUInt32.read(from: &buf)
+        )
+
+        case 90: return .searchBookPickerArtifacts(query: try FfiConverterString.read(from: &buf), limit: try FfiConverterUInt32.read(from: &buf)
+        )
+
+        case 91: return .clearBookPickerSearch
+
+        case 92: return .uploadCapturePhoto(bytes: try FfiConverterData.read(from: &buf), mime: try FfiConverterString.read(from: &buf), width: try FfiConverterUInt32.read(from: &buf), height: try FfiConverterUInt32.read(from: &buf), alt: try FfiConverterString.read(from: &buf)
+        )
+
+        case 93: return .clearCaptureUpload
+
+        case 94: return .publishCaptureHighlight(selection: try FfiConverterTypeHighlighterCaptureArtifact.read(from: &buf), targetGroupId: try FfiConverterOptionString.read(from: &buf), draft: try FfiConverterTypeHighlightDraft.read(from: &buf)
+        )
+
+        case 95: return .publishCapturePicture(selection: try FfiConverterOptionTypeHighlighterCaptureArtifact.read(from: &buf), targetGroupId: try FfiConverterOptionString.read(from: &buf), image: try FfiConverterTypeBlossomUpload.read(from: &buf), note: try FfiConverterString.read(from: &buf)
+        )
+
+        case 96: return .publishClipHighlight(artifact: try FfiConverterTypeArtifactRecord.read(from: &buf), targetGroupId: try FfiConverterOptionString.read(from: &buf), draft: try FfiConverterTypeHighlightDraft.read(from: &buf)
+        )
+
+        case 97: return .clearCaptureResult
+
+        case 98: return .clearCaptureError
+
+        case 99: return .requestProfile(pubkeyHex: try FfiConverterString.read(from: &buf)
+        )
+
+        case 100: return .openProfile(pubkeyHex: try FfiConverterString.read(from: &buf)
+        )
+
+        case 101: return .refreshProfile
+
+        case 102: return .closeProfile
+
+        case 103: return .toggleProfileFollow
+
+        case 104: return .openArticleReader(pubkeyHex: try FfiConverterString.read(from: &buf), dTag: try FfiConverterString.read(from: &buf), seed: try FfiConverterOptionTypeArticleRecord.read(from: &buf)
+        )
+
+        case 105: return .refreshArticleReader
+
+        case 106: return .closeArticleReader
+
+        case 107: return .publishArticleHighlight(quote: try FfiConverterString.read(from: &buf), context: try FfiConverterString.read(from: &buf), note: try FfiConverterString.read(from: &buf)
+        )
+
+        case 108: return .publishArtifactShare(preview: try FfiConverterTypeArtifactPreview.read(from: &buf), groupId: try FfiConverterString.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf)
+        )
+
+        case 109: return .publishUrlShare(url: try FfiConverterString.read(from: &buf), groupId: try FfiConverterString.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf)
+        )
+
+        case 110: return .shareHighlightRepost(eventId: try FfiConverterString.read(from: &buf), authorPubkeyHex: try FfiConverterString.read(from: &buf), relayHint: try FfiConverterString.read(from: &buf), targetGroupId: try FfiConverterString.read(from: &buf)
+        )
+
+        case 111: return .clearShareComposerResult
+
+        case 112: return .clearShareComposerError
+
+        case 113: return .openRoom(groupId: try FfiConverterString.read(from: &buf)
+        )
+
+        case 114: return .refreshRoom
+
+        case 115: return .publishRoomDiscussion(title: try FfiConverterString.read(from: &buf), body: try FfiConverterString.read(from: &buf), attachmentUrl: try FfiConverterOptionString.read(from: &buf)
+        )
+
+        case 116: return .clearRoomDiscussionError
+
+        case 117: return .loadMoreRoomChat
+
+        case 118: return .publishRoomChatMessage(content: try FfiConverterString.read(from: &buf), replyToEventId: try FfiConverterOptionString.read(from: &buf)
+        )
+
+        case 119: return .clearRoomChatError
+
+        case 120: return .closeRoom
+
+        case 121: return .openHomeFeed
+
+        case 122: return .refreshHomeFeed
+
+        case 123: return .closeHomeFeed
+
+        case 124: return .searchOpened
+
+        case 125: return .searchClosed
+
+        case 126: return .setSearchQuery(query: try FfiConverterString.read(from: &buf)
+        )
+
+        case 127: return .submitSearch(query: try FfiConverterString.read(from: &buf)
+        )
+
+        case 128: return .clearSearch
+
+        case 129: return .recordRecentSearch(query: try FfiConverterString.read(from: &buf)
+        )
+
+        case 130: return .clearRecentSearches
+
+        case 131: return .openNetworkSettings
+
+        case 132: return .refreshNetworkSettings
+
+        case 133: return .upsertNetworkRelay(config: try FfiConverterTypeRelayConfig.read(from: &buf)
+        )
+
+        case 134: return .removeNetworkRelay(url: try FfiConverterString.read(from: &buf)
+        )
+
+        case 135: return .setNetworkRelayRoles(url: try FfiConverterString.read(from: &buf), read: try FfiConverterBool.read(from: &buf), write: try FfiConverterBool.read(from: &buf), rooms: try FfiConverterBool.read(from: &buf), indexer: try FfiConverterBool.read(from: &buf)
+        )
+
+        case 136: return .probeNetworkRelayNip11(url: try FfiConverterString.read(from: &buf)
+        )
+
+        case 137: return .setNetworkImportNpub(npub: try FfiConverterString.read(from: &buf)
+        )
+
+        case 138: return .fetchNetworkImportRelays
+
+        case 139: return .toggleNetworkImportRelay(url: try FfiConverterString.read(from: &buf)
+        )
+
+        case 140: return .applyNetworkImportRelays
+
+        case 141: return .clearNetworkError
+
+        case 142: return .closeNetworkSettings
+
+        case 143: return .setNetworkWifiOnly(enabled: try FfiConverterBool.read(from: &buf)
+        )
+
+        case 144: return .networkPathChanged(isWifi: try FfiConverterBool.read(from: &buf)
+        )
+
+        case 145: return .reconnectNetwork
+
+        case 146: return .toggleOnboardingInterest(interestId: try FfiConverterString.read(from: &buf)
+        )
+
+        case 147: return .completeOnboarding
+
+        case 148: return .clearToast
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -11533,210 +11766,688 @@ public struct FfiConverterTypeHighlighterAppAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(8))
 
 
-        case let .startNostrConnect(callbackUrl):
+        case let .uploadCreateRoomCover(bytes,mime,width,height,alt):
             writeInt(&buf, Int32(9))
+            FfiConverterData.write(bytes, into: &buf)
+            FfiConverterString.write(mime, into: &buf)
+            FfiConverterUInt32.write(width, into: &buf)
+            FfiConverterUInt32.write(height, into: &buf)
+            FfiConverterString.write(alt, into: &buf)
+
+
+        case let .createRoomCapabilityFailed(message):
+            writeInt(&buf, Int32(10))
+            FfiConverterString.write(message, into: &buf)
+
+
+        case .clearCreateRoomCover:
+            writeInt(&buf, Int32(11))
+
+
+        case let .submitCreateRoom(name,about,visibility,access):
+            writeInt(&buf, Int32(12))
+            FfiConverterString.write(name, into: &buf)
+            FfiConverterString.write(about, into: &buf)
+            FfiConverterTypeRoomVisibility.write(visibility, into: &buf)
+            FfiConverterTypeRoomAccess.write(access, into: &buf)
+
+
+        case .clearCreateRoomResult:
+            writeInt(&buf, Int32(13))
+
+
+        case .clearCreateRoomError:
+            writeInt(&buf, Int32(14))
+
+
+        case let .openRoomInvite(groupId):
+            writeInt(&buf, Int32(15))
+            FfiConverterString.write(groupId, into: &buf)
+
+
+        case .refreshRoomInvite:
+            writeInt(&buf, Int32(16))
+
+
+        case let .setRoomInviteQuery(query):
+            writeInt(&buf, Int32(17))
+            FfiConverterString.write(query, into: &buf)
+
+
+        case let .toggleRoomInviteCandidate(pubkeyHex,source):
+            writeInt(&buf, Int32(18))
+            FfiConverterString.write(pubkeyHex, into: &buf)
+            FfiConverterTypeHighlighterRoomInviteCandidateSource.write(source, into: &buf)
+
+
+        case let .removeRoomInviteCandidate(pubkeyHex):
+            writeInt(&buf, Int32(19))
+            FfiConverterString.write(pubkeyHex, into: &buf)
+
+
+        case .acceptRoomInvitePastedCandidate:
+            writeInt(&buf, Int32(20))
+
+
+        case .mintRoomInviteLink:
+            writeInt(&buf, Int32(21))
+
+
+        case .submitRoomInviteMembers:
+            writeInt(&buf, Int32(22))
+
+
+        case .clearRoomInviteAddError:
+            writeInt(&buf, Int32(23))
+
+
+        case .clearRoomInviteInviteLinkError:
+            writeInt(&buf, Int32(24))
+
+
+        case .clearRoomInviteToast:
+            writeInt(&buf, Int32(25))
+
+
+        case .closeRoomInvite:
+            writeInt(&buf, Int32(26))
+
+
+        case let .openComments(rootTagName,rootTagValue,rootKind):
+            writeInt(&buf, Int32(27))
+            FfiConverterString.write(rootTagName, into: &buf)
+            FfiConverterString.write(rootTagValue, into: &buf)
+            FfiConverterUInt16.write(rootKind, into: &buf)
+
+
+        case .refreshComments:
+            writeInt(&buf, Int32(28))
+
+
+        case let .setCommentDraft(parentEventId,body):
+            writeInt(&buf, Int32(29))
+            FfiConverterOptionString.write(parentEventId, into: &buf)
+            FfiConverterString.write(body, into: &buf)
+
+
+        case let .publishComment(parentEventId):
+            writeInt(&buf, Int32(30))
+            FfiConverterOptionString.write(parentEventId, into: &buf)
+
+
+        case .clearCommentPublishError:
+            writeInt(&buf, Int32(31))
+
+
+        case let .toggleCommentLike(eventId):
+            writeInt(&buf, Int32(32))
+            FfiConverterString.write(eventId, into: &buf)
+
+
+        case let .toggleCommentBookmark(eventId):
+            writeInt(&buf, Int32(33))
+            FfiConverterString.write(eventId, into: &buf)
+
+
+        case .clearCommentInteractionError:
+            writeInt(&buf, Int32(34))
+
+
+        case .closeComments:
+            writeInt(&buf, Int32(35))
+
+
+        case let .openFeedback(coordinate):
+            writeInt(&buf, Int32(36))
+            FfiConverterString.write(coordinate, into: &buf)
+
+
+        case .refreshFeedbackThreads:
+            writeInt(&buf, Int32(37))
+
+
+        case let .setFeedbackNewThreadDraft(body):
+            writeInt(&buf, Int32(38))
+            FfiConverterString.write(body, into: &buf)
+
+
+        case .publishFeedbackNewThread:
+            writeInt(&buf, Int32(39))
+
+
+        case let .openFeedbackThread(rootEventId):
+            writeInt(&buf, Int32(40))
+            FfiConverterString.write(rootEventId, into: &buf)
+
+
+        case .refreshFeedbackThread:
+            writeInt(&buf, Int32(41))
+
+
+        case let .setFeedbackReplyDraft(body):
+            writeInt(&buf, Int32(42))
+            FfiConverterString.write(body, into: &buf)
+
+
+        case .publishFeedbackReply:
+            writeInt(&buf, Int32(43))
+
+
+        case .clearFeedbackPublishError:
+            writeInt(&buf, Int32(44))
+
+
+        case .closeFeedbackThread:
+            writeInt(&buf, Int32(45))
+
+
+        case .closeFeedback:
+            writeInt(&buf, Int32(46))
+
+
+        case .openMediaSettings:
+            writeInt(&buf, Int32(47))
+
+
+        case .refreshMediaSettings:
+            writeInt(&buf, Int32(48))
+
+
+        case let .addBlossomServer(url):
+            writeInt(&buf, Int32(49))
+            FfiConverterString.write(url, into: &buf)
+
+
+        case let .removeBlossomServer(url):
+            writeInt(&buf, Int32(50))
+            FfiConverterString.write(url, into: &buf)
+
+
+        case let .moveBlossomServers(fromIndices,toIndex):
+            writeInt(&buf, Int32(51))
+            FfiConverterSequenceUInt32.write(fromIndices, into: &buf)
+            FfiConverterUInt32.write(toIndex, into: &buf)
+
+
+        case .clearMediaSettingsError:
+            writeInt(&buf, Int32(52))
+
+
+        case .closeMediaSettings:
+            writeInt(&buf, Int32(53))
+
+
+        case let .openEditProfile(seed):
+            writeInt(&buf, Int32(54))
+            FfiConverterOptionTypeProfileMetadata.write(seed, into: &buf)
+
+
+        case let .setEditProfileDisplayName(value):
+            writeInt(&buf, Int32(55))
+            FfiConverterString.write(value, into: &buf)
+
+
+        case let .setEditProfileName(value):
+            writeInt(&buf, Int32(56))
+            FfiConverterString.write(value, into: &buf)
+
+
+        case let .setEditProfileAbout(value):
+            writeInt(&buf, Int32(57))
+            FfiConverterString.write(value, into: &buf)
+
+
+        case let .setEditProfilePicture(value):
+            writeInt(&buf, Int32(58))
+            FfiConverterString.write(value, into: &buf)
+
+
+        case let .setEditProfileBanner(value):
+            writeInt(&buf, Int32(59))
+            FfiConverterString.write(value, into: &buf)
+
+
+        case let .setEditProfileNip05(value):
+            writeInt(&buf, Int32(60))
+            FfiConverterString.write(value, into: &buf)
+
+
+        case let .setEditProfileWebsite(value):
+            writeInt(&buf, Int32(61))
+            FfiConverterString.write(value, into: &buf)
+
+
+        case let .setEditProfileLud16(value):
+            writeInt(&buf, Int32(62))
+            FfiConverterString.write(value, into: &buf)
+
+
+        case let .uploadEditProfileImage(target,bytes,mime,width,height,alt):
+            writeInt(&buf, Int32(63))
+            FfiConverterTypeHighlighterEditProfileImageTarget.write(target, into: &buf)
+            FfiConverterData.write(bytes, into: &buf)
+            FfiConverterString.write(mime, into: &buf)
+            FfiConverterUInt32.write(width, into: &buf)
+            FfiConverterUInt32.write(height, into: &buf)
+            FfiConverterString.write(alt, into: &buf)
+
+
+        case let .editProfileCapabilityFailed(message):
+            writeInt(&buf, Int32(64))
+            FfiConverterString.write(message, into: &buf)
+
+
+        case .submitEditProfile:
+            writeInt(&buf, Int32(65))
+
+
+        case .clearEditProfileError:
+            writeInt(&buf, Int32(66))
+
+
+        case .clearEditProfileResult:
+            writeInt(&buf, Int32(67))
+
+
+        case .closeEditProfile:
+            writeInt(&buf, Int32(68))
+
+
+        case let .startNostrConnect(callbackUrl):
+            writeInt(&buf, Int32(69))
             FfiConverterString.write(callbackUrl, into: &buf)
 
 
         case let .externalUrlOpenFailed(url):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(70))
             FfiConverterString.write(url, into: &buf)
 
 
         case .logout:
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(71))
 
 
         case let .toggleArticleBookmark(address):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(72))
             FfiConverterString.write(address, into: &buf)
 
 
         case .openBookmarks:
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(73))
 
 
         case .refreshBookmarks:
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(74))
 
 
         case .closeBookmarks:
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(75))
 
 
         case let .openBookmarkCollection(pubkeyHex,dTag,kind):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(76))
             FfiConverterString.write(pubkeyHex, into: &buf)
             FfiConverterString.write(dTag, into: &buf)
             FfiConverterUInt32.write(kind, into: &buf)
 
 
         case .refreshBookmarkCollection:
-            writeInt(&buf, Int32(17))
+            writeInt(&buf, Int32(77))
 
 
         case let .openCurationMenu(articleAddress):
-            writeInt(&buf, Int32(18))
+            writeInt(&buf, Int32(78))
             FfiConverterString.write(articleAddress, into: &buf)
 
 
         case .closeCurationMenu:
-            writeInt(&buf, Int32(19))
+            writeInt(&buf, Int32(79))
 
 
         case let .setAddressInCurationSet(dTag,address,member):
-            writeInt(&buf, Int32(20))
+            writeInt(&buf, Int32(80))
             FfiConverterString.write(dTag, into: &buf)
             FfiConverterString.write(address, into: &buf)
             FfiConverterBool.write(member, into: &buf)
 
 
         case let .createCurationSetAndAdd(title,address):
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(81))
             FfiConverterString.write(title, into: &buf)
             FfiConverterString.write(address, into: &buf)
 
 
         case .openRoomExplorer:
-            writeInt(&buf, Int32(22))
+            writeInt(&buf, Int32(82))
 
 
         case .refreshRoomExplorer:
-            writeInt(&buf, Int32(23))
+            writeInt(&buf, Int32(83))
 
 
         case .refreshRoomBrowseAll:
-            writeInt(&buf, Int32(24))
+            writeInt(&buf, Int32(84))
 
 
         case let .requestJoinRoom(groupId,roomName):
-            writeInt(&buf, Int32(25))
+            writeInt(&buf, Int32(85))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterString.write(roomName, into: &buf)
 
 
         case let .requestIsbnPreview(isbn):
-            writeInt(&buf, Int32(26))
+            writeInt(&buf, Int32(86))
             FfiConverterString.write(isbn, into: &buf)
 
 
         case let .requestWebMetadata(url):
-            writeInt(&buf, Int32(27))
+            writeInt(&buf, Int32(87))
             FfiConverterString.write(url, into: &buf)
 
 
+        case let .requestReferenceHighlights(tagName,tagValue,limit):
+            writeInt(&buf, Int32(88))
+            FfiConverterString.write(tagName, into: &buf)
+            FfiConverterString.write(tagValue, into: &buf)
+            FfiConverterUInt32.write(limit, into: &buf)
+
+
+        case let .requestBookPickerRecents(limit):
+            writeInt(&buf, Int32(89))
+            FfiConverterUInt32.write(limit, into: &buf)
+
+
+        case let .searchBookPickerArtifacts(query,limit):
+            writeInt(&buf, Int32(90))
+            FfiConverterString.write(query, into: &buf)
+            FfiConverterUInt32.write(limit, into: &buf)
+
+
+        case .clearBookPickerSearch:
+            writeInt(&buf, Int32(91))
+
+
+        case let .uploadCapturePhoto(bytes,mime,width,height,alt):
+            writeInt(&buf, Int32(92))
+            FfiConverterData.write(bytes, into: &buf)
+            FfiConverterString.write(mime, into: &buf)
+            FfiConverterUInt32.write(width, into: &buf)
+            FfiConverterUInt32.write(height, into: &buf)
+            FfiConverterString.write(alt, into: &buf)
+
+
+        case .clearCaptureUpload:
+            writeInt(&buf, Int32(93))
+
+
+        case let .publishCaptureHighlight(selection,targetGroupId,draft):
+            writeInt(&buf, Int32(94))
+            FfiConverterTypeHighlighterCaptureArtifact.write(selection, into: &buf)
+            FfiConverterOptionString.write(targetGroupId, into: &buf)
+            FfiConverterTypeHighlightDraft.write(draft, into: &buf)
+
+
+        case let .publishCapturePicture(selection,targetGroupId,image,note):
+            writeInt(&buf, Int32(95))
+            FfiConverterOptionTypeHighlighterCaptureArtifact.write(selection, into: &buf)
+            FfiConverterOptionString.write(targetGroupId, into: &buf)
+            FfiConverterTypeBlossomUpload.write(image, into: &buf)
+            FfiConverterString.write(note, into: &buf)
+
+
+        case let .publishClipHighlight(artifact,targetGroupId,draft):
+            writeInt(&buf, Int32(96))
+            FfiConverterTypeArtifactRecord.write(artifact, into: &buf)
+            FfiConverterOptionString.write(targetGroupId, into: &buf)
+            FfiConverterTypeHighlightDraft.write(draft, into: &buf)
+
+
+        case .clearCaptureResult:
+            writeInt(&buf, Int32(97))
+
+
+        case .clearCaptureError:
+            writeInt(&buf, Int32(98))
+
+
         case let .requestProfile(pubkeyHex):
-            writeInt(&buf, Int32(28))
+            writeInt(&buf, Int32(99))
             FfiConverterString.write(pubkeyHex, into: &buf)
 
 
         case let .openProfile(pubkeyHex):
-            writeInt(&buf, Int32(29))
+            writeInt(&buf, Int32(100))
             FfiConverterString.write(pubkeyHex, into: &buf)
 
 
         case .refreshProfile:
-            writeInt(&buf, Int32(30))
+            writeInt(&buf, Int32(101))
 
 
         case .closeProfile:
-            writeInt(&buf, Int32(31))
+            writeInt(&buf, Int32(102))
 
 
         case .toggleProfileFollow:
-            writeInt(&buf, Int32(32))
+            writeInt(&buf, Int32(103))
 
 
         case let .openArticleReader(pubkeyHex,dTag,seed):
-            writeInt(&buf, Int32(33))
+            writeInt(&buf, Int32(104))
             FfiConverterString.write(pubkeyHex, into: &buf)
             FfiConverterString.write(dTag, into: &buf)
             FfiConverterOptionTypeArticleRecord.write(seed, into: &buf)
 
 
         case .refreshArticleReader:
-            writeInt(&buf, Int32(34))
+            writeInt(&buf, Int32(105))
 
 
         case .closeArticleReader:
-            writeInt(&buf, Int32(35))
+            writeInt(&buf, Int32(106))
 
 
         case let .publishArticleHighlight(quote,context,note):
-            writeInt(&buf, Int32(36))
+            writeInt(&buf, Int32(107))
             FfiConverterString.write(quote, into: &buf)
             FfiConverterString.write(context, into: &buf)
             FfiConverterString.write(note, into: &buf)
 
 
+        case let .publishArtifactShare(preview,groupId,note):
+            writeInt(&buf, Int32(108))
+            FfiConverterTypeArtifactPreview.write(preview, into: &buf)
+            FfiConverterString.write(groupId, into: &buf)
+            FfiConverterOptionString.write(note, into: &buf)
+
+
+        case let .publishUrlShare(url,groupId,note):
+            writeInt(&buf, Int32(109))
+            FfiConverterString.write(url, into: &buf)
+            FfiConverterString.write(groupId, into: &buf)
+            FfiConverterOptionString.write(note, into: &buf)
+
+
+        case let .shareHighlightRepost(eventId,authorPubkeyHex,relayHint,targetGroupId):
+            writeInt(&buf, Int32(110))
+            FfiConverterString.write(eventId, into: &buf)
+            FfiConverterString.write(authorPubkeyHex, into: &buf)
+            FfiConverterString.write(relayHint, into: &buf)
+            FfiConverterString.write(targetGroupId, into: &buf)
+
+
+        case .clearShareComposerResult:
+            writeInt(&buf, Int32(111))
+
+
+        case .clearShareComposerError:
+            writeInt(&buf, Int32(112))
+
+
+        case let .openRoom(groupId):
+            writeInt(&buf, Int32(113))
+            FfiConverterString.write(groupId, into: &buf)
+
+
+        case .refreshRoom:
+            writeInt(&buf, Int32(114))
+
+
+        case let .publishRoomDiscussion(title,body,attachmentUrl):
+            writeInt(&buf, Int32(115))
+            FfiConverterString.write(title, into: &buf)
+            FfiConverterString.write(body, into: &buf)
+            FfiConverterOptionString.write(attachmentUrl, into: &buf)
+
+
+        case .clearRoomDiscussionError:
+            writeInt(&buf, Int32(116))
+
+
+        case .loadMoreRoomChat:
+            writeInt(&buf, Int32(117))
+
+
+        case let .publishRoomChatMessage(content,replyToEventId):
+            writeInt(&buf, Int32(118))
+            FfiConverterString.write(content, into: &buf)
+            FfiConverterOptionString.write(replyToEventId, into: &buf)
+
+
+        case .clearRoomChatError:
+            writeInt(&buf, Int32(119))
+
+
+        case .closeRoom:
+            writeInt(&buf, Int32(120))
+
+
         case .openHomeFeed:
-            writeInt(&buf, Int32(37))
+            writeInt(&buf, Int32(121))
 
 
         case .refreshHomeFeed:
-            writeInt(&buf, Int32(38))
+            writeInt(&buf, Int32(122))
 
 
         case .closeHomeFeed:
-            writeInt(&buf, Int32(39))
+            writeInt(&buf, Int32(123))
 
 
         case .searchOpened:
-            writeInt(&buf, Int32(40))
+            writeInt(&buf, Int32(124))
 
 
         case .searchClosed:
-            writeInt(&buf, Int32(41))
+            writeInt(&buf, Int32(125))
 
 
         case let .setSearchQuery(query):
-            writeInt(&buf, Int32(42))
+            writeInt(&buf, Int32(126))
             FfiConverterString.write(query, into: &buf)
 
 
         case let .submitSearch(query):
-            writeInt(&buf, Int32(43))
+            writeInt(&buf, Int32(127))
             FfiConverterString.write(query, into: &buf)
 
 
         case .clearSearch:
-            writeInt(&buf, Int32(44))
+            writeInt(&buf, Int32(128))
 
 
         case let .recordRecentSearch(query):
-            writeInt(&buf, Int32(45))
+            writeInt(&buf, Int32(129))
             FfiConverterString.write(query, into: &buf)
 
 
         case .clearRecentSearches:
-            writeInt(&buf, Int32(46))
+            writeInt(&buf, Int32(130))
+
+
+        case .openNetworkSettings:
+            writeInt(&buf, Int32(131))
+
+
+        case .refreshNetworkSettings:
+            writeInt(&buf, Int32(132))
+
+
+        case let .upsertNetworkRelay(config):
+            writeInt(&buf, Int32(133))
+            FfiConverterTypeRelayConfig.write(config, into: &buf)
+
+
+        case let .removeNetworkRelay(url):
+            writeInt(&buf, Int32(134))
+            FfiConverterString.write(url, into: &buf)
+
+
+        case let .setNetworkRelayRoles(url,read,write,rooms,indexer):
+            writeInt(&buf, Int32(135))
+            FfiConverterString.write(url, into: &buf)
+            FfiConverterBool.write(read, into: &buf)
+            FfiConverterBool.write(write, into: &buf)
+            FfiConverterBool.write(rooms, into: &buf)
+            FfiConverterBool.write(indexer, into: &buf)
+
+
+        case let .probeNetworkRelayNip11(url):
+            writeInt(&buf, Int32(136))
+            FfiConverterString.write(url, into: &buf)
+
+
+        case let .setNetworkImportNpub(npub):
+            writeInt(&buf, Int32(137))
+            FfiConverterString.write(npub, into: &buf)
+
+
+        case .fetchNetworkImportRelays:
+            writeInt(&buf, Int32(138))
+
+
+        case let .toggleNetworkImportRelay(url):
+            writeInt(&buf, Int32(139))
+            FfiConverterString.write(url, into: &buf)
+
+
+        case .applyNetworkImportRelays:
+            writeInt(&buf, Int32(140))
+
+
+        case .clearNetworkError:
+            writeInt(&buf, Int32(141))
+
+
+        case .closeNetworkSettings:
+            writeInt(&buf, Int32(142))
 
 
         case let .setNetworkWifiOnly(enabled):
-            writeInt(&buf, Int32(47))
+            writeInt(&buf, Int32(143))
             FfiConverterBool.write(enabled, into: &buf)
 
 
         case let .networkPathChanged(isWifi):
-            writeInt(&buf, Int32(48))
+            writeInt(&buf, Int32(144))
             FfiConverterBool.write(isWifi, into: &buf)
 
 
         case .reconnectNetwork:
-            writeInt(&buf, Int32(49))
+            writeInt(&buf, Int32(145))
 
 
         case let .toggleOnboardingInterest(interestId):
-            writeInt(&buf, Int32(50))
+            writeInt(&buf, Int32(146))
             FfiConverterString.write(interestId, into: &buf)
 
 
         case .completeOnboarding:
-            writeInt(&buf, Int32(51))
+            writeInt(&buf, Int32(147))
 
 
         case .clearToast:
-            writeInt(&buf, Int32(52))
+            writeInt(&buf, Int32(148))
 
         }
     }
@@ -11768,68 +12479,51 @@ extension HighlighterAppAction: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum HighlighterAppUpdate {
+public enum HighlighterCaptureArtifact {
 
-    case fullState(state: HighlighterAppState
+    case existing(record: ArtifactRecord
     )
-    case persistSessionCredential(credential: HighlighterSessionCredential
-    )
-    case clearSessionCredentials
-    case openExternalUrl(url: String
+    case pending(preview: ArtifactPreview
     )
 }
 
 
 #if compiler(>=6)
-extension HighlighterAppUpdate: Sendable {}
+extension HighlighterCaptureArtifact: Sendable {}
 #endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeHighlighterAppUpdate: FfiConverterRustBuffer {
-    typealias SwiftType = HighlighterAppUpdate
+public struct FfiConverterTypeHighlighterCaptureArtifact: FfiConverterRustBuffer {
+    typealias SwiftType = HighlighterCaptureArtifact
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterAppUpdate {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterCaptureArtifact {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        case 1: return .fullState(state: try FfiConverterTypeHighlighterAppState.read(from: &buf)
+        case 1: return .existing(record: try FfiConverterTypeArtifactRecord.read(from: &buf)
         )
 
-        case 2: return .persistSessionCredential(credential: try FfiConverterTypeHighlighterSessionCredential.read(from: &buf)
-        )
-
-        case 3: return .clearSessionCredentials
-
-        case 4: return .openExternalUrl(url: try FfiConverterString.read(from: &buf)
+        case 2: return .pending(preview: try FfiConverterTypeArtifactPreview.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
-    public static func write(_ value: HighlighterAppUpdate, into buf: inout [UInt8]) {
+    public static func write(_ value: HighlighterCaptureArtifact, into buf: inout [UInt8]) {
         switch value {
 
 
-        case let .fullState(state):
+        case let .existing(record):
             writeInt(&buf, Int32(1))
-            FfiConverterTypeHighlighterAppState.write(state, into: &buf)
+            FfiConverterTypeArtifactRecord.write(record, into: &buf)
 
 
-        case let .persistSessionCredential(credential):
+        case let .pending(preview):
             writeInt(&buf, Int32(2))
-            FfiConverterTypeHighlighterSessionCredential.write(credential, into: &buf)
-
-
-        case .clearSessionCredentials:
-            writeInt(&buf, Int32(3))
-
-
-        case let .openExternalUrl(url):
-            writeInt(&buf, Int32(4))
-            FfiConverterString.write(url, into: &buf)
+            FfiConverterTypeArtifactPreview.write(preview, into: &buf)
 
         }
     }
@@ -11839,19 +12533,19 @@ public struct FfiConverterTypeHighlighterAppUpdate: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeHighlighterAppUpdate_lift(_ buf: RustBuffer) throws -> HighlighterAppUpdate {
-    return try FfiConverterTypeHighlighterAppUpdate.lift(buf)
+public func FfiConverterTypeHighlighterCaptureArtifact_lift(_ buf: RustBuffer) throws -> HighlighterCaptureArtifact {
+    return try FfiConverterTypeHighlighterCaptureArtifact.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeHighlighterAppUpdate_lower(_ value: HighlighterAppUpdate) -> RustBuffer {
-    return FfiConverterTypeHighlighterAppUpdate.lower(value)
+public func FfiConverterTypeHighlighterCaptureArtifact_lower(_ value: HighlighterCaptureArtifact) -> RustBuffer {
+    return FfiConverterTypeHighlighterCaptureArtifact.lower(value)
 }
 
 
-extension HighlighterAppUpdate: Equatable, Hashable {}
+extension HighlighterCaptureArtifact: Equatable, Hashable {}
 
 
 
@@ -11945,56 +12639,45 @@ extension HighlighterConnectionState: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum HighlighterHomeFeedItem {
+public enum HighlighterEditProfileImageTarget {
 
-    case highlights(stableId: String, sortKey: UInt64, highlights: [HydratedHighlight], highlightCount: UInt64
-    )
-    case read(stableId: String, sortKey: UInt64, item: ReadingFeedItem
-    )
+    case picture
+    case banner
 }
 
 
 #if compiler(>=6)
-extension HighlighterHomeFeedItem: Sendable {}
+extension HighlighterEditProfileImageTarget: Sendable {}
 #endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeHighlighterHomeFeedItem: FfiConverterRustBuffer {
-    typealias SwiftType = HighlighterHomeFeedItem
+public struct FfiConverterTypeHighlighterEditProfileImageTarget: FfiConverterRustBuffer {
+    typealias SwiftType = HighlighterEditProfileImageTarget
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterHomeFeedItem {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterEditProfileImageTarget {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        case 1: return .highlights(stableId: try FfiConverterString.read(from: &buf), sortKey: try FfiConverterUInt64.read(from: &buf), highlights: try FfiConverterSequenceTypeHydratedHighlight.read(from: &buf), highlightCount: try FfiConverterUInt64.read(from: &buf)
-        )
+        case 1: return .picture
 
-        case 2: return .read(stableId: try FfiConverterString.read(from: &buf), sortKey: try FfiConverterUInt64.read(from: &buf), item: try FfiConverterTypeReadingFeedItem.read(from: &buf)
-        )
+        case 2: return .banner
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
-    public static func write(_ value: HighlighterHomeFeedItem, into buf: inout [UInt8]) {
+    public static func write(_ value: HighlighterEditProfileImageTarget, into buf: inout [UInt8]) {
         switch value {
 
 
-        case let .highlights(stableId,sortKey,highlights,highlightCount):
+        case .picture:
             writeInt(&buf, Int32(1))
-            FfiConverterString.write(stableId, into: &buf)
-            FfiConverterUInt64.write(sortKey, into: &buf)
-            FfiConverterSequenceTypeHydratedHighlight.write(highlights, into: &buf)
-            FfiConverterUInt64.write(highlightCount, into: &buf)
 
 
-        case let .read(stableId,sortKey,item):
+        case .banner:
             writeInt(&buf, Int32(2))
-            FfiConverterString.write(stableId, into: &buf)
-            FfiConverterUInt64.write(sortKey, into: &buf)
-            FfiConverterTypeReadingFeedItem.write(item, into: &buf)
 
         }
     }
@@ -12004,19 +12687,236 @@ public struct FfiConverterTypeHighlighterHomeFeedItem: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeHighlighterHomeFeedItem_lift(_ buf: RustBuffer) throws -> HighlighterHomeFeedItem {
-    return try FfiConverterTypeHighlighterHomeFeedItem.lift(buf)
+public func FfiConverterTypeHighlighterEditProfileImageTarget_lift(_ buf: RustBuffer) throws -> HighlighterEditProfileImageTarget {
+    return try FfiConverterTypeHighlighterEditProfileImageTarget.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeHighlighterHomeFeedItem_lower(_ value: HighlighterHomeFeedItem) -> RustBuffer {
-    return FfiConverterTypeHighlighterHomeFeedItem.lower(value)
+public func FfiConverterTypeHighlighterEditProfileImageTarget_lower(_ value: HighlighterEditProfileImageTarget) -> RustBuffer {
+    return FfiConverterTypeHighlighterEditProfileImageTarget.lower(value)
 }
 
 
-extension HighlighterHomeFeedItem: Equatable, Hashable {}
+extension HighlighterEditProfileImageTarget: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum HighlighterHomeFeedItemKind {
+
+    case highlights
+    case read
+}
+
+
+#if compiler(>=6)
+extension HighlighterHomeFeedItemKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterHomeFeedItemKind: FfiConverterRustBuffer {
+    typealias SwiftType = HighlighterHomeFeedItemKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterHomeFeedItemKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .highlights
+
+        case 2: return .read
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: HighlighterHomeFeedItemKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .highlights:
+            writeInt(&buf, Int32(1))
+
+
+        case .read:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterHomeFeedItemKind_lift(_ buf: RustBuffer) throws -> HighlighterHomeFeedItemKind {
+    return try FfiConverterTypeHighlighterHomeFeedItemKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterHomeFeedItemKind_lower(_ value: HighlighterHomeFeedItemKind) -> RustBuffer {
+    return FfiConverterTypeHighlighterHomeFeedItemKind.lower(value)
+}
+
+
+extension HighlighterHomeFeedItemKind: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum HighlighterRoomInviteCandidateSource {
+
+    case follow
+    case paste
+}
+
+
+#if compiler(>=6)
+extension HighlighterRoomInviteCandidateSource: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterRoomInviteCandidateSource: FfiConverterRustBuffer {
+    typealias SwiftType = HighlighterRoomInviteCandidateSource
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterRoomInviteCandidateSource {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .follow
+
+        case 2: return .paste
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: HighlighterRoomInviteCandidateSource, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .follow:
+            writeInt(&buf, Int32(1))
+
+
+        case .paste:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterRoomInviteCandidateSource_lift(_ buf: RustBuffer) throws -> HighlighterRoomInviteCandidateSource {
+    return try FfiConverterTypeHighlighterRoomInviteCandidateSource.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterRoomInviteCandidateSource_lower(_ value: HighlighterRoomInviteCandidateSource) -> RustBuffer {
+    return FfiConverterTypeHighlighterRoomInviteCandidateSource.lower(value)
+}
+
+
+extension HighlighterRoomInviteCandidateSource: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum HighlighterRoomInvitePastedKind {
+
+    case npub
+    case nprofile
+    case hex
+}
+
+
+#if compiler(>=6)
+extension HighlighterRoomInvitePastedKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterRoomInvitePastedKind: FfiConverterRustBuffer {
+    typealias SwiftType = HighlighterRoomInvitePastedKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterRoomInvitePastedKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .npub
+
+        case 2: return .nprofile
+
+        case 3: return .hex
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: HighlighterRoomInvitePastedKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .npub:
+            writeInt(&buf, Int32(1))
+
+
+        case .nprofile:
+            writeInt(&buf, Int32(2))
+
+
+        case .hex:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterRoomInvitePastedKind_lift(_ buf: RustBuffer) throws -> HighlighterRoomInvitePastedKind {
+    return try FfiConverterTypeHighlighterRoomInvitePastedKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterRoomInvitePastedKind_lower(_ value: HighlighterRoomInvitePastedKind) -> RustBuffer {
+    return FfiConverterTypeHighlighterRoomInvitePastedKind.lower(value)
+}
+
+
+extension HighlighterRoomInvitePastedKind: Equatable, Hashable {}
 
 
 
@@ -12391,11 +13291,7 @@ extension NostrEntityRef: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
- * Connection state of a single relay the app is talking to. Mirrors the
- * nostr-sdk internal `RelayStatus` but trimmed to the values the UI cares
- * about. `Initialized` / `Pending` / `Sleeping` are collapsed into
- * `Connecting` — from the user's perspective all three mean "not yet on
- * the wire but trying".
+ * Connection state of a single relay in NMP's relay diagnostics projection.
  */
 
 public enum RelayStatus {
@@ -12887,30 +13783,6 @@ fileprivate struct FfiConverterOptionTypeArticleRecord: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeArtifactPreview: FfiConverterRustBuffer {
-    typealias SwiftType = ArtifactPreview?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeArtifactPreview.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeArtifactPreview.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterOptionTypeArtifactRecord: FfiConverterRustBuffer {
     typealias SwiftType = ArtifactRecord?
 
@@ -12983,6 +13855,30 @@ fileprivate struct FfiConverterOptionTypeBookmarkSetRecord: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeCacheStats: FfiConverterRustBuffer {
+    typealias SwiftType = CacheStats?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeCacheStats.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeCacheStats.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeCurrentUser: FfiConverterRustBuffer {
     typealias SwiftType = CurrentUser?
 
@@ -13031,6 +13927,78 @@ fileprivate struct FfiConverterOptionTypeDiscussionAttachment: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeHighlighterHomeReadItem: FfiConverterRustBuffer {
+    typealias SwiftType = HighlighterHomeReadItem?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeHighlighterHomeReadItem.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeHighlighterHomeReadItem.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeHighlighterRelayRemovalImpact: FfiConverterRustBuffer {
+    typealias SwiftType = HighlighterRelayRemovalImpact?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeHighlighterRelayRemovalImpact.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeHighlighterRelayRemovalImpact.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeHighlighterRoomInviteResolvedCandidate: FfiConverterRustBuffer {
+    typealias SwiftType = HighlighterRoomInviteResolvedCandidate?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeHighlighterRoomInviteResolvedCandidate.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeHighlighterRoomInviteResolvedCandidate.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeHighlighterToast: FfiConverterRustBuffer {
     typealias SwiftType = HighlighterToast?
 
@@ -13047,6 +14015,30 @@ fileprivate struct FfiConverterOptionTypeHighlighterToast: FfiConverterRustBuffe
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeHighlighterToast.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeNip11Document: FfiConverterRustBuffer {
+    typealias SwiftType = Nip11Document?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeNip11Document.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeNip11Document.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -13095,6 +14087,54 @@ fileprivate struct FfiConverterOptionTypeProfileMetadata: FfiConverterRustBuffer
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeProfileMetadata.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeHighlighterCaptureArtifact: FfiConverterRustBuffer {
+    typealias SwiftType = HighlighterCaptureArtifact?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeHighlighterCaptureArtifact.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeHighlighterCaptureArtifact.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeNostrEntityRef: FfiConverterRustBuffer {
+    typealias SwiftType = NostrEntityRef?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeNostrEntityRef.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeNostrEntityRef.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -13403,31 +14443,6 @@ fileprivate struct FfiConverterSequenceTypeFeedbackThreadRecord: FfiConverterRus
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeHighlightDraft: FfiConverterRustBuffer {
-    typealias SwiftType = [HighlightDraft]
-
-    public static func write(_ value: [HighlightDraft], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeHighlightDraft.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlightDraft] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [HighlightDraft]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeHighlightDraft.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterSequenceTypeHighlightRecord: FfiConverterRustBuffer {
     typealias SwiftType = [HighlightRecord]
 
@@ -13445,6 +14460,106 @@ fileprivate struct FfiConverterSequenceTypeHighlightRecord: FfiConverterRustBuff
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeHighlightRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeHighlighterCommentChildLinks: FfiConverterRustBuffer {
+    typealias SwiftType = [HighlighterCommentChildLinks]
+
+    public static func write(_ value: [HighlighterCommentChildLinks], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHighlighterCommentChildLinks.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlighterCommentChildLinks] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HighlighterCommentChildLinks]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHighlighterCommentChildLinks.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeHighlighterCommentDraft: FfiConverterRustBuffer {
+    typealias SwiftType = [HighlighterCommentDraft]
+
+    public static func write(_ value: [HighlighterCommentDraft], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHighlighterCommentDraft.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlighterCommentDraft] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HighlighterCommentDraft]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHighlighterCommentDraft.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeHighlighterCommentInteraction: FfiConverterRustBuffer {
+    typealias SwiftType = [HighlighterCommentInteraction]
+
+    public static func write(_ value: [HighlighterCommentInteraction], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHighlighterCommentInteraction.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlighterCommentInteraction] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HighlighterCommentInteraction]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHighlighterCommentInteraction.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeHighlighterHomeFeedItem: FfiConverterRustBuffer {
+    typealias SwiftType = [HighlighterHomeFeedItem]
+
+    public static func write(_ value: [HighlighterHomeFeedItem], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHighlighterHomeFeedItem.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlighterHomeFeedItem] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HighlighterHomeFeedItem]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHighlighterHomeFeedItem.read(from: &buf))
         }
         return seq
     }
@@ -13520,6 +14635,131 @@ fileprivate struct FfiConverterSequenceTypeHighlighterProfile: FfiConverterRustB
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeHighlighterProfile.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeHighlighterReferenceCommentBucket: FfiConverterRustBuffer {
+    typealias SwiftType = [HighlighterReferenceCommentBucket]
+
+    public static func write(_ value: [HighlighterReferenceCommentBucket], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHighlighterReferenceCommentBucket.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlighterReferenceCommentBucket] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HighlighterReferenceCommentBucket]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHighlighterReferenceCommentBucket.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeHighlighterReferenceHighlightBucket: FfiConverterRustBuffer {
+    typealias SwiftType = [HighlighterReferenceHighlightBucket]
+
+    public static func write(_ value: [HighlighterReferenceHighlightBucket], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHighlighterReferenceHighlightBucket.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlighterReferenceHighlightBucket] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HighlighterReferenceHighlightBucket]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHighlighterReferenceHighlightBucket.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeHighlighterRelayNip11Snapshot: FfiConverterRustBuffer {
+    typealias SwiftType = [HighlighterRelayNip11Snapshot]
+
+    public static func write(_ value: [HighlighterRelayNip11Snapshot], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHighlighterRelayNip11Snapshot.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlighterRelayNip11Snapshot] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HighlighterRelayNip11Snapshot]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHighlighterRelayNip11Snapshot.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeHighlighterRelayRemovalImpact: FfiConverterRustBuffer {
+    typealias SwiftType = [HighlighterRelayRemovalImpact]
+
+    public static func write(_ value: [HighlighterRelayRemovalImpact], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHighlighterRelayRemovalImpact.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlighterRelayRemovalImpact] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HighlighterRelayRemovalImpact]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHighlighterRelayRemovalImpact.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeHighlighterRoomInviteCandidate: FfiConverterRustBuffer {
+    typealias SwiftType = [HighlighterRoomInviteCandidate]
+
+    public static func write(_ value: [HighlighterRoomInviteCandidate], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHighlighterRoomInviteCandidate.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlighterRoomInviteCandidate] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HighlighterRoomInviteCandidate]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHighlighterRoomInviteCandidate.read(from: &buf))
         }
         return seq
     }
@@ -13628,56 +14868,6 @@ fileprivate struct FfiConverterSequenceTypeProfileMetadata: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeReactionRecord: FfiConverterRustBuffer {
-    typealias SwiftType = [ReactionRecord]
-
-    public static func write(_ value: [ReactionRecord], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeReactionRecord.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ReactionRecord] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [ReactionRecord]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeReactionRecord.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeReadingFeedItem: FfiConverterRustBuffer {
-    typealias SwiftType = [ReadingFeedItem]
-
-    public static func write(_ value: [ReadingFeedItem], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeReadingFeedItem.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ReadingFeedItem] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [ReadingFeedItem]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeReadingFeedItem.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterSequenceTypeRelayConfig: FfiConverterRustBuffer {
     typealias SwiftType = [RelayConfig]
 
@@ -13774,31 +14964,6 @@ fileprivate struct FfiConverterSequenceTypeWebBookmarkRecord: FfiConverterRustBu
         return seq
     }
 }
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeHighlighterHomeFeedItem: FfiConverterRustBuffer {
-    typealias SwiftType = [HighlighterHomeFeedItem]
-
-    public static func write(_ value: [HighlighterHomeFeedItem], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeHighlighterHomeFeedItem.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlighterHomeFeedItem] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [HighlighterHomeFeedItem]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeHighlighterHomeFeedItem.read(from: &buf))
-        }
-        return seq
-    }
-}
 private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
 private let UNIFFI_RUST_FUTURE_POLL_MAYBE_READY: Int8 = 1
 
@@ -13845,8 +15010,8 @@ fileprivate func uniffiFutureContinuationCallback(handle: UInt64, pollResult: In
         print("uniffiFutureContinuationCallback invalid handle")
     }
 }
-public func normalizeIsbn(raw: String)throws  -> String  {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+public func normalizeIsbn(raw: String) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_func_normalize_isbn(
         FfiConverterString.lower(raw),$0
     )
@@ -13868,376 +15033,55 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_highlighter_core_checksum_func_normalize_isbn() != 15167) {
+    if (uniffi_highlighter_core_checksum_func_normalize_isbn() != 9244) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_eventcallback_on_data_changed() != 54279) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlighterappreconciler_on_update() != 45803) {
+    if (uniffi_highlighter_core_checksum_method_highlighterappreconciler_on_state() != 62223) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_add_room_member() != 5956) {
+    if (uniffi_highlighter_core_checksum_method_highlighterappreconciler_on_persist_session_credential() != 47169) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_build_preview_from_url() != 53328) {
+    if (uniffi_highlighter_core_checksum_method_highlighterappreconciler_on_clear_session_credentials() != 3787) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_create_curation_set() != 35369) {
+    if (uniffi_highlighter_core_checksum_method_highlighterappreconciler_on_open_external_url() != 7022) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_create_room() != 43966) {
+    if (uniffi_highlighter_core_checksum_method_highlighternmpapp_article() != 60075) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_create_room_invite_codes() != 29452) {
+    if (uniffi_highlighter_core_checksum_method_highlighternmpapp_clear_core_event_callback() != 51619) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_current_user() != 38772) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_decode_nostr_entity() != 32142) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_decode_npub() != 51714) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_disconnect_all() != 46894) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_generate_account() != 54846) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_all_rooms() != 20905) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_article() != 17849) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifacts() != 30870) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_auto_connected_relays() != 7930) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_blossom_servers() != 32428) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_bookmarked_article_addresses() != 53917) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_cache_stats() != 48741) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_chat_messages() != 44460) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_comments_for_reference() != 23769) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_discussions() != 41672) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_featured_rooms() != 46959) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_feedback_thread_events() != 32828) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_feedback_threads() != 39148) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_curation_sets() != 5953) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_highlights() != 12124) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_following_reads() != 29016) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_follows() != 29379) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights() != 25748) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights_for_article() != 24140) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlights_for_reference() != 19698) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_communities() != 31741) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_bookmark_sets() != 11257) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_curation_sets() != 52536) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_highlights() != 10939) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_my_web_bookmarks() != 49630) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_new_rooms() != 38074) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_project_first_agent_pubkey() != 8227) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_reactions_for_event() != 45696) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_recent_books() != 33628) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_relay_diagnostics() != 57074) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_relays() != 12364) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_rooms_from_read_authors() != 47912) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_rooms_with_friends() != 10603) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_relays() != 43695) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_articles() != 2405) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_communities() != 15418) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_highlights() != 58884) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_user_profile() != 29632) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_metadata() != 24724) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_highlight_share_url() != 12268) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_import_relays_from_npub() != 20364) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_init_default_blossom_servers() != 35163) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_is_article_bookmarked() != 11256) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_is_event_bookmarked() != 30643) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_is_following() != 22885) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_login_nsec() != 30089) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_logout() != 15288) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_lookup_isbn() != 58236) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_pair_bunker() != 63581) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_probe_relay_nip11() != 47708) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 62633) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_chat_message() != 34308) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_comment() != 22772) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_discussion() != 50982) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_feedback_note() != 51524) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_highlight() != 16312) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_highlights_and_share() != 8629) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_picture() != 8020) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_reaction() != 53660) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_reconnect_all() != 18338) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_remove_relay() != 27189) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_request_join_room() != 22012) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_resolve_nostr_entity() != 33337) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_articles() != 31180) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_artifacts() != 48576) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_communities() != 5207) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_highlights() != 49733) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_search_profiles() != 3897) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_set_address_in_curation_set() != 55665) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_set_blossom_servers() != 8768) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_set_event_callback() != 16901) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_set_follow() != 22034) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_set_relay_roles() != 25561) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_share_highlight_to_room() != 10741) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_sign_nip05_registration_auth() != 26895) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_sign_nip98_auth() != 43473) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_start_featured_rooms() != 4206) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_start_friends_rooms_discovery() != 37507) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_start_nostr_connect() != 46145) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_start_room_discovery() != 41569) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article() != 35661) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article_search() != 39992) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_bookmark_sets() != 52089) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_bookmarks() != 41073) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_feedback_thread() != 19940) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_feedback_threads() != 5574) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_curation_sets() != 24304) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_highlights() != 25287) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_following_reads() != 12398) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_joined_communities() != 33427) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_relay_status() != 5993) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room() != 19851) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room_chat() != 62044) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_room_discussions() != 25508) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_user_profile() != 11829) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_vault() != 26608) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_web_bookmarks() != 9203) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_article_bookmark() != 6523) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_event_bookmark() != 63170) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_unpublish_reaction() != 4906) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_unsubscribe() != 55013) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_update_profile() != 54507) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_upload_photo() != 51840) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_relay() != 60842) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlighternmpapp_clear_legacy_event_callback() != 59804) {
+    if (uniffi_highlighter_core_checksum_method_highlighternmpapp_decode_nostr_entity() != 22973) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlighternmpapp_dispatch() != 36333) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlighternmpapp_legacy_core() != 10716) {
+    if (uniffi_highlighter_core_checksum_method_highlighternmpapp_highlight_share_url() != 39080) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlighternmpapp_listen_for_updates() != 27305) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlighternmpapp_set_legacy_event_callback() != 61896) {
+    if (uniffi_highlighter_core_checksum_method_highlighternmpapp_network_removal_impact() != 42619) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighternmpapp_publish_url_share() != 35144) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighternmpapp_resolve_nostr_entity() != 32063) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighternmpapp_set_core_event_callback() != 34421) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlighternmpapp_state() != 39891) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_constructor_highlightercore_new() != 37739) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_constructor_highlighternmpapp_new() != 21128) {

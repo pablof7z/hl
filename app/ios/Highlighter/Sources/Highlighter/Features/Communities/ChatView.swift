@@ -4,7 +4,6 @@ struct ChatView: View {
     let groupId: String
 
     @Environment(HighlighterStore.self) private var app
-    @State private var store = ChatStore()
     @State private var draft: String = ""
     @FocusState private var inputFocused: Bool
     @State private var replyTo: ChatMessageRecord? = nil
@@ -31,10 +30,9 @@ struct ChatView: View {
         }
         .background(Color.highlighterPaper.ignoresSafeArea())
         .task {
-            await store.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
+            app.openRoom(groupId: groupId)
         }
-        .onDisappear { store.stop() }
-        .onChange(of: store.messages.count) { oldCount, newCount in
+        .onChange(of: messages.count) { oldCount, newCount in
             let added = max(0, newCount - oldCount)
             guard added > 0 else { return }
             if isAtBottom {
@@ -46,12 +44,12 @@ struct ChatView: View {
             }
         }
         .alert("Couldn't send", isPresented: Binding(
-            get: { store.sendError != nil },
-            set: { if !$0 { store.sendError = nil } }
+            get: { chatErrorMessage != nil },
+            set: { if !$0 { app.clearRoomChatError() } }
         )) {
-            Button("OK", role: .cancel) { store.sendError = nil }
+            Button("OK", role: .cancel) { app.clearRoomChatError() }
         } message: {
-            Text(store.sendError ?? "")
+            Text(chatErrorMessage ?? "")
         }
     }
 
@@ -59,20 +57,20 @@ struct ChatView: View {
 
     @ViewBuilder
     private var messageList: some View {
-        if store.isLoading && store.messages.isEmpty {
+        if isLoading && messages.isEmpty {
             ProgressView()
                 .controlSize(.large)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if store.messages.isEmpty {
+        } else if messages.isEmpty {
             emptyState
         } else {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         // Load-more trigger — invisible when idle, spinner when fetching.
-                        if store.hasMore || store.isLoadingMore {
+                        if hasMore || isLoadingMore {
                             Group {
-                                if store.isLoadingMore {
+                                if isLoadingMore {
                                     ProgressView()
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 12)
@@ -82,14 +80,14 @@ struct ChatView: View {
                                         .frame(height: 1)
                                         .id("load-more-trigger")
                                         .onAppear {
-                                            loadMoreAnchorId = store.messages.first?.eventId
-                                            Task { await store.loadMore() }
+                                            loadMoreAnchorId = messages.first?.eventId
+                                            app.loadMoreRoomChat()
                                         }
                                 }
                             }
                         }
 
-                        ForEach(Array(store.messages.enumerated()), id: \.element.eventId) { index, message in
+                        ForEach(Array(messages.enumerated()), id: \.element.eventId) { index, message in
                             ChatMessageRow(
                                 message: message,
                                 profile: app.profile(pubkeyHex: message.authorPubkey),
@@ -103,13 +101,13 @@ struct ChatView: View {
                                 app.requestProfile(pubkeyHex: message.authorPubkey)
                             }
                             .onAppear {
-                                if index == store.messages.count - 1 {
+                                if index == messages.count - 1 {
                                     isAtBottom = true
                                     pendingNewCount = 0
                                 }
                             }
                             .onDisappear {
-                                if index == store.messages.count - 1 {
+                                if index == messages.count - 1 {
                                     isAtBottom = false
                                 }
                             }
@@ -118,17 +116,17 @@ struct ChatView: View {
                     .padding(.vertical, 12)
                 }
                 .onAppear {
-                    if let last = store.messages.last {
+                    if let last = messages.last {
                         proxy.scrollTo(last.eventId, anchor: .bottom)
                     }
                 }
                 .onChange(of: scrollRevision) { _, _ in
-                    guard let last = store.messages.last else { return }
+                    guard let last = messages.last else { return }
                     withAnimation(.easeOut(duration: 0.2)) {
                         proxy.scrollTo(last.eventId, anchor: .bottom)
                     }
                 }
-                .onChange(of: store.isLoadingMore) { wasLoading, isLoading in
+                .onChange(of: isLoadingMore) { wasLoading, isLoading in
                     // After prepending older messages, snap back to where the
                     // user was so the view doesn't jump to the new top.
                     guard wasLoading, !isLoading, let anchorId = loadMoreAnchorId else { return }
@@ -227,7 +225,7 @@ struct ChatView: View {
             TextField("Message", text: $draft, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.body)
-                .lineLimit(1...6)
+                .lineLimit(1 ... 6)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
@@ -238,13 +236,19 @@ struct ChatView: View {
 
             if canSend {
                 Button {
-                    Task { await send() }
+                    send()
                 } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 30))
-                        .foregroundStyle(Color.highlighterAccent)
+                    if isSending {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 30))
+                            .foregroundStyle(Color.highlighterAccent)
+                    }
                 }
                 .accessibilityLabel("Send message")
+                .disabled(isSending)
                 .transition(.scale.combined(with: .opacity))
             }
         }
@@ -256,22 +260,50 @@ struct ChatView: View {
     // MARK: - Helpers
 
     private var canSend: Bool {
-        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !isSending && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private func send() async {
+    private var activeRoomDetail: HighlighterRoomDetailSnapshot {
+        app.roomDetail
+    }
+
+    private var messages: [ChatMessageRecord] {
+        activeRoomDetail.groupId == groupId ? activeRoomDetail.chatMessages : []
+    }
+
+    private var isLoading: Bool {
+        activeRoomDetail.groupId == groupId && activeRoomDetail.isLoading
+    }
+
+    private var hasMore: Bool {
+        activeRoomDetail.groupId == groupId && activeRoomDetail.chatHasMore
+    }
+
+    private var isLoadingMore: Bool {
+        activeRoomDetail.groupId == groupId && activeRoomDetail.isChatLoadingMore
+    }
+
+    private var isSending: Bool {
+        activeRoomDetail.groupId == groupId && activeRoomDetail.isSendingChatMessage
+    }
+
+    private var chatErrorMessage: String? {
+        activeRoomDetail.groupId == groupId ? activeRoomDetail.chatErrorMessage : nil
+    }
+
+    private func send() {
         let text = draft
         let reply = replyTo
         draft = ""
         replyTo = nil
-        await store.send(text: text, replyTo: reply)
+        app.publishRoomChatMessage(content: text, replyToEventId: reply?.eventId)
         scrollRevision += 1
     }
 
     private func shouldShowHeader(at index: Int) -> Bool {
         guard index > 0 else { return true }
-        let prev = store.messages[index - 1]
-        let curr = store.messages[index]
+        let prev = messages[index - 1]
+        let curr = messages[index]
         if prev.authorPubkey != curr.authorPubkey { return true }
         if curr.createdAt > prev.createdAt + 300 { return true }
         return false
@@ -279,7 +311,7 @@ struct ChatView: View {
 
     private func parentMessage(for message: ChatMessageRecord) -> ChatMessageRecord? {
         guard let id = message.replyToEventId else { return nil }
-        return store.messages.first { $0.eventId == id }
+        return messages.first { $0.eventId == id }
     }
 
     private func parentProfile(for message: ChatMessageRecord) -> ProfileMetadata? {
@@ -294,8 +326,6 @@ struct ChatView: View {
         }
         return String(pubkey.prefix(8))
     }
-
-
 }
 
 // MARK: - ChatMessageRow
@@ -331,7 +361,7 @@ private struct ChatMessageRow: View {
                     let dy = value.translation.height
                     guard dx > 0, dx > abs(dy) else { return }
                     swipeOffset = min(dx * 0.55, 60)
-                    if swipeOffset >= 40 && !swipeTriggered {
+                    if swipeOffset >= 40, !swipeTriggered {
                         swipeTriggered = true
                         onReply()
                     }
@@ -458,7 +488,7 @@ private struct ProfileAvatar: View {
             if let urlString = profile?.picture, !urlString.isEmpty, let url = URL(string: urlString) {
                 AsyncImage(url: url) { phase in
                     switch phase {
-                    case .success(let image):
+                    case let .success(image):
                         image.resizable().scaledToFill()
                     default:
                         placeholder

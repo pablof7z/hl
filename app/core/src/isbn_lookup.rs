@@ -89,9 +89,8 @@ impl IsbnPreviewStore {
                 let entries = guard
                     .entries
                     .iter()
-                    .filter_map(|(isbn, entry)| {
-                        entry.durable.then(|| (isbn.clone(), entry.preview.clone()))
-                    })
+                    .filter(|(_, entry)| entry.durable)
+                    .map(|(isbn, entry)| (isbn.clone(), entry.preview.clone()))
                     .collect();
                 serde_json::to_vec(&IsbnCacheFile { entries }).ok()
             } else {
@@ -248,7 +247,7 @@ fn has_valid_isbn13_checksum(digits: &str) -> bool {
         };
         sum += if i % 2 == 0 { d } else { d * 3 };
     }
-    sum % 10 == 0
+    sum.is_multiple_of(10)
 }
 
 fn has_valid_isbn10_checksum(digits: &str) -> bool {
@@ -269,7 +268,7 @@ fn has_valid_isbn10_checksum(digits: &str) -> bool {
         };
         sum += value * (10 - i as u32);
     }
-    sum % 11 == 0
+    sum.is_multiple_of(11)
 }
 
 /// Convert a valid 10-digit ISBN to 13 digits by prepending "978" and

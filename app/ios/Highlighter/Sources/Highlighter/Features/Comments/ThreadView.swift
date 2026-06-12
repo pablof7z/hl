@@ -10,10 +10,9 @@ import SwiftUI
 struct ThreadView: View {
     let focused: CommentNode?
     let artifactHeader: AnyView?
-    let store: CommentsStore
-    let artifact: ArtifactRef
     let artifactAuthorPubkey: String?
 
+    @Environment(HighlighterStore.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var focusedNode: CommentNode? = nil
 
@@ -38,8 +37,7 @@ struct ThreadView: View {
                                     node: child,
                                     depth: 0,
                                     isAuthorReply: false,
-                                    onTap: { focusOn(child) },
-                                    store: store
+                                    onTap: { focusOn(child) }
                                 )
                                 inlineReplyPreview(for: child)
                                 Divider()
@@ -53,8 +51,7 @@ struct ThreadView: View {
 
             CommentComposer(
                 parentEventId: focused?.record.eventId,
-                placeholder: composerPlaceholder,
-                store: store
+                placeholder: composerPlaceholder
             )
         }
         .background(Color.highlighterPaper.ignoresSafeArea())
@@ -68,10 +65,8 @@ struct ThreadView: View {
         }
         .navigationDestination(item: $focusedNode) { node in
             ThreadView(
-                focused: Self.locate(eventId: node.record.eventId, in: store.tree) ?? node,
+                focused: Self.locate(eventId: node.record.eventId, in: tree) ?? node,
                 artifactHeader: nil,
-                store: store,
-                artifact: artifact,
                 artifactAuthorPubkey: artifactAuthorPubkey
             )
         }
@@ -81,10 +76,14 @@ struct ThreadView: View {
 
     private var children: [CommentNode] {
         if let focused {
-            return Self.locate(eventId: focused.record.eventId, in: store.tree)?.children
+            return Self.locate(eventId: focused.record.eventId, in: tree)?.children
                 ?? focused.children
         }
-        return store.tree
+        return tree
+    }
+
+    private var tree: [CommentNode] {
+        CommentTreeBuilder.build(snapshot: app.comments)
     }
 
     static func locate(eventId: String, in nodes: [CommentNode]) -> CommentNode? {
@@ -106,8 +105,7 @@ struct ThreadView: View {
                 node: mostRecent,
                 depth: 1,
                 isAuthorReply: isAuthorReply,
-                onTap: { focusOn(mostRecent) },
-                store: store
+                onTap: { focusOn(mostRecent) }
             )
             .padding(.leading, 18)
             .padding(.trailing, 18)
@@ -148,8 +146,7 @@ struct ThreadView: View {
                 node: node,
                 depth: 0,
                 isAuthorReply: false,
-                onTap: {},
-                store: store
+                onTap: {}
             )
             .allowsHitTesting(false)
             HStack(spacing: 6) {
@@ -172,7 +169,7 @@ struct ThreadView: View {
     }
 
     private func replyCountLabel(for node: CommentNode) -> String {
-        let count = (Self.locate(eventId: node.record.eventId, in: store.tree)?.children.count)
+        let count = (Self.locate(eventId: node.record.eventId, in: tree)?.children.count)
             ?? node.children.count
         if count == 0 { return "Be the first to reply" }
         if count == 1 { return "1 reply" }
@@ -202,7 +199,7 @@ struct ThreadView: View {
 
     private var navTitle: String {
         if focused != nil { return "Reply thread" }
-        let count = store.totalCount
+        let count = Int(app.comments.recordCount)
         if count == 0 { return "Comments" }
         if count == 1 { return "1 comment" }
         return "\(count) comments"

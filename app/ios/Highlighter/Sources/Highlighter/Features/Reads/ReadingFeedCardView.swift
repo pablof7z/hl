@@ -6,30 +6,30 @@ import SwiftUI
 struct ReadingFeedCardView: View {
     @Environment(HighlighterStore.self) private var app
 
-    let item: ReadingFeedItem
+    let item: HighlighterHomeReadItem
 
     var body: some View {
         ReadingCard(
-            title: item.article.title,
-            summary: item.article.summary,
+            title: item.title,
+            summary: item.summary,
             imageURL: coverURL,
             authorName: authorDisplayName,
-            authorPubkey: item.article.pubkey,
+            authorPubkey: item.pubkey,
             relativeDate: relativeDate,
             metaBits: metaBits,
             showTrailing: hasSocialSignal,
             avatar: {
                 AuthorAvatar(
-                    pubkey: item.article.pubkey,
-                    pictureURL: app.profile(pubkeyHex: item.article.pubkey)?.picture ?? "",
+                    pubkey: item.pubkey,
+                    pictureURL: app.profile(pubkeyHex: item.pubkey)?.picture ?? "",
                     displayInitial: authorInitial,
                     size: 22
                 )
             },
             trailing: { socialBadge }
         )
-        .task(id: item.article.pubkey) {
-            app.requestProfile(pubkeyHex: item.article.pubkey)
+        .task(id: item.pubkey) {
+            app.requestProfile(pubkeyHex: item.pubkey)
         }
         .task(id: primaryInteractor ?? "") {
             guard let pk = primaryInteractor else { return }
@@ -42,7 +42,7 @@ struct ReadingFeedCardView: View {
     private var metaBits: [String] {
         var out: [String] = []
         if let mins = readTimeMinutes { out.append("\(mins) min read") }
-        if let tag = item.article.hashtags.first, !tag.isEmpty { out.append("#\(tag)") }
+        if let tag = item.firstHashtag, !tag.isEmpty { out.append("#\(tag)") }
         return out
     }
 
@@ -97,10 +97,10 @@ struct ReadingFeedCardView: View {
     // MARK: - Author name / initial resolution
 
     private var authorDisplayName: String {
-        let profile = app.profile(pubkeyHex: item.article.pubkey)
+        let profile = app.profile(pubkeyHex: item.pubkey)
         if let dn = profile?.displayName, !dn.isEmpty { return dn }
         if let n = profile?.name, !n.isEmpty { return n }
-        return shortPubkey(item.article.pubkey)
+        return shortPubkey(item.pubkey)
     }
 
     private var authorInitial: String {
@@ -122,12 +122,12 @@ struct ReadingFeedCardView: View {
     // MARK: - Derived bits
 
     private var coverURL: URL? {
-        guard !item.article.image.isEmpty else { return nil }
-        return URL(string: item.article.image)
+        guard !item.image.isEmpty else { return nil }
+        return URL(string: item.image)
     }
 
     private var relativeDate: String? {
-        let seconds = item.article.publishedAt ?? item.article.createdAt ?? 0
+        let seconds = item.publishedAt ?? item.createdAt ?? 0
         guard seconds > 0 else { return nil }
         let date = Date(timeIntervalSince1970: TimeInterval(seconds))
         let formatter = RelativeDateTimeFormatter()
@@ -138,9 +138,7 @@ struct ReadingFeedCardView: View {
 
     /// Rough read-time estimate: 240 wpm. Matches the reader view.
     private var readTimeMinutes: Int? {
-        let words = item.article.content.split(whereSeparator: { $0.isWhitespace }).count
-        guard words > 60 else { return nil }
-        return max(1, words / 240)
+        item.readTimeMinutes.map(Int.init)
     }
 
     private func shortPubkey(_ hex: String) -> String {

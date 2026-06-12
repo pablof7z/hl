@@ -24,7 +24,7 @@ use crate::errors::CoreError;
 use crate::groups::KIND_GROUP_METADATA;
 use crate::models::{ArticleRecord, CommunitySummary, HighlightRecord, ProfileMetadata};
 use crate::profile;
-use crate::relays::HIGHLIGHTER_RELAY;
+use crate::relays::highlighter_relay;
 
 /// NIP-51 kind for the user's curated list of search relays.
 pub const KIND_SEARCH_RELAYS: u16 = 10007;
@@ -306,7 +306,7 @@ pub fn query_search_relays(ndb: &Ndb, user_hex: &str) -> Result<Vec<String>, Cor
         }
     };
 
-    push(HIGHLIGHTER_RELAY.to_string(), &mut out, &mut seen);
+    push(highlighter_relay().to_string(), &mut out, &mut seen);
 
     if user_hex.is_empty() {
         return Ok(out);
@@ -469,6 +469,17 @@ mod tests {
         ndb.process_event(&line).unwrap();
     }
 
+    fn wait_until<T>(mut load: impl FnMut() -> T, ready: impl Fn(&T) -> bool) -> T {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            let value = load();
+            if ready(&value) || std::time::Instant::now() >= deadline {
+                return value;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
     #[test]
     fn search_highlights_matches_quote_and_note_case_insensitive() {
         let (ndb, _tmp) = fresh_ndb();
@@ -492,11 +503,16 @@ mod tests {
         process(&ndb, &match_quote);
         process(&ndb, &match_note);
         process(&ndb, &no_match);
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
-        let hits = search_highlights(&ndb, "DOSTOEVSKY", 20).unwrap();
+        let hits = wait_until(
+            || search_highlights(&ndb, "DOSTOEVSKY", 20).unwrap(),
+            |hits| hits.iter().any(|h| h.note.contains("dostoevsky")),
+        );
         assert!(hits.iter().any(|h| h.note.contains("dostoevsky")));
-        let kara = search_highlights(&ndb, "karamazov", 20).unwrap();
+        let kara = wait_until(
+            || search_highlights(&ndb, "karamazov", 20).unwrap(),
+            |hits| hits.iter().any(|h| h.quote.contains("Karamazov")),
+        );
         assert!(kara.iter().any(|h| h.quote.contains("Karamazov")));
     }
 
@@ -537,9 +553,11 @@ mod tests {
         process(&ndb, &older);
         process(&ndb, &newer);
         process(&ndb, &hashtag_match);
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
-        let hits = search_articles(&ndb, "attention", 20).unwrap();
+        let hits = wait_until(
+            || search_articles(&ndb, "attention", 20).unwrap(),
+            |hits| hits.len() == 2,
+        );
         assert_eq!(hits.len(), 2, "dedupe by (pubkey, d): 2 distinct addresses");
         let essay = hits.iter().find(|a| a.identifier == "essay").unwrap();
         assert_eq!(essay.title, "On Attention (revised)", "newest wins");
@@ -566,9 +584,11 @@ mod tests {
 
         process(&ndb, &contains_only);
         process(&ndb, &prefix_match);
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
-        let hits = search_profiles(&ndb, "huxley", 20).unwrap();
+        let hits = wait_until(
+            || search_profiles(&ndb, "huxley", 20).unwrap(),
+            |hits| hits.len() == 2,
+        );
         assert_eq!(hits.len(), 2);
         assert_eq!(
             hits[0].display_name, "Huxley's Fan",
@@ -588,18 +608,23 @@ mod tests {
                     "wss://relay.nostr.band".to_string(),
                 ])
                 .unwrap(),
-                Tag::parse(vec!["relay".to_string(), HIGHLIGHTER_RELAY.to_string()]).unwrap(),
+                Tag::parse(vec!["relay".to_string(), highlighter_relay().to_string()]).unwrap(),
             ])
             .sign_with_keys(&user)
             .unwrap();
         process(&ndb, &event);
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
-        let relays = query_search_relays(&ndb, &user.public_key().to_hex()).unwrap();
-        assert_eq!(relays.first().map(String::as_str), Some(HIGHLIGHTER_RELAY));
+        let relays = wait_until(
+            || query_search_relays(&ndb, &user.public_key().to_hex()).unwrap(),
+            |relays| relays.iter().any(|r| r == "wss://relay.nostr.band"),
+        );
+        assert_eq!(
+            relays.first().map(String::as_str),
+            Some(highlighter_relay())
+        );
         assert!(relays.iter().any(|r| r == "wss://relay.nostr.band"));
         // No duplicates for the default relay even though the user also listed it.
-        let hl_count = relays.iter().filter(|r| *r == HIGHLIGHTER_RELAY).count();
+        let hl_count = relays.iter().filter(|r| *r == highlighter_relay()).count();
         assert_eq!(hl_count, 1);
     }
 }

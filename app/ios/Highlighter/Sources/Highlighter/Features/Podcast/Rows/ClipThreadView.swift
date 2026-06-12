@@ -6,12 +6,21 @@ struct ClipThreadView: View {
 
     let clipEventId: String
 
-    @State private var replyText: String = ""
-    @State private var isSending: Bool = false
-    @State private var sendError: String? = nil
-
     private var comments: [CommentRecord]? {
-        app.podcastPlayer.comments[clipEventId]
+        guard app.comments.rootTagName == "e",
+              app.comments.rootTagValue == clipEventId
+        else { return nil }
+        return app.comments.records
+    }
+
+    private var replyText: Binding<String> {
+        Binding(
+            get: { app.commentDraft(parentEventId: nil) },
+            set: { value in
+                app.setCommentDraft(parentEventId: nil, body: value)
+                app.clearCommentPublishError()
+            }
+        )
     }
 
     var body: some View {
@@ -46,11 +55,11 @@ struct ClipThreadView: View {
                 .padding(.horizontal, 16)
 
             HStack(spacing: 10) {
-                TextField("Reply...", text: $replyText)
+                TextField("Reply...", text: replyText)
                     .font(.subheadline)
                     .tint(Color.highlighterAccent)
 
-                if isSending {
+                if app.comments.isPublishing {
                     ProgressView()
                         .scaleEffect(0.8)
                 } else {
@@ -58,16 +67,16 @@ struct ClipThreadView: View {
                         send()
                     }
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(replyText.trimmingCharacters(in: .whitespaces).isEmpty
+                    .foregroundStyle(replyText.wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty
                         ? Color.secondary
                         : Color.highlighterAccent)
-                    .disabled(replyText.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(replyText.wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
 
-            if let error = sendError {
+            if let error = app.comments.publishErrorMessage {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.red)
@@ -75,31 +84,16 @@ struct ClipThreadView: View {
                     .padding(.bottom, 8)
             }
         }
+        .task(id: clipEventId) {
+            app.openComments(rootTagName: "e", rootTagValue: clipEventId, rootKind: 9802)
+        }
     }
 
     private func send() {
-        let text = replyText.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty, !isSending else { return }
-        isSending = true
-        sendError = nil
-        let id = clipEventId
-        Task {
-            do {
-                let record = try await app.safeCore.publishComment(
-                    rootTagName: "e",
-                    rootTagValue: id,
-                    rootKind: 9802,
-                    content: text
-                )
-                var existing = app.podcastPlayer.comments[id] ?? []
-                existing.append(record)
-                app.podcastPlayer.comments[id] = existing
-                replyText = ""
-            } catch {
-                sendError = error.localizedDescription
-            }
-            isSending = false
-        }
+        let text = replyText.wrappedValue.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty, !app.comments.isPublishing else { return }
+        app.clearCommentPublishError()
+        app.publishComment(parentEventId: nil)
     }
 }
 

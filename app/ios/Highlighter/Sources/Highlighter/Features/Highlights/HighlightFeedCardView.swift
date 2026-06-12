@@ -116,7 +116,8 @@ struct HighlightFeedCardView: View {
     private var resourceCover: some View {
         if let urlString = resourceCoverURL,
            !urlString.isEmpty,
-           let url = URL(string: urlString) {
+           let url = URL(string: urlString)
+        {
             Color.clear
                 .overlay(
                     KFImage(url)
@@ -359,12 +360,12 @@ struct HighlightFeedCardView: View {
         if let source = lead.artifact?.preview.source.lowercased(), !source.isEmpty {
             switch source {
             case "article": return .article
-            case "web":     return .web
+            case "web": return .web
             case "podcast": return .podcast
-            case "book":    return .book
-            case "video":   return .video
-            case "paper":   return .paper
-            default:        return .unknown
+            case "book": return .book
+            case "video": return .video
+            case "paper": return .paper
+            default: return .unknown
             }
         }
         let extRef = lead.highlight.externalReference.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -381,11 +382,11 @@ struct HighlightFeedCardView: View {
     private var kindIconName: String {
         switch artifactKind {
         case .article: return "doc.text"
-        case .web:     return "globe"
+        case .web: return "globe"
         case .podcast: return "waveform"
-        case .book:    return "book.closed"
-        case .video:   return "play.rectangle"
-        case .paper:   return "doc.richtext"
+        case .book: return "book.closed"
+        case .video: return "play.rectangle"
+        case .paper: return "doc.richtext"
         case .unknown: return "quote.bubble"
         }
     }
@@ -587,7 +588,7 @@ struct HighlightFeedCardView: View {
         let dTag = String(parts[2])
         guard !pubkey.isEmpty, !dTag.isEmpty else { return }
 
-        sourceArticle = try? await app.safeCore.getArticle(pubkeyHex: pubkey, dTag: dTag)
+        sourceArticle = await app.article(pubkeyHex: pubkey, dTag: dTag)
         app.requestProfile(pubkeyHex: pubkey)
     }
 }

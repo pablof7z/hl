@@ -19,6 +19,14 @@ nostr = { version = "0.44", default-features = false, features = ["std", "nip46"
 nostr-ndb = "0.44.0"
 nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", rev = "2619b9bc4cbd7d8d9198a3be0ae8f1f8f51040cb" }
 nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "3d238e6e3750ca4473ea24c5f29d26c9faa3ccd6", default-features = false }
+nmp-core = { path = "../../../nostr-multi-platform/crates/nmp-core" }
+nmp-ffi = { path = "../../../nostr-multi-platform/crates/nmp-ffi", features = ["signer-broker"] }
+nmp-app-template = { path = "../../../nostr-multi-platform/crates/nmp-app-template" }
+nmp-signers = { path = "../../../nostr-multi-platform/crates/nmp-signers" }
+nmp-nip29 = { path = "../../../nostr-multi-platform/crates/nmp-nip29" }
+nmp-blossom = { path = "../../../nostr-multi-platform/crates/nmp-blossom" }
+nmp-content = { path = "../../../nostr-multi-platform/crates/nmp-content" }
+nmp-kinds = { path = "../../../nostr-multi-platform/crates/nmp-kinds" }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 futures = "0.3"
@@ -31,6 +39,7 @@ dirs = "5"
 uuid = { version = "1", features = ["v4"] }
 url = "2"
 scraper = "0.20"
+zeroize = "1"
 
 [patch.crates-io]
 nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", rev = "2619b9bc4cbd7d8d9198a3be0ae8f1f8f51040cb" }

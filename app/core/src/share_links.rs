@@ -5,7 +5,7 @@
 
 use crate::errors::CoreError;
 use crate::nostr_entities::encode_event_to_nevent;
-use crate::relays::HIGHLIGHTER_RELAY;
+use crate::relays::highlighter_relay;
 
 const HIGHLIGHT_SHARE_BASE_URL: &str = "https://beta.highlighter.com/highlight/";
 const HIGHLIGHT_EVENT_KIND: u32 = 9802;
@@ -17,7 +17,7 @@ pub fn highlight_share_url(
     let nevent = encode_event_to_nevent(
         event_id_hex,
         author_pubkey_hex,
-        vec![HIGHLIGHTER_RELAY.to_owned()],
+        vec![highlighter_relay().to_owned()],
         Some(HIGHLIGHT_EVENT_KIND),
     )?;
     Ok(format!("{HIGHLIGHT_SHARE_BASE_URL}{nevent}"))
@@ -57,7 +57,7 @@ mod tests {
                 assert_eq!(event_id_hex, expected_event_id);
                 assert_eq!(author_hint_hex.as_deref(), Some(expected_author.as_str()));
                 assert_eq!(kind_hint, Some(HIGHLIGHT_EVENT_KIND));
-                assert_eq!(relays, vec![HIGHLIGHTER_RELAY.to_owned()]);
+                assert_eq!(relays, vec![highlighter_relay().to_owned()]);
             }
             other => panic!("wrong variant: {other:?}"),
         }

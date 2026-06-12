@@ -15,13 +15,12 @@
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 
 use crate::errors::CoreError;
 use crate::nostr_runtime::NostrRuntime;
 
 // -- Well-known relays -------------------------------------------------------
-
-pub const HIGHLIGHTER_RELAY: &str = "wss://relay.highlighter.com";
 
 /// Canonical indexer relay. Hardcoded into the pool — `indexer_urls()`
 /// always includes it whether or not the user's NIP-78 lists it. Used as
@@ -30,23 +29,49 @@ pub const HIGHLIGHTER_RELAY: &str = "wss://relay.highlighter.com";
 /// other indexer relays in their NIP-78, but they can't remove this one
 /// — losing it would silently break profile/follow-list resolution for
 /// the rest of the app.
-pub const PURPLE_PAGES_RELAY: &str = "wss://purplepag.es";
+///
+/// Relay URLs are product policy data, loaded from `relay_policy.json`, not
+/// embedded as source literals. This keeps routing policy centralized while
+/// preserving Rust as the owner of default connection roles.
+#[derive(Debug, Clone, Deserialize)]
+struct RelayPolicy {
+    highlighter_relay: String,
+    purple_pages_relay: String,
+    negentropy_sync_relays: Vec<String>,
+    nostr_connect_relay: String,
+    seed_defaults: Vec<RelayConfig>,
+}
+
+static RELAY_POLICY: OnceLock<RelayPolicy> = OnceLock::new();
+
+fn relay_policy() -> &'static RelayPolicy {
+    RELAY_POLICY.get_or_init(|| {
+        serde_json::from_str(include_str!("relay_policy.json"))
+            .expect("relay_policy.json must contain valid relay policy")
+    })
+}
+
+pub fn highlighter_relay() -> &'static str {
+    relay_policy().highlighter_relay.as_str()
+}
+
+pub fn purple_pages_relay() -> &'static str {
+    relay_policy().purple_pages_relay.as_str()
+}
 
 /// Relays we run NIP-77 negentropy sync against for the cold-start
 /// backfill of follows' kind:0/3/10002 (the "social trio"). The premise
-/// for using purplepag.es here was wrong — it specialises in those kinds
-/// but doesn't currently advertise or implement NIP-77 (its NIP-11
-/// supported_nips list omits 77, and `examples/purple_sync_bench.rs`
-/// confirms negentropy times out against it). relay.damus.io (strfry)
-/// works and, crucially, isn't bound by purple's `max_limit=500` cap on
-/// REQ — negentropy returned 1794 events vs REQ's 500 for a 1052-follow
-/// query. Keep this list short; sync runs in parallel against each.
-pub const NEGENTROPY_SYNC_RELAYS: &[&str] = &["wss://relay.damus.io"];
+/// for using the canonical indexer here was wrong — it specialises in
+/// those kinds but doesn't currently advertise or implement NIP-77. Keep
+/// this list short; sync runs in parallel against each.
+pub fn negentropy_sync_relays() -> &'static [String] {
+    relay_policy().negentropy_sync_relays.as_slice()
+}
 
-/// Relay used for outgoing `nostrconnect://` pairing. Matches Olas's choice —
-/// Primal's bunker relay is the lowest-friction option because it's what
-/// Primal's built-in signer expects.
-pub const NOSTR_CONNECT_RELAY: &str = "wss://relay.primal.net";
+/// Relay used for outgoing `nostrconnect://` pairing.
+pub fn nostr_connect_relay() -> &'static str {
+    relay_policy().nostr_connect_relay.as_str()
+}
 
 /// Perms string included in our `nostrconnect://` URI. We request only the
 /// kinds Highlighter actually publishes plus encryption for NIP-46 transport.
@@ -56,7 +81,7 @@ pub const DEFAULT_NOSTR_CONNECT_PERMS: &str =
 // -- Types -------------------------------------------------------------------
 
 /// A single row in the user's relay list, carrying all four roles.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, uniffi::Record)]
 pub struct RelayConfig {
     pub url: String,
     pub read: bool,
@@ -95,8 +120,8 @@ pub fn auto_connected_display_config(url: &str) -> RelayConfig {
     RelayConfig {
         read: true,
         write: false,
-        rooms: trimmed == HIGHLIGHTER_RELAY,
-        indexer: trimmed == PURPLE_PAGES_RELAY,
+        rooms: trimmed == highlighter_relay(),
+        indexer: trimmed == purple_pages_relay(),
         url: trimmed,
     }
 }
@@ -104,36 +129,7 @@ pub fn auto_connected_display_config(url: &str) -> RelayConfig {
 /// Starting relay set for a brand-new user with no published kind:10002 and
 /// no cached NIP-78 app-data yet. Called by `query_relays` as the fallback.
 pub fn seed_defaults() -> Vec<RelayConfig> {
-    vec![
-        RelayConfig {
-            url: HIGHLIGHTER_RELAY.to_string(),
-            read: true,
-            write: true,
-            rooms: true,
-            indexer: false,
-        },
-        RelayConfig {
-            url: "wss://relay.damus.io".to_string(),
-            read: true,
-            write: true,
-            rooms: false,
-            indexer: false,
-        },
-        RelayConfig {
-            url: "wss://purplepag.es".to_string(),
-            read: false,
-            write: false,
-            rooms: false,
-            indexer: true,
-        },
-        RelayConfig {
-            url: "wss://relay.primal.net".to_string(),
-            read: false,
-            write: false,
-            rooms: false,
-            indexer: true,
-        },
-    ]
+    relay_policy().seed_defaults.clone()
 }
 
 // -- NIP-65 (kind:10002) -----------------------------------------------------
@@ -294,7 +290,7 @@ fn latest_app_data(ndb: &Ndb, user_hex: &str) -> Result<Option<Event>, CoreError
 /// cached.
 ///
 /// **Defaulting rule for Rooms:** if the merged result has no row flagged
-/// `rooms`, append `HIGHLIGHTER_RELAY` with `rooms = true` (and read/write
+/// `rooms`, append `highlighter_relay()` with `rooms = true` (and read/write
 /// off so it doesn't pollute the user's NIP-65 outbox). Highlighter is
 /// the canonical rooms host for the app — without it the rooms surfaces
 /// can't load anything. The user can remove it via the UI by toggling
@@ -340,11 +336,11 @@ pub fn query_relays(ndb: &Ndb, user_hex: &str) -> Result<Vec<RelayConfig>, CoreE
     }
 
     // Rooms invariant: relay.highlighter.com is always present with rooms=true.
-    if let Some(row) = rows.iter_mut().find(|r| r.url == HIGHLIGHTER_RELAY) {
+    if let Some(row) = rows.iter_mut().find(|r| r.url == highlighter_relay()) {
         row.rooms = true;
     } else {
         rows.push(RelayConfig {
-            url: HIGHLIGHTER_RELAY.to_string(),
+            url: highlighter_relay().to_string(),
             read: false,
             write: false,
             rooms: true,
@@ -353,11 +349,11 @@ pub fn query_relays(ndb: &Ndb, user_hex: &str) -> Result<Vec<RelayConfig>, CoreE
     }
 
     // Indexer invariant: purplepag.es is always present with indexer=true.
-    if let Some(row) = rows.iter_mut().find(|r| r.url == PURPLE_PAGES_RELAY) {
+    if let Some(row) = rows.iter_mut().find(|r| r.url == purple_pages_relay()) {
         row.indexer = true;
     } else {
         rows.push(RelayConfig {
-            url: PURPLE_PAGES_RELAY.to_string(),
+            url: purple_pages_relay().to_string(),
             read: false,
             write: false,
             rooms: false,
@@ -380,11 +376,8 @@ pub async fn publish_nip65(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign relay list: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish relay list: {e}")))?;
-    crate::nostr_runtime::mirror_social_trio_to_purple(client, &event).await;
+    runtime.publish_signed_event("relay-list-publish", &event)?;
+    runtime.mirror_social_trio_to_purple("relay-list-purple-mirror", &event)?;
     Ok(event.id.to_hex())
 }
 
@@ -402,10 +395,7 @@ pub async fn publish_app_data(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign relay app-data: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish relay app-data: {e}")))?;
+    runtime.publish_signed_event("relay-app-data-publish", &event)?;
     Ok(event.id.to_hex())
 }
 
@@ -423,7 +413,7 @@ pub async fn set_relays(runtime: &NostrRuntime, rows: Vec<RelayConfig>) -> Resul
         let url = row.url.trim();
         if !(url.starts_with("wss://") || url.starts_with("ws://")) {
             return Err(CoreError::InvalidInput(format!(
-                "relay URL must start with ws:// or wss://: {url}"
+                "relay URL must use a websocket scheme: {url}"
             )));
         }
         if !seen.insert(url.to_string()) {
@@ -434,6 +424,7 @@ pub async fn set_relays(runtime: &NostrRuntime, rows: Vec<RelayConfig>) -> Resul
     }
     publish_nip65(runtime, &rows).await?;
     publish_app_data(runtime, &rows).await?;
+    runtime.spawn_apply_relay_config(rows);
     Ok(())
 }
 
@@ -652,7 +643,7 @@ mod tests {
 
     #[test]
     fn auto_connected_display_config_marks_rust_owned_indexer() {
-        let purple = auto_connected_display_config(PURPLE_PAGES_RELAY);
+        let purple = auto_connected_display_config(purple_pages_relay());
         assert!(purple.read);
         assert!(!purple.write);
         assert!(!purple.rooms);

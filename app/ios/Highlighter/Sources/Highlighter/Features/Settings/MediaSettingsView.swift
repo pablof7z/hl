@@ -2,32 +2,33 @@ import SwiftUI
 
 struct MediaSettingsView: View {
     @Environment(HighlighterStore.self) private var store
-    @State private var servers: [String] = []
-    @State private var isLoading = true
     @State private var showAddSheet = false
-    @State private var isSaving = false
 
     var body: some View {
         List {
             Section {
-                if isLoading {
+                if store.mediaSettings.isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 8)
                 } else {
-                    ForEach(servers, id: \.self) { server in
+                    ForEach(store.mediaSettings.blossomServers, id: \.self) { server in
                         Text(server)
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
                     .onMove { indices, newOffset in
-                        servers.move(fromOffsets: indices, toOffset: newOffset)
-                        Task { await save() }
+                        store.moveBlossomServers(fromOffsets: indices, toOffset: newOffset)
                     }
                     .onDelete { indices in
-                        guard servers.count > indices.count else { return }
-                        servers.remove(atOffsets: indices)
-                        Task { await save() }
+                        for idx in indices where idx < store.mediaSettings.blossomServers.count {
+                            store.removeBlossomServer(url: store.mediaSettings.blossomServers[idx])
+                        }
+                    }
+                    if let error = store.mediaSettings.errorMessage {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
                     }
                 }
             } header: {
@@ -46,41 +47,24 @@ struct MediaSettingsView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
-                .disabled(isSaving || isLoading)
+                .disabled(store.mediaSettings.isSaving || store.mediaSettings.isLoading)
             }
             ToolbarItem(placement: .topBarLeading) {
-                if !isLoading {
+                if !store.mediaSettings.isLoading {
                     EditButton()
                 }
             }
         }
         .sheet(isPresented: $showAddSheet) {
-            AddBlossomServerSheet { url in
-                if !servers.contains(url) {
-                    servers.append(url)
-                    Task { await save() }
-                }
-            }
+            AddBlossomServerSheet()
         }
-        .task { await load() }
-    }
-
-    private func load() async {
-        servers = (try? await store.safeCore.getBlossomServers()) ?? []
-        isLoading = false
-    }
-
-    private func save() async {
-        guard !servers.isEmpty else { return }
-        isSaving = true
-        _ = try? await store.safeCore.setBlossomServers(servers)
-        isSaving = false
+        .task { store.openMediaSettings() }
+        .onDisappear { store.closeMediaSettings() }
     }
 }
 
 private struct AddBlossomServerSheet: View {
-    let onAdd: (String) -> Void
-
+    @Environment(HighlighterStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var urlText = ""
 
@@ -112,7 +96,7 @@ private struct AddBlossomServerSheet: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Add") {
                         let trimmed = urlText.trimmingCharacters(in: .whitespaces)
-                        onAdd(trimmed)
+                        store.addBlossomServer(url: trimmed)
                         dismiss()
                     }
                     .disabled(!isValid)

@@ -5,6 +5,6 @@ import Foundation
 /// ISBN-10 conversion semantics.
 enum ISBNValidator {
     static func validate(_ raw: String) -> String? {
-        try? normalizeIsbn(raw: raw)
+        normalizeIsbn(raw: raw)
     }
 }

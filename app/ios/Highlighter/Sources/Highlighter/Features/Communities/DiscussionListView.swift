@@ -1,19 +1,19 @@
 import SwiftUI
 
-/// Discussions tab content for a room. Uses its own `DiscussionStore`.
+/// Discussions tab content for a room. Data comes from the Rust-owned
+/// `roomDetail` snapshot opened by `RoomHomeView`.
 struct DiscussionListView: View {
     let groupId: String
     @Binding var composerPresented: Bool
 
     @Environment(HighlighterStore.self) private var app
-    @State private var store = DiscussionStore()
 
     var body: some View {
         Group {
-            if store.isLoading && store.discussions.isEmpty {
+            if isLoading && discussions.isEmpty {
                 ProgressView().controlSize(.large)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if store.discussions.isEmpty {
+            } else if discussions.isEmpty {
                 ContentUnavailableView(
                     "No discussions yet",
                     systemImage: "bubble.left.and.bubble.right",
@@ -22,7 +22,7 @@ struct DiscussionListView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(store.discussions, id: \.eventId) { d in
+                        ForEach(discussions, id: \.eventId) { d in
                             NavigationLink(value: d) {
                                 DiscussionRow(discussion: d)
                             }
@@ -37,15 +37,18 @@ struct DiscussionListView: View {
                 .background(Color.highlighterPaper.ignoresSafeArea())
             }
         }
-        .task {
-            await store.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
-        }
-        .onDisappear { store.stop() }
         .sheet(isPresented: $composerPresented) {
-            DiscussionComposerView(groupId: groupId) { discussion in
-                store.apply(discussion: discussion)
-            }
+            DiscussionComposerView(groupId: groupId)
         }
+    }
+
+    private var discussions: [DiscussionRecord] {
+        guard app.roomDetail.groupId == groupId else { return [] }
+        return app.roomDetail.discussions
+    }
+
+    private var isLoading: Bool {
+        app.roomDetail.groupId == groupId && app.roomDetail.isLoading
     }
 }
 

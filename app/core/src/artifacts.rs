@@ -203,10 +203,11 @@ pub async fn publish(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign artifact share: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish artifact share: {e}")))?;
+    runtime.publish_signed_event_to_relays(
+        "artifact-share-publish",
+        &event,
+        runtime.rooms_urls(),
+    )?;
 
     Ok(ArtifactRecord {
         preview,
@@ -218,9 +219,9 @@ pub async fn publish(
     })
 }
 
-/// Port of `fetchArtifactSharesForGroup`. MVP leaves this to the live
-/// subscription — stub returns empty and lets the Room pump hydrate via
-/// deltas.
+/// Port of `fetchArtifactSharesForGroup`. Room data is hydrated through the
+/// nostrdb-backed query path and live subscription pump, so this compatibility
+/// entry point intentionally has no separate network fetch path.
 pub async fn fetch_shares(_group_id: &str, _limit: u32) -> Result<Vec<ArtifactRecord>, CoreError> {
     Ok(Vec::new())
 }
@@ -274,9 +275,83 @@ pub fn query_for_group(
     Ok(records)
 }
 
-/// Simple title/author substring search over cached artifacts.
-pub fn search_cached(_query: &str, _limit: u32) -> Result<Vec<ArtifactRecord>, CoreError> {
-    Ok(Vec::new())
+/// Simple title/author/source substring search over cached artifacts.
+pub fn search_cached(ndb: &Ndb, query: &str, limit: u32) -> Result<Vec<ArtifactRecord>, CoreError> {
+    let q = query.trim();
+    if q.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let cap = (limit.saturating_mul(8)).max(256) as i32;
+    let filter = NdbFilter::new().kinds([KIND_ARTIFACT_SHARE as u64]).build();
+    let results = ndb
+        .query(&txn, &[filter], cap)
+        .map_err(|e| CoreError::Cache(format!("query artifacts: {e}")))?;
+
+    let mut by_ref = std::collections::BTreeMap::<String, ArtifactRecord>::new();
+    for r in &results {
+        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
+            continue;
+        };
+        let Ok(json) = note.json() else { continue };
+        let Ok(event) = Event::from_json(&json) else {
+            continue;
+        };
+        if crate::discussions::is_discussion(&event) {
+            continue;
+        }
+        let Some(group_id) = first_tag_value(&event, "h") else {
+            continue;
+        };
+        let Some(record) = artifact_record_from_event(&event, group_id) else {
+            continue;
+        };
+        if !artifact_matches(&record, q) {
+            continue;
+        }
+        let key = artifact_reference_key(&record);
+        if key.is_empty() {
+            continue;
+        }
+        match by_ref.get(&key) {
+            Some(existing)
+                if existing.created_at.unwrap_or(0) >= record.created_at.unwrap_or(0) => {}
+            _ => {
+                by_ref.insert(key, record);
+            }
+        }
+    }
+
+    let mut records: Vec<ArtifactRecord> = by_ref.into_values().collect();
+    records.sort_by(|a, b| b.created_at.unwrap_or(0).cmp(&a.created_at.unwrap_or(0)));
+    records.truncate(limit as usize);
+    Ok(records)
+}
+
+fn artifact_matches(record: &ArtifactRecord, query: &str) -> bool {
+    contains_ci(&record.preview.title, query)
+        || contains_ci(&record.preview.author, query)
+        || contains_ci(&record.preview.source, query)
+        || contains_ci(&record.preview.catalog_id, query)
+        || contains_ci(&record.preview.reference_tag_value, query)
+}
+
+fn contains_ci(value: &str, query: &str) -> bool {
+    value.to_lowercase().contains(&query.to_lowercase())
+}
+
+fn artifact_reference_key(record: &ArtifactRecord) -> String {
+    let name = record.preview.reference_tag_name.trim();
+    let value = record.preview.reference_tag_value.trim();
+    if !name.is_empty() && !value.is_empty() {
+        return format!("{name}:{value}");
+    }
+    let url = record.preview.url.trim();
+    if !url.is_empty() {
+        return format!("r:{url}");
+    }
+    record.share_event_id.clone()
 }
 
 // -- Event helpers -----------------------------------------------------------
@@ -472,7 +547,7 @@ pub fn normalize_artifact_url(value: &str) -> Option<String> {
         .query_pairs()
         .filter(|(k, _)| {
             let lower = k.to_ascii_lowercase();
-            !lower.starts_with("utm_") && !TRACKING_PARAMS.iter().any(|t| *t == lower.as_str())
+            !lower.starts_with("utm_") && !TRACKING_PARAMS.contains(&lower.as_str())
         })
         .map(|(k, v)| (k.into_owned(), v.into_owned()))
         .collect();
@@ -546,7 +621,7 @@ fn domain_label(url: &str) -> String {
 fn fallback_title(url: &str) -> String {
     if let Ok(parsed) = url::Url::parse(url) {
         let path = parsed.path().trim_end_matches('/');
-        if let Some(last) = path.split('/').filter(|s| !s.is_empty()).last() {
+        if let Some(last) = path.split('/').rfind(|s| !s.is_empty()) {
             return title_case(&last.replace(['-', '_'], " "));
         }
         return parsed
@@ -648,11 +723,12 @@ fn build_share_event(
     preview: &ArtifactPreview,
     note: Option<&str>,
 ) -> Result<EventBuilder, CoreError> {
-    let mut tags: Vec<Tag> = Vec::new();
-    tags.push(parse_tag(&["h", group_id])?);
-    tags.push(parse_tag(&["d", &preview.id])?);
-    tags.push(parse_tag(&["title", &preview.title])?);
-    tags.push(parse_tag(&["source", &preview.source])?);
+    let mut tags: Vec<Tag> = vec![
+        parse_tag(&["h", group_id])?,
+        parse_tag(&["d", &preview.id])?,
+        parse_tag(&["title", &preview.title])?,
+        parse_tag(&["source", &preview.source])?,
+    ];
 
     match preview.reference_tag_name.as_str() {
         "i" => {
@@ -1010,8 +1086,36 @@ mod tests {
         ndb.process_event(&line).expect("process event");
     }
 
-    fn wait_for_ndb() {
-        std::thread::sleep(std::time::Duration::from_millis(100));
+    fn wait_for_group(
+        ndb: &nostrdb::Ndb,
+        group_id: &str,
+        limit: u32,
+        ready: impl Fn(&[ArtifactRecord]) -> bool,
+    ) -> Vec<ArtifactRecord> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            let records = query_for_group(ndb, group_id, limit).expect("query");
+            if ready(&records) || std::time::Instant::now() >= deadline {
+                return records;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    fn wait_for_search(
+        ndb: &nostrdb::Ndb,
+        query: &str,
+        limit: u32,
+        ready: impl Fn(&[ArtifactRecord]) -> bool,
+    ) -> Vec<ArtifactRecord> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            let records = search_cached(ndb, query, limit).expect("search");
+            if ready(&records) || std::time::Instant::now() >= deadline {
+                return records;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
     }
 
     fn make_share(keys: &Keys, group_id: &str, d: &str, title: &str) -> Event {
@@ -1037,9 +1141,8 @@ mod tests {
         let keys = Keys::generate();
         let share = make_share(&keys, "alpha", "art-1", "Alpha Article");
         ingest(&ndb, &share);
-        wait_for_ndb();
 
-        let records = query_for_group(&ndb, "alpha", 32).expect("query");
+        let records = wait_for_group(&ndb, "alpha", 32, |records| records.len() == 1);
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].preview.title, "Alpha Article");
         assert_eq!(records[0].group_id, "alpha");
@@ -1051,15 +1154,28 @@ mod tests {
         let keys = Keys::generate();
         ingest(&ndb, &make_share(&keys, "alpha", "a1", "Alpha"));
         ingest(&ndb, &make_share(&keys, "bravo", "b1", "Bravo"));
-        wait_for_ndb();
 
-        let alpha = query_for_group(&ndb, "alpha", 32).expect("alpha");
+        let alpha = wait_for_group(&ndb, "alpha", 32, |records| records.len() == 1);
         assert_eq!(alpha.len(), 1);
         assert_eq!(alpha[0].preview.title, "Alpha");
 
-        let bravo = query_for_group(&ndb, "bravo", 32).expect("bravo");
+        let bravo = wait_for_group(&ndb, "bravo", 32, |records| records.len() == 1);
         assert_eq!(bravo.len(), 1);
         assert_eq!(bravo[0].preview.title, "Bravo");
+    }
+
+    #[test]
+    fn search_cached_matches_and_dedupes_artifacts() {
+        let (ndb, _tmp) = isolated_ndb();
+        let keys = Keys::generate();
+        ingest(&ndb, &make_share(&keys, "alpha", "same", "Old Rust Book"));
+        ingest(&ndb, &make_share(&keys, "bravo", "same", "New Rust Book"));
+        ingest(&ndb, &make_share(&keys, "alpha", "other", "Unrelated"));
+
+        let records = wait_for_search(&ndb, "rust", 10, |records| records.len() == 1);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].preview.title, "New Rust Book");
+        assert_eq!(records[0].group_id, "bravo");
     }
 
     #[test]
@@ -1078,9 +1194,8 @@ mod tests {
             .expect("sign");
         ingest(&ndb, &discussion);
         ingest(&ndb, &make_share(&keys, "alpha", "art-1", "Real Article"));
-        wait_for_ndb();
 
-        let records = query_for_group(&ndb, "alpha", 32).expect("query");
+        let records = wait_for_group(&ndb, "alpha", 32, |records| records.len() == 1);
         assert_eq!(records.len(), 1, "discussion must be excluded");
         assert_eq!(records[0].preview.title, "Real Article");
     }
@@ -1095,8 +1210,7 @@ mod tests {
                 &make_share(&keys, "alpha", &format!("a{i}"), &format!("T{i}")),
             );
         }
-        wait_for_ndb();
-        let records = query_for_group(&ndb, "alpha", 3).expect("query");
+        let records = wait_for_group(&ndb, "alpha", 3, |records| records.len() == 3);
         assert_eq!(records.len(), 3);
     }
 }

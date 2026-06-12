@@ -7,15 +7,17 @@ struct CommentsView: View {
     let artifact: ArtifactRef
     let artifactAuthorPubkey: String?
     let artifactHeader: AnyView?
-    let store: CommentsStore
+
+    @Environment(HighlighterStore.self) private var app
 
     var body: some View {
         ThreadView(
             focused: nil,
             artifactHeader: artifactHeader,
-            store: store,
-            artifact: artifact,
             artifactAuthorPubkey: artifactAuthorPubkey
         )
+        .task(id: artifact) {
+            app.openComments(artifact: artifact)
+        }
     }
 }

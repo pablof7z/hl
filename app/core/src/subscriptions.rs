@@ -3,10 +3,9 @@
 //! A "subscription" here is a Swift-visible handle (`u64`) that ties together
 //! three things:
 //! 1. a `nostrdb::Subscription` that receives new notes matching a filter,
-//! 2. an optional `nostr_sdk::SubscriptionId` for the corresponding relay
-//!    subscription (not every view needs one — the vault reads local only,
-//!    and the joined-communities pump rides the global membership
-//!    subscription installed at login),
+//! 2. one or more NMP logical interests, keyed by `nostr_sdk::SubscriptionId`
+//!    owners so the legacy FFI cancellation surface stays stable while NMP
+//!    owns relay planning and wire subscriptions,
 //! 3. a tokio pump task that drains the nostrdb subscription, builds the
 //!    matching `DataChangeType` variants, and delivers them via the
 //!    [`EventCallback`] stored on the core.
@@ -22,16 +21,13 @@ use nostrdb::{Filter as NdbFilter, Subscription as NdbSub, Transaction};
 use parking_lot::Mutex;
 use tokio::task::JoinHandle;
 
+use crate::errors::CoreError;
 use crate::events::{DataChangeType, Delta, EventCallback};
-use crate::feedback::{
-    ensure_feedback_relay, FEEDBACK_RELAY, KIND_FEEDBACK_NOTE, KIND_FEEDBACK_THREAD_META,
-};
+use crate::feedback::{FEEDBACK_RELAY, KIND_FEEDBACK_NOTE, KIND_FEEDBACK_THREAD_META};
 use crate::groups::{
     build_community_summary, KIND_GROUP_ADMINS, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA,
 };
-use crate::models::{ArtifactPreview, ArtifactRecord, HighlightRecord, HydratedHighlight};
-use crate::nostr_runtime::{pin_relay_for_read, NostrRuntime};
-use crate::outbox;
+use crate::nostr_runtime::NostrRuntime;
 use crate::reads::INTERACTION_KINDS;
 
 const KIND_METADATA: u16 = 0;
@@ -47,11 +43,9 @@ const FIRST_HANDLE: u64 = 1;
 struct Entry {
     /// Pump task draining the nostrdb subscription. Aborted on `remove`.
     task: JoinHandle<()>,
-    /// Relay subscriptions to cancel when unsubscribing. Empty when the pump
-    /// rides already-installed relay subs (e.g. `JoinedCommunities`).
-    /// A single kind may install multiple relay subs if its filter can't be
-    /// expressed as one (e.g. `UserProfile` fans out across author and #p).
-    relay_subs: Vec<SubscriptionId>,
+    /// NMP interest-owner ids to cancel when unsubscribing. Empty when the
+    /// pump rides app-scope interests already installed at login.
+    nmp_interest_ids: Vec<SubscriptionId>,
 }
 
 pub(crate) struct SubscriptionRegistry {
@@ -198,14 +192,17 @@ impl SubscriptionRegistry {
             .subscribe(&ndb_filters)
             .map_err(|e| crate::errors::CoreError::Cache(format!("ndb subscribe: {e}")))?;
 
-        let relay_subs = install_relay_sub(runtime, &kind);
+        let nmp_interest_ids = install_nmp_interests(runtime, &kind)?;
 
         let task = self.spawn_pump(runtime.clone(), sub, kind, handle);
 
-        self.inner
-            .lock()
-            .entries
-            .insert(handle, Entry { task, relay_subs });
+        self.inner.lock().entries.insert(
+            handle,
+            Entry {
+                task,
+                nmp_interest_ids,
+            },
+        );
 
         Ok(handle)
     }
@@ -216,7 +213,7 @@ impl SubscriptionRegistry {
             return;
         };
         entry.task.abort();
-        for id in entry.relay_subs {
+        for id in entry.nmp_interest_ids {
             runtime.drop_subscription(id);
         }
     }
@@ -229,7 +226,7 @@ impl SubscriptionRegistry {
         };
         for (_, entry) in entries {
             entry.task.abort();
-            for id in entry.relay_subs {
+            for id in entry.nmp_interest_ids {
                 runtime.drop_subscription(id);
             }
         }
@@ -249,150 +246,23 @@ impl SubscriptionRegistry {
     }
 }
 
-/// Per-pubkey input cap fed into the outbox planner. NIP-65 has no
-/// ordering on the relays in a kind:10002 — position 1 has the same
-/// significance as position 5 — so this is a *sanity bound*, not a
-/// "preferred-N" signal. Trimming the input artificially shrinks the
-/// overlap pool the set-cover greedy can mine: real-data measurement
-/// (see `examples/outbox_stats.rs`) showed `cap=2` cost ~12 percentage
-/// points of coverage for a 1000-follow user vs. feeding the planner
-/// every write relay. 50 is comfortably above any realistic kind:10002
-/// (NIP-65 itself recommends 2-4) while protecting against pathological
-/// or malicious lists.
-const OUTBOX_MAX_RELAYS_PER_PUBKEY: usize = 50;
-
-/// Hard cap on relays the planner will pick. Keeps the home feed from
-/// fanning out to dozens of connections when the user follows people
-/// scattered across many small relays. The set-cover greedy concentrates
-/// coverage in the highest-overlap relays first; the long-tail authors
-/// past this cap fall through to the read-relay fallback shard.
-const OUTBOX_MAX_RELAYS: usize = 10;
-
-/// Build the per-pubkey write-relay map for `follows`. Each follow's
-/// vec contains every write-marked relay from their newest cached
-/// kind:10002, capped only by `OUTBOX_MAX_RELAYS_PER_PUBKEY` for safety.
-/// Follows without a cached kind:10002 land here with an empty vec —
-/// the planner moves them straight to the uncovered list.
-fn outbox_per_pubkey_for(
+fn install_nmp_interests(
     runtime: &NostrRuntime,
-    follows: &[PublicKey],
-) -> std::collections::HashMap<PublicKey, Vec<String>> {
-    let ndb = runtime.ndb();
-    let mut out = std::collections::HashMap::with_capacity(follows.len());
-    for pk in follows {
-        let urls = outbox::write_relays_for_pubkey(ndb, &pk.to_hex(), OUTBOX_MAX_RELAYS_PER_PUBKEY)
-            .unwrap_or_default();
-        out.insert(*pk, urls);
-    }
-    out
-}
-
-/// Spawn one async-routed subscription per outbox shard, plus a fallback
-/// shard on the user's read relays for authors the planner couldn't cover
-/// (no cached kind:10002 yet, or trimmed by `OUTBOX_MAX_RELAYS`). Returns
-/// the list of generated `SubscriptionId`s so the registry can drop them
-/// on unsubscribe.
-fn spawn_outbox_subs(
-    runtime: &NostrRuntime,
-    follows: &[PublicKey],
-    kinds: Vec<u16>,
-    extra_tag: Option<(Alphabet, String)>,
-    role_label: &'static str,
-) -> Vec<SubscriptionId> {
-    if follows.is_empty() {
-        return Vec::new();
-    }
-    let plan =
-        outbox::compute_outbox_plan(outbox_per_pubkey_for(runtime, follows), OUTBOX_MAX_RELAYS);
-    tracing::info!(
-        role = role_label,
-        follows = follows.len(),
-        shards = plan.shards.len(),
-        uncovered = plan.uncovered.len(),
-        "outbox plan computed"
-    );
-
-    let client = runtime.client().clone();
-    let kinds_arc = Arc::new(kinds);
-    let tag_arc = Arc::new(extra_tag);
-    let mut ids: Vec<SubscriptionId> = Vec::new();
-
-    for shard in plan.shards.iter() {
-        let id = SubscriptionId::generate();
-        let id_clone = id.clone();
-        let url = shard.url.clone();
-        let authors = shard.authors.clone();
-        let kinds_c = kinds_arc.clone();
-        let tag_c = tag_arc.clone();
-        let c = client.clone();
-        runtime.runtime_handle().spawn(async move {
-            pin_relay_for_read(&c, &url).await;
-            let mut filter = Filter::new()
-                .kinds(kinds_c.iter().map(|k| Kind::Custom(*k)))
-                .authors(authors);
-            if let Some((alpha, value)) = tag_c.as_ref() {
-                filter = filter.custom_tag(SingleLetterTag::lowercase(*alpha), value.clone());
-            }
-            if let Err(e) = c
-                .subscribe_with_id_to([url.clone()], id_clone, filter, None)
-                .await
-            {
-                tracing::warn!(role = role_label, relay = %url, error = %e, "outbox shard subscribe failed");
-            }
-        });
-        ids.push(id);
-    }
-
-    if !plan.uncovered.is_empty() {
-        let fallback_urls = runtime.read_urls();
-        if !fallback_urls.is_empty() {
-            let id = SubscriptionId::generate();
-            let id_clone = id.clone();
-            let authors = plan.uncovered.clone();
-            let kinds_c = kinds_arc.clone();
-            let tag_c = tag_arc.clone();
-            let urls = fallback_urls;
-            let c = client.clone();
-            runtime.runtime_handle().spawn(async move {
-                let mut filter = Filter::new()
-                    .kinds(kinds_c.iter().map(|k| Kind::Custom(*k)))
-                    .authors(authors);
-                if let Some((alpha, value)) = tag_c.as_ref() {
-                    filter = filter.custom_tag(SingleLetterTag::lowercase(*alpha), value.clone());
-                }
-                if let Err(e) = c.subscribe_with_id_to(urls, id_clone, filter, None).await {
-                    tracing::warn!(role = role_label, error = %e, "outbox fallback subscribe failed");
-                }
-            });
-            ids.push(id);
-        } else {
-            tracing::warn!(
-                role = role_label,
-                uncovered = plan.uncovered.len(),
-                "outbox: no read relays for fallback — these authors won't appear in the feed"
-            );
-        }
-    }
-
-    ids
-}
-
-fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<SubscriptionId> {
+    kind: &SubscriptionKind,
+) -> Result<Vec<SubscriptionId>, CoreError> {
+    let mut ids = Vec::new();
     match kind {
         SubscriptionKind::Room { group_id } => {
-            let id = SubscriptionId::generate();
-            let client = runtime.client().clone();
-            let id_clone = id.clone();
-            let group_id = group_id.clone();
-            runtime.runtime_handle().spawn(async move {
-                let filter = Filter::new()
-                    .kinds([Kind::Custom(11), Kind::Custom(9802), Kind::Custom(16)])
-                    .custom_tag(SingleLetterTag::lowercase(Alphabet::H), group_id);
-                if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
-                    tracing::warn!(error = %e, "failed to subscribe to room feed");
-                }
-            });
-            vec![id]
+            let filter = Filter::new()
+                .kinds([Kind::Custom(11), Kind::Custom(9802), Kind::Custom(16)])
+                .custom_tag(SingleLetterTag::lowercase(Alphabet::H), group_id.clone());
+            open_nmp_on_relays(
+                runtime,
+                &mut ids,
+                "rooms/feed",
+                filter,
+                runtime.rooms_urls(),
+            )?;
         }
         SubscriptionKind::RoomDiscussions { group_id } => {
             // Discussions are also kind:11 but distinguished by the
@@ -401,105 +271,66 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             // `build_change`. Reusing `#h` means the Room sub and this one
             // receive the same events from nostrdb — each pump decides what
             // it cares about.
-            let id = SubscriptionId::generate();
-            let client = runtime.client().clone();
-            let id_clone = id.clone();
-            let group_id = group_id.clone();
-            runtime.runtime_handle().spawn(async move {
-                let filter = Filter::new()
-                    .kinds([Kind::Custom(11)])
-                    .custom_tag(SingleLetterTag::lowercase(Alphabet::H), group_id);
-                if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
-                    tracing::warn!(error = %e, "failed to subscribe to discussions feed");
-                }
-            });
-            vec![id]
+            let filter = Filter::new()
+                .kinds([Kind::Custom(11)])
+                .custom_tag(SingleLetterTag::lowercase(Alphabet::H), group_id.clone());
+            open_nmp_on_relays(
+                runtime,
+                &mut ids,
+                "rooms/discussions",
+                filter,
+                runtime.rooms_urls(),
+            )?;
         }
         SubscriptionKind::RoomChat { group_id } => {
             // NIP-29 chat lives at kind:9 with `#h=<group_id>`. Targets the
             // rooms-flagged relays so the room host sees the REQ — chat is
             // not part of any user's outbox set, the room-relay is the
             // canonical home.
-            let id = SubscriptionId::generate();
-            let client = runtime.client().clone();
-            let id_clone = id.clone();
-            let group_id_owned = group_id.clone();
-            let urls = runtime.rooms_urls();
-            runtime.runtime_handle().spawn(async move {
-                let filter = Filter::new()
-                    .kinds([Kind::Custom(crate::chat::KIND_CHAT_MESSAGE)])
-                    .custom_tag(SingleLetterTag::lowercase(Alphabet::H), group_id_owned);
-                let result = if urls.is_empty() {
-                    client.subscribe_with_id(id_clone, filter, None).await
-                } else {
-                    client
-                        .subscribe_with_id_to(urls, id_clone, filter, None)
-                        .await
-                };
-                if let Err(e) = result {
-                    tracing::warn!(error = %e, "failed to subscribe to room chat feed");
-                }
-            });
-            vec![id]
+            let filter = Filter::new()
+                .kinds([Kind::Custom(crate::chat::KIND_CHAT_MESSAGE)])
+                .custom_tag(SingleLetterTag::lowercase(Alphabet::H), group_id.clone());
+            open_nmp_on_relays(
+                runtime,
+                &mut ids,
+                "rooms/chat",
+                filter,
+                runtime.rooms_urls(),
+            )?;
         }
         SubscriptionKind::Vault { user_pubkey } => {
-            let id = SubscriptionId::generate();
-            let client = runtime.client().clone();
-            let id_clone = id.clone();
-            let pk = *user_pubkey;
-            runtime.runtime_handle().spawn(async move {
-                let filter = Filter::new().kinds([Kind::Custom(9802)]).author(pk);
-                if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
-                    tracing::warn!(error = %e, "failed to subscribe to vault feed");
-                }
-            });
-            vec![id]
+            let filter = Filter::new()
+                .kinds([Kind::Custom(9802)])
+                .author(*user_pubkey);
+            open_nmp_auto(runtime, &mut ids, "vault/highlights", filter)?;
         }
         SubscriptionKind::UserProfile { pubkey } => {
             // Two separate filters: author-based for self-published kinds,
             // #p-based for membership events.
-            let client = runtime.client().clone();
             let pk = *pubkey;
+            let author_filter = Filter::new()
+                .kinds([
+                    Kind::Custom(KIND_METADATA),
+                    Kind::Custom(KIND_CONTACTS),
+                    Kind::Custom(KIND_LONG_FORM),
+                    Kind::Custom(KIND_HIGHLIGHT),
+                ])
+                .author(pk);
+            open_nmp_auto(runtime, &mut ids, "profile/author", author_filter)?;
 
-            let author_id = SubscriptionId::generate();
-            let author_id_clone = author_id.clone();
-            let client_a = client.clone();
-            runtime.runtime_handle().spawn(async move {
-                let filter = Filter::new()
-                    .kinds([
-                        Kind::Custom(KIND_METADATA),
-                        Kind::Custom(KIND_CONTACTS),
-                        Kind::Custom(KIND_LONG_FORM),
-                        Kind::Custom(KIND_HIGHLIGHT),
-                    ])
-                    .author(pk);
-                if let Err(e) = client_a
-                    .subscribe_with_id(author_id_clone, filter, None)
-                    .await
-                {
-                    tracing::warn!(error = %e, "failed to subscribe to profile author feed");
-                }
-            });
-
-            let membership_id = SubscriptionId::generate();
-            let membership_id_clone = membership_id.clone();
-            let client_b = client.clone();
-            runtime.runtime_handle().spawn(async move {
-                let filter = Filter::new()
-                    .kinds([
-                        Kind::Custom(KIND_GROUP_ADMINS),
-                        Kind::Custom(KIND_GROUP_MEMBERS),
-                    ])
-                    .pubkey(pk);
-                if let Err(e) = client_b
-                    .subscribe_with_id(membership_id_clone, filter, None)
-                    .await
-                {
-                    tracing::warn!(error = %e, "failed to subscribe to profile membership feed");
-                }
-            });
-
-            vec![author_id, membership_id]
+            let membership_filter = Filter::new()
+                .kinds([
+                    Kind::Custom(KIND_GROUP_ADMINS),
+                    Kind::Custom(KIND_GROUP_MEMBERS),
+                ])
+                .pubkey(pk);
+            open_nmp_on_relays(
+                runtime,
+                &mut ids,
+                "profile/membership",
+                membership_filter,
+                runtime.rooms_urls(),
+            )?;
         }
         SubscriptionKind::Article {
             author,
@@ -511,82 +342,49 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             // `a`-tag). Keeping them as distinct subs keeps relay-side
             // filtering precise and costs no more than the single sub the
             // Room/Vault kinds install — the pool batches.
-            let client = runtime.client().clone();
-
-            let body_id = SubscriptionId::generate();
-            let body_id_clone = body_id.clone();
             let author_pk = *author;
-            let d_tag_owned = d_tag.clone();
-            let client_a = client.clone();
-            runtime.runtime_handle().spawn(async move {
-                let filter = Filter::new()
-                    .kinds([Kind::Custom(KIND_LONG_FORM)])
-                    .author(author_pk)
-                    .custom_tag(SingleLetterTag::lowercase(Alphabet::D), d_tag_owned);
-                if let Err(e) = client_a
-                    .subscribe_with_id(body_id_clone, filter, None)
-                    .await
-                {
-                    tracing::warn!(error = %e, "failed to subscribe to article body feed");
-                }
-            });
+            let body_filter = Filter::new()
+                .kinds([Kind::Custom(KIND_LONG_FORM)])
+                .author(author_pk)
+                .custom_tag(SingleLetterTag::lowercase(Alphabet::D), d_tag.clone());
+            open_nmp_auto(runtime, &mut ids, "article/body", body_filter)?;
 
-            let highlights_id = SubscriptionId::generate();
-            let highlights_id_clone = highlights_id.clone();
-            let address_owned = address.clone();
-            let client_b = client.clone();
-            runtime.runtime_handle().spawn(async move {
-                let filter = Filter::new()
-                    .kinds([Kind::Custom(KIND_HIGHLIGHT)])
-                    .custom_tag(SingleLetterTag::lowercase(Alphabet::A), address_owned);
-                if let Err(e) = client_b
-                    .subscribe_with_id(highlights_id_clone, filter, None)
-                    .await
-                {
-                    tracing::warn!(error = %e, "failed to subscribe to article highlights feed");
-                }
-            });
-
-            vec![body_id, highlights_id]
+            let highlights_filter = Filter::new()
+                .kinds([Kind::Custom(KIND_HIGHLIGHT)])
+                .custom_tag(SingleLetterTag::lowercase(Alphabet::A), address.clone());
+            open_nmp_auto(runtime, &mut ids, "article/highlights", highlights_filter)?;
         }
         SubscriptionKind::FollowingReads { follows, .. } => {
-            // Two outbox-routed filter sets — articles by follows, then their
-            // interactions on any kind:30023 — so each relay only sees the
-            // subset of authors it actually hosts. Authors with no cached
-            // kind:10002 fall back to the user's own read relays for now;
-            // the follows-NIP-65 backfill subscription installed at login
-            // is what fills in their relay lists over time.
             if follows.is_empty() {
-                return vec![];
+                return Ok(ids);
             }
-            let mut ids = spawn_outbox_subs(
+            let articles = Filter::new()
+                .kinds([Kind::Custom(KIND_LONG_FORM)])
+                .authors(follows.clone());
+            open_nmp_auto(runtime, &mut ids, "feed/following-reads/articles", articles)?;
+
+            let interactions = Filter::new()
+                .kinds(INTERACTION_KINDS.iter().map(|k| Kind::Custom(*k)))
+                .authors(follows.clone())
+                .custom_tag(SingleLetterTag::lowercase(Alphabet::K), "30023");
+            open_nmp_auto(
                 runtime,
-                follows,
-                vec![30023],
-                None,
-                "outbox/following-reads/articles",
-            );
-            ids.extend(spawn_outbox_subs(
-                runtime,
-                follows,
-                INTERACTION_KINDS.to_vec(),
-                Some((Alphabet::K, "30023".to_string())),
-                "outbox/following-reads/interactions",
-            ));
-            ids
+                &mut ids,
+                "feed/following-reads/interactions",
+                interactions,
+            )?;
         }
         SubscriptionKind::FollowingHighlights { follows, group_ids } => {
-            let mut ids: Vec<SubscriptionId> = Vec::new();
-
-            // Follow-authored highlights via outbox shards.
             if !follows.is_empty() {
-                ids.extend(spawn_outbox_subs(
+                let filter = Filter::new()
+                    .kinds([Kind::Custom(KIND_HIGHLIGHT)])
+                    .authors(follows.clone());
+                open_nmp_auto(
                     runtime,
-                    follows,
-                    vec![KIND_HIGHLIGHT],
-                    None,
-                    "outbox/following-highlights",
-                ));
+                    &mut ids,
+                    "feed/following-highlights/authors",
+                    filter,
+                )?;
             }
 
             // Room-tagged highlights stay on the rooms-flagged relays where
@@ -594,29 +392,17 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
             // because the authoritative source is the room host, not the
             // highlighters' personal outboxes.
             if !group_ids.is_empty() {
-                let id = SubscriptionId::generate();
-                let id_clone = id.clone();
-                let groups = group_ids.clone();
-                let urls = runtime.rooms_urls();
-                let c = runtime.client().clone();
-                runtime.runtime_handle().spawn(async move {
-                    let filter = Filter::new()
-                        .kinds([Kind::Custom(KIND_HIGHLIGHT)])
-                        .custom_tags(SingleLetterTag::lowercase(Alphabet::H), groups);
-                    if urls.is_empty() {
-                        if let Err(e) = c.subscribe_with_id(id_clone, filter, None).await {
-                            tracing::warn!(error = %e, "room highlights subscribe (default pool)");
-                        }
-                    } else if let Err(e) =
-                        c.subscribe_with_id_to(urls, id_clone, filter, None).await
-                    {
-                        tracing::warn!(error = %e, "room highlights subscribe (rooms relays)");
-                    }
-                });
-                ids.push(id);
+                let filter = Filter::new()
+                    .kinds([Kind::Custom(KIND_HIGHLIGHT)])
+                    .custom_tags(SingleLetterTag::lowercase(Alphabet::H), group_ids.clone());
+                open_nmp_on_relays(
+                    runtime,
+                    &mut ids,
+                    "feed/following-highlights/rooms",
+                    filter,
+                    runtime.rooms_urls(),
+                )?;
             }
-
-            ids
         }
         SubscriptionKind::FeedbackThreads {
             coordinate,
@@ -624,172 +410,132 @@ fn install_relay_sub(runtime: &NostrRuntime, kind: &SubscriptionKind) -> Vec<Sub
         } => {
             // Both subs target only FEEDBACK_RELAY so the kind:1/513 traffic
             // for the project never fans out across the user's relay set.
-            let client = runtime.client().clone();
-            let mut ids: Vec<SubscriptionId> = Vec::new();
-
-            let roots_id = SubscriptionId::generate();
-            let roots_id_clone = roots_id.clone();
-            let coord_owned = coordinate.clone();
             let pk = *current_user_pubkey;
-            let client_a = client.clone();
-            runtime.runtime_handle().spawn(async move {
-                ensure_feedback_relay(&client_a).await;
-                let filter = Filter::new()
-                    .kinds([Kind::Custom(KIND_FEEDBACK_NOTE)])
-                    .author(pk)
-                    .custom_tag(SingleLetterTag::lowercase(Alphabet::A), coord_owned);
-                if let Err(e) = client_a
-                    .subscribe_with_id_to([FEEDBACK_RELAY], roots_id_clone, filter, None)
-                    .await
-                {
-                    tracing::warn!(error = %e, "failed to subscribe to feedback roots feed");
-                }
-            });
-            ids.push(roots_id);
+            let roots = Filter::new()
+                .kinds([Kind::Custom(KIND_FEEDBACK_NOTE)])
+                .author(pk)
+                .custom_tag(SingleLetterTag::lowercase(Alphabet::A), coordinate.clone());
+            open_nmp_on_relays(
+                runtime,
+                &mut ids,
+                "feedback/threads/roots",
+                roots,
+                vec![FEEDBACK_RELAY.to_string()],
+            )?;
 
-            let meta_id = SubscriptionId::generate();
-            let meta_id_clone = meta_id.clone();
-            let coord_owned = coordinate.clone();
-            let client_b = client.clone();
-            runtime.runtime_handle().spawn(async move {
-                ensure_feedback_relay(&client_b).await;
-                let filter = Filter::new()
-                    .kinds([Kind::Custom(KIND_FEEDBACK_THREAD_META)])
-                    .custom_tag(SingleLetterTag::lowercase(Alphabet::A), coord_owned);
-                if let Err(e) = client_b
-                    .subscribe_with_id_to([FEEDBACK_RELAY], meta_id_clone, filter, None)
-                    .await
-                {
-                    tracing::warn!(error = %e, "failed to subscribe to feedback meta feed");
-                }
-            });
-            ids.push(meta_id);
-
-            ids
+            let meta = Filter::new()
+                .kinds([Kind::Custom(KIND_FEEDBACK_THREAD_META)])
+                .custom_tag(SingleLetterTag::lowercase(Alphabet::A), coordinate.clone());
+            open_nmp_on_relays(
+                runtime,
+                &mut ids,
+                "feedback/threads/meta",
+                meta,
+                vec![FEEDBACK_RELAY.to_string()],
+            )?;
         }
         SubscriptionKind::FeedbackThread { root_event_id } => {
-            let id = SubscriptionId::generate();
-            let id_clone = id.clone();
             let root_hex = root_event_id.to_hex();
-            let client = runtime.client().clone();
-            runtime.runtime_handle().spawn(async move {
-                ensure_feedback_relay(&client).await;
-                let filter = Filter::new()
-                    .kinds([Kind::Custom(KIND_FEEDBACK_NOTE)])
-                    .custom_tag(SingleLetterTag::lowercase(Alphabet::E), root_hex);
-                if let Err(e) = client
-                    .subscribe_with_id_to([FEEDBACK_RELAY], id_clone, filter, None)
-                    .await
-                {
-                    tracing::warn!(error = %e, "failed to subscribe to feedback thread feed");
-                }
-            });
-            vec![id]
+            let replies = Filter::new()
+                .kinds([Kind::Custom(KIND_FEEDBACK_NOTE)])
+                .custom_tag(SingleLetterTag::lowercase(Alphabet::E), root_hex);
+            open_nmp_on_relays(
+                runtime,
+                &mut ids,
+                "feedback/thread/replies",
+                replies,
+                vec![FEEDBACK_RELAY.to_string()],
+            )?;
+            let root = Filter::new().ids([*root_event_id]);
+            open_nmp_on_relays(
+                runtime,
+                &mut ids,
+                "feedback/thread/root",
+                root,
+                vec![FEEDBACK_RELAY.to_string()],
+            )?;
         }
         SubscriptionKind::SearchArticles { query, relays } => {
             if relays.is_empty() || query.trim().is_empty() {
-                return vec![];
+                return Ok(ids);
             }
-            let id = SubscriptionId::generate();
-            let id_clone = id.clone();
-            let client = runtime.client().clone();
-            let relays_owned = relays.clone();
-            let query_owned = query.clone();
-            runtime.runtime_handle().spawn(async move {
-                // Make sure every target relay is in the pool before we open
-                // the REQ — NIP-51 search relays may not be in the user's
-                // NIP-65 set, and `relay.highlighter.com` always should be but
-                // belt-and-braces.
-                for url in &relays_owned {
-                    if let Err(e) = client.add_relay(url).await {
-                        tracing::debug!(url = %url, error = %e, "search: add_relay");
-                    }
-                    if let Err(e) = client.connect_relay(url).await {
-                        tracing::debug!(url = %url, error = %e, "search: connect_relay");
-                    }
-                }
-                let filter = Filter::new()
-                    .kinds([Kind::Custom(KIND_LONG_FORM)])
-                    .search(query_owned)
-                    .limit(60);
-                if let Err(e) = client
-                    .subscribe_with_id_to(relays_owned, id_clone, filter, None)
-                    .await
-                {
-                    tracing::warn!(error = %e, "failed to open NIP-50 article search");
-                }
-            });
-            vec![id]
+            let filter = Filter::new()
+                .kinds([Kind::Custom(KIND_LONG_FORM)])
+                .search(query.clone())
+                .limit(60);
+            open_nmp_on_relays(runtime, &mut ids, "search/articles", filter, relays.clone())?;
         }
         // JoinedCommunities rides the membership relay-sub already installed
         // at login — no additional relay subscription needed.
-        SubscriptionKind::JoinedCommunities { .. } => vec![],
+        SubscriptionKind::JoinedCommunities { .. } => {}
         SubscriptionKind::Bookmarks { user_pubkey } => {
-            let id = SubscriptionId::generate();
-            let id_clone = id.clone();
-            let client = runtime.client().clone();
-            let pk = *user_pubkey;
-            runtime.runtime_handle().spawn(async move {
-                let filter = Filter::new()
-                    .kinds([Kind::Custom(crate::bookmarks::KIND_BOOKMARKS)])
-                    .author(pk);
-                if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
-                    tracing::warn!(error = %e, "failed to subscribe to bookmarks feed");
-                }
-            });
-            vec![id]
+            let filter = Filter::new()
+                .kinds([Kind::Custom(crate::bookmarks::KIND_BOOKMARKS)])
+                .author(*user_pubkey);
+            open_nmp_auto(runtime, &mut ids, "bookmarks/list", filter)?;
         }
         SubscriptionKind::BookmarkSets { user_pubkey } => {
-            let id = SubscriptionId::generate();
-            let id_clone = id.clone();
-            let client = runtime.client().clone();
-            let pk = *user_pubkey;
-            runtime.runtime_handle().spawn(async move {
-                let filter = Filter::new()
-                    .kinds([
-                        Kind::Custom(crate::lists::KIND_BOOKMARK_SETS),
-                        Kind::Custom(crate::lists::KIND_CURATION_SETS),
-                    ])
-                    .author(pk);
-                if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
-                    tracing::warn!(error = %e, "failed to subscribe to bookmark sets");
-                }
-            });
-            vec![id]
+            let filter = Filter::new()
+                .kinds([
+                    Kind::Custom(crate::lists::KIND_BOOKMARK_SETS),
+                    Kind::Custom(crate::lists::KIND_CURATION_SETS),
+                ])
+                .author(*user_pubkey);
+            open_nmp_auto(runtime, &mut ids, "bookmarks/sets", filter)?;
         }
         SubscriptionKind::FollowingCurationSets { follows } => {
             if follows.is_empty() {
-                return vec![];
+                return Ok(ids);
             }
-            let id = SubscriptionId::generate();
-            let id_clone = id.clone();
-            let client = runtime.client().clone();
-            let authors: Vec<PublicKey> = follows.clone();
-            runtime.runtime_handle().spawn(async move {
-                let filter = Filter::new()
-                    .kinds([Kind::Custom(crate::lists::KIND_CURATION_SETS)])
-                    .authors(authors);
-                if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
-                    tracing::warn!(error = %e, "failed to subscribe to following curation sets");
-                }
-            });
-            vec![id]
+            let filter = Filter::new()
+                .kinds([Kind::Custom(crate::lists::KIND_CURATION_SETS)])
+                .authors(follows.clone());
+            open_nmp_auto(runtime, &mut ids, "curation/following-sets", filter)?;
         }
         SubscriptionKind::WebBookmarks { user_pubkey } => {
-            let id = SubscriptionId::generate();
-            let id_clone = id.clone();
-            let client = runtime.client().clone();
-            let pk = *user_pubkey;
-            runtime.runtime_handle().spawn(async move {
-                let filter = Filter::new()
-                    .kinds([Kind::Custom(crate::lists::KIND_WEB_BOOKMARK)])
-                    .author(pk);
-                if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
-                    tracing::warn!(error = %e, "failed to subscribe to web bookmarks");
-                }
-            });
-            vec![id]
+            let filter = Filter::new()
+                .kinds([Kind::Custom(crate::lists::KIND_WEB_BOOKMARK)])
+                .author(*user_pubkey);
+            open_nmp_auto(runtime, &mut ids, "bookmarks/web", filter)?;
         }
+    }
+    Ok(ids)
+}
+
+fn open_nmp_auto(
+    runtime: &NostrRuntime,
+    ids: &mut Vec<SubscriptionId>,
+    label: &'static str,
+    filter: Filter,
+) -> Result<(), CoreError> {
+    let id = SubscriptionId::generate();
+    if let Err(e) = runtime.open_nmp_filter(&id, label, filter, None) {
+        close_nmp_interests(runtime, ids);
+        return Err(e);
+    }
+    ids.push(id);
+    Ok(())
+}
+
+fn open_nmp_on_relays(
+    runtime: &NostrRuntime,
+    ids: &mut Vec<SubscriptionId>,
+    label: &'static str,
+    filter: Filter,
+    relays: Vec<String>,
+) -> Result<(), CoreError> {
+    let id = SubscriptionId::generate();
+    if let Err(e) = runtime.open_nmp_filter_on_relays(&id, label, filter, relays) {
+        close_nmp_interests(runtime, ids);
+        return Err(e);
+    }
+    ids.push(id);
+    Ok(())
+}
+
+fn close_nmp_interests(runtime: &NostrRuntime, ids: &mut Vec<SubscriptionId>) {
+    for id in ids.drain(..) {
+        runtime.drop_subscription(id);
     }
 }
 
@@ -864,7 +610,7 @@ fn build_ndb_filters(kind: &SubscriptionKind) -> Vec<NdbFilter> {
         }
         SubscriptionKind::FollowingReads { follows, .. } => {
             if follows.is_empty() {
-                // Pump won't receive anything; still build a stub so the
+                // Pump won't receive anything; still build a sentinel so the
                 // SubscriptionRegistry bookkeeping is consistent.
                 return vec![NdbFilter::new().kinds([KIND_LONG_FORM as u64]).build()];
             }
@@ -1037,8 +783,8 @@ async fn run_pump(
                 // (no pubkey filter exists at that level), so a 39000 for an
                 // unrelated group — e.g., landing from a profile-view relay sub
                 // — must not pollute joinedCommunities.
-                if let DataChangeType::CommunityUpserted { community } = &change {
-                    if !hydrated.contains(&community.id) {
+                if let DataChangeType::CommunityUpserted { group_id } = &change {
+                    if !hydrated.contains(group_id) {
                         continue;
                     }
                 }
@@ -1158,7 +904,9 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
                     // (`#d=<learned_ids>`), so by construction every 39000 we
                     // see belongs to a group this user is in.
                     let summary = build_community_summary(event).ok()?;
-                    Some(DataChangeType::CommunityUpserted { community: summary })
+                    Some(DataChangeType::CommunityUpserted {
+                        group_id: summary.id,
+                    })
                 }
                 KIND_GROUP_ADMINS | KIND_GROUP_MEMBERS => {
                     // Only relevant to this user — the relay-side sub already
@@ -1194,24 +942,13 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
                     if crate::discussions::is_discussion(event) {
                         return None;
                     }
-                    let artifact = minimal_artifact_record(event, group_id)?;
                     Some(DataChangeType::ArtifactUpserted {
                         group_id: group_id.clone(),
-                        artifact,
                     })
                 }
-                9802 => {
-                    let highlight = minimal_highlight_record(event)?;
-                    Some(DataChangeType::HighlightUpserted {
-                        group_id: group_id.clone(),
-                        highlight: HydratedHighlight {
-                            highlight,
-                            artifact: None,
-                            shared_by_event_id: None,
-                            shared_by_pubkey: None,
-                        },
-                    })
-                }
+                9802 => Some(DataChangeType::HighlightUpserted {
+                    group_id: group_id.clone(),
+                }),
                 16 => {
                     // kind:16 repost is only a highlight share if its k=9802.
                     let k = first_tag_value(event, "k")?;
@@ -1236,10 +973,9 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
             if event.kind.as_u16() != 11 {
                 return None;
             }
-            let discussion = crate::discussions::record_from_event(event)?;
+            crate::discussions::record_from_event(event)?;
             Some(DataChangeType::DiscussionUpserted {
                 group_id: group_id.clone(),
-                discussion,
             })
         }
         SubscriptionKind::RoomChat { group_id } => {
@@ -1250,10 +986,9 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
             if event_group != group_id {
                 return None;
             }
-            let message = crate::chat::record_from_event(event)?;
+            crate::chat::record_from_event(event)?;
             Some(DataChangeType::ChatMessageUpserted {
                 group_id: group_id.clone(),
-                message,
             })
         }
         SubscriptionKind::Vault { user_pubkey } => {
@@ -1263,8 +998,9 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
             if event.kind.as_u16() != 9802 {
                 return None;
             }
-            let highlight = minimal_highlight_record(event)?;
-            Some(DataChangeType::MyHighlightUpserted { highlight })
+            Some(DataChangeType::MyHighlightUpserted {
+                event_id: event.id.to_hex(),
+            })
         }
         SubscriptionKind::UserProfile { pubkey } => {
             let pk_hex = pubkey.to_hex();
@@ -1328,7 +1064,7 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
         }
         SubscriptionKind::FollowingReads { follows, .. } => {
             // Follows are small (≤ a few thousand); linear scan is fine.
-            let is_follow = follows.iter().any(|pk| *pk == event.pubkey);
+            let is_follow = follows.contains(&event.pubkey);
             if !is_follow {
                 return None;
             }
@@ -1355,7 +1091,7 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
             if event.kind.as_u16() != KIND_HIGHLIGHT {
                 return None;
             }
-            let is_follow = follows.iter().any(|pk| *pk == event.pubkey);
+            let is_follow = follows.contains(&event.pubkey);
             let in_joined_group = first_tag_value(event, "h")
                 .map(|h| group_ids.iter().any(|g| g == h))
                 .unwrap_or(false);
@@ -1467,152 +1203,11 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
             if !matches_root {
                 return None;
             }
-            let record = crate::feedback::event_record_for_delta(event, &root_hex);
-            Some(DataChangeType::FeedbackThreadEventUpserted { event: record })
+            Some(DataChangeType::FeedbackThreadEventUpserted {
+                event_id: event.id.to_hex(),
+            })
         }
     }
-}
-
-/// kind:11 → ArtifactRecord for live subscription deltas. Mirrors the
-/// tag-reading shape of `artifact_record_from_event` so podcast shares
-/// arriving over a live sub render the same as cached ones.
-fn minimal_artifact_record(event: &Event, group_id: &str) -> Option<ArtifactRecord> {
-    let title = first_tag_value(event, "title").unwrap_or("").to_string();
-    let url = first_tag_value(event, "r").unwrap_or("").to_string();
-    let source = first_tag_value(event, "source").unwrap_or("").to_string();
-    let author = first_tag_value(event, "author").unwrap_or("").to_string();
-    let image = first_tag_value(event, "image").unwrap_or("").to_string();
-    let summary = first_tag_value(event, "summary").unwrap_or("").to_string();
-    let d = first_tag_value(event, "d").unwrap_or("").to_string();
-    let k = first_tag_value(event, "k").unwrap_or("").to_string();
-
-    // Reference tag: `i` (catalog) takes precedence over `a`/`e`.
-    let (ref_name, ref_value) = if let Some(i) = first_tag_value(event, "i") {
-        ("i".to_string(), i.to_string())
-    } else if let Some(a) = first_tag_value(event, "a") {
-        ("a".to_string(), a.to_string())
-    } else if let Some(e) = first_tag_value(event, "e") {
-        ("e".to_string(), e.to_string())
-    } else {
-        (String::new(), String::new())
-    };
-
-    let podcast_item_guid = first_tag_value(event, "podcast_item_guid")
-        .map(str::to_string)
-        .unwrap_or_else(|| {
-            ref_value
-                .strip_prefix("podcast:item:guid:")
-                .map(str::to_string)
-                .unwrap_or_default()
-        });
-    let podcast_guid = first_tag_value(event, "podcast_guid")
-        .map(str::to_string)
-        .unwrap_or_else(|| {
-            ref_value
-                .strip_prefix("podcast:guid:")
-                .map(str::to_string)
-                .unwrap_or_default()
-        });
-
-    let preview = ArtifactPreview {
-        id: d.clone(),
-        url,
-        title,
-        author,
-        image,
-        description: summary,
-        source,
-        domain: String::new(),
-        catalog_id: if ref_name == "i" {
-            ref_value.clone()
-        } else {
-            String::new()
-        },
-        catalog_kind: k.clone(),
-        podcast_guid,
-        podcast_item_guid,
-        podcast_show_title: first_tag_value(event, "podcast_show_title")
-            .unwrap_or("")
-            .to_string(),
-        audio_url: first_tag_value(event, "audio").unwrap_or("").to_string(),
-        audio_preview_url: first_tag_value(event, "audio_preview")
-            .unwrap_or("")
-            .to_string(),
-        transcript_url: first_tag_value(event, "transcript")
-            .unwrap_or("")
-            .to_string(),
-        feed_url: first_tag_value(event, "feed").unwrap_or("").to_string(),
-        published_at: first_tag_value(event, "published_at")
-            .unwrap_or("")
-            .to_string(),
-        duration_seconds: first_tag_value(event, "duration").and_then(|v| v.parse::<i64>().ok()),
-        reference_tag_name: ref_name.clone(),
-        reference_tag_value: ref_value.clone(),
-        reference_kind: k,
-        highlight_tag_name: String::new(),
-        highlight_tag_value: String::new(),
-        highlight_reference_key: String::new(),
-        chapters: crate::artifacts::read_chapters(event),
-    };
-
-    Some(ArtifactRecord {
-        preview,
-        group_id: group_id.to_string(),
-        share_event_id: event.id.to_hex(),
-        pubkey: event.pubkey.to_hex(),
-        created_at: Some(event.created_at.as_secs()),
-        note: event.content.clone(),
-    })
-}
-
-/// Minimal kind:9802 → HighlightRecord.
-fn minimal_highlight_record(event: &Event) -> Option<HighlightRecord> {
-    let quote = event.content.clone();
-    let context = first_tag_value(event, "context").unwrap_or("").to_string();
-    let comment = first_tag_value(event, "comment").unwrap_or("").to_string();
-    let artifact_address = first_tag_value(event, "a").unwrap_or("").to_string();
-    let event_reference = first_tag_value(event, "e").unwrap_or("").to_string();
-    let source_url = first_tag_value(event, "r").unwrap_or("").to_string();
-
-    let source_reference_key = if !artifact_address.is_empty() {
-        format!("a:{artifact_address}")
-    } else if !event_reference.is_empty() {
-        format!("e:{event_reference}")
-    } else if !source_url.is_empty() {
-        format!("r:{source_url}")
-    } else {
-        String::new()
-    };
-
-    Some(HighlightRecord {
-        event_id: event.id.to_hex(),
-        pubkey: event.pubkey.to_hex(),
-        quote,
-        context,
-        note: comment,
-        artifact_address,
-        event_reference,
-        external_reference: String::new(),
-        source_url,
-        source_reference_key,
-        clip_start_seconds: first_tag_value(event, "start").and_then(|s| s.parse().ok()),
-        clip_end_seconds: first_tag_value(event, "end").and_then(|s| s.parse().ok()),
-        clip_speaker: first_tag_value(event, "speaker").unwrap_or("").to_string(),
-        clip_transcript_segment_ids: event
-            .tags
-            .iter()
-            .filter_map(|tag| {
-                let s = tag.as_slice();
-                if s.first().map(String::as_str) == Some("segment") {
-                    s.get(1).map(|v| v.to_string())
-                } else {
-                    None
-                }
-            })
-            .collect(),
-        image_url: crate::highlights::imeta_image_url(event),
-        created_at: Some(event.created_at.as_secs()),
-    })
 }
 
 /// Scan nostrdb for all cached kind:39001 / 39002 events where `user_pubkey`
@@ -1799,8 +1394,8 @@ mod tests {
                 "joined-communities rides app-scope bus"
             );
             match delta.change {
-                DataChangeType::CommunityUpserted { community } => {
-                    assert_eq!(community.id, "alpha");
+                DataChangeType::CommunityUpserted { group_id } => {
+                    assert_eq!(group_id, "alpha");
                     saw_community = true;
                 }
                 DataChangeType::MembershipChanged { group_id } => {
@@ -1961,9 +1556,8 @@ mod tests {
             };
             assert_eq!(delta.subscription_id, handle);
             match delta.change {
-                DataChangeType::ArtifactUpserted { group_id, artifact } => {
+                DataChangeType::ArtifactUpserted { group_id } => {
                     assert_eq!(group_id, "alpha");
-                    assert_eq!(artifact.preview.title, "Alpha Book");
                     alpha_seen = true;
                 }
                 other => panic!("unexpected delta: {other:?}"),
@@ -2017,8 +1611,8 @@ mod tests {
             };
             assert_eq!(delta.subscription_id, handle);
             match delta.change {
-                DataChangeType::MyHighlightUpserted { highlight } => {
-                    assert_eq!(highlight.quote, "my quote");
+                DataChangeType::MyHighlightUpserted { event_id } => {
+                    assert_eq!(event_id, mine.id.to_hex());
                     mine_seen = true;
                 }
                 other => panic!("unexpected delta: {other:?}"),
@@ -2111,12 +1705,12 @@ mod tests {
                 continue;
             }
             match &delta.change {
-                DataChangeType::CommunityUpserted { community } => {
+                DataChangeType::CommunityUpserted { group_id } => {
                     assert_ne!(
-                        community.id, "strangers-only",
+                        group_id, "strangers-only",
                         "must not emit CommunityUpserted for a group the user is not a member of"
                     );
-                    if community.id == "mine" {
+                    if group_id == "mine" {
                         saw_mine = true;
                     }
                 }
@@ -2185,10 +1779,8 @@ mod tests {
             };
             assert_eq!(delta.subscription_id, handle);
             match delta.change {
-                DataChangeType::ChatMessageUpserted { group_id, message } => {
+                DataChangeType::ChatMessageUpserted { group_id } => {
                     assert_eq!(group_id, "alpha");
-                    assert_eq!(message.content, "hello alpha");
-                    assert_eq!(message.group_id, "alpha");
                     alpha_seen = true;
                 }
                 other => panic!("unexpected delta on chat sub: {other:?}"),

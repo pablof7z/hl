@@ -305,6 +305,18 @@ pub struct ProfileMetadata {
     pub created_at: Option<u64>,
 }
 
+#[derive(Debug, Clone, Default, uniffi::Record)]
+pub struct ProfileUpdateDraft {
+    pub name: String,
+    pub display_name: String,
+    pub about: String,
+    pub picture: String,
+    pub banner: String,
+    pub nip05: String,
+    pub website: String,
+    pub lud16: String,
+}
+
 /// NIP-23 long-form article (kind:30023). Dedupe happens by `d` tag with the
 /// newest `created_at` winning, matching how the web app renders.
 #[derive(Debug, Clone, uniffi::Record)]
@@ -373,7 +385,6 @@ pub struct FeedbackEventRecord {
 }
 
 /// Options for initiating a `nostrconnect://` outgoing pairing.
-/// Matches Olas's `NDKBunkerSigner.NostrConnectOptions`.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct NostrConnectOptions {
     pub name: String,
@@ -394,11 +405,7 @@ impl Default for NostrConnectOptions {
     }
 }
 
-/// Connection state of a single relay the app is talking to. Mirrors the
-/// nostr-sdk internal `RelayStatus` but trimmed to the values the UI cares
-/// about. `Initialized` / `Pending` / `Sleeping` are collapsed into
-/// `Connecting` — from the user's perspective all three mean "not yet on
-/// the wire but trying".
+/// Connection state of a single relay in NMP's relay diagnostics projection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum RelayStatus {
     Connecting,
@@ -408,25 +415,20 @@ pub enum RelayStatus {
     Banned,
 }
 
-/// Live diagnostic snapshot for a single relay, polled from the nostr-sdk
-/// connection pool. Updated by `NostrRuntime`'s diagnostics poller every
-/// second; Swift reads via `get_relay_diagnostics` and listens for
-/// `RelayStatusChanged` deltas to know when to re-render.
+/// Live diagnostic snapshot for a single relay, decoded from NMP's typed
+/// `relay_diagnostics` projection. Swift reads via `get_relay_diagnostics`
+/// and listens for `RelayStatusChanged` deltas to know when to re-render.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct RelayDiagnostic {
     pub url: String,
     pub state: RelayStatus,
-    /// Round-trip time in milliseconds when the relay is connected. `None`
-    /// until the first ping completes.
+    /// Round-trip time in milliseconds when available from the runtime.
     pub rtt_ms: Option<u32>,
-    /// Cumulative bytes sent on this connection since it was first opened
-    /// this session.
+    /// Cumulative bytes sent on this connection when available.
     pub bytes_sent: u64,
-    /// Cumulative bytes received on this connection since it was first
-    /// opened this session.
+    /// Cumulative bytes received on this connection when available.
     pub bytes_received: u64,
-    /// Unix seconds of the most recent successful connect, `None` if never
-    /// connected in this session.
+    /// Unix seconds of the most recent successful connect when available.
     pub connected_since_ts: Option<u64>,
 }
 

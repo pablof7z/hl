@@ -5,7 +5,6 @@ struct BookView: View {
     let catalogId: String
 
     @Environment(HighlighterStore.self) private var app
-    @State private var highlights: [HighlightRecord] = []
     @State private var descriptionExpanded = false
 
     private var isbn: String {
@@ -13,6 +12,14 @@ struct BookView: View {
     }
 
     private var preview: ArtifactPreview? { app.isbnPreview(isbn: isbn) }
+
+    private var highlightTagValue: String {
+        catalogId.hasPrefix("isbn:") ? catalogId : "isbn:\(catalogId)"
+    }
+
+    private var highlights: [HighlightRecord] {
+        app.referenceHighlights(tagName: "i", tagValue: highlightTagValue) ?? []
+    }
 
     var body: some View {
         ScrollView {
@@ -28,7 +35,7 @@ struct BookView: View {
         .background(Color.highlighterPaper.ignoresSafeArea())
         .navigationTitle(preview?.title ?? "")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: catalogId) { await load() }
+        .task(id: catalogId) { load() }
     }
 
     // MARK: - Hero
@@ -235,16 +242,9 @@ struct BookView: View {
 
     // MARK: - Data loading
 
-    private func load() async {
+    private func load() {
         app.requestIsbnPreview(isbn: isbn)
-        let tagValue = catalogId.hasPrefix("isbn:") ? catalogId : "isbn:\(catalogId)"
-        if let hs = try? await app.safeCore.getHighlightsForReference(
-            tagName: "i",
-            tagValue: tagValue,
-            limit: 64
-        ) {
-            await MainActor.run { highlights = hs }
-        }
+        app.requestReferenceHighlights(tagName: "i", tagValue: highlightTagValue, limit: 64)
     }
 
     // MARK: - Helpers
@@ -261,12 +261,12 @@ struct BookView: View {
         let delta = Date().timeIntervalSince1970 - TimeInterval(s)
         guard delta >= 0 else { return nil }
         switch delta {
-        case ..<60:         return "just now"
-        case ..<3600:       return "\(Int(delta / 60))m"
-        case ..<86400:      return "\(Int(delta / 3600))h"
-        case ..<604800:     return "\(Int(delta / 86400))d"
-        case ..<2592000:    return "\(Int(delta / 604800))w"
-        default:            return "\(Int(delta / 2592000))mo"
+        case ..<60: return "just now"
+        case ..<3600: return "\(Int(delta / 60))m"
+        case ..<86400: return "\(Int(delta / 3600))h"
+        case ..<604_800: return "\(Int(delta / 86400))d"
+        case ..<2_592_000: return "\(Int(delta / 604_800))w"
+        default: return "\(Int(delta / 2_592_000))mo"
         }
     }
 }

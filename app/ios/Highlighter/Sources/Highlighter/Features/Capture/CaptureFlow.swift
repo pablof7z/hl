@@ -28,7 +28,7 @@ private struct CaptureFlowModifier: ViewModifier {
         content
             .task {
                 if store == nil {
-                    store = CaptureStore(safeCore: appStore.safeCore)
+                    store = CaptureStore(appStore: appStore)
                 }
             }
             .fullScreenCover(isPresented: cameraBinding) {
@@ -61,6 +61,12 @@ private struct CaptureFlowModifier: ViewModifier {
                 if case .done = newValue {
                     store?.reset(keepingPickerSelection: false)
                 }
+            }
+            .onChange(of: appStore.capture) { _, snapshot in
+                store?.applyCaptureSnapshot(snapshot)
+            }
+            .onChange(of: appStore.bookPicker) { _, snapshot in
+                store?.prefillRecentBookFromSnapshot(snapshot)
             }
     }
 

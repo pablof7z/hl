@@ -3,12 +3,16 @@ package com.highlighter.app
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.Uri
 import android.os.Bundle
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -61,6 +65,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.ImeAction
@@ -76,32 +81,56 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import uniffi.highlighter_core.ArticleRecord
+import uniffi.highlighter_core.ArtifactPreview
+import uniffi.highlighter_core.ArtifactRecord
 import uniffi.highlighter_core.BookmarkSetRecord
+import uniffi.highlighter_core.BlossomUpload
+import uniffi.highlighter_core.ChatMessageRecord
+import uniffi.highlighter_core.CommentRecord
 import uniffi.highlighter_core.CommunitySummary
+import uniffi.highlighter_core.DiscussionRecord
+import uniffi.highlighter_core.FeedbackEventRecord
+import uniffi.highlighter_core.FeedbackThreadRecord
 import uniffi.highlighter_core.HighlightRecord
+import uniffi.highlighter_core.HighlightDraft
 import uniffi.highlighter_core.HighlighterAppAction
 import uniffi.highlighter_core.HighlighterAppConfig
 import uniffi.highlighter_core.HighlighterAppReconciler
 import uniffi.highlighter_core.HighlighterAppState
-import uniffi.highlighter_core.HighlighterAppUpdate
 import uniffi.highlighter_core.HighlighterArticleReaderSnapshot
 import uniffi.highlighter_core.HighlighterAuthSnapshot
+import uniffi.highlighter_core.HighlighterBookPickerSnapshot
 import uniffi.highlighter_core.HighlighterBookmarksSnapshot
+import uniffi.highlighter_core.HighlighterCaptureArtifact
+import uniffi.highlighter_core.HighlighterCaptureSnapshot
 import uniffi.highlighter_core.HighlighterChromeSnapshot
+import uniffi.highlighter_core.HighlighterCommentsSnapshot
 import uniffi.highlighter_core.HighlighterConnectionState
 import uniffi.highlighter_core.HighlighterCreateAccountSnapshot
+import uniffi.highlighter_core.HighlighterCreateRoomSnapshot
+import uniffi.highlighter_core.HighlighterFeedbackSnapshot
 import uniffi.highlighter_core.HighlighterHomeFeedItem
+import uniffi.highlighter_core.HighlighterHomeFeedItemKind
 import uniffi.highlighter_core.HighlighterHomeFeedSnapshot
+import uniffi.highlighter_core.HighlighterMediaSettingsSnapshot
 import uniffi.highlighter_core.HighlighterNmpApp
 import uniffi.highlighter_core.HighlighterNetworkSnapshot
 import uniffi.highlighter_core.HighlighterOnboardingInterest
 import uniffi.highlighter_core.HighlighterOnboardingSnapshot
 import uniffi.highlighter_core.HighlighterProfileViewSnapshot
+import uniffi.highlighter_core.HighlighterRoomDetailSnapshot
 import uniffi.highlighter_core.HighlighterRoomExplorerSnapshot
+import uniffi.highlighter_core.HighlighterRoomInviteCandidateSource
+import uniffi.highlighter_core.HighlighterRoomInviteSnapshot
 import uniffi.highlighter_core.HighlighterSearchSnapshot
+import uniffi.highlighter_core.HighlighterSessionCredential
 import uniffi.highlighter_core.HighlighterUsernameStatus
+import uniffi.highlighter_core.HydratedHighlight
 import uniffi.highlighter_core.ProfileMetadata
+import uniffi.highlighter_core.RelayConfig
+import uniffi.highlighter_core.RoomAccess
 import uniffi.highlighter_core.RoomRecommendation
+import uniffi.highlighter_core.RoomVisibility
 import uniffi.highlighter_core.WebBookmarkRecord
 import java.io.File
 
@@ -112,6 +141,8 @@ private val Line = Color(0xFFE2DED2)
 private val Moss = Color(0xFF315C4D)
 private val Gold = Color(0xFFC58B2B)
 private val Clay = Color(0xFF8E5141)
+private const val FEEDBACK_PROJECT_COORDINATE =
+    "31933:09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7:highlighter"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -126,10 +157,17 @@ class MainActivity : ComponentActivity() {
                     viewModel.dispatch(HighlighterAppAction.OpenHomeFeed)
                     viewModel.dispatch(HighlighterAppAction.OpenBookmarks)
                     viewModel.dispatch(HighlighterAppAction.OpenRoomExplorer)
+                    viewModel.dispatch(HighlighterAppAction.OpenMediaSettings)
+                    viewModel.dispatch(HighlighterAppAction.OpenNetworkSettings)
+                    viewModel.dispatch(HighlighterAppAction.OpenFeedback(FEEDBACK_PROJECT_COORDINATE))
+                    viewModel.dispatch(HighlighterAppAction.RequestBookPickerRecents(12u))
                     onDispose {
                         viewModel.dispatch(HighlighterAppAction.CloseArticleReader)
                         viewModel.dispatch(HighlighterAppAction.CloseBookmarks)
                         viewModel.dispatch(HighlighterAppAction.CloseHomeFeed)
+                        viewModel.dispatch(HighlighterAppAction.CloseMediaSettings)
+                        viewModel.dispatch(HighlighterAppAction.CloseNetworkSettings)
+                        viewModel.dispatch(HighlighterAppAction.CloseFeedback)
                         viewModel.dispatch(HighlighterAppAction.SearchClosed)
                     }
                 }
@@ -208,8 +246,165 @@ class MainActivity : ComponentActivity() {
                     onRefreshRoomBrowseAll = {
                         viewModel.dispatch(HighlighterAppAction.RefreshRoomBrowseAll)
                     },
+                    onSubmitCreateRoom = { name, about, visibility, access ->
+                        viewModel.dispatch(
+                            HighlighterAppAction.SubmitCreateRoom(
+                                name,
+                                about,
+                                visibility,
+                                access,
+                            ),
+                        )
+                    },
+                    onClearCreateRoomResult = {
+                        viewModel.dispatch(HighlighterAppAction.ClearCreateRoomResult)
+                    },
+                    onClearCreateRoomError = {
+                        viewModel.dispatch(HighlighterAppAction.ClearCreateRoomError)
+                    },
                     onRequestJoinRoom = { groupId, roomName ->
                         viewModel.dispatch(HighlighterAppAction.RequestJoinRoom(groupId, roomName))
+                    },
+                    onOpenRoomInvite = { groupId ->
+                        viewModel.dispatch(HighlighterAppAction.OpenRoomInvite(groupId))
+                    },
+                    onRefreshRoomInvite = {
+                        viewModel.dispatch(HighlighterAppAction.RefreshRoomInvite)
+                    },
+                    onSetRoomInviteQuery = { query ->
+                        viewModel.dispatch(HighlighterAppAction.SetRoomInviteQuery(query))
+                    },
+                    onToggleRoomInviteCandidate = { pubkey, source ->
+                        viewModel.dispatch(HighlighterAppAction.ToggleRoomInviteCandidate(pubkey, source))
+                    },
+                    onRemoveRoomInviteCandidate = { pubkey ->
+                        viewModel.dispatch(HighlighterAppAction.RemoveRoomInviteCandidate(pubkey))
+                    },
+                    onAcceptRoomInvitePastedCandidate = {
+                        viewModel.dispatch(HighlighterAppAction.AcceptRoomInvitePastedCandidate)
+                    },
+                    onMintRoomInviteLink = {
+                        viewModel.dispatch(HighlighterAppAction.MintRoomInviteLink)
+                    },
+                    onSubmitRoomInviteMembers = {
+                        viewModel.dispatch(HighlighterAppAction.SubmitRoomInviteMembers)
+                    },
+                    onCloseRoomInvite = {
+                        viewModel.dispatch(HighlighterAppAction.CloseRoomInvite)
+                    },
+                    onOpenRoom = { groupId ->
+                        viewModel.dispatch(HighlighterAppAction.OpenRoom(groupId))
+                    },
+                    onRefreshRoom = {
+                        viewModel.dispatch(HighlighterAppAction.RefreshRoom)
+                    },
+                    onPublishRoomDiscussion = { title, body ->
+                        viewModel.dispatch(HighlighterAppAction.PublishRoomDiscussion(title, body, null))
+                    },
+                    onPublishRoomChatMessage = { body ->
+                        viewModel.dispatch(HighlighterAppAction.PublishRoomChatMessage(body, null))
+                    },
+                    onLoadMoreRoomChat = {
+                        viewModel.dispatch(HighlighterAppAction.LoadMoreRoomChat)
+                    },
+                    onCloseRoom = {
+                        viewModel.dispatch(HighlighterAppAction.CloseRoom)
+                    },
+                    onOpenComments = { rootTagName, rootTagValue, rootKind ->
+                        viewModel.dispatch(
+                            HighlighterAppAction.OpenComments(
+                                rootTagName,
+                                rootTagValue,
+                                rootKind,
+                            ),
+                        )
+                    },
+                    onSetCommentDraft = { parentEventId, body ->
+                        viewModel.dispatch(HighlighterAppAction.SetCommentDraft(parentEventId, body))
+                    },
+                    onPublishComment = { parentEventId ->
+                        viewModel.dispatch(HighlighterAppAction.PublishComment(parentEventId))
+                    },
+                    onToggleCommentLike = { eventId ->
+                        viewModel.dispatch(HighlighterAppAction.ToggleCommentLike(eventId))
+                    },
+                    onToggleCommentBookmark = { eventId ->
+                        viewModel.dispatch(HighlighterAppAction.ToggleCommentBookmark(eventId))
+                    },
+                    onRefreshComments = {
+                        viewModel.dispatch(HighlighterAppAction.RefreshComments)
+                    },
+                    onCloseComments = {
+                        viewModel.dispatch(HighlighterAppAction.CloseComments)
+                    },
+                    onRefreshFeedback = {
+                        viewModel.dispatch(HighlighterAppAction.RefreshFeedbackThreads)
+                    },
+                    onSetFeedbackNewThreadDraft = { body ->
+                        viewModel.dispatch(HighlighterAppAction.SetFeedbackNewThreadDraft(body))
+                    },
+                    onPublishFeedbackNewThread = {
+                        viewModel.dispatch(HighlighterAppAction.PublishFeedbackNewThread)
+                    },
+                    onOpenFeedbackThread = { rootId ->
+                        viewModel.dispatch(HighlighterAppAction.OpenFeedbackThread(rootId))
+                    },
+                    onSetFeedbackReplyDraft = { body ->
+                        viewModel.dispatch(HighlighterAppAction.SetFeedbackReplyDraft(body))
+                    },
+                    onPublishFeedbackReply = {
+                        viewModel.dispatch(HighlighterAppAction.PublishFeedbackReply)
+                    },
+                    onRefreshFeedbackThread = {
+                        viewModel.dispatch(HighlighterAppAction.RefreshFeedbackThread)
+                    },
+                    onCloseFeedbackThread = {
+                        viewModel.dispatch(HighlighterAppAction.CloseFeedbackThread)
+                    },
+                    onRefreshMediaSettings = {
+                        viewModel.dispatch(HighlighterAppAction.RefreshMediaSettings)
+                    },
+                    onAddBlossomServer = { url ->
+                        viewModel.dispatch(HighlighterAppAction.AddBlossomServer(url))
+                    },
+                    onRemoveBlossomServer = { url ->
+                        viewModel.dispatch(HighlighterAppAction.RemoveBlossomServer(url))
+                    },
+                    onSearchBookPickerArtifacts = { query ->
+                        viewModel.dispatch(HighlighterAppAction.SearchBookPickerArtifacts(query, 20u))
+                    },
+                    onClearBookPickerSearch = {
+                        viewModel.dispatch(HighlighterAppAction.ClearBookPickerSearch)
+                    },
+                    onUploadCapturePhoto = { bytes, mime, width, height, alt ->
+                        viewModel.dispatch(
+                            HighlighterAppAction.UploadCapturePhoto(bytes, mime, width, height, alt),
+                        )
+                    },
+                    onPublishCaptureHighlight = { selection, targetGroupId, draft ->
+                        viewModel.dispatch(
+                            HighlighterAppAction.PublishCaptureHighlight(
+                                selection,
+                                targetGroupId,
+                                draft,
+                            ),
+                        )
+                    },
+                    onPublishCapturePicture = { selection, targetGroupId, image, note ->
+                        viewModel.dispatch(
+                            HighlighterAppAction.PublishCapturePicture(
+                                selection,
+                                targetGroupId,
+                                image,
+                                note,
+                            ),
+                        )
+                    },
+                    onClearCaptureResult = {
+                        viewModel.dispatch(HighlighterAppAction.ClearCaptureResult)
+                    },
+                    onClearCaptureError = {
+                        viewModel.dispatch(HighlighterAppAction.ClearCaptureError)
                     },
                     onOpenArticle = { article ->
                         viewModel.dispatch(
@@ -217,6 +412,15 @@ class MainActivity : ComponentActivity() {
                                 article.pubkey,
                                 article.identifier,
                                 article,
+                            ),
+                        )
+                    },
+                    onOpenReadArticle = { pubkey, identifier ->
+                        viewModel.dispatch(
+                            HighlighterAppAction.OpenArticleReader(
+                                pubkey,
+                                identifier,
+                                null,
                             ),
                         )
                     },
@@ -274,16 +478,19 @@ class HighlighterViewModel(application: Application) :
         app.dispatch(action)
     }
 
-    override fun onUpdate(update: HighlighterAppUpdate) {
-        when (update) {
-            is HighlighterAppUpdate.FullState -> {
-                _state.value = update.state
-                syncNetworkCallback(update.state.network.wifiOnlyEnabled)
-            }
-            is HighlighterAppUpdate.PersistSessionCredential -> Unit
-            HighlighterAppUpdate.ClearSessionCredentials -> Unit
-            is HighlighterAppUpdate.OpenExternalUrl -> openExternalUrl(update.url)
-        }
+    override fun onState(state: HighlighterAppState) {
+        _state.value = state
+        syncNetworkCallback(state.network.wifiOnlyEnabled)
+    }
+
+    override fun onPersistSessionCredential(credential: HighlighterSessionCredential) {
+    }
+
+    override fun onClearSessionCredentials() {
+    }
+
+    override fun onOpenExternalUrl(url: String) {
+        openExternalUrl(url)
     }
 
     private fun openExternalUrl(url: String) {
@@ -389,8 +596,52 @@ private fun HighlighterAppScreen(
     onRefreshProfile: () -> Unit,
     onToggleProfileFollow: () -> Unit,
     onRefreshRoomBrowseAll: () -> Unit,
+    onSubmitCreateRoom: (String, String, RoomVisibility, RoomAccess) -> Unit,
+    onClearCreateRoomResult: () -> Unit,
+    onClearCreateRoomError: () -> Unit,
     onRequestJoinRoom: (String, String) -> Unit,
+    onOpenRoomInvite: (String) -> Unit,
+    onRefreshRoomInvite: () -> Unit,
+    onSetRoomInviteQuery: (String) -> Unit,
+    onToggleRoomInviteCandidate: (String, HighlighterRoomInviteCandidateSource) -> Unit,
+    onRemoveRoomInviteCandidate: (String) -> Unit,
+    onAcceptRoomInvitePastedCandidate: () -> Unit,
+    onMintRoomInviteLink: () -> Unit,
+    onSubmitRoomInviteMembers: () -> Unit,
+    onCloseRoomInvite: () -> Unit,
+    onOpenRoom: (String) -> Unit,
+    onRefreshRoom: () -> Unit,
+    onPublishRoomDiscussion: (String, String) -> Unit,
+    onPublishRoomChatMessage: (String) -> Unit,
+    onLoadMoreRoomChat: () -> Unit,
+    onCloseRoom: () -> Unit,
+    onOpenComments: (String, String, UShort) -> Unit,
+    onSetCommentDraft: (String?, String) -> Unit,
+    onPublishComment: (String?) -> Unit,
+    onToggleCommentLike: (String) -> Unit,
+    onToggleCommentBookmark: (String) -> Unit,
+    onRefreshComments: () -> Unit,
+    onCloseComments: () -> Unit,
+    onRefreshFeedback: () -> Unit,
+    onSetFeedbackNewThreadDraft: (String) -> Unit,
+    onPublishFeedbackNewThread: () -> Unit,
+    onOpenFeedbackThread: (String) -> Unit,
+    onSetFeedbackReplyDraft: (String) -> Unit,
+    onPublishFeedbackReply: () -> Unit,
+    onRefreshFeedbackThread: () -> Unit,
+    onCloseFeedbackThread: () -> Unit,
+    onRefreshMediaSettings: () -> Unit,
+    onAddBlossomServer: (String) -> Unit,
+    onRemoveBlossomServer: (String) -> Unit,
+    onSearchBookPickerArtifacts: (String) -> Unit,
+    onClearBookPickerSearch: () -> Unit,
+    onUploadCapturePhoto: (ByteArray, String, UInt, UInt, String) -> Unit,
+    onPublishCaptureHighlight: (HighlighterCaptureArtifact, String?, HighlightDraft) -> Unit,
+    onPublishCapturePicture: (HighlighterCaptureArtifact?, String?, BlossomUpload, String) -> Unit,
+    onClearCaptureResult: () -> Unit,
+    onClearCaptureError: () -> Unit,
     onOpenArticle: (ArticleRecord) -> Unit,
+    onOpenReadArticle: (String, String) -> Unit,
     onRefreshArticleReader: () -> Unit,
     onCloseArticleReader: () -> Unit,
     onPublishArticleHighlight: (String, String) -> Unit,
@@ -450,6 +701,66 @@ private fun HighlighterAppScreen(
                         onReconnect = onReconnectNetwork,
                     )
                 }
+                item {
+                    MediaSettingsPanel(
+                        media = state.mediaSettings,
+                        onRefresh = onRefreshMediaSettings,
+                        onAddServer = onAddBlossomServer,
+                        onRemoveServer = onRemoveBlossomServer,
+                    )
+                }
+                item {
+                    CreateRoomPanel(
+                        createRoom = state.createRoom,
+                        onSubmit = onSubmitCreateRoom,
+                        onOpenRoom = onOpenRoom,
+                        onOpenInvite = onOpenRoomInvite,
+                        onClearResult = onClearCreateRoomResult,
+                        onClearError = onClearCreateRoomError,
+                    )
+                }
+                if (state.roomInvite.groupId.isNotBlank()) {
+                    item {
+                        RoomInvitePanel(
+                            invite = state.roomInvite,
+                            onRefresh = onRefreshRoomInvite,
+                            onQueryChange = onSetRoomInviteQuery,
+                            onToggleCandidate = onToggleRoomInviteCandidate,
+                            onRemoveCandidate = onRemoveRoomInviteCandidate,
+                            onAcceptPastedCandidate = onAcceptRoomInvitePastedCandidate,
+                            onMintInviteLink = onMintRoomInviteLink,
+                            onSubmitMembers = onSubmitRoomInviteMembers,
+                            onClose = onCloseRoomInvite,
+                        )
+                    }
+                }
+                item {
+                    CapturePanel(
+                        capture = state.capture,
+                        bookPicker = state.bookPicker,
+                        communities = state.chrome.joinedCommunities,
+                        onSearch = onSearchBookPickerArtifacts,
+                        onClearSearch = onClearBookPickerSearch,
+                        onUploadPhoto = onUploadCapturePhoto,
+                        onPublishHighlight = onPublishCaptureHighlight,
+                        onPublishPicture = onPublishCapturePicture,
+                        onClearResult = onClearCaptureResult,
+                        onClearError = onClearCaptureError,
+                    )
+                }
+                item {
+                    FeedbackPanel(
+                        feedback = state.feedback,
+                        onRefreshThreads = onRefreshFeedback,
+                        onSetNewThreadDraft = onSetFeedbackNewThreadDraft,
+                        onPublishNewThread = onPublishFeedbackNewThread,
+                        onOpenThread = onOpenFeedbackThread,
+                        onSetReplyDraft = onSetFeedbackReplyDraft,
+                        onPublishReply = onPublishFeedbackReply,
+                        onRefreshThread = onRefreshFeedbackThread,
+                        onCloseThread = onCloseFeedbackThread,
+                    )
+                }
                 if (state.profileView.pubkeyHex.isNotBlank()) {
                     item {
                         ProfilePanel(
@@ -484,7 +795,7 @@ private fun HighlighterAppScreen(
                     HomeFeedPanel(
                         feed = state.homeFeed,
                         onRefresh = onRefreshHomeFeed,
-                        onOpenArticle = onOpenArticle,
+                        onOpenReadArticle = onOpenReadArticle,
                     )
                 }
                 item {
@@ -501,7 +812,34 @@ private fun HighlighterAppScreen(
                         onRefresh = onRefreshRoomExplorer,
                         onBrowseAll = onRefreshRoomBrowseAll,
                         onJoin = onRequestJoinRoom,
+                        onOpenRoom = onOpenRoom,
                     )
+                }
+                if (state.roomDetail.groupId.isNotBlank()) {
+                    item {
+                        RoomDetailPanel(
+                            room = state.roomDetail,
+                            onRefresh = onRefreshRoom,
+                            onClose = onCloseRoom,
+                            onPublishDiscussion = onPublishRoomDiscussion,
+                            onPublishChat = onPublishRoomChatMessage,
+                            onLoadMoreChat = onLoadMoreRoomChat,
+                            onOpenComments = onOpenComments,
+                        )
+                    }
+                }
+                if (state.comments.rootTagValue.isNotBlank()) {
+                    item {
+                        CommentsPanel(
+                            comments = state.comments,
+                            onRefresh = onRefreshComments,
+                            onSetDraft = onSetCommentDraft,
+                            onPublish = onPublishComment,
+                            onToggleLike = onToggleCommentLike,
+                            onToggleBookmark = onToggleCommentBookmark,
+                            onClose = onCloseComments,
+                        )
+                    }
                 }
                 item {
                     SectionHeader("Communities", state.chrome.joinedCommunitiesTotal.toString())
@@ -512,7 +850,7 @@ private fun HighlighterAppScreen(
                     }
                 } else {
                     items(state.chrome.joinedCommunities, key = { it.id }) { community ->
-                        CommunityRow(community = community)
+                        CommunityRow(community = community, onOpenRoom = onOpenRoom)
                     }
                 }
             }
@@ -1340,7 +1678,7 @@ private fun ArticleReaderPanel(
 private fun HomeFeedPanel(
     feed: HighlighterHomeFeedSnapshot,
     onRefresh: () -> Unit,
-    onOpenArticle: (ArticleRecord) -> Unit,
+    onOpenReadArticle: (String, String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
@@ -1371,16 +1709,19 @@ private fun HomeFeedPanel(
             feed.isLoading && feed.items.isEmpty() -> EmptyPanel("Loading highlights")
             feed.items.isEmpty() -> EmptyPanel("No highlights yet")
             else -> feed.items.take(8).forEach { item ->
-                HomeFeedRow(item, onOpenArticle)
+                HomeFeedRow(item, onOpenReadArticle)
             }
         }
     }
 }
 
 @Composable
-private fun HomeFeedRow(item: HighlighterHomeFeedItem, onOpenArticle: (ArticleRecord) -> Unit) {
-    when (item) {
-        is HighlighterHomeFeedItem.Highlights -> {
+private fun HomeFeedRow(
+    item: HighlighterHomeFeedItem,
+    onOpenReadArticle: (String, String) -> Unit,
+) {
+    when (item.kind) {
+        HighlighterHomeFeedItemKind.HIGHLIGHTS -> {
             val lead = item.highlights.firstOrNull()?.highlight
             if (lead != null) {
                 Surface(
@@ -1408,28 +1749,29 @@ private fun HomeFeedRow(item: HighlighterHomeFeedItem, onOpenArticle: (ArticleRe
                 }
             }
         }
-        is HighlighterHomeFeedItem.Read -> {
+        HighlighterHomeFeedItemKind.READ -> {
+            val read = item.read ?: return
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onOpenArticle(item.item.article) },
+                    .clickable { onOpenReadArticle(read.pubkey, read.identifier) },
                 color = Color(0xFFFFFCF5),
                 shape = RoundedCornerShape(8.dp),
                 border = BorderStroke(1.dp, Line),
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text(
-                        text = item.item.article.title.ifBlank { item.item.article.identifier },
+                        text = read.title.ifBlank { read.identifier },
                         style = MaterialTheme.typography.bodyLarge,
                         color = Ink,
                         fontWeight = FontWeight.Medium,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (item.item.article.summary.isNotBlank()) {
+                    if (read.summary.isNotBlank()) {
                         Spacer(modifier = Modifier.height(5.dp))
                         Text(
-                            text = item.item.article.summary,
+                            text = read.summary,
                             style = MaterialTheme.typography.bodySmall,
                             color = Muted,
                             maxLines = 2,
@@ -1538,6 +1880,7 @@ private fun RoomExplorerPanel(
     onRefresh: () -> Unit,
     onBrowseAll: () -> Unit,
     onJoin: (String, String) -> Unit,
+    onOpenRoom: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
@@ -1594,6 +1937,7 @@ private fun RoomExplorerPanel(
             rooms = explorer.featured,
             joinedRoomIds = joinedRoomIds,
             onJoin = onJoin,
+            onOpenRoom = onOpenRoom,
         )
         RecommendationShelf(
             title = "Friends are here",
@@ -1601,6 +1945,7 @@ private fun RoomExplorerPanel(
             recommendations = explorer.friendsShelf,
             joinedRoomIds = joinedRoomIds,
             onJoin = onJoin,
+            onOpenRoom = onOpenRoom,
         )
         RecommendationShelf(
             title = "Writers you read",
@@ -1608,6 +1953,7 @@ private fun RoomExplorerPanel(
             recommendations = explorer.authorsShelf,
             joinedRoomIds = joinedRoomIds,
             onJoin = onJoin,
+            onOpenRoom = onOpenRoom,
         )
         RoomShelf(
             title = "New & noteworthy",
@@ -1615,6 +1961,7 @@ private fun RoomExplorerPanel(
             rooms = explorer.newNoteworthy,
             joinedRoomIds = joinedRoomIds,
             onJoin = onJoin,
+            onOpenRoom = onOpenRoom,
         )
         if (explorer.allRooms.isNotEmpty()) {
             RoomShelf(
@@ -1623,6 +1970,7 @@ private fun RoomExplorerPanel(
                 rooms = explorer.allRooms.take(12),
                 joinedRoomIds = joinedRoomIds,
                 onJoin = onJoin,
+                onOpenRoom = onOpenRoom,
             )
         }
     }
@@ -1635,6 +1983,7 @@ private fun RoomShelf(
     rooms: List<CommunitySummary>,
     joinedRoomIds: Set<String>,
     onJoin: (String, String) -> Unit,
+    onOpenRoom: (String) -> Unit,
 ) {
     if (rooms.isEmpty()) {
         return
@@ -1648,6 +1997,7 @@ private fun RoomShelf(
                     subtitle = room.about,
                     isJoined = joinedRoomIds.contains(room.id),
                     onJoin = onJoin,
+                    onOpenRoom = onOpenRoom,
                 )
             }
         }
@@ -1661,6 +2011,7 @@ private fun RecommendationShelf(
     recommendations: List<RoomRecommendation>,
     joinedRoomIds: Set<String>,
     onJoin: (String, String) -> Unit,
+    onOpenRoom: (String) -> Unit,
 ) {
     if (recommendations.isEmpty()) {
         return
@@ -1674,6 +2025,7 @@ private fun RecommendationShelf(
                     subtitle = recommendation.signalLabel(),
                     isJoined = joinedRoomIds.contains(recommendation.summary.id),
                     onJoin = onJoin,
+                    onOpenRoom = onOpenRoom,
                 )
             }
         }
@@ -1686,9 +2038,12 @@ private fun RoomTile(
     subtitle: String,
     isJoined: Boolean,
     onJoin: (String, String) -> Unit,
+    onOpenRoom: (String) -> Unit,
 ) {
     Surface(
-        modifier = Modifier.width(220.dp),
+        modifier = Modifier
+            .width(220.dp)
+            .clickable { onOpenRoom(room.id) },
         color = Color(0xFFFFFCF5),
         shape = RoundedCornerShape(8.dp),
         border = BorderStroke(1.dp, Line),
@@ -1723,6 +2078,835 @@ private fun RoomTile(
                     enabled = !isJoined,
                 ) {
                     Text(if (isJoined) "Joined" else "Join")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CreateRoomPanel(
+    createRoom: HighlighterCreateRoomSnapshot,
+    onSubmit: (String, String, RoomVisibility, RoomAccess) -> Unit,
+    onOpenRoom: (String) -> Unit,
+    onOpenInvite: (String) -> Unit,
+    onClearResult: () -> Unit,
+    onClearError: () -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var about by remember { mutableStateOf("") }
+    var visibility by remember { mutableStateOf(RoomVisibility.PUBLIC) }
+    var access by remember { mutableStateOf(RoomAccess.OPEN) }
+    Panel {
+        SectionHeader("Create room", if (createRoom.isCreating) "Saving" else "NIP-29")
+        Spacer(modifier = Modifier.height(10.dp))
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Name") },
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = about,
+            onValueChange = { about = it },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2,
+            maxLines = 4,
+            label = { Text("About") },
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ToggleButton("Public", visibility == RoomVisibility.PUBLIC) {
+                visibility = RoomVisibility.PUBLIC
+            }
+            ToggleButton("Private", visibility == RoomVisibility.PRIVATE) {
+                visibility = RoomVisibility.PRIVATE
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ToggleButton("Open", access == RoomAccess.OPEN) {
+                access = RoomAccess.OPEN
+            }
+            ToggleButton("Closed", access == RoomAccess.CLOSED) {
+                access = RoomAccess.CLOSED
+            }
+        }
+        createRoom.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(text = message, style = MaterialTheme.typography.bodySmall, color = Clay)
+            TextButton(onClick = onClearError) {
+                Text("Dismiss")
+            }
+        }
+        createRoom.createdGroupId?.takeIf { it.isNotBlank() }?.let { groupId ->
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Created ${groupId.take(12)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = Muted,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { onOpenRoom(groupId) }) {
+                    Text("Open")
+                }
+                TextButton(onClick = { onOpenInvite(groupId) }) {
+                    Text("Invite")
+                }
+                TextButton(onClick = onClearResult) {
+                    Text("Clear")
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Button(
+            onClick = {
+                val cleanName = name.trim()
+                if (cleanName.isNotEmpty()) {
+                    onSubmit(cleanName, about.trim(), visibility, access)
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            enabled = name.isNotBlank() && !createRoom.isCreating,
+        ) {
+            Text(if (createRoom.isCreating) "Creating" else "Create")
+        }
+    }
+}
+
+@Composable
+private fun RoomInvitePanel(
+    invite: HighlighterRoomInviteSnapshot,
+    onRefresh: () -> Unit,
+    onQueryChange: (String) -> Unit,
+    onToggleCandidate: (String, HighlighterRoomInviteCandidateSource) -> Unit,
+    onRemoveCandidate: (String) -> Unit,
+    onAcceptPastedCandidate: () -> Unit,
+    onMintInviteLink: () -> Unit,
+    onSubmitMembers: () -> Unit,
+    onClose: () -> Unit,
+) {
+    Panel {
+        SectionHeader("Invites", invite.selected.size.toString())
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = invite.query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Search follows or paste npub") },
+        )
+        invite.pastedCandidate?.let { candidate ->
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = candidate.pubkeyHex.take(16),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+                TextButton(onClick = onAcceptPastedCandidate) {
+                    Text("Add")
+                }
+            }
+        }
+        if (invite.visibleFollows.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            invite.visibleFollows.take(8).forEach { pubkey ->
+                val selected = invite.selected.any { it.pubkeyHex == pubkey }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = pubkey.take(18),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    TextButton(
+                        onClick = {
+                            onToggleCandidate(pubkey, HighlighterRoomInviteCandidateSource.FOLLOW)
+                        },
+                    ) {
+                        Text(if (selected) "Remove" else "Select")
+                    }
+                }
+            }
+        }
+        if (invite.selected.isNotEmpty()) {
+            SearchGroupHeader("Selected", invite.selected.size.toString())
+            invite.selected.forEach { candidate ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = candidate.pubkeyHex.take(18),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Muted,
+                    )
+                    TextButton(onClick = { onRemoveCandidate(candidate.pubkeyHex) }) {
+                        Text("Remove")
+                    }
+                }
+            }
+        }
+        invite.inviteUrl?.takeIf { it.isNotBlank() }?.let { url ->
+            Spacer(modifier = Modifier.height(8.dp))
+            SelectionContainer {
+                Text(text = url, style = MaterialTheme.typography.bodySmall, color = Muted)
+            }
+        }
+        listOfNotNull(invite.addErrorMessage, invite.inviteLinkErrorMessage, invite.toastMessage)
+            .filter { it.isNotBlank() }
+            .forEach { message ->
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(text = message, style = MaterialTheme.typography.bodySmall, color = Clay)
+            }
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onRefresh, shape = RoundedCornerShape(8.dp)) {
+                Text(if (invite.isLoadingFollows) "Loading" else "Refresh")
+            }
+            OutlinedButton(
+                onClick = onMintInviteLink,
+                shape = RoundedCornerShape(8.dp),
+                enabled = !invite.isMintingInviteLink,
+            ) {
+                Text(if (invite.isMintingInviteLink) "Minting" else "Link")
+            }
+            Button(
+                onClick = onSubmitMembers,
+                shape = RoundedCornerShape(8.dp),
+                enabled = invite.selected.isNotEmpty() && !invite.isAddingMembers,
+            ) {
+                Text(if (invite.isAddingMembers) "Adding" else "Add")
+            }
+            TextButton(onClick = onClose) {
+                Text("Close")
+            }
+        }
+    }
+}
+
+@Composable
+private fun CapturePanel(
+    capture: HighlighterCaptureSnapshot,
+    bookPicker: HighlighterBookPickerSnapshot,
+    communities: List<CommunitySummary>,
+    onSearch: (String) -> Unit,
+    onClearSearch: () -> Unit,
+    onUploadPhoto: (ByteArray, String, UInt, UInt, String) -> Unit,
+    onPublishHighlight: (HighlighterCaptureArtifact, String?, HighlightDraft) -> Unit,
+    onPublishPicture: (HighlighterCaptureArtifact?, String?, BlossomUpload, String) -> Unit,
+    onClearResult: () -> Unit,
+    onClearError: () -> Unit,
+) {
+    val context = LocalContext.current
+    var query by remember { mutableStateOf("") }
+    var quote by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    var selectedArtifact by remember { mutableStateOf<ArtifactRecord?>(null) }
+    var selectedGroupId by remember { mutableStateOf<String?>(null) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            readPickedImage(context, uri)?.let { image ->
+                onUploadPhoto(image.bytes, image.mime, image.width, image.height, note.trim())
+            }
+        }
+    }
+    Panel {
+        SectionHeader("Capture", if (capture.isPublishing) "Publishing" else "Highlight")
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = {
+                    picker.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                    )
+                },
+                shape = RoundedCornerShape(8.dp),
+                enabled = !capture.isUploading,
+            ) {
+                Text(if (capture.isUploading) "Uploading" else "Photo")
+            }
+            capture.upload?.let { upload ->
+                Chip("${upload.width}x${upload.height}")
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = query,
+            onValueChange = {
+                query = it
+                if (it.trim().length >= 2) {
+                    onSearch(it.trim())
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Find artifact") },
+        )
+        if (query.isNotBlank()) {
+            TextButton(onClick = {
+                query = ""
+                onClearSearch()
+            }) {
+                Text("Clear search")
+            }
+        }
+        val artifactRows = if (bookPicker.searchQuery.isNotBlank()) {
+            bookPicker.searchResults
+        } else {
+            bookPicker.recentBooks
+        }
+        artifactRows.take(5).forEach { record ->
+            ArtifactPickerRow(
+                record = record,
+                selected = selectedArtifact?.shareEventId == record.shareEventId,
+                onSelect = { selectedArtifact = record },
+            )
+        }
+        if (communities.isNotEmpty()) {
+            SearchGroupHeader("Community", communities.size.toString())
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(communities, key = { it.id }) { community ->
+                    ToggleButton(
+                        label = community.name.ifBlank { community.id }.take(18),
+                        selected = selectedGroupId == community.id,
+                    ) {
+                        selectedGroupId = if (selectedGroupId == community.id) null else community.id
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = quote,
+            onValueChange = { quote = it },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2,
+            maxLines = 5,
+            label = { Text("Quote") },
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = note,
+            onValueChange = { note = it },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 1,
+            maxLines = 4,
+            label = { Text("Note / alt text") },
+        )
+        capture.uploadErrorMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(text = message, style = MaterialTheme.typography.bodySmall, color = Clay)
+        }
+        capture.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(text = message, style = MaterialTheme.typography.bodySmall, color = Clay)
+            TextButton(onClick = onClearError) {
+                Text("Dismiss")
+            }
+        }
+        capture.publishedEventId?.takeIf { it.isNotBlank() }?.let { id ->
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(text = "Published ${id.take(12)}", style = MaterialTheme.typography.bodySmall, color = Muted)
+            TextButton(onClick = onClearResult) {
+                Text("Clear")
+            }
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = {
+                    val artifact = selectedArtifact ?: return@Button
+                    onPublishHighlight(
+                        HighlighterCaptureArtifact.Existing(artifact),
+                        selectedGroupId,
+                        HighlightDraft(
+                            quote.trim(),
+                            "",
+                            note.trim(),
+                            null,
+                            null,
+                            "",
+                            emptyList(),
+                            capture.upload,
+                        ),
+                    )
+                },
+                shape = RoundedCornerShape(8.dp),
+                enabled = selectedArtifact != null && quote.isNotBlank() && !capture.isPublishing,
+            ) {
+                Text(if (capture.isPublishing) "Saving" else "Highlight")
+            }
+            OutlinedButton(
+                onClick = {
+                    val upload = capture.upload ?: return@OutlinedButton
+                    onPublishPicture(
+                        selectedArtifact?.let { HighlighterCaptureArtifact.Existing(it) },
+                        selectedGroupId,
+                        upload,
+                        note.trim(),
+                    )
+                },
+                shape = RoundedCornerShape(8.dp),
+                enabled = capture.upload != null && !capture.isPublishing,
+            ) {
+                Text("Picture")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArtifactPickerRow(
+    record: ArtifactRecord,
+    selected: Boolean,
+    onSelect: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onSelect)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = record.preview.title.ifBlank { record.preview.url.ifBlank { "Untitled" } },
+                style = MaterialTheme.typography.bodyMedium,
+                color = Ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = record.preview.author.ifBlank { record.preview.domain },
+                style = MaterialTheme.typography.bodySmall,
+                color = Muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        TextButton(onClick = onSelect) {
+            Text(if (selected) "Selected" else "Use")
+        }
+    }
+}
+
+@Composable
+private fun FeedbackPanel(
+    feedback: HighlighterFeedbackSnapshot,
+    onRefreshThreads: () -> Unit,
+    onSetNewThreadDraft: (String) -> Unit,
+    onPublishNewThread: () -> Unit,
+    onOpenThread: (String) -> Unit,
+    onSetReplyDraft: (String) -> Unit,
+    onPublishReply: () -> Unit,
+    onRefreshThread: () -> Unit,
+    onCloseThread: () -> Unit,
+) {
+    Panel {
+        SectionHeader("Feedback", feedback.threadCount.toString())
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = feedback.newThreadDraft,
+            onValueChange = onSetNewThreadDraft,
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2,
+            maxLines = 5,
+            label = { Text("New feedback") },
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = onPublishNewThread,
+                shape = RoundedCornerShape(8.dp),
+                enabled = feedback.newThreadDraft.isNotBlank() && !feedback.isPublishingNewThread,
+            ) {
+                Text(if (feedback.isPublishingNewThread) "Sending" else "Send")
+            }
+            OutlinedButton(onClick = onRefreshThreads, shape = RoundedCornerShape(8.dp)) {
+                Text(if (feedback.isLoadingThreads) "Loading" else "Refresh")
+            }
+        }
+        feedback.publishErrorMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(text = message, style = MaterialTheme.typography.bodySmall, color = Clay)
+        }
+        if (feedback.threads.isNotEmpty()) {
+            SearchGroupHeader("Threads", feedback.threadCount.toString())
+            feedback.threads.take(5).forEach { thread ->
+                FeedbackThreadRow(thread, onOpenThread)
+            }
+        } else if (feedback.isLoadingThreads) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(text = "Loading feedback", style = MaterialTheme.typography.bodyMedium, color = Muted)
+        }
+        if (feedback.selectedRootEventId != null) {
+            SearchGroupHeader("Conversation", feedback.selectedEventCount.toString())
+            feedback.selectedEvents.takeLast(8).forEach { event ->
+                FeedbackEventRow(event)
+            }
+            OutlinedTextField(
+                value = feedback.replyDraft,
+                onValueChange = onSetReplyDraft,
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 1,
+                maxLines = 4,
+                label = { Text("Reply") },
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onPublishReply,
+                    shape = RoundedCornerShape(8.dp),
+                    enabled = feedback.replyDraft.isNotBlank() && !feedback.isPublishingReply,
+                ) {
+                    Text(if (feedback.isPublishingReply) "Sending" else "Reply")
+                }
+                OutlinedButton(onClick = onRefreshThread, shape = RoundedCornerShape(8.dp)) {
+                    Text(if (feedback.isLoadingThread) "Loading" else "Refresh")
+                }
+                TextButton(onClick = onCloseThread) {
+                    Text("Close")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FeedbackThreadRow(thread: FeedbackThreadRecord, onOpen: (String) -> Unit) {
+    SearchResultRow(
+        title = thread.title ?: thread.preview.ifBlank { thread.rootEventId.take(12) },
+        subtitle = thread.summary ?: thread.statusLabel ?: thread.authorPubkey.take(12),
+        onClick = { onOpen(thread.rootEventId) },
+    )
+}
+
+@Composable
+private fun FeedbackEventRow(event: FeedbackEventRecord) {
+    SearchResultRow(
+        title = event.content,
+        subtitle = event.authorPubkey.take(12),
+    )
+}
+
+@Composable
+private fun RoomDetailPanel(
+    room: HighlighterRoomDetailSnapshot,
+    onRefresh: () -> Unit,
+    onClose: () -> Unit,
+    onPublishDiscussion: (String, String) -> Unit,
+    onPublishChat: (String) -> Unit,
+    onLoadMoreChat: () -> Unit,
+    onOpenComments: (String, String, UShort) -> Unit,
+) {
+    var discussionTitle by remember(room.groupId) { mutableStateOf("") }
+    var discussionBody by remember(room.groupId) { mutableStateOf("") }
+    var chatBody by remember(room.groupId) { mutableStateOf("") }
+    Panel {
+        SectionHeader("Room", room.groupId.take(12))
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onRefresh, shape = RoundedCornerShape(8.dp)) {
+                Text(if (room.isLoading) "Loading" else "Refresh")
+            }
+            TextButton(onClick = onClose) {
+                Text("Close")
+            }
+        }
+        room.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(text = message, style = MaterialTheme.typography.bodySmall, color = Clay)
+        }
+        if (room.artifacts.isNotEmpty()) {
+            SearchGroupHeader("Artifacts", room.artifactCount.toString())
+            room.artifacts.take(4).forEach { ArtifactSummaryRow(it) }
+        }
+        if (room.highlights.isNotEmpty()) {
+            SearchGroupHeader("Highlights", room.highlightCount.toString())
+            room.highlights.take(4).forEach { hydrated ->
+                HydratedHighlightRow(hydrated) {
+                    onOpenComments("e", hydrated.highlight.eventId, 9802u)
+                }
+            }
+        }
+        SearchGroupHeader("Discuss", room.discussionCount.toString())
+        OutlinedTextField(
+            value = discussionTitle,
+            onValueChange = { discussionTitle = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Title") },
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = discussionBody,
+            onValueChange = { discussionBody = it },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2,
+            maxLines = 5,
+            label = { Text("Body") },
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(
+            onClick = {
+                onPublishDiscussion(discussionTitle.trim(), discussionBody.trim())
+                discussionTitle = ""
+                discussionBody = ""
+            },
+            shape = RoundedCornerShape(8.dp),
+            enabled = discussionTitle.isNotBlank() && !room.isPublishingDiscussion,
+        ) {
+            Text(if (room.isPublishingDiscussion) "Posting" else "Post discussion")
+        }
+        room.discussionErrorMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(text = message, style = MaterialTheme.typography.bodySmall, color = Clay)
+        }
+        room.discussions.take(5).forEach { discussion ->
+            DiscussionRow(discussion) {
+                onOpenComments("e", discussion.eventId, 11u)
+            }
+        }
+        SearchGroupHeader("Chat", room.chatMessageCount.toString())
+        room.chatMessages.takeLast(6).forEach { ChatRow(it) }
+        if (room.chatHasMore) {
+            TextButton(onClick = onLoadMoreChat) {
+                Text(if (room.isChatLoadingMore) "Loading" else "Load more")
+            }
+        }
+        OutlinedTextField(
+            value = chatBody,
+            onValueChange = { chatBody = it },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 1,
+            maxLines = 3,
+            label = { Text("Message") },
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(
+            onClick = {
+                onPublishChat(chatBody.trim())
+                chatBody = ""
+            },
+            shape = RoundedCornerShape(8.dp),
+            enabled = chatBody.isNotBlank() && !room.isSendingChatMessage,
+        ) {
+            Text(if (room.isSendingChatMessage) "Sending" else "Send")
+        }
+        room.chatErrorMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(text = message, style = MaterialTheme.typography.bodySmall, color = Clay)
+        }
+    }
+}
+
+@Composable
+private fun ArtifactSummaryRow(record: ArtifactRecord) {
+    SearchResultRow(
+        title = record.preview.title.ifBlank { record.preview.url.ifBlank { "Untitled" } },
+        subtitle = record.note.ifBlank { record.preview.author.ifBlank { record.preview.domain } },
+    )
+}
+
+@Composable
+private fun HydratedHighlightRow(item: HydratedHighlight, onComments: () -> Unit) {
+    Column(modifier = Modifier.padding(vertical = 7.dp)) {
+        Text(
+            text = item.highlight.quote.ifBlank { "Untitled highlight" },
+            style = MaterialTheme.typography.bodyMedium,
+            color = Ink,
+            fontWeight = FontWeight.Medium,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+        )
+        TextButton(onClick = onComments) {
+            Text("Comments")
+        }
+    }
+}
+
+@Composable
+private fun DiscussionRow(discussion: DiscussionRecord, onComments: () -> Unit) {
+    Column(modifier = Modifier.padding(vertical = 7.dp)) {
+        Text(
+            text = discussion.title.ifBlank { discussion.summary.ifBlank { discussion.eventId.take(12) } },
+            style = MaterialTheme.typography.bodyMedium,
+            color = Ink,
+            fontWeight = FontWeight.Medium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (discussion.body.isNotBlank()) {
+            Text(
+                text = discussion.body,
+                style = MaterialTheme.typography.bodySmall,
+                color = Muted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        TextButton(onClick = onComments) {
+            Text("Comments")
+        }
+    }
+}
+
+@Composable
+private fun ChatRow(message: ChatMessageRecord) {
+    SearchResultRow(
+        title = message.content,
+        subtitle = message.authorPubkey.take(12),
+    )
+}
+
+@Composable
+private fun CommentsPanel(
+    comments: HighlighterCommentsSnapshot,
+    onRefresh: () -> Unit,
+    onSetDraft: (String?, String) -> Unit,
+    onPublish: (String?) -> Unit,
+    onToggleLike: (String) -> Unit,
+    onToggleBookmark: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    val topDraft = comments.drafts.firstOrNull { it.parentEventId == null }?.body ?: ""
+    Panel {
+        SectionHeader("Comments", comments.recordCount.toString())
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onRefresh, shape = RoundedCornerShape(8.dp)) {
+                Text(if (comments.isLoading) "Loading" else "Refresh")
+            }
+            TextButton(onClick = onClose) {
+                Text("Close")
+            }
+        }
+        comments.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(text = message, style = MaterialTheme.typography.bodySmall, color = Clay)
+        }
+        OutlinedTextField(
+            value = topDraft,
+            onValueChange = { onSetDraft(null, it) },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2,
+            maxLines = 5,
+            label = { Text("Add comment") },
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(
+            onClick = { onPublish(null) },
+            shape = RoundedCornerShape(8.dp),
+            enabled = topDraft.isNotBlank() && !comments.isPublishing,
+        ) {
+            Text(if (comments.isPublishing) "Posting" else "Post")
+        }
+        comments.publishErrorMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(text = message, style = MaterialTheme.typography.bodySmall, color = Clay)
+        }
+        comments.records.take(12).forEach { comment ->
+            CommentRow(
+                comment = comment,
+                likeCount = comments.interactions
+                    .firstOrNull { it.eventId == comment.eventId }
+                    ?.likeCount ?: 0uL,
+                bookmarked = comments.interactions
+                    .firstOrNull { it.eventId == comment.eventId }
+                    ?.isBookmarked == true,
+                onLike = { onToggleLike(comment.eventId) },
+                onBookmark = { onToggleBookmark(comment.eventId) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun CommentRow(
+    comment: CommentRecord,
+    likeCount: ULong,
+    bookmarked: Boolean,
+    onLike: () -> Unit,
+    onBookmark: () -> Unit,
+) {
+    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        Text(text = comment.body, style = MaterialTheme.typography.bodyMedium, color = Ink)
+        Text(
+            text = comment.pubkey.take(12),
+            style = MaterialTheme.typography.bodySmall,
+            color = Muted,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = onLike) {
+                Text("Like $likeCount")
+            }
+            TextButton(onClick = onBookmark) {
+                Text(if (bookmarked) "Saved" else "Save")
+            }
+        }
+    }
+}
+
+@Composable
+private fun MediaSettingsPanel(
+    media: HighlighterMediaSettingsSnapshot,
+    onRefresh: () -> Unit,
+    onAddServer: (String) -> Unit,
+    onRemoveServer: (String) -> Unit,
+) {
+    var serverUrl by remember { mutableStateOf("") }
+    Panel {
+        SectionHeader("Media", media.blossomServerCount.toString())
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = serverUrl,
+            onValueChange = { serverUrl = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Blossom server") },
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = {
+                    val url = serverUrl.trim()
+                    if (url.isNotEmpty()) {
+                        onAddServer(url)
+                        serverUrl = ""
+                    }
+                },
+                shape = RoundedCornerShape(8.dp),
+                enabled = serverUrl.isNotBlank() && !media.isSaving,
+            ) {
+                Text(if (media.isSaving) "Saving" else "Add")
+            }
+            OutlinedButton(onClick = onRefresh, shape = RoundedCornerShape(8.dp)) {
+                Text(if (media.isLoading) "Loading" else "Refresh")
+            }
+        }
+        media.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(text = message, style = MaterialTheme.typography.bodySmall, color = Clay)
+        }
+        media.blossomServers.take(6).forEach { url ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = url,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                TextButton(onClick = { onRemoveServer(url) }) {
+                    Text("Remove")
                 }
             }
         }
@@ -1801,9 +2985,14 @@ private fun SectionHeader(title: String, count: String) {
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun CommunityRow(community: CommunitySummary) {
+private fun CommunityRow(community: CommunitySummary, onOpenRoom: (String) -> Unit) {
     Panel {
-        Row(verticalAlignment = Alignment.Top) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onOpenRoom(community.id) },
+            verticalAlignment = Alignment.Top,
+        ) {
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -1971,6 +3160,46 @@ private fun Panel(content: @Composable ColumnScope.() -> Unit) {
         )
     }
 }
+
+@Composable
+private fun ToggleButton(label: String, selected: Boolean, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, if (selected) Moss else Line),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = if (selected) Moss else Color.Transparent,
+            contentColor = if (selected) Color.White else Ink,
+        ),
+    ) {
+        Text(
+            text = label,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+private data class PickedImage(
+    val bytes: ByteArray,
+    val mime: String,
+    val width: UInt,
+    val height: UInt,
+)
+
+private fun readPickedImage(context: Context, uri: Uri): PickedImage? =
+    runCatching {
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: return null
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+        PickedImage(
+            bytes = bytes,
+            mime = context.contentResolver.getType(uri) ?: "image/jpeg",
+            width = options.outWidth.coerceAtLeast(0).toUInt(),
+            height = options.outHeight.coerceAtLeast(0).toUInt(),
+        )
+    }.getOrNull()
 
 private fun HighlighterConnectionState.statusLabel(isBootstrapping: Boolean): String =
     when {

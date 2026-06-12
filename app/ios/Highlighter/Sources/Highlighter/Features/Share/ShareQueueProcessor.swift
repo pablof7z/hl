@@ -22,20 +22,19 @@ enum ShareQueueProcessor {
         var lastSuccessCommunity: String?
 
         for share in pending {
-            do {
-                let preview = try await app.safeCore.buildPreviewFromUrl(share.url)
-                _ = try await app.safeCore.publishArtifact(
-                    preview: preview,
-                    groupId: share.groupId,
-                    note: share.note.isEmpty ? nil : share.note
-                )
+            let published = await app.publishQueuedUrlShare(
+                url: share.url,
+                groupId: share.groupId,
+                note: share.note.isEmpty ? nil : share.note
+            )
+            if published {
                 successCount += 1
                 if let community = app.joinedCommunities.first(where: { $0.id == share.groupId }) {
                     lastSuccessCommunity = community.name
                 } else {
                     lastSuccessCommunity = share.groupId
                 }
-            } catch {
+            } else {
                 requeue.append(share)
             }
         }

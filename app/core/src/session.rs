@@ -1,5 +1,6 @@
-//! NIP-46 bunker + nsec session management. UX patterns follow Olas iOS
-//! (`Olas-iOS-60m1gj/OlasApp/Views/Auth/LoginView.swift`):
+//! App session projection. NMP owns keys, NIP-46 transport, and active signer
+//! lifecycle; this module caches the active user and subscription handles for
+//! the UniFFI-facing Highlighter API.
 //!
 //! - Swift does signer *detection* (`canOpenURL`) and UI for the Primal hero
 //!   button. Rust is never responsible for probing installed apps — that's an
@@ -10,16 +11,12 @@
 //! - Swift calls `pair_bunker()` when the user pastes/scans a `bunker://` or
 //!   `nostrconnect://` URI produced by a remote signer.
 //! - Nsec persistence is Swift-side (iOS Keychain via `AppSessionStore`).
-//!   The Rust core only holds the active `Keys` in memory for the life of
-//!   the session.
-
-use std::sync::Arc;
+//!   Rust passes the nsec into NMP and does not retain the key material here.
 
 use nostr_sdk::prelude::*;
 
 use crate::errors::CoreError;
 use crate::models::CurrentUser;
-use crate::nip46::BunkerSigner;
 
 #[derive(Default)]
 pub struct Session {
@@ -61,19 +58,8 @@ pub struct Session {
 }
 
 enum ActiveSigner {
-    Nsec(Keys),
-    /// NIP-46 remote signer. The `user` pubkey is cached because
-    /// `BunkerSigner::get_public_key` is async and `current_user()` must not
-    /// block. The `signer` handle is retained for its lifecycle: keeping the
-    /// Arc alive in Session prevents the relay subscription task from being
-    /// dropped out from under the `nostr_sdk::Client` while the app still
-    /// uses it (set_signer takes its own reference too, but Session owns the
-    /// canonical handle for logout).
-    Bunker {
-        #[allow(dead_code)]
-        signer: Arc<BunkerSigner>,
-        user: CurrentUser,
-    },
+    Nsec { user: CurrentUser },
+    Bunker { user: CurrentUser },
 }
 
 impl Session {
@@ -86,13 +72,18 @@ impl Session {
         let keys = Keys::parse(trimmed)
             .map_err(|e| CoreError::InvalidInput(format!("invalid nsec: {e}")))?;
         let user = current_user_from_pubkey(&keys.public_key())?;
-        self.signer = Some(ActiveSigner::Nsec(keys));
+        self.signer = Some(ActiveSigner::Nsec { user: user.clone() });
         Ok(user)
     }
 
-    /// Install a NIP-46 signer that's already completed its handshake.
-    pub fn set_bunker(&mut self, signer: Arc<BunkerSigner>, user: CurrentUser) {
-        self.signer = Some(ActiveSigner::Bunker { signer, user });
+    /// Record an nsec signer that NMP has already activated.
+    pub fn set_nsec(&mut self, user: CurrentUser) {
+        self.signer = Some(ActiveSigner::Nsec { user });
+    }
+
+    /// Record a NIP-46 signer that NMP has already activated.
+    pub fn set_bunker(&mut self, user: CurrentUser) {
+        self.signer = Some(ActiveSigner::Bunker { user });
     }
 
     pub fn logout(&mut self) {
@@ -193,18 +184,9 @@ impl Session {
 
     pub fn current_user(&self) -> Option<CurrentUser> {
         match &self.signer {
-            Some(ActiveSigner::Nsec(keys)) => current_user_from_pubkey(&keys.public_key()).ok(),
+            Some(ActiveSigner::Nsec { user }) => Some(user.clone()),
             Some(ActiveSigner::Bunker { user, .. }) => Some(user.clone()),
             None => None,
-        }
-    }
-
-    /// Exposed so feature modules (publishing, subscriptions) can obtain an
-    /// NDK-ready signing interface without this module knowing about them.
-    pub fn keys(&self) -> Option<&Keys> {
-        match &self.signer {
-            Some(ActiveSigner::Nsec(keys)) => Some(keys),
-            _ => None,
         }
     }
 
@@ -212,7 +194,7 @@ impl Session {
     /// relay roundtrip for NIP-46.
     pub fn pubkey(&self) -> Option<PublicKey> {
         match &self.signer {
-            Some(ActiveSigner::Nsec(keys)) => Some(keys.public_key()),
+            Some(ActiveSigner::Nsec { user }) => PublicKey::from_hex(&user.pubkey).ok(),
             Some(ActiveSigner::Bunker { user, .. }) => PublicKey::from_hex(&user.pubkey).ok(),
             None => None,
         }

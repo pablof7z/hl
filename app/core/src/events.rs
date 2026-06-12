@@ -4,37 +4,30 @@
 //! `subscription_id`, so Swift can route the change to the view-scoped store
 //! that installed the subscription.
 
+use crate::models::CurrentUser;
 use crate::models::RelayStatus;
-use crate::models::{
-    ArtifactRecord, ChatMessageRecord, CommunitySummary, CurrentUser, DiscussionRecord,
-    FeedbackEventRecord, HighlightRecord, HydratedHighlight,
-};
 
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum DataChangeType {
     CommunityUpserted {
-        community: CommunitySummary,
+        group_id: String,
     },
     MembershipChanged {
         group_id: String,
     },
     ArtifactUpserted {
         group_id: String,
-        artifact: ArtifactRecord,
     },
     DiscussionUpserted {
         group_id: String,
-        discussion: DiscussionRecord,
     },
     /// A NIP-29 kind:9 chat message arrived for `group_id`. The Swift
     /// chat store appends it to its message list (ordered by `created_at`).
     ChatMessageUpserted {
         group_id: String,
-        message: ChatMessageRecord,
     },
     HighlightUpserted {
         group_id: String,
-        highlight: HydratedHighlight,
     },
     /// A kind:16 cross-community share of a highlight was received.
     HighlightShared {
@@ -43,7 +36,7 @@ pub enum DataChangeType {
         shared_by_pubkey: String,
     },
     MyHighlightUpserted {
-        highlight: HighlightRecord,
+        event_id: String,
     },
     /// Something that affects the profile view for `pubkey` arrived. `kind`
     /// is the event kind (0 metadata, 3 contacts, 30023 article, 9802
@@ -78,7 +71,7 @@ pub enum DataChangeType {
     /// A kind:1 message inside an open feedback thread arrived. The Swift
     /// store inserts/upserts it into the chat view ordered by `created_at`.
     FeedbackThreadEventUpserted {
-        event: FeedbackEventRecord,
+        event_id: String,
     },
     /// A NIP-50 relay search returned new kind:30023 events. The Swift store
     /// re-queries its local article substring match on receipt; payload is the

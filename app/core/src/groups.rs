@@ -13,8 +13,8 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
 use crate::models::CommunitySummary;
-use crate::nostr_runtime::NostrRuntime;
-use crate::relays::HIGHLIGHTER_RELAY;
+use crate::nostr_runtime::{signed_event_from_action_result, NostrRuntime};
+use crate::relays::highlighter_relay;
 
 pub const KIND_GROUP_METADATA: u16 = 39000;
 pub const KIND_GROUP_ADMINS: u16 = 39001;
@@ -197,9 +197,8 @@ pub fn build_joined_communities(
     joined
 }
 
-/// Publish a NIP-29 kind:9021 join-request event for `group_id`. Fire-and-
-/// forget from the UI's perspective: returns the event id once the relay
-/// accepts the event. The user's actual membership state flips when a
+/// Publish a NIP-29 kind:9021 join-request event for `group_id`. The NMP
+/// actor owns relay dispatch; the user's actual membership state flips when a
 /// matching kind:39002 arrives in the ndb stream — the subscription pump
 /// delivers that as `MembershipChanged` and the UI promotes the
 /// "Join requested" toast to "You're in ✓".
@@ -212,22 +211,16 @@ pub async fn publish_join_request(
         return Err(CoreError::InvalidInput("group_id must not be empty".into()));
     }
 
-    let builder =
-        EventBuilder::new(Kind::Custom(KIND_JOIN_REQUEST), "").tags(vec![Tag::parse(vec![
-            "h".to_string(),
-            group_id.to_string(),
-        ])
-        .map_err(|e| CoreError::Other(format!("build h tag: {e}")))?]);
-
-    let client = runtime.client();
-    let event = client
-        .sign_event_builder(builder)
-        .await
-        .map_err(|e| CoreError::Signer(format!("sign join request: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish join request: {e}")))?;
+    let action = nmp_nip29::action::JoinGroupInput {
+        group: nmp_nip29::GroupId::new(highlighter_relay(), group_id),
+        invite_code: None,
+        reason: None,
+    };
+    let row = runtime
+        .dispatch_nmp_action_for_result("join-request-publish", "nmp.nip29.join", &action)
+        .await?;
+    let event = signed_event_from_action_result("join-request-publish", row.result.as_deref())?;
+    runtime.cache_accepted_event("join-request-publish", &event)?;
     Ok(event.id.to_hex())
 }
 
@@ -307,10 +300,11 @@ pub async fn create_room(
         .sign_event_builder(create_builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign create-group: {e}")))?;
-    client
-        .send_event(&create_event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish create-group: {e}")))?;
+    runtime.publish_signed_event_to_relays(
+        "create-group-publish",
+        &create_event,
+        runtime.rooms_urls(),
+    )?;
 
     // 2. edit-metadata: name + about + picture + visibility/access markers.
     //    Marker tags use the convention the local reader (`build_summary`)
@@ -336,10 +330,11 @@ pub async fn create_room(
         .sign_event_builder(metadata_builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign edit-metadata: {e}")))?;
-    client
-        .send_event(&metadata_event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish edit-metadata: {e}")))?;
+    runtime.publish_signed_event_to_relays(
+        "edit-metadata-publish",
+        &metadata_event,
+        runtime.rooms_urls(),
+    )?;
 
     Ok(group_id)
 }
@@ -368,10 +363,7 @@ pub async fn add_member(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign put-user: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish put-user: {e}")))?;
+    runtime.publish_signed_event_to_relays("put-user-publish", &event, runtime.rooms_urls())?;
     Ok(event.id.to_hex())
 }
 
@@ -414,10 +406,11 @@ pub async fn create_invite_codes(
             .sign_event_builder(builder)
             .await
             .map_err(|e| CoreError::Signer(format!("sign create-invite: {e}")))?;
-        client
-            .send_event(&event)
-            .await
-            .map_err(|e| CoreError::Relay(format!("publish create-invite: {e}")))?;
+        runtime.publish_signed_event_to_relays(
+            "create-invite-publish",
+            &event,
+            runtime.rooms_urls(),
+        )?;
 
         all_codes.extend(batch);
         remaining -= batch_size;
@@ -522,7 +515,7 @@ fn build_summary(
         visibility: visibility.to_string(),
         admin_pubkeys,
         member_count,
-        relay_url: HIGHLIGHTER_RELAY.to_string(),
+        relay_url: highlighter_relay().to_string(),
         metadata_event_id: metadata_event.map(|e| e.id.to_hex()).unwrap_or_default(),
         created_at: metadata_event.map(|e| e.created_at.as_secs()),
     })

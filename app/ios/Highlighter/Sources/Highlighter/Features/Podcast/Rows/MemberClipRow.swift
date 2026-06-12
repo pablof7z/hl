@@ -103,16 +103,7 @@ struct MemberClipRow: View {
         }
         .onChange(of: isExpanded) { _, expanded in
             guard expanded else { return }
-            let id = highlight.eventId
-            guard app.podcastPlayer.comments[id] == nil else { return }
-            Task {
-                let records = (try? await app.safeCore.getCommentsForReference(
-                    tagName: "e",
-                    tagValue: id,
-                    limit: 200
-                )) ?? []
-                app.podcastPlayer.comments[id] = records
-            }
+            app.openComments(rootTagName: "e", rootTagValue: highlight.eventId, rootKind: 9802)
         }
     }
 

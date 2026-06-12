@@ -1,0 +1,36 @@
+{
+  "highlighter_relay": "wss://relay.highlighter.com",
+  "purple_pages_relay": "wss://purplepag.es",
+  "negentropy_sync_relays": ["wss://relay.damus.io"],
+  "nostr_connect_relay": "wss://relay.primal.net",
+  "seed_defaults": [
+    {
+      "url": "wss://relay.highlighter.com",
+      "read": true,
+      "write": true,
+      "rooms": true,
+      "indexer": false
+    },
+    {
+      "url": "wss://relay.damus.io",
+      "read": true,
+      "write": true,
+      "rooms": false,
+      "indexer": false
+    },
+    {
+      "url": "wss://purplepag.es",
+      "read": false,
+      "write": false,
+      "rooms": false,
+      "indexer": true
+    },
+    {
+      "url": "wss://relay.primal.net",
+      "read": false,
+      "write": false,
+      "rooms": false,
+      "indexer": true
+    }
+  ]
+}

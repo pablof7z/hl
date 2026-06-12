@@ -1,30 +1,19 @@
 import SwiftUI
 
-/// Lets the user import another nostr account's relay list. Takes an npub
-/// (or hex pubkey), fetches that user's kind:10002 via the Indexer pool,
-/// and shows the discovered relays with checkboxes. Merging is opt-in —
-/// only rows the user ticks get upserted.
+/// Lets the user import another nostr account's relay list. Rust owns the
+/// fetch, candidate projection, selection set, and apply operation.
 struct ImportRelaysSheet: View {
-    let store: NetworkSettingsStore
-
     @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
-
-    @State private var npubText: String = ""
-    @State private var fetched: [RelayConfig] = []
-    @State private var selected: Set<String> = []
-    @State private var isFetching = false
-    @State private var errorText: String?
-    @State private var isApplying = false
 
     var body: some View {
         NavigationStack {
             Form {
                 npubSection
-                if !fetched.isEmpty {
+                if !importState.candidates.isEmpty {
                     foundSection
                 }
-                if let err = errorText {
+                if let err = importState.errorMessage {
                     errorSection(err)
                 }
             }
@@ -35,27 +24,45 @@ struct ImportRelaysSheet: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Add \(selected.count)") {
-                        Task { await applySelected() }
+                    Button("Add \(importState.selectedUrls.count)") {
+                        appStore.applyNetworkImportRelays()
                     }
-                    .disabled(selected.isEmpty || isApplying)
+                    .disabled(importState.selectedUrls.isEmpty || importState.isApplying)
+                }
+            }
+            .onChange(of: importState.isApplying) { wasApplying, isApplying in
+                if wasApplying, !isApplying, importState.errorMessage == nil {
+                    dismiss()
                 }
             }
         }
     }
 
-    // MARK: - Sections
+    private var importState: HighlighterNetworkImportSnapshot {
+        appStore.network.importRelays
+    }
+
+    private var npubBinding: Binding<String> {
+        Binding(
+            get: { importState.npub },
+            set: { appStore.setNetworkImportNpub($0) }
+        )
+    }
+
+    private var selectedUrls: Set<String> {
+        Set(importState.selectedUrls)
+    }
 
     private var npubSection: some View {
         Section {
-            TextField("npub1… or hex pubkey", text: $npubText)
+            TextField("npub1… or hex pubkey", text: npubBinding)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .monospaced()
             Button {
-                Task { await fetch() }
+                appStore.fetchNetworkImportRelays()
             } label: {
-                if isFetching {
+                if importState.isFetching {
                     HStack {
                         ProgressView().scaleEffect(0.7)
                         Text("Fetching…")
@@ -64,7 +71,7 @@ struct ImportRelaysSheet: View {
                     Label("Fetch relays", systemImage: "arrow.down.circle")
                 }
             }
-            .disabled(npubText.trimmingCharacters(in: .whitespaces).isEmpty || isFetching)
+            .disabled(importState.npub.trimmingCharacters(in: .whitespaces).isEmpty || importState.isFetching)
         } header: {
             Text("Source")
         } footer: {
@@ -74,13 +81,13 @@ struct ImportRelaysSheet: View {
 
     private var foundSection: some View {
         Section {
-            ForEach(fetched, id: \.url) { row in
+            ForEach(importState.candidates, id: \.url) { row in
                 Button {
-                    toggle(row.url)
+                    appStore.toggleNetworkImportRelay(url: row.url)
                 } label: {
                     HStack {
-                        Image(systemName: selected.contains(row.url) ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(selected.contains(row.url) ? Color.accentColor : .secondary)
+                        Image(systemName: selectedUrls.contains(row.url) ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(selectedUrls.contains(row.url) ? Color.accentColor : .secondary)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(displayURL(row.url))
                                 .font(.subheadline)
@@ -96,7 +103,7 @@ struct ImportRelaysSheet: View {
                 .buttonStyle(.plain)
             }
         } header: {
-            Text("Found \(fetched.count) relay\(fetched.count == 1 ? "" : "s")")
+            Text("Found \(importState.candidates.count) relay\(importState.candidates.count == 1 ? "" : "s")")
         } footer: {
             Text("Selected relays will be added or updated in your list with their original Read/Write roles. Rooms and Indexer stay off — tap a relay later to turn them on.")
         }
@@ -107,44 +114,6 @@ struct ImportRelaysSheet: View {
             Label(err, systemImage: "exclamationmark.triangle")
                 .font(.caption)
                 .foregroundStyle(.orange)
-        }
-    }
-
-    // MARK: - Actions
-
-    private func fetch() async {
-        errorText = nil
-        fetched = []
-        selected = []
-        isFetching = true
-        defer { isFetching = false }
-        do {
-            let rows = try await appStore.safeCore
-                .importRelaysFromNpub(npubText.trimmingCharacters(in: .whitespaces))
-            fetched = rows
-            selected = Set(rows.map { $0.url })
-            if rows.isEmpty {
-                errorText = "No kind:10002 found for this user — they may not have published a relay list yet."
-            }
-        } catch {
-            errorText = String(describing: error)
-        }
-    }
-
-    private func applySelected() async {
-        isApplying = true
-        defer { isApplying = false }
-        for row in fetched where selected.contains(row.url) {
-            await store.upsert(row)
-        }
-        dismiss()
-    }
-
-    private func toggle(_ url: String) {
-        if selected.contains(url) {
-            selected.remove(url)
-        } else {
-            selected.insert(url)
         }
     }
 

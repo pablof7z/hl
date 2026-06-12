@@ -185,10 +185,7 @@ async fn publish_bookmarks(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign bookmarks: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish bookmarks: {e}")))?;
+    runtime.publish_signed_event("bookmarks-publish", &event)?;
     Ok(event.id.to_hex())
 }
 
@@ -239,6 +236,24 @@ mod tests {
         ndb.process_event(&line).unwrap();
     }
 
+    fn wait_for_bookmarks(
+        ndb: &Ndb,
+        user_hex: &str,
+        ready: impl Fn(&BookmarkList) -> bool,
+    ) -> BookmarkList {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            let list = query_bookmarks(ndb, user_hex).unwrap();
+            if ready(&list) {
+                return list;
+            }
+            if std::time::Instant::now() >= deadline {
+                return list;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
     #[test]
     fn query_bookmarks_parses_a_tags_and_preserves_unknowns() {
         let (ndb, _tmp) = fresh_ndb();
@@ -254,9 +269,10 @@ mod tests {
             .sign_with_keys(&keys)
             .unwrap();
         process(&ndb, &event);
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
-        let list = query_bookmarks(&ndb, &keys.public_key().to_hex()).unwrap();
+        let list = wait_for_bookmarks(&ndb, &keys.public_key().to_hex(), |list| {
+            list.addresses.len() == 2 && list.other_tags.len() == 2 && list.content == "opaque"
+        });
         assert_eq!(list.addresses, vec!["30023:aa:essay", "30023:bb:letter"]);
         assert_eq!(list.other_tags.len(), 2);
         assert_eq!(list.content, "opaque");
@@ -280,9 +296,10 @@ mod tests {
 
         process(&ndb, &older);
         process(&ndb, &newer);
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
-        let list = query_bookmarks(&ndb, &keys.public_key().to_hex()).unwrap();
+        let list = wait_for_bookmarks(&ndb, &keys.public_key().to_hex(), |list| {
+            list.addresses.len() == 1 && list.addresses[0] == "30023:aa:new"
+        });
         assert_eq!(list.addresses, vec!["30023:aa:new"]);
     }
 
@@ -296,9 +313,11 @@ mod tests {
             .sign_with_keys(&keys)
             .unwrap();
         process(&ndb, &event);
-        std::thread::sleep(std::time::Duration::from_millis(50));
 
         let pk = keys.public_key().to_hex();
+        let _ = wait_for_bookmarks(&ndb, &pk, |list| {
+            list.addresses.len() == 1 && list.addresses[0] == "30023:aa:essay"
+        });
         assert!(is_bookmarked(&ndb, &pk, "30023:aa:essay").unwrap());
         assert!(!is_bookmarked(&ndb, &pk, "30023:aa:letter").unwrap());
         assert!(!is_bookmarked(&ndb, &pk, "30023:aa:").unwrap());

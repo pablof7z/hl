@@ -7,21 +7,11 @@ struct AddRelaySheet: View {
     @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
 
-    let onAdd: (RelayConfig) -> Void
-
     @State private var urlText = ""
     @State private var read = true
     @State private var write = true
     @State private var rooms = false
     @State private var indexer = false
-
-    /// NIP-11 probe status. Populated after the URL field loses focus (or
-    /// after a 600ms debounce) so the user sees what relay they're about
-    /// to add without the probe firing on every keystroke.
-    @State private var probeResult: Nip11Document?
-    @State private var probeError: String?
-    @State private var probeInFlight = false
-    @State private var probeTask: Task<Void, Never>?
     @FocusState private var urlFieldFocused: Bool
 
     /// Whether the URL looks like a wss:// or ws:// URL.
@@ -34,6 +24,10 @@ struct AddRelaySheet: View {
         urlText.trimmingCharacters(in: .whitespaces).hasPrefix("ws://")
     }
 
+    private var trimmedUrl: String {
+        urlText.trimmingCharacters(in: .whitespaces)
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -44,7 +38,6 @@ struct AddRelaySheet: View {
                         .autocorrectionDisabled()
                         .focused($urlFieldFocused)
                         .onSubmit { startProbeForCurrentURL() }
-                        .onChange(of: urlText) { _, _ in resetProbe() }
                         .onChange(of: urlFieldFocused) { _, focused in
                             if !focused {
                                 startProbeForCurrentURL()
@@ -89,19 +82,15 @@ struct AddRelaySheet: View {
             }
             .navigationTitle("Add Relay")
             .navigationBarTitleDisplayMode(.inline)
-            .onDisappear {
-                probeTask?.cancel()
-            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Add") {
-                        let trimmed = urlText.trimmingCharacters(in: .whitespaces)
-                        onAdd(
+                        appStore.upsertNetworkRelay(
                             RelayConfig(
-                                url: trimmed,
+                                url: trimmedUrl,
                                 read: read,
                                 write: write,
                                 rooms: rooms,
@@ -135,14 +124,15 @@ struct AddRelaySheet: View {
     /// time.
     @ViewBuilder
     private var probeStatus: some View {
-        if probeInFlight {
+        let probe = appStore.networkNip11(url: trimmedUrl)
+        if probe?.isLoading == true {
             HStack(spacing: 6) {
                 ProgressView().scaleEffect(0.7)
                 Text("Checking relay…")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-        } else if let doc = probeResult {
+        } else if let doc = probe?.document {
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.seal.fill")
                     .foregroundStyle(.green)
@@ -151,7 +141,7 @@ struct AddRelaySheet: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
-        } else if let err = probeError {
+        } else if let err = probe?.errorMessage {
             HStack(spacing: 6) {
                 Image(systemName: "questionmark.circle")
                     .foregroundStyle(.secondary)
@@ -178,37 +168,8 @@ struct AddRelaySheet: View {
         return joined.isEmpty ? "Reachable (no NIP-11 metadata)" : joined
     }
 
-    /// Clears stale NIP-11 output when the field changes. A new probe runs
-    /// when the user submits the field or moves focus away.
-    private func resetProbe() {
-        probeTask?.cancel()
-        probeTask = nil
-        probeResult = nil
-        probeError = nil
-        probeInFlight = false
-    }
-
-    /// Cancels an in-flight probe if the URL changes before it resolves.
     private func startProbeForCurrentURL() {
-        probeTask?.cancel()
-        probeResult = nil
-        probeError = nil
         guard isValid else { return }
-        let url = urlText.trimmingCharacters(in: .whitespaces)
-        let core = appStore.safeCore
-        probeTask = Task { [url] in
-            probeInFlight = true
-            defer { probeInFlight = false }
-            do {
-                let doc = try await core.probeRelayNip11(url)
-                guard !Task.isCancelled else { return }
-                probeResult = doc
-                probeError = nil
-            } catch {
-                guard !Task.isCancelled else { return }
-                probeResult = nil
-                probeError = "Couldn't reach the relay — you can still add it."
-            }
-        }
+        appStore.probeNetworkRelayNip11(url: trimmedUrl)
     }
 }

@@ -35,10 +35,11 @@ pub async fn publish_picture(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign picture: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish picture: {e}")))?;
+    if group_id.is_some() {
+        runtime.publish_signed_event_to_relays("picture-publish", &event, runtime.rooms_urls())?;
+    } else {
+        runtime.publish_signed_event("picture-publish", &event)?;
+    }
 
     Ok(PictureRecord {
         event_id: event.id.to_hex(),

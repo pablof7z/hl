@@ -1,0 +1,1183 @@
+//! Highlighter's NMP composition root.
+//!
+//! Native shells must not drive NMP directly. This module owns the one live
+//! `nmp_ffi::NmpApp`, wires the canonical `nmp-app-template` defaults before
+//! start, and exposes the app-core operations Highlighter still needs while
+//! feature projections are being rendered from the existing Rust read model.
+
+use std::borrow::Cow;
+use std::collections::{HashMap, VecDeque};
+use std::ffi::{CStr, CString};
+use std::hash::{Hash, Hasher};
+use std::path::{Path, PathBuf};
+use std::ptr::NonNull;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
+use std::sync::Arc;
+use std::thread::JoinHandle;
+use std::time::Duration;
+
+use nmp_app_template::{NmpAppBuilder, RunConfig};
+use nmp_core::planner::{
+    InterestId, InterestLifecycle, InterestScope, InterestShape, LogicalInterest,
+};
+use nmp_core::publish::{PublishAction, PublishTarget};
+use nmp_core::substrate::{
+    ActionRegistrar, AppHost, SignedEvent as NmpSignedEvent, UnsignedEvent as NmpUnsignedEvent,
+};
+use nmp_core::typed_projections::{
+    decode_action_results, decode_relay_diagnostics, ActionResultRow, ACTION_RESULTS_SCHEMA_ID,
+    RELAY_DIAGNOSTICS_SCHEMA_ID,
+};
+use nmp_core::{
+    ActorCommand, KindFilter, RawEventObserver, RawEventObserverId, SignContinuation, SignerSource,
+    TypedProjectionData,
+};
+use nmp_ffi::{
+    nmp_app_add_relay, nmp_app_dispatch_action, nmp_app_free, nmp_app_free_string,
+    nmp_app_lifecycle_background, nmp_app_lifecycle_foreground, nmp_app_nostrconnect_uri,
+    nmp_app_remove_relay, nmp_broker_free_string, nmp_signer_broker_init, NmpApp,
+};
+use nostr_sdk::prelude::*;
+use nostrdb::Ndb;
+use parking_lot::{Mutex, RwLock};
+use tokio::sync::oneshot;
+use zeroize::Zeroizing;
+
+use crate::errors::CoreError;
+use crate::events::{DataChangeType, Delta, EventCallback};
+use crate::models::{NostrConnectOptions, RelayDiagnostic, RelayStatus};
+use crate::relays::{nostr_connect_relay, RelayConfig};
+
+const NMP_PUBLISH_NAMESPACE: &str = "nmp.publish";
+const NMP_SIGN_TIMEOUT: Duration = Duration::from_secs(65);
+const NMP_BUNKER_PAIR_TIMEOUT: Duration = Duration::from_secs(300);
+const NMP_PROTOCOL_ACTION_TIMEOUT: Duration = Duration::from_secs(360);
+const NMP_ACTION_RESULT_CACHE_LIMIT: usize = 128;
+
+type EventCallbackSlot = Arc<RwLock<Option<Arc<dyn EventCallback>>>>;
+
+/// Thin owner for the actor-backed NMP runtime.
+pub(crate) struct HighlighterNmpRuntime {
+    app: NonNull<NmpApp>,
+    storage_dir: PathBuf,
+    applied_relays: RwLock<HashMap<String, String>>,
+    identity: Arc<NmpIdentityState>,
+    diagnostics: Arc<NmpRelayDiagnosticsState>,
+    action_results: Arc<NmpActionResultsState>,
+    action_result_stop: Arc<AtomicBool>,
+    action_result_wake: SyncSender<()>,
+    action_result_worker: Option<JoinHandle<()>>,
+    typed_projection_drain_lock: Arc<Mutex<()>>,
+    raw_mirror_id: RawEventObserverId,
+    raw_mirror_worker: Option<JoinHandle<()>>,
+}
+
+// SAFETY: `NmpApp` is actor-backed and explicitly designed for cross-thread
+// host calls. This wrapper only sends commands through the NMP public API and
+// frees the pointer once in Drop.
+unsafe impl Send for HighlighterNmpRuntime {}
+unsafe impl Sync for HighlighterNmpRuntime {}
+
+impl Drop for HighlighterNmpRuntime {
+    fn drop(&mut self) {
+        self.action_result_stop.store(true, Ordering::Release);
+        let _ = self.action_result_wake.try_send(());
+        if let Some(worker) = self.action_result_worker.take() {
+            let _ = worker.join();
+        }
+
+        self.app_ref()
+            .unregister_raw_event_observer(self.raw_mirror_id);
+        if let Some(worker) = self.raw_mirror_worker.take() {
+            let _ = worker.join();
+        }
+        nmp_app_free(self.app.as_ptr());
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct NmpInterestHandle {
+    id: u64,
+}
+
+struct RawMirrorMessage {
+    source: String,
+    json: String,
+}
+
+struct RawMirrorObserver {
+    tx: SyncSender<RawMirrorMessage>,
+}
+
+struct NmpIdentityState {
+    inner: Mutex<NmpIdentitySnapshot>,
+}
+
+#[derive(Default)]
+struct NmpIdentitySnapshot {
+    active: Option<String>,
+    waiters: Vec<oneshot::Sender<String>>,
+}
+
+struct NmpRelayDiagnosticsState {
+    relays: RwLock<HashMap<String, RelayDiagnostic>>,
+    callback_slot: RwLock<Option<EventCallbackSlot>>,
+}
+
+#[derive(Default)]
+struct NmpActionResultsState {
+    inner: Mutex<NmpActionResultsSnapshot>,
+}
+
+#[derive(Default)]
+struct NmpActionResultsSnapshot {
+    waiters: HashMap<String, oneshot::Sender<ActionResultRow>>,
+    completed: HashMap<String, ActionResultRow>,
+    order: VecDeque<String>,
+}
+
+/// `nostr_sdk::Client` still provides event-builder ergonomics for feature
+/// modules, but every actual signature resolves through NMP's identity actor.
+#[derive(Clone)]
+pub(crate) struct NmpNostrSigner {
+    nmp: Arc<HighlighterNmpRuntime>,
+}
+
+impl std::fmt::Debug for NmpNostrSigner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("NmpNostrSigner")
+    }
+}
+
+impl RawEventObserver for RawMirrorObserver {
+    fn on_raw_event(&self, kind: u32, json: &str) {
+        self.on_raw_event_with_source(kind, json, None);
+    }
+
+    fn on_raw_event_with_source(&self, _kind: u32, json: &str, source_relay_url: Option<&str>) {
+        let message = RawMirrorMessage {
+            source: source_relay_url.unwrap_or("nmp").to_string(),
+            json: json.to_string(),
+        };
+        match self.tx.try_send(message) {
+            Ok(()) | Err(TrySendError::Full(_)) | Err(TrySendError::Disconnected(_)) => {}
+        }
+    }
+}
+
+impl NmpIdentityState {
+    fn new(active: Option<String>) -> Self {
+        Self {
+            inner: Mutex::new(NmpIdentitySnapshot {
+                active,
+                waiters: Vec::new(),
+            }),
+        }
+    }
+
+    fn active(&self) -> Option<String> {
+        self.inner.lock().active.clone()
+    }
+
+    fn apply(&self, active: Option<String>) {
+        let mut guard = self.inner.lock();
+        if guard.active == active {
+            return;
+        }
+        guard.active = active.clone();
+        if let Some(pubkey) = active {
+            for waiter in guard.waiters.drain(..) {
+                let _ = waiter.send(pubkey.clone());
+            }
+        }
+    }
+
+    async fn wait_for_change(
+        &self,
+        previous: Option<String>,
+        timeout: Duration,
+    ) -> Result<String, CoreError> {
+        let rx = {
+            let mut guard = self.inner.lock();
+            if let Some(active) = guard.active.clone() {
+                if previous.as_deref() != Some(active.as_str()) {
+                    return Ok(active);
+                }
+            }
+            let (tx, rx) = oneshot::channel();
+            guard.waiters.push(tx);
+            rx
+        };
+        match tokio::time::timeout(timeout, rx).await {
+            Ok(Ok(pubkey)) => Ok(pubkey),
+            Ok(Err(_)) => Err(CoreError::Signer("NMP identity waiter dropped".into())),
+            Err(_) => Err(CoreError::Signer(
+                "NMP identity activation timed out".into(),
+            )),
+        }
+    }
+}
+
+impl Default for NmpRelayDiagnosticsState {
+    fn default() -> Self {
+        Self {
+            relays: RwLock::new(HashMap::new()),
+            callback_slot: RwLock::new(None),
+        }
+    }
+}
+
+impl NmpRelayDiagnosticsState {
+    fn set_callback(&self, callback_slot: EventCallbackSlot) {
+        *self.callback_slot.write() = Some(callback_slot);
+    }
+
+    fn snapshot(&self) -> Vec<RelayDiagnostic> {
+        self.relays.read().values().cloned().collect()
+    }
+
+    fn apply(&self, rows: Vec<RelayDiagnostic>) {
+        let next: HashMap<String, RelayDiagnostic> =
+            rows.into_iter().map(|row| (row.url.clone(), row)).collect();
+        let mut changed = Vec::new();
+        {
+            let previous = self.relays.read();
+            for (url, diag) in next.iter() {
+                match previous.get(url) {
+                    Some(prev) if prev.state == diag.state => {}
+                    _ => changed.push((url.clone(), diag.state)),
+                }
+            }
+            for url in previous.keys() {
+                if !next.contains_key(url) {
+                    changed.push((url.clone(), RelayStatus::Terminated));
+                }
+            }
+        }
+        *self.relays.write() = next;
+
+        if changed.is_empty() {
+            return;
+        }
+        let Some(slot) = self.callback_slot.read().clone() else {
+            return;
+        };
+        let Some(callback) = slot.read().clone() else {
+            return;
+        };
+        for (url, state) in changed {
+            callback.on_data_changed(Delta {
+                subscription_id: 0,
+                change: DataChangeType::RelayStatusChanged { url, state },
+            });
+        }
+    }
+}
+
+impl NmpActionResultsState {
+    fn apply(&self, rows: Vec<ActionResultRow>) {
+        for row in rows {
+            self.apply_row(row);
+        }
+    }
+
+    fn apply_row(&self, row: ActionResultRow) {
+        let correlation_id = row.correlation_id.trim();
+        if correlation_id.is_empty() {
+            return;
+        }
+
+        let correlation_id = correlation_id.to_string();
+        let mut guard = self.inner.lock();
+        if let Some(waiter) = guard.waiters.remove(&correlation_id) {
+            let _ = waiter.send(row);
+            return;
+        }
+
+        if !guard.completed.contains_key(&correlation_id) {
+            guard.order.push_back(correlation_id.clone());
+        }
+        guard.completed.insert(correlation_id.clone(), row);
+        while guard.order.len() > NMP_ACTION_RESULT_CACHE_LIMIT {
+            if let Some(old) = guard.order.pop_front() {
+                guard.completed.remove(&old);
+            }
+        }
+    }
+
+    async fn wait_for(
+        &self,
+        correlation_id: &str,
+        timeout: Duration,
+    ) -> Result<ActionResultRow, CoreError> {
+        let correlation_id = correlation_id.trim();
+        if correlation_id.is_empty() {
+            return Err(CoreError::Other(
+                "NMP action result wait requires a correlation_id".into(),
+            ));
+        }
+
+        let rx = {
+            let mut guard = self.inner.lock();
+            if let Some(row) = guard.completed.remove(correlation_id) {
+                guard.order.retain(|key| key != correlation_id);
+                return Ok(row);
+            }
+            if guard.waiters.contains_key(correlation_id) {
+                return Err(CoreError::Other(format!(
+                    "duplicate NMP action result waiter for {correlation_id}"
+                )));
+            }
+            let (tx, rx) = oneshot::channel();
+            guard.waiters.insert(correlation_id.to_string(), tx);
+            rx
+        };
+
+        match tokio::time::timeout(timeout, rx).await {
+            Ok(Ok(row)) => Ok(row),
+            Ok(Err(_)) => Err(CoreError::Other(format!(
+                "NMP action result waiter dropped for {correlation_id}"
+            ))),
+            Err(_) => {
+                self.inner.lock().waiters.remove(correlation_id);
+                Err(CoreError::Other(format!(
+                    "NMP action result timed out for {correlation_id}"
+                )))
+            }
+        }
+    }
+}
+
+impl NostrSigner for NmpNostrSigner {
+    fn backend(&self) -> SignerBackend<'_> {
+        SignerBackend::Custom(Cow::Borrowed("nmp"))
+    }
+
+    fn get_public_key(&self) -> BoxedFuture<'_, Result<PublicKey, SignerError>> {
+        Box::pin(async move {
+            let pubkey = self
+                .nmp
+                .active_pubkey()
+                .ok_or_else(|| SignerError::from("NMP signer has no active account"))?;
+            PublicKey::from_hex(&pubkey)
+                .map_err(|e| SignerError::from(format!("active NMP pubkey: {e}")))
+        })
+    }
+
+    fn sign_event(&self, unsigned: UnsignedEvent) -> BoxedFuture<'_, Result<Event, SignerError>> {
+        Box::pin(async move {
+            let nmp_unsigned = unsigned_event_for_nmp(&unsigned);
+            let signer_pubkey = Some(unsigned.pubkey.to_hex());
+            let signed = self
+                .nmp
+                .sign_unsigned_event(signer_pubkey, nmp_unsigned)
+                .await
+                .map_err(|e| SignerError::from(e.to_string()))?;
+            Event::from_json(signed.to_nip01_json())
+                .map_err(|e| SignerError::from(format!("NMP signed event decode: {e}")))
+        })
+    }
+
+    fn nip04_encrypt<'a>(
+        &'a self,
+        _public_key: &'a PublicKey,
+        _content: &'a str,
+    ) -> BoxedFuture<'a, Result<String, SignerError>> {
+        Box::pin(async move {
+            Err(SignerError::from(
+                "NMP signer facade does not expose NIP-04 encryption",
+            ))
+        })
+    }
+
+    fn nip04_decrypt<'a>(
+        &'a self,
+        _public_key: &'a PublicKey,
+        _encrypted_content: &'a str,
+    ) -> BoxedFuture<'a, Result<String, SignerError>> {
+        Box::pin(async move {
+            Err(SignerError::from(
+                "NMP signer facade does not expose NIP-04 decryption",
+            ))
+        })
+    }
+
+    fn nip44_encrypt<'a>(
+        &'a self,
+        _public_key: &'a PublicKey,
+        _content: &'a str,
+    ) -> BoxedFuture<'a, Result<String, SignerError>> {
+        Box::pin(async move {
+            Err(SignerError::from(
+                "NMP signer facade does not expose NIP-44 encryption",
+            ))
+        })
+    }
+
+    fn nip44_decrypt<'a>(
+        &'a self,
+        _public_key: &'a PublicKey,
+        _payload: &'a str,
+    ) -> BoxedFuture<'a, Result<String, SignerError>> {
+        Box::pin(async move {
+            Err(SignerError::from(
+                "NMP signer facade does not expose NIP-44 decryption",
+            ))
+        })
+    }
+}
+
+impl HighlighterNmpRuntime {
+    pub(crate) fn new(
+        nostrdb_dir: &Path,
+        ndb: Arc<Ndb>,
+        initial_relays: &[RelayConfig],
+    ) -> Result<Self, CoreError> {
+        let storage_dir = nmp_storage_dir(nostrdb_dir);
+        std::fs::create_dir_all(&storage_dir)
+            .map_err(|e| CoreError::Cache(format!("create NMP store: {e}")))?;
+
+        let relay_roles: Vec<(String, String)> =
+            initial_relays.iter().filter_map(nmp_relay_role).collect();
+        let applied_relays: HashMap<String, String> = relay_roles.iter().cloned().collect();
+
+        let mut builder = NmpAppBuilder::new().with_relays(relay_roles);
+        nmp_app_template::register_defaults(&mut builder);
+        register_nmp_protocol_actions(&mut builder);
+        nmp_blossom::register_actions(&mut builder);
+        builder.set_nostrconnect_bootstrap_relay(nostr_connect_relay().to_string());
+        let app = builder
+            .storage_path(storage_dir.to_string_lossy().into_owned())
+            .start(RunConfig::default());
+        let app = NonNull::new(app)
+            .ok_or_else(|| CoreError::Other("NMP app initialization returned null".into()))?;
+        nmp_signer_broker_init(app.as_ptr());
+
+        let app_ref = unsafe { app.as_ref() };
+        let active = app_ref
+            .active_account_handle()
+            .lock()
+            .ok()
+            .and_then(|guard| guard.clone());
+        let identity = Arc::new(NmpIdentityState::new(active));
+        let identity_observer = identity.clone();
+        app_ref.register_identity_change_observer(move |active| {
+            identity_observer.apply(active);
+        });
+
+        let diagnostics = Arc::new(NmpRelayDiagnosticsState::default());
+        let action_results = Arc::new(NmpActionResultsState::default());
+        let action_result_stop = Arc::new(AtomicBool::new(false));
+        let typed_projection_drain_lock = Arc::new(Mutex::new(()));
+        let identity_tick_observer = identity.clone();
+        let diagnostics_app = app.as_ptr() as usize;
+        app_ref.register_snapshot_tick_observer(move || {
+            let app_ref = unsafe { &*(diagnostics_app as *const NmpApp) };
+            let active = app_ref
+                .active_account_handle()
+                .lock()
+                .ok()
+                .and_then(|guard| guard.clone());
+            identity_tick_observer.apply(active);
+        });
+
+        let (action_result_wake, action_result_rx) = sync_channel::<()>(1);
+        let action_result_worker = spawn_action_result_drain(
+            app.as_ptr() as usize,
+            action_result_rx,
+            action_results.clone(),
+            diagnostics.clone(),
+            typed_projection_drain_lock.clone(),
+            action_result_stop.clone(),
+        )?;
+        let action_result_tick_tx = action_result_wake.clone();
+        app_ref.register_snapshot_tick_observer(move || match action_result_tick_tx.try_send(()) {
+            Ok(()) | Err(TrySendError::Full(())) | Err(TrySendError::Disconnected(())) => {}
+        });
+
+        let (raw_mirror_observer, raw_mirror_worker) = spawn_raw_mirror(ndb)?;
+        let raw_mirror_id =
+            app_ref.register_raw_event_observer(KindFilter::default(), raw_mirror_observer);
+        if raw_mirror_id.0 == 0 {
+            action_result_stop.store(true, Ordering::Release);
+            let _ = action_result_wake.try_send(());
+            let _ = action_result_worker.join();
+            let _ = raw_mirror_worker.join();
+            nmp_app_free(app.as_ptr());
+            return Err(CoreError::Other(
+                "NMP raw event mirror registration failed".into(),
+            ));
+        }
+
+        Ok(Self {
+            app,
+            storage_dir,
+            applied_relays: RwLock::new(applied_relays),
+            identity,
+            diagnostics,
+            action_results,
+            action_result_stop,
+            action_result_wake,
+            action_result_worker: Some(action_result_worker),
+            typed_projection_drain_lock,
+            raw_mirror_id,
+            raw_mirror_worker: Some(raw_mirror_worker),
+        })
+    }
+
+    pub(crate) fn storage_dir(&self) -> &Path {
+        &self.storage_dir
+    }
+
+    pub(crate) fn nostr_signer(self: &Arc<Self>) -> NmpNostrSigner {
+        NmpNostrSigner { nmp: self.clone() }
+    }
+
+    pub(crate) fn active_pubkey(&self) -> Option<String> {
+        self.identity.active()
+    }
+
+    pub(crate) async fn wait_for_active_account_after(
+        &self,
+        previous: Option<String>,
+        timeout: Duration,
+    ) -> Result<String, CoreError> {
+        self.identity.wait_for_change(previous, timeout).await
+    }
+
+    pub(crate) async fn wait_for_bunker_pair_after(
+        &self,
+        previous: Option<String>,
+    ) -> Result<String, CoreError> {
+        self.wait_for_active_account_after(previous, NMP_BUNKER_PAIR_TIMEOUT)
+            .await
+    }
+
+    pub(crate) fn nostrconnect_uri(
+        &self,
+        options: &NostrConnectOptions,
+    ) -> Result<String, CoreError> {
+        let relay = cstring_arg(nostr_connect_relay(), "NMP nostrconnect relay")?;
+        let uri_ptr = nmp_app_nostrconnect_uri(self.app.as_ptr(), relay.as_ptr(), std::ptr::null());
+        if uri_ptr.is_null() {
+            return Err(CoreError::Signer(
+                "NMP nostrconnect URI generation failed".into(),
+            ));
+        }
+        let uri = unsafe { CStr::from_ptr(uri_ptr) }
+            .to_string_lossy()
+            .into_owned();
+        nmp_broker_free_string(uri_ptr);
+        apply_nostrconnect_options(uri, options)
+    }
+
+    pub(crate) fn sign_in_nsec(&self, nsec: &str) -> Result<String, CoreError> {
+        let secret = nsec.trim();
+        if secret.is_empty() {
+            return Err(CoreError::InvalidInput("nsec must not be empty".into()));
+        }
+        let keys = Keys::parse(secret)
+            .map_err(|e| CoreError::InvalidInput(format!("invalid nsec: {e}")))?;
+        let pubkey = keys.public_key().to_hex();
+        self.app_ref().add_signer(
+            SignerSource::LocalNsec(Zeroizing::new(secret.to_string())),
+            true,
+        );
+        // `add_signer` is actor-queued and all later signing commands use the
+        // same sender, so NMP will install the key before any publish/sign
+        // request that follows this call. The app projection can move
+        // immediately instead of waiting for a throttled snapshot tick.
+        self.identity.apply(Some(pubkey.clone()));
+        Ok(pubkey)
+    }
+
+    pub(crate) fn sign_in_bunker_uri(&self, uri: &str) -> Result<(), CoreError> {
+        let uri = uri.trim();
+        if uri.is_empty() {
+            return Err(CoreError::InvalidInput(
+                "bunker URI must not be empty".into(),
+            ));
+        }
+        nmp_signers::parse_bunker_uri(uri)
+            .map_err(|e| CoreError::InvalidInput(format!("invalid bunker URI: {e}")))?;
+        self.app_ref()
+            .add_signer(SignerSource::BunkerUri(uri.to_string()), true);
+        Ok(())
+    }
+
+    pub(crate) async fn sign_unsigned_event(
+        &self,
+        signer_pubkey: Option<String>,
+        unsigned: NmpUnsignedEvent,
+    ) -> Result<NmpSignedEvent, CoreError> {
+        let (tx, rx) = oneshot::channel();
+        let continuation = SignContinuation::new(move |outcome| {
+            let _ = tx.send(outcome);
+        });
+        self.app_ref()
+            .actor_sender()
+            .send(ActorCommand::SignEventForAccount {
+                unsigned,
+                signer_pubkey,
+                continuation,
+            })
+            .map_err(|e| CoreError::Signer(format!("NMP sign command failed: {e}")))?;
+
+        match tokio::time::timeout(NMP_SIGN_TIMEOUT, rx).await {
+            Ok(Ok(Ok(signed))) => Ok(signed),
+            Ok(Ok(Err(reason))) => Err(CoreError::Signer(reason)),
+            Ok(Err(_)) => Err(CoreError::Signer("NMP sign continuation dropped".into())),
+            Err(_) => Err(CoreError::Signer("NMP sign timed out".into())),
+        }
+    }
+
+    pub(crate) fn remove_account(&self, pubkey_hex: &str) {
+        let pubkey_hex = pubkey_hex.trim();
+        if !pubkey_hex.is_empty() {
+            self.app_ref().remove_account(pubkey_hex.to_string());
+        }
+    }
+
+    pub(crate) fn foreground(&self) {
+        nmp_app_lifecycle_foreground(self.app.as_ptr());
+    }
+
+    pub(crate) fn background(&self) {
+        nmp_app_lifecycle_background(self.app.as_ptr());
+    }
+
+    pub(crate) fn sync_relays(&self, rows: &[RelayConfig]) -> Result<(), CoreError> {
+        let next: HashMap<String, String> = rows.iter().filter_map(nmp_relay_role).collect();
+        let current = self.applied_relays.read().clone();
+
+        for url in current.keys().filter(|url| !next.contains_key(*url)) {
+            self.remove_relay(url)?;
+        }
+
+        for (url, role) in next.iter() {
+            if current.get(url) != Some(role) {
+                self.add_relay(url, role)?;
+            }
+        }
+
+        *self.applied_relays.write() = next;
+        Ok(())
+    }
+
+    pub(crate) fn open_filter_interest(
+        &self,
+        label: &str,
+        owner: &str,
+        filter: Filter,
+        relay_pin: Option<String>,
+        lifecycle: InterestLifecycle,
+    ) -> Result<NmpInterestHandle, CoreError> {
+        let filter_json = serde_json::to_string(&filter)
+            .map_err(|e| CoreError::Other(format!("{label}: encode NMP filter: {e}")))?;
+        let mut shape = InterestShape::from_filter_json(&filter_json)
+            .ok_or_else(|| CoreError::InvalidInput(format!("{label}: invalid NMP filter")))?;
+        shape.relay_pin = relay_pin.clone().filter(|url| !url.trim().is_empty());
+        let id = stable_interest_id(
+            label,
+            owner,
+            &filter_json,
+            shape.relay_pin.as_deref(),
+            &lifecycle,
+        );
+        let interest = LogicalInterest {
+            id: InterestId(id),
+            scope: InterestScope::Global,
+            shape,
+            lifecycle,
+            ..LogicalInterest::default()
+        };
+        self.app_ref().push_interest(interest);
+        Ok(NmpInterestHandle { id })
+    }
+
+    pub(crate) fn close_interest(&self, handle: NmpInterestHandle) {
+        let _ = self
+            .app_ref()
+            .actor_sender()
+            .send(ActorCommand::WithdrawInterest(InterestId(handle.id)));
+    }
+
+    pub(crate) fn set_relay_diagnostics_callback(&self, callback_slot: EventCallbackSlot) {
+        self.diagnostics.set_callback(callback_slot);
+    }
+
+    pub(crate) fn relay_diagnostics_snapshot(&self) -> Vec<RelayDiagnostic> {
+        let typed = self.drain_typed_snapshot_projections();
+        apply_typed_projection_sidecars(&typed, &self.action_results, &self.diagnostics);
+        self.diagnostics.snapshot()
+    }
+
+    pub(crate) fn publish_signed_auto(&self, source: &str, event: &Event) -> Result<(), CoreError> {
+        self.dispatch_publish(source, event, PublishTarget::Auto)
+    }
+
+    pub(crate) fn publish_signed_to_relays(
+        &self,
+        source: &str,
+        event: &Event,
+        relays: Vec<String>,
+    ) -> Result<(), CoreError> {
+        let relays: Vec<String> = relays
+            .into_iter()
+            .map(|r| r.trim().to_string())
+            .filter(|r| !r.is_empty())
+            .collect();
+        if relays.is_empty() {
+            return Err(CoreError::Relay(format!(
+                "{source}: explicit NMP publish target requires at least one relay"
+            )));
+        }
+        self.dispatch_publish(source, event, PublishTarget::Explicit { relays })
+    }
+
+    pub(crate) async fn dispatch_action_for_result<T: serde::Serialize>(
+        &self,
+        source: &str,
+        namespace: &str,
+        action: &T,
+    ) -> Result<ActionResultRow, CoreError> {
+        let action_json = serde_json::to_string(action)
+            .map_err(|e| CoreError::Other(format!("{source}: encode NMP action: {e}")))?;
+        let correlation_id = self.dispatch_action_json(source, namespace, &action_json)?;
+        let row = self
+            .action_results
+            .wait_for(&correlation_id, NMP_PROTOCOL_ACTION_TIMEOUT)
+            .await?;
+        if let Some(error) = row.error.as_ref().filter(|s| !s.trim().is_empty()) {
+            return Err(CoreError::Other(format!("{source}: {error}")));
+        }
+        if row.status == "failed" {
+            return Err(CoreError::Other(format!(
+                "{source}: NMP action failed without an error body"
+            )));
+        }
+        Ok(row)
+    }
+
+    fn dispatch_publish(
+        &self,
+        source: &str,
+        event: &Event,
+        target: PublishTarget,
+    ) -> Result<(), CoreError> {
+        let action = PublishAction::Publish {
+            handle: event.id.to_hex(),
+            event: signed_event_for_nmp(event),
+            target,
+        };
+        let action_json = serde_json::to_string(&action)
+            .map_err(|e| CoreError::Other(format!("{source}: encode NMP publish action: {e}")))?;
+        let correlation_id =
+            self.dispatch_action_json(source, NMP_PUBLISH_NAMESPACE, &action_json)?;
+        if correlation_id.trim().is_empty() {
+            return Err(CoreError::Relay(format!(
+                "{source}: NMP publish response missing correlation_id"
+            )));
+        }
+        Ok(())
+    }
+
+    fn dispatch_action_json(
+        &self,
+        source: &str,
+        namespace: &str,
+        action_json: &str,
+    ) -> Result<String, CoreError> {
+        let namespace = cstring_arg(namespace, "NMP action namespace")?;
+        let action = cstring_arg(action_json, "NMP action")?;
+        let response_ptr =
+            nmp_app_dispatch_action(self.app.as_ptr(), namespace.as_ptr(), action.as_ptr());
+        if response_ptr.is_null() {
+            return Err(CoreError::Relay(format!(
+                "{source}: NMP publish returned null"
+            )));
+        }
+
+        let response = unsafe { CStr::from_ptr(response_ptr) }
+            .to_string_lossy()
+            .into_owned();
+        nmp_app_free_string(response_ptr);
+
+        let value: serde_json::Value = serde_json::from_str(&response)
+            .map_err(|e| CoreError::Relay(format!("{source}: invalid NMP response: {e}")))?;
+        if let Some(error) = value.get("error").and_then(serde_json::Value::as_str) {
+            return Err(CoreError::Relay(format!("{source}: {error}")));
+        }
+        if let Some(correlation_id) = value
+            .get("correlation_id")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+        {
+            return Ok(correlation_id);
+        }
+        Err(CoreError::Relay(format!(
+            "{source}: NMP action response missing correlation_id"
+        )))
+    }
+
+    fn drain_typed_snapshot_projections(&self) -> Vec<TypedProjectionData> {
+        let _guard = self.typed_projection_drain_lock.lock();
+        self.app_ref().run_typed_snapshot_projections()
+    }
+
+    fn add_relay(&self, url: &str, role: &str) -> Result<(), CoreError> {
+        let url = cstring_arg(url, "NMP relay URL")?;
+        let role = cstring_arg(role, "NMP relay role")?;
+        nmp_app_add_relay(self.app.as_ptr(), url.as_ptr(), role.as_ptr());
+        Ok(())
+    }
+
+    fn remove_relay(&self, url: &str) -> Result<(), CoreError> {
+        let url = cstring_arg(url, "NMP relay URL")?;
+        nmp_app_remove_relay(self.app.as_ptr(), url.as_ptr());
+        Ok(())
+    }
+
+    fn app_ref(&self) -> &NmpApp {
+        unsafe { self.app.as_ref() }
+    }
+}
+
+fn register_nmp_protocol_actions(app: &mut impl ActionRegistrar) {
+    app.register_action::<nmp_nip29::action::PostChatMessageAction>();
+    app.register_action::<nmp_nip29::action::ReactInGroupAction>();
+    app.register_action::<nmp_nip29::action::CreatePublicGroupAction>();
+    app.register_action::<nmp_nip29::action::DiscoverGroupsAction>();
+    app.register_action::<nmp_nip29::action::JoinGroupAction>();
+}
+
+fn spawn_action_result_drain(
+    app_ptr: usize,
+    wake_rx: std::sync::mpsc::Receiver<()>,
+    action_results: Arc<NmpActionResultsState>,
+    diagnostics: Arc<NmpRelayDiagnosticsState>,
+    drain_lock: Arc<Mutex<()>>,
+    stop: Arc<AtomicBool>,
+) -> Result<JoinHandle<()>, CoreError> {
+    std::thread::Builder::new()
+        .name("highlighter-nmp-action-results".into())
+        .spawn(move || {
+            while wake_rx.recv().is_ok() {
+                if stop.load(Ordering::Acquire) {
+                    break;
+                }
+                let typed = {
+                    let _guard = drain_lock.lock();
+                    let app_ref = unsafe { &*(app_ptr as *const NmpApp) };
+                    app_ref.run_typed_snapshot_projections()
+                };
+                apply_typed_projection_sidecars(&typed, &action_results, &diagnostics);
+            }
+        })
+        .map_err(|e| CoreError::Other(format!("spawn NMP action result drain: {e}")))
+}
+
+fn apply_typed_projection_sidecars(
+    typed: &[TypedProjectionData],
+    action_results: &NmpActionResultsState,
+    diagnostics: &NmpRelayDiagnosticsState,
+) {
+    if let Some(rows) = action_results_from_typed_projections(typed) {
+        action_results.apply(rows);
+    }
+    if let Some(rows) = relay_diagnostics_from_typed_projections(typed) {
+        diagnostics.apply(rows);
+    }
+}
+
+fn action_results_from_typed_projections(
+    typed: &[TypedProjectionData],
+) -> Option<Vec<ActionResultRow>> {
+    let entry = typed.iter().find(|entry| {
+        entry.key == ACTION_RESULTS_SCHEMA_ID || entry.schema_id == ACTION_RESULTS_SCHEMA_ID
+    })?;
+    decode_action_results(&entry.payload)
+        .ok()
+        .map(|model| model.results)
+}
+
+fn stable_interest_id(
+    label: &str,
+    owner: &str,
+    filter_json: &str,
+    relay_pin: Option<&str>,
+    lifecycle: &InterestLifecycle,
+) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    label.hash(&mut hasher);
+    owner.hash(&mut hasher);
+    filter_json.hash(&mut hasher);
+    relay_pin.hash(&mut hasher);
+    lifecycle.hash(&mut hasher);
+    let id = hasher.finish();
+    if id == 0 {
+        1
+    } else {
+        id
+    }
+}
+
+fn spawn_raw_mirror(ndb: Arc<Ndb>) -> Result<(Arc<RawMirrorObserver>, JoinHandle<()>), CoreError> {
+    let (tx, rx) = sync_channel::<RawMirrorMessage>(1024);
+    let worker = std::thread::Builder::new()
+        .name("highlighter-nmp-raw-mirror".into())
+        .spawn(move || {
+            while let Ok(message) = rx.recv() {
+                let source = serde_json::to_string(&message.source)
+                    .unwrap_or_else(|_| "\"nmp\"".to_string());
+                let line = format!(r#"["EVENT",{source},{}]"#, message.json);
+                if let Err(e) = ndb.process_event(&line) {
+                    tracing::warn!(error = %e, "NMP raw event mirror to nostrdb");
+                }
+            }
+        })
+        .map_err(|e| CoreError::Other(format!("spawn NMP raw mirror: {e}")))?;
+    Ok((Arc::new(RawMirrorObserver { tx }), worker))
+}
+
+fn nmp_storage_dir(nostrdb_dir: &Path) -> PathBuf {
+    nostrdb_dir
+        .parent()
+        .map(|p| p.join("nmp"))
+        .unwrap_or_else(|| nostrdb_dir.join("nmp"))
+}
+
+pub(crate) fn nmp_relay_role(row: &RelayConfig) -> Option<(String, String)> {
+    let url = row.url.trim();
+    if url.is_empty() {
+        return None;
+    }
+
+    let mut roles: Vec<&str> = Vec::new();
+    match (row.read || row.rooms, row.write) {
+        (true, true) => roles.push("both"),
+        (true, false) => roles.push("read"),
+        (false, true) => roles.push("write"),
+        (false, false) => {}
+    }
+    if row.indexer {
+        roles.push("indexer");
+    }
+    if roles.is_empty() {
+        return None;
+    }
+    Some((url.to_string(), roles.join(",")))
+}
+
+fn signed_event_for_nmp(event: &Event) -> NmpSignedEvent {
+    NmpSignedEvent {
+        id: event.id.to_hex(),
+        sig: event.sig.to_string(),
+        unsigned: NmpUnsignedEvent {
+            pubkey: event.pubkey.to_hex(),
+            created_at: event.created_at.as_secs(),
+            kind: u32::from(event.kind.as_u16()),
+            tags: event
+                .tags
+                .iter()
+                .map(|tag| tag.as_slice().to_vec())
+                .collect(),
+            content: event.content.clone(),
+        },
+    }
+}
+
+fn unsigned_event_for_nmp(event: &UnsignedEvent) -> NmpUnsignedEvent {
+    NmpUnsignedEvent {
+        pubkey: event.pubkey.to_hex(),
+        created_at: event.created_at.as_secs(),
+        kind: u32::from(event.kind.as_u16()),
+        tags: event
+            .tags
+            .iter()
+            .map(|tag| tag.as_slice().to_vec())
+            .collect(),
+        content: event.content.clone(),
+    }
+}
+
+fn relay_diagnostics_from_typed_projections(
+    typed: &[TypedProjectionData],
+) -> Option<Vec<RelayDiagnostic>> {
+    let entry = typed.iter().find(|entry| {
+        entry.key == RELAY_DIAGNOSTICS_SCHEMA_ID || entry.schema_id == RELAY_DIAGNOSTICS_SCHEMA_ID
+    })?;
+    let decoded = decode_relay_diagnostics(&entry.payload).ok()?;
+    Some(
+        decoded
+            .relays
+            .into_iter()
+            .map(|row| RelayDiagnostic {
+                url: row.relay_url,
+                state: relay_status_from_nmp(&row.connection_label, &row.connection_tone),
+                rtt_ms: None,
+                bytes_sent: parse_bytes_display(row.bytes_tx_display.as_deref()),
+                bytes_received: parse_bytes_display(row.bytes_rx_display.as_deref()),
+                connected_since_ts: None,
+            })
+            .collect(),
+    )
+}
+
+fn apply_nostrconnect_options(
+    uri: String,
+    options: &NostrConnectOptions,
+) -> Result<String, CoreError> {
+    let mut parsed = url::Url::parse(&uri)
+        .map_err(|e| CoreError::Signer(format!("NMP nostrconnect URI parse failed: {e}")))?;
+    let retained_pairs: Vec<(String, String)> = parsed
+        .query_pairs()
+        .filter_map(|(key, value)| {
+            if matches!(key.as_ref(), "name" | "url" | "image" | "perms") {
+                None
+            } else {
+                Some((key.into_owned(), value.into_owned()))
+            }
+        })
+        .collect();
+
+    parsed.set_query(None);
+    {
+        let mut pairs = parsed.query_pairs_mut();
+        for (key, value) in retained_pairs {
+            pairs.append_pair(&key, &value);
+        }
+
+        let name = options.name.trim();
+        pairs.append_pair("name", if name.is_empty() { "Highlighter" } else { name });
+
+        let app_url = options.url.trim();
+        if !app_url.is_empty() {
+            pairs.append_pair("url", app_url);
+        }
+
+        let image = options.image.trim();
+        if !image.is_empty() {
+            pairs.append_pair("image", image);
+        }
+
+        let perms = options.perms.trim();
+        pairs.append_pair(
+            "perms",
+            if perms.is_empty() {
+                crate::relays::DEFAULT_NOSTR_CONNECT_PERMS
+            } else {
+                perms
+            },
+        );
+    }
+
+    Ok(parsed.to_string())
+}
+
+fn relay_status_from_nmp(label: &str, tone: &str) -> RelayStatus {
+    let joined = format!("{label} {tone}").to_ascii_lowercase();
+    if joined.contains("banned") {
+        RelayStatus::Banned
+    } else if joined.contains("terminated") {
+        RelayStatus::Terminated
+    } else if joined.contains("disconnected") || joined.contains("closed") {
+        RelayStatus::Disconnected
+    } else if joined.contains("connected") {
+        RelayStatus::Connected
+    } else {
+        RelayStatus::Connecting
+    }
+}
+
+fn parse_bytes_display(display: Option<&str>) -> u64 {
+    let Some(display) = display.map(str::trim).filter(|s| !s.is_empty()) else {
+        return 0;
+    };
+    let normalized = display.replace(',', "");
+    let mut parts = normalized.split_whitespace();
+    let Some(value) = parts.next().and_then(|v| v.parse::<f64>().ok()) else {
+        return normalized.parse::<u64>().unwrap_or(0);
+    };
+    let unit = parts.next().unwrap_or("B").to_ascii_lowercase();
+    let factor = match unit.as_str() {
+        "b" | "byte" | "bytes" => 1.0,
+        "kb" | "kib" => 1024.0,
+        "mb" | "mib" => 1024.0 * 1024.0,
+        "gb" | "gib" => 1024.0 * 1024.0 * 1024.0,
+        _ => 1.0,
+    };
+    (value * factor).round().max(0.0) as u64
+}
+
+fn cstring_arg(value: &str, label: &str) -> Result<CString, CoreError> {
+    CString::new(value)
+        .map_err(|_| CoreError::InvalidInput(format!("{label} contains an interior NUL byte")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(read: bool, write: bool, rooms: bool, indexer: bool) -> RelayConfig {
+        RelayConfig {
+            url: "wss://relay.example".into(),
+            read,
+            write,
+            rooms,
+            indexer,
+        }
+    }
+
+    #[test]
+    fn nmp_relay_role_maps_read_write_to_both() {
+        assert_eq!(
+            nmp_relay_role(&row(true, true, false, false)),
+            Some(("wss://relay.example".into(), "both".into()))
+        );
+    }
+
+    #[test]
+    fn nmp_relay_role_maps_rooms_to_read() {
+        assert_eq!(
+            nmp_relay_role(&row(false, false, true, false)),
+            Some(("wss://relay.example".into(), "read".into()))
+        );
+    }
+
+    #[test]
+    fn nmp_relay_role_preserves_indexer_composite() {
+        assert_eq!(
+            nmp_relay_role(&row(true, true, false, true)),
+            Some(("wss://relay.example".into(), "both,indexer".into()))
+        );
+    }
+
+    #[test]
+    fn nmp_relay_role_skips_disabled_rows() {
+        assert_eq!(nmp_relay_role(&row(false, false, false, false)), None);
+    }
+
+    #[test]
+    fn nmp_signed_event_conversion_preserves_nip01_shape() {
+        let keys = Keys::generate();
+        let tag = Tag::parse(vec!["t".to_string(), "highlighter".to_string()]).expect("tag");
+        let event = EventBuilder::new(Kind::Custom(9802), "quote")
+            .tags([tag])
+            .sign_with_keys(&keys)
+            .expect("event");
+
+        let converted = signed_event_for_nmp(&event);
+
+        assert_eq!(converted.id, event.id.to_hex());
+        assert_eq!(converted.sig, event.sig.to_string());
+        assert_eq!(converted.unsigned.pubkey, event.pubkey.to_hex());
+        assert_eq!(converted.unsigned.kind, 9802);
+        assert_eq!(converted.unsigned.content, "quote");
+        assert_eq!(
+            converted.unsigned.tags,
+            vec![vec!["t".to_string(), "highlighter".to_string()]]
+        );
+    }
+}

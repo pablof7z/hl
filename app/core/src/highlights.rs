@@ -9,7 +9,7 @@ use crate::models::{
     ArtifactRecord, BlossomUpload, HighlightDraft, HighlightRecord, HydratedHighlight,
 };
 use crate::nostr_runtime::NostrRuntime;
-use crate::relays::HIGHLIGHTER_RELAY;
+use crate::relays::highlighter_relay;
 
 /// NIP-84 highlight event.
 const KIND_HIGHLIGHT: u16 = 9802;
@@ -56,26 +56,24 @@ pub async fn publish_and_share(
             .sign_event_builder(builder)
             .await
             .map_err(|e| CoreError::Signer(format!("sign highlight: {e}")))?;
-        client
-            .send_event(&highlight_event)
-            .await
-            .map_err(|e| CoreError::Relay(format!("publish highlight: {e}")))?;
+        runtime.publish_signed_event("highlight-publish", &highlight_event)?;
 
         // 2. Build + sign + publish the kind:16 repost into the target group.
         let repost_builder = build_repost_event(
             highlight_event.id,
             &author_pubkey_hex,
             target_group_id,
-            HIGHLIGHTER_RELAY,
+            highlighter_relay(),
         )?;
         let repost_event = client
             .sign_event_builder(repost_builder)
             .await
             .map_err(|e| CoreError::Signer(format!("sign repost: {e}")))?;
-        client
-            .send_event(&repost_event)
-            .await
-            .map_err(|e| CoreError::Relay(format!("publish repost: {e}")))?;
+        runtime.publish_signed_event_to_relays(
+            "highlight-repost-publish",
+            &repost_event,
+            vec![highlighter_relay().to_string()],
+        )?;
 
         // 3. Build the HighlightRecord to return.
         records.push(record_from_event(&highlight_event, &draft, &artifact));
@@ -105,7 +103,7 @@ pub async fn share_to_community(
         .map_err(|e| CoreError::InvalidInput(format!("invalid author pubkey: {e}")))?;
 
     let relay_hint = if highlight_relay_url.trim().is_empty() {
-        HIGHLIGHTER_RELAY
+        highlighter_relay()
     } else {
         highlight_relay_url
     };
@@ -121,10 +119,11 @@ pub async fn share_to_community(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign repost: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish repost: {e}")))?;
+    runtime.publish_signed_event_to_relays(
+        "highlight-repost-publish",
+        &event,
+        vec![highlighter_relay().to_string()],
+    )?;
     Ok(())
 }
 
@@ -190,10 +189,7 @@ pub async fn publish(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign highlight: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish highlight: {e}")))?;
+    runtime.publish_signed_event("highlight-publish", &event)?;
     Ok(record_from_event(&event, &draft, &artifact))
 }
 
@@ -371,7 +367,7 @@ pub fn query_following_highlights(
         .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
         .collect();
     if let Ok(me) = PublicKey::from_hex(user_pubkey_hex) {
-        if !follows_pks.iter().any(|pk| *pk == me) {
+        if !follows_pks.contains(&me) {
             follows_pks.push(me);
         }
     }
@@ -601,7 +597,8 @@ fn build_highlight_event(
     // if the primary reference is already an `i` tag with the same value
     // (would be a duplicate).
     let catalog_id = artifact.preview.catalog_id.trim();
-    if !catalog_id.is_empty() && !(ref_name == "i" && ref_value == catalog_id) {
+    let duplicates_primary_reference = ref_name == "i" && ref_value == catalog_id;
+    if !catalog_id.is_empty() && !duplicates_primary_reference {
         tags.push(
             Tag::parse(vec!["i".to_string(), catalog_id.to_string()])
                 .map_err(|e| CoreError::Other(format!("build catalog tag: {e}")))?,
@@ -1285,9 +1282,10 @@ mod tests {
             let relay_line = format!("[\"EVENT\",\"s\",{}]", e.as_json());
             ndb.process_event(&relay_line).expect("process event");
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-
-        let hits = query_for_article(&ndb, target_address, 32).expect("query");
+        let hits = wait_until(
+            || query_for_article(&ndb, target_address, 32).expect("query"),
+            |hits| hits.len() == 1,
+        );
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].quote, "matching quote");
         assert_eq!(hits[0].artifact_address, target_address);
@@ -1318,8 +1316,15 @@ mod tests {
         ndb.process_event(&line).expect("process event");
     }
 
-    fn wait_for_ndb() {
-        std::thread::sleep(std::time::Duration::from_millis(100));
+    fn wait_until<T>(mut load: impl FnMut() -> T, ready: impl Fn(&T) -> bool) -> T {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            let value = load();
+            if ready(&value) || std::time::Instant::now() >= deadline {
+                return value;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
     }
 
     fn make_group_highlight(keys: &Keys, group_id: &str, quote: &str) -> Event {
@@ -1338,9 +1343,11 @@ mod tests {
         let keys = Keys::generate();
         let hl = make_group_highlight(&keys, "alpha", "my insight");
         ingest(&ndb, &hl);
-        wait_for_ndb();
 
-        let records = query_for_group(&ndb, "alpha", 32).expect("query");
+        let records = wait_until(
+            || query_for_group(&ndb, "alpha", 32).expect("query"),
+            |records| records.len() == 1,
+        );
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].highlight.quote, "my insight");
     }
@@ -1351,13 +1358,18 @@ mod tests {
         let keys = Keys::generate();
         ingest(&ndb, &make_group_highlight(&keys, "alpha", "alpha hl"));
         ingest(&ndb, &make_group_highlight(&keys, "bravo", "bravo hl"));
-        wait_for_ndb();
 
-        let alpha = query_for_group(&ndb, "alpha", 32).expect("alpha");
+        let alpha = wait_until(
+            || query_for_group(&ndb, "alpha", 32).expect("alpha"),
+            |records| records.len() == 1,
+        );
         assert_eq!(alpha.len(), 1);
         assert_eq!(alpha[0].highlight.quote, "alpha hl");
 
-        let bravo = query_for_group(&ndb, "bravo", 32).expect("bravo");
+        let bravo = wait_until(
+            || query_for_group(&ndb, "bravo", 32).expect("bravo"),
+            |records| records.len() == 1,
+        );
         assert_eq!(bravo.len(), 1);
         assert_eq!(bravo[0].highlight.quote, "bravo hl");
     }
@@ -1377,9 +1389,11 @@ mod tests {
             .expect("sign");
         ingest(&ndb, &no_h);
         ingest(&ndb, &make_group_highlight(&keys, "alpha", "alpha hl"));
-        wait_for_ndb();
 
-        let records = query_for_group(&ndb, "alpha", 32).expect("query");
+        let records = wait_until(
+            || query_for_group(&ndb, "alpha", 32).expect("query"),
+            |records| records.len() == 1,
+        );
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].highlight.quote, "alpha hl");
     }

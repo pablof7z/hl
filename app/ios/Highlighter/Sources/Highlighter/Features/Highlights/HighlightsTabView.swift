@@ -13,35 +13,35 @@ struct HighlightsTabView: View {
     var body: some View {
         NavigationStack {
             content(feed: app.homeFeed)
-            .navigationTitle("Highlights")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        capturePresented = true
-                    } label: {
-                        Image(systemName: "plus")
+                .navigationTitle("Highlights")
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            capturePresented = true
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                        .accessibilityLabel("Capture highlight")
                     }
-                    .accessibilityLabel("Capture highlight")
                 }
-            }
-            .navigationDestination(for: HighlightDetailTarget.self) { target in
-                HighlightDetailView(item: target.item)
-            }
-            .navigationDestination(for: ArticleReaderTarget.self) { target in
-                ArticleReaderView(target: target)
-            }
-            .navigationDestination(for: WebReaderTarget.self) { target in
-                WebReaderView(target: target)
-            }
-            .navigationDestination(for: BookTarget.self) { target in
-                BookView(catalogId: target.catalogId)
-            }
-            .navigationDestination(for: ProfileDestination.self) { destination in
-                if case .pubkey(let pk) = destination {
-                    ProfileView(pubkey: pk)
+                .navigationDestination(for: HighlightDetailTarget.self) { target in
+                    HighlightDetailView(item: target.item)
                 }
-            }
-            .globalUserToolbar()
+                .navigationDestination(for: ArticleReaderTarget.self) { target in
+                    ArticleReaderView(target: target)
+                }
+                .navigationDestination(for: WebReaderTarget.self) { target in
+                    WebReaderView(target: target)
+                }
+                .navigationDestination(for: BookTarget.self) { target in
+                    BookView(catalogId: target.catalogId)
+                }
+                .navigationDestination(for: ProfileDestination.self) { destination in
+                    if case let .pubkey(pk) = destination {
+                        ProfileView(pubkey: pk)
+                    }
+                }
+                .globalUserToolbar()
         }
         .sheet(item: $shareTarget) { target in
             ShareToCommunitySheet(target: target)
@@ -111,11 +111,13 @@ struct HighlightsTabView: View {
 
     @ViewBuilder
     private func row(for item: HighlighterHomeFeedItem) -> some View {
-        switch item {
-        case .highlights(stableId: _, sortKey: _, highlights: let hs, highlightCount: _):
-            highlightRow(hs)
-        case .read(stableId: _, sortKey: _, item: let r):
-            readRow(r)
+        switch item.kind {
+        case .highlights:
+            highlightRow(item.highlights)
+        case .read:
+            if let read = item.read {
+                readRow(read)
+            }
         }
     }
 
@@ -154,18 +156,18 @@ struct HighlightsTabView: View {
 
     // MARK: - Article (read-only surfacing) row
 
-    private func readRow(_ item: ReadingFeedItem) -> some View {
+    private func readRow(_ item: HighlighterHomeReadItem) -> some View {
         NavigationLink(value: ArticleReaderTarget(
-            pubkey: item.article.pubkey,
-            dTag: item.article.identifier,
-            seed: item.article
+            pubkey: item.pubkey,
+            dTag: item.identifier,
+            seed: nil
         )) {
             ReadingFeedCardView(item: item)
         }
         .buttonStyle(.plain)
         .contextMenu {
             Button {
-                shareTarget = .article(item.article)
+                shareTarget = .read(item)
             } label: {
                 Label("Share to community", systemImage: "square.and.arrow.up")
             }
@@ -217,16 +219,5 @@ struct HighlightsTabView: View {
             displaySubtitle: item.highlight.quote,
             imageURL: nil
         )
-    }
-}
-
-private extension HighlighterHomeFeedItem {
-    var stableId: String {
-        switch self {
-        case .highlights(stableId: let stableId, sortKey: _, highlights: _, highlightCount: _):
-            stableId
-        case .read(stableId: let stableId, sortKey: _, item: _):
-            stableId
-        }
     }
 }

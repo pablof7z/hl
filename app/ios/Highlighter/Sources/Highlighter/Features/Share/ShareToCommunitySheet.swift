@@ -20,6 +20,8 @@ struct ShareToCommunityTarget: Identifiable {
     enum Kind {
         /// Share the source artifact/article via kind:11.
         case artifactShare(preview: ArtifactPreview)
+        /// Share a URL; Rust builds the canonical preview at publish time.
+        case urlShare(url: String)
         /// Re-share an existing highlight via kind:16.
         case highlightRepost(eventId: String, authorPubkeyHex: String, relayHint: String)
     }
@@ -41,6 +43,56 @@ struct ShareToCommunityTarget: Identifiable {
             displayTitle: artifact.preview.title.isEmpty ? "Untitled" : artifact.preview.title,
             displaySubtitle: artifact.preview.description,
             imageURL: artifact.preview.image.isEmpty ? nil : URL(string: artifact.preview.image)
+        )
+    }
+
+    static func read(_ item: HighlighterHomeReadItem) -> ShareToCommunityTarget {
+        let address = "30023:\(item.pubkey):\(item.identifier)"
+        let preview = ArtifactPreview(
+            id: item.identifier,
+            url: "",
+            title: item.title,
+            author: "",
+            image: item.image,
+            description: item.summary,
+            source: "article",
+            domain: "",
+            catalogId: "",
+            catalogKind: "",
+            podcastGuid: "",
+            podcastItemGuid: "",
+            podcastShowTitle: "",
+            audioUrl: "",
+            audioPreviewUrl: "",
+            transcriptUrl: "",
+            feedUrl: "",
+            publishedAt: "",
+            durationSeconds: item.readTimeMinutes.map { Int64($0) * 60 },
+            referenceTagName: "a",
+            referenceTagValue: address,
+            referenceKind: "30023",
+            highlightTagName: "a",
+            highlightTagValue: address,
+            highlightReferenceKey: "a:\(address)",
+            chapters: []
+        )
+        return ShareToCommunityTarget(
+            kind: .artifactShare(preview: preview),
+            displayTitle: item.title.isEmpty ? "Article" : item.title,
+            displaySubtitle: item.summary,
+            imageURL: item.image.isEmpty ? nil : URL(string: item.image)
+        )
+    }
+
+    static func url(_ url: URL, metadata: WebMetadata?) -> ShareToCommunityTarget {
+        let title = metadata?.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let description = metadata?.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        let image = metadata?.image.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ShareToCommunityTarget(
+            kind: .urlShare(url: url.absoluteString),
+            displayTitle: title?.isEmpty == false ? title! : (url.host ?? url.absoluteString),
+            displaySubtitle: description ?? "",
+            imageURL: image?.isEmpty == false ? URL(string: image!) : nil
         )
     }
 
@@ -76,9 +128,6 @@ struct ShareToCommunitySheet: View {
     let target: ShareToCommunityTarget
 
     @State private var note: String = ""
-    @State private var publishingId: String?
-    @State private var errorMessage: String?
-
     var body: some View {
         NavigationStack {
             List {
@@ -89,7 +138,7 @@ struct ShareToCommunitySheet: View {
 
                 Section("Note (optional)") {
                     TextField("What caught your attention?", text: $note, axis: .vertical)
-                        .lineLimit(2...6)
+                        .lineLimit(2 ... 6)
                 }
 
                 Section("Share to") {
@@ -113,16 +162,26 @@ struct ShareToCommunitySheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
-                        .disabled(publishingId != nil)
+                        .disabled(app.shareComposer.isPublishing)
                 }
             }
             .alert("Couldn't share", isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
+                get: { app.shareComposer.errorMessage != nil },
+                set: { if !$0 { app.clearShareComposerError() } }
             )) {
-                Button("OK", role: .cancel) { errorMessage = nil }
+                Button("OK", role: .cancel) { app.clearShareComposerError() }
             } message: {
-                Text(errorMessage ?? "")
+                Text(app.shareComposer.errorMessage ?? "")
+            }
+            .onAppear {
+                app.clearShareComposerResult()
+                app.clearShareComposerError()
+            }
+            .onChange(of: app.shareComposer.publishedGroupId) { _, groupId in
+                guard groupId != nil else { return }
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                app.clearShareComposerResult()
+                dismiss()
             }
         }
     }
@@ -190,42 +249,38 @@ struct ShareToCommunitySheet: View {
 
     private var navigationTitle: String {
         switch target.kind {
-        case .artifactShare: return "Share to community"
+        case .artifactShare, .urlShare: return "Share to community"
         case .highlightRepost: return "Share highlight"
         }
     }
 
     private func publish(to groupId: String) {
-        guard publishingId == nil else { return }
-        publishingId = groupId
+        guard !app.shareComposer.isPublishing else { return }
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        Task {
-            do {
-                switch target.kind {
-                case .artifactShare(let preview):
-                    _ = try await app.safeCore.publishArtifact(
-                        preview: preview,
-                        groupId: groupId,
-                        note: trimmedNote.isEmpty ? nil : trimmedNote
-                    )
-                case .highlightRepost(let eventId, let authorPubkey, let relayHint):
-                    try await app.safeCore.shareHighlightToRoom(
-                        highlightId: eventId,
-                        highlightAuthorPubkeyHex: authorPubkey,
-                        highlightRelayUrl: relayHint,
-                        targetGroupId: groupId
-                    )
-                }
-                await MainActor.run {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    dismiss()
-                }
-            } catch {
-                await MainActor.run {
-                    publishingId = nil
-                    errorMessage = error.localizedDescription
-                }
-            }
+        switch target.kind {
+        case let .artifactShare(preview):
+            app.publishArtifactShare(
+                preview: preview,
+                groupId: groupId,
+                note: trimmedNote.isEmpty ? nil : trimmedNote
+            )
+        case let .urlShare(url):
+            app.publishUrlShare(
+                url: url,
+                groupId: groupId,
+                note: trimmedNote.isEmpty ? nil : trimmedNote
+            )
+        case let .highlightRepost(eventId, authorPubkey, relayHint):
+            app.shareHighlightRepost(
+                eventId: eventId,
+                authorPubkeyHex: authorPubkey,
+                relayHint: relayHint,
+                targetGroupId: groupId
+            )
         }
+    }
+
+    private var publishingId: String? {
+        app.shareComposer.publishingGroupId
     }
 }

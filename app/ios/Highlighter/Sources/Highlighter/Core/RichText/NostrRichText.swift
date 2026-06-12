@@ -32,9 +32,9 @@ struct NostrRichText: View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 switch block {
-                case .paragraph(let runs):
+                case let .paragraph(runs):
                     paragraph(runs)
-                case .eventRef(let ref):
+                case let .eventRef(ref):
                     NostrEntityCard(entity: ref)
                 }
             }
@@ -43,37 +43,37 @@ struct NostrRichText: View {
 
     // MARK: - Paragraph rendering
 
-    @ViewBuilder
     private func paragraph(_ runs: [Run]) -> some View {
-        // Concatenate runs into a single Text so wrapping behaves like
-        // a normal paragraph. Mentions render with the cached display
-        // name when available.
-        runs.reduce(Text(""), { acc, run in
+        // Keep the paragraph as one Text so wrapping behaves naturally.
+        var attributed = AttributedString()
+        for run in runs {
             switch run {
-            case .text(let s):
+            case let .text(s):
                 let a = (try? AttributedString(
                     markdown: s,
                     options: AttributedString.MarkdownParsingOptions(
                         interpretedSyntax: .inlineOnlyPreservingWhitespace
                     )
                 )) ?? AttributedString(s)
-                return acc + Text(a)
-            case .entity(let ref):
-                guard case .profile(let pubkey, _) = ref else {
+                attributed += a
+            case let .entity(ref):
+                guard case let .profile(pubkey, _) = ref else {
                     // Event refs at this layer are guaranteed to be the
                     // first run of an `eventRef` block via `blocks`,
                     // so this case is unreachable in paragraphs.
-                    return acc
+                    continue
                 }
                 let label = mentionLabel(for: pubkey)
-                return acc + Text("@\(label)")
-                    .foregroundStyle(accent)
-                    .font(font.weight(.medium))
+                var mention = AttributedString("@\(label)")
+                mention.foregroundColor = accent
+                mention.font = font.weight(.medium)
+                attributed += mention
             }
-        })
-        .font(font)
-        .foregroundStyle(ink)
-        .fixedSize(horizontal: false, vertical: true)
+        }
+        return Text(attributed)
+            .font(font)
+            .foregroundStyle(ink)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private func mentionLabel(for pubkeyHex: String) -> String {
@@ -94,7 +94,7 @@ struct NostrRichText: View {
             switch run {
             case .text, .entity(.profile):
                 currentRuns.append(run)
-            case .entity(let ref):
+            case let .entity(ref):
                 if !currentRuns.isEmpty {
                     blocks.append(.paragraph(currentRuns))
                     currentRuns.removeAll()
@@ -119,7 +119,7 @@ struct NostrRichText: View {
         while i < scalars.endIndex {
             if let r = scanNostrURI(at: i, in: scalars) {
                 if r.0.lowerBound > i {
-                    let pre = String(scalars[i..<r.0.lowerBound])
+                    let pre = String(scalars[i ..< r.0.lowerBound])
                     out.append(.text(pre))
                 }
                 if let entity = decode(r.1) {
@@ -144,7 +144,7 @@ struct NostrRichText: View {
         at start: String.Index,
         in s: String
     ) -> (Range<String.Index>, String)? {
-        guard let prefixRange = s.range(of: "nostr:", options: [.literal, .caseInsensitive], range: start..<s.endIndex) else {
+        guard let prefixRange = s.range(of: "nostr:", options: [.literal, .caseInsensitive], range: start ..< s.endIndex) else {
             return nil
         }
         let bodyStart = prefixRange.upperBound
@@ -156,7 +156,7 @@ struct NostrRichText: View {
             end = s.index(after: end)
         }
         if end == bodyStart { return nil }
-        let body = String(s[bodyStart..<end])
+        let body = String(s[bodyStart ..< end])
         // Only count it as an entity URI if it starts with one of the
         // recognised HRPs followed by `1` (the bech32 separator).
         let lower = body.lowercased()
@@ -168,7 +168,7 @@ struct NostrRichText: View {
         else {
             return nil
         }
-        return (prefixRange.lowerBound..<end, body)
+        return (prefixRange.lowerBound ..< end, body)
     }
 
     private func isBech32Char(_ c: Character) -> Bool {
@@ -177,11 +177,11 @@ struct NostrRichText: View {
         // Lowercase ASCII letters + digits (bech32 alphabet is a subset
         // but accepting the full alphanumeric set here is fine — the
         // FromBech32 decoder rejects invalid inputs).
-        return (0x30...0x39).contains(v) || (0x61...0x7A).contains(v)
+        return (0x30 ... 0x39).contains(v) || (0x61 ... 0x7A).contains(v)
     }
 
     private func decode(_ raw: String) -> NostrEntityRef? {
-        try? appStore.core.decodeNostrEntity(input: raw)
+        appStore.decodeNostrEntity(raw)
     }
 
     /// Pull every `nostr:` event-reference entity (`note1…`, `nevent1…`,
@@ -193,18 +193,18 @@ struct NostrRichText: View {
     /// markdown refactor.
     static func extractEventRefs(
         from content: String,
-        using core: HighlighterCore
+        using app: HighlighterNmpApp
     ) -> [NostrEntityRef] {
         var seen: Set<String> = []
         var out: [NostrEntityRef] = []
-        for run in tokeniseWithDecoder(content, decoder: { try? core.decodeNostrEntity(input: $0) }) {
-            guard case .entity(let ref) = run else { continue }
+        for run in tokeniseWithDecoder(content, decoder: { app.decodeNostrEntity(input: $0) }) {
+            guard case let .entity(ref) = run else { continue }
             switch ref {
             case .profile:
                 continue
-            case .event(let id, _, _, _):
+            case let .event(id, _, _, _):
                 if seen.insert("e:\(id)").inserted { out.append(ref) }
-            case .address(let kind, let pk, let d, _):
+            case let .address(kind, pk, d, _):
                 if seen.insert("a:\(kind):\(pk):\(d)").inserted { out.append(ref) }
             }
         }
@@ -221,7 +221,7 @@ struct NostrRichText: View {
         var out: [Run] = []
         var i = s.startIndex
         while i < s.endIndex {
-            guard let prefixRange = s.range(of: "nostr:", options: [.literal, .caseInsensitive], range: i..<s.endIndex) else {
+            guard let prefixRange = s.range(of: "nostr:", options: [.literal, .caseInsensitive], range: i ..< s.endIndex) else {
                 out.append(.text(String(s[i...])))
                 break
             }
@@ -231,17 +231,17 @@ struct NostrRichText: View {
                 let c = s[end]
                 guard let scalar = c.unicodeScalars.first, c.unicodeScalars.count == 1 else { break }
                 let v = scalar.value
-                if (0x30...0x39).contains(v) || (0x61...0x7A).contains(v) {
+                if (0x30 ... 0x39).contains(v) || (0x61 ... 0x7A).contains(v) {
                     end = s.index(after: end)
                 } else { break }
             }
             if end == bodyStart { i = prefixRange.upperBound; continue }
-            let body = String(s[bodyStart..<end])
+            let body = String(s[bodyStart ..< end])
             let lower = body.lowercased()
             let isEntity = lower.hasPrefix("npub1") || lower.hasPrefix("nprofile1")
                 || lower.hasPrefix("note1") || lower.hasPrefix("nevent1") || lower.hasPrefix("naddr1")
             if !isEntity { i = prefixRange.upperBound; continue }
-            if prefixRange.lowerBound > i { out.append(.text(String(s[i..<prefixRange.lowerBound]))) }
+            if prefixRange.lowerBound > i { out.append(.text(String(s[i ..< prefixRange.lowerBound]))) }
             if let entity = decoder(body) { out.append(.entity(entity)) } else { out.append(.text(body)) }
             i = end
         }
@@ -271,7 +271,7 @@ private extension NostrEntityRef {
 
 private extension Optional where Wrapped == NostrEntityRef {
     var asProfile: (pubkeyHex: String, relays: [String])? {
-        guard case .profile(let pubkey, let relays) = self else { return nil }
+        guard case let .profile(pubkey, relays) = self else { return nil }
         return (pubkey, relays)
     }
 }
@@ -304,9 +304,9 @@ struct NostrEntityCard: View {
 
     private var cacheKey: String {
         switch entity {
-        case .profile(let pk, _): return "p:\(pk)"
-        case .event(let id, _, _, _): return "e:\(id)"
-        case .address(let kind, let pk, let d, _): return "a:\(kind):\(pk):\(d)"
+        case let .profile(pk, _): return "p:\(pk)"
+        case let .event(id, _, _, _): return "e:\(id)"
+        case let .address(kind, pk, d, _): return "a:\(kind):\(pk):\(d)"
         }
     }
 
@@ -340,18 +340,18 @@ struct NostrEntityCard: View {
 
     private var entityLabel: String {
         switch entity {
-        case .profile(let pk, _): return "Profile · \(pk.prefix(12))…"
-        case .event(let id, _, _, let kind):
+        case let .profile(pk, _): return "Profile · \(pk.prefix(12))…"
+        case let .event(id, _, _, kind):
             if let k = kind { return "Event kind \(k) · \(id.prefix(12))…" }
             return "Event · \(id.prefix(12))…"
-        case .address(let kind, _, let d, _): return "Kind \(kind) · \(d)"
+        case let .address(kind, _, d, _): return "Kind \(kind) · \(d)"
         }
     }
 
     private func load() async {
         guard !attempted else { return }
         attempted = true
-        if let event = try? await appStore.safeCore.resolveNostrEntity(entity) {
+        if let event = await appStore.resolveNostrEntity(entity) {
             await MainActor.run { resolved = event }
         }
     }

@@ -2,6 +2,18 @@
   "schema_version": 1,
   "entries": [
     {
+      "shipped_at": "2026-06-12T01:50:00Z",
+      "lines": [
+        "Capture publishing, clip sharing, and book picker search now use the same Rust-owned app state across iOS and Android."
+      ]
+    },
+    {
+      "shipped_at": "2026-06-11T11:53:00Z",
+      "lines": [
+        "Network settings now show which rooms use a relay before removal and explain missing relay lists more clearly during import."
+      ]
+    },
+    {
       "shipped_at": "2026-06-11T00:13:00Z",
       "lines": [
         "Article reading and highlight publishing now use the same Rust-owned state on iOS and Android."

@@ -4,23 +4,13 @@ import SwiftUI
 /// role toggles + Remove action.
 struct RelayDetailView: View {
     let url: String
-    let store: NetworkSettingsStore
 
     @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
     @State private var showRemoveConfirm = false
-    @State private var isSaving = false
 
-    /// Names of joined rooms hosted on this relay. Non-empty → the user
-    /// would lose access to those rooms if they remove the relay. Listed
-    /// in the confirmation dialog so the user can decide.
-    private var orphanedRoomNames: [String] {
-        appStore.joinedCommunities
-            .filter {
-                $0.relayUrl.trimmingCharacters(in: .whitespaces)
-                    == url.trimmingCharacters(in: .whitespaces)
-            }
-            .map { $0.name.isEmpty ? $0.id : $0.name }
+    private var removalImpact: HighlighterRelayRemovalImpact? {
+        appStore.networkRemovalImpact(url: url)
     }
 
     var body: some View {
@@ -34,25 +24,26 @@ struct RelayDetailView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Relay")
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: url) {
+            appStore.probeNetworkRelayNip11(url: url)
+        }
         .confirmationDialog(
-            orphanedRoomNames.isEmpty
+            (removalImpact?.roomCount ?? 0) == 0
                 ? "Remove this relay?"
                 : "Remove — you're a member of rooms here",
             isPresented: $showRemoveConfirm,
             titleVisibility: .visible
         ) {
             Button("Remove", role: .destructive) {
-                Task {
-                    await store.remove(url)
-                    dismiss()
-                }
+                appStore.removeNetworkRelay(url: url)
+                dismiss()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            if orphanedRoomNames.isEmpty {
-                Text("Highlighter will stop sending and receiving events through this relay.")
+            if let impact = removalImpact, impact.roomCount > 0 {
+                Text("This relay hosts \(impact.roomCount) of your rooms (\(impact.roomNames.prefix(3).joined(separator: ", "))\(impact.roomCount > 3 ? ", …" : "")). Removing it will cut you off from them until you re-add it.")
             } else {
-                Text("This relay hosts \(orphanedRoomNames.count) of your rooms (\(orphanedRoomNames.prefix(3).joined(separator: ", "))\(orphanedRoomNames.count > 3 ? ", …" : "")). Removing it will cut you off from them until you re-add it.")
+                Text("Highlighter will stop sending and receiving events through this relay.")
             }
         }
     }
@@ -60,14 +51,14 @@ struct RelayDetailView: View {
     // MARK: - Sections
 
     private var config: RelayConfig? {
-        store.relays.first(where: { $0.url == url })
+        appStore.network.relays.first(where: { $0.url == url })
     }
 
     private var diagnostic: RelayDiagnostic? {
-        store.diagnostic(for: url)
+        appStore.networkDiagnostic(url: url)
     }
 
-    private var nip11: Nip11Document? { store.nip11(for: url) }
+    private var nip11: Nip11Document? { appStore.networkNip11(url: url)?.document }
 
     @ViewBuilder
     private var headerSection: some View {
@@ -129,16 +120,16 @@ struct RelayDetailView: View {
         if let cfg = config {
             Section {
                 ToggleRow(label: "Read", isOn: cfg.read) { on in
-                    Task { await applyRoles(cfg, read: on) }
+                    applyRoles(cfg, read: on)
                 }
                 ToggleRow(label: "Write", isOn: cfg.write) { on in
-                    Task { await applyRoles(cfg, write: on) }
+                    applyRoles(cfg, write: on)
                 }
                 ToggleRow(label: "Rooms", isOn: cfg.rooms) { on in
-                    Task { await applyRoles(cfg, rooms: on) }
+                    applyRoles(cfg, rooms: on)
                 }
                 ToggleRow(label: "Indexer", isOn: cfg.indexer) { on in
-                    Task { await applyRoles(cfg, indexer: on) }
+                    applyRoles(cfg, indexer: on)
                 }
             } header: {
                 Text("Roles")
@@ -165,13 +156,13 @@ struct RelayDetailView: View {
 
     @ViewBuilder
     private var orphanRoomsSection: some View {
-        if !orphanedRoomNames.isEmpty {
+        if let impact = removalImpact, impact.roomCount > 0 {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
                     Label("Hosts your rooms", systemImage: "person.3.fill")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.orange)
-                    Text(orphanedRoomNames.prefix(5).joined(separator: ", ") + (orphanedRoomNames.count > 5 ? ", …" : ""))
+                    Text(impact.roomNames.joined(separator: ", ") + (impact.roomCount > UInt64(impact.roomNames.count) ? ", …" : ""))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -216,10 +207,8 @@ struct RelayDetailView: View {
         write: Bool? = nil,
         rooms: Bool? = nil,
         indexer: Bool? = nil
-    ) async {
-        isSaving = true
-        defer { isSaving = false }
-        await store.setRoles(
+    ) {
+        appStore.setNetworkRelayRoles(
             url: cfg.url,
             read: read ?? cfg.read,
             write: write ?? cfg.write,
@@ -227,6 +216,8 @@ struct RelayDetailView: View {
             indexer: indexer ?? cfg.indexer
         )
     }
+
+    private var isSaving: Bool { appStore.network.isSaving }
 
     // MARK: - Formatting
 

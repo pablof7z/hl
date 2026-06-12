@@ -105,6 +105,9 @@ struct ClipComposerSheet: View {
                 selectedGroupId = artifact.groupId
             }
         }
+        .onChange(of: app.capture) { _, snapshot in
+            applyPublishSnapshot(snapshot)
+        }
     }
 
     // MARK: - Header
@@ -313,6 +316,8 @@ struct ClipComposerSheet: View {
         guard canPublish else { return }
         isPublishing = true
         publishError = nil
+        app.clearCaptureError()
+        app.clearCaptureResult()
 
         let draft = HighlightDraft(
             quote: extractedFragment,
@@ -325,28 +330,27 @@ struct ClipComposerSheet: View {
             image: nil
         )
 
-        Task {
-            do {
-                if let groupId = selectedGroupId, !groupId.isEmpty {
-                    _ = try await app.safeCore.publishHighlightsAndShare(
-                        artifact: artifact,
-                        drafts: [draft],
-                        targetGroupId: groupId
-                    )
-                } else {
-                    _ = try await app.safeCore.publishHighlight(draft: draft, artifact: artifact)
-                }
-                await MainActor.run {
-                    isPublishing = false
-                    app.shareToast = "Clip shared"
-                    dismiss()
-                }
-            } catch {
-                await MainActor.run {
-                    isPublishing = false
-                    publishError = error.localizedDescription
-                }
-            }
+        app.publishClipHighlight(
+            artifact: artifact,
+            targetGroupId: selectedGroupId,
+            draft: draft
+        )
+    }
+
+    private func applyPublishSnapshot(_ snapshot: HighlighterCaptureSnapshot) {
+        guard isPublishing || snapshot.isPublishing else { return }
+        if snapshot.isPublishing {
+            isPublishing = true
+            return
+        }
+        if snapshot.publishedEventId != nil {
+            isPublishing = false
+            app.clearCaptureResult()
+            dismiss()
+        } else if let message = snapshot.errorMessage {
+            isPublishing = false
+            publishError = message
+            app.clearCaptureError()
         }
     }
 }

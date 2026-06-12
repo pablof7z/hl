@@ -10,7 +10,8 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
 use crate::models::ChatMessageRecord;
-use crate::nostr_runtime::NostrRuntime;
+use crate::nostr_runtime::{signed_event_from_action_result, NostrRuntime};
+use crate::relays::highlighter_relay;
 
 /// NIP-29 chat message. Content is the message body; the only required tag
 /// is `["h", <group_id>]` so the relay routes it to the room. Optional
@@ -67,8 +68,8 @@ pub fn query_chat_messages(
     Ok(records)
 }
 
-/// Build + sign + publish a kind:9 chat message into `group_id`.
-/// `reply_to_event_id`, when set, becomes a marked NIP-10-style `e` tag
+/// Publish a kind:9 chat message through NMP's NIP-29 action. `reply_to_event_id`,
+/// when set, becomes a marked NIP-10-style `e` tag
 /// `["e", <id>, "", "reply"]` so other clients render the threading.
 pub async fn publish_chat_message(
     runtime: &NostrRuntime,
@@ -87,26 +88,20 @@ pub async fn publish_chat_message(
         ));
     }
 
-    let mut tags: Vec<Tag> = Vec::with_capacity(2);
-    tags.push(parse_tag(&["h", group_id])?);
-    if let Some(reply_to) = reply_to_event_id {
-        let reply_to = reply_to.trim();
-        if !reply_to.is_empty() {
-            tags.push(parse_tag(&["e", reply_to, "", "reply"])?);
-        }
-    }
-
-    let builder = EventBuilder::new(Kind::Custom(KIND_CHAT_MESSAGE), content).tags(tags);
-
-    let client = runtime.client();
-    let event = client
-        .sign_event_builder(builder)
-        .await
-        .map_err(|e| CoreError::Signer(format!("sign chat message: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish chat message: {e}")))?;
+    let action = nmp_nip29::action::PostChatMessageInput {
+        group: nmp_nip29::GroupId::new(highlighter_relay(), group_id),
+        content: content.to_string(),
+        previous_event_id_prefixes: Vec::new(),
+        reply_to_event_id: reply_to_event_id
+            .map(str::trim)
+            .filter(|reply| !reply.is_empty())
+            .map(str::to_string),
+    };
+    let row = runtime
+        .dispatch_nmp_action_for_result("chat-publish", "nmp.nip29.post_chat_message", &action)
+        .await?;
+    let event = signed_event_from_action_result("chat-publish", row.result.as_deref())?;
+    runtime.cache_accepted_event("chat-publish", &event)?;
 
     record_from_event(&event)
         .ok_or_else(|| CoreError::Other("signed chat message failed to parse back".into()))
@@ -166,6 +161,7 @@ fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
     None
 }
 
+#[cfg(test)]
 fn parse_tag(parts: &[&str]) -> Result<Tag, CoreError> {
     Tag::parse(parts.iter().map(|s| s.to_string()).collect::<Vec<_>>())
         .map_err(|e| CoreError::Other(format!("build tag: {e}")))

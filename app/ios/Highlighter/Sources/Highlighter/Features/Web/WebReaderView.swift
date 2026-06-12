@@ -19,8 +19,6 @@ struct WebReaderView: View {
     @State private var showAsReader: Bool = true
     @State private var readerAvailable: Bool = false
     @State private var shareTarget: ShareToCommunityTarget?
-    @State private var sharePreparing = false
-    @State private var shareError: String?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -57,58 +55,33 @@ struct WebReaderView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    Task { await prepareShare() }
+                    prepareShare()
                 } label: {
-                    if sharePreparing {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "square.and.arrow.up")
-                    }
+                    Image(systemName: "square.and.arrow.up")
                 }
-                .disabled(sharePreparing)
                 .accessibilityLabel("Share to room")
             }
+        }
+        .task(id: target.url.absoluteString) {
+            app.requestWebMetadata(url: target.url.absoluteString)
         }
         .sheet(item: $shareTarget) { target in
             ShareToCommunitySheet(target: target)
                 .environment(app)
                 .presentationDetents([.medium, .large])
         }
-        .alert("Couldn't share", isPresented: Binding(
-            get: { shareError != nil },
-            set: { if !$0 { shareError = nil } }
-        )) {
-            Button("OK", role: .cancel) { shareError = nil }
-        } message: {
-            Text(shareError ?? "")
-        }
         .commentsAttachment(
             artifact: .external(id: target.url.absoluteString, kind: 0)
         )
     }
 
-    /// Build an `ArtifactPreview` from the URL via the Rust core (which
-    /// fetches the page metadata) and hand it to the share sheet.
-    /// Falls back to a bare URL-only preview if the fetch fails so
-    /// the user can still share the link without a title.
-    private func prepareShare() async {
-        sharePreparing = true
-        defer { sharePreparing = false }
-        do {
-            let preview = try await app.safeCore.buildPreviewFromUrl(target.url.absoluteString)
-            await MainActor.run {
-                shareTarget = ShareToCommunityTarget(
-                    kind: .artifactShare(preview: preview),
-                    displayTitle: preview.title.isEmpty ? (target.url.host ?? target.url.absoluteString) : preview.title,
-                    displaySubtitle: preview.description,
-                    imageURL: preview.image.isEmpty ? nil : URL(string: preview.image)
-                )
-            }
-        } catch {
-            await MainActor.run {
-                shareError = "Couldn't build a preview: \(error.localizedDescription)"
-            }
-        }
+    /// Opens the share sheet with a URL intent. Rust builds the canonical
+    /// preview and publishes from the NMP share composer after room selection.
+    private func prepareShare() {
+        shareTarget = ShareToCommunityTarget.url(
+            target.url,
+            metadata: app.webMetadata(url: target.url.absoluteString)
+        )
     }
 }
 
@@ -199,13 +172,13 @@ private struct WebView: UIViewRepresentable {
             self.isLoadingBinding = isLoadingBinding
         }
 
-        nonisolated func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        nonisolated func webView(_: WKWebView, didStartProvisionalNavigation _: WKNavigation!) {
             Task { @MainActor in
                 self.isLoadingBinding.wrappedValue = true
             }
         }
 
-        nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        nonisolated func webView(_: WKWebView, didFinish _: WKNavigation!) {
             Task { @MainActor in
                 await self.applyMode()
                 self.injectHighlight()
@@ -214,13 +187,13 @@ private struct WebView: UIViewRepresentable {
             }
         }
 
-        nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        nonisolated func webView(_: WKWebView, didFail _: WKNavigation!, withError _: Error) {
             Task { @MainActor in
                 self.isLoadingBinding.wrappedValue = false
             }
         }
 
-        nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        nonisolated func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError _: Error) {
             Task { @MainActor in
                 self.isLoadingBinding.wrappedValue = false
             }

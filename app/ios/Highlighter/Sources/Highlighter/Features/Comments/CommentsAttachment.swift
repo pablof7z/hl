@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Attaches NIP-22 comments to any reader by injecting a top-bar toolbar
 /// button (bubble icon + count) that pushes a CommentsView onto the
-/// enclosing NavigationStack. Owns the CommentsStore lifecycle so the
+/// enclosing NavigationStack. Opens the Rust comments slice so the
 /// count is live before the user ever taps.
 struct CommentsAttachment: ViewModifier {
     let artifact: ArtifactRef
@@ -10,9 +10,7 @@ struct CommentsAttachment: ViewModifier {
     let artifactHeader: AnyView?
 
     @Environment(HighlighterStore.self) private var app
-    @State private var store = CommentsStore()
     @State private var showComments = false
-    @State private var didStart = false
 
     func body(content: Content) -> some View {
         content
@@ -22,9 +20,9 @@ struct CommentsAttachment: ViewModifier {
                         commentsLabel
                     }
                     .accessibilityLabel(
-                        store.totalCount == 0
+                        commentCount == 0
                             ? "Start the thread"
-                            : "\(store.totalCount) comments"
+                            : "\(commentCount) comments"
                     )
                 }
             }
@@ -32,18 +30,11 @@ struct CommentsAttachment: ViewModifier {
                 CommentsView(
                     artifact: artifact,
                     artifactAuthorPubkey: artifactAuthorPubkey,
-                    artifactHeader: artifactHeader,
-                    store: store
+                    artifactHeader: artifactHeader
                 )
             }
             .task(id: artifact) {
-                guard !didStart else { return }
-                didStart = true
-                await store.start(
-                    artifact: artifact,
-                    core: app.safeCore,
-                    currentUserPubkey: app.currentUser?.pubkey
-                )
+                app.openComments(artifact: artifact)
             }
     }
 
@@ -51,12 +42,19 @@ struct CommentsAttachment: ViewModifier {
         HStack(spacing: 4) {
             Image(systemName: "bubble.left")
                 .font(.system(size: 15, weight: .medium))
-            if store.totalCount > 0 {
-                Text("\(store.totalCount)")
+            if commentCount > 0 {
+                Text("\(commentCount)")
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .monospacedDigit()
             }
         }
+    }
+
+    private var commentCount: Int {
+        guard app.comments.rootTagName == artifact.rootTagName,
+              app.comments.rootTagValue == artifact.rootTagValue
+        else { return 0 }
+        return Int(app.comments.recordCount)
     }
 }
 

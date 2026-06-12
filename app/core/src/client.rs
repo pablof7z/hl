@@ -1,5 +1,4 @@
-//! Top-level UniFFI-exposed object. Swift holds one `HighlighterCore` for
-//! the life of the app.
+//! Internal Highlighter protocol/runtime engine.
 //!
 //! State discipline: async methods never hold the `parking_lot` guard across
 //! an `.await` point (the guard isn't `Send`). Long-running protocol work
@@ -26,21 +25,19 @@ use crate::models::{
     ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, ChatMessageRecord,
     CommentRecord, CommunitySummary, CurrentUser, DiscussionRecord, FeedbackEventRecord,
     FeedbackThreadRecord, HighlightDraft, HighlightRecord, HydratedHighlight, NostrConnectOptions,
-    PictureDraft, PictureRecord, ProfileMetadata, ReadingFeedItem, RoomRecommendation,
+    PictureDraft, PictureRecord, ProfileMetadata, ProfileUpdateDraft, ReadingFeedItem,
+    RoomRecommendation,
 };
-use crate::nip46::{self, BunkerSigner};
-use crate::nostr_runtime::{pin_relay_for_read, NostrRuntime};
+use crate::nostr_runtime::NostrRuntime;
 use crate::profile;
 use crate::reads;
 use crate::recommendations;
 use crate::relays::RelayConfig;
-use crate::relays::NOSTR_CONNECT_RELAY;
 use crate::session::{current_user_from_pubkey, Session};
 use crate::share_links;
 use crate::subscriptions::{SubscriptionKind, SubscriptionRegistry};
 use crate::web_metadata::{self, WebMetadata, WebMetadataStore};
 
-#[derive(uniffi::Object)]
 pub struct HighlighterCore {
     inner: Arc<RwLock<Inner>>,
     runtime: Arc<NostrRuntime>,
@@ -59,9 +56,7 @@ struct Inner {
     session: Session,
 }
 
-#[uniffi::export(async_runtime = "tokio")]
 impl HighlighterCore {
-    #[uniffi::constructor]
     pub fn new() -> Arc<Self> {
         let runtime =
             Arc::new(NostrRuntime::new().expect("nostr runtime initialization must succeed"));
@@ -71,69 +66,28 @@ impl HighlighterCore {
     // -- Auth (sync) --
 
     pub fn login_nsec(&self, nsec: String) -> Result<CurrentUser, CoreError> {
-        // Do the session mutation + keys extraction in a single write-guard
-        // scope. Binding both values to locals ensures the guard drops
-        // before the subsequent `self.inner.write()` call — without this,
-        // Rust keeps the guard alive for the whole expression chain and
-        // parking_lot deadlocks on re-entry.
-        let (user, keys) = {
-            let mut guard = self.inner.write();
-            let user = guard.session.login_nsec(&nsec)?;
-            let keys = guard.session.keys().cloned();
-            (user, keys)
-        };
+        // Project the user from the nsec without committing session state
+        // until NMP has accepted the signer.
+        let trimmed = nsec.trim().to_string();
+        let keys = Keys::parse(&trimmed)
+            .map_err(|e| CoreError::InvalidInput(format!("invalid nsec: {e}")))?;
+        let user = current_user_from_pubkey(&keys.public_key())?;
 
-        if let Some(keys) = keys {
-            self.runtime.set_signer(keys.clone());
-            let pubkey = keys.public_key();
-            // First-pass: apply whatever's in cache so subscriptions have a
-            // pool to talk to immediately. The bootstrap below races to
-            // fetch the user's actual NIP-65 from the network and re-apply
-            // — without it, a fresh install with cold cache stays on
-            // seed_defaults forever.
-            self.runtime.spawn_apply_user_relay_config(pubkey.to_hex());
-            let user_relay_config_id = self.runtime.spawn_user_relay_config_bootstrap(pubkey);
-            let sub_id = self.runtime.spawn_membership_subscription(pubkey);
-            let contacts_id = self.runtime.spawn_contacts_subscription(pubkey);
-            // Eagerly fetch 39000 metadata for any groups already in the
-            // nostrdb cache. Without this, the first `getJoinedCommunities`
-            // call on a warm cache would return summaries with name=id because
-            // the stage-2 metadata sub would only be installed after the pump
-            // sees a live membership delta.
-            let cached_ids =
-                crate::subscriptions::collect_cached_group_ids(self.runtime.ndb(), &pubkey);
-            if !cached_ids.is_empty() {
-                self.runtime
-                    .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
-            }
-            // Best-effort outbox bootstrap: fetch follows' kind:10002 so the
-            // home-feed planner has data to work with. Empty on first login
-            // (no kind:3 cached yet) — `subscribe_following_*` will re-arm
-            // this whenever it's called, picking up follows discovered since.
-            //
-            // Also kick off a NIP-77 negentropy sync against purplepag.es
-            // for the social trio (kind:0/3/10002) of the same set. Live
-            // subscriptions catch incremental updates; negentropy sync is
-            // the cheap cold-start path that closes the "no kind:10002
-            // cached" gap so the planner stops dumping authors into the
-            // fallback shard.
-            let cached_follows = current_followed_pubkeys(self.runtime.ndb(), &pubkey);
-            self.runtime
-                .spawn_negentropy_sync_for_follows(cached_follows.clone());
-            let follows_nip65_id = self
-                .runtime
-                .spawn_follows_relay_lists_subscription(cached_follows);
-
-            let mut guard = self.inner.write();
-            guard.session.set_membership_subscription(sub_id);
-            guard.session.set_contacts_subscription(contacts_id);
-            guard
-                .session
-                .set_user_relay_config_subscription(user_relay_config_id);
-            if let Some(id) = follows_nip65_id {
-                guard.session.set_follows_nip65_subscription(id);
-            }
+        let active_pubkey_hex = self.runtime.set_local_nsec_signer(&trimmed)?;
+        if active_pubkey_hex != user.pubkey {
+            return Err(CoreError::Signer(format!(
+                "NMP activated {} but session expected {}",
+                active_pubkey_hex, user.pubkey
+            )));
         }
+        let pubkey = PublicKey::from_hex(&user.pubkey)
+            .map_err(|e| CoreError::Signer(format!("active pubkey decode: {e}")))?;
+        {
+            let mut guard = self.inner.write();
+            guard.session.set_nsec(user.clone());
+        }
+
+        spawn_login_bootstrap(self.runtime.clone(), self.inner.clone(), pubkey);
         Ok(user)
     }
 
@@ -149,6 +103,7 @@ impl HighlighterCore {
 
     pub fn logout(&self) {
         self.subscriptions.clear(&self.runtime);
+        let active_user = self.inner.read().session.current_user();
         {
             let mut guard = self.inner.write();
             if let Some(sub_id) = guard.session.take_membership_subscription() {
@@ -173,6 +128,9 @@ impl HighlighterCore {
                 self.runtime.drop_subscription(sub_id);
             }
         }
+        if let Some(user) = active_user {
+            self.runtime.remove_nmp_account(&user.pubkey);
+        }
         self.inner.write().session.logout();
         self.runtime.unset_signer();
     }
@@ -189,79 +147,44 @@ impl HighlighterCore {
         &self,
         options: NostrConnectOptions,
     ) -> Result<String, CoreError> {
-        // Local ephemeral keypair. The remote signer uses this pubkey to
-        // address its messages to us over the relay; after pair completion
-        // the user's pubkey comes from the remote signer via GetPublicKey.
-        let local_keys = Keys::generate();
-        let secret = nip46::random_secret();
+        let previous = self.runtime.active_account_pubkey();
+        let uri = self.runtime.start_nostrconnect_uri(&options)?;
 
-        let uri = nip46::build_nostr_connect_uri(
-            local_keys.public_key(),
-            NOSTR_CONNECT_RELAY,
-            &options.name,
-            &options.url,
-            &options.image,
-            &options.perms,
-            &secret,
-        )?;
-
-        // Ensure the NIP-46 relay is part of the pool before we start
-        // listening for the inbound `connect` request. `add_relay` is a
-        // no-op if the relay is already known — but we can't rely on the
-        // initial pool reconcile having completed yet.
-        let client = self.runtime.client().clone();
-        if let Err(e) = client.add_relay(NOSTR_CONNECT_RELAY).await {
-            tracing::warn!(relay = %NOSTR_CONNECT_RELAY, error = %e, "add_relay");
-        }
-        client.connect().await;
-
-        // Spawn a background task that waits for the remote signer to
-        // connect and then installs the resulting BunkerSigner. The task
-        // must own: the client (for set_signer after pairing), the callback
-        // slot (to fire SignerConnected), the Session guard slot (to store
-        // the active signer), and the local keys.
+        // The NMP broker owns the NIP-46 relay session. This task only waits
+        // for the NMP identity observer to expose the resolved remote account,
+        // then installs Highlighter's post-login projections.
         let inner = self.inner.clone();
         let runtime = self.runtime.clone();
         let callback_slot = self.callback_slot.clone();
         self.runtime.runtime_handle().spawn(async move {
-            let result =
-                BunkerSigner::await_inbound(client.clone(), local_keys, Some(secret)).await;
+            let result = runtime.wait_for_bunker_pair_after(previous).await;
             match result {
-                Ok((signer, user_pubkey)) => {
-                    let user = match current_user_from_pubkey(&user_pubkey) {
-                        Ok(u) => u,
-                        Err(e) => {
-                            tracing::warn!(error = %e, "npub encode after bunker pair");
-                            return;
-                        }
-                    };
-                    let signer = Arc::new(signer);
-                    // We're inside NostrRuntime's tokio runtime here
-                    // (spawned via `runtime_handle().spawn`). The sync
-                    // `runtime.set_signer` wrapper uses `block_on`, which
-                    // panics ("Cannot start a runtime from within a
-                    // runtime") when called from inside that same
-                    // runtime — talk to the client directly instead.
-                    client.set_signer((*signer).clone()).await;
-                    runtime.spawn_apply_user_relay_config(user_pubkey.to_hex());
-                    let sub_id = runtime.spawn_membership_subscription(user_pubkey);
-                    let contacts_id = runtime.spawn_contacts_subscription(user_pubkey);
+                Ok(user_pubkey_hex) => {
+                    match PublicKey::from_hex(&user_pubkey_hex)
+                        .map_err(|e| CoreError::Signer(format!("NMP bunker pubkey decode: {e}")))
+                        .and_then(|pk| current_user_from_pubkey(&pk).map(|user| (pk, user)))
                     {
-                        let mut guard = inner.write();
-                        guard.session.set_bunker(signer, user.clone());
-                        guard.session.set_membership_subscription(sub_id);
-                        guard.session.set_contacts_subscription(contacts_id);
-                    }
-                    let cb = { callback_slot.read().clone() };
-                    if let Some(cb) = cb {
-                        cb.on_data_changed(Delta {
-                            subscription_id: 0,
-                            change: DataChangeType::SignerConnected { user },
-                        });
+                        Ok((user_pubkey, user)) => {
+                            {
+                                let mut guard = inner.write();
+                                guard.session.set_bunker(user.clone());
+                            }
+                            let cb = { callback_slot.read().clone() };
+                            if let Some(cb) = cb {
+                                cb.on_data_changed(Delta {
+                                    subscription_id: 0,
+                                    change: DataChangeType::SignerConnected { user },
+                                });
+                            }
+                            spawn_login_bootstrap(runtime.clone(), inner.clone(), user_pubkey);
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = %e, "NMP bunker user projection failed");
+                        }
                     }
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, "nostrconnect inbound pairing failed");
+                    tracing::warn!(error = %e, "NMP nostrconnect pairing failed");
                 }
             }
         });
@@ -275,37 +198,16 @@ impl HighlighterCore {
             return Err(CoreError::InvalidInput("empty bunker URI".into()));
         }
 
-        let client = self.runtime.client().clone();
-        let (signer, user_pubkey) = BunkerSigner::pair(client, &normalized).await?;
+        let user_pubkey_hex = self.runtime.sign_in_bunker_uri(&normalized).await?;
+        let user_pubkey = PublicKey::from_hex(&user_pubkey_hex)
+            .map_err(|e| CoreError::Signer(format!("NMP bunker pubkey decode: {e}")))?;
         let user = current_user_from_pubkey(&user_pubkey)?;
-
-        let signer = Arc::new(signer);
-        self.runtime.set_signer((*signer).clone());
-        self.runtime
-            .spawn_apply_user_relay_config(user_pubkey.to_hex());
-
-        let sub_id = self.runtime.spawn_membership_subscription(user_pubkey);
-        let contacts_id = self.runtime.spawn_contacts_subscription(user_pubkey);
-        let cached_ids =
-            crate::subscriptions::collect_cached_group_ids(self.runtime.ndb(), &user_pubkey);
-        if !cached_ids.is_empty() {
-            self.runtime
-                .spawn_group_metadata_subscription(cached_ids.into_iter().collect());
-        }
         {
             let mut guard = self.inner.write();
-            guard.session.set_bunker(signer, user.clone());
-            guard.session.set_membership_subscription(sub_id);
-            guard.session.set_contacts_subscription(contacts_id);
+            guard.session.set_bunker(user.clone());
         }
 
-        let cb = { self.callback_slot.read().clone() };
-        if let Some(cb) = cb {
-            cb.on_data_changed(Delta {
-                subscription_id: 0,
-                change: DataChangeType::SignerConnected { user: user.clone() },
-            });
-        }
+        spawn_login_bootstrap(self.runtime.clone(), self.inner.clone(), user_pubkey);
 
         Ok(user)
     }
@@ -424,7 +326,7 @@ impl HighlighterCore {
             .iter()
             .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
             .collect();
-        if !follows_pks.iter().any(|pk| *pk == user_pubkey) {
+        if !follows_pks.contains(&user_pubkey) {
             follows_pks.push(user_pubkey);
         }
         self.refresh_follows_nip65_subscription(&follows_pks);
@@ -588,28 +490,10 @@ impl HighlighterCore {
     /// waiting for the relay echo.
     pub async fn update_profile(
         &self,
-        name: String,
-        display_name: String,
-        about: String,
-        picture: String,
-        banner: String,
-        nip05: String,
-        website: String,
-        lud16: String,
+        draft: ProfileUpdateDraft,
     ) -> Result<ProfileMetadata, CoreError> {
         let _ = self.require_user_pubkey()?;
-        profile::publish_profile(
-            &self.runtime,
-            &name,
-            &display_name,
-            &about,
-            &picture,
-            &banner,
-            &nip05,
-            &website,
-            &lud16,
-        )
-        .await
+        profile::publish_profile(&self.runtime, &draft).await
     }
 
     pub async fn get_user_articles(
@@ -809,10 +693,10 @@ impl HighlighterCore {
 
     pub async fn search_artifacts(
         &self,
-        _query: String,
-        _limit: u32,
+        query: String,
+        limit: u32,
     ) -> Result<Vec<ArtifactRecord>, CoreError> {
-        Err(CoreError::NotInitialized)
+        crate::artifacts::search_cached(self.runtime.ndb(), &query, limit)
     }
 
     // -- Search: across local nostrdb (all four surfaces) + NIP-50 relay ---
@@ -1625,39 +1509,23 @@ impl HighlighterCore {
         }
 
         let filter = crate::nostr_entities::fetch_filter(&entity)?;
-        let fetched = if urls.is_empty() {
-            self.runtime
-                .client()
-                .fetch_events(filter, crate::nostr_entities::NOSTR_ENTITY_FETCH_TIMEOUT)
-                .await
-        } else {
-            for url in &urls {
-                pin_relay_for_read(self.runtime.client(), url).await;
-            }
-            self.runtime
-                .client()
-                .fetch_events_from(
-                    urls,
-                    filter,
-                    crate::nostr_entities::NOSTR_ENTITY_FETCH_TIMEOUT,
-                )
-                .await
-        };
-
-        match fetched {
-            Ok(events) => {
-                if let Some(cached) =
-                    crate::nostr_entities::resolve_from_cache(self.runtime.ndb(), &entity)?
-                {
-                    return Ok(Some(cached));
-                }
-                crate::nostr_entities::resolve_from_events(events.iter(), &entity)
-            }
-            Err(err) => {
-                tracing::warn!(error = %err, "resolve nostr entity fetch");
-                Ok(None)
-            }
+        let ndb_filter = crate::nostr_entities::ndb_filter(&entity)?;
+        if let Err(err) = self
+            .runtime
+            .open_nmp_filter_once_and_wait(
+                "entity/resolve",
+                filter,
+                urls,
+                vec![ndb_filter],
+                crate::nostr_entities::NOSTR_ENTITY_FETCH_TIMEOUT,
+            )
+            .await
+        {
+            tracing::warn!(error = %err, "resolve nostr entity via NMP");
+            return Ok(None);
         }
+
+        crate::nostr_entities::resolve_from_cache(self.runtime.ndb(), &entity)
     }
 
     /// Pubkeys (hex) the current user follows per their cached kind:3 contact
@@ -1729,13 +1597,13 @@ impl HighlighterCore {
         blossom::sign_nip05_registration_auth(&self.runtime, &name, &domain).await
     }
 
-    // -- Capture flow (BUD-01 upload + kind:20 picture publish) --
+    // -- Capture flow (NMP Blossom upload + kind:20 picture publish) --
 
-    /// Upload a photo to the default Blossom server (`blossom.primal.net`)
-    /// using BUD-01 auth. The caller (iOS) is responsible for stripping EXIF
-    /// metadata and recompressing the image before sending bytes — Rust does
-    /// not decode the image. `width`/`height` are stamped onto the returned
-    /// descriptor for use in the publishing event's `imeta` tag.
+    /// Upload a photo through NMP's Blossom action. The caller is responsible
+    /// for stripping EXIF metadata and recompressing the image before sending
+    /// bytes — Rust does not decode the image. `width`/`height` are stamped
+    /// onto the returned descriptor for use in the publishing event's `imeta`
+    /// tag.
     /// `alt` is the recognized OCR text, or empty if none.
     pub async fn upload_photo(
         &self,
@@ -1775,7 +1643,7 @@ impl HighlighterCore {
 
     /// Insert-or-update a single relay. Replaces the row with matching URL or
     /// appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
-    /// the live relay pool so the change takes effect immediately.
+    /// NMP's relay registry so the change takes effect immediately.
     pub async fn upsert_relay(&self, cfg: crate::relays::RelayConfig) -> Result<(), CoreError> {
         let user = self
             .inner
@@ -1832,9 +1700,7 @@ impl HighlighterCore {
 
     // -- Relay telemetry --
 
-    /// Snapshot of the live per-relay diagnostics map. One row per URL
-    /// currently in the client's pool. Refreshed by the background
-    /// diagnostics poller at least once per second.
+    /// Snapshot of NMP's live per-relay diagnostics projection.
     pub async fn get_relay_diagnostics(
         &self,
     ) -> Result<Vec<crate::models::RelayDiagnostic>, CoreError> {
@@ -1872,20 +1738,17 @@ impl HighlighterCore {
         Ok(0)
     }
 
-    /// Nudge the relay pool to attempt a reconnect on every disconnected
-    /// relay. `Client::connect` is idempotent — already-connected relays
-    /// are unaffected; disconnected / terminated / banned relays get a
-    /// fresh WebSocket attempt.
+    /// Nudge NMP to resume foreground relay activity and reconcile the current
+    /// relay registry.
     pub async fn reconnect_all(&self) -> Result<(), CoreError> {
-        self.runtime.client().connect().await;
+        self.runtime.reconnect_all();
         Ok(())
     }
 
-    /// Close every WebSocket in the pool. Used by the Wi-Fi-only toggle
-    /// when the device drops off Wi-Fi — the Swift side re-enables by
-    /// calling `reconnect_all` once the path monitor reports Wi-Fi back.
+    /// Ask NMP to enter background relay lifecycle. Used by the Wi-Fi-only
+    /// toggle when the device drops off Wi-Fi.
     pub async fn disconnect_all(&self) -> Result<(), CoreError> {
-        self.runtime.client().disconnect().await;
+        self.runtime.disconnect_all();
         Ok(())
     }
 
@@ -1941,11 +1804,9 @@ impl HighlighterCore {
         let callback_slot: Arc<RwLock<Option<Arc<dyn EventCallback>>>> =
             Arc::new(RwLock::new(None));
         let subscriptions = Arc::new(SubscriptionRegistry::new(callback_slot.clone()));
-        // Start the diagnostics poller before handing out the Arc<Self>.
-        // The callback slot starts empty; the poller updates its in-memory
-        // map regardless, and fires deltas once Swift installs a callback
-        // via `set_event_callback`.
-        runtime.spawn_diagnostics_poller(callback_slot.clone());
+        // Wire Swift-facing relay status deltas to NMP's typed diagnostics
+        // projection before handing out the Arc<Self>.
+        runtime.install_relay_diagnostics_observer(callback_slot.clone());
         let web_metadata = Arc::new(WebMetadataStore::open(runtime.data_dir()));
         let isbn_previews = Arc::new(IsbnPreviewStore::open(runtime.data_dir()));
         Arc::new(Self {
@@ -2001,6 +1862,60 @@ impl HighlighterCore {
     }
 }
 
+fn spawn_login_bootstrap(
+    runtime: Arc<NostrRuntime>,
+    inner: Arc<RwLock<Inner>>,
+    user_pubkey: PublicKey,
+) {
+    if let Err(err) = std::thread::Builder::new()
+        .name("highlighter-login-bootstrap".into())
+        .spawn(move || {
+            // App-scope relay and membership setup is side-effect work; it
+            // must not block the actor from publishing the signed-in state.
+            runtime.spawn_apply_user_relay_config(user_pubkey.to_hex());
+            let user_relay_config_id = runtime.spawn_user_relay_config_bootstrap(user_pubkey);
+            let sub_id = runtime.spawn_membership_subscription(user_pubkey);
+            let contacts_id = runtime.spawn_contacts_subscription(user_pubkey);
+
+            let cached_ids =
+                crate::subscriptions::collect_cached_group_ids(runtime.ndb(), &user_pubkey);
+            if !cached_ids.is_empty() {
+                runtime.spawn_group_metadata_subscription(cached_ids.into_iter().collect());
+            }
+
+            let cached_follows = current_followed_pubkeys(runtime.ndb(), &user_pubkey);
+            runtime.spawn_negentropy_sync_for_follows(cached_follows.clone());
+            let follows_nip65_id = runtime.spawn_follows_relay_lists_subscription(cached_follows);
+
+            let mut guard = inner.write();
+            let still_active = guard
+                .session
+                .current_user()
+                .is_some_and(|user| user.pubkey == user_pubkey.to_hex());
+            if !still_active {
+                runtime.drop_subscription(sub_id);
+                runtime.drop_subscription(contacts_id);
+                runtime.drop_subscription(user_relay_config_id);
+                if let Some(id) = follows_nip65_id {
+                    runtime.drop_subscription(id);
+                }
+                return;
+            }
+
+            guard.session.set_membership_subscription(sub_id);
+            guard.session.set_contacts_subscription(contacts_id);
+            guard
+                .session
+                .set_user_relay_config_subscription(user_relay_config_id);
+            if let Some(id) = follows_nip65_id {
+                guard.session.set_follows_nip65_subscription(id);
+            }
+        })
+    {
+        tracing::warn!(error = %err, "spawn login bootstrap");
+    }
+}
+
 /// Read the cached kind:3 contact list for `user_pubkey` and return the
 /// `p`-tag pubkeys that successfully parse. Used at login to seed the
 /// follows-NIP-65 subscription before the user touches a home feed.
@@ -2019,8 +1934,7 @@ fn current_followed_pubkeys(ndb: &nostrdb::Ndb, user_pubkey: &PublicKey) -> Vec<
         .collect()
 }
 
-/// Strip a leading `nostr:` prefix, trim whitespace. Olas does this before
-/// handing a URI to `NDKBunkerSigner.bunker(...)`.
+/// Strip a leading `nostr:` prefix before handing a URI to NMP's signer broker.
 pub(crate) fn normalize_bunker_uri(input: &str) -> String {
     let t = input.trim();
     t.strip_prefix("nostr:").unwrap_or(t).to_string()

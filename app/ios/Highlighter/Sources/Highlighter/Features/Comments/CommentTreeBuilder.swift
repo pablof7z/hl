@@ -22,58 +22,22 @@ struct CommentNode: Identifiable, Hashable {
 }
 
 enum CommentTreeBuilder {
-    /// Build a nested forest from a flat `[CommentRecord]`.
-    ///
-    /// Top-level comments are those whose lowercase parent tag mirrors
-    /// the root scope (`parentTagValue == rootTagValue`). Replies are
-    /// linked via `parentTagValue == <some_comment.eventId>`.
-    ///
-    /// Children are sorted ascending by `createdAt`; orphans (parent
-    /// resolves to neither root nor a sibling in the input) are
-    /// promoted to top-level so nothing is silently dropped.
-    static func build(
-        records: [CommentRecord],
-        rootTagValue: String
-    ) -> [CommentNode] {
-        if records.isEmpty { return [] }
+    /// Build a nested display forest from Rust-owned thread links. Rust owns
+    /// NIP-22 parentage, orphan promotion, and ordering; Swift only assembles
+    /// ids into view nodes.
+    static func build(snapshot: HighlighterCommentsSnapshot) -> [CommentNode] {
+        let recordsById = Dictionary(uniqueKeysWithValues: snapshot.records.map { ($0.eventId, $0) })
+        let childrenById = Dictionary(uniqueKeysWithValues: snapshot.childLinks.map {
+            ($0.eventId, $0.childEventIds)
+        })
 
-        // Sort once so child ordering naturally falls out chronological.
-        let sorted = records.sorted { lhs, rhs in
-            (lhs.createdAt ?? 0) < (rhs.createdAt ?? 0)
+        func node(for id: String) -> CommentNode? {
+            guard let record = recordsById[id] else { return nil }
+            let children = (childrenById[id] ?? []).compactMap { node(for: $0) }
+            return CommentNode(record: record, children: children)
         }
 
-        var byId: [String: [CommentRecord]] = [:]
-        var seenIds = Set<String>()
-        for r in sorted {
-            byId[r.parentTagValue, default: []].append(r)
-            seenIds.insert(r.eventId)
-        }
-
-        // Top-level: parent points at the root scope.
-        var topLevel = byId[rootTagValue] ?? []
-
-        // Promote orphans whose parent isn't the root and isn't a known
-        // comment id — happens when a relay coughs up a reply but not
-        // its parent. Surface them at top-level so the user can still
-        // read them.
-        for r in sorted {
-            let parent = r.parentTagValue
-            if parent == rootTagValue { continue }
-            if seenIds.contains(parent) { continue }
-            topLevel.append(r)
-        }
-
-        return topLevel.map { build(record: $0, byParent: byId) }
-    }
-
-    private static func build(
-        record: CommentRecord,
-        byParent: [String: [CommentRecord]]
-    ) -> CommentNode {
-        let children = (byParent[record.eventId] ?? []).map {
-            build(record: $0, byParent: byParent)
-        }
-        return CommentNode(record: record, children: children)
+        return snapshot.topLevelEventIds.compactMap { node(for: $0) }
     }
 }
 

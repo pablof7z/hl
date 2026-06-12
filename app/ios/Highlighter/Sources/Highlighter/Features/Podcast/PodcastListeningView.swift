@@ -17,19 +17,19 @@ enum TimelineRow: Identifiable {
 
     var id: String {
         switch self {
-        case .chapter(let t, _): return "chapter-\(t)"
-        case .clip(let h): return "clip-\(h.eventId)"
-        case .transcript(let s): return "transcript-\(s.id)"
-        case .waveformTick(let t): return "waveform-\(t)"
+        case let .chapter(t, _): return "chapter-\(t)"
+        case let .clip(h): return "clip-\(h.eventId)"
+        case let .transcript(s): return "transcript-\(s.id)"
+        case let .waveformTick(t): return "waveform-\(t)"
         }
     }
 
     var t: Double {
         switch self {
-        case .chapter(let t, _): return t
-        case .clip(let h): return h.clipStartSeconds ?? 0
-        case .transcript(let s): return s.start
-        case .waveformTick(let t): return t
+        case let .chapter(t, _): return t
+        case let .clip(h): return h.clipStartSeconds ?? 0
+        case let .transcript(s): return s.start
+        case let .waveformTick(t): return t
         }
     }
 }
@@ -74,9 +74,23 @@ struct PodcastListeningView: View {
 
     // Auto-scroll
     @State private var lastManualScroll = Date.distantPast
-    @State private var memberClips: [HighlightRecord] = []
 
     private var player: PodcastPlayerStore { app.podcastPlayer }
+
+    private var memberClips: [HighlightRecord] {
+        guard let target = currentClipReference else { return [] }
+        return (app.referenceHighlights(tagName: target.tagName, tagValue: target.tagValue) ?? [])
+            .sorted { ($0.clipStartSeconds ?? 0) < ($1.clipStartSeconds ?? 0) }
+    }
+
+    private var currentClipReference: (tagName: String, tagValue: String)? {
+        guard let artifact = player.currentArtifact else { return nil }
+        let guid = artifact.preview.podcastItemGuid
+        let tagValue = guid.isEmpty
+            ? artifact.shareEventId
+            : "podcast:item:guid:\(guid)"
+        return ("i", tagValue)
+    }
 
     var body: some View {
         Group {
@@ -92,7 +106,8 @@ struct PodcastListeningView: View {
         }) {
             if let artifact = player.currentArtifact,
                let start = clipRangeStart,
-               let end = clipRangeEnd {
+               let end = clipRangeEnd
+            {
                 ClipComposerSheet(
                     artifact: artifact,
                     startSeconds: Binding(
@@ -183,7 +198,8 @@ struct PodcastListeningView: View {
     private var episodeMeta: String {
         var parts: [String] = []
         if let artifact = player.currentArtifact,
-           let dur = artifact.preview.durationSeconds, dur > 0 {
+           let dur = artifact.preview.durationSeconds, dur > 0
+        {
             let h = dur / 3600
             let m = (dur % 3600) / 60
             if h > 0 { parts.append("\(h)h \(m)m") }
@@ -317,16 +333,16 @@ struct PodcastListeningView: View {
     private func rowView(for row: TimelineRow) -> some View {
         let state = rowState(for: row)
         switch row {
-        case .chapter(let t, let title):
+        case let .chapter(t, title):
             ChapterRow(t: t, title: title, state: state, onSeek: { player.seek(to: $0) })
-        case .clip(let h):
+        case let .clip(h):
             MemberClipRow(highlight: h, state: state, onSeek: { player.seek(to: $0) })
-        case .transcript(let seg):
+        case let .transcript(seg):
             TranscriptRow(segment: seg, state: state, onSeek: {
                 player.seek(to: $0)
                 if !player.isPlaying { player.play() }
             })
-        case .waveformTick(let t):
+        case let .waveformTick(t):
             WaveformTickRow(
                 t: t,
                 state: state,
@@ -521,18 +537,8 @@ struct PodcastListeningView: View {
     // MARK: - Helpers
 
     private func loadClips() async {
-        guard let artifact = player.currentArtifact else { return }
-        let guid = artifact.preview.podcastItemGuid
-        let tagValue = guid.isEmpty
-            ? artifact.shareEventId
-            : "podcast:item:guid:\(guid)"
-        if let clips = try? await app.safeCore.getHighlightsForReference(
-            tagName: "i",
-            tagValue: tagValue,
-            limit: 128
-        ) {
-            memberClips = clips.sorted { ($0.clipStartSeconds ?? 0) < ($1.clipStartSeconds ?? 0) }
-        }
+        guard let target = currentClipReference else { return }
+        app.requestReferenceHighlights(tagName: target.tagName, tagValue: target.tagValue, limit: 128)
     }
 }
 

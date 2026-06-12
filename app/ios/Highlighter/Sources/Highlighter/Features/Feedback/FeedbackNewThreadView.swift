@@ -4,32 +4,32 @@ import SwiftUI
 /// agent's kind:513 metadata; until then the thread row falls back to the
 /// trimmed body content.
 struct FeedbackNewThreadView: View {
-    let store: FeedbackStore
-    /// Called after a successful send. Caller decides whether to also dismiss
-    /// the parent threads sheet (currently always `false` — we stay in the
-    /// list so the user sees their new thread arrive).
-    let onSent: (Bool) -> Void
-
     @Environment(HighlighterStore.self) private var app
     @Environment(\.dismiss) private var dismiss
 
-    @State private var draft: String = ""
-    @State private var isPublishing = false
-    @State private var errorMessage: String?
+    @State private var seenPublishedRoot: String?
 
     private var canPublish: Bool {
-        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isPublishing
+        !app.feedback.newThreadDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !app.feedback.isPublishingNewThread
+    }
+
+    private var draft: Binding<String> {
+        Binding(
+            get: { app.feedback.newThreadDraft },
+            set: { app.setFeedbackNewThreadDraft($0) }
+        )
     }
 
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 0) {
-                TextEditor(text: $draft)
+                TextEditor(text: draft)
                     .font(.body)
                     .padding(.horizontal, 12)
                     .padding(.top, 8)
                     .overlay(alignment: .topLeading) {
-                        if draft.isEmpty {
+                        if app.feedback.newThreadDraft.isEmpty {
                             Text("What's on your mind?")
                                 .font(.body)
                                 .foregroundStyle(.tertiary)
@@ -38,7 +38,7 @@ struct FeedbackNewThreadView: View {
                                 .allowsHitTesting(false)
                         }
                     }
-                if let errorMessage {
+                if let errorMessage = app.feedback.publishErrorMessage {
                     Text(errorMessage)
                         .font(.caption)
                         .foregroundStyle(.red)
@@ -51,40 +51,26 @@ struct FeedbackNewThreadView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
-                        .disabled(isPublishing)
+                        .disabled(app.feedback.isPublishingNewThread)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isPublishing ? "Sending…" : "Send") {
-                        Task { await publish() }
+                    Button(app.feedback.isPublishingNewThread ? "Sending…" : "Send") {
+                        app.publishFeedbackNewThread()
                     }
                     .disabled(!canPublish)
                 }
             }
         }
-    }
-
-    private func publish() async {
-        isPublishing = true
-        errorMessage = nil
-        defer { isPublishing = false }
-
-        do {
-            let agent = await store.resolveAgentPubkey()
-            let record = try await app.safeCore.publishFeedbackNote(
-                coordinate: FeedbackProject.coordinate,
-                agentPubkey: agent,
-                parentEventId: nil,
-                body: draft
-            )
-            store.optimisticallyInsert(rootEvent: record)
-            await store.refreshThreads()
-            dismiss()
-            onSent(false)
-        } catch {
-            errorMessage =
-                (error as? LocalizedError)?.errorDescription
-                ?? (error as? CoreError).map { "\($0)" }
-                ?? "\(error)"
+        .onAppear {
+            seenPublishedRoot = app.feedback.lastPublishedRootEventId
+            app.clearFeedbackPublishError()
+        }
+        .onChange(of: app.feedback.lastPublishedRootEventId) { _, next in
+            guard let next, next != seenPublishedRoot else { return }
+            seenPublishedRoot = next
+            if !app.feedback.isPublishingNewThread {
+                dismiss()
+            }
         }
     }
 }

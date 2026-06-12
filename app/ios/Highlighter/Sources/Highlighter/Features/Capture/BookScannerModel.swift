@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Observation
 import UIKit
 
@@ -92,8 +92,8 @@ final class BookScannerModel: NSObject {
     }
 
     func focus(at devicePoint: CGPoint) {
-        guard let device = AVCaptureDevice.default(for: .video) else { return }
         sessionQueue.async {
+            guard let device = AVCaptureDevice.default(for: .video) else { return }
             do {
                 try device.lockForConfiguration()
                 if device.isFocusPointOfInterestSupported {
@@ -129,7 +129,8 @@ final class BookScannerModel: NSObject {
 
     private func configureAndStart() async {
         let session = self.session
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        let metadataQueue = self.metadataQueue
+        let configuredOutput = await withCheckedContinuation { (continuation: CheckedContinuation<AVCaptureMetadataOutput?, Never>) in
             sessionQueue.async {
                 session.beginConfiguration()
                 session.sessionPreset = .high
@@ -146,19 +147,19 @@ final class BookScannerModel: NSObject {
                 let output = AVCaptureMetadataOutput()
                 if session.canAddOutput(output) {
                     session.addOutput(output)
-                    output.setMetadataObjectsDelegate(self, queue: self.metadataQueue)
+                    output.setMetadataObjectsDelegate(self, queue: metadataQueue)
                     let types: [AVMetadataObject.ObjectType] = [.ean13, .ean8]
                     output.metadataObjectTypes = types.filter {
                         output.availableMetadataObjectTypes.contains($0)
                     }
                 }
-                self.metadataOutput = output
 
                 session.commitConfiguration()
                 session.startRunning()
-                continuation.resume()
+                continuation.resume(returning: output)
             }
         }
+        metadataOutput = configuredOutput
     }
 
     // MARK: - Event-driven scanner affordances

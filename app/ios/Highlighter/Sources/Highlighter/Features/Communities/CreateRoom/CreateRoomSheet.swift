@@ -7,9 +7,9 @@ import SwiftUI
 /// the typeface honours that. Visibility is an inline row, not a segmented
 /// control — the default (public · open) is sane, so most users never
 /// touch it. Picking a cover routes through `PhotosPicker` →
-/// `core.uploadPhoto` so the image lands on the user's Blossom server
-/// before the room is created. On success, pushes `RoomInviteView` in
-/// welcome mode so adding the first guests feels like one continuous act.
+/// the NMP app action so the image lands on the user's Blossom server before
+/// the room is created. On success, pushes `RoomInviteView` in welcome mode so
+/// adding the first guests feels like one continuous act.
 struct CreateRoomSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(HighlighterStore.self) private var appStore
@@ -20,11 +20,7 @@ struct CreateRoomSheet: View {
     @State private var access: RoomAccess = .open
     @State private var visibilityPickerPresented = false
     @State private var photoItem: PhotosPickerItem?
-    @State private var coverUpload: BlossomUpload?
-    @State private var coverIsUploading = false
-    @State private var isCreating = false
-    @State private var error: String?
-    @State private var createdGroupId: String?
+    @State private var didResetCreateRoomState = false
 
     @FocusState private var focused: Field?
     private enum Field { case name, about }
@@ -64,8 +60,9 @@ struct CreateRoomSheet: View {
                         .foregroundStyle(Color.highlighterInkStrong)
                 }
             }
-            .navigationDestination(item: $createdGroupId) { groupId in
+            .navigationDestination(item: createdGroupBinding) { groupId in
                 RoomInviteView(groupId: groupId, mode: .welcome) {
+                    appStore.clearCreateRoomResult()
                     dismiss()
                 }
             }
@@ -78,13 +75,24 @@ struct CreateRoomSheet: View {
                 .presentationDragIndicator(.visible)
             }
             .alert("Couldn't create room", isPresented: errorBinding, actions: {
-                Button("OK") { error = nil }
+                Button("OK") { appStore.clearCreateRoomError() }
             }, message: {
                 if let error { Text(error) }
             })
             .onChange(of: photoItem) { _, newItem in
                 guard let newItem else { return }
                 Task { await uploadCover(item: newItem) }
+            }
+            .onChange(of: createdGroupId) { _, groupId in
+                if groupId != nil {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                }
+            }
+            .onAppear {
+                guard !didResetCreateRoomState else { return }
+                didResetCreateRoomState = true
+                appStore.clearCreateRoomResult()
+                appStore.clearCreateRoomError()
             }
         }
     }
@@ -131,7 +139,7 @@ struct CreateRoomSheet: View {
         .overlay(alignment: .topTrailing) {
             if coverUpload != nil {
                 Button {
-                    coverUpload = nil
+                    appStore.clearCreateRoomCover()
                     photoItem = nil
                 } label: {
                     Image(systemName: "xmark")
@@ -176,7 +184,7 @@ struct CreateRoomSheet: View {
             .font(.body)
             .foregroundStyle(Color.highlighterInkStrong)
             .focused($focused, equals: .about)
-            .lineLimit(3...8)
+            .lineLimit(3 ... 8)
         }
     }
 
@@ -261,29 +269,26 @@ struct CreateRoomSheet: View {
     }
 
     private var errorBinding: Binding<Bool> {
-        Binding(get: { error != nil }, set: { if !$0 { error = nil } })
+        Binding(get: { error != nil }, set: { if !$0 { appStore.clearCreateRoomError() } })
     }
 
     private func uploadCover(item: PhotosPickerItem) async {
-        coverIsUploading = true
-        defer { coverIsUploading = false }
         do {
             guard let data = try await item.loadTransferable(type: Data.self) else { return }
             guard let image = UIImage(data: data) else {
-                error = "That image couldn't be read."
+                appStore.createRoomCapabilityFailed(message: "Couldn't read that image.")
                 return
             }
             let prepared = await prepareForUpload(image: image)
-            let upload = try await appStore.safeCore.uploadPhoto(
+            appStore.uploadCreateRoomCover(
                 bytes: prepared.data,
                 mime: "image/jpeg",
                 width: UInt32(prepared.width),
                 height: UInt32(prepared.height),
                 alt: ""
             )
-            coverUpload = upload
         } catch {
-            self.error = "Couldn't upload cover: \(error.localizedDescription)"
+            appStore.createRoomCapabilityFailed(message: "Couldn't read that image.")
         }
     }
 
@@ -311,28 +316,44 @@ struct CreateRoomSheet: View {
 
     private func create() {
         guard canCreate else { return }
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedAbout = about.trimmingCharacters(in: .whitespacesAndNewlines)
-        let pictureURL = coverUpload?.url ?? ""
-        isCreating = true
         focused = nil
-        Task {
-            defer { isCreating = false }
-            do {
-                let groupId = try await appStore.safeCore.createRoom(
-                    name: trimmedName,
-                    about: trimmedAbout,
-                    picture: pictureURL,
-                    visibility: visibility,
-                    access: access
-                )
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.success)
-                createdGroupId = groupId
-            } catch {
-                self.error = "Couldn't publish: \(error.localizedDescription)"
+        appStore.submitCreateRoom(
+            name: name,
+            about: about,
+            visibility: visibility,
+            access: access
+        )
+    }
+
+    private var coverUpload: BlossomUpload? {
+        appStore.createRoom.coverUpload
+    }
+
+    private var coverIsUploading: Bool {
+        appStore.createRoom.isCoverUploading
+    }
+
+    private var isCreating: Bool {
+        appStore.createRoom.isCreating
+    }
+
+    private var error: String? {
+        appStore.createRoom.errorMessage
+    }
+
+    private var createdGroupId: String? {
+        appStore.createRoom.createdGroupId
+    }
+
+    private var createdGroupBinding: Binding<String?> {
+        Binding(
+            get: { createdGroupId },
+            set: { value in
+                if value == nil {
+                    appStore.clearCreateRoomResult()
+                }
             }
-        }
+        )
     }
 }
 

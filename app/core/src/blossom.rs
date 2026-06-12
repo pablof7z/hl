@@ -1,19 +1,20 @@
 //! Blossom server list (BUD-03, kind:10063) read + publish, NIP-98 auth, and
-//! BUD-01 PUT upload.
+//! app-model adaptation for NMP-owned Blossom uploads.
 //!
 //! The kind:10063 "User Server List" is a replaceable event; publishing a new
 //! one supersedes the old one on every relay. Tags follow BUD-03: each server
 //! is an `["server", "<url>"]` tag. Order is preserved — the first server in
 //! the list is the upload default; fallback proceeds in list order.
 //!
-//! Uploads use BUD-01 auth (`kind:24242`, action=upload, x=sha256,
-//! expiration=now+300) base64-encoded into an `Authorization: Nostr <b64>`
-//! header. The server returns a JSON blob descriptor with the canonical URL.
+//! Uploads are dispatched through `nmp.blossom.upload`: Highlighter writes the
+//! native-supplied bytes to a local staging file and NMP owns hashing, kind:24242
+//! auth, signing, HTTP PUT transport, and action-result reporting.
 
-use base64::{engine::general_purpose::STANDARD, Engine};
+use std::path::{Path, PathBuf};
+
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
-use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
 use crate::errors::CoreError;
 use crate::models::BlossomUpload;
@@ -21,11 +22,8 @@ use crate::nostr_runtime::NostrRuntime;
 
 const KIND_BLOSSOM_SERVERS: u16 = 10063;
 const KIND_NIP98_HTTP_AUTH: u16 = 27235;
-/// BUD-01 authorization event kind for Blossom uploads/deletes/listings.
-const KIND_BLOSSOM_AUTH: u16 = 24242;
 pub const DEFAULT_SERVER: &str = "https://blossom.primal.net";
-/// Auth events expire 5 minutes after signing. The server enforces this.
-const AUTH_EXPIRATION_SECS: u64 = 300;
+const NMP_BLOSSOM_UPLOAD_NAMESPACE: &str = "nmp.blossom.upload";
 
 // -- Reads --
 
@@ -128,10 +126,7 @@ pub async fn publish_blossom_servers(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign blossom servers: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish blossom servers: {e}")))?;
+    runtime.publish_signed_event("blossom-servers-publish", &event)?;
     Ok(event.id.to_hex())
 }
 
@@ -158,7 +153,7 @@ pub async fn init_default_blossom_servers(
 /// the caller base64-encodes it and prefixes `"Nostr "`.
 ///
 /// `payload_hash`: hex-encoded SHA-256 of the request body (required by
-/// BUD-01 for PUT uploads).
+/// Optional SHA-256 payload hash for HTTP endpoints that require it.
 pub async fn sign_nip98_auth(
     runtime: &NostrRuntime,
     url: &str,
@@ -203,42 +198,14 @@ pub async fn sign_nip05_registration_auth(
     Ok(event.as_json())
 }
 
-// -- BUD-01 upload --
+// -- NMP Blossom upload --
 
-/// Lowercase hex SHA-256 of `bytes`.
-pub fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
-}
-
-/// Build + sign a kind:24242 BUD-01 upload authorization event.
-async fn sign_bud01_upload_auth(
-    runtime: &NostrRuntime,
-    sha256_hex_value: &str,
-    note: &str,
-) -> Result<Event, CoreError> {
-    let expiration = Timestamp::now().as_secs() + AUTH_EXPIRATION_SECS;
-    let tags = vec![
-        parse_tag(&["t", "upload"])?,
-        parse_tag(&["x", sha256_hex_value])?,
-        parse_tag(&["expiration", &expiration.to_string()])?,
-    ];
-    let builder = EventBuilder::new(Kind::Custom(KIND_BLOSSOM_AUTH), note).tags(tags);
-    runtime
-        .client()
-        .sign_event_builder(builder)
-        .await
-        .map_err(|e| CoreError::Signer(format!("sign blossom upload auth: {e}")))
-}
-
-/// PUT `bytes` to `<server>/upload` with a BUD-01 `Authorization: Nostr <b64>`
-/// header. Returns the parsed `BlossomUpload` descriptor.
+/// Stage `bytes`, dispatch `nmp.blossom.upload`, and adapt NMP's action result
+/// into the app's `BlossomUpload` descriptor.
 ///
 /// `width`, `height`, and `alt` are stamped onto the returned record but are
-/// NOT sent to the server — they're metadata the caller uses to build a
-/// NIP-92 `imeta` tag on the publishing event. Pass `0` for unknown
-/// dimensions; iOS callers always know dim post-recompression.
+/// NOT sent to the server. They remain app metadata used to build the NIP-92
+/// `imeta` tag on the publishing event.
 pub async fn upload_blob(
     runtime: &NostrRuntime,
     bytes: Vec<u8>,
@@ -256,50 +223,127 @@ pub async fn upload_blob(
     }
 
     let size_bytes = bytes.len() as u64;
-    let sha = sha256_hex(&bytes);
-    let auth = sign_bud01_upload_auth(runtime, &sha, "Upload book photo").await?;
-    let auth_b64 = STANDARD.encode(auth.as_json().as_bytes());
-    let endpoint = format!("{DEFAULT_SERVER}/upload");
-
-    let client = reqwest::Client::new();
-    let response = client
-        .put(&endpoint)
-        .header("Authorization", format!("Nostr {auth_b64}"))
-        .header("Content-Type", mime_clean)
-        .body(bytes)
-        .send()
-        .await
-        .map_err(|e| CoreError::Network(format!("blossom PUT: {e}")))?;
-
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        return Err(CoreError::Network(format!(
-            "blossom upload failed: {status} {body}"
-        )));
+    let signer_pubkey = runtime
+        .active_account_pubkey()
+        .ok_or(CoreError::NotAuthenticated)?;
+    let mut servers = query_blossom_servers(runtime.ndb(), &signer_pubkey)?;
+    if servers.is_empty() {
+        servers.push(DEFAULT_SERVER.to_string());
     }
 
-    // Server returns a Blob descriptor. We need at least `url`. The rest we
-    // already know locally (we just hashed/sized the bytes).
-    let descriptor: serde_json::Value = response
-        .json()
+    let staging_path = write_upload_staging_file(runtime.data_dir(), &bytes).await?;
+    let file_path = staging_path
+        .to_str()
+        .ok_or_else(|| CoreError::Cache("upload staging path is not valid UTF-8".into()))?
+        .to_string();
+    let action = nmp_blossom::UploadInput {
+        file_path,
+        content_type: Some(mime_clean.to_string()),
+        servers,
+        signer_pubkey: Some(signer_pubkey),
+    };
+
+    let action_result = runtime
+        .dispatch_nmp_action_for_result("blossom-upload", NMP_BLOSSOM_UPLOAD_NAMESPACE, &action)
+        .await;
+    if let Err(e) = tokio::fs::remove_file(&staging_path).await {
+        tracing::warn!(
+            path = %staging_path.display(),
+            error = %e,
+            "remove Blossom upload staging file"
+        );
+    }
+    let row = action_result?;
+    let result_json = row
+        .result
+        .as_deref()
+        .ok_or_else(|| CoreError::Network("NMP Blossom upload missing descriptor".into()))?;
+
+    upload_from_nmp_result(result_json, mime_clean, size_bytes, width, height, alt)
+}
+
+async fn write_upload_staging_file(data_dir: &Path, bytes: &[u8]) -> Result<PathBuf, CoreError> {
+    let dir = data_dir.join("nmp-upload-staging");
+    tokio::fs::create_dir_all(&dir)
         .await
-        .map_err(|e| CoreError::Network(format!("blossom response not JSON: {e}")))?;
-    let url = descriptor
+        .map_err(|e| CoreError::Cache(format!("create upload staging dir: {e}")))?;
+    let path = dir.join(format!("blossom-{}.blob", Uuid::new_v4()));
+    tokio::fs::write(&path, bytes)
+        .await
+        .map_err(|e| CoreError::Cache(format!("write upload staging file: {e}")))?;
+    Ok(path)
+}
+
+fn upload_from_nmp_result(
+    result_json: &str,
+    fallback_mime: &str,
+    fallback_size_bytes: u64,
+    width: u32,
+    height: u32,
+    alt: String,
+) -> Result<BlossomUpload, CoreError> {
+    let descriptor: serde_json::Value = serde_json::from_str(result_json)
+        .map_err(|e| CoreError::Network(format!("NMP Blossom descriptor is not JSON: {e}")))?;
+    let selected = select_descriptor_value(&descriptor).ok_or_else(|| {
+        CoreError::Network("NMP Blossom descriptor missing successful URL".into())
+    })?;
+    let url = selected
         .get("url")
-        .and_then(|v| v.as_str())
+        .and_then(serde_json::Value::as_str)
         .map(str::to_string)
-        .ok_or_else(|| CoreError::Network("blossom response missing `url`".into()))?;
+        .ok_or_else(|| CoreError::Network("NMP Blossom descriptor missing `url`".into()))?;
+    let sha256_hex = descriptor
+        .get("sha256")
+        .or_else(|| selected.get("sha256"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| CoreError::Network("NMP Blossom descriptor missing `sha256`".into()))?;
+    let size_bytes = descriptor
+        .get("size")
+        .or_else(|| selected.get("size"))
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(fallback_size_bytes);
+    let mime = descriptor
+        .get("type")
+        .or_else(|| selected.get("type"))
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(fallback_mime)
+        .to_string();
 
     Ok(BlossomUpload {
         url,
-        sha256_hex: sha,
-        mime: mime_clean.to_string(),
+        sha256_hex,
+        mime,
         size_bytes,
         width,
         height,
         alt,
     })
+}
+
+fn select_descriptor_value(value: &serde_json::Value) -> Option<&serde_json::Value> {
+    if value
+        .get("url")
+        .and_then(serde_json::Value::as_str)
+        .is_some()
+    {
+        return Some(value);
+    }
+    value
+        .get("servers")
+        .and_then(serde_json::Value::as_array)?
+        .iter()
+        .find(|server| {
+            server
+                .get("ok")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false)
+                && server
+                    .get("url")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some()
+        })
 }
 
 // -- Tests --
@@ -374,49 +418,41 @@ mod tests {
     }
 
     #[test]
-    fn sha256_hex_is_lowercase_64_chars() {
-        let h = sha256_hex(b"hello");
-        assert_eq!(h.len(), 64);
-        assert!(h
-            .chars()
-            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
-        // Known vector for "hello".
-        assert_eq!(
-            h,
-            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
-        );
+    fn nmp_flat_descriptor_maps_to_app_upload() {
+        let upload = upload_from_nmp_result(
+            r#"{"url":"https://b.example/blob.png","sha256":"abc123","size":42,"type":"image/png","uploaded":1}"#,
+            "application/octet-stream",
+            5,
+            320,
+            240,
+            "alt text".to_string(),
+        )
+        .expect("flat descriptor");
+
+        assert_eq!(upload.url, "https://b.example/blob.png");
+        assert_eq!(upload.sha256_hex, "abc123");
+        assert_eq!(upload.mime, "image/png");
+        assert_eq!(upload.size_bytes, 42);
+        assert_eq!(upload.width, 320);
+        assert_eq!(upload.height, 240);
+        assert_eq!(upload.alt, "alt text");
     }
 
     #[test]
-    fn bud01_auth_event_has_required_tags() {
-        // Build the event via the same path the upload function uses, but
-        // sign locally so we can inspect the result without network IO.
-        let keys = Keys::generate();
-        let sha = sha256_hex(b"some bytes");
-        let expiration = Timestamp::now().as_secs() + AUTH_EXPIRATION_SECS;
-        let tags = vec![
-            Tag::parse(vec!["t".to_string(), "upload".to_string()]).unwrap(),
-            Tag::parse(vec!["x".to_string(), sha.clone()]).unwrap(),
-            Tag::parse(vec!["expiration".to_string(), expiration.to_string()]).unwrap(),
-        ];
-        let event = EventBuilder::new(Kind::Custom(KIND_BLOSSOM_AUTH), "Upload book photo")
-            .tags(tags)
-            .sign_with_keys(&keys)
-            .expect("sign");
+    fn nmp_aggregate_descriptor_uses_first_successful_server() {
+        let upload = upload_from_nmp_result(
+            r#"{"sha256":"def456","size":99,"type":"image/jpeg","uploaded":2,"servers":[{"server":"https://a.example","ok":false,"error":"nope"},{"server":"https://b.example","ok":true,"url":"https://b.example/blob.jpg"}]}"#,
+            "application/octet-stream",
+            5,
+            0,
+            0,
+            "".to_string(),
+        )
+        .expect("aggregate descriptor");
 
-        assert_eq!(event.kind, Kind::Custom(24242));
-        let tag_pairs: Vec<(String, String)> = event
-            .tags
-            .iter()
-            .filter_map(|t| {
-                let s = t.as_slice();
-                Some((s.first()?.clone(), s.get(1)?.clone()))
-            })
-            .collect();
-        assert!(tag_pairs.contains(&("t".into(), "upload".into())));
-        assert!(tag_pairs.contains(&("x".into(), sha)));
-        assert!(tag_pairs
-            .iter()
-            .any(|(k, v)| k == "expiration" && v.parse::<u64>().is_ok()));
+        assert_eq!(upload.url, "https://b.example/blob.jpg");
+        assert_eq!(upload.sha256_hex, "def456");
+        assert_eq!(upload.mime, "image/jpeg");
+        assert_eq!(upload.size_bytes, 99);
     }
 }

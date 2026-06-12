@@ -3,8 +3,8 @@ import Network
 import Observation
 
 /// App-scoped facade over Rust-owned TEA state. Swift renders snapshots and
-/// dispatches typed actions; remaining legacy view stores are narrow routing
-/// adapters while their slices move into `HighlighterNmpApp`.
+/// dispatches typed actions; native helpers stay limited to UI routing and OS
+/// capability execution.
 @MainActor
 @Observable
 final class HighlighterStore {
@@ -18,8 +18,6 @@ final class HighlighterStore {
 
     // Internal plumbing
     @ObservationIgnored let nmpApp: HighlighterNmpApp
-    @ObservationIgnored let core: HighlighterCore
-    @ObservationIgnored let safeCore: SafeHighlighterCore
     @ObservationIgnored private(set) var eventBridge: EventBridge?
     @ObservationIgnored private var nmpReconciler: HighlighterAppStateReconciler?
     @ObservationIgnored private var lastNmpToastMessage: String?
@@ -33,25 +31,96 @@ final class HighlighterStore {
     var bookmarkedArticleAddresses: Set<String> {
         Set(nmpState.chrome.bookmarkedArticleAddresses)
     }
+
     var isBootstrapping: Bool { nmpState.isBootstrapping }
     var isAuthenticating: Bool { nmpState.auth.isSigningIn }
     var isLoggedIn: Bool { currentUser != nil }
+    var createRoom: HighlighterCreateRoomSnapshot { nmpState.createRoom }
+    var roomInvite: HighlighterRoomInviteSnapshot { nmpState.roomInvite }
+    var comments: HighlighterCommentsSnapshot { nmpState.comments }
+    var feedback: HighlighterFeedbackSnapshot { nmpState.feedback }
+    var mediaSettings: HighlighterMediaSettingsSnapshot { nmpState.mediaSettings }
+    var editProfile: HighlighterEditProfileSnapshot { nmpState.editProfile }
+    var shareComposer: HighlighterShareComposerSnapshot { nmpState.shareComposer }
+    var capture: HighlighterCaptureSnapshot { nmpState.capture }
+    var bookPicker: HighlighterBookPickerSnapshot { nmpState.bookPicker }
+
+    func highlightShareURL(eventIdHex: String, authorPubkeyHex: String?) -> String? {
+        nmpApp.highlightShareUrl(eventIdHex: eventIdHex, authorPubkeyHex: authorPubkeyHex)
+    }
+
+    func decodeNostrEntity(_ input: String) -> NostrEntityRef? {
+        nmpApp.decodeNostrEntity(input: input)
+    }
+
+    func resolveNostrEntity(_ entity: NostrEntityRef) async -> NostrEntityEvent? {
+        await nmpApp.resolveNostrEntity(entity: entity)
+    }
+
+    func article(pubkeyHex: String, dTag: String) async -> ArticleRecord? {
+        await nmpApp.article(pubkeyHex: pubkeyHex, dTag: dTag)
+    }
+
+    func publishArtifactShare(preview: ArtifactPreview, groupId: String, note: String?) {
+        nmpApp.dispatch(
+            action: .publishArtifactShare(
+                preview: preview,
+                groupId: groupId,
+                note: note
+            )
+        )
+    }
+
+    func publishUrlShare(url: String, groupId: String, note: String?) {
+        nmpApp.dispatch(
+            action: .publishUrlShare(
+                url: url,
+                groupId: groupId,
+                note: note
+            )
+        )
+    }
+
+    func shareHighlightRepost(
+        eventId: String,
+        authorPubkeyHex: String,
+        relayHint: String,
+        targetGroupId: String
+    ) {
+        nmpApp.dispatch(
+            action: .shareHighlightRepost(
+                eventId: eventId,
+                authorPubkeyHex: authorPubkeyHex,
+                relayHint: relayHint,
+                targetGroupId: targetGroupId
+            )
+        )
+    }
+
+    func clearShareComposerResult() {
+        nmpApp.dispatch(action: .clearShareComposerResult)
+    }
+
+    func clearShareComposerError() {
+        nmpApp.dispatch(action: .clearShareComposerError)
+    }
+
+    func publishQueuedUrlShare(url: String, groupId: String, note: String?) async -> Bool {
+        await nmpApp.publishUrlShare(url: url, groupId: groupId, note: note)
+    }
 
     init() {
         let nmpApp = HighlighterNmpApp(
             config: HighlighterAppConfig(dataDir: nil, visibleLimit: 250, emitHz: 30)
         )
-        let core = nmpApp.legacyCore()
         self.nmpApp = nmpApp
-        self.nmpState = nmpApp.state()
-        self.core = core
-        self.safeCore = SafeHighlighterCore(core: core)
+        nmpState = nmpApp.state()
         // Surface the MiniPlayer (paused) with whatever episode the user was
         // last listening to, if any. Tapping play wires AVPlayer through the
         // normal `load(artifact:)` path which seeks to the saved position.
         podcastPlayer.rehydrateFromSavedRecord()
         let reconciler = HighlighterAppStateReconciler(appStore: self)
-        self.nmpReconciler = reconciler
+        nmpReconciler = reconciler
         nmpApp.listenForUpdates(reconciler: reconciler)
         syncNetworkPathMonitor(wifiOnlyEnabled: nmpState.network.wifiOnlyEnabled)
     }
@@ -119,7 +188,7 @@ final class HighlighterStore {
     }
 
     func logout() {
-        nmpApp.clearLegacyEventCallback()
+        nmpApp.clearCoreEventCallback()
         nmpApp.dispatch(action: .logout)
         eventBridge = nil
         AppSessionStore.shared.clear()
@@ -131,6 +200,315 @@ final class HighlighterStore {
         shareToast = nil
         lastNmpToastMessage = nil
         nmpApp.dispatch(action: .clearToast)
+    }
+
+    func uploadCreateRoomCover(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String) {
+        nmpApp.dispatch(
+            action: .uploadCreateRoomCover(
+                bytes: bytes,
+                mime: mime,
+                width: width,
+                height: height,
+                alt: alt
+            )
+        )
+    }
+
+    func clearCreateRoomCover() {
+        nmpApp.dispatch(action: .clearCreateRoomCover)
+    }
+
+    func createRoomCapabilityFailed(message: String) {
+        nmpApp.dispatch(action: .createRoomCapabilityFailed(message: message))
+    }
+
+    func submitCreateRoom(name: String, about: String, visibility: RoomVisibility, access: RoomAccess) {
+        nmpApp.dispatch(
+            action: .submitCreateRoom(
+                name: name,
+                about: about,
+                visibility: visibility,
+                access: access
+            )
+        )
+    }
+
+    func clearCreateRoomResult() {
+        nmpApp.dispatch(action: .clearCreateRoomResult)
+    }
+
+    func clearCreateRoomError() {
+        nmpApp.dispatch(action: .clearCreateRoomError)
+    }
+
+    func openRoomInvite(groupId: String) {
+        let trimmed = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        nmpApp.dispatch(action: .openRoomInvite(groupId: trimmed))
+    }
+
+    func refreshRoomInvite() {
+        nmpApp.dispatch(action: .refreshRoomInvite)
+    }
+
+    func setRoomInviteQuery(_ query: String) {
+        nmpApp.dispatch(action: .setRoomInviteQuery(query: query))
+    }
+
+    func toggleRoomInviteCandidate(pubkeyHex: String, source: HighlighterRoomInviteCandidateSource) {
+        let trimmed = pubkeyHex.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        nmpApp.dispatch(action: .toggleRoomInviteCandidate(pubkeyHex: trimmed, source: source))
+    }
+
+    func removeRoomInviteCandidate(pubkeyHex: String) {
+        let trimmed = pubkeyHex.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        nmpApp.dispatch(action: .removeRoomInviteCandidate(pubkeyHex: trimmed))
+    }
+
+    func acceptRoomInvitePastedCandidate() {
+        nmpApp.dispatch(action: .acceptRoomInvitePastedCandidate)
+    }
+
+    func mintRoomInviteLink() {
+        nmpApp.dispatch(action: .mintRoomInviteLink)
+    }
+
+    func submitRoomInviteMembers() {
+        nmpApp.dispatch(action: .submitRoomInviteMembers)
+    }
+
+    func clearRoomInviteAddError() {
+        nmpApp.dispatch(action: .clearRoomInviteAddError)
+    }
+
+    func clearRoomInviteInviteLinkError() {
+        nmpApp.dispatch(action: .clearRoomInviteInviteLinkError)
+    }
+
+    func clearRoomInviteToast() {
+        nmpApp.dispatch(action: .clearRoomInviteToast)
+    }
+
+    func closeRoomInvite() {
+        nmpApp.dispatch(action: .closeRoomInvite)
+    }
+
+    func openComments(rootTagName: String, rootTagValue: String, rootKind: UInt16) {
+        let tag = rootTagName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = rootTagValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !tag.isEmpty, !value.isEmpty else { return }
+        nmpApp.dispatch(
+            action: .openComments(
+                rootTagName: tag,
+                rootTagValue: value,
+                rootKind: rootKind
+            )
+        )
+    }
+
+    func refreshComments() {
+        nmpApp.dispatch(action: .refreshComments)
+    }
+
+    func commentDraft(parentEventId: String?) -> String {
+        comments.drafts.first { $0.parentEventId == parentEventId }?.body ?? ""
+    }
+
+    func setCommentDraft(parentEventId: String?, body: String) {
+        nmpApp.dispatch(action: .setCommentDraft(parentEventId: parentEventId, body: body))
+    }
+
+    func publishComment(parentEventId: String?) {
+        nmpApp.dispatch(action: .publishComment(parentEventId: parentEventId))
+    }
+
+    func clearCommentPublishError() {
+        nmpApp.dispatch(action: .clearCommentPublishError)
+    }
+
+    func toggleCommentLike(eventId: String) {
+        let trimmed = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        nmpApp.dispatch(action: .toggleCommentLike(eventId: trimmed))
+    }
+
+    func toggleCommentBookmark(eventId: String) {
+        let trimmed = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        nmpApp.dispatch(action: .toggleCommentBookmark(eventId: trimmed))
+    }
+
+    func clearCommentInteractionError() {
+        nmpApp.dispatch(action: .clearCommentInteractionError)
+    }
+
+    func closeComments() {
+        nmpApp.dispatch(action: .closeComments)
+    }
+
+    func openFeedback(coordinate: String) {
+        let trimmed = coordinate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        nmpApp.dispatch(action: .openFeedback(coordinate: trimmed))
+    }
+
+    func refreshFeedbackThreads() {
+        nmpApp.dispatch(action: .refreshFeedbackThreads)
+    }
+
+    func setFeedbackNewThreadDraft(_ body: String) {
+        nmpApp.dispatch(action: .setFeedbackNewThreadDraft(body: body))
+    }
+
+    func publishFeedbackNewThread() {
+        nmpApp.dispatch(action: .publishFeedbackNewThread)
+    }
+
+    func openFeedbackThread(rootEventId: String) {
+        let trimmed = rootEventId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        nmpApp.dispatch(action: .openFeedbackThread(rootEventId: trimmed))
+    }
+
+    func refreshFeedbackThread() {
+        nmpApp.dispatch(action: .refreshFeedbackThread)
+    }
+
+    func setFeedbackReplyDraft(_ body: String) {
+        nmpApp.dispatch(action: .setFeedbackReplyDraft(body: body))
+    }
+
+    func publishFeedbackReply() {
+        nmpApp.dispatch(action: .publishFeedbackReply)
+    }
+
+    func clearFeedbackPublishError() {
+        nmpApp.dispatch(action: .clearFeedbackPublishError)
+    }
+
+    func closeFeedbackThread() {
+        nmpApp.dispatch(action: .closeFeedbackThread)
+    }
+
+    func closeFeedback() {
+        nmpApp.dispatch(action: .closeFeedback)
+    }
+
+    func openMediaSettings() {
+        nmpApp.dispatch(action: .openMediaSettings)
+    }
+
+    func refreshMediaSettings() {
+        nmpApp.dispatch(action: .refreshMediaSettings)
+    }
+
+    func addBlossomServer(url: String) {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        nmpApp.dispatch(action: .addBlossomServer(url: trimmed))
+    }
+
+    func removeBlossomServer(url: String) {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        nmpApp.dispatch(action: .removeBlossomServer(url: trimmed))
+    }
+
+    func moveBlossomServers(fromOffsets: IndexSet, toOffset: Int) {
+        let indices = fromOffsets.map { UInt32($0) }
+        guard !indices.isEmpty, toOffset >= 0 else { return }
+        nmpApp.dispatch(
+            action: .moveBlossomServers(
+                fromIndices: indices,
+                toIndex: UInt32(toOffset)
+            )
+        )
+    }
+
+    func clearMediaSettingsError() {
+        nmpApp.dispatch(action: .clearMediaSettingsError)
+    }
+
+    func closeMediaSettings() {
+        nmpApp.dispatch(action: .closeMediaSettings)
+    }
+
+    func openEditProfile(seed: ProfileMetadata?) {
+        nmpApp.dispatch(action: .openEditProfile(seed: seed))
+    }
+
+    func setEditProfileDisplayName(_ value: String) {
+        nmpApp.dispatch(action: .setEditProfileDisplayName(value: value))
+    }
+
+    func setEditProfileName(_ value: String) {
+        nmpApp.dispatch(action: .setEditProfileName(value: value))
+    }
+
+    func setEditProfileAbout(_ value: String) {
+        nmpApp.dispatch(action: .setEditProfileAbout(value: value))
+    }
+
+    func setEditProfilePicture(_ value: String) {
+        nmpApp.dispatch(action: .setEditProfilePicture(value: value))
+    }
+
+    func setEditProfileBanner(_ value: String) {
+        nmpApp.dispatch(action: .setEditProfileBanner(value: value))
+    }
+
+    func setEditProfileNip05(_ value: String) {
+        nmpApp.dispatch(action: .setEditProfileNip05(value: value))
+    }
+
+    func setEditProfileWebsite(_ value: String) {
+        nmpApp.dispatch(action: .setEditProfileWebsite(value: value))
+    }
+
+    func setEditProfileLud16(_ value: String) {
+        nmpApp.dispatch(action: .setEditProfileLud16(value: value))
+    }
+
+    func uploadEditProfileImage(
+        target: HighlighterEditProfileImageTarget,
+        bytes: Data,
+        mime: String,
+        width: UInt32,
+        height: UInt32,
+        alt: String
+    ) {
+        nmpApp.dispatch(
+            action: .uploadEditProfileImage(
+                target: target,
+                bytes: bytes,
+                mime: mime,
+                width: width,
+                height: height,
+                alt: alt
+            )
+        )
+    }
+
+    func editProfileCapabilityFailed(message: String) {
+        nmpApp.dispatch(action: .editProfileCapabilityFailed(message: message))
+    }
+
+    func submitEditProfile() {
+        nmpApp.dispatch(action: .submitEditProfile)
+    }
+
+    func clearEditProfileError() {
+        nmpApp.dispatch(action: .clearEditProfileError)
+    }
+
+    func clearEditProfileResult() {
+        nmpApp.dispatch(action: .clearEditProfileResult)
+    }
+
+    func closeEditProfile() {
+        nmpApp.dispatch(action: .closeEditProfile)
     }
 
     var search: HighlighterSearchSnapshot {
@@ -161,8 +539,16 @@ final class HighlighterStore {
         nmpState.articleReader
     }
 
+    var roomDetail: HighlighterRoomDetailSnapshot {
+        nmpState.roomDetail
+    }
+
     var network: HighlighterNetworkSnapshot {
         nmpState.network
+    }
+
+    func networkRemovalImpact(url: String) -> HighlighterRelayRemovalImpact? {
+        nmpApp.networkRemovalImpact(url: url)
     }
 
     func openSearch() {
@@ -187,6 +573,84 @@ final class HighlighterStore {
 
     func clearRecentSearches() {
         nmpApp.dispatch(action: .clearRecentSearches)
+    }
+
+    func openNetworkSettings() {
+        nmpApp.dispatch(action: .openNetworkSettings)
+    }
+
+    func refreshNetworkSettings() {
+        nmpApp.dispatch(action: .refreshNetworkSettings)
+    }
+
+    func closeNetworkSettings() {
+        nmpApp.dispatch(action: .closeNetworkSettings)
+    }
+
+    func upsertNetworkRelay(_ config: RelayConfig) {
+        nmpApp.dispatch(action: .upsertNetworkRelay(config: config))
+    }
+
+    func removeNetworkRelay(url: String) {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        nmpApp.dispatch(action: .removeNetworkRelay(url: trimmed))
+    }
+
+    func setNetworkRelayRoles(
+        url: String,
+        read: Bool,
+        write: Bool,
+        rooms: Bool,
+        indexer: Bool
+    ) {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        nmpApp.dispatch(
+            action: .setNetworkRelayRoles(
+                url: trimmed,
+                read: read,
+                write: write,
+                rooms: rooms,
+                indexer: indexer
+            )
+        )
+    }
+
+    func probeNetworkRelayNip11(url: String) {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("wss://") || trimmed.hasPrefix("ws://") else { return }
+        nmpApp.dispatch(action: .probeNetworkRelayNip11(url: trimmed))
+    }
+
+    func setNetworkImportNpub(_ npub: String) {
+        nmpApp.dispatch(action: .setNetworkImportNpub(npub: npub))
+    }
+
+    func fetchNetworkImportRelays() {
+        nmpApp.dispatch(action: .fetchNetworkImportRelays)
+    }
+
+    func toggleNetworkImportRelay(url: String) {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        nmpApp.dispatch(action: .toggleNetworkImportRelay(url: trimmed))
+    }
+
+    func applyNetworkImportRelays() {
+        nmpApp.dispatch(action: .applyNetworkImportRelays)
+    }
+
+    func clearNetworkError() {
+        nmpApp.dispatch(action: .clearNetworkError)
+    }
+
+    func networkDiagnostic(url: String) -> RelayDiagnostic? {
+        network.diagnostics.first { $0.url == url }
+    }
+
+    func networkNip11(url: String) -> HighlighterRelayNip11Snapshot? {
+        network.nip11.first { $0.url == url }
     }
 
     func openRoomExplorer() {
@@ -248,7 +712,7 @@ final class HighlighterStore {
     // MARK: - Bookmarks
 
     /// Rust-owned toggle: the actor publishes and emits the next bookmark
-    /// snapshot; Swift does not run optimistic bookmark policy.
+    /// snapshot; Swift never computes bookmark membership locally.
     func toggleBookmark(articleAddress: String) async {
         let trimmed = articleAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -365,6 +829,53 @@ final class HighlighterStore {
         )
     }
 
+    func openRoom(groupId: String) {
+        let trimmed = groupId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        nmpApp.dispatch(action: .openRoom(groupId: trimmed))
+    }
+
+    func refreshRoom() {
+        nmpApp.dispatch(action: .refreshRoom)
+    }
+
+    func publishRoomDiscussion(title: String, body: String, attachmentUrl: String?) {
+        nmpApp.dispatch(
+            action: .publishRoomDiscussion(
+                title: title,
+                body: body,
+                attachmentUrl: attachmentUrl
+            )
+        )
+    }
+
+    func clearRoomDiscussionError() {
+        nmpApp.dispatch(action: .clearRoomDiscussionError)
+    }
+
+    func loadMoreRoomChat() {
+        nmpApp.dispatch(action: .loadMoreRoomChat)
+    }
+
+    func publishRoomChatMessage(content: String, replyToEventId: String?) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        nmpApp.dispatch(
+            action: .publishRoomChatMessage(
+                content: trimmed,
+                replyToEventId: replyToEventId
+            )
+        )
+    }
+
+    func clearRoomChatError() {
+        nmpApp.dispatch(action: .clearRoomChatError)
+    }
+
+    func closeRoom() {
+        nmpApp.dispatch(action: .closeRoom)
+    }
+
     func setNetworkWifiOnly(_ enabled: Bool) {
         nmpApp.dispatch(action: .setNetworkWifiOnly(enabled: enabled))
     }
@@ -384,6 +895,115 @@ final class HighlighterStore {
         let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         nmpApp.dispatch(action: .requestWebMetadata(url: trimmed))
+    }
+
+    func requestReferenceHighlights(tagName: String, tagValue: String, limit: UInt32) {
+        let cleanTag = tagName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cleanValue = tagValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTag.isEmpty, !cleanValue.isEmpty else { return }
+        nmpApp.dispatch(
+            action: .requestReferenceHighlights(
+                tagName: cleanTag,
+                tagValue: cleanValue,
+                limit: limit
+            )
+        )
+    }
+
+    func referenceHighlights(tagName: String, tagValue: String) -> [HighlightRecord]? {
+        let key = "\(tagName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()):\(tagValue.trimmingCharacters(in: .whitespacesAndNewlines))"
+        return nmpState.referenceHighlights.first { $0.key == key }?.highlights
+    }
+
+    func requestBookPickerRecents(limit: UInt32 = 24) {
+        nmpApp.dispatch(action: .requestBookPickerRecents(limit: limit))
+    }
+
+    func searchBookPickerArtifacts(query: String, limit: UInt32 = 20) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            nmpApp.dispatch(action: .clearBookPickerSearch)
+            return
+        }
+        nmpApp.dispatch(action: .searchBookPickerArtifacts(query: trimmed, limit: limit))
+    }
+
+    func clearBookPickerSearch() {
+        nmpApp.dispatch(action: .clearBookPickerSearch)
+    }
+
+    func uploadCapturePhoto(
+        bytes: Data,
+        mime: String,
+        width: UInt32,
+        height: UInt32,
+        alt: String
+    ) {
+        nmpApp.dispatch(
+            action: .uploadCapturePhoto(
+                bytes: bytes,
+                mime: mime,
+                width: width,
+                height: height,
+                alt: alt
+            )
+        )
+    }
+
+    func clearCaptureUpload() {
+        nmpApp.dispatch(action: .clearCaptureUpload)
+    }
+
+    func publishCaptureHighlight(
+        selection: HighlighterCaptureArtifact,
+        targetGroupId: String?,
+        draft: HighlightDraft
+    ) {
+        nmpApp.dispatch(
+            action: .publishCaptureHighlight(
+                selection: selection,
+                targetGroupId: targetGroupId,
+                draft: draft
+            )
+        )
+    }
+
+    func publishCapturePicture(
+        selection: HighlighterCaptureArtifact?,
+        targetGroupId: String?,
+        image: BlossomUpload,
+        note: String
+    ) {
+        nmpApp.dispatch(
+            action: .publishCapturePicture(
+                selection: selection,
+                targetGroupId: targetGroupId,
+                image: image,
+                note: note
+            )
+        )
+    }
+
+    func publishClipHighlight(
+        artifact: ArtifactRecord,
+        targetGroupId: String?,
+        draft: HighlightDraft
+    ) {
+        nmpApp.dispatch(
+            action: .publishClipHighlight(
+                artifact: artifact,
+                targetGroupId: targetGroupId,
+                draft: draft
+            )
+        )
+    }
+
+    func clearCaptureResult() {
+        nmpApp.dispatch(action: .clearCaptureResult)
+    }
+
+    func clearCaptureError() {
+        nmpApp.dispatch(action: .clearCaptureError)
     }
 
     func webMetadata(url: String) -> WebMetadata? {
@@ -421,13 +1041,13 @@ final class HighlighterStore {
 
     private func registerEventBridge() {
         let bridge = EventBridge(appStore: self)
-        nmpApp.setLegacyEventCallback(callback: bridge)
+        nmpApp.setCoreEventCallback(callback: bridge)
         eventBridge = bridge
     }
 
     private func dispatchStoredCredential(_ credential: HighlighterSessionCredential) {
         switch credential {
-        case .nsec(let nsec):
+        case let .nsec(nsec):
             nmpApp.dispatch(
                 action: .signInNsec(
                     nsec: nsec,
@@ -435,7 +1055,7 @@ final class HighlighterStore {
                     clearStoredOnFailure: true
                 )
             )
-        case .bunkerUri(let uri):
+        case let .bunkerUri(uri):
             nmpApp.dispatch(
                 action: .pairBunker(
                     uri: uri,
@@ -504,19 +1124,29 @@ private final class HighlighterAppStateReconciler: HighlighterAppReconciler, @un
         self.appStore = appStore
     }
 
-    func onUpdate(update: HighlighterAppUpdate) {
+    func onState(state: HighlighterAppState) {
         Task { @MainActor in
             guard let appStore else { return }
-            switch update {
-            case .fullState(let state):
-                appStore.applyNmpState(state)
-            case .persistSessionCredential(let credential):
-                AppSessionStore.shared.persist(credential)
-            case .clearSessionCredentials:
-                AppSessionStore.shared.clear()
-            case .openExternalUrl(let url):
-                appStore.openExternalUrl(url)
-            }
+            appStore.applyNmpState(state)
+        }
+    }
+
+    func onPersistSessionCredential(credential: HighlighterSessionCredential) {
+        Task { @MainActor in
+            AppSessionStore.shared.persist(credential)
+        }
+    }
+
+    func onClearSessionCredentials() {
+        Task { @MainActor in
+            AppSessionStore.shared.clear()
+        }
+    }
+
+    func onOpenExternalUrl(url: String) {
+        Task { @MainActor in
+            guard let appStore else { return }
+            appStore.openExternalUrl(url)
         }
     }
 }

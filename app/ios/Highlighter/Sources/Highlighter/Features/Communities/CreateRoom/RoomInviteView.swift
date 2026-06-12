@@ -25,15 +25,6 @@ struct RoomInviteView: View {
     @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
 
-    @State private var query: String = ""
-    @State private var follows: [String] = []
-    @State private var followsLoaded = false
-    @State private var pasteResolution: ResolvedCandidate?
-    @State private var selected: [Candidate] = []
-    @State private var sending = false
-    @State private var error: String?
-    @State private var sentToast: String?
-
     var body: some View {
         ZStack(alignment: .bottom) {
             ScrollView {
@@ -79,23 +70,23 @@ struct RoomInviteView: View {
                 }
             }
         }
-        .task {
-            await loadFollows()
+        .task(id: groupId) {
+            appStore.openRoomInvite(groupId: groupId)
         }
-        .onChange(of: query) { _, newValue in
-            Task { await resolvePaste(input: newValue) }
+        .onDisappear {
+            appStore.closeRoomInvite()
         }
         .alert("Couldn't add", isPresented: errorBinding, actions: {
-            Button("OK") { error = nil }
-        }, message: { if let error { Text(error) } })
+            Button("OK") { appStore.clearRoomInviteAddError() }
+        }, message: { if let addError { Text(addError) } })
         .overlay(alignment: .top) {
-            if let toast = sentToast {
+            if let toast = inviteToast {
                 HStack(spacing: 10) {
                     Text(toast)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.white)
                     Button {
-                        withAnimation(.easeIn(duration: 0.2)) { sentToast = nil }
+                        withAnimation(.easeIn(duration: 0.2)) { appStore.clearRoomInviteToast() }
                     } label: {
                         Image(systemName: "xmark")
                             .font(.caption.weight(.bold))
@@ -107,8 +98,8 @@ struct RoomInviteView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
                 .background(Color.highlighterInkStrong, in: Capsule())
-                    .padding(.top, 8)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                .padding(.top, 8)
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
     }
@@ -135,8 +126,8 @@ struct RoomInviteView: View {
 
     @ViewBuilder
     private var chipsZone: some View {
-        if !selected.isEmpty {
-            FlowChips(items: selected) { candidate in
+        if !selectedCandidates.isEmpty {
+            FlowChips(items: selectedCandidates) { candidate in
                 Chip(candidate: candidate, profile: profile(for: candidate.pubkeyHex)) {
                     remove(candidate)
                 }
@@ -150,7 +141,7 @@ struct RoomInviteView: View {
                 .foregroundStyle(Color.highlighterInkMuted)
             TextField(
                 "",
-                text: $query,
+                text: roomInviteQueryBinding,
                 prompt: Text("Search follows or paste an npub")
                     .foregroundColor(Color.highlighterInkMuted.opacity(0.7))
             )
@@ -158,10 +149,9 @@ struct RoomInviteView: View {
             .autocorrectionDisabled()
             .submitLabel(.done)
             .onSubmit { acceptPasteIfAny() }
-            if !query.isEmpty {
+            if !appStore.roomInvite.query.isEmpty {
                 Button {
-                    query = ""
-                    pasteResolution = nil
+                    appStore.setRoomInviteQuery("")
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(Color.highlighterInkMuted)
@@ -179,23 +169,21 @@ struct RoomInviteView: View {
 
     @ViewBuilder
     private var suggestionsList: some View {
-        if let resolved = pasteResolution {
+        if let resolved = appStore.roomInvite.pastedCandidate {
             VStack(spacing: 0) {
                 personRow(
                     pubkeyHex: resolved.pubkeyHex,
                     profile: profile(for: resolved.pubkeyHex),
-                    secondary: resolved.kind.label,
+                    secondary: resolved.kind.inviteLabel,
                     isSelected: isSelected(resolved.pubkeyHex)
                 ) {
-                    add(Candidate(pubkeyHex: resolved.pubkeyHex, source: resolved.kind.candidateSource))
-                    query = ""
-                    pasteResolution = nil
+                    appStore.acceptRoomInvitePastedCandidate()
                 }
             }
             .padding(.horizontal, 22)
         } else {
-            let visible = visibleFollows()
-            if visible.isEmpty && !query.isEmpty && followsLoaded {
+            let visible = appStore.roomInvite.visibleFollows
+            if visible.isEmpty && !appStore.roomInvite.query.isEmpty && !appStore.roomInvite.isLoadingFollows {
                 Text("No matching follow — paste an npub to invite anyone.")
                     .font(.subheadline)
                     .foregroundStyle(Color.highlighterInkMuted)
@@ -210,7 +198,7 @@ struct RoomInviteView: View {
                             secondary: "Following",
                             isSelected: isSelected(pubkey)
                         ) {
-                            toggle(Candidate(pubkeyHex: pubkey, source: .follow))
+                            appStore.toggleRoomInviteCandidate(pubkeyHex: pubkey, source: .follow)
                         }
                         if pubkey != visible.last {
                             Divider().overlay(Color.highlighterRule)
@@ -225,7 +213,7 @@ struct RoomInviteView: View {
 
     @ViewBuilder
     private var stickyAddBar: some View {
-        if !selected.isEmpty {
+        if !selectedCandidates.isEmpty {
             VStack(spacing: 0) {
                 LinearGradient(
                     colors: [Color.highlighterPaper.opacity(0), Color.highlighterPaper],
@@ -234,12 +222,14 @@ struct RoomInviteView: View {
                 )
                 .frame(height: 24)
 
-                Button(action: send) {
+                Button {
+                    appStore.submitRoomInviteMembers()
+                } label: {
                     ZStack {
-                        if sending {
+                        if appStore.roomInvite.isAddingMembers {
                             ProgressView().tint(.white)
                         } else {
-                            Text(selected.count == 1 ? "Add 1 person" : "Add \(selected.count) people")
+                            Text(selectedCandidates.count == 1 ? "Add 1 person" : "Add \(selectedCandidates.count) people")
                                 .font(.headline)
                                 .foregroundStyle(.white)
                         }
@@ -252,7 +242,7 @@ struct RoomInviteView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .disabled(sending)
+                .disabled(appStore.roomInvite.isAddingMembers)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 24)
                 .background(Color.highlighterPaper)
@@ -310,144 +300,48 @@ struct RoomInviteView: View {
     }
 
     private func isSelected(_ pubkey: String) -> Bool {
-        selected.contains(where: { $0.pubkeyHex == pubkey })
+        selectedCandidates.contains(where: { $0.pubkeyHex == pubkey })
     }
 
-    private func toggle(_ candidate: Candidate) {
-        if isSelected(candidate.pubkeyHex) {
-            remove(candidate)
-        } else {
-            add(candidate)
-        }
-    }
-
-    private func add(_ candidate: Candidate) {
-        guard !isSelected(candidate.pubkeyHex) else { return }
-        let me = appStore.currentUser?.pubkey ?? ""
-        if candidate.pubkeyHex.lowercased() == me.lowercased() {
-            error = "You're already in this room."
-            return
-        }
-        selected.append(candidate)
-        UISelectionFeedbackGenerator().selectionChanged()
-    }
-
-    private func remove(_ candidate: Candidate) {
-        selected.removeAll(where: { $0.pubkeyHex == candidate.pubkeyHex })
+    private func remove(_ candidate: HighlighterRoomInviteCandidate) {
+        appStore.removeRoomInviteCandidate(pubkeyHex: candidate.pubkeyHex)
     }
 
     private func acceptPasteIfAny() {
-        guard let resolved = pasteResolution else { return }
-        add(Candidate(pubkeyHex: resolved.pubkeyHex, source: resolved.kind.candidateSource))
-        query = ""
-        pasteResolution = nil
+        guard appStore.roomInvite.pastedCandidate != nil else { return }
+        appStore.acceptRoomInvitePastedCandidate()
     }
 
     private var errorBinding: Binding<Bool> {
-        Binding(get: { error != nil }, set: { if !$0 { error = nil } })
+        Binding(
+            get: { addError != nil },
+            set: { if !$0 { appStore.clearRoomInviteAddError() } }
+        )
     }
 
-    private func visibleFollows() -> [String] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return Array(follows.prefix(50)) }
-        let needle = trimmed.lowercased()
-        return follows.filter { pubkey in
-            let prof = profile(for: pubkey)
-            let name = (prof?.name ?? "").lowercased()
-            let nip05 = (prof?.nip05 ?? "").lowercased()
-            let displayName = (prof?.displayName ?? "").lowercased()
-            return name.contains(needle) || nip05.contains(needle) || displayName.contains(needle)
-        }.prefix(50).map { $0 }
+    private var roomInviteQueryBinding: Binding<String> {
+        Binding(
+            get: { appStore.roomInvite.query },
+            set: { appStore.setRoomInviteQuery($0) }
+        )
+    }
+
+    private var selectedCandidates: [HighlighterRoomInviteCandidate] {
+        appStore.roomInvite.selected
+    }
+
+    private var addError: String? {
+        appStore.roomInvite.addErrorMessage
+    }
+
+    private var inviteToast: String? {
+        appStore.roomInvite.toastMessage
     }
 
     private func displayName(profile: ProfileMetadata?, fallback hex: String) -> String {
         if let displayName = profile?.displayName, !displayName.isEmpty { return displayName }
         if let name = profile?.name, !name.isEmpty { return name }
         return shortPubkey(hex)
-    }
-
-    // MARK: - Loading + actions
-
-    private func loadFollows() async {
-        do {
-            let result = try await appStore.safeCore.getFollows()
-            await MainActor.run {
-                follows = result
-                followsLoaded = true
-            }
-            // Warm the profile cache for the first chunk so suggestions
-            // render with names rather than truncated hex.
-            for pubkey in result.prefix(40) {
-                appStore.requestProfile(pubkeyHex: pubkey)
-            }
-        } catch {
-            await MainActor.run { followsLoaded = true }
-        }
-    }
-
-    private func resolvePaste(input: String) async {
-        let trimmed = input
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "nostr:", with: "")
-        guard looksLikeReference(trimmed) else {
-            await MainActor.run { pasteResolution = nil }
-            return
-        }
-        do {
-            let hex = try await appStore.safeCore.decodeNpub(trimmed)
-            let kind: ResolvedCandidate.Kind
-            if trimmed.lowercased().hasPrefix("npub") { kind = .npub }
-            else if trimmed.lowercased().hasPrefix("nprofile") { kind = .nprofile }
-            else { kind = .hex }
-            appStore.requestProfile(pubkeyHex: hex)
-            await MainActor.run {
-                pasteResolution = ResolvedCandidate(pubkeyHex: hex, kind: kind)
-            }
-        } catch {
-            await MainActor.run { pasteResolution = nil }
-        }
-    }
-
-    private func looksLikeReference(_ s: String) -> Bool {
-        let lower = s.lowercased()
-        if lower.hasPrefix("npub1") && lower.count >= 60 { return true }
-        if lower.hasPrefix("nprofile1") && lower.count >= 60 { return true }
-        if s.count == 64 && s.allSatisfy({ $0.isHexDigit }) { return true }
-        return false
-    }
-
-    private func send() {
-        guard !sending, !selected.isEmpty else { return }
-        sending = true
-        sentToast = nil
-        let toAdd = selected
-        Task {
-            defer { Task { @MainActor in sending = false } }
-            var failures: [String] = []
-            for candidate in toAdd {
-                do {
-                    _ = try await appStore.safeCore.addRoomMember(
-                        groupId: groupId,
-                        pubkeyHex: candidate.pubkeyHex
-                    )
-                } catch {
-                    failures.append(shortPubkey(candidate.pubkeyHex))
-                }
-            }
-            await MainActor.run {
-                if failures.isEmpty {
-                    let added = toAdd.count
-                    selected.removeAll()
-                    sentToast = added == 1 ? "Added 1 person" : "Added \(added) people"
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                } else if failures.count == toAdd.count {
-                    error = "Couldn't add anyone. Are you a moderator of this room?"
-                } else {
-                    selected.removeAll(where: { c in !failures.contains(shortPubkey(c.pubkeyHex)) })
-                    error = "Some failed: \(failures.joined(separator: ", "))"
-                }
-            }
-        }
     }
 
     private func shortPubkey(_ hex: String) -> String {
@@ -458,29 +352,18 @@ struct RoomInviteView: View {
     }
 }
 
-// MARK: - Models
-
-private struct Candidate: Identifiable, Equatable {
-    enum Source { case follow, paste, manual }
-    let pubkeyHex: String
-    let source: Source
-    var id: String { pubkeyHex }
+extension HighlighterRoomInviteCandidate: Identifiable {
+    public var id: String { pubkeyHex }
 }
 
-private struct ResolvedCandidate {
-    enum Kind {
-        case npub, nprofile, hex
-        var label: String {
-            switch self {
-            case .npub: return "Pasted npub"
-            case .nprofile: return "Pasted nprofile"
-            case .hex: return "Pasted pubkey"
-            }
+private extension HighlighterRoomInvitePastedKind {
+    var inviteLabel: String {
+        switch self {
+        case .npub: return "Pasted npub"
+        case .nprofile: return "Pasted nprofile"
+        case .hex: return "Pasted pubkey"
         }
-        var candidateSource: Candidate.Source { .paste }
     }
-    let pubkeyHex: String
-    let kind: Kind
 }
 
 // MARK: - Avatar
@@ -528,7 +411,7 @@ private struct AvatarView: View {
 // MARK: - Chip
 
 private struct Chip: View {
-    let candidate: Candidate
+    let candidate: HighlighterRoomInviteCandidate
     let profile: ProfileMetadata?
     let onRemove: () -> Void
 
@@ -581,7 +464,7 @@ private struct FlowChips<Item: Identifiable, Content: View>: View {
 private struct FlowLayout: Layout {
     var spacing: CGFloat = 8
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
         let width = proposal.width ?? .infinity
         var rowWidth: CGFloat = 0
         var totalHeight: CGFloat = 0
@@ -600,7 +483,7 @@ private struct FlowLayout: Layout {
         return CGSize(width: width, height: totalHeight + rowHeight)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
         var x = bounds.minX
         var y = bounds.minY
         var rowHeight: CGFloat = 0

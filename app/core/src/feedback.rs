@@ -231,13 +231,31 @@ pub fn query_first_agent_pubkey(ndb: &Ndb, coordinate: &str) -> Result<Option<St
     Ok(latest.and_then(|e| first_tag_value(&e, "p").map(str::to_string)))
 }
 
+fn resolve_agent_pubkey(
+    ndb: &Ndb,
+    coordinate: &str,
+    supplied_agent_pubkey: Option<&str>,
+) -> Result<Option<String>, CoreError> {
+    match supplied_agent_pubkey
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(pk) => {
+            PublicKey::from_hex(pk)
+                .map_err(|e| CoreError::InvalidInput(format!("invalid agent pubkey: {e}")))?;
+            Ok(Some(pk.to_string()))
+        }
+        None => query_first_agent_pubkey(ndb, coordinate),
+    }
+}
+
 /// Build, sign and send a kind:1 feedback note. The event always carries an
-/// `a` tag for the project coordinate; a `p` tag is added when an
-/// `agent_pubkey` is supplied (`None` is allowed when the project event isn't
-/// cached yet — the note still ships, the agent will just discover it via
-/// the `a`-tag subscription). When `parent_event_id` is `Some`, an
-/// `["e", root, "", "root"]` marker is added so the reply attaches to an
-/// existing thread. Published only to [`FEEDBACK_RELAY`].
+/// `a` tag for the project coordinate; a `p` tag is added from an explicitly
+/// supplied agent pubkey or, when omitted, the first cached project agent.
+/// Missing project metadata is allowed — the note still ships, and the agent
+/// can discover it via the `a`-tag subscription. When `parent_event_id` is
+/// `Some`, an `["e", root, "", "root"]` marker is added so the reply attaches
+/// to an existing thread. Published only to [`FEEDBACK_RELAY`].
 pub async fn publish_note(
     runtime: &NostrRuntime,
     coordinate: &str,
@@ -258,14 +276,7 @@ pub async fn publish_note(
         ));
     }
     parse_coordinate(coordinate)?;
-    let agent_pubkey = match agent_pubkey.map(str::trim).filter(|s| !s.is_empty()) {
-        Some(pk) => {
-            PublicKey::from_hex(pk)
-                .map_err(|e| CoreError::InvalidInput(format!("invalid agent pubkey: {e}")))?;
-            Some(pk.to_string())
-        }
-        None => None,
-    };
+    let agent_pubkey = resolve_agent_pubkey(runtime.ndb(), coordinate, agent_pubkey)?;
     let parent_root = match parent_event_id.map(str::trim).filter(|s| !s.is_empty()) {
         Some(s) => Some(
             EventId::from_hex(s)
@@ -288,29 +299,16 @@ pub async fn publish_note(
         .await
         .map_err(|e| CoreError::Signer(format!("sign feedback note: {e}")))?;
 
-    ensure_feedback_relay(client).await;
-    client
-        .send_event_to([FEEDBACK_RELAY], &event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish feedback note: {e}")))?;
+    runtime.publish_signed_event_to_relays(
+        "feedback-publish",
+        &event,
+        vec![FEEDBACK_RELAY.to_string()],
+    )?;
 
     let root_id = parent_root
         .map(|id| id.to_hex())
         .unwrap_or_else(|| event.id.to_hex());
     Ok(event_record(&event, &root_id))
-}
-
-/// Idempotently add + connect [`FEEDBACK_RELAY`] to the runtime's relay pool
-/// before any feedback publish/subscribe runs. Errors are logged but never
-/// propagated — `add_relay` returns `Ok(false)` if the relay is already
-/// known, and `connect_relay` is fine to call again on a connected relay.
-pub async fn ensure_feedback_relay(client: &Client) {
-    if let Err(e) = client.add_relay(FEEDBACK_RELAY).await {
-        tracing::warn!(relay = %FEEDBACK_RELAY, error = %e, "feedback relay add_relay");
-    }
-    if let Err(e) = client.connect_relay(FEEDBACK_RELAY).await {
-        tracing::warn!(relay = %FEEDBACK_RELAY, error = %e, "feedback relay connect");
-    }
 }
 
 // --- helpers ---------------------------------------------------------------
@@ -348,12 +346,6 @@ fn record_from_root(root: &Event, latest_meta: Option<&Event>) -> FeedbackThread
         status_label,
         preview: trim_preview(&root.content),
     }
-}
-
-/// Public shim used by the subscription pump's `build_change` to materialise
-/// a delta payload from a streamed event without re-querying ndb.
-pub(crate) fn event_record_for_delta(event: &Event, root_event_id: &str) -> FeedbackEventRecord {
-    event_record(event, root_event_id)
 }
 
 fn event_record(event: &Event, root_event_id: &str) -> FeedbackEventRecord {
@@ -405,11 +397,6 @@ fn parse_coordinate(coordinate: &str) -> Result<(u16, String, String), CoreError
         ));
     }
     Ok((kind, pubkey.to_string(), d_tag.to_string()))
-}
-
-fn parse_tag(parts: &[&str]) -> Result<Tag, CoreError> {
-    Tag::parse(parts.iter().map(|s| s.to_string()).collect::<Vec<_>>())
-        .map_err(|e| CoreError::Other(format!("build tag: {e}")))
 }
 
 fn build_feedback_tags(
@@ -468,7 +455,7 @@ mod tests {
     }
 
     fn tag(parts: &[&str]) -> Tag {
-        parse_tag(parts).expect("tag")
+        Tag::parse(parts.iter().map(|s| s.to_string()).collect::<Vec<_>>()).expect("tag")
     }
 
     fn flush() {
@@ -697,6 +684,72 @@ mod tests {
             .expect("query")
             .expect("agent present");
         assert_eq!(agent, agent_a.public_key().to_hex());
+    }
+
+    #[test]
+    fn resolve_agent_pubkey_prefers_valid_supplied_agent() {
+        let (ndb, _tmp) = open_ndb();
+        let project = Keys::generate();
+        let coord = format!(
+            "{}:{}:{}",
+            KIND_PROJECT_DEFINITION,
+            project.public_key().to_hex(),
+            "demo"
+        );
+        let supplied = Keys::generate().public_key().to_hex();
+
+        let agent = resolve_agent_pubkey(&ndb, &coord, Some(&format!(" {supplied} ")))
+            .expect("resolve")
+            .expect("agent");
+
+        assert_eq!(agent, supplied);
+    }
+
+    #[test]
+    fn resolve_agent_pubkey_uses_cached_project_when_omitted() {
+        let (ndb, _tmp) = open_ndb();
+        let project = Keys::generate();
+        let coord = format!(
+            "{}:{}:{}",
+            KIND_PROJECT_DEFINITION,
+            project.public_key().to_hex(),
+            "demo"
+        );
+        let agent = Keys::generate();
+        let project_event = sign(
+            &project,
+            KIND_PROJECT_DEFINITION,
+            vec![
+                tag(&["d", "demo"]),
+                tag(&["p", &agent.public_key().to_hex()]),
+            ],
+            "",
+            1_000,
+        );
+        process(&ndb, &project_event);
+        flush();
+
+        let resolved = resolve_agent_pubkey(&ndb, &coord, None)
+            .expect("resolve")
+            .expect("agent");
+
+        assert_eq!(resolved, agent.public_key().to_hex());
+    }
+
+    #[test]
+    fn resolve_agent_pubkey_allows_missing_project_metadata() {
+        let (ndb, _tmp) = open_ndb();
+        let project = Keys::generate();
+        let coord = format!(
+            "{}:{}:{}",
+            KIND_PROJECT_DEFINITION,
+            project.public_key().to_hex(),
+            "demo"
+        );
+
+        let resolved = resolve_agent_pubkey(&ndb, &coord, None).expect("resolve");
+
+        assert!(resolved.is_none());
     }
 
     #[test]

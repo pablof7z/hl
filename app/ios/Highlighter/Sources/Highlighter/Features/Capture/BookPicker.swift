@@ -20,11 +20,7 @@ struct BookPicker: View {
 
     @Binding var selection: BookSelection?
 
-    @State private var recents: [ArtifactRecord] = []
-    @State private var searchResults: [ArtifactRecord] = []
     @State private var query: String = ""
-    @State private var loadingRecents = true
-    @State private var searching = false
     @State private var showScanner = false
     @State private var showManualEntry = false
     @State private var resolvingISBN: String?
@@ -59,13 +55,15 @@ struct BookPicker: View {
                 }
             }
             .task {
-                if loadingRecents {
-                    recents = (try? await appStore.safeCore.getRecentBooks(limit: 24)) ?? []
-                    loadingRecents = false
+                if appStore.bookPicker.recentBooks.isEmpty, !appStore.bookPicker.isLoadingRecents {
+                    appStore.requestBookPickerRecents(limit: 24)
                 }
             }
             .task(id: query) {
                 await runSearch()
+            }
+            .onChange(of: appStore.nmpState.rev) { _, _ in
+                applyResolvedPreviewIfAvailable()
             }
             .fullScreenCover(isPresented: $showScanner) {
                 BookScannerView { isbn in
@@ -161,6 +159,14 @@ struct BookPicker: View {
     }
 
     // MARK: - Recents
+
+    private var recents: [ArtifactRecord] {
+        appStore.bookPicker.recentBooks
+    }
+
+    private var loadingRecents: Bool {
+        appStore.bookPicker.isLoadingRecents
+    }
 
     private var recentsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -269,6 +275,18 @@ struct BookPicker: View {
     }
 
     // MARK: - Search
+
+    private var searchResults: [ArtifactRecord] {
+        guard appStore.bookPicker.searchQuery == query.trimmingCharacters(in: .whitespacesAndNewlines) else {
+            return []
+        }
+        return appStore.bookPicker.searchResults
+    }
+
+    private var searching: Bool {
+        appStore.bookPicker.searchQuery == query.trimmingCharacters(in: .whitespacesAndNewlines)
+            && appStore.bookPicker.isSearching
+    }
 
     private var searchResultsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -410,36 +428,28 @@ struct BookPicker: View {
         resolvingISBN = isbn
         resolvedPreview = nil
         resolveError = nil
-        Task {
-            do {
-                let preview = try await appStore.safeCore.lookupIsbn(isbn)
-                // Only commit the preview if we're still on the same ISBN
-                // (user could have cancelled mid-flight).
-                if resolvingISBN == isbn {
-                    resolvedPreview = preview
-                }
-            } catch {
-                if resolvingISBN == isbn {
-                    resolveError = error.localizedDescription
-                }
-            }
+        if let preview = appStore.isbnPreview(isbn: isbn) {
+            resolvedPreview = preview
+        } else {
+            appStore.requestIsbnPreview(isbn: isbn)
         }
     }
 
     private func runSearch() async {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            searchResults = []
-            searching = false
+            appStore.clearBookPickerSearch()
             return
         }
-        searching = true
-        let results = (try? await appStore.safeCore.searchArtifacts(query: trimmed)) ?? []
-        guard !Task.isCancelled,
-              query.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed
+        appStore.searchBookPickerArtifacts(query: trimmed)
+    }
+
+    private func applyResolvedPreviewIfAvailable() {
+        guard let isbn = resolvingISBN,
+              resolvedPreview == nil,
+              let preview = appStore.isbnPreview(isbn: isbn)
         else { return }
-        searchResults = results
-        searching = false
+        resolvedPreview = preview
     }
 }
 

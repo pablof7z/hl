@@ -60,14 +60,13 @@ final class CaptureStore {
     /// coordinates. `nil` means the full scanned page is the active image.
     var highlightCropBox: CGRect?
 
-    private let safeCore: SafeHighlighterCore
+    private let appStore: HighlighterStore
     private var processedJPEG: ImageProcessing.Result?
     private var preparedUploadJPEG: ImageProcessing.Result?
     private var selectedHighlightBoxes: [CGRect] = []
-    private var uploadGeneration = 0
 
-    init(safeCore: SafeHighlighterCore) {
-        self.safeCore = safeCore
+    init(appStore: HighlighterStore) {
+        self.appStore = appStore
     }
 
     var isUploading: Bool {
@@ -95,6 +94,8 @@ final class CaptureStore {
     /// in reviewing until the user hits Publish.
     func handleCapturedImage(_ image: UIImage) {
         reset(keepingPickerSelection: false)
+        appStore.clearCaptureUpload()
+        appStore.clearCaptureError()
         phase = .processing
         thumbnail = image
         prefillRecentBook()
@@ -134,27 +135,13 @@ final class CaptureStore {
                 // The imeta alt is a one-line summary; flatten the markdown
                 // for it (paragraph breaks → spaces).
                 let altText = flattenForAlt(markdown)
-                let uploaded = try await upload(processed: processed, alt: altText)
-                self.upload = BlossomUpload(
-                    url: uploaded.url,
-                    sha256Hex: uploaded.sha256Hex,
-                    mime: uploaded.mime,
-                    sizeBytes: uploaded.sizeBytes,
-                    width: uploaded.width,
-                    height: uploaded.height,
-                    alt: altText
-                )
+                startUpload(processed: processed, alt: altText)
                 self.phase = .reviewing
             } catch {
-                // OCR alone never fails here (it returns []); this catches
-                // upload errors. If upload already succeeded via the task
-                // group, leave it alone and slide into reviewing so the user
-                // can still edit text; otherwise surface the error.
-                if self.upload == nil {
-                    self.uploadError = (error as? LocalizedError)?.errorDescription
+                self.phase = .error(
+                    (error as? LocalizedError)?.errorDescription
                         ?? error.localizedDescription
-                }
-                self.phase = .reviewing
+                )
             }
         }
     }
@@ -164,12 +151,29 @@ final class CaptureStore {
     /// we re-check before assigning so we never overwrite a deliberate pick.
     private func prefillRecentBook() {
         guard selectedBook == nil else { return }
-        Task {
-            guard let recent = try? await safeCore.getRecentBooks(limit: 1),
-                  let book = recent.first else { return }
-            if self.selectedBook == nil {
-                self.selectedBook = .existing(book)
-            }
+        appStore.requestBookPickerRecents(limit: 1)
+        prefillRecentBookFromSnapshot(appStore.bookPicker)
+    }
+
+    func prefillRecentBookFromSnapshot(_ snapshot: HighlighterBookPickerSnapshot) {
+        guard selectedBook == nil, let book = snapshot.recentBooks.first else { return }
+        selectedBook = .existing(book)
+    }
+
+    func applyCaptureSnapshot(_ snapshot: HighlighterCaptureSnapshot) {
+        upload = snapshot.upload
+        uploadError = snapshot.uploadErrorMessage
+        if snapshot.isUploading, phase == .reviewing || phase == .processing {
+            return
+        }
+        if snapshot.isPublishing {
+            phase = .publishing
+        } else if let eventId = snapshot.publishedEventId {
+            phase = .done(eventId)
+            appStore.clearCaptureResult()
+        } else if let message = snapshot.errorMessage {
+            phase = .error(message)
+            appStore.clearCaptureError()
         }
     }
 
@@ -235,7 +239,7 @@ final class CaptureStore {
     /// auto-published first. Without a room, an `ArtifactRecord` is synthesised
     /// from the preview so the highlight still carries the reference tags.
     func publish() {
-        guard let upload else { return }
+        guard let upload = upload ?? appStore.capture.upload else { return }
         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
         let selection = selectedBook
         let groupId = selectedGroupId
@@ -253,96 +257,29 @@ final class CaptureStore {
         )
 
         phase = .publishing
-        Task {
-            do {
-                if !quote.isEmpty, let selection {
-                    let artifact = try await resolveArtifact(selection, groupId: groupId)
-                    let draft = HighlightDraft(
-                        quote: quote,
-                        context: stashedContext,
-                        note: trimmedNote,
-                        clipStartSeconds: nil,
-                        clipEndSeconds: nil,
-                        clipSpeaker: "",
-                        clipTranscriptSegmentIds: [],
-                        image: imageWithAlt
-                    )
-                    if let groupId {
-                        let records = try await safeCore.publishHighlightsAndShare(
-                            artifact: artifact,
-                            drafts: [draft],
-                            targetGroupId: groupId
-                        )
-                        self.phase = .done(records.first?.eventId)
-                    } else {
-                        let record = try await safeCore.publishHighlight(draft: draft, artifact: artifact)
-                        self.phase = .done(record.eventId)
-                    }
-                } else {
-                    let artifactForPicture: ArtifactRecord?
-                    switch selection {
-                    case .existing(let record):
-                        artifactForPicture = record
-                    case .pending(let preview):
-                        if let groupId {
-                            artifactForPicture = try await safeCore.publishArtifact(
-                                preview: preview,
-                                groupId: groupId,
-                                note: nil
-                            )
-                        } else {
-                            artifactForPicture = ArtifactRecord(
-                                preview: preview,
-                                groupId: "",
-                                shareEventId: "",
-                                pubkey: "",
-                                createdAt: nil,
-                                note: ""
-                            )
-                        }
-                    case nil:
-                        artifactForPicture = nil
-                    }
-                    let draft = PictureDraft(
-                        image: imageWithAlt,
-                        note: trimmedNote,
-                        artifact: artifactForPicture,
-                        targetGroupId: groupId
-                    )
-                    let record = try await safeCore.publishPicture(draft)
-                    self.phase = .done(record.eventId)
-                }
-            } catch {
-                self.phase = .error(error.localizedDescription)
-            }
-        }
-    }
-
-    /// Produce an `ArtifactRecord` for the given selection.
-    /// For `.existing`, returns as-is. For `.pending` with a group, publishes
-    /// the kind:11 artifact share first; without a group, synthesises a record
-    /// from the preview so the highlight event can carry the reference tags.
-    private func resolveArtifact(_ selection: BookSelection, groupId: String?) async throws -> ArtifactRecord {
-        switch selection {
-        case .existing(let record):
-            return record
-        case .pending(let preview):
-            if let groupId {
-                return try await safeCore.publishArtifact(
-                    preview: preview,
-                    groupId: groupId,
-                    note: nil
-                )
-            } else {
-                return ArtifactRecord(
-                    preview: preview,
-                    groupId: "",
-                    shareEventId: "",
-                    pubkey: "",
-                    createdAt: nil,
-                    note: ""
-                )
-            }
+        if !quote.isEmpty, let selection {
+            let draft = HighlightDraft(
+                quote: quote,
+                context: stashedContext,
+                note: trimmedNote,
+                clipStartSeconds: nil,
+                clipEndSeconds: nil,
+                clipSpeaker: "",
+                clipTranscriptSegmentIds: [],
+                image: imageWithAlt
+            )
+            appStore.publishCaptureHighlight(
+                selection: selection.nmpArtifact,
+                targetGroupId: groupId,
+                draft: draft
+            )
+        } else {
+            appStore.publishCapturePicture(
+                selection: selection?.nmpArtifact,
+                targetGroupId: groupId,
+                image: imageWithAlt,
+                note: trimmedNote
+            )
         }
     }
 
@@ -359,13 +296,15 @@ final class CaptureStore {
         processedJPEG = nil
         preparedUploadJPEG = nil
         selectedHighlightBoxes = []
-        uploadGeneration = 0
         highlightCropMarginFraction = 0.08
         highlightCropBox = nil
         if !keepingPickerSelection {
             selectedBook = nil
             selectedGroupId = nil
         }
+        appStore.clearCaptureUpload()
+        appStore.clearCaptureError()
+        appStore.clearCaptureResult()
     }
 
     // MARK: - Internals
@@ -381,19 +320,6 @@ final class CaptureStore {
             return []
         }
         return (try? await OCRService.recognizeLines(in: cgImage)) ?? []
-    }
-
-    private func upload(
-        processed: ImageProcessing.Result,
-        alt: String
-    ) async throws -> BlossomUpload {
-        try await safeCore.uploadPhoto(
-            bytes: processed.data,
-            mime: processed.mime,
-            width: UInt32(processed.width),
-            height: UInt32(processed.height),
-            alt: alt
-        )
     }
 
     private func prepareHighlightedCrop(reupload: Bool) {
@@ -420,31 +346,19 @@ final class CaptureStore {
     }
 
     private func startUpload(processed: ImageProcessing.Result) {
-        uploadGeneration += 1
-        let generation = uploadGeneration
+        startUpload(processed: processed, alt: flattenForAlt(ocrMarkdown))
+    }
+
+    private func startUpload(processed: ImageProcessing.Result, alt: String) {
         upload = nil
         uploadError = nil
-
-        Task {
-            do {
-                let altText = flattenForAlt(ocrMarkdown)
-                let uploaded = try await upload(processed: processed, alt: altText)
-                guard generation == self.uploadGeneration else { return }
-                self.upload = BlossomUpload(
-                    url: uploaded.url,
-                    sha256Hex: uploaded.sha256Hex,
-                    mime: uploaded.mime,
-                    sizeBytes: uploaded.sizeBytes,
-                    width: uploaded.width,
-                    height: uploaded.height,
-                    alt: altText
-                )
-            } catch {
-                guard generation == self.uploadGeneration else { return }
-                self.uploadError = (error as? LocalizedError)?.errorDescription
-                    ?? error.localizedDescription
-            }
-        }
+        appStore.uploadCapturePhoto(
+            bytes: processed.data,
+            mime: processed.mime,
+            width: UInt32(processed.width),
+            height: UInt32(processed.height),
+            alt: alt
+        )
     }
 
     private func flattenForAlt(_ markdown: String) -> String {

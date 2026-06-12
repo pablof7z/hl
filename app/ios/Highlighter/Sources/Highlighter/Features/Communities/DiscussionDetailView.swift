@@ -4,7 +4,6 @@ struct DiscussionDetailView: View {
     let discussion: DiscussionRecord
 
     @Environment(HighlighterStore.self) private var app
-    @State private var store = CommentsStore()
     @State private var focusedNode: CommentNode? = nil
 
     private var artifactRef: ArtifactRef { .event(id: discussion.eventId, kind: 11) }
@@ -28,26 +27,19 @@ struct DiscussionDetailView: View {
 
             CommentComposer(
                 parentEventId: nil,
-                placeholder: "Add to the conversation",
-                store: store
+                placeholder: "Add to the conversation"
             )
         }
         .background(Color.highlighterPaper.ignoresSafeArea())
         .navigationTitle(discussion.title)
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await store.start(
-                artifact: artifactRef,
-                core: app.safeCore,
-                currentUserPubkey: app.currentUser?.pubkey
-            )
+        .task(id: discussion.eventId) {
+            app.openComments(artifact: artifactRef)
         }
         .navigationDestination(item: $focusedNode) { node in
             ThreadView(
-                focused: ThreadView.locate(eventId: node.record.eventId, in: store.tree) ?? node,
+                focused: ThreadView.locate(eventId: node.record.eventId, in: commentTree) ?? node,
                 artifactHeader: nil,
-                store: store,
-                artifact: artifactRef,
                 artifactAuthorPubkey: discussion.pubkey
             )
         }
@@ -156,11 +148,11 @@ struct DiscussionDetailView: View {
 
     @ViewBuilder
     private var repliesSection: some View {
-        if store.isLoading && store.tree.isEmpty {
+        if app.comments.isLoading && commentTree.isEmpty {
             ProgressView()
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
-        } else if store.tree.isEmpty {
+        } else if commentTree.isEmpty {
             VStack(spacing: 8) {
                 Image(systemName: "bubble.left.and.bubble.right")
                     .font(.system(size: 28, weight: .light))
@@ -172,14 +164,13 @@ struct DiscussionDetailView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 48)
         } else {
-            ForEach(store.tree) { node in
+            ForEach(commentTree) { node in
                 VStack(spacing: 0) {
                     CommentRow(
                         node: node,
                         depth: 0,
                         isAuthorReply: node.record.pubkey == discussion.pubkey,
-                        onTap: { focusedNode = node },
-                        store: store
+                        onTap: { focusedNode = node }
                     )
                     inlineReplyPreview(for: node)
                     Divider()
@@ -196,8 +187,7 @@ struct DiscussionDetailView: View {
                 node: mostRecent,
                 depth: 1,
                 isAuthorReply: mostRecent.record.pubkey == discussion.pubkey,
-                onTap: { focusedNode = mostRecent },
-                store: store
+                onTap: { focusedNode = mostRecent }
             )
             .padding(.leading, 18)
             .padding(.trailing, 18)
@@ -235,6 +225,10 @@ struct DiscussionDetailView: View {
         let profile = app.profile(pubkeyHex: discussion.pubkey)
         let name = profile?.displayName ?? profile?.name ?? ""
         return name.first.map { String($0).uppercased() } ?? String(discussion.pubkey.prefix(1).uppercased())
+    }
+
+    private var commentTree: [CommentNode] {
+        CommentTreeBuilder.build(snapshot: app.comments)
     }
 
     private func relativeTime(_ timestamp: UInt64) -> String {

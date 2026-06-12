@@ -6,16 +6,13 @@ struct RoomHomeView: View {
     let groupId: String
 
     @Environment(HighlighterStore.self) private var app
-    @State private var room = RoomStore()
     @State private var selectedTab: Tab = .home
     @State private var composerPresented: Bool = false
     @State private var suggestPresented: Bool = false
     @State private var capturePresented: Bool = false
     @State private var shareTarget: ShareToCommunityTarget?
     @State private var inviteSheetPresented: Bool = false
-    @State private var hasChatActivity: Bool = false
     @State private var chatUnread: Bool = false
-    @State private var chatPresenceProbe = ChatPresenceProbe()
 
     var body: some View {
         tabContent
@@ -54,21 +51,24 @@ struct RoomHomeView: View {
             .onChange(of: selectedTab) { _, tab in
                 if tab == .chat { chatUnread = false }
             }
+            .onChange(of: roomChatMessageCount) { oldCount, newCount in
+                guard newCount > oldCount else { return }
+                if selectedTab == .chat {
+                    chatUnread = false
+                } else {
+                    chatUnread = true
+                }
+            }
+            .onChange(of: hasChatActivity) { _, active in
+                if !active && selectedTab == .chat {
+                    selectedTab = .home
+                }
+            }
             .task {
-                await room.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
-                await chatPresenceProbe.start(
-                    groupId: groupId,
-                    core: app.safeCore,
-                    bridge: app.eventBridge,
-                    onActivity: {
-                        hasChatActivity = true
-                        if selectedTab != .chat { chatUnread = true }
-                    }
-                )
+                app.openRoom(groupId: groupId)
             }
             .onDisappear {
-                room.stop()
-                chatPresenceProbe.stop()
+                app.closeRoom()
                 if selectedTab == .chat && !hasChatActivity {
                     selectedTab = .home
                 }
@@ -89,7 +89,7 @@ struct RoomHomeView: View {
                 DiscussionComposerView(
                     groupId: groupId,
                     navigationTitle: "Suggest an artifact"
-                ) { _ in }
+                )
                 .presentationDetents([.medium, .large])
             }
     }
@@ -160,11 +160,11 @@ struct RoomHomeView: View {
 
     private var homeContent: some View {
         RoomLanesView(
-            artifacts: room.artifacts,
-            highlights: room.highlights,
-            highlightsByReference: room.highlightsByReference,
-            commentsByReference: room.commentsByReference,
-            isLoading: room.isLoading,
+            artifacts: roomArtifacts,
+            highlights: roomHighlights,
+            highlightsByReference: highlightsByReference,
+            commentsByReference: commentsByReference,
+            isLoading: isRoomLoading,
             onShareToCommunity: { artifact in
                 shareTarget = .artifact(artifact)
             }
@@ -175,10 +175,10 @@ struct RoomHomeView: View {
 
     @ViewBuilder
     private var libraryContent: some View {
-        if room.isLoading && room.artifacts.isEmpty && room.highlights.isEmpty {
+        if isRoomLoading && roomArtifacts.isEmpty && roomHighlights.isEmpty {
             ProgressView().controlSize(.large)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if room.artifacts.isEmpty && room.highlights.isEmpty {
+        } else if roomArtifacts.isEmpty && roomHighlights.isEmpty {
             ContentUnavailableView(
                 "Nothing here yet",
                 systemImage: "square.stack.3d.up",
@@ -187,8 +187,8 @@ struct RoomHomeView: View {
         } else {
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    if !room.artifacts.isEmpty {
-                        ForEach(Array(room.artifacts.enumerated()), id: \.element.shareEventId) { index, a in
+                    if !roomArtifacts.isEmpty {
+                        ForEach(Array(roomArtifacts.enumerated()), id: \.element.shareEventId) { index, a in
                             NavigationLink(value: a) {
                                 artifactRow(a, commentCount: commentCount(for: a))
                             }
@@ -201,7 +201,7 @@ struct RoomHomeView: View {
                                 }
                             }
 
-                            if index < room.artifacts.count - 1 {
+                            if index < roomArtifacts.count - 1 {
                                 Rectangle()
                                     .fill(Color.highlighterRule)
                                     .frame(height: 1)
@@ -209,7 +209,7 @@ struct RoomHomeView: View {
                         }
                     }
 
-                    if !room.highlights.isEmpty {
+                    if !roomHighlights.isEmpty {
                         highlightsSection
                     }
                 }
@@ -256,12 +256,12 @@ struct RoomHomeView: View {
         } else {
             return 0
         }
-        return room.commentsByReference["\(upperTag):\(value)"]?.count ?? 0
+        return commentsByReference["\(upperTag):\(value)"]?.count ?? 0
     }
 
     @ViewBuilder
     private var highlightsSection: some View {
-        if !room.artifacts.isEmpty {
+        if !roomArtifacts.isEmpty {
             Rectangle()
                 .fill(Color.highlighterRule)
                 .frame(height: 1)
@@ -275,14 +275,14 @@ struct RoomHomeView: View {
             .padding(.top, 18)
             .padding(.bottom, 8)
 
-        ForEach(Array(room.highlights.enumerated()), id: \.element.highlight.eventId) { index, h in
+        ForEach(Array(roomHighlights.enumerated()), id: \.element.highlight.eventId) { index, h in
             Text(h.highlight.quote)
                 .lineLimit(3)
                 .foregroundStyle(Color.highlighterInkStrong)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 14)
 
-            if index < room.highlights.count - 1 {
+            if index < roomHighlights.count - 1 {
                 Rectangle()
                     .fill(Color.highlighterRule)
                     .frame(height: 1)
@@ -296,5 +296,47 @@ struct RoomHomeView: View {
         let match = app.joinedCommunities.first { $0.id == groupId }
         if let name = match?.name, !name.isEmpty { return name }
         return "Community"
+    }
+
+    private var activeRoomDetail: HighlighterRoomDetailSnapshot {
+        app.roomDetail
+    }
+
+    private var roomArtifacts: [ArtifactRecord] {
+        activeRoomDetail.groupId == groupId ? activeRoomDetail.artifacts : []
+    }
+
+    private var roomHighlights: [HydratedHighlight] {
+        activeRoomDetail.groupId == groupId ? activeRoomDetail.highlights : []
+    }
+
+    private var isRoomLoading: Bool {
+        activeRoomDetail.groupId == groupId && activeRoomDetail.isLoading
+    }
+
+    private var roomChatMessageCount: UInt64 {
+        activeRoomDetail.groupId == groupId ? activeRoomDetail.chatMessageCount : 0
+    }
+
+    private var hasChatActivity: Bool {
+        roomChatMessageCount > 0
+    }
+
+    private var highlightsByReference: [String: [HighlightRecord]] {
+        var buckets: [String: [HighlightRecord]] = [:]
+        guard activeRoomDetail.groupId == groupId else { return buckets }
+        for bucket in activeRoomDetail.highlightsByReference {
+            buckets[bucket.key] = bucket.highlights
+        }
+        return buckets
+    }
+
+    private var commentsByReference: [String: [CommentRecord]] {
+        var buckets: [String: [CommentRecord]] = [:]
+        guard activeRoomDetail.groupId == groupId else { return buckets }
+        for bucket in activeRoomDetail.commentsByReference {
+            buckets[bucket.key] = bucket.comments
+        }
+        return buckets
     }
 }

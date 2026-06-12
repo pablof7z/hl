@@ -1,19 +1,14 @@
 import SwiftUI
 
-/// New-discussion composer. A discussion is a kind:11 thread with the
-/// `t=discussion` marker, optionally carrying an attached URL (rendered as
-/// an artifact preview chip). Publishing is synchronous from the user's
-/// POV — we hold the sheet open until the core returns a signed record so
-/// the caller can optimistically insert it into the list.
+/// New-discussion composer. Swift owns the transient form text; Rust owns URL
+/// validation, publishing, error state, and the room projection refresh.
 struct DiscussionComposerView: View {
     let groupId: String
     let navigationTitle: String
-    let onPublished: (DiscussionRecord) -> Void
 
-    init(groupId: String, navigationTitle: String = "New discussion", onPublished: @escaping (DiscussionRecord) -> Void) {
+    init(groupId: String, navigationTitle: String = "New discussion") {
         self.groupId = groupId
         self.navigationTitle = navigationTitle
-        self.onPublished = onPublished
     }
 
     @Environment(HighlighterStore.self) private var app
@@ -22,8 +17,7 @@ struct DiscussionComposerView: View {
     @State private var title: String = ""
     @State private var messageBody: String = ""
     @State private var attachmentURL: String = ""
-    @State private var isPublishing: Bool = false
-    @State private var errorMessage: String?
+    @State private var waitingForPublish: Bool = false
 
     private var canPublish: Bool {
         !title.trimmingCharacters(in: .whitespaces).isEmpty && !isPublishing
@@ -57,6 +51,16 @@ struct DiscussionComposerView: View {
                     }
                 }
             }
+            .onChange(of: publishedDiscussionId) { _, eventId in
+                guard waitingForPublish, eventId != nil else { return }
+                waitingForPublish = false
+                dismiss()
+            }
+            .onChange(of: errorMessage) { _, message in
+                if message != nil {
+                    waitingForPublish = false
+                }
+            }
             .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -66,7 +70,7 @@ struct DiscussionComposerView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(isPublishing ? "Posting…" : "Post") {
-                        Task { await publish() }
+                        publish()
                     }
                     .disabled(!canPublish)
                 }
@@ -74,33 +78,29 @@ struct DiscussionComposerView: View {
         }
     }
 
-    private func publish() async {
-        isPublishing = true
-        errorMessage = nil
-        defer { isPublishing = false }
+    private var activeRoomDetail: HighlighterRoomDetailSnapshot {
+        app.roomDetail
+    }
 
-        let trimmedURL = attachmentURL.trimmingCharacters(in: .whitespaces)
-        var attachment: ArtifactPreview? = nil
-        if !trimmedURL.isEmpty {
-            do {
-                attachment = try await app.safeCore.buildPreviewFromUrl(trimmedURL)
-            } catch {
-                errorMessage = "Enter a valid attachment URL."
-                return
-            }
-        }
+    private var isPublishing: Bool {
+        activeRoomDetail.groupId == groupId && activeRoomDetail.isPublishingDiscussion
+    }
 
-        do {
-            let record = try await app.safeCore.publishDiscussion(
-                groupId: groupId,
-                title: title.trimmingCharacters(in: .whitespaces),
-                body: messageBody,
-                attachment: attachment
-            )
-            onPublished(record)
-            dismiss()
-        } catch {
-            errorMessage = (error as? CoreError).map { "\($0)" } ?? "Failed to publish."
-        }
+    private var errorMessage: String? {
+        activeRoomDetail.groupId == groupId ? activeRoomDetail.discussionErrorMessage : nil
+    }
+
+    private var publishedDiscussionId: String? {
+        activeRoomDetail.groupId == groupId ? activeRoomDetail.lastPublishedDiscussionId : nil
+    }
+
+    private func publish() {
+        waitingForPublish = true
+        app.clearRoomDiscussionError()
+        app.publishRoomDiscussion(
+            title: title,
+            body: messageBody,
+            attachmentUrl: attachmentURL
+        )
     }
 }

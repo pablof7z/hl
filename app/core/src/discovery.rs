@@ -96,8 +96,19 @@ mod tests {
         ndb.process_event(&line).expect("process event");
     }
 
-    fn wait_for_ndb() {
-        std::thread::sleep(std::time::Duration::from_millis(100));
+    fn wait_for_rooms(
+        limit: u32,
+        ndb: &Ndb,
+        ready: impl Fn(&[CommunitySummary]) -> bool,
+    ) -> Vec<CommunitySummary> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            let out = query_all_rooms_from_ndb(ndb, limit).expect("ok");
+            if ready(&out) || std::time::Instant::now() >= deadline {
+                return out;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
     }
 
     fn meta(keys: &Keys, id: &str, name: &str, ts: u64) -> Event {
@@ -127,9 +138,8 @@ mod tests {
         ingest(&ndb, &meta(&author, "alpha", "Alpha", 100));
         ingest(&ndb, &meta(&author, "bravo", "Bravo", 300));
         ingest(&ndb, &meta(&author, "charlie", "Charlie", 200));
-        wait_for_ndb();
 
-        let out = query_all_rooms_from_ndb(&ndb, 32).expect("ok");
+        let out = wait_for_rooms(32, &ndb, |out| out.len() == 3);
         let ids: Vec<_> = out.iter().map(|c| c.id.as_str()).collect();
         assert_eq!(ids, vec!["bravo", "charlie", "alpha"]);
     }
@@ -144,9 +154,8 @@ mod tests {
                 &meta(&author, &format!("room{i}"), &format!("R{i}"), 100 + i),
             );
         }
-        wait_for_ndb();
 
-        let out = query_all_rooms_from_ndb(&ndb, 4).expect("ok");
+        let out = wait_for_rooms(4, &ndb, |out| out.len() == 4);
         assert_eq!(out.len(), 4);
     }
 
@@ -156,9 +165,10 @@ mod tests {
         let author = Keys::generate();
         ingest(&ndb, &meta(&author, "alpha", "Old Alpha", 100));
         ingest(&ndb, &meta(&author, "alpha", "New Alpha", 200));
-        wait_for_ndb();
 
-        let out = query_all_rooms_from_ndb(&ndb, 32).expect("ok");
+        let out = wait_for_rooms(32, &ndb, |out| {
+            out.first().map(|room| room.name.as_str()) == Some("New Alpha")
+        });
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].name, "New Alpha");
     }

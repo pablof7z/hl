@@ -85,10 +85,7 @@ pub async fn publish(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign discussion: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish discussion: {e}")))?;
+    runtime.publish_signed_event_to_relays("discussion-publish", &event, runtime.rooms_urls())?;
 
     record_from_event(&event)
         .ok_or_else(|| CoreError::Other("signed discussion event failed to parse back".into()))
@@ -182,11 +179,12 @@ fn build_event(
 ) -> Result<EventBuilder, CoreError> {
     let slug = slug_from_title(title);
 
-    let mut tags: Vec<Tag> = Vec::new();
-    tags.push(parse_tag(&["h", group_id])?);
-    tags.push(parse_tag(&["d", &slug])?);
-    tags.push(parse_tag(&["t", DISCUSSION_MARKER_TAG])?);
-    tags.push(parse_tag(&["title", title])?);
+    let mut tags: Vec<Tag> = vec![
+        parse_tag(&["h", group_id])?,
+        parse_tag(&["d", &slug])?,
+        parse_tag(&["t", DISCUSSION_MARKER_TAG])?,
+        parse_tag(&["title", title])?,
+    ];
 
     if let Some(preview) = attachment {
         match preview.reference_tag_name.as_str() {

@@ -66,9 +66,6 @@ struct ProfileView: View {
         .ignoresSafeArea(edges: .top)
         .sheet(isPresented: $editPresented) {
             EditProfileSheet(initial: profile.profile) { _ in
-                if pubkey == appStore.currentUser?.pubkey {
-                    appStore.nmpApp.dispatch(action: .refreshAppChrome)
-                }
                 appStore.refreshProfile()
                 appStore.requestProfile(pubkeyHex: pubkey)
             }
@@ -131,7 +128,7 @@ private struct HeroBanner: View {
         LinearGradient(
             colors: [
                 Color.highlighterAccent.opacity(0.35),
-                Color.highlighterRule
+                Color.highlighterRule,
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -215,7 +212,8 @@ private struct ActionRow: View {
                 followButton
             }
             if let website = profile.profile?.website, !website.isEmpty,
-               let url = URL(string: website) {
+               let url = URL(string: website)
+            {
                 Link(destination: url) {
                     Label(url.host ?? website, systemImage: "link")
                         .font(.subheadline.weight(.medium))
@@ -408,7 +406,7 @@ private struct TabContent: View {
                             artifact: nil,
                             sharedByEventId: nil,
                             sharedByPubkey: nil
-                        )
+                        ),
                     ])
                 }
             }

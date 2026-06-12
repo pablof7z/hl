@@ -9,8 +9,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::errors::CoreError;
-use crate::models::ProfileMetadata;
-use crate::nostr_runtime::{mirror_social_trio_to_purple, NostrRuntime};
+use crate::models::{ProfileMetadata, ProfileUpdateDraft};
+use crate::nostr_runtime::NostrRuntime;
 
 const KIND_METADATA: u16 = 0;
 
@@ -120,21 +120,13 @@ struct RawMetadata {
 /// edit form drives. Falls back to a brand-new object if no kind:0 is
 /// cached.
 ///
-/// After the standard `send_event` broadcast, mirrors to
-/// `PURPLE_PAGES_RELAY` so the canonical social-trio store always has
-/// the latest revision (other Nostr clients look there for kind:0).
+/// After the canonical NMP publish, mirrors to `purple_pages_relay()` so
+/// the social-trio store always has the latest revision.
 /// Returns the parsed `ProfileMetadata` so the caller's UI can swap to
 /// the new state without waiting for the relay echo.
 pub async fn publish_profile(
     runtime: &NostrRuntime,
-    name: &str,
-    display_name: &str,
-    about: &str,
-    picture: &str,
-    banner: &str,
-    nip05: &str,
-    website: &str,
-    lud16: &str,
+    draft: &ProfileUpdateDraft,
 ) -> Result<ProfileMetadata, CoreError> {
     // Recover the current user's pubkey from the active signer so we can
     // load their existing kind:0 from cache.
@@ -157,14 +149,14 @@ pub async fn publish_profile(
         .as_object_mut()
         .expect("guaranteed to be a JSON object");
 
-    set_or_clear(obj, "name", name);
-    set_or_clear(obj, "display_name", display_name);
-    set_or_clear(obj, "about", about);
-    set_or_clear(obj, "picture", picture);
-    set_or_clear(obj, "banner", banner);
-    set_or_clear(obj, "nip05", nip05);
-    set_or_clear(obj, "website", website);
-    set_or_clear(obj, "lud16", lud16);
+    set_or_clear(obj, "name", &draft.name);
+    set_or_clear(obj, "display_name", &draft.display_name);
+    set_or_clear(obj, "about", &draft.about);
+    set_or_clear(obj, "picture", &draft.picture);
+    set_or_clear(obj, "banner", &draft.banner);
+    set_or_clear(obj, "nip05", &draft.nip05);
+    set_or_clear(obj, "website", &draft.website);
+    set_or_clear(obj, "lud16", &draft.lud16);
 
     let body = serde_json::to_string(&content)
         .map_err(|e| CoreError::Other(format!("serialise metadata: {e}")))?;
@@ -174,11 +166,8 @@ pub async fn publish_profile(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign metadata: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish metadata: {e}")))?;
-    mirror_social_trio_to_purple(client, &event).await;
+    runtime.publish_signed_event("profile-publish", &event)?;
+    runtime.mirror_social_trio_to_purple("profile-purple-mirror", &event)?;
 
     Ok(parse_metadata(&event))
 }

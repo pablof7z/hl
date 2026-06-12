@@ -5,12 +5,8 @@ import SwiftUI
 /// the bottom for replies.
 struct FeedbackThreadDetailView: View {
     let thread: FeedbackThreadRecord
-    let listStore: FeedbackStore
 
     @Environment(HighlighterStore.self) private var app
-    @State private var detailStore = FeedbackThreadStore()
-    @State private var draft: String = ""
-    @State private var sendError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,16 +16,10 @@ struct FeedbackThreadDetailView: View {
         }
         .navigationTitle(thread.title ?? "Feedback")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await detailStore.start(
-                rootEventId: thread.rootEventId,
-                coordinate: FeedbackProject.coordinate,
-                agentPubkey: listStore.cachedAgentPubkey,
-                core: app.safeCore,
-                bridge: app.eventBridge
-            )
+        .task(id: thread.rootEventId) {
+            app.openFeedbackThread(rootEventId: thread.rootEventId)
         }
-        .onDisappear { detailStore.stop() }
+        .onDisappear { app.closeFeedbackThread() }
     }
 
     @ViewBuilder
@@ -45,7 +35,7 @@ struct FeedbackThreadDetailView: View {
                             .padding(.top, 8)
                             .padding(.bottom, 6)
                     }
-                    ForEach(Array(detailStore.events.enumerated()), id: \.element.eventId) { index, event in
+                    ForEach(Array(events.enumerated()), id: \.element.eventId) { index, event in
                         FeedbackMessageBubble(
                             event: event,
                             isFromMe: event.authorPubkey == app.currentUser?.pubkey,
@@ -57,14 +47,20 @@ struct FeedbackThreadDetailView: View {
                             app.requestProfile(pubkeyHex: event.authorPubkey)
                         }
                     }
-                    if detailStore.isLoading && detailStore.events.isEmpty {
+                    if app.feedback.isLoadingThread && events.isEmpty {
                         ProgressView().padding()
+                    }
+                    if let error = app.feedback.threadErrorMessage, events.isEmpty {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .padding()
                     }
                 }
                 .padding(.vertical, 8)
             }
-            .onChange(of: detailStore.events.count) { _, _ in
-                if let last = detailStore.events.last {
+            .onChange(of: events.count) { _, _ in
+                if let last = events.last {
                     withAnimation(.easeOut(duration: 0.2)) {
                         proxy.scrollTo(last.eventId, anchor: .bottom)
                     }
@@ -76,18 +72,18 @@ struct FeedbackThreadDetailView: View {
     @ViewBuilder
     private var composer: some View {
         VStack(spacing: 6) {
-            if let sendError {
+            if let sendError = app.feedback.publishErrorMessage {
                 Text(sendError)
                     .font(.caption)
                     .foregroundStyle(.red)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack(alignment: .bottom, spacing: 8) {
-                TextField("Reply…", text: $draft, axis: .vertical)
+                TextField("Reply…", text: replyDraft, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
-                    .lineLimit(1...5)
+                    .lineLimit(1 ... 5)
                 Button {
-                    Task { await send() }
+                    app.publishFeedbackReply()
                 } label: {
                     Image(systemName: "paperplane.fill")
                         .font(.title3)
@@ -103,24 +99,27 @@ struct FeedbackThreadDetailView: View {
     }
 
     private var canSend: Bool {
-        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !detailStore.isPublishing
+        !app.feedback.replyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !app.feedback.isPublishingReply
     }
 
-    private func send() async {
-        sendError = nil
-        do {
-            _ = try await detailStore.sendReply(body: draft)
-            draft = ""
-            await listStore.refreshThreads()
-        } catch {
-            sendError = (error as? LocalizedError)?.errorDescription ?? "\(error)"
-        }
+    private var events: [FeedbackEventRecord] {
+        app.feedback.selectedRootEventId == thread.rootEventId
+            ? app.feedback.selectedEvents
+            : []
+    }
+
+    private var replyDraft: Binding<String> {
+        Binding(
+            get: { app.feedback.replyDraft },
+            set: { app.setFeedbackReplyDraft($0) }
+        )
     }
 
     private func shouldShowHeader(at index: Int) -> Bool {
         guard index > 0 else { return true }
-        let prev = detailStore.events[index - 1]
-        let curr = detailStore.events[index]
+        let prev = events[index - 1]
+        let curr = events[index]
         if prev.authorPubkey != curr.authorPubkey { return true }
         if curr.createdAt > prev.createdAt + 300 { return true }
         return false

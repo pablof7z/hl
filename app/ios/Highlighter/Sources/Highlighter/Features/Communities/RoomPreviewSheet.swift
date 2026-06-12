@@ -15,7 +15,7 @@ struct RoomPreviewSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var detent: PresentationDetent = .medium
-    @State private var roomStore: RoomStore?
+    @State private var didOpenPreviewRoom: Bool = false
 
     private var alreadyJoined: Bool {
         appStore.joinedCommunities.contains(where: { $0.id == room.id })
@@ -60,10 +60,14 @@ struct RoomPreviewSheet: View {
         .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
         .onChange(of: isExpanded) { _, expanded in
-            if expanded { startRoomStoreIfNeeded() }
+            if expanded {
+                openPreviewRoomIfNeeded()
+            }
         }
         .onDisappear {
-            roomStore?.stop()
+            if didOpenPreviewRoom {
+                appStore.closeRoom()
+            }
         }
     }
 
@@ -137,11 +141,11 @@ struct RoomPreviewSheet: View {
                 .tracking(1.2)
                 .foregroundStyle(Color.highlighterInkMuted)
 
-            if let store = roomStore, !store.artifacts.isEmpty {
+            if !previewArtifacts.isEmpty {
                 VStack(spacing: 0) {
-                    ForEach(Array(store.artifacts.prefix(8)), id: \.shareEventId) { artifact in
+                    ForEach(Array(previewArtifacts.prefix(8)), id: \.shareEventId) { artifact in
                         InsideArtifactRow(artifact: artifact)
-                        if artifact.shareEventId != store.artifacts.prefix(8).last?.shareEventId {
+                        if artifact.shareEventId != previewArtifacts.prefix(8).last?.shareEventId {
                             Divider().overlay(Color.highlighterRule)
                         }
                     }
@@ -150,7 +154,7 @@ struct RoomPreviewSheet: View {
                     RoundedRectangle(cornerRadius: 14)
                         .stroke(Color.highlighterRule, lineWidth: 1)
                 )
-            } else if roomStore?.isLoading == true || roomStore == nil {
+            } else if isPreviewRoomLoading || !didOpenPreviewRoom {
                 HStack(spacing: 10) {
                     ProgressView().controlSize(.small)
                     Text("Pulling recent content…")
@@ -259,17 +263,19 @@ struct RoomPreviewSheet: View {
 
     // MARK: - Private
 
-    private func startRoomStoreIfNeeded() {
-        guard roomStore == nil else { return }
-        let store = RoomStore()
-        roomStore = store
-        Task {
-            await store.start(
-                groupId: room.id,
-                core: appStore.safeCore,
-                bridge: appStore.eventBridge
-            )
-        }
+    private func openPreviewRoomIfNeeded() {
+        guard !didOpenPreviewRoom else { return }
+        didOpenPreviewRoom = true
+        appStore.openRoom(groupId: room.id)
+    }
+
+    private var previewArtifacts: [ArtifactRecord] {
+        guard appStore.roomDetail.groupId == room.id else { return [] }
+        return appStore.roomDetail.artifacts
+    }
+
+    private var isPreviewRoomLoading: Bool {
+        appStore.roomDetail.groupId == room.id && appStore.roomDetail.isLoading
     }
 }
 

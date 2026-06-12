@@ -33,17 +33,17 @@ enum ArtifactRef: Hashable {
 
     var rootTagValue: String {
         switch self {
-        case .article(let addr, _): return addr
-        case .event(let id, _): return id
-        case .external(let id, _): return id
+        case let .article(addr, _): return addr
+        case let .event(id, _): return id
+        case let .external(id, _): return id
         }
     }
 
     var rootKind: UInt16 {
         switch self {
-        case .article(_, let k): return k
-        case .event(_, let k): return k
-        case .external(_, let k): return k
+        case let .article(_, k): return k
+        case let .event(_, k): return k
+        case let .external(_, k): return k
         }
     }
 }
@@ -62,5 +62,15 @@ extension ArtifactRef {
         case "i": self = .external(id: value, kind: kind)
         default: return nil
         }
+    }
+}
+
+extension HighlighterStore {
+    func openComments(artifact: ArtifactRef) {
+        openComments(
+            rootTagName: artifact.rootTagName,
+            rootTagValue: artifact.rootTagValue,
+            rootKind: artifact.rootKind
+        )
     }
 }

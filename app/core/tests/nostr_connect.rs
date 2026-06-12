@@ -2,64 +2,131 @@
 //! input validation paths — neither test actually waits for a live remote
 //! signer to respond.
 
-use highlighter_core::{HighlighterCore, NostrConnectOptions};
+use highlighter_core::{
+    HighlighterAppAction, HighlighterAppConfig, HighlighterAppReconciler, HighlighterAppState,
+    HighlighterNmpApp, HighlighterSessionCredential, HighlighterToastKind,
+};
+use std::collections::HashMap;
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
+use std::time::Duration;
 use tempfile::TempDir;
 
-fn isolated_core() -> (Arc<HighlighterCore>, TempDir) {
-    let tmp = tempfile::tempdir().expect("tempdir");
-    let core = HighlighterCore::new_with_data_dir(tmp.path().join("ndb"));
-    (core, tmp)
+#[derive(Debug, Clone)]
+enum TestUpdate {
+    State(HighlighterAppState),
+    PersistSessionCredential,
+    ClearSessionCredentials,
+    OpenExternalUrl(String),
 }
 
-#[tokio::test]
-async fn start_nostr_connect_returns_valid_uri() {
-    let (core, _tmp) = isolated_core();
+struct TestReconciler {
+    tx: Sender<TestUpdate>,
+}
 
-    let options = NostrConnectOptions {
-        name: "Highlighter".into(),
-        url: "https://highlighter.com".into(),
-        image: "https://highlighter.com/icon.png".into(),
-        perms: "sign_event:11,sign_event:9802,nip44_encrypt".into(),
-    };
+impl HighlighterAppReconciler for TestReconciler {
+    fn on_state(&self, state: HighlighterAppState) {
+        let _ = self.tx.send(TestUpdate::State(state));
+    }
 
-    let uri = core
-        .start_nostr_connect(options)
-        .await
-        .expect("start_nostr_connect should return a URI");
+    fn on_persist_session_credential(&self, _credential: HighlighterSessionCredential) {
+        let _ = self.tx.send(TestUpdate::PersistSessionCredential);
+    }
 
-    // Shape: nostrconnect://<64-hex pubkey>?<query>
-    assert!(uri.starts_with("nostrconnect://"), "got: {uri}");
+    fn on_clear_session_credentials(&self) {
+        let _ = self.tx.send(TestUpdate::ClearSessionCredentials);
+    }
 
-    // Relay must be Primal's bunker relay (hardcoded per spec).
+    fn on_open_external_url(&self, url: String) {
+        let _ = self.tx.send(TestUpdate::OpenExternalUrl(url));
+    }
+}
+
+fn isolated_app() -> (Arc<HighlighterNmpApp>, Receiver<TestUpdate>, TempDir) {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let app = HighlighterNmpApp::new(HighlighterAppConfig {
+        data_dir: Some(tmp.path().join("ndb").to_string_lossy().into_owned()),
+        visible_limit: 8,
+        emit_hz: 30,
+    });
+    let (tx, rx) = channel();
+    app.listen_for_updates(Arc::new(TestReconciler { tx }));
+    let _ = next_state(&rx);
+    (app, rx, tmp)
+}
+
+fn next_update(rx: &Receiver<TestUpdate>) -> TestUpdate {
+    rx.recv_timeout(Duration::from_secs(5))
+        .expect("app update within timeout")
+}
+
+fn next_state(rx: &Receiver<TestUpdate>) -> HighlighterAppState {
+    for _ in 0..16 {
+        if let TestUpdate::State(state) = next_update(rx) {
+            return state;
+        }
+    }
+    panic!("state update within timeout")
+}
+
+#[test]
+fn start_nostr_connect_emits_valid_external_uri() {
+    let (app, rx, _tmp) = isolated_app();
+
+    app.dispatch(HighlighterAppAction::StartNostrConnect {
+        callback_url: "highlighter://nip46".into(),
+    });
+
+    let mut uri = None;
+    for _ in 0..16 {
+        match next_update(&rx) {
+            TestUpdate::OpenExternalUrl(url) => {
+                uri = Some(url);
+                break;
+            }
+            TestUpdate::State(_)
+            | TestUpdate::PersistSessionCredential
+            | TestUpdate::ClearSessionCredentials => {}
+        }
+    }
+    let uri = uri.expect("start_nostr_connect should request opening a URI");
+
+    let parsed = url::Url::parse(&uri).expect("nostrconnect URI should parse");
+    assert_eq!(parsed.scheme(), "nostrconnect", "got: {uri}");
+    let pubkey = parsed.host_str().expect("missing nostrconnect pubkey host");
+    assert_eq!(pubkey.len(), 64, "got: {uri}");
+    assert!(pubkey.chars().all(|c| c.is_ascii_hexdigit()), "got: {uri}");
+    let query: HashMap<String, String> = parsed.query_pairs().into_owned().collect();
+
     assert!(
-        uri.contains("relay=wss://relay.primal.net"),
-        "missing primal relay in URI: {uri}"
+        query
+            .get("relay")
+            .is_some_and(|v| v == "wss://relay.primal.net"),
+        "missing relay in URI: {uri}"
     );
 
     // Perms must round-trip. We passed a specific subset — check at least one
     // entry made it through.
     assert!(
-        uri.contains("perms=sign_event:11"),
+        query
+            .get("perms")
+            .is_some_and(|v| v.contains("sign_event:11")),
         "missing sign_event:11 perm: {uri}"
     );
 
-    // App name must be URL-encoded in the query string.
     assert!(
-        uri.contains("name=Highlighter"),
+        query.get("name").is_some_and(|v| v == "Highlighter"),
         "missing name param: {uri}"
     );
 
-    // Secret param for the connect handshake.
-    assert!(uri.contains("secret="), "missing secret param: {uri}");
+    assert!(
+        query.get("secret").is_some_and(|v| !v.is_empty()),
+        "missing secret param: {uri}"
+    );
 }
 
-#[tokio::test]
-async fn pair_bunker_rejects_garbage() {
-    let (core, _tmp) = isolated_core();
-
-    // Leading `nostr:` is the only thing `normalize_bunker_uri` strips —
-    // everything else must parse as a valid NIP-46 URI.
+#[test]
+fn pair_bunker_rejects_garbage() {
     let cases = [
         "",
         "   ",
@@ -74,11 +141,23 @@ async fn pair_bunker_rejects_garbage() {
     ];
 
     for case in cases {
-        let res = core.pair_bunker(case.to_string()).await;
-        assert!(
-            res.is_err(),
-            "pair_bunker should reject {case:?} but got {:?}",
-            res
-        );
+        let (app, rx, _tmp) = isolated_app();
+        app.dispatch(HighlighterAppAction::PairBunker {
+            uri: case.to_string(),
+            persist: false,
+            clear_stored_on_failure: false,
+        });
+        let mut saw_error = false;
+        for _ in 0..8 {
+            let state = next_state(&rx);
+            saw_error = state
+                .toast
+                .as_ref()
+                .is_some_and(|toast| toast.kind == HighlighterToastKind::Error);
+            if saw_error {
+                break;
+            }
+        }
+        assert!(saw_error, "pair_bunker should reject {case:?}");
     }
 }

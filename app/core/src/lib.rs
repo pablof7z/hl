@@ -6,7 +6,7 @@ pub mod blossom;
 pub mod bookmarks;
 pub mod cache;
 pub mod chat;
-pub mod client;
+mod client;
 pub mod comments;
 pub mod curation;
 pub mod discovery;
@@ -20,8 +20,8 @@ pub mod highlights;
 pub mod isbn_lookup;
 pub mod lists;
 pub mod models;
-pub mod nip46;
 pub mod nmp_app;
+mod nmp_runtime;
 pub mod nostr_entities;
 pub mod nostr_runtime;
 pub mod outbox;
@@ -39,7 +39,6 @@ pub mod share_links;
 pub mod subscriptions;
 pub mod web_metadata;
 
-pub use client::HighlighterCore;
 pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};
 pub use models::{
@@ -47,22 +46,29 @@ pub use models::{
     ChatMessageRecord, CommentRecord, CommunitySummary, CurrentUser, DiscussionAttachment,
     DiscussionRecord, FeedbackEventRecord, FeedbackThreadRecord, GeneratedAccount, HighlightDraft,
     HighlightRecord, HydratedHighlight, NostrConnectOptions, PictureDraft, PictureRecord,
-    ProfileMetadata, ReadingFeedItem, RoomRecommendation, RoomRecommendationReason,
-    WebBookmarkRecord,
+    ProfileMetadata, ProfileUpdateDraft, ReadingFeedItem, RoomRecommendation,
+    RoomRecommendationReason, WebBookmarkRecord,
 };
 pub use nmp_app::{
     HighlighterAppAction, HighlighterAppConfig, HighlighterAppReconciler, HighlighterAppState,
-    HighlighterAppUpdate, HighlighterArticleReaderSnapshot,
+    HighlighterArticleReaderSnapshot, HighlighterBookPickerSnapshot,
     HighlighterBookmarkCollectionDetailSnapshot, HighlighterBookmarksSnapshot,
-    HighlighterChromeSnapshot, HighlighterConnectionState, HighlighterCurationMenuSnapshot,
-    HighlighterIsbnPreview, HighlighterNetworkSnapshot, HighlighterNmpApp,
-    HighlighterOnboardingInterest, HighlighterOnboardingSnapshot, HighlighterProfile,
-    HighlighterProfileViewSnapshot, HighlighterToast, HighlighterToastKind, HighlighterWebMetadata,
+    HighlighterCaptureArtifact, HighlighterCaptureSnapshot, HighlighterChromeSnapshot,
+    HighlighterConnectionState, HighlighterCurationMenuSnapshot, HighlighterEditProfileImageTarget,
+    HighlighterEditProfileSnapshot, HighlighterFeedbackSnapshot, HighlighterHomeFeedItem,
+    HighlighterHomeFeedItemKind, HighlighterHomeFeedSnapshot, HighlighterHomeReadItem,
+    HighlighterIsbnPreview, HighlighterMediaSettingsSnapshot, HighlighterNetworkImportSnapshot,
+    HighlighterNetworkSnapshot, HighlighterNmpApp, HighlighterOnboardingInterest,
+    HighlighterOnboardingSnapshot, HighlighterProfile, HighlighterProfileViewSnapshot,
+    HighlighterRelayNip11Snapshot, HighlighterRelayRemovalImpact, HighlighterSessionCredential,
+    HighlighterShareComposerSnapshot, HighlighterToast, HighlighterToastKind,
+    HighlighterWebMetadata,
 };
 pub use reactions::ReactionRecord;
+pub use relays::RelayConfig;
 pub use web_metadata::WebMetadata;
 
 #[uniffi::export]
-pub fn normalize_isbn(raw: String) -> Result<String, CoreError> {
-    isbn_lookup::normalize_isbn(&raw)
+pub fn normalize_isbn(raw: String) -> Option<String> {
+    isbn_lookup::normalize_isbn(&raw).ok()
 }

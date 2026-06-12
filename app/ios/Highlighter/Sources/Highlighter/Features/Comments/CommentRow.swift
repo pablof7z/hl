@@ -17,8 +17,6 @@ struct CommentRow: View {
     let isAuthorReply: Bool
     let onTap: () -> Void
 
-    let store: CommentsStore
-
     @Environment(HighlighterStore.self) private var app
 
     var body: some View {
@@ -104,8 +102,8 @@ struct CommentRow: View {
 
     @ViewBuilder
     private var footer: some View {
-        let liked = store.isLiked(node.record.eventId)
-        let count = store.likeCount(node.record.eventId)
+        let liked = isLiked(node.record.eventId)
+        let count = likeCount(node.record.eventId)
         if liked || count > 0 {
             HStack(spacing: 6) {
                 Image(systemName: liked ? "heart.fill" : "heart")
@@ -142,17 +140,17 @@ struct CommentRow: View {
 
     @ViewBuilder
     private var actionMenu: some View {
-        let isBookmarked = store.isBookmarked(node.record.eventId)
+        let isBookmarked = isBookmarked(node.record.eventId)
         Button {
-            Task { await store.toggleLike(node.record) }
+            app.toggleCommentLike(eventId: node.record.eventId)
         } label: {
             Label(
-                store.isLiked(node.record.eventId) ? "Unlike" : "Like",
-                systemImage: store.isLiked(node.record.eventId) ? "heart.slash" : "heart"
+                isLiked(node.record.eventId) ? "Unlike" : "Like",
+                systemImage: isLiked(node.record.eventId) ? "heart.slash" : "heart"
             )
         }
         Button {
-            Task { await store.toggleBookmark(node.record) }
+            app.toggleCommentBookmark(eventId: node.record.eventId)
         } label: {
             Label(
                 isBookmarked ? "Remove bookmark" : "Bookmark",
@@ -176,7 +174,7 @@ struct CommentRow: View {
         return String(node.record.pubkey.prefix(10))
     }
 
-    private func initial(for pubkey: String) -> String {
+    private func initial(for _: String) -> String {
         displayName.first.map { String($0).uppercased() } ?? ""
     }
 
@@ -187,5 +185,21 @@ struct CommentRow: View {
         formatter.unitsStyle = .abbreviated
         formatter.dateTimeStyle = .numeric
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private func interaction(for eventId: String) -> HighlighterCommentInteraction? {
+        app.comments.interactions.first { $0.eventId == eventId }
+    }
+
+    private func isLiked(_ eventId: String) -> Bool {
+        interaction(for: eventId)?.myLikeEventId != nil
+    }
+
+    private func likeCount(_ eventId: String) -> Int {
+        Int(interaction(for: eventId)?.likeCount ?? 0)
+    }
+
+    private func isBookmarked(_ eventId: String) -> Bool {
+        interaction(for: eventId)?.isBookmarked ?? false
     }
 }

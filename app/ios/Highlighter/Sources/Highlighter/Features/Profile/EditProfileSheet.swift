@@ -2,17 +2,8 @@ import Kingfisher
 import PhotosUI
 import SwiftUI
 
-/// Edit-profile flow for the current user. Pre-populates from the cached
-/// `ProfileMetadata` so a user who's never published a kind:0 still gets
-/// blank fields, and a user who has gets their values back exactly as
-/// they were last seen on a relay (`unknown_field` round-trip is handled
-/// at the Rust layer — `publish_profile` preserves keys we don't know).
-///
-/// Picture and banner uploads route through Blossom via the same
-/// `safeCore.uploadPhoto` path the rooms / capture flows use; we stash
-/// the returned URL into the corresponding text field so the form can
-/// show progress + the user can still paste a URL by hand if they
-/// prefer not to re-upload.
+/// Edit-profile flow for the current user. Rust owns field values, upload
+/// state, save state, errors, and the saved profile projection.
 struct EditProfileSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(HighlighterStore.self) private var appStore
@@ -20,32 +11,22 @@ struct EditProfileSheet: View {
     let initial: ProfileMetadata?
     let onSaved: (ProfileMetadata) -> Void
 
-    @State private var displayName: String = ""
-    @State private var name: String = ""
-    @State private var about: String = ""
-    @State private var picture: String = ""
-    @State private var banner: String = ""
-    @State private var nip05: String = ""
-    @State private var website: String = ""
-    @State private var lud16: String = ""
-
     @State private var pictureItem: PhotosPickerItem?
     @State private var bannerItem: PhotosPickerItem?
-    @State private var pictureUploading = false
-    @State private var bannerUploading = false
 
-    @State private var saving = false
-    @State private var error: String?
+    private var draft: HighlighterEditProfileSnapshot {
+        appStore.editProfile
+    }
 
     private var isDirty: Bool {
-        displayName != (initial?.displayName ?? "")
-            || name != (initial?.name ?? "")
-            || about != (initial?.about ?? "")
-            || picture != (initial?.picture ?? "")
-            || banner != (initial?.banner ?? "")
-            || nip05 != (initial?.nip05 ?? "")
-            || website != (initial?.website ?? "")
-            || lud16 != (initial?.lud16 ?? "")
+        draft.displayName != (initial?.displayName ?? "")
+            || draft.name != (initial?.name ?? "")
+            || draft.about != (initial?.about ?? "")
+            || draft.picture != (initial?.picture ?? "")
+            || draft.banner != (initial?.banner ?? "")
+            || draft.nip05 != (initial?.nip05 ?? "")
+            || draft.website != (initial?.website ?? "")
+            || draft.lud16 != (initial?.lud16 ?? "")
     }
 
     var body: some View {
@@ -56,7 +37,7 @@ struct EditProfileSheet: View {
                         bannerPlate
                         avatarPlate
                             .padding(.horizontal, 22)
-                            .padding(.top, -52) // overlap the banner
+                            .padding(.top, -52)
                         identityFields
                             .padding(.horizontal, 22)
                         Divider().overlay(Color.highlighterRule)
@@ -80,27 +61,39 @@ struct EditProfileSheet: View {
                 }
             }
             .alert("Couldn't save", isPresented: errorBinding) {
-                Button("OK") { error = nil }
+                Button("OK") { appStore.clearEditProfileError() }
             } message: {
-                if let error { Text(error) }
+                if let error = draft.errorMessage { Text(error) }
             }
-            .onAppear { hydrate() }
+            .onAppear {
+                appStore.openEditProfile(seed: initial)
+            }
+            .onDisappear {
+                appStore.closeEditProfile()
+            }
             .onChange(of: pictureItem) { _, item in
                 guard let item else { return }
-                Task { await upload(item: item, into: \.picture, uploading: \.pictureUploading) }
+                Task { await upload(item: item, target: .picture) }
             }
             .onChange(of: bannerItem) { _, item in
                 guard let item else { return }
-                Task { await upload(item: item, into: \.banner, uploading: \.bannerUploading) }
+                Task { await upload(item: item, target: .banner) }
+            }
+            .onChange(of: draft.savedProfile) { _, profile in
+                guard let profile else { return }
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                onSaved(profile)
+                appStore.clearEditProfileResult()
+                dismiss()
             }
         }
     }
 
-    // MARK: - Sections
-
     private var bannerPlate: some View {
-        ZStack {
-            if let url = URL(string: banner), !banner.isEmpty {
+        let bannerActionTitle = draft.banner.isEmpty ? "Add banner" : "Replace"
+
+        return ZStack {
+            if let url = URL(string: draft.banner), !draft.banner.isEmpty {
                 KFImage(url)
                     .resizable()
                     .scaledToFill()
@@ -120,19 +113,21 @@ struct EditProfileSheet: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            if !banner.isEmpty {
-                clearChip { banner = ""; bannerItem = nil }
-                    .padding(12)
+            if !draft.banner.isEmpty {
+                clearChip {
+                    appStore.setEditProfileBanner("")
+                    bannerItem = nil
+                }
+                .padding(12)
             }
         }
         .overlay(alignment: .bottomTrailing) {
             HStack(spacing: 6) {
-                if bannerUploading {
+                if draft.isBannerUploading {
                     ProgressView().controlSize(.small).tint(.white)
                 }
                 PhotosPicker(selection: $bannerItem, matching: .images) {
-                    Label(banner.isEmpty ? "Add banner" : "Replace", systemImage: "photo")
-                        .labelStyle(.titleAndIcon)
+                    Label(bannerActionTitle, systemImage: "photo")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 12)
@@ -145,9 +140,11 @@ struct EditProfileSheet: View {
     }
 
     private var avatarPlate: some View {
-        HStack(spacing: 14) {
+        let pictureActionTitle = draft.picture.isEmpty ? "Add photo" : "Replace photo"
+
+        return HStack(spacing: 14) {
             ZStack {
-                if let url = URL(string: picture), !picture.isEmpty {
+                if let url = URL(string: draft.picture), !draft.picture.isEmpty {
                     KFImage(url)
                         .resizable()
                         .scaledToFill()
@@ -171,7 +168,7 @@ struct EditProfileSheet: View {
             .clipShape(Circle())
             .overlay(Circle().stroke(Color.highlighterPaper, lineWidth: 4))
             .overlay {
-                if pictureUploading {
+                if draft.isPictureUploading {
                     Circle().fill(.black.opacity(0.4))
                     ProgressView().controlSize(.regular).tint(.white)
                 }
@@ -179,7 +176,7 @@ struct EditProfileSheet: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 PhotosPicker(selection: $pictureItem, matching: .images) {
-                    Label(picture.isEmpty ? "Add photo" : "Replace photo", systemImage: "camera")
+                    Label(pictureActionTitle, systemImage: "camera")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(Color.highlighterInkStrong)
                         .padding(.horizontal, 12)
@@ -188,9 +185,9 @@ struct EditProfileSheet: View {
                             Capsule().fill(Color.highlighterTintPale)
                         )
                 }
-                if !picture.isEmpty {
+                if !draft.picture.isEmpty {
                     Button {
-                        picture = ""
+                        appStore.setEditProfilePicture("")
                         pictureItem = nil
                     } label: {
                         Text("Remove")
@@ -208,12 +205,18 @@ struct EditProfileSheet: View {
             field(
                 label: "Display name",
                 placeholder: "How you want to be addressed",
-                text: $displayName
+                text: Binding(
+                    get: { draft.displayName },
+                    set: { appStore.setEditProfileDisplayName($0) }
+                )
             )
             field(
                 label: "Username",
                 placeholder: "lowercase, no spaces",
-                text: $name,
+                text: Binding(
+                    get: { draft.name },
+                    set: { appStore.setEditProfileName($0) }
+                ),
                 autocap: .never,
                 autocorrect: false
             )
@@ -221,14 +224,17 @@ struct EditProfileSheet: View {
                 fieldLabel("About")
                 TextField(
                     "",
-                    text: $about,
+                    text: Binding(
+                        get: { draft.about },
+                        set: { appStore.setEditProfileAbout($0) }
+                    ),
                     prompt: Text("A line or two — what do you read?")
                         .foregroundColor(Color.highlighterInkMuted.opacity(0.7)),
                     axis: .vertical
                 )
                 .font(.body)
                 .foregroundStyle(Color.highlighterInkStrong)
-                .lineLimit(3...8)
+                .lineLimit(3 ... 8)
             }
         }
     }
@@ -238,7 +244,10 @@ struct EditProfileSheet: View {
             field(
                 label: "NIP-05",
                 placeholder: "you@example.com",
-                text: $nip05,
+                text: Binding(
+                    get: { draft.nip05 },
+                    set: { appStore.setEditProfileNip05($0) }
+                ),
                 autocap: .never,
                 keyboard: .emailAddress,
                 autocorrect: false
@@ -246,7 +255,10 @@ struct EditProfileSheet: View {
             field(
                 label: "Website",
                 placeholder: "https://…",
-                text: $website,
+                text: Binding(
+                    get: { draft.website },
+                    set: { appStore.setEditProfileWebsite($0) }
+                ),
                 autocap: .never,
                 keyboard: .URL,
                 autocorrect: false
@@ -254,7 +266,10 @@ struct EditProfileSheet: View {
             field(
                 label: "Lightning address",
                 placeholder: "you@walletofsatoshi.com",
-                text: $lud16,
+                text: Binding(
+                    get: { draft.lud16 },
+                    set: { appStore.setEditProfileLud16($0) }
+                ),
                 autocap: .never,
                 keyboard: .emailAddress,
                 autocorrect: false
@@ -312,9 +327,9 @@ struct EditProfileSheet: View {
             )
             .frame(height: 24)
 
-            Button(action: save) {
+            Button(action: { appStore.submitEditProfile() }) {
                 ZStack {
-                    if saving {
+                    if draft.isSaving {
                         ProgressView().tint(.white)
                     } else {
                         Text("Save")
@@ -337,74 +352,36 @@ struct EditProfileSheet: View {
         }
     }
 
-    // MARK: - Helpers
-
     private var canSave: Bool {
-        isDirty && !saving && !pictureUploading && !bannerUploading
+        isDirty && !draft.isSaving && !draft.isPictureUploading && !draft.isBannerUploading
     }
 
     private var errorBinding: Binding<Bool> {
-        Binding(get: { error != nil }, set: { if !$0 { error = nil } })
+        Binding(
+            get: { draft.errorMessage != nil },
+            set: { if !$0 { appStore.clearEditProfileError() } }
+        )
     }
 
-    private func hydrate() {
-        guard let p = initial else { return }
-        displayName = p.displayName
-        name = p.name
-        about = p.about
-        picture = p.picture
-        banner = p.banner
-        nip05 = p.nip05
-        website = p.website
-        lud16 = p.lud16
-    }
-
-    private func upload(
-        item: PhotosPickerItem,
-        into keyPath: ReferenceWritableKeyPath<EditProfileSheet, String>,
-        uploading uploadingKey: ReferenceWritableKeyPath<EditProfileSheet, Bool>
-    ) async {
-        // SwiftUI structs can't have ReferenceWritableKeyPath into State —
-        // do the inline assignment via the closure pattern instead.
-        await runUpload(item: item) { url in
-            switch keyPath {
-            case \EditProfileSheet.picture: picture = url
-            case \EditProfileSheet.banner: banner = url
-            default: break
-            }
-        } uploading: { isUploading in
-            switch uploadingKey {
-            case \EditProfileSheet.pictureUploading: pictureUploading = isUploading
-            case \EditProfileSheet.bannerUploading: bannerUploading = isUploading
-            default: break
-            }
-        }
-    }
-
-    private func runUpload(
-        item: PhotosPickerItem,
-        commit: @escaping (String) -> Void,
-        uploading: @escaping (Bool) -> Void
-    ) async {
-        uploading(true)
-        defer { uploading(false) }
+    private func upload(item: PhotosPickerItem, target: HighlighterEditProfileImageTarget) async {
         do {
             guard let data = try await item.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data) else {
-                error = "Couldn't read that image."
+                  let image = UIImage(data: data)
+            else {
+                appStore.editProfileCapabilityFailed(message: "Couldn't read that image.")
                 return
             }
             let prepared = await prepareForUpload(image: image)
-            let upload = try await appStore.safeCore.uploadPhoto(
+            appStore.uploadEditProfileImage(
+                target: target,
                 bytes: prepared.data,
                 mime: "image/jpeg",
                 width: UInt32(prepared.width),
                 height: UInt32(prepared.height),
                 alt: ""
             )
-            commit(upload.url)
         } catch {
-            self.error = "Upload failed: \(error.localizedDescription)"
+            appStore.editProfileCapabilityFailed(message: "Couldn't read that image.")
         }
     }
 
@@ -418,34 +395,5 @@ struct EditProfileSheet: View {
         let scaled = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: target)) }
         let data = scaled.jpegData(compressionQuality: 0.85) ?? Data()
         return PreparedImage(data: data, width: Int(scaled.size.width), height: Int(scaled.size.height))
-    }
-
-    private func save() {
-        guard canSave else { return }
-        saving = true
-        Task {
-            defer { Task { @MainActor in saving = false } }
-            do {
-                let updated = try await appStore.safeCore.updateProfile(
-                    name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                    displayName: displayName.trimmingCharacters(in: .whitespacesAndNewlines),
-                    about: about.trimmingCharacters(in: .whitespacesAndNewlines),
-                    picture: picture.trimmingCharacters(in: .whitespacesAndNewlines),
-                    banner: banner.trimmingCharacters(in: .whitespacesAndNewlines),
-                    nip05: nip05.trimmingCharacters(in: .whitespacesAndNewlines),
-                    website: website.trimmingCharacters(in: .whitespacesAndNewlines),
-                    lud16: lud16.trimmingCharacters(in: .whitespacesAndNewlines)
-                )
-                await MainActor.run {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    onSaved(updated)
-                    dismiss()
-                }
-            } catch {
-                await MainActor.run {
-                    self.error = error.localizedDescription
-                }
-            }
-        }
     }
 }

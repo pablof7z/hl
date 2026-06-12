@@ -170,9 +170,9 @@ pub fn query_user_web_bookmarks(
 
 /// Create a brand-new empty kind:30004 curation set authored by the
 /// current user. `title` is the user-supplied display name; description /
-/// image stay empty (those are layered later via the editor). Returns the
-/// freshly published record so the caller can optimistically insert it
-/// into a list and immediately use its `id` (d-tag) for further edits.
+/// image stay empty until the editor publishes those fields. Returns the
+/// freshly published record so the caller can immediately use its `id`
+/// (d-tag) for further edits.
 pub async fn create_curation_set(
     runtime: &NostrRuntime,
     user_hex: &str,
@@ -185,14 +185,7 @@ pub async fn create_curation_set(
         ));
     }
 
-    // Stable identifier — UNIX nanoseconds, unique-per-user since each
-    // author generates their own. NIP-33 only requires uniqueness within
-    // the (author, d-tag) keyspace, not globally.
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let d_tag = format!("c-{nanos:x}");
+    let d_tag = new_curation_set_d_tag();
 
     let tags = vec![
         Tag::parse(vec!["d".to_string(), d_tag.clone()])
@@ -207,10 +200,7 @@ pub async fn create_curation_set(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign curation set: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish curation set: {e}")))?;
+    runtime.publish_signed_event("curation-set-publish", &event)?;
 
     let _ = user_hex; // unused — pubkey comes from the signer
     Ok(BookmarkSetRecord {
@@ -224,6 +214,10 @@ pub async fn create_curation_set(
         note_ids: Vec::new(),
         created_at: Some(event.created_at.as_secs()),
     })
+}
+
+fn new_curation_set_d_tag() -> String {
+    format!("c-{}", uuid::Uuid::new_v4().simple())
 }
 
 /// Idempotently add or remove an `a`-tag (NIP-33 article address) from
@@ -302,10 +296,7 @@ pub async fn set_address_in_curation_set(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign curation set: {e}")))?;
-    client
-        .send_event(&new_event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish curation set: {e}")))?;
+    runtime.publish_signed_event("curation-set-publish", &new_event)?;
 
     Ok(member)
 }
@@ -419,5 +410,21 @@ fn parse_web_bookmark_event(event: Event) -> WebBookmarkRecord {
         topics,
         published_at,
         created_at: Some(event.created_at.as_secs()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn curation_set_d_tags_are_random_and_prefixed() {
+        let first = new_curation_set_d_tag();
+        let second = new_curation_set_d_tag();
+
+        assert!(first.starts_with("c-"));
+        assert_eq!(first.len(), 34);
+        assert!(first[2..].chars().all(|ch| ch.is_ascii_hexdigit()));
+        assert_ne!(first, second);
     }
 }

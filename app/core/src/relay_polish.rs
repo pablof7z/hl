@@ -127,11 +127,39 @@ pub async fn import_from_npub(
     let filter = Filter::new()
         .kinds([Kind::Custom(KIND_RELAY_LIST)])
         .author(pubkey);
-    let events = runtime
-        .client()
-        .fetch_events_from(urls, filter, IMPORT_FETCH_TIMEOUT)
-        .await
-        .map_err(|e| CoreError::Relay(format!("fetch kind:10002 for import: {e}")))?;
+    let pk_bytes: [u8; 32] = pubkey.to_bytes();
+    let ndb_filter = NdbFilter::new()
+        .kinds([KIND_RELAY_LIST as u64])
+        .authors([&pk_bytes])
+        .build();
+    runtime
+        .open_nmp_filter_once_and_wait(
+            "relay-import/nip65",
+            filter,
+            urls,
+            vec![ndb_filter],
+            IMPORT_FETCH_TIMEOUT,
+        )
+        .await?;
+
+    relay_rows_from_cache(runtime.ndb(), pubkey)
+}
+
+fn relay_rows_from_cache(ndb: &Ndb, pubkey: PublicKey) -> Result<Vec<RelayConfig>, CoreError> {
+    let pk_bytes: [u8; 32] = pubkey.to_bytes();
+    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
+    let filter = NdbFilter::new()
+        .kinds([KIND_RELAY_LIST as u64])
+        .authors([&pk_bytes])
+        .build();
+    let mut events: Vec<Event> = ndb
+        .query(&txn, &[filter], 16)
+        .map_err(|e| CoreError::Cache(format!("query imported kind:10002: {e}")))?
+        .into_iter()
+        .filter_map(|result| result.note.json().ok())
+        .filter_map(|json| Event::from_json(&json).ok())
+        .collect();
+    events.sort_by_key(|event| std::cmp::Reverse(event.created_at));
 
     let mut rows: Vec<RelayConfig> = Vec::new();
     // Events is sorted newest first — first one wins per replaceable rules.

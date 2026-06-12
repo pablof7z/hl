@@ -20,9 +20,6 @@ struct RoomShareCard: View {
 
     @State private var qrShown = false
     @State private var copied = false
-    @State private var inviteCode: String?
-    @State private var mintedGroupId: String?
-    @State private var mintError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -99,8 +96,8 @@ struct RoomShareCard: View {
                     .accessibilityLabel(qrShown ? "Hide QR" : "Show QR")
                 }
 
-                if let mintError {
-                    Text(mintError)
+                if let inviteLinkError {
+                    Text(inviteLinkError)
                         .font(.caption)
                         .foregroundStyle(Color.highlighterAccent)
                 }
@@ -119,48 +116,26 @@ struct RoomShareCard: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 18))
         .task(id: groupId) {
-            await mintInviteIfNeeded()
+            guard appStore.roomInvite.groupId == groupId else { return }
+            guard shareURL == nil, !appStore.roomInvite.isMintingInviteLink else { return }
+            appStore.mintRoomInviteLink()
         }
     }
 
     private var shareURL: String? {
-        guard mintedGroupId == groupId, let code = inviteCode else { return nil }
-        return "https://highlighter.com/r/\(groupId)/join/\(code)"
+        guard appStore.roomInvite.groupId == groupId else { return nil }
+        return appStore.roomInvite.inviteUrl
+    }
+
+    private var inviteLinkError: String? {
+        guard appStore.roomInvite.groupId == groupId else { return nil }
+        return appStore.roomInvite.inviteLinkErrorMessage
     }
 
     private var linkLabel: String {
         if let url = shareURL { return url }
-        if mintError != nil { return "Couldn't create invite link" }
+        if inviteLinkError != nil { return "Couldn't create invite link" }
         return "Creating invite link…"
-    }
-
-    private func mintInviteIfNeeded() async {
-        if mintedGroupId != groupId {
-            inviteCode = nil
-            mintedGroupId = nil
-            copied = false
-            mintError = nil
-        }
-        guard inviteCode == nil else { return }
-        do {
-            let codes = try await appStore.safeCore.createRoomInviteCodes(
-                groupId: groupId,
-                count: 1
-            )
-            await MainActor.run {
-                inviteCode = codes.first
-                mintedGroupId = inviteCode == nil ? nil : groupId
-                copied = false
-                mintError = inviteCode == nil ? "No code returned." : nil
-            }
-        } catch {
-            await MainActor.run {
-                inviteCode = nil
-                mintedGroupId = nil
-                copied = false
-                mintError = "Couldn't mint invite link. Add people directly below."
-            }
-        }
     }
 
     private func copy() {
@@ -174,7 +149,8 @@ struct RoomShareCard: View {
     private var heroBackdrop: some View {
         ZStack {
             if let url = URL(string: room?.picture ?? ""),
-               !(room?.picture ?? "").isEmpty {
+               !(room?.picture ?? "").isEmpty
+            {
                 KFImage(url)
                     .resizable()
                     .scaledToFill()
