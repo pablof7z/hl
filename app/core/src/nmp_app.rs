@@ -5,11 +5,14 @@
 //! [`HighlighterCore`](crate::client::HighlighterCore) is an internal runtime
 //! engine owned by this actor, not a platform API.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 use parking_lot::RwLock;
 
@@ -87,6 +90,13 @@ pub struct HighlighterAppConfig {
     /// after state changes; the value is carried so shells can share the same
     /// config vocabulary as NMP.
     pub emit_hz: u32,
+    /// Test/diagnostic seam (design §4.6): override the bundled relay policy
+    /// JSON so a harness can point every relay role at a controlled URL (e.g.
+    /// a black-hole relay). Additive uniffi field with a `None` default so
+    /// existing Swift/Kotlin constructors keep compiling. Applied once,
+    /// process-wide, before the relay policy is first read.
+    #[uniffi(default = None)]
+    pub relay_policy_json: Option<String>,
 }
 
 impl HighlighterAppConfig {
@@ -108,6 +118,7 @@ impl Default for HighlighterAppConfig {
             data_dir: None,
             visible_limit: DEFAULT_VISIBLE_LIMIT,
             emit_hz: DEFAULT_EMIT_HZ,
+            relay_policy_json: None,
         }
     }
 }
@@ -889,6 +900,8 @@ pub struct HighlighterCurationMenuSnapshot {
     pub curation_sets: Vec<BookmarkSetRecord>,
     pub curation_set_count: u64,
     pub is_loading: bool,
+    /// True while a membership write / set creation is in flight off-actor.
+    pub is_saving: bool,
     pub error_message: Option<String>,
 }
 
@@ -899,6 +912,7 @@ impl HighlighterCurationMenuSnapshot {
             curation_sets: Vec::new(),
             curation_set_count: 0,
             is_loading: false,
+            is_saving: false,
             error_message: None,
         }
     }
@@ -919,6 +933,10 @@ pub struct HighlighterRoomExplorerSnapshot {
     pub curator_pubkey_hex: String,
     pub is_loading: bool,
     pub is_browse_loading: bool,
+    /// Group id of an in-flight join request; empty when none. Set before the
+    /// off-actor join op is submitted, cleared when its outcome resolves, so
+    /// the UI can show per-room joining feedback for the up-to-30s wait.
+    pub joining_group_id: String,
     pub error_message: Option<String>,
 }
 
@@ -938,6 +956,7 @@ impl HighlighterRoomExplorerSnapshot {
             curator_pubkey_hex: ROOM_EXPLORER_CURATOR_PUBKEY_HEX.into(),
             is_loading: false,
             is_browse_loading: false,
+            joining_group_id: String::new(),
             error_message: None,
         }
     }
@@ -1672,6 +1691,14 @@ pub struct HighlighterNmpApp {
 impl HighlighterNmpApp {
     #[uniffi::constructor]
     pub fn new(config: HighlighterAppConfig) -> Arc<Self> {
+        if let Some(policy_json) = config
+            .relay_policy_json
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            crate::relays::set_relay_policy_override(policy_json);
+        }
         let visible_limit = config.normalized_visible_limit();
         let emit_hz = config.normalized_emit_hz();
         let core = match config
@@ -1808,6 +1835,23 @@ impl HighlighterNmpApp {
     }
 }
 
+/// Test-only surface. Lives outside the `#[uniffi::export]` impl block:
+/// the uniffi macro generates scaffolding for every method it sees,
+/// including `#[cfg(test)]` ones, which breaks non-test builds.
+#[cfg(test)]
+impl HighlighterNmpApp {
+    /// Inject a core delta straight into the actor queue so a test can
+    /// deterministically exercise `handle_core_delta`'s cascade (which on
+    /// device is push-delivered by the event callback). Used by the Phase-3
+    /// non-blocking-delta acceptance test.
+    fn inject_delta_for_test(&self, change: DataChangeType) {
+        let _ = self.tx.try_send(KernelMsg::CoreDelta(Box::new(Delta {
+            subscription_id: 0,
+            change,
+        })));
+    }
+}
+
 impl Drop for HighlighterNmpApp {
     fn drop(&mut self) {
         let _ = self.tx.try_send(KernelMsg::Stop);
@@ -1837,49 +1881,14 @@ impl EventCallback for CoreDeltaMultiplexer {
 enum KernelMsg {
     Action(Box<HighlighterAppAction>),
     CoreDelta(Box<Delta>),
-    IsbnPreviewResolved {
-        requested: String,
-        result: Box<Result<ArtifactPreview, String>>,
-    },
-    WebMetadataResolved {
-        requested: String,
-        result: Box<Result<WebMetadata, String>>,
-    },
-    UsernameAvailabilityResolved {
+    /// Off-actor operation completion (Phase 1 OpRunner). A single variant
+    /// covers every migrated network-class operation; the actor applies it in
+    /// [`apply_op_outcome`] after a staleness check, preserving the
+    /// single-writer invariant.
+    OpResolved {
+        domain: OpDomain,
         generation: u64,
-        username: String,
-        result: Box<Result<Nip05Availability, String>>,
-    },
-    NsecSignInResolved {
-        generation: u64,
-        nsec: String,
-        persist: bool,
-        clear_stored_on_failure: bool,
-        result: Box<Result<CurrentUser, String>>,
-    },
-    BunkerSignInResolved {
-        generation: u64,
-        uri: String,
-        persist: bool,
-        clear_stored_on_failure: bool,
-        result: Box<Result<CurrentUser, String>>,
-    },
-    AccountCreateResolved {
-        generation: u64,
-        result: Box<Result<CreateAccountOutcome, String>>,
-    },
-    OnboardingFollowsResolved {
-        generation: u64,
-        failures: usize,
-    },
-    DefaultBlossomInitResolved {
-        pubkey_hex: String,
-        result: Box<Result<(), String>>,
-    },
-    SearchLocalResolved {
-        generation: u64,
-        query: String,
-        result: Box<Result<SearchResults, String>>,
+        outcome: Box<OpOutcome>,
     },
     Stop,
 }
@@ -1893,10 +1902,8 @@ struct ActorContext {
     local_state_path: PathBuf,
 }
 
-#[derive(Default)]
 struct ActorRuntimes {
     auth_generation: u64,
-    onboarding_generation: u64,
     pending_joins: Vec<PendingJoin>,
     pending_isbn_lookups: BTreeSet<String>,
     pending_web_metadata: BTreeSet<String>,
@@ -1914,6 +1921,36 @@ struct ActorRuntimes {
     feedback_runtime: FeedbackRuntime,
     room_explorer_runtime: RoomExplorerRuntime,
     network_runtime: NetworkRuntime,
+    /// Off-actor operation runner (design §4.1). Lives here (the actor's
+    /// `&mut` state) rather than `ActorContext` because `submit_op` mutates
+    /// `in_flight`/`generations`.
+    ops: OpRunner,
+}
+
+impl ActorRuntimes {
+    fn new(actor_tx: SyncSender<KernelMsg>) -> Self {
+        Self {
+            auth_generation: 0,
+            pending_joins: Vec::new(),
+            pending_isbn_lookups: BTreeSet::new(),
+            pending_web_metadata: BTreeSet::new(),
+            profile_handles: BTreeMap::new(),
+            profile_pubkeys_by_handle: BTreeMap::new(),
+            app_scope_subscriptions: AppScopeSubscriptions::default(),
+            search_runtime: SearchRuntime::default(),
+            create_account_runtime: CreateAccountRuntime::default(),
+            home_feed_runtime: HomeFeedRuntime::default(),
+            bookmark_runtime: BookmarkRuntime::default(),
+            profile_view_runtime: ProfileViewRuntime::default(),
+            article_reader_runtime: ArticleReaderRuntime::default(),
+            room_detail_runtime: RoomDetailRuntime::default(),
+            room_invite_runtime: RoomInviteRuntime::default(),
+            feedback_runtime: FeedbackRuntime::default(),
+            room_explorer_runtime: RoomExplorerRuntime::default(),
+            network_runtime: NetworkRuntime::default(),
+            ops: OpRunner::new(actor_tx),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -1941,6 +1978,532 @@ struct SearchLocalResolution {
     result: Result<SearchResults, String>,
 }
 
+// ===========================================================================
+// Off-actor operation runner (actor-blocking-fix, design §4.1).
+//
+// The kernel actor is the single writer and the single emitter. Any await
+// inside a message handler freezes every other message and every snapshot
+// emission. `OpRunner` moves network-class work off the actor onto a small
+// shared multi-thread runtime; completion re-enters the actor as a single
+// `KernelMsg::OpResolved` message, applied in `apply_op_outcome` — the only
+// state-mutation point for migrated operations. This mirrors the nine
+// spawn-and-message-back workers the facade already shipped, and ADR-0024 /
+// ADR-0040 in the embedded framework.
+// ===========================================================================
+
+/// Per-message handler-duration watchdog (design §4.6 loop-stall guard,
+/// ADR-0028 liveness philosophy). Max observed dispatch duration in
+/// milliseconds, readable from the in-file test module.
+static ACTOR_MAX_HANDLER_MS: AtomicU64 = AtomicU64::new(0);
+
+/// Any single KernelMsg dispatch slower than this is a liveness smell.
+const ACTOR_HANDLER_WARN_MS: u128 = 250;
+
+/// `block_on_local` is for Class-D (local-only) work that is expected to be
+/// cheap. Anything slower than this is logged so the lint and traces can
+/// catch a Class-A/B operation that slipped past migration.
+const BLOCK_ON_LOCAL_WARN_MS: u128 = 50;
+
+/// Record one handler's dispatch duration and warn if it blew the budget.
+fn record_handler_duration(tag: &str, elapsed: Duration) {
+    let ms = elapsed.as_millis();
+    // Monotonic max gauge for the test-only watchdog.
+    let ms_u64 = ms.min(u128::from(u64::MAX)) as u64;
+    let mut prev = ACTOR_MAX_HANDLER_MS.load(Ordering::Relaxed);
+    while ms_u64 > prev {
+        match ACTOR_MAX_HANDLER_MS.compare_exchange_weak(
+            prev,
+            ms_u64,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            Ok(_) => break,
+            Err(observed) => prev = observed,
+        }
+    }
+    if ms > ACTOR_HANDLER_WARN_MS {
+        tracing::warn!(handler = tag, elapsed_ms = ms, "slow actor handler");
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn actor_max_handler_ms() -> u64 {
+    ACTOR_MAX_HANDLER_MS.load(Ordering::Relaxed)
+}
+
+#[cfg(test)]
+pub(crate) fn reset_actor_max_handler_ms() {
+    ACTOR_MAX_HANDLER_MS.store(0, Ordering::Relaxed);
+}
+
+/// Thin wrapper around `runtime.block_on` reserved for Class-D local work.
+/// It measures and warns when a "local" future actually blocks; the Phase-0
+/// lint bans naked `block_on_local(&runtime, "actor_block", ` everywhere else in this file so a
+/// future network await cannot silently land back on the actor thread.
+fn block_on_local<F: Future>(runtime: &tokio::runtime::Runtime, tag: &str, fut: F) -> F::Output {
+    let started = Instant::now();
+    let out = runtime.block_on(fut);
+    let elapsed = started.elapsed();
+    if elapsed.as_millis() > BLOCK_ON_LOCAL_WARN_MS {
+        // Intentionally only a warn (not debug_assert): slow CI must not turn a
+        // transient stall into a suite-wide panic.
+        tracing::warn!(
+            site = tag,
+            elapsed_ms = elapsed.as_millis(),
+            "block_on_local exceeded local budget"
+        );
+    }
+    out
+}
+
+/// Which blossom upload surface an upload op feeds back into.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum UploadSlot {
+    RoomCover,
+    ProfilePicture,
+    ProfileBanner,
+    Capture,
+}
+
+/// Domain key — one in-flight slot per UI surface, so a second request
+/// supersedes the first (generation bump + abort).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum OpDomain {
+    JoinRoom,
+    RoomChatPublish,
+    BlossomUpload(UploadSlot),
+    RelayProbe,
+    RelayImport,
+    RoomCreate,
+    RoomInvite,
+    RoomInviteMembers,
+    // --- Phase 2: Class B publish helpers (design §4.4). ---
+    CommentPublish,
+    /// Per-comment interaction toggle, keyed by a stable hash of the target
+    /// comment event id plus the interaction kind. Keying rationale: a toggle
+    /// on comment A must NOT abort an in-flight toggle on comment B (different
+    /// key → independent slots), while a rapid double-tap on the SAME comment
+    /// of the SAME kind SHOULD supersede (same key → abort+regenerate → the
+    /// last tap wins). The event id itself rides in the outcome payload; only a
+    /// `u64` lives in the key so `OpDomain` stays `Copy`.
+    CommentInteraction {
+        target: u64,
+        kind: CommentInteractionKind,
+    },
+    FeedbackPublish,
+    MediaSettingsWrite,
+    ProfileEditSubmit,
+    /// Bookmark toggle keyed by a stable hash of the article address — two
+    /// different articles toggle independently; the same article supersedes.
+    ArticleBookmarkToggle {
+        target: u64,
+    },
+    CurationWrite,
+    /// Follow toggle for the open profile view. Only one profile view is open
+    /// at a time, so a single unkeyed slot is correct: a rapid double-tap on
+    /// the same profile supersedes and the last tap wins.
+    FollowToggle,
+    HighlightPublish,
+    SharePublish,
+    CapturePublish,
+    RoomDiscussionPublish,
+    /// Relay-list writes (upsert / remove / set-roles / import-apply). One slot
+    /// because these all mutate the single relay list; serializing them via
+    /// supersession is acceptable (last write wins, then a refresh reconciles).
+    NetworkRelayWrite,
+    OnboardingFollows,
+    // --- Phase 4: the eight bespoke legacy workers, folded onto OpRunner. ---
+    /// Local-search worker. Single-flight by design: the `SearchRuntime`
+    /// `local_running_query` gate refuses a second submit while one is in
+    /// flight, so OpRunner's abort-on-resubmit never actually fires here; the
+    /// generation supersession is carried by `search_runtime.generation`
+    /// (checked in the apply arm exactly as the old resolver did), and the
+    /// resolver re-drives the worker if the query moved on.
+    SearchLocal,
+    /// NIP-05 username availability check. Keyed unkeyed (one create-account
+    /// form open at a time); the apply arm re-validates against
+    /// `create_account_runtime.username_generation` AND the live form text,
+    /// byte-for-byte with the former resolver.
+    UsernameCheck,
+    /// nsec + bunker sign-in SHARE this single domain so that, exactly as
+    /// today (both bumped the one `auth_generation`), a bunker attempt
+    /// supersedes an in-flight nsec attempt and vice-versa — last sign-in
+    /// wins regardless of method.
+    Auth,
+    /// Account creation. Carries its own 30s deadline (preserved) and is
+    /// superseded by `create_generation` semantics via OpRunner generations.
+    AccountCreate,
+    /// Default-blossom-server init. The original keyed dedup on the target
+    /// pubkey (`initializing_blossom_defaults_for_pubkey`); the pubkey rides
+    /// in the outcome and the apply arm performs the same still-this-user
+    /// check, so a single unkeyed slot is sufficient.
+    DefaultBlossomInit,
+    /// ISBN preview lookup, keyed by a stable hash of the ISBN so concurrent
+    /// lookups for different ISBNs run independently (no supersession), exactly
+    /// like the former `pending_isbn_lookups` set. The dedup set is retained as
+    /// the submit-time guard.
+    IsbnPreview {
+        target: u64,
+    },
+    /// Web-metadata lookup, same per-target keying + retained `pending_web_metadata`
+    /// coalescing set as ISBN above.
+    WebMetadata {
+        target: u64,
+    },
+}
+
+/// The two per-comment interactions sharing the [`OpDomain::CommentInteraction`]
+/// keying scheme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum CommentInteractionKind {
+    Like,
+    Bookmark,
+}
+
+/// Stable hash of a string identifier for use inside a `Copy` `OpDomain` key.
+fn op_target_hash(id: &str) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    id.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// Per-domain typed completion payloads. Each mirrors the Result the
+/// corresponding handler produced inline today.
+enum OpOutcome {
+    JoinRoom {
+        group_id: String,
+        room_name: String,
+        result: Result<(), String>,
+    },
+    RoomChatPublish {
+        result: Result<(), String>,
+    },
+    BlossomUpload {
+        slot: UploadSlot,
+        result: Result<BlossomUpload, String>,
+    },
+    RelayProbe {
+        url: String,
+        document: Option<Nip11Document>,
+    },
+    RelayImport {
+        result: Result<Vec<RelayConfig>, String>,
+    },
+    RoomCreate {
+        result: Result<String, String>,
+    },
+    RoomInvite {
+        group_id: String,
+        result: Result<Vec<String>, String>,
+    },
+    RoomInviteMembers {
+        /// Pubkeys that failed to add (empty = all succeeded).
+        result: Result<RoomInviteMembersOutcome, String>,
+    },
+    CommentPublish {
+        parent_event_id: Option<String>,
+        result: Result<CommentRecord, String>,
+    },
+    CommentInteraction {
+        kind: CommentInteractionKind,
+        result: Result<(), String>,
+    },
+    FeedbackPublish {
+        parent_event_id: Option<String>,
+        result: Result<FeedbackEventRecord, String>,
+    },
+    MediaSettingsWrite {
+        result: Result<(), String>,
+    },
+    ProfileEditSubmit {
+        result: Result<ProfileMetadata, String>,
+    },
+    ArticleBookmarkToggle {
+        result: Result<(), String>,
+    },
+    CurationWrite {
+        /// Ok(toast message) on success.
+        result: Result<String, String>,
+    },
+    FollowToggle {
+        desired_following: bool,
+        previous_following: bool,
+        result: Result<(), String>,
+    },
+    HighlightPublish {
+        note_was_empty: bool,
+        result: Result<HighlightRecord, String>,
+    },
+    SharePublish {
+        group_id: String,
+        /// Ok(toast message) on success.
+        result: Result<String, String>,
+    },
+    CapturePublish {
+        /// Ok((event_id, toast message)) on success.
+        result: Result<(String, String), String>,
+    },
+    RoomDiscussionPublish {
+        result: Result<String, String>,
+    },
+    NetworkRelayWrite {
+        kind: NetworkRelayWriteKind,
+        result: Result<(), String>,
+    },
+    OnboardingFollows {
+        failures: usize,
+    },
+    // --- Phase 4 worker payloads (mirror the deleted *Resolved variants). ---
+    SearchLocal {
+        generation: u64,
+        query: String,
+        result: Result<SearchResults, String>,
+    },
+    UsernameCheck {
+        generation: u64,
+        username: String,
+        result: Result<Nip05Availability, String>,
+    },
+    NsecSignIn {
+        generation: u64,
+        nsec: String,
+        persist: bool,
+        clear_stored_on_failure: bool,
+        result: Result<CurrentUser, String>,
+    },
+    BunkerSignIn {
+        generation: u64,
+        uri: String,
+        persist: bool,
+        clear_stored_on_failure: bool,
+        result: Result<CurrentUser, String>,
+    },
+    AccountCreate {
+        generation: u64,
+        result: Box<Result<CreateAccountOutcome, String>>,
+    },
+    DefaultBlossomInit {
+        pubkey_hex: String,
+        result: Result<(), String>,
+    },
+    IsbnPreview {
+        requested: String,
+        result: Box<Result<ArtifactPreview, String>>,
+    },
+    WebMetadata {
+        requested: String,
+        result: Box<Result<WebMetadata, String>>,
+    },
+}
+
+/// Result detail for a [`OpDomain::RoomInviteMembers`] batch add.
+struct RoomInviteMembersOutcome {
+    total: usize,
+    failures: Vec<String>,
+}
+
+/// Which relay-list write a [`OpDomain::NetworkRelayWrite`] performed, so the
+/// D6 copy and the follow-up refresh match the original handler.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NetworkRelayWriteKind {
+    Upsert,
+    Remove,
+    SetRoles,
+    ImportApply,
+}
+
+/// Standard D6 timeout copy, mirroring the shipped account-create message.
+fn op_timeout_message(domain: OpDomain) -> String {
+    match domain {
+        OpDomain::JoinRoom => "Joining timed out. Check your connection and try again.".into(),
+        OpDomain::RoomChatPublish => {
+            "Sending timed out. Check your connection and try again.".into()
+        }
+        OpDomain::BlossomUpload(_) => {
+            "Upload timed out. Check your connection and try again.".into()
+        }
+        OpDomain::RelayProbe => "Couldn't reach the relay — you can still add it.".into(),
+        OpDomain::RelayImport => "Import timed out. Check your connection and try again.".into(),
+        OpDomain::RoomCreate => {
+            "Creating the room timed out. Check your connection and try again.".into()
+        }
+        OpDomain::RoomInvite => {
+            "Minting the invite link timed out. Check your connection and try again.".into()
+        }
+        OpDomain::RoomInviteMembers => {
+            "Adding members timed out. Check your connection and try again.".into()
+        }
+        OpDomain::CommentPublish => {
+            "Publishing timed out. Check your connection and try again.".into()
+        }
+        OpDomain::CommentInteraction { kind, .. } => match kind {
+            CommentInteractionKind::Like => {
+                "Couldn't update like — check your connection and try again.".into()
+            }
+            CommentInteractionKind::Bookmark => {
+                "Couldn't update bookmark — check your connection and try again.".into()
+            }
+        },
+        OpDomain::FeedbackPublish => {
+            "Sending feedback timed out. Check your connection and try again.".into()
+        }
+        OpDomain::MediaSettingsWrite => {
+            "Saving media servers timed out. Check your connection and try again.".into()
+        }
+        OpDomain::ProfileEditSubmit => {
+            "Saving your profile timed out. Check your connection and try again.".into()
+        }
+        OpDomain::ArticleBookmarkToggle { .. } => {
+            "Couldn't update bookmark — check your connection and try again.".into()
+        }
+        OpDomain::CurationWrite => {
+            "Updating the collection timed out. Check your connection and try again.".into()
+        }
+        OpDomain::FollowToggle => {
+            "Couldn't update follow — check your connection and try again.".into()
+        }
+        OpDomain::HighlightPublish => {
+            "Publishing the highlight timed out. Check your connection and try again.".into()
+        }
+        OpDomain::SharePublish => "Sharing timed out. Check your connection and try again.".into(),
+        OpDomain::CapturePublish => {
+            "Publishing timed out. Check your connection and try again.".into()
+        }
+        OpDomain::RoomDiscussionPublish => {
+            "Publishing the discussion timed out. Check your connection and try again.".into()
+        }
+        OpDomain::NetworkRelayWrite => {
+            "Saving relays timed out. Check your connection and try again.".into()
+        }
+        OpDomain::OnboardingFollows => "Saved your interests".into(),
+        // The next five workers enforce/own their own error handling inside the
+        // submitted future; the generic timeout fallback copy mirrors the
+        // shipped strings (account-create keeps its exact on-device message).
+        OpDomain::SearchLocal => "Search timed out. Check your connection and try again.".into(),
+        OpDomain::UsernameCheck => "Username check timed out.".into(),
+        OpDomain::Auth => "Sign-in timed out. Check your connection and try again.".into(),
+        OpDomain::AccountCreate => {
+            "Account creation timed out. Check your connection and try again.".into()
+        }
+        OpDomain::DefaultBlossomInit => "Blossom setup timed out.".into(),
+        OpDomain::IsbnPreview { .. } => "ISBN lookup timed out.".into(),
+        OpDomain::WebMetadata { .. } => "Web metadata lookup timed out.".into(),
+    }
+}
+
+/// Class A/B deadline (UI cannot wait the protocol's 360s / 65s worst case).
+const OP_DEADLINE_NETWORK: Duration = Duration::from_secs(30);
+/// Class C probe deadlines (keep the existing bounds; the worker enforces).
+const OP_DEADLINE_RELAY_PROBE: Duration = Duration::from_secs(6);
+const OP_DEADLINE_RELAY_IMPORT: Duration = Duration::from_secs(5);
+
+struct InFlightOp {
+    abort: tokio::task::AbortHandle,
+}
+
+/// Off-actor operation runner. Owned by `ActorRuntimes` (actor-thread only).
+struct OpRunner {
+    /// 2-worker multi-thread runtime: enough parallelism that a stuck upload
+    /// cannot starve a publish, bounded so we never spawn a thread-per-tap
+    /// zoo. Workers never touch `HighlighterAppState` or `ActorRuntimes`.
+    runtime: tokio::runtime::Runtime,
+    actor_tx: SyncSender<KernelMsg>,
+    in_flight: HashMap<OpDomain, InFlightOp>,
+    /// Monotonic generation per domain; survives `cancel_all` so a late
+    /// resolution from a previous session can never be mistaken for current.
+    generations: HashMap<OpDomain, u64>,
+}
+
+impl OpRunner {
+    fn new(actor_tx: SyncSender<KernelMsg>) -> Self {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .thread_name("highlighter-op-runner")
+            .build()
+            .expect("build highlighter OpRunner runtime");
+        Self {
+            runtime,
+            actor_tx,
+            in_flight: HashMap::new(),
+            generations: HashMap::new(),
+        }
+    }
+
+    fn bump_generation(&mut self, domain: OpDomain) -> u64 {
+        let slot = self.generations.entry(domain).or_insert(0);
+        *slot = slot.saturating_add(1);
+        *slot
+    }
+
+    /// A resolution is stale if its domain was superseded by a newer
+    /// submission, or the in-flight record is gone (e.g. after `cancel_all`).
+    fn is_stale(&self, domain: OpDomain, generation: u64) -> bool {
+        match self.generations.get(&domain) {
+            Some(current) => *current != generation,
+            None => true,
+        }
+    }
+
+    /// Submit `fut` off the actor thread with a worker-side deadline. On the
+    /// actor thread only: bumps the domain generation, aborts any prior task
+    /// for the domain (supersession), and records the new in-flight handle.
+    fn submit_op<F>(
+        &mut self,
+        domain: OpDomain,
+        deadline: Duration,
+        timeout_outcome: OpOutcome,
+        fut: F,
+    ) where
+        F: Future<Output = OpOutcome> + Send + 'static,
+    {
+        let generation = self.bump_generation(domain);
+        if let Some(prev) = self.in_flight.remove(&domain) {
+            prev.abort.abort();
+        }
+        let tx = self.actor_tx.clone();
+        let handle = self.runtime.spawn(async move {
+            // On deadline we send the caller-supplied truthful timeout outcome
+            // (carrying the live generation + real keys/flags), so the apply
+            // arm applies it instead of silently dropping a zeroed fallback.
+            let outcome = match tokio::time::timeout(deadline, fut).await {
+                Ok(outcome) => outcome,
+                Err(_) => timeout_outcome,
+            };
+            if tx
+                .send(KernelMsg::OpResolved {
+                    domain,
+                    generation,
+                    outcome: Box::new(outcome),
+                })
+                .is_err()
+            {
+                tracing::warn!("highlighter NMP actor is stopped");
+            }
+        });
+        self.in_flight.insert(
+            domain,
+            InFlightOp {
+                abort: handle.abort_handle(),
+            },
+        );
+    }
+
+    /// Logout: abort every in-flight op and bump every known generation so any
+    /// resolution still racing in cannot write a logged-out user's data into a
+    /// fresh session.
+    fn cancel_all(&mut self) {
+        for (_, op) in self.in_flight.drain() {
+            op.abort.abort();
+        }
+        for slot in self.generations.values_mut() {
+            *slot = slot.saturating_add(1);
+        }
+    }
+}
+
 fn spawn_actor(rx: Receiver<KernelMsg>, ctx: ActorContext, emit_hz: u32) -> JoinHandle<()> {
     thread::Builder::new()
         .name("highlighter-nmp-actor".into())
@@ -1950,127 +2513,41 @@ fn spawn_actor(rx: Receiver<KernelMsg>, ctx: ActorContext, emit_hz: u32) -> Join
                 .thread_name("highlighter-nmp-actions")
                 .build()
                 .expect("build highlighter NMP actor runtime");
-            let mut runtimes = ActorRuntimes::default();
+            let mut runtimes = ActorRuntimes::new(ctx.actor_tx.clone());
             while let Ok(msg) = rx.recv() {
+                // Per-message duration watchdog (design §4.6). Tag captured
+                // before the match consumes `msg`.
+                let msg_tag = kernel_msg_tag(&msg);
+                let dispatch_started = Instant::now();
                 match msg {
                     KernelMsg::Action(action) => {
                         tracing::debug!(action = action.tag(), "highlighter app action");
                         handle_action(*action, &runtime, &ctx, &mut runtimes);
                     }
                     KernelMsg::CoreDelta(delta) => {
-                        runtime.block_on(handle_core_delta(*delta, &ctx, &mut runtimes));
+                        // Phase 3 (actor-blocking-fix §4.4): `handle_core_delta`
+                        // is now a synchronous fn. Every refresh/hydrate it
+                        // cascades into is local-only (ndb reads + synchronous
+                        // subscription registration), so the delta path holds no
+                        // network-bounded await on the actor thread. The only
+                        // awaits left are the FFI-wide `async fn` core methods,
+                        // wrapped at the helper boundary in `block_on_local`
+                        // exactly as `handle_action` already does — proving the
+                        // non-blocking invariant structurally rather than by
+                        // convention.
+                        handle_core_delta(*delta, &runtime, &ctx, &mut runtimes);
                     }
-                    KernelMsg::IsbnPreviewResolved { requested, result } => {
-                        handle_isbn_preview_resolved(
-                            &ctx.state,
-                            &mut runtimes.pending_isbn_lookups,
-                            requested,
-                            *result,
-                            ctx.visible_limit,
-                        );
-                        emit(&ctx.state, &ctx.reconciler);
-                    }
-                    KernelMsg::WebMetadataResolved { requested, result } => {
-                        handle_web_metadata_resolved(
-                            &ctx.state,
-                            &mut runtimes.pending_web_metadata,
-                            requested,
-                            *result,
-                            ctx.visible_limit,
-                        );
-                        emit(&ctx.state, &ctx.reconciler);
-                    }
-                    KernelMsg::UsernameAvailabilityResolved {
+                    KernelMsg::OpResolved {
+                        domain,
                         generation,
-                        username,
-                        result,
+                        outcome,
                     } => {
-                        handle_username_availability_resolved(
-                            &ctx.state,
-                            &mut runtimes.create_account_runtime,
-                            generation,
-                            username,
-                            *result,
-                        );
-                        emit(&ctx.state, &ctx.reconciler);
-                    }
-                    KernelMsg::NsecSignInResolved {
-                        generation,
-                        nsec,
-                        persist,
-                        clear_stored_on_failure,
-                        result,
-                    } => {
-                        handle_nsec_sign_in_resolved(
-                            &ctx,
-                            &mut runtimes,
-                            generation,
-                            nsec,
-                            persist,
-                            clear_stored_on_failure,
-                            *result,
-                        );
-                    }
-                    KernelMsg::BunkerSignInResolved {
-                        generation,
-                        uri,
-                        persist,
-                        clear_stored_on_failure,
-                        result,
-                    } => {
-                        handle_bunker_sign_in_resolved(
-                            &ctx,
-                            &mut runtimes,
-                            generation,
-                            uri,
-                            persist,
-                            clear_stored_on_failure,
-                            *result,
-                        );
-                    }
-                    KernelMsg::AccountCreateResolved { generation, result } => {
-                        handle_account_create_resolved(
-                            &ctx,
-                            &mut runtimes.create_account_runtime,
-                            generation,
-                            *result,
-                        );
-                    }
-                    KernelMsg::OnboardingFollowsResolved {
-                        generation,
-                        failures,
-                    } => {
-                        handle_onboarding_follows_resolved(
-                            &ctx.state,
-                            &ctx.reconciler,
-                            &runtimes,
-                            generation,
-                            failures,
-                        );
-                    }
-                    KernelMsg::DefaultBlossomInitResolved { pubkey_hex, result } => {
-                        handle_default_blossom_init_resolved(
-                            &ctx.state,
-                            &ctx.reconciler,
-                            &mut runtimes.app_scope_subscriptions,
-                            pubkey_hex,
-                            *result,
-                        );
-                    }
-                    KernelMsg::SearchLocalResolved {
-                        generation,
-                        query,
-                        result,
-                    } => {
-                        handle_search_local_resolved(
-                            &ctx,
-                            &mut runtimes.search_runtime,
-                            SearchLocalResolution {
-                                generation,
-                                query,
-                                result: *result,
-                            },
-                        );
+                        if !runtimes.ops.is_stale(domain, generation) {
+                            // Drop the in-flight record now that it has resolved.
+                            runtimes.ops.in_flight.remove(&domain);
+                            apply_op_outcome(&runtime, &ctx, &mut runtimes, domain, *outcome);
+                            emit(&ctx.state, &ctx.reconciler);
+                        }
                     }
                     KernelMsg::Stop => {
                         clear_app_scope_subscriptions(
@@ -2091,13 +2568,721 @@ fn spawn_actor(rx: Receiver<KernelMsg>, ctx: ActorContext, emit_hz: u32) -> Join
                             &mut runtimes.article_reader_runtime,
                         );
                         clear_room_detail_runtime(&ctx.core, &mut runtimes.room_detail_runtime);
+                        runtimes.ops.cancel_all();
                         break;
                     }
                 }
+                record_handler_duration(msg_tag, dispatch_started.elapsed());
             }
             tracing::debug!(emit_hz, "highlighter NMP actor stopped");
         })
         .expect("spawn highlighter NMP actor")
+}
+
+/// Short static tag for a `KernelMsg`, used by the per-message watchdog.
+fn kernel_msg_tag(msg: &KernelMsg) -> &'static str {
+    match msg {
+        KernelMsg::Action(_) => "action",
+        KernelMsg::CoreDelta(_) => "core_delta",
+        KernelMsg::OpResolved { .. } => "op_resolved",
+        KernelMsg::Stop => "stop",
+    }
+}
+
+/// The single state-mutation point for migrated off-actor operations
+/// (design §4.1). Runs on the actor thread; clears the domain's busy flag,
+/// applies the result or a D6 toast, and may run Class-D local follow-ups
+/// (ndb-only refreshes) via `block_on_local`. The caller emits afterwards.
+fn apply_op_outcome(
+    runtime: &tokio::runtime::Runtime,
+    ctx: &ActorContext,
+    runtimes: &mut ActorRuntimes,
+    _domain: OpDomain,
+    outcome: OpOutcome,
+) {
+    let core = &ctx.core;
+    let state = &ctx.state;
+    let visible_limit = ctx.visible_limit;
+    match outcome {
+        OpOutcome::JoinRoom {
+            group_id,
+            room_name,
+            result,
+        } => match result {
+            Ok(()) => {
+                runtimes
+                    .pending_joins
+                    .retain(|join| join.group_id != group_id);
+                runtimes.pending_joins.push(PendingJoin {
+                    group_id: group_id.clone(),
+                    room_name,
+                });
+                let mut current = state.write();
+                clear_joining_marker(&mut current.room_explorer, &group_id);
+                current.room_explorer.error_message = None;
+                current.toast = Some(HighlighterToast {
+                    kind: HighlighterToastKind::Info,
+                    message: "Join requested".into(),
+                });
+                current.bump();
+            }
+            Err(err) => {
+                runtimes
+                    .pending_joins
+                    .retain(|join| join.group_id != group_id);
+                {
+                    let mut current = state.write();
+                    clear_joining_marker(&mut current.room_explorer, &group_id);
+                    current.bump();
+                }
+                set_room_explorer_join_error(state, err);
+            }
+        },
+        OpOutcome::RoomChatPublish { result } => match result {
+            Ok(()) => {
+                {
+                    let mut current = state.write();
+                    current.room_detail.is_sending_chat_message = false;
+                    current.room_detail.chat_error_message = None;
+                    current.bump();
+                }
+                // Local-only refresh (ndb reads + sync subscription).
+                block_on_local(
+                    runtime,
+                    "refresh_room_detail",
+                    refresh_room_detail(
+                        core,
+                        state,
+                        &mut runtimes.room_detail_runtime,
+                        visible_limit,
+                    ),
+                );
+            }
+            Err(err) => set_room_chat_error(state, format!("Couldn't send message: {err}")),
+        },
+        OpOutcome::BlossomUpload { slot, result } => {
+            apply_blossom_upload_outcome(state, slot, result)
+        }
+        OpOutcome::RelayProbe { url, document } => {
+            let mut current = state.write();
+            if document.is_some() {
+                upsert_network_nip11_projection(
+                    &mut current.network,
+                    HighlighterRelayNip11Snapshot {
+                        url,
+                        document,
+                        is_loading: false,
+                        error_message: None,
+                    },
+                );
+            } else {
+                upsert_network_nip11_projection(
+                    &mut current.network,
+                    HighlighterRelayNip11Snapshot {
+                        url,
+                        document: None,
+                        is_loading: false,
+                        error_message: Some(
+                            "Couldn't reach the relay — you can still add it.".into(),
+                        ),
+                    },
+                );
+            }
+            current.bump();
+        }
+        OpOutcome::RelayImport { result } => match result {
+            Ok(mut rows) => {
+                if rows.len() > NETWORK_IMPORT_LIMIT {
+                    rows.truncate(NETWORK_IMPORT_LIMIT);
+                }
+                let selected_urls = rows.iter().map(|row| row.url.clone()).collect::<Vec<_>>();
+                let mut current = state.write();
+                current.network.import_relays.candidate_count = rows.len() as u64;
+                current.network.import_relays.candidates = rows;
+                current.network.import_relays.selected_urls = selected_urls;
+                current.network.import_relays.is_fetching = false;
+                current.network.import_relays.error_message =
+                    (current.network.import_relays.candidate_count == 0)
+                        .then(|| "No relay list found for this user.".to_string());
+                current.bump();
+            }
+            Err(err) => {
+                let mut current = state.write();
+                current.network.import_relays.is_fetching = false;
+                current.network.import_relays.error_message = Some(err);
+                current.bump();
+            }
+        },
+        OpOutcome::RoomCreate { result } => match result {
+            Ok(group_id) => {
+                {
+                    let mut current = state.write();
+                    current.create_room.is_creating = false;
+                    current.create_room.created_group_id = Some(group_id);
+                    current.create_room.error_message = None;
+                    current.bump();
+                }
+                block_on_local(
+                    runtime,
+                    "hydrate_joined_communities",
+                    hydrate_joined_communities(
+                        core,
+                        state,
+                        &mut runtimes.pending_joins,
+                        visible_limit,
+                    ),
+                );
+            }
+            Err(err) => set_create_room_error(state, format!("Couldn't publish: {err}")),
+        },
+        OpOutcome::RoomInvite { group_id, result } => match result {
+            Ok(codes) => {
+                let url = codes
+                    .first()
+                    .filter(|code| !code.trim().is_empty())
+                    .map(|code| format!("https://highlighter.com/r/{group_id}/join/{code}"));
+                let mut current = state.write();
+                current.room_invite.is_minting_invite_link = false;
+                current.room_invite.invite_url = url;
+                current.room_invite.invite_link_error_message =
+                    if current.room_invite.invite_url.is_none() {
+                        Some("No invite code returned.".into())
+                    } else {
+                        None
+                    };
+                current.bump();
+            }
+            Err(err) => {
+                let mut current = state.write();
+                current.room_invite.is_minting_invite_link = false;
+                current.room_invite.invite_url = None;
+                current.room_invite.invite_link_error_message =
+                    Some(format!("Couldn't mint invite link: {err}"));
+                current.bump();
+            }
+        },
+        OpOutcome::RoomInviteMembers { result } => match result {
+            Ok(outcome) => {
+                let RoomInviteMembersOutcome { total, failures } = outcome;
+                let mut current = state.write();
+                current.room_invite.is_adding_members = false;
+                if failures.is_empty() {
+                    current.room_invite.selected.clear();
+                    current.room_invite.add_error_message = None;
+                    current.room_invite.toast_message = Some(if total == 1 {
+                        "Added 1 person".into()
+                    } else {
+                        format!("Added {total} people")
+                    });
+                } else if failures.len() == total {
+                    current.room_invite.add_error_message =
+                        Some("Couldn't add anyone. Are you a moderator of this room?".into());
+                } else {
+                    let failure_set: BTreeSet<String> = failures.iter().cloned().collect();
+                    current
+                        .room_invite
+                        .selected
+                        .retain(|candidate| failure_set.contains(&candidate.pubkey_hex));
+                    let failed_names = failures
+                        .iter()
+                        .map(|pubkey| short_pubkey(pubkey))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    current.room_invite.add_error_message =
+                        Some(format!("Some failed: {failed_names}"));
+                }
+                current.bump();
+            }
+            Err(err) => set_room_invite_add_error(state, err),
+        },
+        OpOutcome::CommentPublish {
+            parent_event_id,
+            result,
+        } => match result {
+            Ok(record) => {
+                set_comment_draft(state, parent_event_id, String::new());
+                {
+                    let mut current = state.write();
+                    current.comments.is_publishing = false;
+                    current.comments.last_published_event_id = Some(record.event_id.clone());
+                    current.comments.publish_error_message = None;
+                    if !current
+                        .comments
+                        .records
+                        .iter()
+                        .any(|existing| existing.event_id == record.event_id)
+                    {
+                        current.comments.records.push(record);
+                        current.comments.record_count = current.comments.records.len() as u64;
+                    }
+                    current.bump();
+                }
+                block_on_local(runtime, "refresh_comments", refresh_comments(core, state));
+            }
+            Err(err) => set_comment_publish_error(state, format!("Couldn't publish: {err}")),
+        },
+        OpOutcome::CommentInteraction { kind, result } => match result {
+            Ok(()) => block_on_local(runtime, "refresh_comments", refresh_comments(core, state)),
+            Err(err) => {
+                let what = match kind {
+                    CommentInteractionKind::Like => "like",
+                    CommentInteractionKind::Bookmark => "bookmark",
+                };
+                set_comment_interaction_error(state, format!("Couldn't update {what}: {err}"));
+            }
+        },
+        OpOutcome::FeedbackPublish {
+            parent_event_id,
+            result,
+        } => match result {
+            Ok(record) => {
+                {
+                    let mut current = state.write();
+                    current.feedback.is_publishing_new_thread = false;
+                    current.feedback.is_publishing_reply = false;
+                    current.feedback.publish_error_message = None;
+                    current.feedback.last_published_root_event_id =
+                        Some(record.root_event_id.clone());
+                    if parent_event_id.is_some() {
+                        current.feedback.reply_draft.clear();
+                        if current
+                            .feedback
+                            .selected_root_event_id
+                            .as_deref()
+                            .is_some_and(|root| root == record.root_event_id)
+                            && !current
+                                .feedback
+                                .selected_events
+                                .iter()
+                                .any(|event| event.event_id == record.event_id)
+                        {
+                            current.feedback.selected_events.push(record);
+                            current.feedback.selected_event_count =
+                                current.feedback.selected_events.len() as u64;
+                        }
+                    } else {
+                        current.feedback.new_thread_draft.clear();
+                    }
+                    current.bump();
+                }
+                block_on_local(
+                    runtime,
+                    "refresh_feedback_threads",
+                    refresh_feedback_threads(core, state, &runtimes.feedback_runtime),
+                );
+                if parent_event_id.is_some() {
+                    block_on_local(
+                        runtime,
+                        "refresh_feedback_thread",
+                        refresh_feedback_thread(core, state, &runtimes.feedback_runtime),
+                    );
+                }
+            }
+            Err(err) => set_feedback_publish_error(state, format!("Couldn't send feedback: {err}")),
+        },
+        OpOutcome::MediaSettingsWrite { result } => match result {
+            Ok(()) => {
+                let mut current = state.write();
+                current.media_settings.is_saving = false;
+                current.media_settings.error_message = None;
+                current.bump();
+            }
+            Err(err) => {
+                set_media_settings_error(state, format!("Couldn't save media servers: {err}"))
+            }
+        },
+        OpOutcome::ProfileEditSubmit { result } => match result {
+            Ok(profile) => {
+                let pubkey = profile.pubkey.clone();
+                let profile_for_cache = profile.clone();
+                {
+                    let mut current = state.write();
+                    current.edit_profile.is_saving = false;
+                    current.edit_profile.error_message = None;
+                    current.edit_profile.saved_profile = Some(profile.clone());
+                    current.chrome.current_user_profile = Some(profile);
+                    current.bump();
+                }
+                insert_profile_metadata(state, pubkey, profile_for_cache, visible_limit);
+                block_on_local(
+                    runtime,
+                    "hydrate_app_chrome",
+                    hydrate_app_chrome(core, state, &mut runtimes.pending_joins, visible_limit),
+                );
+            }
+            Err(err) => set_edit_profile_error(state, err),
+        },
+        OpOutcome::ArticleBookmarkToggle { result } => match result {
+            Ok(()) => {
+                set_toast(state, None);
+                block_on_local(
+                    runtime,
+                    "hydrate_bookmarks",
+                    hydrate_bookmarks(core, state, visible_limit),
+                );
+                if runtimes.bookmark_runtime.library_open {
+                    block_on_local(
+                        runtime,
+                        "refresh_bookmarks_library",
+                        refresh_bookmarks_library(
+                            core,
+                            state,
+                            &mut runtimes.bookmark_runtime,
+                            visible_limit,
+                        ),
+                    );
+                }
+            }
+            Err(err) => set_toast(
+                state,
+                Some(HighlighterToast {
+                    kind: HighlighterToastKind::Error,
+                    message: err,
+                }),
+            ),
+        },
+        OpOutcome::CurationWrite { result } => match result {
+            Ok(message) => {
+                set_curation_menu_saving(state, false);
+                if message.is_empty() {
+                    set_toast(state, None);
+                } else {
+                    set_toast(
+                        state,
+                        Some(HighlighterToast {
+                            kind: HighlighterToastKind::Success,
+                            message,
+                        }),
+                    );
+                }
+                block_on_local(
+                    runtime,
+                    "refresh_bookmark_surfaces",
+                    refresh_bookmark_surfaces(
+                        core,
+                        state,
+                        &mut runtimes.bookmark_runtime,
+                        visible_limit,
+                    ),
+                );
+            }
+            Err(err) => {
+                set_curation_menu_saving(state, false);
+                set_toast(
+                    state,
+                    Some(HighlighterToast {
+                        kind: HighlighterToastKind::Error,
+                        message: err.clone(),
+                    }),
+                );
+                set_curation_menu_error(state, err);
+            }
+        },
+        OpOutcome::FollowToggle {
+            desired_following,
+            previous_following,
+            result,
+        } => match result {
+            Ok(()) => {
+                let mut current = state.write();
+                current.profile_view.is_following = desired_following;
+                current.profile_view.is_mutating_follow = false;
+                current.profile_view.error_message = None;
+                current.bump();
+            }
+            Err(err) => {
+                let mut current = state.write();
+                current.profile_view.is_following = previous_following;
+                current.profile_view.is_mutating_follow = false;
+                current.profile_view.error_message = Some(err.clone());
+                current.toast = Some(HighlighterToast {
+                    kind: HighlighterToastKind::Error,
+                    message: err,
+                });
+                current.bump();
+            }
+        },
+        OpOutcome::HighlightPublish {
+            note_was_empty,
+            result,
+        } => match result {
+            Ok(record) => {
+                let mut current = state.write();
+                current
+                    .article_reader
+                    .highlights
+                    .retain(|highlight| highlight.event_id != record.event_id);
+                current.article_reader.highlights.insert(0, record.clone());
+                sort_highlights_newest_first(&mut current.article_reader.highlights);
+                let max_len = visible_limit.clamp(1, ARTICLE_READER_HIGHLIGHT_LIMIT);
+                current.article_reader.highlights.truncate(max_len);
+                current.article_reader.highlight_count =
+                    current.article_reader.highlights.len() as u64;
+                current.article_reader.last_published_highlight_id = Some(record.event_id);
+                current.article_reader.is_publishing_highlight = false;
+                current.article_reader.error_message = None;
+                current.toast = Some(HighlighterToast {
+                    kind: HighlighterToastKind::Success,
+                    message: if note_was_empty {
+                        "Highlighted".into()
+                    } else {
+                        "Highlighted with note".into()
+                    },
+                });
+                current.bump();
+            }
+            Err(err) => set_article_reader_publish_error(state, err),
+        },
+        OpOutcome::SharePublish { group_id, result } => match result {
+            Ok(message) => set_share_composer_success(state, group_id, message),
+            Err(err) => set_share_composer_error(state, err),
+        },
+        OpOutcome::CapturePublish { result } => match result {
+            Ok((event_id, message)) => set_capture_publish_success(state, event_id, message),
+            Err(err) => set_capture_publish_error(state, err),
+        },
+        OpOutcome::RoomDiscussionPublish { result } => match result {
+            Ok(event_id) => {
+                {
+                    let mut current = state.write();
+                    current.room_detail.is_publishing_discussion = false;
+                    current.room_detail.discussion_error_message = None;
+                    current.room_detail.last_published_discussion_id = Some(event_id);
+                    current.bump();
+                }
+                block_on_local(
+                    runtime,
+                    "refresh_room_detail",
+                    refresh_room_detail(
+                        core,
+                        state,
+                        &mut runtimes.room_detail_runtime,
+                        visible_limit,
+                    ),
+                );
+            }
+            Err(err) => {
+                set_room_discussion_error(state, format!("Failed to publish discussion: {err}"))
+            }
+        },
+        OpOutcome::NetworkRelayWrite { kind, result } => {
+            match result {
+                Ok(()) => clear_network_action_error(state),
+                Err(err) => {
+                    let prefix = match kind {
+                        NetworkRelayWriteKind::Upsert => "Couldn't save relay",
+                        NetworkRelayWriteKind::Remove => "Couldn't remove relay",
+                        NetworkRelayWriteKind::SetRoles => "Couldn't update relay roles",
+                        NetworkRelayWriteKind::ImportApply => "Couldn't import",
+                    };
+                    if matches!(kind, NetworkRelayWriteKind::ImportApply) {
+                        let mut current = state.write();
+                        current.network.import_relays.is_applying = false;
+                        current.network.import_relays.error_message =
+                            Some(format!("{prefix}: {err}"));
+                        current.bump();
+                    } else {
+                        set_network_action_error(state, format!("{prefix}: {err}"));
+                    }
+                }
+            }
+            // On success of an import-apply, clear the import staging area.
+            if matches!(kind, NetworkRelayWriteKind::ImportApply) {
+                let succeeded = {
+                    let current = state.read();
+                    current.network.import_relays.error_message.is_none()
+                };
+                if succeeded {
+                    let mut current = state.write();
+                    current.network.import_relays = HighlighterNetworkImportSnapshot::empty();
+                    current.bump();
+                }
+            }
+            // All relay writes refresh the network panel (Class-D, ndb + sync).
+            block_on_local(
+                runtime,
+                "refresh_network_settings",
+                refresh_network_settings(core, state),
+            );
+        }
+        OpOutcome::OnboardingFollows { failures } => {
+            if failures > 0 {
+                let mut current = state.write();
+                current.toast = Some(HighlighterToast {
+                    kind: HighlighterToastKind::Info,
+                    message: "Saved your interests".into(),
+                });
+                current.bump();
+            }
+        }
+        // --- Phase 4: route the folded workers through their existing
+        // resolvers, byte-for-byte. Each resolver still performs its own
+        // domain-specific staleness re-check (search_runtime.generation,
+        // username_generation, auth_generation, create_generation, the blossom
+        // pubkey match, the pending_* coalescing sets), so behaviour is
+        // identical to the deleted KernelMsg arms. The caller emits afterwards.
+        OpOutcome::SearchLocal {
+            generation,
+            query,
+            result,
+        } => {
+            handle_search_local_resolved(
+                ctx,
+                runtimes,
+                SearchLocalResolution {
+                    generation,
+                    query,
+                    result,
+                },
+            );
+        }
+        OpOutcome::UsernameCheck {
+            generation,
+            username,
+            result,
+        } => {
+            handle_username_availability_resolved(
+                state,
+                &mut runtimes.create_account_runtime,
+                generation,
+                username,
+                result,
+            );
+        }
+        OpOutcome::NsecSignIn {
+            generation,
+            nsec,
+            persist,
+            clear_stored_on_failure,
+            result,
+        } => {
+            handle_nsec_sign_in_resolved(
+                ctx,
+                runtimes,
+                generation,
+                nsec,
+                persist,
+                clear_stored_on_failure,
+                result,
+            );
+        }
+        OpOutcome::BunkerSignIn {
+            generation,
+            uri,
+            persist,
+            clear_stored_on_failure,
+            result,
+        } => {
+            handle_bunker_sign_in_resolved(
+                ctx,
+                runtimes,
+                generation,
+                uri,
+                persist,
+                clear_stored_on_failure,
+                result,
+            );
+        }
+        OpOutcome::AccountCreate { generation, result } => {
+            handle_account_create_resolved(
+                ctx,
+                &mut runtimes.create_account_runtime,
+                generation,
+                *result,
+            );
+        }
+        OpOutcome::DefaultBlossomInit { pubkey_hex, result } => {
+            handle_default_blossom_init_resolved(
+                &ctx.state,
+                &ctx.reconciler,
+                &mut runtimes.app_scope_subscriptions,
+                pubkey_hex,
+                result,
+            );
+        }
+        OpOutcome::IsbnPreview { requested, result } => {
+            handle_isbn_preview_resolved(
+                state,
+                &mut runtimes.pending_isbn_lookups,
+                requested,
+                *result,
+                visible_limit,
+            );
+        }
+        OpOutcome::WebMetadata { requested, result } => {
+            handle_web_metadata_resolved(
+                state,
+                &mut runtimes.pending_web_metadata,
+                requested,
+                *result,
+                visible_limit,
+            );
+        }
+    }
+}
+
+/// Apply a finished blossom upload into whichever surface requested it.
+fn apply_blossom_upload_outcome(
+    state: &Arc<RwLock<HighlighterAppState>>,
+    slot: UploadSlot,
+    result: Result<BlossomUpload, String>,
+) {
+    match slot {
+        UploadSlot::RoomCover => match result {
+            Ok(upload) => {
+                let mut current = state.write();
+                current.create_room.cover_upload = Some(upload);
+                current.create_room.is_cover_uploading = false;
+                current.create_room.error_message = None;
+                current.bump();
+            }
+            Err(err) => set_create_room_error(state, format!("Couldn't upload cover: {err}")),
+        },
+        UploadSlot::ProfilePicture => match result {
+            Ok(upload) => {
+                let mut current = state.write();
+                current.edit_profile.picture = upload.url;
+                current.edit_profile.is_picture_uploading = false;
+                current.edit_profile.error_message = None;
+                current.bump();
+            }
+            Err(err) => {
+                set_edit_profile_image_uploading(
+                    state,
+                    HighlighterEditProfileImageTarget::Picture,
+                    false,
+                );
+                set_edit_profile_error(state, format!("Upload failed: {err}"));
+            }
+        },
+        UploadSlot::ProfileBanner => match result {
+            Ok(upload) => {
+                let mut current = state.write();
+                current.edit_profile.banner = upload.url;
+                current.edit_profile.is_banner_uploading = false;
+                current.edit_profile.error_message = None;
+                current.bump();
+            }
+            Err(err) => {
+                set_edit_profile_image_uploading(
+                    state,
+                    HighlighterEditProfileImageTarget::Banner,
+                    false,
+                );
+                set_edit_profile_error(state, format!("Upload failed: {err}"));
+            }
+        },
+        UploadSlot::Capture => match result {
+            Ok(upload) => {
+                let mut current = state.write();
+                current.capture.upload = Some(upload);
+                current.capture.is_uploading = false;
+                current.capture.upload_error_message = None;
+                current.bump();
+            }
+            Err(err) => set_capture_upload_error(state, format!("Upload failed: {err}")),
+        },
+    }
 }
 
 fn handle_action(
@@ -2109,7 +3294,6 @@ fn handle_action(
     let core = &ctx.core;
     let state = &ctx.state;
     let reconciler = &ctx.reconciler;
-    let actor_tx = &ctx.actor_tx;
     let visible_limit = ctx.visible_limit;
     let local_state_path = ctx.local_state_path.as_path();
     let pending_joins = &mut runtimes.pending_joins;
@@ -2130,54 +3314,49 @@ fn handle_action(
     let feedback_runtime = &mut runtimes.feedback_runtime;
     let room_explorer_runtime = &mut runtimes.room_explorer_runtime;
     let network_runtime = &mut runtimes.network_runtime;
+    let ops = &mut runtimes.ops;
 
     match action {
         HighlighterAppAction::Bootstrap => {
             set_bootstrapping(state, true);
             emit(state, reconciler);
-            runtime.block_on(hydrate_app_chrome(
-                core,
-                state,
-                pending_joins,
-                visible_limit,
-            ));
-            runtime.block_on(ensure_signed_in_app_scope(
-                core,
-                state,
-                app_scope_subscriptions,
-                actor_tx,
-            ));
+            block_on_local(
+                runtime,
+                "hydrate_app_chrome",
+                hydrate_app_chrome(core, state, pending_joins, visible_limit),
+            );
+            block_on_local(
+                runtime,
+                "ensure_signed_in_app_scope",
+                ensure_signed_in_app_scope(core, state, app_scope_subscriptions, ops),
+            );
             set_bootstrapping(state, false);
             emit(state, reconciler);
         }
         HighlighterAppAction::RefreshAppChrome => {
-            runtime.block_on(hydrate_app_chrome(
-                core,
-                state,
-                pending_joins,
-                visible_limit,
-            ));
-            runtime.block_on(ensure_signed_in_app_scope(
-                core,
-                state,
-                app_scope_subscriptions,
-                actor_tx,
-            ));
+            block_on_local(
+                runtime,
+                "hydrate_app_chrome",
+                hydrate_app_chrome(core, state, pending_joins, visible_limit),
+            );
+            block_on_local(
+                runtime,
+                "ensure_signed_in_app_scope",
+                ensure_signed_in_app_scope(core, state, app_scope_subscriptions, ops),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::AppForegrounded => {
-            runtime.block_on(handle_app_foregrounded(
-                core,
-                state,
-                pending_joins,
-                visible_limit,
-            ));
-            runtime.block_on(ensure_signed_in_app_scope(
-                core,
-                state,
-                app_scope_subscriptions,
-                actor_tx,
-            ));
+            block_on_local(
+                runtime,
+                "handle_app_foregrounded",
+                handle_app_foregrounded(core, state, pending_joins, visible_limit),
+            );
+            block_on_local(
+                runtime,
+                "ensure_signed_in_app_scope",
+                ensure_signed_in_app_scope(core, state, app_scope_subscriptions, ops),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::SignInNsec {
@@ -2188,29 +3367,62 @@ fn handle_action(
             set_signing_in(state, true);
             emit(state, reconciler);
             let nsec = nsec.trim().to_string();
+            // nsec + bunker share `auth_generation` AND OpRunner's single
+            // `OpDomain::Auth` slot, preserving today's cross-method
+            // supersession: a later sign-in (of either kind) supersedes any
+            // in-flight attempt — last sign-in wins (Phase 4 fold).
             *auth_generation = auth_generation.saturating_add(1);
             let generation = *auth_generation;
-            if let Err(message) = start_nsec_sign_in_request(
-                core,
-                actor_tx,
-                generation,
-                nsec,
-                persist,
-                clear_stored_on_failure,
-            ) {
-                set_toast(
-                    state,
-                    Some(HighlighterToast {
-                        kind: HighlighterToastKind::Error,
-                        message,
-                    }),
-                );
-                set_signing_in(state, false);
-                emit(state, reconciler);
-                if clear_stored_on_failure {
-                    emit_clear_session_credentials(reconciler);
-                }
-            }
+            // Establish the nsec identity synchronously on the actor thread
+            // (network-free) BEFORE submitting the off-actor op, so a rapid
+            // superseding sign-in (e.g. a bunker pairing dispatched right after)
+            // observes this account as the prior active identity. Without this,
+            // the bunker op could read an unset prior identity and latch onto the
+            // nsec's later async identity-apply, masking a genuine pairing
+            // timeout. The full `login_nsec` inside the op re-applies idempotently
+            // and still performs the (network-bound) signer install off-actor.
+            let _ = core.apply_nsec_identity(&nsec);
+            let core_for_op = core.clone();
+            let timeout_nsec = nsec.clone();
+            ops.submit_op(
+                OpDomain::Auth,
+                OP_DEADLINE_NETWORK,
+                // Truthful timeout fallback: live generation + the real
+                // persist/clear flags so a wedged sign-in clears `is_signing_in`
+                // (and honors clear-stored) instead of being dropped at gen 0.
+                // Carries the secret exactly as the success outcome does; the
+                // Err arm never logs it.
+                OpOutcome::NsecSignIn {
+                    generation,
+                    nsec: timeout_nsec,
+                    persist,
+                    clear_stored_on_failure,
+                    result: Err(op_timeout_message(OpDomain::Auth)),
+                },
+                async move {
+                    // `login_nsec` is a SYNC core method that blocks internally on
+                    // the NMP runtime (it installs the signer via `block_on`). The
+                    // legacy worker therefore ran on a dedicated current-thread
+                    // runtime; on OpRunner's multi-thread runtime a nested
+                    // `block_on` panics ("runtime within a runtime"), so we move it
+                    // to the blocking pool with `spawn_blocking`.
+                    let nsec_for_call = nsec.clone();
+                    let result = tokio::task::spawn_blocking(move || {
+                        core_for_op
+                            .login_nsec(nsec_for_call)
+                            .map_err(|err| err.to_string())
+                    })
+                    .await
+                    .unwrap_or_else(|join_err| Err(format!("sign-in task failed: {join_err}")));
+                    OpOutcome::NsecSignIn {
+                        generation,
+                        nsec,
+                        persist,
+                        clear_stored_on_failure,
+                        result,
+                    }
+                },
+            );
         }
         HighlighterAppAction::PairBunker {
             uri,
@@ -2222,37 +3434,41 @@ fn handle_action(
             let uri = uri.trim().to_string();
             *auth_generation = auth_generation.saturating_add(1);
             let generation = *auth_generation;
-            if let Err(message) = start_bunker_sign_in_request(
-                core,
-                actor_tx,
-                generation,
-                uri,
-                persist,
-                clear_stored_on_failure,
-            ) {
-                set_toast(
-                    state,
-                    Some(HighlighterToast {
-                        kind: HighlighterToastKind::Error,
-                        message,
-                    }),
-                );
-                set_signing_in(state, false);
-                emit(state, reconciler);
-                if clear_stored_on_failure {
-                    emit_clear_session_credentials(reconciler);
-                }
-            }
+            let core_for_op = core.clone();
+            let timeout_uri = uri.clone();
+            ops.submit_op(
+                OpDomain::Auth,
+                OP_DEADLINE_NETWORK,
+                // Truthful bunker timeout fallback: live generation + real flags
+                // so a black-holed pairing clears `is_signing_in` with an error
+                // toast instead of wedging at gen 0.
+                OpOutcome::BunkerSignIn {
+                    generation,
+                    uri: timeout_uri,
+                    persist,
+                    clear_stored_on_failure,
+                    result: Err(op_timeout_message(OpDomain::Auth)),
+                },
+                async move {
+                    let result = core_for_op
+                        .pair_bunker(uri.clone())
+                        .await
+                        .map_err(|err| err.to_string());
+                    OpOutcome::BunkerSignIn {
+                        generation,
+                        uri,
+                        persist,
+                        clear_stored_on_failure,
+                        result,
+                    }
+                },
+            );
         }
         HighlighterAppAction::SetCreateAccountDisplayName { display_name } => {
             let next_username =
                 update_create_account_display_name(state, display_name, create_account_runtime);
             if let Some((generation, username)) = next_username {
-                if let Err(message) =
-                    start_username_availability_request(actor_tx, generation, username)
-                {
-                    set_create_account_username_error(state, message);
-                }
+                submit_username_availability_op(ops, generation, username);
             }
             emit(state, reconciler);
         }
@@ -2260,19 +3476,13 @@ fn handle_action(
             let next_username =
                 update_create_account_username(state, username, create_account_runtime);
             if let Some((generation, username)) = next_username {
-                if let Err(message) =
-                    start_username_availability_request(actor_tx, generation, username)
-                {
-                    set_create_account_username_error(state, message);
-                }
+                submit_username_availability_op(ops, generation, username);
             }
             emit(state, reconciler);
         }
         HighlighterAppAction::SubmitCreateAccount => {
             if let Some(request) = prepare_create_account_request(state, create_account_runtime) {
-                if let Err(message) = start_create_account_request(core, actor_tx, request) {
-                    set_create_account_submit_error(state, message);
-                }
+                submit_create_account_op(ops, core, request);
             }
             emit(state, reconciler);
         }
@@ -2283,12 +3493,34 @@ fn handle_action(
             height,
             alt,
         } => {
-            set_create_room_cover_uploading(state, true);
-            emit(state, reconciler);
-            runtime.block_on(upload_create_room_cover(
-                core, state, bytes, mime, width, height, alt,
-            ));
-            emit(state, reconciler);
+            if bytes.is_empty() {
+                set_create_room_error(state, "That image couldn't be read.".into());
+                emit(state, reconciler);
+            } else {
+                set_create_room_cover_uploading(state, true);
+                emit(state, reconciler);
+                let core = core.clone();
+                ops.submit_op(
+                    OpDomain::BlossomUpload(UploadSlot::RoomCover),
+                    OP_DEADLINE_NETWORK,
+                    OpOutcome::BlossomUpload {
+                        slot: UploadSlot::RoomCover,
+                        result: Err(op_timeout_message(OpDomain::BlossomUpload(
+                            UploadSlot::RoomCover,
+                        ))),
+                    },
+                    async move {
+                        let result = core
+                            .upload_photo(bytes, mime, width, height, alt)
+                            .await
+                            .map_err(|err| err.to_string());
+                        OpOutcome::BlossomUpload {
+                            slot: UploadSlot::RoomCover,
+                            result,
+                        }
+                    },
+                );
+            }
         }
         HighlighterAppAction::CreateRoomCapabilityFailed { message } => {
             let message = message.trim();
@@ -2312,19 +3544,37 @@ fn handle_action(
             visibility,
             access,
         } => {
-            set_create_room_creating(state, true);
-            emit(state, reconciler);
-            runtime.block_on(submit_create_room(
-                core,
-                state,
-                name,
-                about,
-                visibility,
-                access,
-                pending_joins,
-                visible_limit,
-            ));
-            emit(state, reconciler);
+            let name = name.trim().to_string();
+            if name.chars().count() < 2 {
+                set_create_room_error(state, "Name your room first.".into());
+                emit(state, reconciler);
+            } else {
+                let about = about.trim().to_string();
+                let picture = state
+                    .read()
+                    .create_room
+                    .cover_upload
+                    .as_ref()
+                    .map(|upload| upload.url.clone())
+                    .unwrap_or_default();
+                set_create_room_creating(state, true);
+                emit(state, reconciler);
+                let core = core.clone();
+                ops.submit_op(
+                    OpDomain::RoomCreate,
+                    OP_DEADLINE_NETWORK,
+                    OpOutcome::RoomCreate {
+                        result: Err(op_timeout_message(OpDomain::RoomCreate)),
+                    },
+                    async move {
+                        let result = core
+                            .create_room(name, about, picture, visibility, access)
+                            .await
+                            .map_err(|err| err.to_string());
+                        OpOutcome::RoomCreate { result }
+                    },
+                );
+            }
         }
         HighlighterAppAction::ClearCreateRoomResult => {
             clear_create_room_result(state);
@@ -2336,11 +3586,11 @@ fn handle_action(
         }
         HighlighterAppAction::OpenRoomInvite { group_id } => {
             prepare_open_room_invite(state, room_invite_runtime, group_id);
-            let prefetch = runtime.block_on(refresh_room_invite_follows(
-                core,
-                state,
-                room_invite_runtime,
-            ));
+            let prefetch = block_on_local(
+                runtime,
+                "refresh_room_invite_follows",
+                refresh_room_invite_follows(core, state, room_invite_runtime),
+            );
             for pubkey in prefetch {
                 request_profile(
                     runtime,
@@ -2352,15 +3602,15 @@ fn handle_action(
                     visible_limit,
                 );
             }
-            runtime.block_on(mint_room_invite_link(core, state));
+            submit_mint_room_invite_link(ops, state, core);
             emit(state, reconciler);
         }
         HighlighterAppAction::RefreshRoomInvite => {
-            let prefetch = runtime.block_on(refresh_room_invite_follows(
-                core,
-                state,
-                room_invite_runtime,
-            ));
+            let prefetch = block_on_local(
+                runtime,
+                "refresh_room_invite_follows",
+                refresh_room_invite_follows(core, state, room_invite_runtime),
+            );
             for pubkey in prefetch {
                 request_profile(
                     runtime,
@@ -2402,12 +3652,53 @@ fn handle_action(
             emit(state, reconciler);
         }
         HighlighterAppAction::MintRoomInviteLink => {
-            runtime.block_on(mint_room_invite_link(core, state));
+            submit_mint_room_invite_link(ops, state, core);
             emit(state, reconciler);
         }
         HighlighterAppAction::SubmitRoomInviteMembers => {
-            runtime.block_on(submit_room_invite_members(core, state));
-            emit(state, reconciler);
+            let (group_id, selected) = {
+                let current = state.read();
+                (
+                    current.room_invite.group_id.clone(),
+                    current.room_invite.selected.clone(),
+                )
+            };
+            if group_id.trim().is_empty() || selected.is_empty() {
+                emit(state, reconciler);
+            } else {
+                {
+                    let mut current = state.write();
+                    current.room_invite.is_adding_members = true;
+                    current.room_invite.add_error_message = None;
+                    current.room_invite.toast_message = None;
+                    current.bump();
+                }
+                emit(state, reconciler);
+                let core = core.clone();
+                ops.submit_op(
+                    OpDomain::RoomInviteMembers,
+                    OP_DEADLINE_NETWORK,
+                    OpOutcome::RoomInviteMembers {
+                        result: Err(op_timeout_message(OpDomain::RoomInviteMembers)),
+                    },
+                    async move {
+                        let total = selected.len();
+                        let mut failures = Vec::new();
+                        for candidate in &selected {
+                            if core
+                                .add_room_member(group_id.clone(), candidate.pubkey_hex.clone())
+                                .await
+                                .is_err()
+                            {
+                                failures.push(candidate.pubkey_hex.clone());
+                            }
+                        }
+                        OpOutcome::RoomInviteMembers {
+                            result: Ok(RoomInviteMembersOutcome { total, failures }),
+                        }
+                    },
+                );
+            }
         }
         HighlighterAppAction::ClearRoomInviteAddError => {
             clear_room_invite_add_error(state);
@@ -2434,12 +3725,12 @@ fn handle_action(
         } => {
             if prepare_open_comments(state, root_tag_name, root_tag_value, root_kind) {
                 emit(state, reconciler);
-                runtime.block_on(refresh_comments(core, state));
+                block_on_local(runtime, "refresh_comments", refresh_comments(core, state));
             }
             emit(state, reconciler);
         }
         HighlighterAppAction::RefreshComments => {
-            runtime.block_on(refresh_comments(core, state));
+            block_on_local(runtime, "refresh_comments", refresh_comments(core, state));
             emit(state, reconciler);
         }
         HighlighterAppAction::SetCommentDraft {
@@ -2450,22 +3741,136 @@ fn handle_action(
             emit(state, reconciler);
         }
         HighlighterAppAction::PublishComment { parent_event_id } => {
-            set_comment_publishing(state, true);
-            emit(state, reconciler);
-            runtime.block_on(publish_comment_from_draft(core, state, parent_event_id));
-            emit(state, reconciler);
+            let (root_tag_name, root_tag_value, root_kind, body) = {
+                let current = state.read();
+                (
+                    current.comments.root_tag_name.clone(),
+                    current.comments.root_tag_value.clone(),
+                    current.comments.root_kind,
+                    comment_draft_body(&current.comments, parent_event_id.as_deref())
+                        .trim()
+                        .to_string(),
+                )
+            };
+            if body.is_empty() {
+                set_comment_publish_error(state, "Write a comment first.".into());
+                emit(state, reconciler);
+            } else {
+                set_comment_publishing(state, true);
+                emit(state, reconciler);
+                let core = core.clone();
+                let timeout_parent = parent_event_id.clone();
+                ops.submit_op(
+                    OpDomain::CommentPublish,
+                    OP_DEADLINE_NETWORK,
+                    OpOutcome::CommentPublish {
+                        parent_event_id: timeout_parent,
+                        result: Err(op_timeout_message(OpDomain::CommentPublish)),
+                    },
+                    async move {
+                        let result = core
+                            .publish_comment(
+                                root_tag_name,
+                                root_tag_value,
+                                root_kind,
+                                parent_event_id.clone(),
+                                body,
+                            )
+                            .await
+                            .map_err(|err| err.to_string());
+                        OpOutcome::CommentPublish {
+                            parent_event_id,
+                            result,
+                        }
+                    },
+                );
+            }
         }
         HighlighterAppAction::ClearCommentPublishError => {
             clear_comment_publish_error(state);
             emit(state, reconciler);
         }
         HighlighterAppAction::ToggleCommentLike { event_id } => {
-            runtime.block_on(toggle_comment_like(core, state, event_id));
-            emit(state, reconciler);
+            let event_id = event_id.trim().to_string();
+            let (author, existing_like) = {
+                let current = state.read();
+                let author = current
+                    .comments
+                    .records
+                    .iter()
+                    .find(|record| record.event_id == event_id)
+                    .map(|record| record.pubkey.clone());
+                let existing_like = current
+                    .comments
+                    .interactions
+                    .iter()
+                    .find(|interaction| interaction.event_id == event_id)
+                    .and_then(|interaction| interaction.my_like_event_id.clone());
+                (author, existing_like)
+            };
+            let Some(author) = author else {
+                set_comment_interaction_error(state, "Comment not found.".into());
+                emit(state, reconciler);
+                return;
+            };
+            let domain = OpDomain::CommentInteraction {
+                target: op_target_hash(&event_id),
+                kind: CommentInteractionKind::Like,
+            };
+            let core = core.clone();
+            ops.submit_op(
+                domain,
+                OP_DEADLINE_NETWORK,
+                OpOutcome::CommentInteraction {
+                    kind: CommentInteractionKind::Like,
+                    result: Err(op_timeout_message(domain)),
+                },
+                async move {
+                    let result = if let Some(reaction_id) = existing_like {
+                        core.unpublish_reaction(reaction_id).await.map(|_| ())
+                    } else {
+                        core.publish_reaction(event_id, author, 1111, "+".into())
+                            .await
+                            .map(|_| ())
+                    }
+                    .map_err(|err| err.to_string());
+                    OpOutcome::CommentInteraction {
+                        kind: CommentInteractionKind::Like,
+                        result,
+                    }
+                },
+            );
         }
         HighlighterAppAction::ToggleCommentBookmark { event_id } => {
-            runtime.block_on(toggle_comment_bookmark(core, state, event_id));
-            emit(state, reconciler);
+            let event_id = event_id.trim().to_string();
+            if event_id.is_empty() {
+                emit(state, reconciler);
+            } else {
+                let domain = OpDomain::CommentInteraction {
+                    target: op_target_hash(&event_id),
+                    kind: CommentInteractionKind::Bookmark,
+                };
+                let core = core.clone();
+                ops.submit_op(
+                    domain,
+                    OP_DEADLINE_NETWORK,
+                    OpOutcome::CommentInteraction {
+                        kind: CommentInteractionKind::Bookmark,
+                        result: Err(op_timeout_message(domain)),
+                    },
+                    async move {
+                        let result = core
+                            .toggle_event_bookmark(event_id)
+                            .await
+                            .map(|_| ())
+                            .map_err(|err| err.to_string());
+                        OpOutcome::CommentInteraction {
+                            kind: CommentInteractionKind::Bookmark,
+                            result,
+                        }
+                    },
+                );
+            }
         }
         HighlighterAppAction::ClearCommentInteractionError => {
             clear_comment_interaction_error(state);
@@ -2479,23 +3884,31 @@ fn handle_action(
             prepare_open_feedback(core, state, feedback_runtime, coordinate);
             set_feedback_threads_loading(state, true);
             emit(state, reconciler);
-            runtime.block_on(refresh_feedback_threads(core, state, feedback_runtime));
-            runtime.block_on(ensure_feedback_threads_subscription(
-                core,
-                state,
-                feedback_runtime,
-            ));
+            block_on_local(
+                runtime,
+                "refresh_feedback_threads",
+                refresh_feedback_threads(core, state, feedback_runtime),
+            );
+            block_on_local(
+                runtime,
+                "ensure_feedback_threads_subscription",
+                ensure_feedback_threads_subscription(core, state, feedback_runtime),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::RefreshFeedbackThreads => {
             set_feedback_threads_loading(state, true);
             emit(state, reconciler);
-            runtime.block_on(refresh_feedback_threads(core, state, feedback_runtime));
-            runtime.block_on(ensure_feedback_threads_subscription(
-                core,
-                state,
-                feedback_runtime,
-            ));
+            block_on_local(
+                runtime,
+                "refresh_feedback_threads",
+                refresh_feedback_threads(core, state, feedback_runtime),
+            );
+            block_on_local(
+                runtime,
+                "ensure_feedback_threads_subscription",
+                ensure_feedback_threads_subscription(core, state, feedback_runtime),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::SetFeedbackNewThreadDraft { body } => {
@@ -2503,37 +3916,74 @@ fn handle_action(
             emit(state, reconciler);
         }
         HighlighterAppAction::PublishFeedbackNewThread => {
-            set_feedback_new_thread_publishing(state, true);
-            emit(state, reconciler);
-            runtime.block_on(publish_feedback_note_from_state(
-                core,
-                state,
-                feedback_runtime,
-                None,
-            ));
-            emit(state, reconciler);
+            let (coordinate, body) = {
+                let current = state.read();
+                (
+                    current.feedback.coordinate.clone(),
+                    current.feedback.new_thread_draft.trim().to_string(),
+                )
+            };
+            if coordinate.trim().is_empty() {
+                set_feedback_publish_error(state, "Feedback isn't ready yet.".into());
+                emit(state, reconciler);
+            } else if body.is_empty() {
+                set_feedback_publish_error(state, "Write feedback first.".into());
+                emit(state, reconciler);
+            } else {
+                set_feedback_new_thread_publishing(state, true);
+                emit(state, reconciler);
+                let core = core.clone();
+                let parent: Option<String> = None;
+                let timeout_parent = parent.clone();
+                ops.submit_op(
+                    OpDomain::FeedbackPublish,
+                    OP_DEADLINE_NETWORK,
+                    OpOutcome::FeedbackPublish {
+                        parent_event_id: timeout_parent,
+                        result: Err(op_timeout_message(OpDomain::FeedbackPublish)),
+                    },
+                    async move {
+                        let result = core
+                            .publish_feedback_note(coordinate, None, parent.clone(), body)
+                            .await
+                            .map_err(|err| err.to_string());
+                        OpOutcome::FeedbackPublish {
+                            parent_event_id: parent,
+                            result,
+                        }
+                    },
+                );
+            }
         }
         HighlighterAppAction::OpenFeedbackThread { root_event_id } => {
             prepare_open_feedback_thread(core, state, feedback_runtime, root_event_id);
             set_feedback_thread_loading(state, true);
             emit(state, reconciler);
-            runtime.block_on(refresh_feedback_thread(core, state, feedback_runtime));
-            runtime.block_on(ensure_feedback_thread_subscription(
-                core,
-                state,
-                feedback_runtime,
-            ));
+            block_on_local(
+                runtime,
+                "refresh_feedback_thread",
+                refresh_feedback_thread(core, state, feedback_runtime),
+            );
+            block_on_local(
+                runtime,
+                "ensure_feedback_thread_subscription",
+                ensure_feedback_thread_subscription(core, state, feedback_runtime),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::RefreshFeedbackThread => {
             set_feedback_thread_loading(state, true);
             emit(state, reconciler);
-            runtime.block_on(refresh_feedback_thread(core, state, feedback_runtime));
-            runtime.block_on(ensure_feedback_thread_subscription(
-                core,
-                state,
-                feedback_runtime,
-            ));
+            block_on_local(
+                runtime,
+                "refresh_feedback_thread",
+                refresh_feedback_thread(core, state, feedback_runtime),
+            );
+            block_on_local(
+                runtime,
+                "ensure_feedback_thread_subscription",
+                ensure_feedback_thread_subscription(core, state, feedback_runtime),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::SetFeedbackReplyDraft { body } => {
@@ -2542,15 +3992,48 @@ fn handle_action(
         }
         HighlighterAppAction::PublishFeedbackReply => {
             let root = feedback_runtime.selected_root_event_id.clone();
-            set_feedback_reply_publishing(state, true);
-            emit(state, reconciler);
-            runtime.block_on(publish_feedback_note_from_state(
-                core,
-                state,
-                feedback_runtime,
-                root,
-            ));
-            emit(state, reconciler);
+            {
+                let (coordinate, body) = {
+                    let current = state.read();
+                    let body = if root.is_some() {
+                        current.feedback.reply_draft.trim().to_string()
+                    } else {
+                        current.feedback.new_thread_draft.trim().to_string()
+                    };
+                    (current.feedback.coordinate.clone(), body)
+                };
+                if coordinate.trim().is_empty() {
+                    set_feedback_publish_error(state, "Feedback isn't ready yet.".into());
+                    emit(state, reconciler);
+                } else if body.is_empty() {
+                    set_feedback_publish_error(state, "Write feedback first.".into());
+                    emit(state, reconciler);
+                } else {
+                    set_feedback_reply_publishing(state, true);
+                    emit(state, reconciler);
+                    let core = core.clone();
+                    let parent = root.clone();
+                    let timeout_parent = parent.clone();
+                    ops.submit_op(
+                        OpDomain::FeedbackPublish,
+                        OP_DEADLINE_NETWORK,
+                        OpOutcome::FeedbackPublish {
+                            parent_event_id: timeout_parent,
+                            result: Err(op_timeout_message(OpDomain::FeedbackPublish)),
+                        },
+                        async move {
+                            let result = core
+                                .publish_feedback_note(coordinate, None, parent.clone(), body)
+                                .await
+                                .map_err(|err| err.to_string());
+                            OpOutcome::FeedbackPublish {
+                                parent_event_id: parent,
+                                result,
+                            }
+                        },
+                    );
+                }
+            }
         }
         HighlighterAppAction::ClearFeedbackPublishError => {
             clear_feedback_publish_error(state);
@@ -2569,14 +4052,38 @@ fn handle_action(
         HighlighterAppAction::OpenMediaSettings | HighlighterAppAction::RefreshMediaSettings => {
             set_media_settings_loading(state, true);
             emit(state, reconciler);
-            runtime.block_on(refresh_media_settings(core, state));
+            block_on_local(
+                runtime,
+                "refresh_media_settings",
+                refresh_media_settings(core, state),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::AddBlossomServer { url } => {
             if add_blossom_server_to_snapshot(state, url) {
                 set_media_settings_saving(state, true);
                 emit(state, reconciler);
-                runtime.block_on(persist_media_settings(core, state));
+                let servers = state.read().media_settings.blossom_servers.clone();
+                if servers.is_empty() {
+                    set_media_settings_error(state, "Keep at least one Blossom server.".into());
+                } else {
+                    let core = core.clone();
+                    ops.submit_op(
+                        OpDomain::MediaSettingsWrite,
+                        OP_DEADLINE_NETWORK,
+                        OpOutcome::MediaSettingsWrite {
+                            result: Err(op_timeout_message(OpDomain::MediaSettingsWrite)),
+                        },
+                        async move {
+                            let result = core
+                                .set_blossom_servers(servers)
+                                .await
+                                .map(|_| ())
+                                .map_err(|err| err.to_string());
+                            OpOutcome::MediaSettingsWrite { result }
+                        },
+                    );
+                }
             }
             emit(state, reconciler);
         }
@@ -2584,7 +4091,27 @@ fn handle_action(
             if remove_blossom_server_from_snapshot(state, &url) {
                 set_media_settings_saving(state, true);
                 emit(state, reconciler);
-                runtime.block_on(persist_media_settings(core, state));
+                let servers = state.read().media_settings.blossom_servers.clone();
+                if servers.is_empty() {
+                    set_media_settings_error(state, "Keep at least one Blossom server.".into());
+                } else {
+                    let core = core.clone();
+                    ops.submit_op(
+                        OpDomain::MediaSettingsWrite,
+                        OP_DEADLINE_NETWORK,
+                        OpOutcome::MediaSettingsWrite {
+                            result: Err(op_timeout_message(OpDomain::MediaSettingsWrite)),
+                        },
+                        async move {
+                            let result = core
+                                .set_blossom_servers(servers)
+                                .await
+                                .map(|_| ())
+                                .map_err(|err| err.to_string());
+                            OpOutcome::MediaSettingsWrite { result }
+                        },
+                    );
+                }
             }
             emit(state, reconciler);
         }
@@ -2595,7 +4122,27 @@ fn handle_action(
             if move_blossom_servers_in_snapshot(state, from_indices, to_index) {
                 set_media_settings_saving(state, true);
                 emit(state, reconciler);
-                runtime.block_on(persist_media_settings(core, state));
+                let servers = state.read().media_settings.blossom_servers.clone();
+                if servers.is_empty() {
+                    set_media_settings_error(state, "Keep at least one Blossom server.".into());
+                } else {
+                    let core = core.clone();
+                    ops.submit_op(
+                        OpDomain::MediaSettingsWrite,
+                        OP_DEADLINE_NETWORK,
+                        OpOutcome::MediaSettingsWrite {
+                            result: Err(op_timeout_message(OpDomain::MediaSettingsWrite)),
+                        },
+                        async move {
+                            let result = core
+                                .set_blossom_servers(servers)
+                                .await
+                                .map(|_| ())
+                                .map_err(|err| err.to_string());
+                            OpOutcome::MediaSettingsWrite { result }
+                        },
+                    );
+                }
             }
             emit(state, reconciler);
         }
@@ -2653,10 +4200,26 @@ fn handle_action(
         } => {
             set_edit_profile_image_uploading(state, target, true);
             emit(state, reconciler);
-            runtime.block_on(upload_edit_profile_image(
-                core, state, target, bytes, mime, width, height, alt,
-            ));
-            emit(state, reconciler);
+            let slot = match target {
+                HighlighterEditProfileImageTarget::Picture => UploadSlot::ProfilePicture,
+                HighlighterEditProfileImageTarget::Banner => UploadSlot::ProfileBanner,
+            };
+            let core = core.clone();
+            ops.submit_op(
+                OpDomain::BlossomUpload(slot),
+                OP_DEADLINE_NETWORK,
+                OpOutcome::BlossomUpload {
+                    slot,
+                    result: Err(op_timeout_message(OpDomain::BlossomUpload(slot))),
+                },
+                async move {
+                    let result = core
+                        .upload_photo(bytes, mime, width, height, alt)
+                        .await
+                        .map_err(|err| err.to_string());
+                    OpOutcome::BlossomUpload { slot, result }
+                },
+            );
         }
         HighlighterAppAction::EditProfileCapabilityFailed { message } => {
             set_edit_profile_error(
@@ -2670,15 +4233,36 @@ fn handle_action(
             emit(state, reconciler);
         }
         HighlighterAppAction::SubmitEditProfile => {
+            let draft = {
+                let current = state.read();
+                ProfileUpdateDraft {
+                    name: current.edit_profile.name.trim().to_string(),
+                    display_name: current.edit_profile.display_name.trim().to_string(),
+                    about: current.edit_profile.about.trim().to_string(),
+                    picture: current.edit_profile.picture.trim().to_string(),
+                    banner: current.edit_profile.banner.trim().to_string(),
+                    nip05: current.edit_profile.nip05.trim().to_string(),
+                    website: current.edit_profile.website.trim().to_string(),
+                    lud16: current.edit_profile.lud16.trim().to_string(),
+                }
+            };
             set_edit_profile_saving(state, true);
             emit(state, reconciler);
-            runtime.block_on(submit_edit_profile(
-                core,
-                state,
-                pending_joins,
-                visible_limit,
-            ));
-            emit(state, reconciler);
+            let core = core.clone();
+            ops.submit_op(
+                OpDomain::ProfileEditSubmit,
+                OP_DEADLINE_NETWORK,
+                OpOutcome::ProfileEditSubmit {
+                    result: Err(op_timeout_message(OpDomain::ProfileEditSubmit)),
+                },
+                async move {
+                    let result = core
+                        .update_profile(draft)
+                        .await
+                        .map_err(|err| err.to_string());
+                    OpOutcome::ProfileEditSubmit { result }
+                },
+            );
         }
         HighlighterAppAction::ClearEditProfileError => {
             clear_edit_profile_error(state);
@@ -2701,7 +4285,11 @@ fn handle_action(
                 image: NOSTR_CONNECT_IMAGE.into(),
                 perms: NOSTR_CONNECT_PERMS.into(),
             };
-            match runtime.block_on(core.start_nostr_connect(options)) {
+            match block_on_local(
+                runtime,
+                "start_nostr_connect",
+                core.start_nostr_connect(options),
+            ) {
                 Ok(uri) => {
                     set_toast(state, None);
                     set_signing_in(state, false);
@@ -2747,6 +4335,7 @@ fn handle_action(
             *room_explorer_runtime = RoomExplorerRuntime::default();
             core.logout();
             pending_joins.clear();
+            ops.cancel_all();
             save_local_state(local_state_path, &local_state_for_snapshot(state, false));
             {
                 let snapshot = state.read().clone();
@@ -2764,39 +4353,35 @@ fn handle_action(
             emit(state, reconciler);
         }
         HighlighterAppAction::ToggleArticleBookmark { address } => {
-            match runtime.block_on(core.toggle_article_bookmark(address)) {
-                Ok(_) => {
-                    set_toast(state, None);
-                    runtime.block_on(hydrate_bookmarks(core, state, visible_limit));
-                    if bookmark_runtime.library_open {
-                        runtime.block_on(refresh_bookmarks_library(
-                            core,
-                            state,
-                            bookmark_runtime,
-                            visible_limit,
-                        ));
-                    }
-                }
-                Err(err) => set_toast(
-                    state,
-                    Some(HighlighterToast {
-                        kind: HighlighterToastKind::Error,
-                        message: err.to_string(),
-                    }),
-                ),
-            }
-            emit(state, reconciler);
+            let domain = OpDomain::ArticleBookmarkToggle {
+                target: op_target_hash(&address),
+            };
+            let core = core.clone();
+            ops.submit_op(
+                domain,
+                OP_DEADLINE_NETWORK,
+                OpOutcome::ArticleBookmarkToggle {
+                    result: Err(op_timeout_message(domain)),
+                },
+                async move {
+                    let result = core
+                        .toggle_article_bookmark(address)
+                        .await
+                        .map(|_| ())
+                        .map_err(|err| err.to_string());
+                    OpOutcome::ArticleBookmarkToggle { result }
+                },
+            );
         }
         HighlighterAppAction::OpenBookmarks | HighlighterAppAction::RefreshBookmarks => {
             bookmark_runtime.library_open = true;
             set_bookmarks_loading(state, true);
             emit(state, reconciler);
-            runtime.block_on(refresh_bookmarks_library(
-                core,
-                state,
-                bookmark_runtime,
-                visible_limit,
-            ));
+            block_on_local(
+                runtime,
+                "refresh_bookmarks_library",
+                refresh_bookmarks_library(core, state, bookmark_runtime, visible_limit),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::CloseBookmarks => {
@@ -2818,23 +4403,21 @@ fn handle_action(
             });
             set_bookmark_collection_loading(state, true);
             emit(state, reconciler);
-            runtime.block_on(refresh_bookmark_collection_detail(
-                core,
-                state,
-                bookmark_runtime,
-                visible_limit,
-            ));
+            block_on_local(
+                runtime,
+                "refresh_bookmark_collection_detail",
+                refresh_bookmark_collection_detail(core, state, bookmark_runtime, visible_limit),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::RefreshBookmarkCollection => {
             set_bookmark_collection_loading(state, true);
             emit(state, reconciler);
-            runtime.block_on(refresh_bookmark_collection_detail(
-                core,
-                state,
-                bookmark_runtime,
-                visible_limit,
-            ));
+            block_on_local(
+                runtime,
+                "refresh_bookmark_collection_detail",
+                refresh_bookmark_collection_detail(core, state, bookmark_runtime, visible_limit),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::OpenCurationMenu { article_address } => {
@@ -2849,7 +4432,11 @@ fn handle_action(
                 true,
             );
             emit(state, reconciler);
-            runtime.block_on(refresh_curation_menu(core, state, bookmark_runtime));
+            block_on_local(
+                runtime,
+                "refresh_curation_menu",
+                refresh_curation_menu(core, state, bookmark_runtime),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::CloseCurationMenu => {
@@ -2863,37 +4450,107 @@ fn handle_action(
             address,
             member,
         } => {
-            runtime.block_on(set_address_in_curation_set(
-                core,
-                state,
-                bookmark_runtime,
-                d_tag,
-                address,
-                member,
-                visible_limit,
-            ));
-            emit(state, reconciler);
+            let d_tag = d_tag.trim().to_string();
+            let Some(address) = normalize_article_address(&address) else {
+                set_toast(
+                    state,
+                    Some(HighlighterToast {
+                        kind: HighlighterToastKind::Error,
+                        message: "Choose an article to add to a collection".into(),
+                    }),
+                );
+                set_curation_menu_error(state, "Choose an article to add to a collection".into());
+                emit(state, reconciler);
+                return;
+            };
+            if d_tag.is_empty() {
+                set_toast(
+                    state,
+                    Some(HighlighterToast {
+                        kind: HighlighterToastKind::Error,
+                        message: "Choose a collection".into(),
+                    }),
+                );
+                set_curation_menu_error(state, "Choose a collection".into());
+                emit(state, reconciler);
+            } else {
+                set_curation_menu_saving(state, true);
+                emit(state, reconciler);
+                let core = core.clone();
+                ops.submit_op(
+                    OpDomain::CurationWrite,
+                    OP_DEADLINE_NETWORK,
+                    OpOutcome::CurationWrite {
+                        result: Err(op_timeout_message(OpDomain::CurationWrite)),
+                    },
+                    async move {
+                        let result = core
+                            .set_address_in_curation_set(d_tag, address, member)
+                            .await
+                            .map(|_| String::new())
+                            .map_err(|err| err.to_string());
+                        OpOutcome::CurationWrite { result }
+                    },
+                );
+            }
         }
         HighlighterAppAction::CreateCurationSetAndAdd { title, address } => {
-            runtime.block_on(create_curation_set_and_add(
-                core,
-                state,
-                bookmark_runtime,
-                title,
-                address,
-                visible_limit,
-            ));
-            emit(state, reconciler);
+            let title = title.trim().to_string();
+            let Some(address) = normalize_article_address(&address) else {
+                set_toast(
+                    state,
+                    Some(HighlighterToast {
+                        kind: HighlighterToastKind::Error,
+                        message: "Choose an article to add to a collection".into(),
+                    }),
+                );
+                set_curation_menu_error(state, "Choose an article to add to a collection".into());
+                emit(state, reconciler);
+                return;
+            };
+            if title.is_empty() {
+                set_toast(
+                    state,
+                    Some(HighlighterToast {
+                        kind: HighlighterToastKind::Error,
+                        message: "Enter a collection name".into(),
+                    }),
+                );
+                set_curation_menu_error(state, "Enter a collection name".into());
+                emit(state, reconciler);
+            } else {
+                set_curation_menu_saving(state, true);
+                emit(state, reconciler);
+                let core = core.clone();
+                ops.submit_op(
+                    OpDomain::CurationWrite,
+                    OP_DEADLINE_NETWORK,
+                    OpOutcome::CurationWrite {
+                        result: Err(op_timeout_message(OpDomain::CurationWrite)),
+                    },
+                    async move {
+                        let result = match core.create_curation_set(title).await {
+                            Ok(record) => core
+                                .set_address_in_curation_set(record.id, address, true)
+                                .await
+                                .map(|_| "Added to collection".to_string())
+                                .map_err(|err| err.to_string()),
+                            Err(err) => Err(err.to_string()),
+                        };
+                        OpOutcome::CurationWrite { result }
+                    },
+                );
+            }
         }
         HighlighterAppAction::OpenRoomExplorer | HighlighterAppAction::RefreshRoomExplorer => {
             room_explorer_runtime.is_open = true;
             set_room_explorer_loading(state, true);
             emit(state, reconciler);
-            runtime.block_on(refresh_room_explorer_home(
-                core,
-                state,
-                room_explorer_runtime,
-            ));
+            block_on_local(
+                runtime,
+                "refresh_room_explorer_home",
+                refresh_room_explorer_home(core, state, room_explorer_runtime),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::RefreshRoomBrowseAll => {
@@ -2901,29 +4558,69 @@ fn handle_action(
             room_explorer_runtime.is_browse_open = true;
             set_room_explorer_browse_loading(state, true);
             emit(state, reconciler);
-            runtime.block_on(refresh_room_explorer_browse(core, state));
+            block_on_local(
+                runtime,
+                "refresh_room_explorer_browse",
+                refresh_room_explorer_browse(core, state),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::RequestJoinRoom {
             group_id,
             room_name,
         } => {
-            runtime.block_on(request_join_room(
-                core,
-                state,
-                pending_joins,
-                group_id,
-                room_name,
-            ));
-            emit(state, reconciler);
+            // Actor-side validation; network join runs off-actor (Class A).
+            let group_id = group_id.trim().to_string();
+            if group_id.is_empty() {
+                set_room_explorer_join_error(state, "Choose a room to join".into());
+                emit(state, reconciler);
+            } else {
+                let room_name = if room_name.trim().is_empty() {
+                    "this room".to_string()
+                } else {
+                    room_name.trim().to_string()
+                };
+                {
+                    let mut current = state.write();
+                    current.room_explorer.joining_group_id = group_id.clone();
+                    current.room_explorer.error_message = None;
+                    current.bump();
+                }
+                emit(state, reconciler);
+                let core = core.clone();
+                let op_group_id = group_id.clone();
+                let timeout_group_id = group_id.clone();
+                let timeout_room_name = room_name.clone();
+                ops.submit_op(
+                    OpDomain::JoinRoom,
+                    OP_DEADLINE_NETWORK,
+                    OpOutcome::JoinRoom {
+                        group_id: timeout_group_id,
+                        room_name: timeout_room_name,
+                        result: Err(op_timeout_message(OpDomain::JoinRoom)),
+                    },
+                    async move {
+                        let result = core
+                            .request_join_room(op_group_id.clone())
+                            .await
+                            .map(|_| ())
+                            .map_err(|err| err.to_string());
+                        OpOutcome::JoinRoom {
+                            group_id: op_group_id,
+                            room_name,
+                            result,
+                        }
+                    },
+                );
+            }
         }
         HighlighterAppAction::RequestIsbnPreview { isbn } => {
-            if start_isbn_preview_request(core, state, pending_isbn_lookups, actor_tx, isbn) {
+            if start_isbn_preview_request(core, state, pending_isbn_lookups, ops, isbn) {
                 emit(state, reconciler);
             }
         }
         HighlighterAppAction::RequestWebMetadata { url } => {
-            if start_web_metadata_request(core, state, pending_web_metadata, actor_tx, url) {
+            if start_web_metadata_request(core, state, pending_web_metadata, ops, url) {
                 emit(state, reconciler);
             }
         }
@@ -2932,32 +4629,31 @@ fn handle_action(
             tag_value,
             limit,
         } => {
-            runtime.block_on(load_reference_highlights(
-                core,
-                state,
-                tag_name,
-                tag_value,
-                limit,
-                visible_limit,
-            ));
+            block_on_local(
+                runtime,
+                "load_reference_highlights",
+                load_reference_highlights(core, state, tag_name, tag_value, limit, visible_limit),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::RequestBookPickerRecents { limit } => {
             set_book_picker_recents_loading(state, true);
             emit(state, reconciler);
-            runtime.block_on(load_book_picker_recents(core, state, limit, visible_limit));
+            block_on_local(
+                runtime,
+                "load_book_picker_recents",
+                load_book_picker_recents(core, state, limit, visible_limit),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::SearchBookPickerArtifacts { query, limit } => {
             set_book_picker_searching(state, query.clone(), true);
             emit(state, reconciler);
-            runtime.block_on(search_book_picker_artifacts(
-                core,
-                state,
-                query,
-                limit,
-                visible_limit,
-            ));
+            block_on_local(
+                runtime,
+                "search_book_picker_artifacts",
+                search_book_picker_artifacts(core, state, query, limit, visible_limit),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::ClearBookPickerSearch => {
@@ -2971,12 +4667,34 @@ fn handle_action(
             height,
             alt,
         } => {
-            set_capture_uploading(state, true);
-            emit(state, reconciler);
-            runtime.block_on(upload_capture_photo(
-                core, state, bytes, mime, width, height, alt,
-            ));
-            emit(state, reconciler);
+            if bytes.is_empty() {
+                set_capture_upload_error(state, "That image couldn't be read.".into());
+                emit(state, reconciler);
+            } else {
+                set_capture_uploading(state, true);
+                emit(state, reconciler);
+                let core = core.clone();
+                ops.submit_op(
+                    OpDomain::BlossomUpload(UploadSlot::Capture),
+                    OP_DEADLINE_NETWORK,
+                    OpOutcome::BlossomUpload {
+                        slot: UploadSlot::Capture,
+                        result: Err(op_timeout_message(OpDomain::BlossomUpload(
+                            UploadSlot::Capture,
+                        ))),
+                    },
+                    async move {
+                        let result = core
+                            .upload_photo(bytes, mime, width, height, alt)
+                            .await
+                            .map_err(|err| err.to_string());
+                        OpOutcome::BlossomUpload {
+                            slot: UploadSlot::Capture,
+                            result,
+                        }
+                    },
+                );
+            }
         }
         HighlighterAppAction::ClearCaptureUpload => {
             clear_capture_upload(state);
@@ -2989,14 +4707,19 @@ fn handle_action(
         } => {
             set_capture_publishing(state, true);
             emit(state, reconciler);
-            runtime.block_on(publish_capture_highlight(
-                core,
-                state,
-                selection,
-                target_group_id,
-                draft,
-            ));
-            emit(state, reconciler);
+            let core = core.clone();
+            ops.submit_op(
+                OpDomain::CapturePublish,
+                OP_DEADLINE_NETWORK,
+                OpOutcome::CapturePublish {
+                    result: Err(op_timeout_message(OpDomain::CapturePublish)),
+                },
+                async move {
+                    let result =
+                        capture_highlight_network(&core, selection, target_group_id, draft).await;
+                    OpOutcome::CapturePublish { result }
+                },
+            );
         }
         HighlighterAppAction::PublishCapturePicture {
             selection,
@@ -3006,15 +4729,20 @@ fn handle_action(
         } => {
             set_capture_publishing(state, true);
             emit(state, reconciler);
-            runtime.block_on(publish_capture_picture(
-                core,
-                state,
-                selection,
-                target_group_id,
-                image,
-                note,
-            ));
-            emit(state, reconciler);
+            let core = core.clone();
+            ops.submit_op(
+                OpDomain::CapturePublish,
+                OP_DEADLINE_NETWORK,
+                OpOutcome::CapturePublish {
+                    result: Err(op_timeout_message(OpDomain::CapturePublish)),
+                },
+                async move {
+                    let result =
+                        capture_picture_network(&core, selection, target_group_id, image, note)
+                            .await;
+                    OpOutcome::CapturePublish { result }
+                },
+            );
         }
         HighlighterAppAction::PublishClipHighlight {
             artifact,
@@ -3023,14 +4751,24 @@ fn handle_action(
         } => {
             set_capture_publishing(state, true);
             emit(state, reconciler);
-            runtime.block_on(publish_clip_highlight(
-                core,
-                state,
-                artifact,
-                target_group_id,
-                draft,
-            ));
-            emit(state, reconciler);
+            let core = core.clone();
+            ops.submit_op(
+                OpDomain::CapturePublish,
+                OP_DEADLINE_NETWORK,
+                OpOutcome::CapturePublish {
+                    result: Err(op_timeout_message(OpDomain::CapturePublish)),
+                },
+                async move {
+                    let result = capture_highlight_with_optional_share_network(
+                        &core,
+                        artifact,
+                        target_group_id,
+                        draft,
+                    )
+                    .await;
+                    OpOutcome::CapturePublish { result }
+                },
+            );
         }
         HighlighterAppAction::ClearCaptureResult => {
             clear_capture_result(state);
@@ -3058,24 +4796,22 @@ fn handle_action(
                 prepare_open_profile_view(core, state, profile_view_runtime, pubkey_hex);
             emit(state, reconciler);
             if should_refresh {
-                runtime.block_on(refresh_profile_view(
-                    core,
-                    state,
-                    profile_view_runtime,
-                    visible_limit,
-                ));
+                block_on_local(
+                    runtime,
+                    "refresh_profile_view",
+                    refresh_profile_view(core, state, profile_view_runtime, visible_limit),
+                );
                 emit(state, reconciler);
             }
         }
         HighlighterAppAction::RefreshProfile => {
             set_profile_view_loading(state, true);
             emit(state, reconciler);
-            runtime.block_on(refresh_profile_view(
-                core,
-                state,
-                profile_view_runtime,
-                visible_limit,
-            ));
+            block_on_local(
+                runtime,
+                "refresh_profile_view",
+                refresh_profile_view(core, state, profile_view_runtime, visible_limit),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::CloseProfile => {
@@ -3084,13 +4820,55 @@ fn handle_action(
             emit(state, reconciler);
         }
         HighlighterAppAction::ToggleProfileFollow => {
-            runtime.block_on(toggle_profile_follow(
-                core,
-                state,
-                profile_view_runtime,
-                visible_limit,
-            ));
-            emit(state, reconciler);
+            let prepared = {
+                let mut current = state.write();
+                if current.profile_view.pubkey_hex.is_empty()
+                    || current.profile_view.viewer_pubkey_hex.is_none()
+                    || current.profile_view.is_own_profile
+                    || current.profile_view.is_mutating_follow
+                {
+                    None
+                } else {
+                    let previous = current.profile_view.is_following;
+                    current.profile_view.is_following = !previous;
+                    current.profile_view.is_mutating_follow = true;
+                    current.profile_view.error_message = None;
+                    current.bump();
+                    Some((current.profile_view.pubkey_hex.clone(), !previous, previous))
+                }
+            };
+            if let Some((target_pubkey_hex, desired_following, previous_following)) = prepared {
+                emit(state, reconciler);
+                let core = core.clone();
+                ops.submit_op(
+                    OpDomain::FollowToggle,
+                    OP_DEADLINE_NETWORK,
+                    // The OpRunner deadline now carries the truthful revert
+                    // (real desired/previous), so the redundant inner
+                    // tokio::time::timeout — whose only purpose was to dodge the
+                    // old gen-0 fallback — is gone; the outer deadline is the
+                    // single bound.
+                    OpOutcome::FollowToggle {
+                        desired_following,
+                        previous_following,
+                        result: Err(op_timeout_message(OpDomain::FollowToggle)),
+                    },
+                    async move {
+                        let result = core
+                            .set_follow(target_pubkey_hex, desired_following)
+                            .await
+                            .map(|_| ())
+                            .map_err(|err| err.to_string());
+                        OpOutcome::FollowToggle {
+                            desired_following,
+                            previous_following,
+                            result,
+                        }
+                    },
+                );
+            } else {
+                emit(state, reconciler);
+            }
         }
         HighlighterAppAction::OpenArticleReader {
             pubkey_hex,
@@ -3107,24 +4885,22 @@ fn handle_action(
             );
             emit(state, reconciler);
             if should_refresh {
-                runtime.block_on(refresh_article_reader(
-                    core,
-                    state,
-                    article_reader_runtime,
-                    visible_limit,
-                ));
+                block_on_local(
+                    runtime,
+                    "refresh_article_reader",
+                    refresh_article_reader(core, state, article_reader_runtime, visible_limit),
+                );
                 emit(state, reconciler);
             }
         }
         HighlighterAppAction::RefreshArticleReader => {
             set_article_reader_loading(state, true);
             emit(state, reconciler);
-            runtime.block_on(refresh_article_reader(
-                core,
-                state,
-                article_reader_runtime,
-                visible_limit,
-            ));
+            block_on_local(
+                runtime,
+                "refresh_article_reader",
+                refresh_article_reader(core, state, article_reader_runtime, visible_limit),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::CloseArticleReader => {
@@ -3137,18 +4913,52 @@ fn handle_action(
             context,
             note,
         } => {
-            set_article_reader_publishing(state, true);
-            emit(state, reconciler);
-            runtime.block_on(publish_article_highlight(
-                core,
-                state,
-                article_reader_runtime,
-                quote,
-                context,
-                note,
-                visible_limit,
-            ));
-            emit(state, reconciler);
+            let quote = quote.trim().to_string();
+            let article = state.read().article_reader.article.clone();
+            let target = article_reader_runtime.target.clone();
+            if quote.is_empty() {
+                set_article_reader_publish_error(state, "Choose text to highlight".into());
+                emit(state, reconciler);
+            } else if article.is_none() || target.is_none() {
+                set_article_reader_publish_error(state, "Article not yet loaded".into());
+                emit(state, reconciler);
+            } else {
+                let article = article.unwrap();
+                let target = target.unwrap();
+                let note_was_empty = note.trim().is_empty();
+                let draft = HighlightDraft {
+                    quote,
+                    context: context.trim().to_string(),
+                    note: note.trim().to_string(),
+                    clip_start_seconds: None,
+                    clip_end_seconds: None,
+                    clip_speaker: String::new(),
+                    clip_transcript_segment_ids: Vec::new(),
+                    image: None,
+                };
+                let artifact = article_as_artifact(&article, &target.address);
+                set_article_reader_publishing(state, true);
+                emit(state, reconciler);
+                let core = core.clone();
+                ops.submit_op(
+                    OpDomain::HighlightPublish,
+                    OP_DEADLINE_NETWORK,
+                    OpOutcome::HighlightPublish {
+                        note_was_empty,
+                        result: Err(op_timeout_message(OpDomain::HighlightPublish)),
+                    },
+                    async move {
+                        let result = core
+                            .publish_highlight(draft, artifact)
+                            .await
+                            .map_err(|err| err.to_string());
+                        OpOutcome::HighlightPublish {
+                            note_was_empty,
+                            result,
+                        }
+                    },
+                );
+            }
         }
         HighlighterAppAction::PublishArtifactShare {
             preview,
@@ -3157,18 +4967,67 @@ fn handle_action(
         } => {
             set_share_composer_publishing(state, Some(group_id.clone()));
             emit(state, reconciler);
-            runtime.block_on(publish_artifact_share(core, state, preview, group_id, note));
-            emit(state, reconciler);
+            let note = note
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty());
+            let core = core.clone();
+            let op_group_id = group_id.clone();
+            let timeout_group_id = group_id.clone();
+            ops.submit_op(
+                OpDomain::SharePublish,
+                OP_DEADLINE_NETWORK,
+                OpOutcome::SharePublish {
+                    group_id: timeout_group_id,
+                    result: Err(op_timeout_message(OpDomain::SharePublish)),
+                },
+                async move {
+                    let result = core
+                        .publish_artifact(preview, op_group_id, note)
+                        .await
+                        .map(|_| "Shared to community".to_string())
+                        .map_err(|err| err.to_string());
+                    OpOutcome::SharePublish { group_id, result }
+                },
+            );
         }
         HighlighterAppAction::PublishUrlShare {
             url,
             group_id,
             note,
         } => {
-            set_share_composer_publishing(state, Some(group_id.clone()));
-            emit(state, reconciler);
-            runtime.block_on(publish_url_share(core, state, url, group_id, note));
-            emit(state, reconciler);
+            let url = url.trim().to_string();
+            if url.is_empty() {
+                set_share_composer_error(state, "Missing URL".into());
+                emit(state, reconciler);
+            } else {
+                set_share_composer_publishing(state, Some(group_id.clone()));
+                emit(state, reconciler);
+                let note = note
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty());
+                let core = core.clone();
+                let op_group_id = group_id.clone();
+                let timeout_group_id = group_id.clone();
+                ops.submit_op(
+                    OpDomain::SharePublish,
+                    OP_DEADLINE_NETWORK,
+                    OpOutcome::SharePublish {
+                        group_id: timeout_group_id,
+                        result: Err(op_timeout_message(OpDomain::SharePublish)),
+                    },
+                    async move {
+                        let result = match core.build_preview_from_url(url).await {
+                            Ok(preview) => core
+                                .publish_artifact(preview, op_group_id, note)
+                                .await
+                                .map(|_| "Shared to community".to_string())
+                                .map_err(|err| err.to_string()),
+                            Err(err) => Err(err.to_string()),
+                        };
+                        OpOutcome::SharePublish { group_id, result }
+                    },
+                );
+            }
         }
         HighlighterAppAction::ShareHighlightRepost {
             event_id,
@@ -3178,15 +5037,30 @@ fn handle_action(
         } => {
             set_share_composer_publishing(state, Some(target_group_id.clone()));
             emit(state, reconciler);
-            runtime.block_on(share_highlight_repost(
-                core,
-                state,
-                event_id,
-                author_pubkey_hex,
-                relay_hint,
-                target_group_id,
-            ));
-            emit(state, reconciler);
+            let core = core.clone();
+            let group_id = target_group_id.clone();
+            let timeout_group_id = group_id.clone();
+            ops.submit_op(
+                OpDomain::SharePublish,
+                OP_DEADLINE_NETWORK,
+                OpOutcome::SharePublish {
+                    group_id: timeout_group_id,
+                    result: Err(op_timeout_message(OpDomain::SharePublish)),
+                },
+                async move {
+                    let result = core
+                        .share_highlight_to_room(
+                            event_id,
+                            author_pubkey_hex,
+                            relay_hint,
+                            target_group_id,
+                        )
+                        .await
+                        .map(|_| "Highlight shared".to_string())
+                        .map_err(|err| err.to_string());
+                    OpOutcome::SharePublish { group_id, result }
+                },
+            );
         }
         HighlighterAppAction::ClearShareComposerResult => {
             clear_share_composer_result(state);
@@ -3201,24 +5075,22 @@ fn handle_action(
                 prepare_open_room_detail(core, state, room_detail_runtime, group_id);
             emit(state, reconciler);
             if should_refresh {
-                runtime.block_on(refresh_room_detail(
-                    core,
-                    state,
-                    room_detail_runtime,
-                    visible_limit,
-                ));
+                block_on_local(
+                    runtime,
+                    "refresh_room_detail",
+                    refresh_room_detail(core, state, room_detail_runtime, visible_limit),
+                );
                 emit(state, reconciler);
             }
         }
         HighlighterAppAction::RefreshRoom => {
             set_room_detail_loading(state, true);
             emit(state, reconciler);
-            runtime.block_on(refresh_room_detail(
-                core,
-                state,
-                room_detail_runtime,
-                visible_limit,
-            ));
+            block_on_local(
+                runtime,
+                "refresh_room_detail",
+                refresh_room_detail(core, state, room_detail_runtime, visible_limit),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::PublishRoomDiscussion {
@@ -3226,18 +5098,49 @@ fn handle_action(
             body,
             attachment_url,
         } => {
-            set_room_discussion_publishing(state, true);
-            emit(state, reconciler);
-            runtime.block_on(publish_room_discussion(
-                core,
-                state,
-                room_detail_runtime,
-                title,
-                body,
-                attachment_url,
-                visible_limit,
-            ));
-            emit(state, reconciler);
+            let Some(group_id) = room_detail_runtime.group_id.clone() else {
+                set_room_discussion_error(state, "Open a room before posting a discussion".into());
+                emit(state, reconciler);
+                return;
+            };
+            let title = title.trim().to_string();
+            if title.is_empty() {
+                set_room_discussion_error(state, "Discussion title required".into());
+                emit(state, reconciler);
+            } else {
+                let attachment_url = attachment_url
+                    .map(|url| url.trim().to_string())
+                    .filter(|url| !url.is_empty());
+                set_room_discussion_publishing(state, true);
+                emit(state, reconciler);
+                let core = core.clone();
+                ops.submit_op(
+                    OpDomain::RoomDiscussionPublish,
+                    OP_DEADLINE_NETWORK,
+                    OpOutcome::RoomDiscussionPublish {
+                        result: Err(op_timeout_message(OpDomain::RoomDiscussionPublish)),
+                    },
+                    async move {
+                        let attachment = match attachment_url {
+                            Some(url) => match core.build_preview_from_url(url).await {
+                                Ok(preview) => Some(preview),
+                                Err(_) => {
+                                    return OpOutcome::RoomDiscussionPublish {
+                                        result: Err("Enter a valid attachment URL.".to_string()),
+                                    };
+                                }
+                            },
+                            None => None,
+                        };
+                        let result = core
+                            .publish_discussion(group_id, title, body, attachment)
+                            .await
+                            .map(|record| record.event_id)
+                            .map_err(|err| err.to_string());
+                        OpOutcome::RoomDiscussionPublish { result }
+                    },
+                );
+            }
         }
         HighlighterAppAction::ClearRoomDiscussionError => {
             clear_room_discussion_error(state);
@@ -3246,12 +5149,11 @@ fn handle_action(
         HighlighterAppAction::LoadMoreRoomChat => {
             if prepare_load_more_room_chat(state, room_detail_runtime) {
                 emit(state, reconciler);
-                runtime.block_on(refresh_room_detail(
-                    core,
-                    state,
-                    room_detail_runtime,
-                    visible_limit,
-                ));
+                block_on_local(
+                    runtime,
+                    "refresh_room_detail",
+                    refresh_room_detail(core, state, room_detail_runtime, visible_limit),
+                );
                 emit(state, reconciler);
             }
         }
@@ -3259,17 +5161,38 @@ fn handle_action(
             content,
             reply_to_event_id,
         } => {
-            set_room_chat_sending(state, true);
-            emit(state, reconciler);
-            runtime.block_on(publish_room_chat_message(
-                core,
-                state,
-                room_detail_runtime,
-                content,
-                reply_to_event_id,
-                visible_limit,
-            ));
-            emit(state, reconciler);
+            let Some(group_id) = room_detail_runtime.group_id.clone() else {
+                set_room_chat_error(state, "Open a room before sending a message".into());
+                emit(state, reconciler);
+                return;
+            };
+            let content = content.trim().to_string();
+            if content.is_empty() {
+                set_room_chat_sending(state, false);
+                emit(state, reconciler);
+            } else {
+                let reply_to_event_id = reply_to_event_id
+                    .map(|id| id.trim().to_string())
+                    .filter(|id| !id.is_empty());
+                set_room_chat_sending(state, true);
+                emit(state, reconciler);
+                let core = core.clone();
+                ops.submit_op(
+                    OpDomain::RoomChatPublish,
+                    OP_DEADLINE_NETWORK,
+                    OpOutcome::RoomChatPublish {
+                        result: Err(op_timeout_message(OpDomain::RoomChatPublish)),
+                    },
+                    async move {
+                        let result = core
+                            .publish_chat_message(group_id, content, reply_to_event_id)
+                            .await
+                            .map(|_| ())
+                            .map_err(|err| err.to_string());
+                        OpOutcome::RoomChatPublish { result }
+                    },
+                );
+            }
         }
         HighlighterAppAction::ClearRoomChatError => {
             clear_room_chat_error(state);
@@ -3284,7 +5207,11 @@ fn handle_action(
             home_feed_runtime.is_open = true;
             set_home_feed_loading(state, true);
             emit(state, reconciler);
-            runtime.block_on(refresh_home_feed(core, state, home_feed_runtime));
+            block_on_local(
+                runtime,
+                "refresh_home_feed",
+                refresh_home_feed(core, state, home_feed_runtime),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::CloseHomeFeed => {
@@ -3295,8 +5222,12 @@ fn handle_action(
         }
         HighlighterAppAction::SearchOpened => {
             search_runtime.is_open = true;
-            runtime.block_on(hydrate_search_relays(core, state));
-            let _ = start_search_worker_if_idle(core, state, search_runtime, actor_tx);
+            block_on_local(
+                runtime,
+                "hydrate_search_relays",
+                hydrate_search_relays(core, state),
+            );
+            let _ = start_search_worker_if_idle(core, state, search_runtime, ops);
             emit(state, reconciler);
         }
         HighlighterAppAction::SearchClosed => {
@@ -3306,12 +5237,12 @@ fn handle_action(
             emit(state, reconciler);
         }
         HighlighterAppAction::SetSearchQuery { query } => {
-            apply_search_query(core, state, search_runtime, actor_tx, query);
+            apply_search_query(core, state, search_runtime, ops, query);
             emit(state, reconciler);
         }
         HighlighterAppAction::SubmitSearch { query } => {
             record_recent_search(state, local_state_path, query.clone());
-            apply_search_query(core, state, search_runtime, actor_tx, query);
+            apply_search_query(core, state, search_runtime, ops, query);
             emit(state, reconciler);
         }
         HighlighterAppAction::ClearSearch => {
@@ -3332,22 +5263,55 @@ fn handle_action(
             network_runtime.is_open = true;
             set_network_settings_loading(state, true);
             emit(state, reconciler);
-            runtime.block_on(refresh_network_settings(core, state));
+            block_on_local(
+                runtime,
+                "refresh_network_settings",
+                refresh_network_settings(core, state),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::UpsertNetworkRelay { config } => {
             set_network_saving(state, true);
             emit(state, reconciler);
-            runtime.block_on(upsert_network_relay(core, state, config));
-            runtime.block_on(refresh_network_settings(core, state));
-            emit(state, reconciler);
+            let core = core.clone();
+            ops.submit_op(
+                OpDomain::NetworkRelayWrite,
+                OP_DEADLINE_NETWORK,
+                OpOutcome::NetworkRelayWrite {
+                    kind: NetworkRelayWriteKind::Upsert,
+                    result: Err(op_timeout_message(OpDomain::NetworkRelayWrite)),
+                },
+                async move {
+                    let result = core
+                        .upsert_relay(config)
+                        .await
+                        .map_err(|err| err.to_string());
+                    OpOutcome::NetworkRelayWrite {
+                        kind: NetworkRelayWriteKind::Upsert,
+                        result,
+                    }
+                },
+            );
         }
         HighlighterAppAction::RemoveNetworkRelay { url } => {
             set_network_saving(state, true);
             emit(state, reconciler);
-            runtime.block_on(remove_network_relay(core, state, url));
-            runtime.block_on(refresh_network_settings(core, state));
-            emit(state, reconciler);
+            let core = core.clone();
+            ops.submit_op(
+                OpDomain::NetworkRelayWrite,
+                OP_DEADLINE_NETWORK,
+                OpOutcome::NetworkRelayWrite {
+                    kind: NetworkRelayWriteKind::Remove,
+                    result: Err(op_timeout_message(OpDomain::NetworkRelayWrite)),
+                },
+                async move {
+                    let result = core.remove_relay(url).await.map_err(|err| err.to_string());
+                    OpOutcome::NetworkRelayWrite {
+                        kind: NetworkRelayWriteKind::Remove,
+                        result,
+                    }
+                },
+            );
         }
         HighlighterAppAction::SetNetworkRelayRoles {
             url,
@@ -3358,38 +5322,143 @@ fn handle_action(
         } => {
             set_network_saving(state, true);
             emit(state, reconciler);
-            runtime.block_on(set_network_relay_roles(
-                core, state, url, read, write, rooms, indexer,
-            ));
-            runtime.block_on(refresh_network_settings(core, state));
-            emit(state, reconciler);
+            let core = core.clone();
+            ops.submit_op(
+                OpDomain::NetworkRelayWrite,
+                OP_DEADLINE_NETWORK,
+                OpOutcome::NetworkRelayWrite {
+                    kind: NetworkRelayWriteKind::SetRoles,
+                    result: Err(op_timeout_message(OpDomain::NetworkRelayWrite)),
+                },
+                async move {
+                    let result = core
+                        .set_relay_roles(url, read, write, rooms, indexer)
+                        .await
+                        .map_err(|err| err.to_string());
+                    OpOutcome::NetworkRelayWrite {
+                        kind: NetworkRelayWriteKind::SetRoles,
+                        result,
+                    }
+                },
+            );
         }
         HighlighterAppAction::ProbeNetworkRelayNip11 { url } => {
-            set_network_nip11_loading(state, url.clone());
-            emit(state, reconciler);
-            runtime.block_on(probe_network_relay_nip11(core, state, url));
-            emit(state, reconciler);
+            let url = url.trim().to_string();
+            if url.is_empty() {
+                emit(state, reconciler);
+            } else {
+                set_network_nip11_loading(state, url.clone());
+                emit(state, reconciler);
+                let core = core.clone();
+                let op_url = url.clone();
+                let timeout_url = url.clone();
+                ops.submit_op(
+                    OpDomain::RelayProbe,
+                    OP_DEADLINE_RELAY_PROBE,
+                    // A failed probe is recorded as `document: None` for the real
+                    // url; the apply arm surfaces the unreachable-relay copy.
+                    OpOutcome::RelayProbe {
+                        url: timeout_url,
+                        document: None,
+                    },
+                    async move {
+                        let document = core.probe_relay_nip11(op_url.clone()).await.ok();
+                        OpOutcome::RelayProbe {
+                            url: op_url,
+                            document,
+                        }
+                    },
+                );
+            }
         }
         HighlighterAppAction::SetNetworkImportNpub { npub } => {
             set_network_import_npub(state, npub);
             emit(state, reconciler);
         }
         HighlighterAppAction::FetchNetworkImportRelays => {
-            set_network_import_fetching(state, true);
-            emit(state, reconciler);
-            runtime.block_on(fetch_network_import_relays(core, state));
-            emit(state, reconciler);
+            let npub = state.read().network.import_relays.npub.trim().to_string();
+            if npub.is_empty() {
+                let mut current = state.write();
+                current.network.import_relays.is_fetching = false;
+                current.network.import_relays.error_message = Some("Enter an npub first.".into());
+                current.bump();
+                emit(state, reconciler);
+            } else {
+                set_network_import_fetching(state, true);
+                emit(state, reconciler);
+                let core = core.clone();
+                ops.submit_op(
+                    OpDomain::RelayImport,
+                    OP_DEADLINE_RELAY_IMPORT,
+                    OpOutcome::RelayImport {
+                        result: Err(op_timeout_message(OpDomain::RelayImport)),
+                    },
+                    async move {
+                        let result = core
+                            .import_relays_from_npub(npub)
+                            .await
+                            .map_err(|err| err.to_string());
+                        OpOutcome::RelayImport { result }
+                    },
+                );
+            }
         }
         HighlighterAppAction::ToggleNetworkImportRelay { url } => {
             toggle_network_import_relay(state, url);
             emit(state, reconciler);
         }
         HighlighterAppAction::ApplyNetworkImportRelays => {
-            set_network_import_applying(state, true);
-            emit(state, reconciler);
-            runtime.block_on(apply_network_import_relays(core, state));
-            runtime.block_on(refresh_network_settings(core, state));
-            emit(state, reconciler);
+            let rows = {
+                let current = state.read();
+                let selected = current
+                    .network
+                    .import_relays
+                    .selected_urls
+                    .iter()
+                    .cloned()
+                    .collect::<BTreeSet<_>>();
+                current
+                    .network
+                    .import_relays
+                    .candidates
+                    .iter()
+                    .filter(|row| selected.contains(&row.url))
+                    .cloned()
+                    .collect::<Vec<_>>()
+            };
+            if rows.is_empty() {
+                let mut current = state.write();
+                current.network.import_relays.is_applying = false;
+                current.network.import_relays.error_message =
+                    Some("Select at least one relay.".into());
+                current.bump();
+                emit(state, reconciler);
+            } else {
+                set_network_import_applying(state, true);
+                emit(state, reconciler);
+                let core = core.clone();
+                ops.submit_op(
+                    OpDomain::NetworkRelayWrite,
+                    OP_DEADLINE_NETWORK,
+                    OpOutcome::NetworkRelayWrite {
+                        kind: NetworkRelayWriteKind::ImportApply,
+                        result: Err(op_timeout_message(OpDomain::NetworkRelayWrite)),
+                    },
+                    async move {
+                        let mut result = Ok(());
+                        for row in rows {
+                            if let Err(err) = core.upsert_relay(row.clone()).await {
+                                result = Err(format!("{}: {err}", row.url));
+                                break;
+                            }
+                        }
+                        OpOutcome::NetworkRelayWrite {
+                            kind: NetworkRelayWriteKind::ImportApply,
+                            result,
+                        }
+                    },
+                );
+            }
         }
         HighlighterAppAction::ClearNetworkError => {
             clear_network_error(state);
@@ -3402,16 +5471,28 @@ fn handle_action(
         }
         HighlighterAppAction::SetNetworkWifiOnly { enabled } => {
             set_network_wifi_only(state, local_state_path, enabled);
-            runtime.block_on(apply_network_connectivity_policy(core, state));
+            block_on_local(
+                runtime,
+                "apply_network_connectivity_policy",
+                apply_network_connectivity_policy(core, state),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::NetworkPathChanged { is_wifi } => {
             set_network_path(state, is_wifi);
-            runtime.block_on(apply_network_connectivity_policy(core, state));
+            block_on_local(
+                runtime,
+                "apply_network_connectivity_policy",
+                apply_network_connectivity_policy(core, state),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::ReconnectNetwork => {
-            runtime.block_on(apply_network_connectivity_policy(core, state));
+            block_on_local(
+                runtime,
+                "apply_network_connectivity_policy",
+                apply_network_connectivity_policy(core, state),
+            );
             emit(state, reconciler);
         }
         HighlighterAppAction::DismissWhatsNew => {
@@ -3423,13 +5504,7 @@ fn handle_action(
             emit(state, reconciler);
         }
         HighlighterAppAction::CompleteOnboarding => {
-            complete_onboarding(
-                core,
-                state,
-                local_state_path,
-                actor_tx,
-                &mut runtimes.onboarding_generation,
-            );
+            complete_onboarding(core, state, local_state_path, ops);
             emit(state, reconciler);
         }
         HighlighterAppAction::ClearToast => {
@@ -3461,7 +5536,28 @@ async fn handle_app_foregrounded(
     hydrate_app_chrome(core, state, pending_joins, visible_limit).await;
 }
 
-async fn handle_core_delta(delta: Delta, ctx: &ActorContext, runtimes: &mut ActorRuntimes) {
+/// Handle one push-delivered core delta on the actor thread.
+///
+/// Phase 3 (actor-blocking-fix §4.4): this is a **synchronous** fn. The audit
+/// in that phase proved every refresh/hydrate it cascades into is local-only
+/// (nostrdb reads + synchronous subscription/interest registration +
+/// in-memory relay snapshots); no network-bounded await is reachable from the
+/// delta path. The leaf `get_*`/`subscribe_*`/`start_*` core methods remain
+/// `async fn` because they are part of the FFI-wide `HighlighterCore` surface
+/// (de-asyncing them would ripple through hundreds of call sites and the
+/// iOS/Android bindings — out of scope). We bridge that single genuine async
+/// dependency at the helper boundary with `block_on_local`, identical to how
+/// `handle_action` already calls these same helpers. Keeping the function body
+/// sync makes the "the delta path never blocks the actor on the network"
+/// invariant structural: there is no `.await` here to accidentally hold a
+/// `parking_lot` guard across, which is also why the former `await_holding_lock`
+/// warning in the `RelayStatusChanged` arm is gone.
+fn handle_core_delta(
+    delta: Delta,
+    runtime: &tokio::runtime::Runtime,
+    ctx: &ActorContext,
+    runtimes: &mut ActorRuntimes,
+) {
     let core = &ctx.core;
     let state = &ctx.state;
     let reconciler = &ctx.reconciler;
@@ -3479,6 +5575,7 @@ async fn handle_core_delta(delta: Delta, ctx: &ActorContext, runtimes: &mut Acto
     let feedback_runtime = &mut runtimes.feedback_runtime;
     let room_explorer_runtime = &mut runtimes.room_explorer_runtime;
     let network_runtime = &mut runtimes.network_runtime;
+    let ops = &mut runtimes.ops;
 
     let subscription_id = delta.subscription_id;
     match delta.change {
@@ -3492,31 +5589,67 @@ async fn handle_core_delta(delta: Delta, ctx: &ActorContext, runtimes: &mut Acto
             }
         }
         DataChangeType::CommunityUpserted { .. } | DataChangeType::MembershipChanged { .. } => {
-            hydrate_joined_communities(core, state, pending_joins, visible_limit).await;
+            block_on_local(
+                runtime,
+                "delta.hydrate_joined_communities",
+                hydrate_joined_communities(core, state, pending_joins, visible_limit),
+            );
             if home_feed_runtime.is_open {
-                refresh_home_feed(core, state, home_feed_runtime).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_home_feed",
+                    refresh_home_feed(core, state, home_feed_runtime),
+                );
             }
             if room_explorer_runtime.is_open {
-                refresh_room_explorer_home(core, state, room_explorer_runtime).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_room_explorer_home",
+                    refresh_room_explorer_home(core, state, room_explorer_runtime),
+                );
             }
             if room_explorer_runtime.is_browse_open {
-                refresh_room_explorer_browse(core, state).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_room_explorer_browse",
+                    refresh_room_explorer_browse(core, state),
+                );
             }
             if profile_view_runtime.pubkey_hex.is_some() {
-                refresh_profile_view(core, state, profile_view_runtime, visible_limit).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_profile_view",
+                    refresh_profile_view(core, state, profile_view_runtime, visible_limit),
+                );
             }
             if article_reader_runtime.target.is_some() {
-                refresh_article_reader(core, state, article_reader_runtime, visible_limit).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_article_reader",
+                    refresh_article_reader(core, state, article_reader_runtime, visible_limit),
+                );
             }
             emit(state, reconciler);
         }
         DataChangeType::BookmarksUpdated => {
-            hydrate_bookmarks(core, state, visible_limit).await;
+            block_on_local(
+                runtime,
+                "delta.hydrate_bookmarks",
+                hydrate_bookmarks(core, state, visible_limit),
+            );
             if bookmark_runtime.library_open {
-                refresh_bookmarks_library(core, state, bookmark_runtime, visible_limit).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_bookmarks_library",
+                    refresh_bookmarks_library(core, state, bookmark_runtime, visible_limit),
+                );
             }
             if bookmark_runtime.curation_menu_article_address.is_some() {
-                refresh_curation_menu(core, state, bookmark_runtime).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_curation_menu",
+                    refresh_curation_menu(core, state, bookmark_runtime),
+                );
             }
             emit(state, reconciler);
         }
@@ -3524,24 +5657,48 @@ async fn handle_core_delta(delta: Delta, ctx: &ActorContext, runtimes: &mut Acto
         | DataChangeType::FollowingCurationSetsUpdated
         | DataChangeType::WebBookmarksUpdated => {
             if bookmark_runtime.library_open {
-                refresh_bookmarks_library(core, state, bookmark_runtime, visible_limit).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_bookmarks_library",
+                    refresh_bookmarks_library(core, state, bookmark_runtime, visible_limit),
+                );
             }
             if bookmark_runtime.selected_collection.is_some() {
-                refresh_bookmark_collection_detail(core, state, bookmark_runtime, visible_limit)
-                    .await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_bookmark_collection_detail",
+                    refresh_bookmark_collection_detail(
+                        core,
+                        state,
+                        bookmark_runtime,
+                        visible_limit,
+                    ),
+                );
             }
             if bookmark_runtime.curation_menu_article_address.is_some() {
-                refresh_curation_menu(core, state, bookmark_runtime).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_curation_menu",
+                    refresh_curation_menu(core, state, bookmark_runtime),
+                );
             }
             emit(state, reconciler);
         }
         DataChangeType::RelayStatusChanged { state: status, .. } => {
-            let mut current = state.write();
-            current.chrome.connection_state = map_connection_state(status);
-            current.bump();
-            drop(current);
+            // Mutate-then-drop the parking_lot guard in its own scope BEFORE any
+            // `block_on_local`, so no guard is ever held across the bridge call
+            // (former `await_holding_lock` lint, now structurally impossible).
+            {
+                let mut current = state.write();
+                current.chrome.connection_state = map_connection_state(status);
+                current.bump();
+            }
             if network_runtime.is_open {
-                refresh_network_settings(core, state).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_network_settings",
+                    refresh_network_settings(core, state),
+                );
             }
             emit(state, reconciler);
         }
@@ -3552,7 +5709,11 @@ async fn handle_core_delta(delta: Delta, ctx: &ActorContext, runtimes: &mut Acto
                 &pubkey,
                 kind,
             ) {
-                refresh_profile_view(core, state, profile_view_runtime, visible_limit).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_profile_view",
+                    refresh_profile_view(core, state, profile_view_runtime, visible_limit),
+                );
                 emit(state, reconciler);
             }
             if article_reader_profile_delta_affects_snapshot(
@@ -3561,7 +5722,11 @@ async fn handle_core_delta(delta: Delta, ctx: &ActorContext, runtimes: &mut Acto
                 &pubkey,
                 kind,
             ) {
-                refresh_article_reader(core, state, article_reader_runtime, visible_limit).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_article_reader",
+                    refresh_article_reader(core, state, article_reader_runtime, visible_limit),
+                );
                 emit(state, reconciler);
             }
             if kind == 3
@@ -3573,7 +5738,11 @@ async fn handle_core_delta(delta: Delta, ctx: &ActorContext, runtimes: &mut Acto
                     .as_ref()
                     .is_some_and(|user| user.pubkey.eq_ignore_ascii_case(&pubkey))
             {
-                refresh_room_invite_follows(core, state, room_invite_runtime).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_room_invite_follows",
+                    refresh_room_invite_follows(core, state, room_invite_runtime),
+                );
                 emit(state, reconciler);
             }
             if kind == 0 {
@@ -3581,7 +5750,11 @@ async fn handle_core_delta(delta: Delta, ctx: &ActorContext, runtimes: &mut Acto
                     .get(&subscription_id)
                     .cloned()
                     .unwrap_or(pubkey);
-                if hydrate_profile(core, state, pubkey_hex, visible_limit).await {
+                if block_on_local(
+                    runtime,
+                    "delta.hydrate_profile",
+                    hydrate_profile(core, state, pubkey_hex, visible_limit),
+                ) {
                     recompute_room_invite_visible_follows(state, &room_invite_runtime.follows);
                     emit(state, reconciler);
                 }
@@ -3593,35 +5766,55 @@ async fn handle_core_delta(delta: Delta, ctx: &ActorContext, runtimes: &mut Acto
                 subscription_id,
                 &address,
             ) {
-                refresh_article_reader(core, state, article_reader_runtime, visible_limit).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_article_reader",
+                    refresh_article_reader(core, state, article_reader_runtime, visible_limit),
+                );
                 emit(state, reconciler);
             }
         }
         DataChangeType::SearchArticlesUpdated { query } => {
             if search_runtime.active_relay_query.as_deref() == Some(query.as_str()) {
                 mark_relay_search_settled(state, &query);
-                if start_search_worker_if_idle(core, state, search_runtime, actor_tx) {
+                if start_search_worker_if_idle(core, state, search_runtime, ops) {
                     emit(state, reconciler);
                 }
             }
         }
         DataChangeType::FollowingReadsUpdated | DataChangeType::FollowingHighlightsUpdated => {
             if home_feed_runtime.is_open {
-                refresh_home_feed(core, state, home_feed_runtime).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_home_feed",
+                    refresh_home_feed(core, state, home_feed_runtime),
+                );
                 emit(state, reconciler);
             }
         }
         DataChangeType::FeedbackThreadsUpdated => {
             if feedback_threads_delta_affects_snapshot(feedback_runtime, subscription_id) {
-                refresh_feedback_threads(core, state, feedback_runtime).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_feedback_threads",
+                    refresh_feedback_threads(core, state, feedback_runtime),
+                );
                 emit(state, reconciler);
             }
         }
         DataChangeType::FeedbackThreadEventUpserted { .. } => {
             if feedback_thread_delta_affects_snapshot(feedback_runtime, subscription_id) {
-                refresh_feedback_thread(core, state, feedback_runtime).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_feedback_thread",
+                    refresh_feedback_thread(core, state, feedback_runtime),
+                );
                 if feedback_runtime.coordinate.is_some() {
-                    refresh_feedback_threads(core, state, feedback_runtime).await;
+                    block_on_local(
+                        runtime,
+                        "delta.refresh_feedback_threads",
+                        refresh_feedback_threads(core, state, feedback_runtime),
+                    );
                 }
                 emit(state, reconciler);
             }
@@ -3632,7 +5825,11 @@ async fn handle_core_delta(delta: Delta, ctx: &ActorContext, runtimes: &mut Acto
         | DataChangeType::DiscussionUpserted { group_id }
         | DataChangeType::ChatMessageUpserted { group_id } => {
             if room_detail_delta_affects_snapshot(room_detail_runtime, subscription_id, &group_id) {
-                refresh_room_detail(core, state, room_detail_runtime, visible_limit).await;
+                block_on_local(
+                    runtime,
+                    "delta.refresh_room_detail",
+                    refresh_room_detail(core, state, room_detail_runtime, visible_limit),
+                );
                 emit(state, reconciler);
             }
         }
@@ -3644,7 +5841,7 @@ fn apply_search_query(
     core: &Arc<HighlighterCore>,
     state: &Arc<RwLock<HighlighterAppState>>,
     search_runtime: &mut SearchRuntime,
-    actor_tx: &SyncSender<KernelMsg>,
+    ops: &mut OpRunner,
     query: String,
 ) {
     let query = query.trim().to_string();
@@ -3665,14 +5862,14 @@ fn apply_search_query(
         current.bump();
     }
 
-    start_search_worker_if_idle(core, state, search_runtime, actor_tx);
+    start_search_worker_if_idle(core, state, search_runtime, ops);
 }
 
 fn start_search_worker_if_idle(
     core: &Arc<HighlighterCore>,
     state: &Arc<RwLock<HighlighterAppState>>,
     search_runtime: &mut SearchRuntime,
-    actor_tx: &SyncSender<KernelMsg>,
+    ops: &mut OpRunner,
 ) -> bool {
     if !search_runtime.is_open || search_runtime.local_running_query.is_some() {
         return false;
@@ -3683,6 +5880,11 @@ fn start_search_worker_if_idle(
         return false;
     }
 
+    // Single-flight gate (unchanged): `local_running_query` is set here and
+    // refuses a second submit until the resolver clears it. Because of that
+    // gate, OpRunner's abort-on-resubmit for `OpDomain::SearchLocal` is inert
+    // in practice; supersession is still carried by `search_runtime.generation`
+    // and re-checked in the apply arm, exactly as the old resolver did.
     search_runtime.local_running_query = Some(query.clone());
     let mut changed = false;
     {
@@ -3696,42 +5898,26 @@ fn start_search_worker_if_idle(
 
     let generation = search_runtime.generation;
     let core = core.clone();
-    let actor_tx = actor_tx.clone();
-    let worker_query = query.clone();
-    match thread::Builder::new()
-        .name("highlighter-search-local".into())
-        .spawn(move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .thread_name("highlighter-search-local-worker")
-                .build()
-                .expect("build search worker runtime");
-            let result = runtime.block_on(run_local_search(core, worker_query.clone()));
-            if actor_tx
-                .send(KernelMsg::SearchLocalResolved {
-                    generation,
-                    query: worker_query,
-                    result: Box::new(result),
-                })
-                .is_err()
-            {
-                tracing::warn!("highlighter NMP actor is stopped");
+    let worker_query = query;
+    let timeout_query = worker_query.clone();
+    ops.submit_op(
+        OpDomain::SearchLocal,
+        OP_DEADLINE_NETWORK,
+        OpOutcome::SearchLocal {
+            generation,
+            query: timeout_query,
+            result: Err(op_timeout_message(OpDomain::SearchLocal)),
+        },
+        async move {
+            let result = run_local_search(core, worker_query.clone()).await;
+            OpOutcome::SearchLocal {
+                generation,
+                query: worker_query,
+                result,
             }
-        }) {
-        Ok(_) => changed,
-        Err(err) => {
-            search_runtime.local_running_query = None;
-            set_toast(
-                state,
-                Some(HighlighterToast {
-                    kind: HighlighterToastKind::Error,
-                    message: format!("Search failed to start: {err}"),
-                }),
-            );
-            mark_search_local_idle(state);
-            true
-        }
-    }
+        },
+    );
+    changed
 }
 
 async fn run_local_search(
@@ -3772,14 +5958,15 @@ async fn run_local_search(
 
 fn handle_search_local_resolved(
     ctx: &ActorContext,
-    search_runtime: &mut SearchRuntime,
+    runtimes: &mut ActorRuntimes,
     resolution: SearchLocalResolution,
 ) {
     let core = &ctx.core;
     let state = &ctx.state;
     let reconciler = &ctx.reconciler;
-    let actor_tx = &ctx.actor_tx;
     let visible_limit = ctx.visible_limit;
+    let search_runtime = &mut runtimes.search_runtime;
+    let ops = &mut runtimes.ops;
     let SearchLocalResolution {
         generation,
         query,
@@ -3791,14 +5978,14 @@ fn handle_search_local_resolved(
     }
 
     if generation != search_runtime.generation {
-        start_search_worker_if_idle(core, state, search_runtime, actor_tx);
+        start_search_worker_if_idle(core, state, search_runtime, ops);
         emit(state, reconciler);
         return;
     }
 
     let current_query = current_search_query(state);
     if current_query != query || !search_runtime.is_open {
-        start_search_worker_if_idle(core, state, search_runtime, actor_tx);
+        start_search_worker_if_idle(core, state, search_runtime, ops);
         emit(state, reconciler);
         return;
     }
@@ -3818,7 +6005,7 @@ fn handle_search_local_resolved(
     }
 
     ensure_search_relay_subscription(core, state, search_runtime, &query);
-    start_search_worker_if_idle(core, state, search_runtime, actor_tx);
+    start_search_worker_if_idle(core, state, search_runtime, ops);
     emit(state, reconciler);
 }
 
@@ -3874,7 +6061,7 @@ fn block_on_search_subscription(core: &Arc<HighlighterCore>, query: String) -> R
         .build()
         .map_err(|err| err.to_string())?;
     runtime
-        .block_on(core.subscribe_article_search(query))
+        .block_on(core.subscribe_article_search(query)) // lint-allow: block_on (worker runtime)
         .map_err(|err| err.to_string())
 }
 
@@ -4111,43 +6298,6 @@ async fn refresh_network_settings(
     current.bump();
 }
 
-async fn upsert_network_relay(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    config: RelayConfig,
-) {
-    match core.upsert_relay(config).await {
-        Ok(()) => clear_network_action_error(state),
-        Err(err) => set_network_action_error(state, format!("Couldn't save relay: {err}")),
-    }
-}
-
-async fn remove_network_relay(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    url: String,
-) {
-    match core.remove_relay(url).await {
-        Ok(()) => clear_network_action_error(state),
-        Err(err) => set_network_action_error(state, format!("Couldn't remove relay: {err}")),
-    }
-}
-
-async fn set_network_relay_roles(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    url: String,
-    read: bool,
-    write: bool,
-    rooms: bool,
-    indexer: bool,
-) {
-    match core.set_relay_roles(url, read, write, rooms, indexer).await {
-        Ok(()) => clear_network_action_error(state),
-        Err(err) => set_network_action_error(state, format!("Couldn't update relay roles: {err}")),
-    }
-}
-
 fn set_network_nip11_loading(state: &Arc<RwLock<HighlighterAppState>>, url: String) {
     let url = url.trim().to_string();
     if url.is_empty() {
@@ -4164,45 +6314,6 @@ fn set_network_nip11_loading(state: &Arc<RwLock<HighlighterAppState>>, url: Stri
         },
     );
     current.bump();
-}
-
-async fn probe_network_relay_nip11(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    url: String,
-) {
-    let url = url.trim().to_string();
-    if url.is_empty() {
-        return;
-    }
-    match core.probe_relay_nip11(url.clone()).await {
-        Ok(document) => {
-            let mut current = state.write();
-            upsert_network_nip11_projection(
-                &mut current.network,
-                HighlighterRelayNip11Snapshot {
-                    url,
-                    document: Some(document),
-                    is_loading: false,
-                    error_message: None,
-                },
-            );
-            current.bump();
-        }
-        Err(_) => {
-            let mut current = state.write();
-            upsert_network_nip11_projection(
-                &mut current.network,
-                HighlighterRelayNip11Snapshot {
-                    url,
-                    document: None,
-                    is_loading: false,
-                    error_message: Some("Couldn't reach the relay — you can still add it.".into()),
-                },
-            );
-            current.bump();
-        }
-    }
 }
 
 fn upsert_network_nip11_projection(
@@ -4233,44 +6344,6 @@ fn set_network_import_fetching(state: &Arc<RwLock<HighlighterAppState>>, is_fetc
         current.network.import_relays.selected_urls.clear();
     }
     current.bump();
-}
-
-async fn fetch_network_import_relays(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-) {
-    let npub = state.read().network.import_relays.npub.trim().to_string();
-    if npub.is_empty() {
-        let mut current = state.write();
-        current.network.import_relays.is_fetching = false;
-        current.network.import_relays.error_message = Some("Enter an npub first.".into());
-        current.bump();
-        return;
-    }
-
-    match core.import_relays_from_npub(npub).await {
-        Ok(mut rows) => {
-            if rows.len() > NETWORK_IMPORT_LIMIT {
-                rows.truncate(NETWORK_IMPORT_LIMIT);
-            }
-            let selected_urls = rows.iter().map(|row| row.url.clone()).collect::<Vec<_>>();
-            let mut current = state.write();
-            current.network.import_relays.candidate_count = rows.len() as u64;
-            current.network.import_relays.candidates = rows;
-            current.network.import_relays.selected_urls = selected_urls;
-            current.network.import_relays.is_fetching = false;
-            current.network.import_relays.error_message =
-                (current.network.import_relays.candidate_count == 0)
-                    .then(|| "No relay list found for this user.".to_string());
-            current.bump();
-        }
-        Err(err) => {
-            let mut current = state.write();
-            current.network.import_relays.is_fetching = false;
-            current.network.import_relays.error_message = Some(err.to_string());
-            current.bump();
-        }
-    }
 }
 
 fn toggle_network_import_relay(state: &Arc<RwLock<HighlighterAppState>>, url: String) {
@@ -4307,51 +6380,6 @@ fn set_network_import_applying(state: &Arc<RwLock<HighlighterAppState>>, is_appl
     current.bump();
 }
 
-async fn apply_network_import_relays(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-) {
-    let rows = {
-        let current = state.read();
-        let selected = current
-            .network
-            .import_relays
-            .selected_urls
-            .iter()
-            .cloned()
-            .collect::<BTreeSet<_>>();
-        current
-            .network
-            .import_relays
-            .candidates
-            .iter()
-            .filter(|row| selected.contains(&row.url))
-            .cloned()
-            .collect::<Vec<_>>()
-    };
-    if rows.is_empty() {
-        let mut current = state.write();
-        current.network.import_relays.is_applying = false;
-        current.network.import_relays.error_message = Some("Select at least one relay.".into());
-        current.bump();
-        return;
-    }
-
-    for row in rows {
-        if let Err(err) = core.upsert_relay(row.clone()).await {
-            let mut current = state.write();
-            current.network.import_relays.is_applying = false;
-            current.network.import_relays.error_message =
-                Some(format!("Couldn't import {}: {err}", row.url));
-            current.bump();
-            return;
-        }
-    }
-    let mut current = state.write();
-    current.network.import_relays = HighlighterNetworkImportSnapshot::empty();
-    current.bump();
-}
-
 fn set_network_action_error(state: &Arc<RwLock<HighlighterAppState>>, message: String) {
     let mut current = state.write();
     current.network.is_saving = false;
@@ -4362,6 +6390,10 @@ fn set_network_action_error(state: &Arc<RwLock<HighlighterAppState>>, message: S
 fn clear_network_action_error(state: &Arc<RwLock<HighlighterAppState>>) {
     let mut current = state.write();
     current.network.action_error_message = None;
+    // Clear the busy flag here too: the follow-up refresh_network_settings
+    // also resets it, but the success path must not depend on that refresh
+    // staying unconditional.
+    current.network.is_saving = false;
     current.bump();
 }
 
@@ -4791,43 +6823,11 @@ async fn refresh_room_explorer_browse(
     current.bump();
 }
 
-async fn request_join_room(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    pending_joins: &mut Vec<PendingJoin>,
-    group_id: String,
-    room_name: String,
-) {
-    let group_id = group_id.trim().to_string();
-    if group_id.is_empty() {
-        set_room_explorer_join_error(state, "Choose a room to join".into());
-        return;
-    }
-    let room_name = if room_name.trim().is_empty() {
-        "this room".to_string()
-    } else {
-        room_name.trim().to_string()
-    };
-
-    match core.request_join_room(group_id.clone()).await {
-        Ok(_) => {
-            pending_joins.retain(|join| join.group_id != group_id);
-            pending_joins.push(PendingJoin {
-                group_id,
-                room_name,
-            });
-            let mut current = state.write();
-            current.room_explorer.error_message = None;
-            current.toast = Some(HighlighterToast {
-                kind: HighlighterToastKind::Info,
-                message: "Join requested".into(),
-            });
-            current.bump();
-        }
-        Err(err) => {
-            pending_joins.retain(|join| join.group_id != group_id);
-            set_room_explorer_join_error(state, err.to_string());
-        }
+/// Clear the explorer's joining marker, but only if it still refers to
+/// `group_id` — a newer join request may have replaced it (supersession).
+fn clear_joining_marker(explorer: &mut HighlighterRoomExplorerSnapshot, group_id: &str) {
+    if explorer.joining_group_id == group_id {
+        explorer.joining_group_id.clear();
     }
 }
 
@@ -4920,7 +6920,7 @@ async fn ensure_signed_in_app_scope(
     core: &Arc<HighlighterCore>,
     state: &Arc<RwLock<HighlighterAppState>>,
     subscriptions: &mut AppScopeSubscriptions,
-    actor_tx: &SyncSender<KernelMsg>,
+    ops: &mut OpRunner,
 ) {
     let Some(user) = core.current_user() else {
         return;
@@ -4962,57 +6962,44 @@ async fn ensure_signed_in_app_scope(
         .as_deref()
         == Some(user_pubkey.as_str());
     if !already_initialized && !already_initializing {
-        match start_default_blossom_init(core, actor_tx, user_pubkey.clone()) {
-            Ok(()) => subscriptions.initializing_blossom_defaults_for_pubkey = Some(user_pubkey),
-            Err(message) => set_toast(
-                state,
-                Some(HighlighterToast {
-                    kind: HighlighterToastKind::Error,
-                    message,
-                }),
-            ),
-        }
+        subscriptions.initializing_blossom_defaults_for_pubkey = Some(user_pubkey.clone());
+        submit_default_blossom_init_op(ops, core, user_pubkey);
     }
 }
 
-fn start_default_blossom_init(
+/// Submit default-blossom-server init off-actor (Phase 4 fold of the former
+/// `highlighter-blossom-init` worker). The target pubkey rides in the outcome;
+/// the worker future still no-ops if the signed-in user changed mid-flight,
+/// and `handle_default_blossom_init_resolved` performs the same
+/// `initializing_blossom_defaults_for_pubkey` / still-this-user check as before.
+fn submit_default_blossom_init_op(
+    ops: &mut OpRunner,
     core: &Arc<HighlighterCore>,
-    actor_tx: &SyncSender<KernelMsg>,
     pubkey_hex: String,
-) -> Result<(), String> {
+) {
     let core = core.clone();
-    let actor_tx = actor_tx.clone();
-    thread::Builder::new()
-        .name("highlighter-blossom-init".into())
-        .spawn(move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .thread_name("highlighter-blossom-init-worker")
-                .build()
-                .expect("build Blossom init worker runtime");
-            let result = runtime.block_on(async {
-                if core
-                    .current_user()
-                    .is_none_or(|user| user.pubkey != pubkey_hex)
-                {
-                    return Ok(());
-                }
+    let timeout_pubkey_hex = pubkey_hex.clone();
+    ops.submit_op(
+        OpDomain::DefaultBlossomInit,
+        OP_DEADLINE_NETWORK,
+        OpOutcome::DefaultBlossomInit {
+            pubkey_hex: timeout_pubkey_hex,
+            result: Err(op_timeout_message(OpDomain::DefaultBlossomInit)),
+        },
+        async move {
+            let result = if core
+                .current_user()
+                .is_none_or(|user| user.pubkey != pubkey_hex)
+            {
+                Ok(())
+            } else {
                 core.init_default_blossom_servers()
                     .await
                     .map_err(|err| err.to_string())
-            });
-            if actor_tx
-                .send(KernelMsg::DefaultBlossomInitResolved {
-                    pubkey_hex,
-                    result: Box::new(result),
-                })
-                .is_err()
-            {
-                tracing::warn!("highlighter NMP actor is stopped");
-            }
-        })
-        .map(|_| ())
-        .map_err(|err| format!("Blossom setup failed to start: {err}"))
+            };
+            OpOutcome::DefaultBlossomInit { pubkey_hex, result }
+        },
+    );
 }
 
 fn handle_default_blossom_init_resolved(
@@ -5160,8 +7147,15 @@ fn apply_create_account_username(
 
 fn recompute_create_account_submit(snapshot: &mut HighlighterCreateAccountSnapshot) {
     let has_name = !snapshot.display_name.trim().is_empty();
+    // `Error` means the availability check itself failed (API/network), not
+    // that the name is unavailable. The username is an optional nicety, so a
+    // broken check must not brick signup — submit proceeds without the claim
+    // (see `prepare_create_account_request`).
     let username_ok = snapshot.username.is_empty()
-        || snapshot.username_status == HighlighterUsernameStatus::Available;
+        || matches!(
+            snapshot.username_status,
+            HighlighterUsernameStatus::Available | HighlighterUsernameStatus::Error
+        );
     snapshot.can_submit = has_name && username_ok && !snapshot.is_creating;
 }
 
@@ -5196,35 +7190,30 @@ fn is_valid_username(username: &str) -> bool {
             .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_' || ch == '-')
 }
 
-fn start_username_availability_request(
-    actor_tx: &SyncSender<KernelMsg>,
-    generation: u64,
-    username: String,
-) -> Result<(), String> {
-    let actor_tx = actor_tx.clone();
-    match thread::Builder::new()
-        .name("highlighter-nip05-check".into())
-        .spawn(move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .thread_name("highlighter-nip05-check-worker")
-                .build()
-                .expect("build NIP-05 check worker runtime");
-            let result = runtime.block_on(check_nip05_availability(&username));
-            if actor_tx
-                .send(KernelMsg::UsernameAvailabilityResolved {
-                    generation,
-                    username,
-                    result: Box::new(result),
-                })
-                .is_err()
-            {
-                tracing::warn!("highlighter NMP actor is stopped");
+/// Submit a NIP-05 username availability check off-actor (Phase 4 fold of the
+/// former `highlighter-nip05-check` worker). The `username_generation` carried
+/// here is re-checked against the live form in `handle_username_availability_resolved`,
+/// exactly as before; OpRunner's `UsernameCheck` slot supersedes an in-flight
+/// check on each keystroke.
+fn submit_username_availability_op(ops: &mut OpRunner, generation: u64, username: String) {
+    let timeout_username = username.clone();
+    ops.submit_op(
+        OpDomain::UsernameCheck,
+        OP_DEADLINE_NETWORK,
+        OpOutcome::UsernameCheck {
+            generation,
+            username: timeout_username,
+            result: Err(op_timeout_message(OpDomain::UsernameCheck)),
+        },
+        async move {
+            let result = check_nip05_availability(&username).await;
+            OpOutcome::UsernameCheck {
+                generation,
+                username,
+                result,
             }
-        }) {
-        Ok(_) => Ok(()),
-        Err(err) => Err(format!("Username check failed to start: {err}")),
-    }
+        },
+    );
 }
 
 fn handle_username_availability_resolved(
@@ -5265,75 +7254,6 @@ fn handle_username_availability_resolved(
     }
     recompute_create_account_submit(&mut current.create_account);
     current.bump();
-}
-
-fn start_nsec_sign_in_request(
-    core: &Arc<HighlighterCore>,
-    actor_tx: &SyncSender<KernelMsg>,
-    generation: u64,
-    nsec: String,
-    persist: bool,
-    clear_stored_on_failure: bool,
-) -> Result<(), String> {
-    let core = core.clone();
-    let actor_tx = actor_tx.clone();
-    thread::Builder::new()
-        .name("highlighter-nsec-sign-in".into())
-        .spawn(move || {
-            let result = core.login_nsec(nsec.clone()).map_err(|err| err.to_string());
-            if actor_tx
-                .send(KernelMsg::NsecSignInResolved {
-                    generation,
-                    nsec,
-                    persist,
-                    clear_stored_on_failure,
-                    result: Box::new(result),
-                })
-                .is_err()
-            {
-                tracing::warn!("drop nsec sign-in result: actor stopped");
-            }
-        })
-        .map(|_| ())
-        .map_err(|err| format!("Couldn't start sign-in: {err}"))
-}
-
-fn start_bunker_sign_in_request(
-    core: &Arc<HighlighterCore>,
-    actor_tx: &SyncSender<KernelMsg>,
-    generation: u64,
-    uri: String,
-    persist: bool,
-    clear_stored_on_failure: bool,
-) -> Result<(), String> {
-    let core = core.clone();
-    let actor_tx = actor_tx.clone();
-    thread::Builder::new()
-        .name("highlighter-bunker-sign-in".into())
-        .spawn(move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .thread_name("highlighter-bunker-sign-in-worker")
-                .build()
-                .expect("build bunker sign-in worker runtime");
-            let result = runtime
-                .block_on(core.pair_bunker(uri.clone()))
-                .map_err(|err| err.to_string());
-            if actor_tx
-                .send(KernelMsg::BunkerSignInResolved {
-                    generation,
-                    uri,
-                    persist,
-                    clear_stored_on_failure,
-                    result: Box::new(result),
-                })
-                .is_err()
-            {
-                tracing::warn!("drop bunker sign-in result: actor stopped");
-            }
-        })
-        .map(|_| ())
-        .map_err(|err| format!("Couldn't start sign-in: {err}"))
 }
 
 fn handle_nsec_sign_in_resolved(
@@ -5438,15 +7358,21 @@ fn prepare_create_account_request(
         return None;
     }
 
-    let username = current.create_account.username.trim().to_string();
-    if !username.is_empty()
-        && current.create_account.username_status != HighlighterUsernameStatus::Available
-    {
-        current.create_account.error_message =
-            Some("Choose an available username or leave it blank".into());
-        recompute_create_account_submit(&mut current.create_account);
-        current.bump();
-        return None;
+    let mut username = current.create_account.username.trim().to_string();
+    if !username.is_empty() {
+        match current.create_account.username_status {
+            HighlighterUsernameStatus::Available => {}
+            // The check itself failed (API/network): create the account
+            // without claiming the username rather than blocking signup.
+            HighlighterUsernameStatus::Error => username = String::new(),
+            _ => {
+                current.create_account.error_message =
+                    Some("Choose an available username or leave it blank".into());
+                recompute_create_account_submit(&mut current.create_account);
+                current.bump();
+                return None;
+            }
+        }
     }
 
     runtime.create_generation = runtime.create_generation.saturating_add(1);
@@ -5465,121 +7391,36 @@ fn prepare_create_account_request(
     })
 }
 
-fn start_create_account_request(
+/// Submit account creation off-actor (Phase 4 fold of the former
+/// `highlighter-create-account` worker). The hard 30s deadline that the old
+/// worker enforced inline is now OpRunner's `OP_DEADLINE_NETWORK` (also 30s),
+/// and the exact on-device timeout copy is preserved in `op_timeout_message`
+/// — signing goes through the NMP actor and NIP-05 registration hits the
+/// network, so without the bound the UI would sit on "Creating…" forever.
+/// `create_generation` supersession is carried in the outcome and re-checked
+/// in `handle_account_create_resolved`, byte-for-byte.
+fn submit_create_account_op(
+    ops: &mut OpRunner,
     core: &Arc<HighlighterCore>,
-    actor_tx: &SyncSender<KernelMsg>,
     request: CreateAccountRequest,
-) -> Result<(), String> {
+) {
     let core = core.clone();
-    let actor_tx = actor_tx.clone();
-    match thread::Builder::new()
-        .name("highlighter-create-account".into())
-        .spawn(move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .thread_name("highlighter-create-account-worker")
-                .build()
-                .expect("build create account worker runtime");
-            let generation = request.generation;
-            let result = runtime.block_on(create_account(&core, request));
-            if actor_tx
-                .send(KernelMsg::AccountCreateResolved {
-                    generation,
-                    result: Box::new(result),
-                })
-                .is_err()
-            {
-                tracing::warn!("highlighter NMP actor is stopped");
+    let generation = request.generation;
+    ops.submit_op(
+        OpDomain::AccountCreate,
+        OP_DEADLINE_NETWORK,
+        OpOutcome::AccountCreate {
+            generation,
+            result: Box::new(Err(op_timeout_message(OpDomain::AccountCreate))),
+        },
+        async move {
+            let result = create_account(&core, request).await;
+            OpOutcome::AccountCreate {
+                generation,
+                result: Box::new(result),
             }
-        }) {
-        Ok(_) => Ok(()),
-        Err(err) => Err(format!("Account creation failed to start: {err}")),
-    }
-}
-
-fn set_create_account_username_error(state: &Arc<RwLock<HighlighterAppState>>, message: String) {
-    let mut current = state.write();
-    current.create_account.username_status = HighlighterUsernameStatus::Error;
-    current.create_account.error_message = Some(message);
-    recompute_create_account_submit(&mut current.create_account);
-    current.bump();
-}
-
-fn set_create_account_submit_error(state: &Arc<RwLock<HighlighterAppState>>, message: String) {
-    let mut current = state.write();
-    current.create_account.is_creating = false;
-    current.create_account.error_message = Some(message);
-    recompute_create_account_submit(&mut current.create_account);
-    current.bump();
-}
-
-async fn upload_create_room_cover(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    bytes: Vec<u8>,
-    mime: String,
-    width: u32,
-    height: u32,
-    alt: String,
-) {
-    if bytes.is_empty() {
-        set_create_room_error(state, "That image couldn't be read.".into());
-        return;
-    }
-
-    match core.upload_photo(bytes, mime, width, height, alt).await {
-        Ok(upload) => {
-            let mut current = state.write();
-            current.create_room.cover_upload = Some(upload);
-            current.create_room.is_cover_uploading = false;
-            current.create_room.error_message = None;
-            current.bump();
-        }
-        Err(err) => set_create_room_error(state, format!("Couldn't upload cover: {err}")),
-    }
-}
-
-async fn submit_create_room(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    name: String,
-    about: String,
-    visibility: RoomVisibility,
-    access: RoomAccess,
-    pending_joins: &mut Vec<PendingJoin>,
-    visible_limit: usize,
-) {
-    let name = name.trim().to_string();
-    if name.chars().count() < 2 {
-        set_create_room_error(state, "Name your room first.".into());
-        return;
-    }
-
-    let about = about.trim().to_string();
-    let picture = state
-        .read()
-        .create_room
-        .cover_upload
-        .as_ref()
-        .map(|upload| upload.url.clone())
-        .unwrap_or_default();
-
-    match core
-        .create_room(name, about, picture, visibility, access)
-        .await
-    {
-        Ok(group_id) => {
-            {
-                let mut current = state.write();
-                current.create_room.is_creating = false;
-                current.create_room.created_group_id = Some(group_id);
-                current.create_room.error_message = None;
-                current.bump();
-            }
-            hydrate_joined_communities(core, state, pending_joins, visible_limit).await;
-        }
-        Err(err) => set_create_room_error(state, format!("Couldn't publish: {err}")),
-    }
+        },
+    );
 }
 
 fn set_create_room_cover_uploading(state: &Arc<RwLock<HighlighterAppState>>, is_uploading: bool) {
@@ -5708,12 +7549,8 @@ fn set_room_invite_query(
     query: String,
 ) -> Option<String> {
     let query = query.trim().to_string();
-    let pasted_candidate = match resolve_room_invite_paste(core, &query) {
-        Some((pubkey_hex, kind)) => {
-            Some(HighlighterRoomInviteResolvedCandidate { pubkey_hex, kind })
-        }
-        None => None,
-    };
+    let pasted_candidate = resolve_room_invite_paste(core, &query)
+        .map(|(pubkey_hex, kind)| HighlighterRoomInviteResolvedCandidate { pubkey_hex, kind });
     let resolved_pubkey = pasted_candidate
         .as_ref()
         .map(|candidate| candidate.pubkey_hex.clone());
@@ -5827,112 +7664,44 @@ fn accept_room_invite_pasted_candidate(state: &Arc<RwLock<HighlighterAppState>>)
     }
 }
 
-async fn mint_room_invite_link(
-    core: &Arc<HighlighterCore>,
+/// Actor-side: read the room id, set the minting busy flag, and submit the
+/// invite-code mint off-actor (Class B sign + publish). Resolution lands in
+/// `apply_op_outcome` for `OpDomain::RoomInvite`.
+fn submit_mint_room_invite_link(
+    ops: &mut OpRunner,
     state: &Arc<RwLock<HighlighterAppState>>,
+    core: &Arc<HighlighterCore>,
 ) {
     let group_id = state.read().room_invite.group_id.clone();
     if group_id.trim().is_empty() {
         return;
     }
-
     {
         let mut current = state.write();
         current.room_invite.is_minting_invite_link = true;
         current.room_invite.invite_link_error_message = None;
         current.bump();
     }
-
-    match core.create_room_invite_codes(group_id.clone(), 1).await {
-        Ok(codes) => {
-            let url = codes
-                .first()
-                .filter(|code| !code.trim().is_empty())
-                .map(|code| format!("https://highlighter.com/r/{group_id}/join/{code}"));
-            let mut current = state.write();
-            current.room_invite.is_minting_invite_link = false;
-            current.room_invite.invite_url = url;
-            current.room_invite.invite_link_error_message =
-                if current.room_invite.invite_url.is_none() {
-                    Some("No invite code returned.".into())
-                } else {
-                    None
-                };
-            current.bump();
-        }
-        Err(err) => {
-            let mut current = state.write();
-            current.room_invite.is_minting_invite_link = false;
-            current.room_invite.invite_url = None;
-            current.room_invite.invite_link_error_message =
-                Some(format!("Couldn't mint invite link: {err}"));
-            current.bump();
-        }
-    }
-}
-
-async fn submit_room_invite_members(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-) {
-    let (group_id, selected) = {
-        let current = state.read();
-        (
-            current.room_invite.group_id.clone(),
-            current.room_invite.selected.clone(),
-        )
-    };
-    if group_id.trim().is_empty() || selected.is_empty() {
-        return;
-    }
-
-    {
-        let mut current = state.write();
-        current.room_invite.is_adding_members = true;
-        current.room_invite.add_error_message = None;
-        current.room_invite.toast_message = None;
-        current.bump();
-    }
-
-    let mut failures = Vec::new();
-    for candidate in &selected {
-        if core
-            .add_room_member(group_id.clone(), candidate.pubkey_hex.clone())
-            .await
-            .is_err()
-        {
-            failures.push(candidate.pubkey_hex.clone());
-        }
-    }
-
-    let mut current = state.write();
-    current.room_invite.is_adding_members = false;
-    if failures.is_empty() {
-        let count = selected.len();
-        current.room_invite.selected.clear();
-        current.room_invite.add_error_message = None;
-        current.room_invite.toast_message = Some(if count == 1 {
-            "Added 1 person".into()
-        } else {
-            format!("Added {count} people")
-        });
-    } else if failures.len() == selected.len() {
-        current.room_invite.add_error_message =
-            Some("Couldn't add anyone. Are you a moderator of this room?".into());
-    } else {
-        let failure_set: BTreeSet<String> = failures.iter().cloned().collect();
-        current
-            .room_invite
-            .selected
-            .retain(|candidate| failure_set.contains(&candidate.pubkey_hex));
-        let failed_names = failures
-            .iter()
-            .map(|pubkey| short_pubkey(pubkey))
-            .collect::<Vec<_>>()
-            .join(", ");
-        current.room_invite.add_error_message = Some(format!("Some failed: {failed_names}"));
-    }
-    current.bump();
+    let core = core.clone();
+    let op_group_id = group_id.clone();
+    ops.submit_op(
+        OpDomain::RoomInvite,
+        OP_DEADLINE_NETWORK,
+        OpOutcome::RoomInvite {
+            group_id,
+            result: Err(op_timeout_message(OpDomain::RoomInvite)),
+        },
+        async move {
+            let result = core
+                .create_room_invite_codes(op_group_id.clone(), 1)
+                .await
+                .map_err(|err| err.to_string());
+            OpOutcome::RoomInvite {
+                group_id: op_group_id,
+                result,
+            }
+        },
+    );
 }
 
 fn clear_room_invite_add_error(state: &Arc<RwLock<HighlighterAppState>>) {
@@ -6241,119 +8010,6 @@ fn set_comment_draft(
     current.bump();
 }
 
-async fn publish_comment_from_draft(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    parent_event_id: Option<String>,
-) {
-    let (root_tag_name, root_tag_value, root_kind, body) = {
-        let current = state.read();
-        (
-            current.comments.root_tag_name.clone(),
-            current.comments.root_tag_value.clone(),
-            current.comments.root_kind,
-            comment_draft_body(&current.comments, parent_event_id.as_deref())
-                .trim()
-                .to_string(),
-        )
-    };
-    if body.is_empty() {
-        set_comment_publish_error(state, "Write a comment first.".into());
-        return;
-    }
-
-    match core
-        .publish_comment(
-            root_tag_name,
-            root_tag_value,
-            root_kind,
-            parent_event_id.clone(),
-            body,
-        )
-        .await
-    {
-        Ok(record) => {
-            set_comment_draft(state, parent_event_id, String::new());
-            {
-                let mut current = state.write();
-                current.comments.is_publishing = false;
-                current.comments.last_published_event_id = Some(record.event_id.clone());
-                current.comments.publish_error_message = None;
-                if !current
-                    .comments
-                    .records
-                    .iter()
-                    .any(|existing| existing.event_id == record.event_id)
-                {
-                    current.comments.records.push(record);
-                    current.comments.record_count = current.comments.records.len() as u64;
-                }
-                current.bump();
-            }
-            refresh_comments(core, state).await;
-        }
-        Err(err) => set_comment_publish_error(state, format!("Couldn't publish: {err}")),
-    }
-}
-
-async fn toggle_comment_like(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    event_id: String,
-) {
-    let event_id = event_id.trim().to_string();
-    let (author, existing_like) = {
-        let current = state.read();
-        let author = current
-            .comments
-            .records
-            .iter()
-            .find(|record| record.event_id == event_id)
-            .map(|record| record.pubkey.clone());
-        let existing_like = current
-            .comments
-            .interactions
-            .iter()
-            .find(|interaction| interaction.event_id == event_id)
-            .and_then(|interaction| interaction.my_like_event_id.clone());
-        (author, existing_like)
-    };
-    let Some(author) = author else {
-        set_comment_interaction_error(state, "Comment not found.".into());
-        return;
-    };
-
-    let result = if let Some(reaction_id) = existing_like {
-        core.unpublish_reaction(reaction_id).await.map(|_| ())
-    } else {
-        core.publish_reaction(event_id, author, 1111, "+".into())
-            .await
-            .map(|_| ())
-    };
-
-    match result {
-        Ok(()) => refresh_comments(core, state).await,
-        Err(err) => set_comment_interaction_error(state, format!("Couldn't update like: {err}")),
-    }
-}
-
-async fn toggle_comment_bookmark(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    event_id: String,
-) {
-    let event_id = event_id.trim().to_string();
-    if event_id.is_empty() {
-        return;
-    }
-    match core.toggle_event_bookmark(event_id).await {
-        Ok(_) => refresh_comments(core, state).await,
-        Err(err) => {
-            set_comment_interaction_error(state, format!("Couldn't update bookmark: {err}"))
-        }
-    }
-}
-
 fn set_comment_publishing(state: &Arc<RwLock<HighlighterAppState>>, is_publishing: bool) {
     let mut current = state.write();
     current.comments.is_publishing = is_publishing;
@@ -6641,72 +8297,6 @@ fn set_feedback_reply_publishing(state: &Arc<RwLock<HighlighterAppState>>, is_pu
     current.bump();
 }
 
-async fn publish_feedback_note_from_state(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    runtime: &FeedbackRuntime,
-    parent_event_id: Option<String>,
-) {
-    let (coordinate, body) = {
-        let current = state.read();
-        let body = if parent_event_id.is_some() {
-            current.feedback.reply_draft.trim().to_string()
-        } else {
-            current.feedback.new_thread_draft.trim().to_string()
-        };
-        (current.feedback.coordinate.clone(), body)
-    };
-    if coordinate.trim().is_empty() {
-        set_feedback_publish_error(state, "Feedback isn't ready yet.".into());
-        return;
-    }
-    if body.is_empty() {
-        set_feedback_publish_error(state, "Write feedback first.".into());
-        return;
-    }
-
-    match core
-        .publish_feedback_note(coordinate, None, parent_event_id.clone(), body)
-        .await
-    {
-        Ok(record) => {
-            {
-                let mut current = state.write();
-                current.feedback.is_publishing_new_thread = false;
-                current.feedback.is_publishing_reply = false;
-                current.feedback.publish_error_message = None;
-                current.feedback.last_published_root_event_id = Some(record.root_event_id.clone());
-                if parent_event_id.is_some() {
-                    current.feedback.reply_draft.clear();
-                    if current
-                        .feedback
-                        .selected_root_event_id
-                        .as_deref()
-                        .is_some_and(|root| root == record.root_event_id)
-                        && !current
-                            .feedback
-                            .selected_events
-                            .iter()
-                            .any(|event| event.event_id == record.event_id)
-                    {
-                        current.feedback.selected_events.push(record);
-                        current.feedback.selected_event_count =
-                            current.feedback.selected_events.len() as u64;
-                    }
-                } else {
-                    current.feedback.new_thread_draft.clear();
-                }
-                current.bump();
-            }
-            refresh_feedback_threads(core, state, runtime).await;
-            if parent_event_id.is_some() {
-                refresh_feedback_thread(core, state, runtime).await;
-            }
-        }
-        Err(err) => set_feedback_publish_error(state, format!("Couldn't send feedback: {err}")),
-    }
-}
-
 fn set_feedback_publish_error(state: &Arc<RwLock<HighlighterAppState>>, message: String) {
     let mut current = state.write();
     current.feedback.is_publishing_new_thread = false;
@@ -6805,28 +8395,6 @@ async fn refresh_media_settings(
             current.media_settings.error_message =
                 Some(format!("Couldn't load media servers: {err}"));
             current.bump();
-        }
-    }
-}
-
-async fn persist_media_settings(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-) {
-    let servers = state.read().media_settings.blossom_servers.clone();
-    if servers.is_empty() {
-        set_media_settings_error(state, "Keep at least one Blossom server.".into());
-        return;
-    }
-    match core.set_blossom_servers(servers).await {
-        Ok(_) => {
-            let mut current = state.write();
-            current.media_settings.is_saving = false;
-            current.media_settings.error_message = None;
-            current.bump();
-        }
-        Err(err) => {
-            set_media_settings_error(state, format!("Couldn't save media servers: {err}"));
         }
     }
 }
@@ -7024,39 +8592,6 @@ fn set_edit_profile_image_uploading(
     current.bump();
 }
 
-async fn upload_edit_profile_image(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    target: HighlighterEditProfileImageTarget,
-    bytes: Vec<u8>,
-    mime: String,
-    width: u32,
-    height: u32,
-    alt: String,
-) {
-    match core.upload_photo(bytes, mime, width, height, alt).await {
-        Ok(upload) => {
-            let mut current = state.write();
-            match target {
-                HighlighterEditProfileImageTarget::Picture => {
-                    current.edit_profile.picture = upload.url;
-                    current.edit_profile.is_picture_uploading = false;
-                }
-                HighlighterEditProfileImageTarget::Banner => {
-                    current.edit_profile.banner = upload.url;
-                    current.edit_profile.is_banner_uploading = false;
-                }
-            }
-            current.edit_profile.error_message = None;
-            current.bump();
-        }
-        Err(err) => {
-            set_edit_profile_image_uploading(state, target, false);
-            set_edit_profile_error(state, format!("Upload failed: {err}"));
-        }
-    }
-}
-
 fn set_edit_profile_saving(state: &Arc<RwLock<HighlighterAppState>>, is_saving: bool) {
     let mut current = state.write();
     current.edit_profile.is_saving = is_saving;
@@ -7065,45 +8600,6 @@ fn set_edit_profile_saving(state: &Arc<RwLock<HighlighterAppState>>, is_saving: 
         current.edit_profile.saved_profile = None;
     }
     current.bump();
-}
-
-async fn submit_edit_profile(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    pending_joins: &mut Vec<PendingJoin>,
-    visible_limit: usize,
-) {
-    let draft = {
-        let current = state.read();
-        ProfileUpdateDraft {
-            name: current.edit_profile.name.trim().to_string(),
-            display_name: current.edit_profile.display_name.trim().to_string(),
-            about: current.edit_profile.about.trim().to_string(),
-            picture: current.edit_profile.picture.trim().to_string(),
-            banner: current.edit_profile.banner.trim().to_string(),
-            nip05: current.edit_profile.nip05.trim().to_string(),
-            website: current.edit_profile.website.trim().to_string(),
-            lud16: current.edit_profile.lud16.trim().to_string(),
-        }
-    };
-
-    match core.update_profile(draft).await {
-        Ok(profile) => {
-            let pubkey = profile.pubkey.clone();
-            let profile_for_cache = profile.clone();
-            {
-                let mut current = state.write();
-                current.edit_profile.is_saving = false;
-                current.edit_profile.error_message = None;
-                current.edit_profile.saved_profile = Some(profile.clone());
-                current.chrome.current_user_profile = Some(profile);
-                current.bump();
-            }
-            insert_profile_metadata(state, pubkey, profile_for_cache, visible_limit);
-            hydrate_app_chrome(core, state, pending_joins, visible_limit).await;
-        }
-        Err(err) => set_edit_profile_error(state, err.to_string()),
-    }
 }
 
 fn set_edit_profile_error(state: &Arc<RwLock<HighlighterAppState>>, message: String) {
@@ -7195,10 +8691,17 @@ fn handle_account_create_resolved(
     }
 }
 
+fn nip05_http_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|err| format!("HTTP client init failed: {err}"))
+}
+
 async fn check_nip05_availability(username: &str) -> Result<Nip05Availability, String> {
     let url = reqwest::Url::parse_with_params(NIP05_API_URL, [("name", username)])
         .map_err(|err| format!("Invalid username check URL: {err}"))?;
-    let response = reqwest::Client::new()
+    let response = nip05_http_client()?
         .get(url)
         .send()
         .await
@@ -7278,7 +8781,7 @@ async fn async_register_nip05(username: &str, auth_json: &str) -> Result<(), Str
         "name": username,
         "auth": auth,
     });
-    let response = reqwest::Client::new()
+    let response = nip05_http_client()?
         .post(NIP05_API_URL)
         .json(&body)
         .send()
@@ -7303,11 +8806,19 @@ async fn async_register_nip05(username: &str, auth_json: &str) -> Result<(), Str
     ))
 }
 
+/// Submit an ISBN preview lookup off-actor (Phase 4 fold of the former
+/// `highlighter-isbn-preview` worker). Request coalescing is unchanged: the
+/// `pending_isbn_lookups` set still dedups concurrent lookups for the same
+/// ISBN, and the per-ISBN `OpDomain::IsbnPreview { target }` key (a stable hash
+/// of the ISBN) gives each distinct ISBN an independent in-flight slot, so
+/// concurrent lookups for different ISBNs do not supersede one another — exactly
+/// the old multi-worker behaviour. Returns `false` (no immediate snapshot
+/// change); the resolved handler emits.
 fn start_isbn_preview_request(
     core: &Arc<HighlighterCore>,
     state: &Arc<RwLock<HighlighterAppState>>,
     pending_isbn_lookups: &mut BTreeSet<String>,
-    actor_tx: &SyncSender<KernelMsg>,
+    ops: &mut OpRunner,
     isbn: String,
 ) -> bool {
     let requested = isbn.trim().to_string();
@@ -7321,42 +8832,29 @@ fn start_isbn_preview_request(
     }
 
     let core = core.clone();
-    let actor_tx = actor_tx.clone();
     let worker_requested = requested.clone();
-    match thread::Builder::new()
-        .name("highlighter-isbn-preview".into())
-        .spawn(move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .thread_name("highlighter-isbn-preview-worker")
-                .build()
-                .expect("build ISBN preview worker runtime");
-            let result = runtime
-                .block_on(core.lookup_isbn(worker_requested.clone()))
+    let domain = OpDomain::IsbnPreview {
+        target: op_target_hash(&requested),
+    };
+    ops.submit_op(
+        domain,
+        OP_DEADLINE_NETWORK,
+        OpOutcome::IsbnPreview {
+            requested,
+            result: Box::new(Err(op_timeout_message(domain))),
+        },
+        async move {
+            let result = core
+                .lookup_isbn(worker_requested.clone())
+                .await
                 .map_err(|err| err.to_string());
-            if actor_tx
-                .send(KernelMsg::IsbnPreviewResolved {
-                    requested: worker_requested,
-                    result: Box::new(result),
-                })
-                .is_err()
-            {
-                tracing::warn!("highlighter NMP actor is stopped");
+            OpOutcome::IsbnPreview {
+                requested: worker_requested,
+                result: Box::new(result),
             }
-        }) {
-        Ok(_) => false,
-        Err(err) => {
-            pending_isbn_lookups.remove(&requested);
-            set_toast(
-                state,
-                Some(HighlighterToast {
-                    kind: HighlighterToastKind::Error,
-                    message: format!("ISBN lookup failed to start: {err}"),
-                }),
-            );
-            true
-        }
-    }
+        },
+    );
+    false
 }
 
 fn handle_isbn_preview_resolved(
@@ -7382,11 +8880,16 @@ fn handle_isbn_preview_resolved(
     }
 }
 
+/// Submit a web-metadata lookup off-actor (Phase 4 fold of the former
+/// `highlighter-web-metadata` worker). Identical coalescing/keying scheme to
+/// [`start_isbn_preview_request`]: `pending_web_metadata` dedups, and the
+/// per-URL `OpDomain::WebMetadata { target }` key keeps distinct URLs
+/// independent. Returns `false`; the resolved handler emits.
 fn start_web_metadata_request(
     core: &Arc<HighlighterCore>,
     state: &Arc<RwLock<HighlighterAppState>>,
     pending_web_metadata: &mut BTreeSet<String>,
-    actor_tx: &SyncSender<KernelMsg>,
+    ops: &mut OpRunner,
     url: String,
 ) -> bool {
     let requested = url.trim().to_string();
@@ -7400,42 +8903,29 @@ fn start_web_metadata_request(
     }
 
     let core = core.clone();
-    let actor_tx = actor_tx.clone();
     let worker_requested = requested.clone();
-    match thread::Builder::new()
-        .name("highlighter-web-metadata".into())
-        .spawn(move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .thread_name("highlighter-web-metadata-worker")
-                .build()
-                .expect("build web metadata worker runtime");
-            let result = runtime
-                .block_on(core.get_web_metadata(worker_requested.clone()))
+    let domain = OpDomain::WebMetadata {
+        target: op_target_hash(&requested),
+    };
+    ops.submit_op(
+        domain,
+        OP_DEADLINE_NETWORK,
+        OpOutcome::WebMetadata {
+            requested,
+            result: Box::new(Err(op_timeout_message(domain))),
+        },
+        async move {
+            let result = core
+                .get_web_metadata(worker_requested.clone())
+                .await
                 .map_err(|err| err.to_string());
-            if actor_tx
-                .send(KernelMsg::WebMetadataResolved {
-                    requested: worker_requested,
-                    result: Box::new(result),
-                })
-                .is_err()
-            {
-                tracing::warn!("highlighter NMP actor is stopped");
+            OpOutcome::WebMetadata {
+                requested: worker_requested,
+                result: Box::new(result),
             }
-        }) {
-        Ok(_) => false,
-        Err(err) => {
-            pending_web_metadata.remove(&requested);
-            set_toast(
-                state,
-                Some(HighlighterToast {
-                    kind: HighlighterToastKind::Error,
-                    message: format!("Web metadata lookup failed to start: {err}"),
-                }),
-            );
-            true
-        }
-    }
+        },
+    );
+    false
 }
 
 fn handle_web_metadata_resolved(
@@ -7815,32 +9305,6 @@ fn set_capture_uploading(state: &Arc<RwLock<HighlighterAppState>>, uploading: bo
     current.bump();
 }
 
-async fn upload_capture_photo(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    bytes: Vec<u8>,
-    mime: String,
-    width: u32,
-    height: u32,
-    alt: String,
-) {
-    if bytes.is_empty() {
-        set_capture_upload_error(state, "That image couldn't be read.".into());
-        return;
-    }
-
-    match core.upload_photo(bytes, mime, width, height, alt).await {
-        Ok(upload) => {
-            let mut current = state.write();
-            current.capture.upload = Some(upload);
-            current.capture.is_uploading = false;
-            current.capture.upload_error_message = None;
-            current.bump();
-        }
-        Err(err) => set_capture_upload_error(state, format!("Upload failed: {err}")),
-    }
-}
-
 fn set_capture_upload_error(state: &Arc<RwLock<HighlighterAppState>>, message: String) {
     let mut current = state.write();
     current.capture.upload = None;
@@ -7867,43 +9331,29 @@ fn set_capture_publishing(state: &Arc<RwLock<HighlighterAppState>>, publishing: 
     current.bump();
 }
 
-async fn publish_capture_highlight(
+/// Network-only capture-highlight publish (no state/runtimes touched). Runs in
+/// an `OpRunner` worker; the result is applied on the actor in `apply_op_outcome`.
+async fn capture_highlight_network(
     core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
     selection: HighlighterCaptureArtifact,
     target_group_id: Option<String>,
     draft: HighlightDraft,
-) {
-    match resolve_capture_artifact(core, selection, target_group_id.as_deref()).await {
-        Ok(artifact) => {
-            publish_highlight_with_optional_share(core, state, artifact, target_group_id, draft)
-                .await
-        }
-        Err(err) => set_capture_publish_error(state, err),
-    }
+) -> Result<(String, String), String> {
+    let artifact = resolve_capture_artifact(core, selection, target_group_id.as_deref()).await?;
+    capture_highlight_with_optional_share_network(core, artifact, target_group_id, draft).await
 }
 
-async fn publish_clip_highlight(
+/// Shared network publish path for capture / clip highlights.
+async fn capture_highlight_with_optional_share_network(
     core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
     artifact: ArtifactRecord,
     target_group_id: Option<String>,
     draft: HighlightDraft,
-) {
-    publish_highlight_with_optional_share(core, state, artifact, target_group_id, draft).await;
-}
-
-async fn publish_highlight_with_optional_share(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    artifact: ArtifactRecord,
-    target_group_id: Option<String>,
-    draft: HighlightDraft,
-) {
+) -> Result<(String, String), String> {
     let target_group_id = target_group_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
-    let result = if let Some(group_id) = target_group_id {
+    let event_id = if let Some(group_id) = target_group_id {
         match core
             .publish_highlights_and_share(artifact, vec![draft], group_id)
             .await
@@ -7912,39 +9362,29 @@ async fn publish_highlight_with_optional_share(
                 .into_iter()
                 .next()
                 .map(|record| record.event_id)
-                .ok_or_else(|| "Publish did not return a highlight event".to_string()),
-            Err(err) => Err(err.to_string()),
+                .ok_or_else(|| "Publish did not return a highlight event".to_string())?,
+            Err(err) => return Err(err.to_string()),
         }
     } else {
         core.publish_highlight(draft, artifact)
             .await
             .map(|record| record.event_id)
-            .map_err(|err| err.to_string())
+            .map_err(|err| err.to_string())?
     };
-
-    match result {
-        Ok(event_id) => set_capture_publish_success(state, event_id, "Highlight published".into()),
-        Err(err) => set_capture_publish_error(state, err),
-    }
+    Ok((event_id, "Highlight published".to_string()))
 }
 
-async fn publish_capture_picture(
+/// Network-only capture-picture publish (no state/runtimes touched).
+async fn capture_picture_network(
     core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
     selection: Option<HighlighterCaptureArtifact>,
     target_group_id: Option<String>,
     image: BlossomUpload,
     note: String,
-) {
+) -> Result<(String, String), String> {
     let artifact = match selection {
         Some(selection) => {
-            match resolve_capture_artifact(core, selection, target_group_id.as_deref()).await {
-                Ok(record) => Some(record),
-                Err(err) => {
-                    set_capture_publish_error(state, err);
-                    return;
-                }
-            }
+            Some(resolve_capture_artifact(core, selection, target_group_id.as_deref()).await?)
         }
         None => None,
     };
@@ -7957,11 +9397,10 @@ async fn publish_capture_picture(
         artifact,
         target_group_id,
     };
-
-    match core.publish_picture(draft).await {
-        Ok(record) => set_capture_publish_success(state, record.event_id, "Photo shared".into()),
-        Err(err) => set_capture_publish_error(state, err.to_string()),
-    }
+    core.publish_picture(draft)
+        .await
+        .map(|record| (record.event_id, "Photo shared".to_string()))
+        .map_err(|err| err.to_string())
 }
 
 async fn resolve_capture_artifact(
@@ -8048,15 +9487,18 @@ fn request_profile(
         return false;
     }
 
-    let mut changed = runtime.block_on(hydrate_profile(
-        core,
-        state,
-        pubkey_hex.clone(),
-        visible_limit,
-    ));
+    let mut changed = block_on_local(
+        runtime,
+        "hydrate_profile",
+        hydrate_profile(core, state, pubkey_hex.clone(), visible_limit),
+    );
 
     if !profile_handles.contains_key(&pubkey_hex) {
-        match runtime.block_on(core.subscribe_user_profile(pubkey_hex.clone())) {
+        match block_on_local(
+            runtime,
+            "subscribe_user_profile",
+            core.subscribe_user_profile(pubkey_hex.clone()),
+        ) {
             Ok(handle) => {
                 profile_handles.insert(pubkey_hex.clone(), handle);
                 profile_pubkeys_by_handle.insert(handle, pubkey_hex);
@@ -8286,55 +9728,6 @@ async fn ensure_profile_view_subscriptions(
     }
 }
 
-async fn toggle_profile_follow(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    _profile_runtime: &mut ProfileViewRuntime,
-    _visible_limit: usize,
-) {
-    let (target_pubkey_hex, desired_following, previous_following) = {
-        let mut current = state.write();
-        if current.profile_view.pubkey_hex.is_empty()
-            || current.profile_view.viewer_pubkey_hex.is_none()
-            || current.profile_view.is_own_profile
-            || current.profile_view.is_mutating_follow
-        {
-            return;
-        }
-        let previous = current.profile_view.is_following;
-        current.profile_view.is_following = !previous;
-        current.profile_view.is_mutating_follow = true;
-        current.profile_view.error_message = None;
-        current.bump();
-        (current.profile_view.pubkey_hex.clone(), !previous, previous)
-    };
-
-    match core
-        .set_follow(target_pubkey_hex.clone(), desired_following)
-        .await
-    {
-        Ok(_) => {
-            let mut current = state.write();
-            current.profile_view.is_following = desired_following;
-            current.profile_view.is_mutating_follow = false;
-            current.profile_view.error_message = None;
-            current.bump();
-        }
-        Err(err) => {
-            let message = err.to_string();
-            let mut current = state.write();
-            current.profile_view.is_following = previous_following;
-            current.profile_view.is_mutating_follow = false;
-            current.profile_view.error_message = Some(message.clone());
-            current.toast = Some(HighlighterToast {
-                kind: HighlighterToastKind::Error,
-                message,
-            });
-            current.bump();
-        }
-    }
-}
-
 fn profile_view_delta_affects_snapshot(
     profile_runtime: &ProfileViewRuntime,
     subscription_id: u64,
@@ -8551,127 +9944,6 @@ async fn ensure_article_reader_subscriptions(
             Ok(handle) => runtime.author_profile_handle = Some(handle),
             Err(err) => record_first_error(first_error, err.to_string()),
         }
-    }
-}
-
-async fn publish_article_highlight(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    runtime: &mut ArticleReaderRuntime,
-    quote: String,
-    context: String,
-    note: String,
-    visible_limit: usize,
-) {
-    let quote = quote.trim().to_string();
-    if quote.is_empty() {
-        set_article_reader_publish_error(state, "Choose text to highlight".into());
-        return;
-    }
-
-    let Some(article) = state.read().article_reader.article.clone() else {
-        set_article_reader_publish_error(state, "Article not yet loaded".into());
-        return;
-    };
-    let Some(target) = runtime.target.clone() else {
-        set_article_reader_publish_error(state, "Article not yet loaded".into());
-        return;
-    };
-
-    let draft = HighlightDraft {
-        quote,
-        context: context.trim().to_string(),
-        note: note.trim().to_string(),
-        clip_start_seconds: None,
-        clip_end_seconds: None,
-        clip_speaker: String::new(),
-        clip_transcript_segment_ids: Vec::new(),
-        image: None,
-    };
-    let artifact = article_as_artifact(&article, &target.address);
-
-    match core.publish_highlight(draft, artifact).await {
-        Ok(record) => {
-            let mut current = state.write();
-            current
-                .article_reader
-                .highlights
-                .retain(|highlight| highlight.event_id != record.event_id);
-            current.article_reader.highlights.insert(0, record.clone());
-            sort_highlights_newest_first(&mut current.article_reader.highlights);
-            let max_len = visible_limit.clamp(1, ARTICLE_READER_HIGHLIGHT_LIMIT);
-            current.article_reader.highlights.truncate(max_len);
-            current.article_reader.highlight_count = current.article_reader.highlights.len() as u64;
-            current.article_reader.last_published_highlight_id = Some(record.event_id);
-            current.article_reader.is_publishing_highlight = false;
-            current.article_reader.error_message = None;
-            current.toast = Some(HighlighterToast {
-                kind: HighlighterToastKind::Success,
-                message: if note.trim().is_empty() {
-                    "Highlighted".into()
-                } else {
-                    "Highlighted with note".into()
-                },
-            });
-            current.bump();
-        }
-        Err(err) => set_article_reader_publish_error(state, err.to_string()),
-    }
-}
-
-async fn publish_artifact_share(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    preview: ArtifactPreview,
-    group_id: String,
-    note: Option<String>,
-) {
-    let note = note
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-    match core.publish_artifact(preview, group_id.clone(), note).await {
-        Ok(_) => set_share_composer_success(state, group_id, "Shared to community".into()),
-        Err(err) => set_share_composer_error(state, err.to_string()),
-    }
-}
-
-async fn publish_url_share(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    url: String,
-    group_id: String,
-    note: Option<String>,
-) {
-    let url = url.trim().to_string();
-    if url.is_empty() {
-        set_share_composer_error(state, "Missing URL".into());
-        return;
-    }
-    match core.build_preview_from_url(url).await {
-        Ok(preview) => publish_artifact_share(core, state, preview, group_id, note).await,
-        Err(err) => set_share_composer_error(state, err.to_string()),
-    }
-}
-
-async fn share_highlight_repost(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    event_id: String,
-    author_pubkey_hex: String,
-    relay_hint: String,
-    target_group_id: String,
-) {
-    match core
-        .share_highlight_to_room(
-            event_id,
-            author_pubkey_hex,
-            relay_hint,
-            target_group_id.clone(),
-        )
-        .await
-    {
-        Ok(_) => set_share_composer_success(state, target_group_id, "Highlight shared".into()),
-        Err(err) => set_share_composer_error(state, err.to_string()),
     }
 }
 
@@ -9113,60 +10385,6 @@ fn set_room_detail_error(state: &Arc<RwLock<HighlighterAppState>>, message: Stri
     current.bump();
 }
 
-async fn publish_room_discussion(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    runtime: &mut RoomDetailRuntime,
-    title: String,
-    body: String,
-    attachment_url: Option<String>,
-    visible_limit: usize,
-) {
-    let Some(group_id) = runtime.group_id.clone() else {
-        set_room_discussion_error(state, "Open a room before posting a discussion".into());
-        return;
-    };
-
-    let title = title.trim().to_string();
-    if title.is_empty() {
-        set_room_discussion_error(state, "Discussion title required".into());
-        return;
-    }
-
-    let attachment_url = attachment_url
-        .map(|url| url.trim().to_string())
-        .filter(|url| !url.is_empty());
-    let attachment = match attachment_url {
-        Some(url) => match core.build_preview_from_url(url).await {
-            Ok(preview) => Some(preview),
-            Err(_) => {
-                set_room_discussion_error(state, "Enter a valid attachment URL.".into());
-                return;
-            }
-        },
-        None => None,
-    };
-
-    match core
-        .publish_discussion(group_id, title, body, attachment)
-        .await
-    {
-        Ok(record) => {
-            {
-                let mut current = state.write();
-                current.room_detail.is_publishing_discussion = false;
-                current.room_detail.discussion_error_message = None;
-                current.room_detail.last_published_discussion_id = Some(record.event_id);
-                current.bump();
-            }
-            refresh_room_detail(core, state, runtime, visible_limit).await;
-        }
-        Err(err) => {
-            set_room_discussion_error(state, format!("Failed to publish discussion: {err}"))
-        }
-    }
-}
-
 fn set_room_discussion_publishing(state: &Arc<RwLock<HighlighterAppState>>, is_publishing: bool) {
     let mut current = state.write();
     current.room_detail.is_publishing_discussion = is_publishing;
@@ -9214,46 +10432,6 @@ fn prepare_load_more_room_chat(
     current.room_detail.chat_error_message = None;
     current.bump();
     true
-}
-
-async fn publish_room_chat_message(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    runtime: &mut RoomDetailRuntime,
-    content: String,
-    reply_to_event_id: Option<String>,
-    visible_limit: usize,
-) {
-    let Some(group_id) = runtime.group_id.clone() else {
-        set_room_chat_error(state, "Open a room before sending a message".into());
-        return;
-    };
-
-    let content = content.trim().to_string();
-    if content.is_empty() {
-        set_room_chat_sending(state, false);
-        return;
-    }
-
-    let reply_to_event_id = reply_to_event_id
-        .map(|id| id.trim().to_string())
-        .filter(|id| !id.is_empty());
-
-    match core
-        .publish_chat_message(group_id, content, reply_to_event_id)
-        .await
-    {
-        Ok(_) => {
-            {
-                let mut current = state.write();
-                current.room_detail.is_sending_chat_message = false;
-                current.room_detail.chat_error_message = None;
-                current.bump();
-            }
-            refresh_room_detail(core, state, runtime, visible_limit).await;
-        }
-        Err(err) => set_room_chat_error(state, format!("Couldn't send message: {err}")),
-    }
 }
 
 fn set_room_chat_sending(state: &Arc<RwLock<HighlighterAppState>>, is_sending: bool) {
@@ -9526,134 +10704,6 @@ async fn refresh_curation_menu(
     current.bump();
 }
 
-async fn set_address_in_curation_set(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    runtime: &mut BookmarkRuntime,
-    d_tag: String,
-    address: String,
-    member: bool,
-    visible_limit: usize,
-) {
-    let d_tag = d_tag.trim().to_string();
-    let Some(address) = normalize_article_address(&address) else {
-        set_toast(
-            state,
-            Some(HighlighterToast {
-                kind: HighlighterToastKind::Error,
-                message: "Choose an article to add to a collection".into(),
-            }),
-        );
-        set_curation_menu_error(state, "Choose an article to add to a collection".into());
-        return;
-    };
-    if d_tag.is_empty() {
-        set_toast(
-            state,
-            Some(HighlighterToast {
-                kind: HighlighterToastKind::Error,
-                message: "Choose a collection".into(),
-            }),
-        );
-        set_curation_menu_error(state, "Choose a collection".into());
-        return;
-    }
-
-    match core
-        .set_address_in_curation_set(d_tag, address, member)
-        .await
-    {
-        Ok(_) => {
-            set_toast(state, None);
-            refresh_bookmark_surfaces(core, state, runtime, visible_limit).await;
-        }
-        Err(err) => {
-            let message = err.to_string();
-            set_toast(
-                state,
-                Some(HighlighterToast {
-                    kind: HighlighterToastKind::Error,
-                    message: message.clone(),
-                }),
-            );
-            set_curation_menu_error(state, message);
-        }
-    }
-}
-
-async fn create_curation_set_and_add(
-    core: &Arc<HighlighterCore>,
-    state: &Arc<RwLock<HighlighterAppState>>,
-    runtime: &mut BookmarkRuntime,
-    title: String,
-    address: String,
-    visible_limit: usize,
-) {
-    let title = title.trim().to_string();
-    let Some(address) = normalize_article_address(&address) else {
-        set_toast(
-            state,
-            Some(HighlighterToast {
-                kind: HighlighterToastKind::Error,
-                message: "Choose an article to add to a collection".into(),
-            }),
-        );
-        set_curation_menu_error(state, "Choose an article to add to a collection".into());
-        return;
-    };
-    if title.is_empty() {
-        set_toast(
-            state,
-            Some(HighlighterToast {
-                kind: HighlighterToastKind::Error,
-                message: "Enter a collection name".into(),
-            }),
-        );
-        set_curation_menu_error(state, "Enter a collection name".into());
-        return;
-    }
-
-    match core.create_curation_set(title).await {
-        Ok(record) => match core
-            .set_address_in_curation_set(record.id, address, true)
-            .await
-        {
-            Ok(_) => {
-                set_toast(
-                    state,
-                    Some(HighlighterToast {
-                        kind: HighlighterToastKind::Success,
-                        message: "Added to collection".into(),
-                    }),
-                );
-                refresh_bookmark_surfaces(core, state, runtime, visible_limit).await;
-            }
-            Err(err) => {
-                let message = err.to_string();
-                set_toast(
-                    state,
-                    Some(HighlighterToast {
-                        kind: HighlighterToastKind::Error,
-                        message: message.clone(),
-                    }),
-                );
-                set_curation_menu_error(state, message);
-            }
-        },
-        Err(err) => {
-            let message = err.to_string();
-            set_toast(
-                state,
-                Some(HighlighterToast {
-                    kind: HighlighterToastKind::Error,
-                    message: message.clone(),
-                }),
-            );
-            set_curation_menu_error(state, message);
-        }
-    }
-}
-
 async fn refresh_bookmark_surfaces(
     core: &Arc<HighlighterCore>,
     state: &Arc<RwLock<HighlighterAppState>>,
@@ -9776,6 +10826,12 @@ fn set_curation_menu_loading(
 fn clear_curation_menu_snapshot(state: &Arc<RwLock<HighlighterAppState>>) {
     let mut current = state.write();
     current.curation_menu = HighlighterCurationMenuSnapshot::empty();
+    current.bump();
+}
+
+fn set_curation_menu_saving(state: &Arc<RwLock<HighlighterAppState>>, saving: bool) {
+    let mut current = state.write();
+    current.curation_menu.is_saving = saving;
     current.bump();
 }
 
@@ -9913,8 +10969,7 @@ fn complete_onboarding(
     core: &Arc<HighlighterCore>,
     state: &Arc<RwLock<HighlighterAppState>>,
     local_state_path: &Path,
-    actor_tx: &SyncSender<KernelMsg>,
-    onboarding_generation: &mut u64,
+    ops: &mut OpRunner,
 ) {
     let selected = {
         let current = state.read();
@@ -9942,92 +10997,42 @@ fn complete_onboarding(
     }
 
     let target_pubkeys = onboarding_pubkeys_for(&selected);
-    *onboarding_generation = onboarding_generation.saturating_add(1);
-    let generation = *onboarding_generation;
 
     save_local_state(local_state_path, &local_state_for_snapshot(state, true));
 
-    let mut current = state.write();
-    current.onboarding = onboarding_snapshot(true, selected, false);
-    current.toast = Some(HighlighterToast {
-        kind: HighlighterToastKind::Success,
-        message: "Welcome to Highlighter".into(),
-    });
-    current.bump();
-    drop(current);
-
-    if let Err(message) =
-        start_onboarding_follow_publish(core, actor_tx, generation, target_pubkeys)
     {
         let mut current = state.write();
+        current.onboarding = onboarding_snapshot(true, selected, false);
         current.toast = Some(HighlighterToast {
-            kind: HighlighterToastKind::Info,
-            message,
+            kind: HighlighterToastKind::Success,
+            message: "Welcome to Highlighter".into(),
         });
         current.bump();
     }
-}
 
-fn start_onboarding_follow_publish(
-    core: &Arc<HighlighterCore>,
-    actor_tx: &SyncSender<KernelMsg>,
-    generation: u64,
-    target_pubkeys: Vec<String>,
-) -> Result<(), String> {
     if target_pubkeys.is_empty() {
-        return Ok(());
+        return;
     }
 
+    // Follow publish runs off-actor via OpRunner (folds the bespoke worker).
     let core = core.clone();
-    let actor_tx = actor_tx.clone();
-    thread::Builder::new()
-        .name("highlighter-onboarding-follows".into())
-        .spawn(move || {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .thread_name("highlighter-onboarding-follows-worker")
-                .build()
-                .expect("build onboarding follow worker runtime");
+    ops.submit_op(
+        OpDomain::OnboardingFollows,
+        OP_DEADLINE_NETWORK,
+        // Mirror the prior fallback: a timed-out batch reports a failure so the
+        // resolver surfaces "save your interests" rather than success.
+        OpOutcome::OnboardingFollows { failures: 1 },
+        async move {
             let mut failures = 0usize;
             for pubkey in target_pubkeys {
-                if let Err(err) = runtime.block_on(core.set_follow(pubkey, true)) {
+                if let Err(err) = core.set_follow(pubkey, true).await {
                     failures = failures.saturating_add(1);
                     tracing::warn!(error = %err, "onboarding follow failed");
                 }
             }
-            if actor_tx
-                .send(KernelMsg::OnboardingFollowsResolved {
-                    generation,
-                    failures,
-                })
-                .is_err()
-            {
-                tracing::warn!("drop onboarding follow result: actor stopped");
-            }
-        })
-        .map(|_| ())
-        .map_err(|err| format!("Saved your interests; follow sync did not start: {err}"))
-}
-
-fn handle_onboarding_follows_resolved(
-    state: &Arc<RwLock<HighlighterAppState>>,
-    reconciler: &Arc<RwLock<Option<Arc<dyn HighlighterAppReconciler>>>>,
-    runtimes: &ActorRuntimes,
-    generation: u64,
-    failures: usize,
-) {
-    if generation != runtimes.onboarding_generation || failures == 0 {
-        return;
-    }
-
-    let mut current = state.write();
-    current.toast = Some(HighlighterToast {
-        kind: HighlighterToastKind::Info,
-        message: "Saved your interests".into(),
-    });
-    current.bump();
-    drop(current);
-    emit(state, reconciler);
+            OpOutcome::OnboardingFollows { failures }
+        },
+    );
 }
 
 fn set_bootstrapping(state: &Arc<RwLock<HighlighterAppState>>, is_bootstrapping: bool) {
@@ -10595,7 +11600,7 @@ mod tests {
     use super::*;
     use nostr_sdk::prelude::*;
     use std::sync::mpsc::{channel, RecvTimeoutError};
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
     use tempfile::tempdir;
 
     #[derive(Debug, Clone)]
@@ -10641,6 +11646,7 @@ mod tests {
             data_dir: Some(data_dir.to_string_lossy().into_owned()),
             visible_limit: 8,
             emit_hz: 30,
+            relay_policy_json: None,
         })
     }
 
@@ -10729,6 +11735,43 @@ mod tests {
             }
         }
         panic!("full state update within timeout")
+    }
+
+    fn wait_for_state(
+        rx: &std::sync::mpsc::Receiver<TestUpdate>,
+        description: &str,
+        predicate: impl FnMut(&HighlighterAppState) -> bool,
+    ) -> HighlighterAppState {
+        wait_for_state_with_timeout(rx, description, Duration::from_secs(5), predicate)
+    }
+
+    fn wait_for_state_with_timeout(
+        rx: &std::sync::mpsc::Receiver<TestUpdate>,
+        description: &str,
+        timeout: Duration,
+        mut predicate: impl FnMut(&HighlighterAppState) -> bool,
+    ) -> HighlighterAppState {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let now = Instant::now();
+            if now >= deadline {
+                panic!("state matching {description} within timeout");
+            }
+            match rx.recv_timeout((deadline - now).min(Duration::from_millis(250))) {
+                Ok(TestUpdate::State(state)) => {
+                    if predicate(&state) {
+                        return state;
+                    }
+                }
+                Ok(
+                    TestUpdate::PersistSessionCredential(_)
+                    | TestUpdate::ClearSessionCredentials
+                    | TestUpdate::OpenExternalUrl,
+                ) => {}
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => panic!("app update channel disconnected"),
+            }
+        }
     }
 
     #[test]
@@ -11050,16 +12093,17 @@ mod tests {
 
         let mut saw_error = false;
         let mut saw_clear = false;
-        for _ in 0..4 {
+        // Sticky flags + a generous update budget: resolutions are async
+        // (OpRunner), so busy/tick emissions interleave with the error
+        // snapshot in nondeterministic order — a one-shot reassignment would
+        // flake when a later non-error snapshot overwrote the flag.
+        for _ in 0..32 {
             match rx.recv_timeout(Duration::from_secs(5)) {
                 Ok(TestUpdate::State(state)) => {
-                    saw_error = state
+                    saw_error |= state
                         .toast
                         .as_ref()
                         .is_some_and(|toast| toast.kind == HighlighterToastKind::Error);
-                    if saw_error {
-                        continue;
-                    }
                 }
                 Ok(TestUpdate::ClearSessionCredentials) => saw_clear = true,
                 Ok(TestUpdate::PersistSessionCredential(_)) => {}
@@ -11094,10 +12138,14 @@ mod tests {
 
         let mut saw_error = false;
         let mut saw_clear = false;
-        for _ in 0..4 {
+        // Sticky flags + a generous update budget: resolutions are async
+        // (OpRunner), so busy/tick emissions interleave with the error
+        // snapshot in nondeterministic order — a one-shot reassignment would
+        // flake when a later non-error snapshot overwrote the flag.
+        for _ in 0..32 {
             match rx.recv_timeout(Duration::from_secs(5)) {
                 Ok(TestUpdate::State(state)) => {
-                    saw_error = state
+                    saw_error |= state
                         .toast
                         .as_ref()
                         .is_some_and(|toast| toast.kind == HighlighterToastKind::Error);
@@ -11150,7 +12198,12 @@ mod tests {
             url: "nostrconnect://abc".into(),
         });
 
-        let state = next_state(&rx);
+        let state = wait_for_state(&rx, "invalid web metadata error toast", |state| {
+            state
+                .toast
+                .as_ref()
+                .is_some_and(|toast| toast.kind == HighlighterToastKind::Error)
+        });
         assert_eq!(
             state.toast.as_ref().map(|toast| toast.kind),
             Some(HighlighterToastKind::Error)
@@ -11220,7 +12273,17 @@ mod tests {
             room_name: "Books".into(),
         });
 
-        let state = next_state(&rx);
+        let joining = wait_for_state(&rx, "join busy state", |state| {
+            state.room_explorer.joining_group_id == "books"
+        });
+        assert!(joining.room_explorer.error_message.is_none());
+
+        let state = wait_for_state(&rx, "join error state", |state| {
+            state.toast.as_ref().is_some_and(|toast| {
+                toast.kind == HighlighterToastKind::Error
+                    && state.room_explorer.error_message.is_some()
+            })
+        });
         let toast = state.toast.expect("toast");
         assert_eq!(toast.kind, HighlighterToastKind::Error);
         assert!(state.room_explorer.error_message.is_some());
@@ -11372,7 +12435,12 @@ mod tests {
             isbn: "not an isbn".into(),
         });
 
-        let state = next_state(&rx);
+        let state = wait_for_state(&rx, "invalid ISBN error toast", |state| {
+            state
+                .toast
+                .as_ref()
+                .is_some_and(|toast| toast.kind == HighlighterToastKind::Error)
+        });
         assert_eq!(
             state.toast.as_ref().map(|toast| toast.kind),
             Some(HighlighterToastKind::Error)
@@ -11584,7 +12652,9 @@ mod tests {
             pubkey_hex: "".into(),
         });
 
-        let state = next_state(&rx);
+        let state = wait_for_state(&rx, "invalid profile error", |state| {
+            state.profile_view.error_message.as_deref() == Some("Choose a profile to open")
+        });
         assert_eq!(
             state.profile_view.error_message.as_deref(),
             Some("Choose a profile to open")
@@ -11606,7 +12676,9 @@ mod tests {
 
         app.dispatch(HighlighterAppAction::CloseProfile);
 
-        let state = next_state(&rx);
+        let state = wait_for_state(&rx, "closed profile snapshot", |state| {
+            state.profile_view.pubkey_hex.is_empty()
+        });
         assert!(state.profile_view.pubkey_hex.is_empty());
         assert!(state.profile_view.articles.is_empty());
         assert!(state.profile_view.highlights.is_empty());
@@ -11629,11 +12701,11 @@ mod tests {
             seed: Some(seed.clone()),
         });
 
-        let loading = next_state(&rx);
-        assert_eq!(
-            loading.article_reader.address,
-            format!("30023:{pubkey}:essay")
-        );
+        let expected_address = format!("30023:{pubkey}:essay");
+        let loading = wait_for_state(&rx, "article reader loading snapshot", |state| {
+            state.article_reader.address == expected_address && state.article_reader.is_loading
+        });
+        assert_eq!(loading.article_reader.address, expected_address);
         assert_eq!(
             loading
                 .article_reader
@@ -11644,7 +12716,9 @@ mod tests {
         );
         assert!(loading.article_reader.is_loading);
 
-        let state = next_state(&rx);
+        let state = wait_for_state(&rx, "article reader loaded snapshot", |state| {
+            state.article_reader.address == expected_address && !state.article_reader.is_loading
+        });
         assert_eq!(state.article_reader.pubkey_hex, pubkey);
         assert_eq!(state.article_reader.d_tag, "essay");
         assert_eq!(
@@ -11694,8 +12768,9 @@ mod tests {
             note: "".into(),
         });
 
-        let publishing = next_state(&rx);
-        assert!(publishing.article_reader.is_publishing_highlight);
+        // Phase 2: the publish helper now validates inputs on the actor BEFORE
+        // submitting the off-actor op, so a no-article failure surfaces as a
+        // single error snapshot with no spurious `is_publishing` flash.
         let state = next_state(&rx);
         assert!(!state.article_reader.is_publishing_highlight);
         assert_eq!(
@@ -11965,5 +13040,938 @@ mod tests {
             pubkey: pubkey.into(),
             ..article_record(identifier, created_at, published_at)
         }
+    }
+
+    // =======================================================================
+    // Actor-blocking-fix acceptance tests (design §4.6).
+    //
+    // These prove the OpRunner keeps the single-writer actor loop live while a
+    // network-class operation is wedged against a dead relay, that superseded
+    // resolutions are dropped, that logout cancels in-flight work, and that no
+    // single handler dispatch blows the loop-stall budget.
+    // =======================================================================
+
+    use std::io::Read as _;
+    use std::net::TcpListener;
+
+    /// A "network up, relay dead" black hole: accepts TCP connections and then
+    /// never writes a byte back (no WebSocket / HTTP handshake completes).
+    /// Returns the bound port; the accept loop runs on a detached thread for
+    /// the lifetime of the process (test binaries are ephemeral).
+    fn spawn_black_hole_listener() -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind black-hole listener");
+        let port = listener.local_addr().expect("local addr").port();
+        std::thread::Builder::new()
+            .name("black-hole-relay".into())
+            .spawn(move || {
+                for stream in listener.incoming() {
+                    if let Ok(mut stream) = stream {
+                        // Hold the connection open and swallow any request
+                        // bytes, but never respond — the client blocks until
+                        // its own deadline fires.
+                        std::thread::spawn(move || {
+                            let mut buf = [0u8; 1024];
+                            // One non-fatal read; then just keep the socket
+                            // alive by parking. Dropping `stream` would RST.
+                            let _ = stream.read(&mut buf);
+                            loop {
+                                std::thread::sleep(Duration::from_secs(3600));
+                            }
+                        });
+                    }
+                }
+            })
+            .expect("spawn black-hole listener");
+        port
+    }
+
+    /// Relay policy JSON pointing every role at the black hole.
+    fn black_hole_relay_policy(port: u16) -> String {
+        let url = format!("ws://127.0.0.1:{port}");
+        format!(
+            r#"{{
+  "highlighter_relay": "{url}",
+  "purple_pages_relay": "{url}",
+  "negentropy_sync_relays": ["{url}"],
+  "nostr_connect_relay": "{url}",
+  "seed_defaults": [
+    {{ "url": "{url}", "read": true, "write": true, "rooms": true, "indexer": true }}
+  ]
+}}"#
+        )
+    }
+
+    fn black_hole_app(port: u16) -> Arc<HighlighterNmpApp> {
+        let tmp = tempdir().expect("tempdir");
+        let data_dir = tmp.keep().join("ndb");
+        // Install the black-hole policy process-wide for this test, then build
+        // the app (which reads seed_defaults at construction).
+        crate::relays::set_relay_policy_for_test(&black_hole_relay_policy(port));
+        HighlighterNmpApp::new(HighlighterAppConfig {
+            data_dir: Some(data_dir.to_string_lossy().into_owned()),
+            visible_limit: 8,
+            emit_hz: 30,
+            relay_policy_json: Some(black_hole_relay_policy(port)),
+        })
+    }
+
+    /// Drain whatever snapshots have already been emitted, returning the last.
+    fn drain_states(rx: &std::sync::mpsc::Receiver<TestUpdate>) -> Option<HighlighterAppState> {
+        let mut last = None;
+        while let Ok(update) = rx.recv_timeout(Duration::from_millis(50)) {
+            if let TestUpdate::State(state) = update {
+                last = Some(state);
+            }
+        }
+        last
+    }
+
+    /// Acceptance 1 — liveness under wedge. With every relay pointed at the
+    /// black hole, a probe op wedges off-actor; meanwhile a burst of local
+    /// actions must each produce a snapshot promptly, and the actor watchdog
+    /// must never see a slow dispatch.
+    #[test]
+    fn acceptance_liveness_under_wedge() {
+        let port = spawn_black_hole_listener();
+        reset_actor_max_handler_ms();
+        let app = black_hole_app(port);
+        let (tx, rx) = channel();
+        app.listen_for_updates(Arc::new(TestReconciler { tx }));
+        let _ = next_state(&rx);
+
+        // Wedge: probe a black-hole relay (HTTP GET that never completes).
+        app.dispatch(HighlighterAppAction::OpenNetworkSettings);
+        let _ = drain_states(&rx);
+        app.dispatch(HighlighterAppAction::ProbeNetworkRelayNip11 {
+            url: format!("ws://127.0.0.1:{port}"),
+        });
+        // The loading snapshot must arrive immediately (op submitted, not awaited).
+        let loading = next_state(&rx);
+        assert!(
+            loading.network.nip11.iter().any(|row| row.is_loading),
+            "probe should set a loading row without blocking"
+        );
+
+        // While the probe is wedged off-actor, fire local actions; each must
+        // yield a snapshot well under a second.
+        for i in 0..10 {
+            let query = format!("q{i}");
+            let before = Instant::now();
+            app.dispatch(HighlighterAppAction::SetSearchQuery { query });
+            let _ = next_state(&rx);
+            assert!(
+                before.elapsed() < Duration::from_secs(1),
+                "local action {i} must not be blocked by the wedged probe"
+            );
+        }
+
+        // No actor dispatch should have blown the loop-stall budget (the probe
+        // ran off-actor). Generous CI bound; design target is < 250ms.
+        let max_ms = actor_max_handler_ms();
+        assert!(
+            max_ms < 2000,
+            "max actor handler duration {max_ms}ms exceeded budget while a probe was wedged"
+        );
+
+        crate::relays::reset_relay_policy_for_test();
+    }
+
+    /// Acceptance 2 — account-creation regression (the on-device repro). With
+    /// relays black-holed, a create-account flow is interleaved with a wedged
+    /// Phase-1 probe; the account-create resolution must still reach a snapshot
+    /// within its deadline. On the PRE-FIX code this fails by construction: the
+    /// actor would be blocked inside the probe handler's `runtime.block_on`, so
+    /// `AccountCreateResolved` could not be dequeued until the probe's 6s wait
+    /// returned — and with a Class-A op ahead (360s) it would never return in
+    /// time. Here the probe runs off-actor, so the create-account worker's own
+    /// resolution is processed promptly.
+    #[test]
+    fn acceptance_account_creation_regression() {
+        let port = spawn_black_hole_listener();
+        let app = black_hole_app(port);
+        let (tx, rx) = channel();
+        app.listen_for_updates(Arc::new(TestReconciler { tx }));
+        let _ = next_state(&rx);
+
+        // Interleave a wedged probe ahead of the account-create flow.
+        app.dispatch(HighlighterAppAction::OpenNetworkSettings);
+        let _ = drain_states(&rx);
+        app.dispatch(HighlighterAppAction::ProbeNetworkRelayNip11 {
+            url: format!("ws://127.0.0.1:{port}"),
+        });
+        let _ = drain_states(&rx);
+
+        app.dispatch(HighlighterAppAction::SetCreateAccountDisplayName {
+            display_name: "Acceptance Tester".into(),
+        });
+        let _ = drain_states(&rx);
+        app.dispatch(HighlighterAppAction::SubmitCreateAccount);
+
+        // The create-account worker has a 30s deadline; the actor must dequeue
+        // its resolution. Poll until `is_creating` clears (success or D6 error),
+        // bounded generously above the worker deadline.
+        let deadline = Instant::now() + Duration::from_secs(45);
+        let mut resolved = false;
+        while Instant::now() < deadline {
+            match rx.recv_timeout(Duration::from_secs(2)) {
+                Ok(TestUpdate::State(state)) => {
+                    if !state.create_account.is_creating
+                        && (state.create_account.created_user.is_some()
+                            || state.create_account.error_message.is_some())
+                    {
+                        resolved = true;
+                        break;
+                    }
+                }
+                Ok(_) => {}
+                Err(_) => {}
+            }
+        }
+        assert!(
+            resolved,
+            "AccountCreateResolved must reach a snapshot within deadline even with a probe wedged"
+        );
+
+        crate::relays::reset_relay_policy_for_test();
+    }
+
+    /// Acceptance 3 — supersession. Two probes for the same domain; only the
+    /// second generation's resolution may land (the first is aborted/dropped).
+    #[test]
+    fn acceptance_supersession_drops_first_generation() {
+        let port = spawn_black_hole_listener();
+        let app = black_hole_app(port);
+        let (tx, rx) = channel();
+        app.listen_for_updates(Arc::new(TestReconciler { tx }));
+        let _ = next_state(&rx);
+
+        app.dispatch(HighlighterAppAction::OpenNetworkSettings);
+        let _ = drain_states(&rx);
+
+        // First probe (will be superseded) and immediately a second.
+        app.dispatch(HighlighterAppAction::ProbeNetworkRelayNip11 {
+            url: format!("ws://127.0.0.1:{port}/first"),
+        });
+        app.dispatch(HighlighterAppAction::ProbeNetworkRelayNip11 {
+            url: format!("ws://127.0.0.1:{port}/second"),
+        });
+
+        // Wait past the probe deadline; collect all resolved (non-loading) rows.
+        let deadline = Instant::now() + Duration::from_secs(12);
+        let mut resolved_urls: Vec<String> = Vec::new();
+        while Instant::now() < deadline {
+            match rx.recv_timeout(Duration::from_secs(1)) {
+                Ok(TestUpdate::State(state)) => {
+                    for row in &state.network.nip11 {
+                        if !row.is_loading && !resolved_urls.contains(&row.url) {
+                            resolved_urls.push(row.url.clone());
+                        }
+                    }
+                }
+                Ok(_) => {}
+                Err(_) => {}
+            }
+            // Stop early once the second resolves.
+            if resolved_urls.iter().any(|u| u.ends_with("/second")) {
+                break;
+            }
+        }
+
+        assert!(
+            resolved_urls.iter().any(|u| u.ends_with("/second")),
+            "second-generation probe must resolve"
+        );
+        assert!(
+            !resolved_urls.iter().any(|u| u.ends_with("/first")),
+            "first-generation probe was superseded and must not resolve a row"
+        );
+
+        crate::relays::reset_relay_policy_for_test();
+    }
+
+    /// Acceptance 4 — logout mid-flight. Start a wedged probe, then sign out;
+    /// after logout the op's domain data must not appear and busy flags clear.
+    #[test]
+    fn acceptance_logout_cancels_in_flight() {
+        let port = spawn_black_hole_listener();
+        let app = black_hole_app(port);
+        let (tx, rx) = channel();
+        app.listen_for_updates(Arc::new(TestReconciler { tx }));
+        let _ = next_state(&rx);
+
+        app.dispatch(HighlighterAppAction::OpenNetworkSettings);
+        let _ = drain_states(&rx);
+        app.dispatch(HighlighterAppAction::ProbeNetworkRelayNip11 {
+            url: format!("ws://127.0.0.1:{port}/inflight"),
+        });
+        let _ = drain_states(&rx);
+
+        // Sign out mid-flight; cancel_all aborts the in-flight probe and bumps
+        // its generation so any late resolution is dropped.
+        app.dispatch(HighlighterAppAction::Logout);
+        let post_logout = next_state(&rx);
+        assert!(
+            post_logout.network.nip11.is_empty(),
+            "post-logout snapshot must not carry the in-flight probe's domain data"
+        );
+
+        // Give the aborted probe past its deadline; no resurrected row may appear.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < deadline {
+            if let Ok(TestUpdate::State(state)) = rx.recv_timeout(Duration::from_secs(1)) {
+                assert!(
+                    state.network.nip11.is_empty(),
+                    "a cancelled probe must not write into a logged-out session"
+                );
+            }
+        }
+
+        crate::relays::reset_relay_policy_for_test();
+    }
+
+    /// Acceptance 5 — loop-stall watchdog. Across a representative sequence of
+    /// local actions (no network), the max single-handler dispatch duration
+    /// must stay under the D8 budget. Generous 1000ms CI bound; design target
+    /// is < 250ms; the 2000ms assertion absorbs CI variance.
+    #[test]
+    fn acceptance_loop_stall_watchdog() {
+        reset_actor_max_handler_ms();
+        let app = test_app();
+        let (tx, rx) = channel();
+        app.listen_for_updates(Arc::new(TestReconciler { tx }));
+        let _ = next_state(&rx);
+
+        let actions = [
+            HighlighterAppAction::OpenHomeFeed,
+            HighlighterAppAction::SetSearchQuery {
+                query: "alpha".into(),
+            },
+            HighlighterAppAction::SetSearchQuery {
+                query: "beta".into(),
+            },
+            HighlighterAppAction::OpenNetworkSettings,
+            HighlighterAppAction::SetNetworkImportNpub {
+                npub: "npub1xyz".into(),
+            },
+            HighlighterAppAction::AppForegrounded,
+            HighlighterAppAction::RefreshAppChrome,
+        ];
+        for action in actions {
+            app.dispatch(action);
+            let _ = drain_states(&rx);
+        }
+
+        let max_ms = actor_max_handler_ms();
+        assert!(
+            max_ms < 2000,
+            "max actor handler duration {max_ms}ms exceeded the loop-stall budget"
+        );
+    }
+
+    /// Regression mechanism proof (design §4.6, account-creation repro).
+    ///
+    /// Demonstrates *by construction* why the pre-fix code froze on a dead
+    /// network and why the fix resolves it, without depending on the full
+    /// pre-fix tree. It models the kernel as a single loop thread draining a
+    /// queue, plus a worker that posts a resolution — exactly the
+    /// account-create worker / `AccountCreateResolved` relationship.
+    ///
+    /// - PRE-FIX shape: the loop runs a network handler INLINE via
+    ///   `runtime.block_on(wedged_future)`. The worker posts its resolution
+    ///   ~50ms in, but the loop cannot observe it until the wedge returns. We
+    ///   assert the observe-latency is dominated by the wedge (the on-device
+    ///   "stuck on Creating…" freeze). On the real pre-fix code this is the
+    ///   360s/65s wait; here we bound the wedge so the suite can never hang.
+    /// - FIXED shape: the loop submits the network work off-thread (like
+    ///   `OpRunner::submit_op`) and keeps draining, so the resolution is
+    ///   observed within the worker's ~50ms latency.
+    #[test]
+    fn regression_inline_block_on_starves_queued_resolution() {
+        use std::sync::mpsc::sync_channel as sc;
+        use tokio::io::AsyncReadExt;
+
+        let port = spawn_black_hole_listener();
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .expect("rt");
+
+        // Bounded wedge: connect to the black hole, then a read that never
+        // completes — models a relay ack that never arrives.
+        let wedge = move || async move {
+            let addr = format!("127.0.0.1:{port}");
+            if let Ok(mut stream) = tokio::net::TcpStream::connect(&addr).await {
+                let mut buf = [0u8; 1];
+                let _ = tokio::time::timeout(Duration::from_secs(3), stream.read(&mut buf)).await;
+            }
+        };
+
+        // --- PRE-FIX shape: inline block_on on the loop thread. ---
+        let prefix_latency = {
+            let (qtx, qrx) = sc::<Instant>(8);
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(50));
+                let _ = qtx.send(Instant::now()); // resolution "posted" time
+            });
+            let rt_handle = rt.handle().clone();
+            let wedge_fut = wedge.clone();
+            let loop_start = Instant::now();
+            // Inline blocking handler (the defect) on the loop thread.
+            rt_handle.block_on(async {
+                wedge_fut().await;
+            });
+            // Only now can the loop drain the resolution.
+            let _posted_at = qrx
+                .recv_timeout(Duration::from_millis(50))
+                .expect("resolution queued");
+            loop_start.elapsed()
+        };
+
+        // --- FIXED shape: submit off-thread, keep draining. ---
+        let fixed_latency = {
+            let (qtx, qrx) = sc::<Instant>(8);
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(50));
+                let _ = qtx.send(Instant::now());
+            });
+            let wedge_fut = wedge.clone();
+            let loop_start = Instant::now();
+            rt.spawn(async move {
+                wedge_fut().await;
+            });
+            // Loop keeps draining immediately.
+            let _posted_at = qrx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("resolution queued");
+            loop_start.elapsed()
+        };
+
+        // Pre-fix: the loop was blocked for the whole wedge (~3s) before it
+        // could observe a resolution that was ready in 50ms.
+        assert!(
+            prefix_latency >= Duration::from_millis(2500),
+            "pre-fix inline block_on must starve the queued resolution for the wedge duration \
+             (observed {prefix_latency:?})"
+        );
+        // Fixed: the resolution is observed within the worker's latency.
+        assert!(
+            fixed_latency < Duration::from_millis(500),
+            "fixed submit-off-thread must observe the queued resolution promptly \
+             (observed {fixed_latency:?})"
+        );
+
+        crate::relays::reset_relay_policy_for_test();
+    }
+
+    // =======================================================================
+    // Phase 2 (Class B publish helpers) acceptance coverage.
+    // =======================================================================
+
+    /// Phase 2 — OpDomain keying for toggles. A toggle on comment A must NOT
+    /// share a slot with a toggle on comment B (independent), while the same
+    /// comment + same kind shares a slot (supersession). Different kinds on the
+    /// same comment are independent slots. This is the correctness contract
+    /// that makes "last tap wins per target" hold without cross-target aborts.
+    #[test]
+    fn comment_interaction_keying_is_per_target_and_kind() {
+        let a_like = OpDomain::CommentInteraction {
+            target: op_target_hash("comment-a"),
+            kind: CommentInteractionKind::Like,
+        };
+        let a_like_again = OpDomain::CommentInteraction {
+            target: op_target_hash("comment-a"),
+            kind: CommentInteractionKind::Like,
+        };
+        let b_like = OpDomain::CommentInteraction {
+            target: op_target_hash("comment-b"),
+            kind: CommentInteractionKind::Like,
+        };
+        let a_bookmark = OpDomain::CommentInteraction {
+            target: op_target_hash("comment-a"),
+            kind: CommentInteractionKind::Bookmark,
+        };
+        // Same comment + same kind => same slot (a double-tap supersedes).
+        assert_eq!(a_like, a_like_again);
+        // Different comment => different slot (no cross-target abort).
+        assert_ne!(a_like, b_like);
+        // Same comment, different kind => different slot.
+        assert_ne!(a_like, a_bookmark);
+        // Article-bookmark keying is likewise per-address.
+        assert_ne!(
+            OpDomain::ArticleBookmarkToggle {
+                target: op_target_hash("addr-1")
+            },
+            OpDomain::ArticleBookmarkToggle {
+                target: op_target_hash("addr-2")
+            },
+        );
+    }
+
+    /// Phase 2 — rapid-double-toggle supersession (last tap wins). Submits two
+    /// ops for the SAME domain back-to-back against the black hole; the first
+    /// is aborted and its (stale-generation) resolution dropped, so only the
+    /// LAST submission's generation may resolve. Modeled directly on `OpRunner`
+    /// so it needs no signed-in fixture, while exercising the exact mechanism
+    /// the comment-like / follow toggles rely on.
+    #[test]
+    fn rapid_double_toggle_last_tap_wins() {
+        use std::sync::mpsc::sync_channel;
+
+        let (tx, rx) = sync_channel::<KernelMsg>(16);
+        let mut ops = OpRunner::new(tx);
+
+        // First tap: a long-running op (would resolve "stale").
+        ops.submit_op(
+            OpDomain::FollowToggle,
+            Duration::from_secs(30),
+            OpOutcome::FollowToggle {
+                desired_following: true,
+                previous_following: false,
+                result: Err(op_timeout_message(OpDomain::FollowToggle)),
+            },
+            async {
+                tokio::time::sleep(Duration::from_secs(10)).await;
+                OpOutcome::FollowToggle {
+                    desired_following: true,
+                    previous_following: false,
+                    result: Ok(()),
+                }
+            },
+        );
+        let first_generation = *ops.generations.get(&OpDomain::FollowToggle).unwrap();
+
+        // Second tap (the LAST one): resolves quickly. This bumps the generation
+        // and aborts the first.
+        ops.submit_op(
+            OpDomain::FollowToggle,
+            Duration::from_secs(30),
+            OpOutcome::FollowToggle {
+                desired_following: false,
+                previous_following: true,
+                result: Err(op_timeout_message(OpDomain::FollowToggle)),
+            },
+            async {
+                OpOutcome::FollowToggle {
+                    desired_following: false,
+                    previous_following: true,
+                    result: Ok(()),
+                }
+            },
+        );
+        let last_generation = *ops.generations.get(&OpDomain::FollowToggle).unwrap();
+        assert!(
+            last_generation > first_generation,
+            "second tap bumps generation"
+        );
+
+        // Collect resolutions for ~2s; only the last generation may appear, and
+        // the first generation must be stale (dropped by the actor's check).
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let mut saw_last = false;
+        while Instant::now() < deadline {
+            match rx.recv_timeout(Duration::from_millis(200)) {
+                Ok(KernelMsg::OpResolved {
+                    domain, generation, ..
+                }) => {
+                    assert_eq!(domain, OpDomain::FollowToggle);
+                    // The first tap, if it sends at all, must be stale.
+                    if generation == first_generation {
+                        assert!(
+                            ops.is_stale(domain, generation),
+                            "first-tap resolution must be stale (superseded)"
+                        );
+                    }
+                    if generation == last_generation {
+                        assert!(
+                            !ops.is_stale(domain, generation),
+                            "last tap must be current"
+                        );
+                        saw_last = true;
+                        break;
+                    }
+                }
+                Ok(_) => {}
+                Err(_) => {}
+            }
+        }
+        assert!(
+            saw_last,
+            "the last tap's resolution must arrive and be current"
+        );
+    }
+
+    /// Phase 2 — publish under a dead network. A Class-B publish domain
+    /// (NetworkRelayWrite) is dispatched against the black hole: the busy flag
+    /// must set immediately (op submitted, not awaited), unrelated local
+    /// actions must each stay well under a second, and the busy flag must clear
+    /// (success or D6 toast) within the deadline + epsilon. On the pre-fix code
+    /// the actor would block inside the publish handler for up to 65s.
+    #[test]
+    fn acceptance_publish_under_dead_network() {
+        let port = spawn_black_hole_listener();
+        reset_actor_max_handler_ms();
+        let app = black_hole_app(port);
+        let (tx, rx) = channel();
+        app.listen_for_updates(Arc::new(TestReconciler { tx }));
+        let _ = next_state(&rx);
+
+        app.dispatch(HighlighterAppAction::OpenNetworkSettings);
+        let _ = drain_states(&rx);
+
+        // Dispatch a relay-list write (Class B publish) against the black hole.
+        app.dispatch(HighlighterAppAction::UpsertNetworkRelay {
+            config: RelayConfig {
+                url: format!("ws://127.0.0.1:{port}"),
+                read: true,
+                write: true,
+                rooms: false,
+                indexer: false,
+            },
+        });
+        // The busy snapshot must arrive immediately (submitted, not awaited).
+        let busy = next_state(&rx);
+        assert!(
+            busy.network.is_saving,
+            "publish should set the saving flag without blocking the actor"
+        );
+
+        // Unrelated local actions must stay live while the publish is in flight.
+        for i in 0..10 {
+            let before = Instant::now();
+            app.dispatch(HighlighterAppAction::SetSearchQuery {
+                query: format!("q{i}"),
+            });
+            let _ = next_state(&rx);
+            assert!(
+                before.elapsed() < Duration::from_secs(1),
+                "local action {i} must not be blocked by the in-flight publish"
+            );
+        }
+
+        // The actor watchdog must never have seen a slow dispatch.
+        let max_ms = actor_max_handler_ms();
+        assert!(
+            max_ms < 2000,
+            "max actor handler {max_ms}ms exceeded budget while a publish was in flight"
+        );
+
+        // The busy flag must clear within the op deadline + epsilon (success or
+        // D6 error), proving the resolution reached the actor.
+        let deadline = Instant::now() + OP_DEADLINE_NETWORK + Duration::from_secs(15);
+        let mut cleared = false;
+        while Instant::now() < deadline {
+            match rx.recv_timeout(Duration::from_secs(2)) {
+                Ok(TestUpdate::State(state)) => {
+                    if !state.network.is_saving {
+                        cleared = true;
+                        break;
+                    }
+                }
+                Ok(_) => {}
+                Err(_) => {}
+            }
+        }
+        assert!(
+            cleared,
+            "the publish busy flag must clear within the deadline even on a dead network"
+        );
+
+        crate::relays::reset_relay_policy_for_test();
+    }
+
+    /// Phase 2 — loop-stall watchdog extended with one of each newly migrated
+    /// action dispatched against the black hole. None may wedge the actor: the
+    /// max single-handler dispatch must stay under the budget while every op is
+    /// in flight off-actor.
+    #[test]
+    fn acceptance_phase2_actions_keep_loop_live() {
+        let port = spawn_black_hole_listener();
+        reset_actor_max_handler_ms();
+        let app = black_hole_app(port);
+        let (tx, rx) = channel();
+        app.listen_for_updates(Arc::new(TestReconciler { tx }));
+        let _ = next_state(&rx);
+
+        // One representative action per newly migrated Class-B domain. Each must
+        // submit-and-return; none may block the loop. (Validation-gated handlers
+        // that early-return without a network op are still safe to dispatch.)
+        let actions = [
+            HighlighterAppAction::OpenNetworkSettings,
+            HighlighterAppAction::UpsertNetworkRelay {
+                config: RelayConfig {
+                    url: format!("ws://127.0.0.1:{port}"),
+                    read: true,
+                    write: true,
+                    rooms: false,
+                    indexer: false,
+                },
+            },
+            HighlighterAppAction::RemoveNetworkRelay {
+                url: format!("ws://127.0.0.1:{port}"),
+            },
+            HighlighterAppAction::SetNetworkRelayRoles {
+                url: format!("ws://127.0.0.1:{port}"),
+                read: true,
+                write: false,
+                rooms: false,
+                indexer: false,
+            },
+            HighlighterAppAction::ToggleArticleBookmark {
+                address: "30023:deadbeef:slug".into(),
+            },
+            HighlighterAppAction::ToggleProfileFollow,
+            HighlighterAppAction::PublishComment {
+                parent_event_id: None,
+            },
+            HighlighterAppAction::PublishFeedbackNewThread,
+            HighlighterAppAction::SubmitEditProfile,
+            HighlighterAppAction::PublishArtifactShare {
+                preview: preview_for_isbn("9780000000000", "Test Book"),
+                group_id: "group".into(),
+                note: None,
+            },
+            HighlighterAppAction::PublishRoomDiscussion {
+                title: "Title".into(),
+                body: "Body".into(),
+                attachment_url: None,
+            },
+        ];
+        for action in actions {
+            let before = Instant::now();
+            app.dispatch(action);
+            let _ = drain_states(&rx);
+            assert!(
+                before.elapsed() < Duration::from_secs(2),
+                "a migrated action wedged the actor loop"
+            );
+        }
+
+        let max_ms = actor_max_handler_ms();
+        assert!(
+            max_ms < 2000,
+            "max actor handler {max_ms}ms exceeded the loop-stall budget under Phase-2 actions"
+        );
+
+        crate::relays::reset_relay_policy_for_test();
+    }
+
+    /// Phase 3 — `handle_core_delta` is non-blocking under a black-holed relay.
+    /// With every relay pointed at the black hole, open the heaviest set of
+    /// panels (so the `CommunityUpserted` cascade actually runs home-feed,
+    /// room-explorer, profile-view and article-reader refreshes), then inject a
+    /// burst of `CommunityUpserted` deltas straight into the actor queue. Each
+    /// delta cascade is pure ndb reads + synchronous subscription registration
+    /// (Phase-3 audit), so the per-message watchdog must stay well under the
+    /// loop-stall budget even though the network is dead. On a delta path that
+    /// still awaited the network this would blow the budget (or hang).
+    #[test]
+    fn acceptance_phase3_core_delta_non_blocking_under_dead_network() {
+        let port = spawn_black_hole_listener();
+        reset_actor_max_handler_ms();
+        let app = black_hole_app(port);
+        let (tx, rx) = channel();
+        app.listen_for_updates(Arc::new(TestReconciler { tx }));
+        let _ = next_state(&rx);
+
+        // Sign in so signed-in-scoped refreshes have a user, then open every
+        // panel the heaviest delta arm cascades into.
+        let keys = Keys::generate();
+        let nsec = keys.secret_key().to_bech32().expect("nsec");
+        app.dispatch(HighlighterAppAction::SignInNsec {
+            nsec,
+            persist: false,
+            clear_stored_on_failure: false,
+        });
+        let _ = drain_states(&rx);
+        app.dispatch(HighlighterAppAction::OpenHomeFeed);
+        let _ = drain_states(&rx);
+        app.dispatch(HighlighterAppAction::OpenRoomExplorer);
+        let _ = drain_states(&rx);
+        app.dispatch(HighlighterAppAction::OpenBookmarks);
+        let _ = drain_states(&rx);
+
+        // The watchdog may have recorded sign-in / panel-open work; reset so the
+        // assertion measures only the delta cascades.
+        reset_actor_max_handler_ms();
+
+        // Inject a burst of heaviest-cascade deltas. Each must dispatch promptly;
+        // the surrounding loop stays live (snapshots keep draining).
+        for i in 0..10 {
+            let before = Instant::now();
+            app.inject_delta_for_test(DataChangeType::CommunityUpserted {
+                group_id: format!("group-{i}"),
+            });
+            let _ = drain_states(&rx);
+            assert!(
+                before.elapsed() < Duration::from_secs(1),
+                "core delta {i} cascade must not block on the dead network"
+            );
+        }
+
+        let max_ms = actor_max_handler_ms();
+        assert!(
+            max_ms < 2000,
+            "handle_core_delta cascade max {max_ms}ms blew the loop-stall budget under a dead relay"
+        );
+
+        crate::relays::reset_relay_policy_for_test();
+    }
+
+    /// Phase 4 — auth supersession across sign-in methods. nsec and bunker
+    /// share `OpDomain::Auth` (preserving today's single `auth_generation`
+    /// semantics): a rapid nsec-then-bunker sequence must drop the superseded
+    /// nsec attempt's RESOLUTION — concretely, its `persist` side effect must
+    /// never fire (credential persistence happens only in the resolution
+    /// success arm, which the staleness check skips).
+    ///
+    /// Deliberately NOT asserted: that the nsec user is absent from chrome.
+    /// `login_nsec` succeeds synchronously at the core level and surfaces
+    /// through the `SignerConnected` delta, which is (by long-standing design)
+    /// independent of facade-level supersession — a later failed bunker
+    /// pairing must not silently log out a successfully signed-in user.
+    #[test]
+    fn auth_supersession_nsec_then_bunker_drops_stale_resolution() {
+        let port = spawn_black_hole_listener();
+        let app = black_hole_app(port);
+        let (tx, rx) = channel();
+        app.listen_for_updates(Arc::new(TestReconciler { tx }));
+        let _ = next_state(&rx);
+
+        let keys = Keys::generate();
+        let nsec_pubkey = keys.public_key().to_hex();
+        let nsec = keys.secret_key().to_bech32().expect("nsec");
+
+        // Rapid sequence: nsec sign-in (persist: true — the canary) is
+        // immediately superseded by a bunker pairing, which will time out
+        // against the black hole. Both bump the shared auth generation; the
+        // nsec resolution carries the stale generation and must be dropped,
+        // so the nsec credential must never be persisted.
+        app.dispatch(HighlighterAppAction::SignInNsec {
+            nsec,
+            persist: true,
+            clear_stored_on_failure: false,
+        });
+        app.dispatch(HighlighterAppAction::PairBunker {
+            uri: format!("bunker://{nsec_pubkey}?relay=ws://127.0.0.1:{port}"),
+            persist: false,
+            clear_stored_on_failure: false,
+        });
+
+        // Drain updates until the bunker attempt settles (error toast +
+        // signing-in cleared) or the deadline passes, recording every
+        // credential-persistence callback along the way.
+        let deadline = Instant::now() + Duration::from_secs(40);
+        let mut persisted_nsec = false;
+        let mut settled_with_error = false;
+        while Instant::now() < deadline {
+            match rx.recv_timeout(Duration::from_secs(2)) {
+                Ok(TestUpdate::PersistSessionCredential(HighlighterSessionCredential::Nsec {
+                    ..
+                })) => {
+                    persisted_nsec = true;
+                }
+                Ok(TestUpdate::State(state)) => {
+                    let errored = state
+                        .toast
+                        .as_ref()
+                        .is_some_and(|t| matches!(t.kind, HighlighterToastKind::Error));
+                    if !state.auth.is_signing_in && errored {
+                        settled_with_error = true;
+                        break;
+                    }
+                }
+                Ok(_) => {}
+                Err(_) => {}
+            }
+        }
+
+        assert!(
+            settled_with_error,
+            "the bunker (last) attempt must settle: signing-in cleared with an error toast"
+        );
+        assert!(
+            !persisted_nsec,
+            "superseded nsec resolution must be dropped: its persist side effect must not fire"
+        );
+
+        crate::relays::reset_relay_policy_for_test();
+    }
+
+    /// Timeout-outcome regression: a room join wedged on a dead network must
+    /// resolve through `apply_op_outcome` at the OpRunner deadline with its
+    /// REAL payload — the live `group_id`, not the old zeroed fallback that
+    /// the staleness/bookkeeping paths silently discarded. Observables: the
+    /// loop stays live while the join is in flight, and the timeout surfaces
+    /// as the room-explorer join error + Error toast (which only the Err arm
+    /// of the JoinRoom outcome writes).
+    #[test]
+    fn join_room_timeout_resolves_with_live_payload() {
+        let port = spawn_black_hole_listener();
+        let app = black_hole_app(port);
+        let (tx, rx) = channel();
+        app.listen_for_updates(Arc::new(TestReconciler { tx }));
+        let _ = next_state(&rx);
+
+        let keys = Keys::generate();
+        let nsec = keys.secret_key().to_bech32().expect("nsec");
+        app.dispatch(HighlighterAppAction::SignInNsec {
+            nsec,
+            persist: false,
+            clear_stored_on_failure: false,
+        });
+        let _ = wait_for_state(&rx, "signed-in state before join timeout", |state| {
+            state.chrome.current_user.is_some()
+        });
+        app.dispatch(HighlighterAppAction::OpenRoomExplorer);
+        let _ = drain_states(&rx);
+
+        app.dispatch(HighlighterAppAction::RequestJoinRoom {
+            group_id: "test-group-timeout".into(),
+            room_name: "Timeout Room".into(),
+        });
+
+        // The busy snapshot must arrive promptly (design §4.1 invariant 2):
+        // the explorer marks which group is mid-join before the op is awaited.
+        // Late emissions from the sign-in/open sequence may still be queued,
+        // so poll a bounded number of snapshots for the marker.
+        let _ = wait_for_state(&rx, "join busy marker", |state| {
+            state.room_explorer.joining_group_id == "test-group-timeout"
+        });
+
+        // The loop must stay live while the join waits on the black hole.
+        let before_rev = app.state().rev;
+        let before = Instant::now();
+        app.dispatch(HighlighterAppAction::SearchOpened);
+        let _ = wait_for_state(&rx, "actor processed search while join pending", |state| {
+            state.rev > before_rev
+        });
+        assert!(
+            before.elapsed() < Duration::from_secs(2),
+            "actor must stay live while the join is in flight"
+        );
+
+        // The join timeout (30s deadline) must resolve via the Err arm:
+        // room-explorer join error + Error toast.
+        let _ = wait_for_state_with_timeout(
+            &rx,
+            "join timeout error state",
+            OP_DEADLINE_NETWORK + Duration::from_secs(15),
+            |state| {
+                state.room_explorer.error_message.is_some()
+                    && state
+                        .toast
+                        .as_ref()
+                        .is_some_and(|t| matches!(t.kind, HighlighterToastKind::Error))
+            },
+        );
+        // And the joining marker must have been cleared by the Err arm.
+        let settled = app.state();
+        assert!(
+            settled.room_explorer.joining_group_id.is_empty(),
+            "join timeout must clear the joining marker"
+        );
+
+        crate::relays::reset_relay_policy_for_test();
     }
 }

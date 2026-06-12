@@ -3781,6 +3781,14 @@ public struct HighlighterAppConfig {
      * config vocabulary as NMP.
      */
     public var emitHz: UInt32
+    /**
+     * Test/diagnostic seam (design §4.6): override the bundled relay policy
+     * JSON so a harness can point every relay role at a controlled URL (e.g.
+     * a black-hole relay). Additive uniffi field with a `None` default so
+     * existing Swift/Kotlin constructors keep compiling. Applied once,
+     * process-wide, before the relay policy is first read.
+     */
+    public var relayPolicyJson: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -3796,10 +3804,18 @@ public struct HighlighterAppConfig {
          * Maximum update cadence requested by the shell. This facade only emits
          * after state changes; the value is carried so shells can share the same
          * config vocabulary as NMP.
-         */emitHz: UInt32) {
+         */emitHz: UInt32,
+        /**
+         * Test/diagnostic seam (design §4.6): override the bundled relay policy
+         * JSON so a harness can point every relay role at a controlled URL (e.g.
+         * a black-hole relay). Additive uniffi field with a `None` default so
+         * existing Swift/Kotlin constructors keep compiling. Applied once,
+         * process-wide, before the relay policy is first read.
+         */relayPolicyJson: String? = nil) {
         self.dataDir = dataDir
         self.visibleLimit = visibleLimit
         self.emitHz = emitHz
+        self.relayPolicyJson = relayPolicyJson
     }
 }
 
@@ -3819,6 +3835,9 @@ extension HighlighterAppConfig: Equatable, Hashable {
         if lhs.emitHz != rhs.emitHz {
             return false
         }
+        if lhs.relayPolicyJson != rhs.relayPolicyJson {
+            return false
+        }
         return true
     }
 
@@ -3826,6 +3845,7 @@ extension HighlighterAppConfig: Equatable, Hashable {
         hasher.combine(dataDir)
         hasher.combine(visibleLimit)
         hasher.combine(emitHz)
+        hasher.combine(relayPolicyJson)
     }
 }
 
@@ -3840,7 +3860,8 @@ public struct FfiConverterTypeHighlighterAppConfig: FfiConverterRustBuffer {
             try HighlighterAppConfig(
                 dataDir: FfiConverterOptionString.read(from: &buf),
                 visibleLimit: FfiConverterUInt32.read(from: &buf),
-                emitHz: FfiConverterUInt32.read(from: &buf)
+                emitHz: FfiConverterUInt32.read(from: &buf),
+                relayPolicyJson: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -3848,6 +3869,7 @@ public struct FfiConverterTypeHighlighterAppConfig: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.dataDir, into: &buf)
         FfiConverterUInt32.write(value.visibleLimit, into: &buf)
         FfiConverterUInt32.write(value.emitHz, into: &buf)
+        FfiConverterOptionString.write(value.relayPolicyJson, into: &buf)
     }
 }
 
@@ -5620,15 +5642,23 @@ public struct HighlighterCurationMenuSnapshot {
     public var curationSets: [BookmarkSetRecord]
     public var curationSetCount: UInt64
     public var isLoading: Bool
+    /**
+     * True while a membership write / set creation is in flight off-actor.
+     */
+    public var isSaving: Bool
     public var errorMessage: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(articleAddress: String, curationSets: [BookmarkSetRecord], curationSetCount: UInt64, isLoading: Bool, errorMessage: String?) {
+    public init(articleAddress: String, curationSets: [BookmarkSetRecord], curationSetCount: UInt64, isLoading: Bool,
+        /**
+         * True while a membership write / set creation is in flight off-actor.
+         */isSaving: Bool, errorMessage: String?) {
         self.articleAddress = articleAddress
         self.curationSets = curationSets
         self.curationSetCount = curationSetCount
         self.isLoading = isLoading
+        self.isSaving = isSaving
         self.errorMessage = errorMessage
     }
 }
@@ -5652,6 +5682,9 @@ extension HighlighterCurationMenuSnapshot: Equatable, Hashable {
         if lhs.isLoading != rhs.isLoading {
             return false
         }
+        if lhs.isSaving != rhs.isSaving {
+            return false
+        }
         if lhs.errorMessage != rhs.errorMessage {
             return false
         }
@@ -5663,6 +5696,7 @@ extension HighlighterCurationMenuSnapshot: Equatable, Hashable {
         hasher.combine(curationSets)
         hasher.combine(curationSetCount)
         hasher.combine(isLoading)
+        hasher.combine(isSaving)
         hasher.combine(errorMessage)
     }
 }
@@ -5680,6 +5714,7 @@ public struct FfiConverterTypeHighlighterCurationMenuSnapshot: FfiConverterRustB
                 curationSets: FfiConverterSequenceTypeBookmarkSetRecord.read(from: &buf),
                 curationSetCount: FfiConverterUInt64.read(from: &buf),
                 isLoading: FfiConverterBool.read(from: &buf),
+                isSaving: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -5689,6 +5724,7 @@ public struct FfiConverterTypeHighlighterCurationMenuSnapshot: FfiConverterRustB
         FfiConverterSequenceTypeBookmarkSetRecord.write(value.curationSets, into: &buf)
         FfiConverterUInt64.write(value.curationSetCount, into: &buf)
         FfiConverterBool.write(value.isLoading, into: &buf)
+        FfiConverterBool.write(value.isSaving, into: &buf)
         FfiConverterOptionString.write(value.errorMessage, into: &buf)
     }
 }
@@ -7887,11 +7923,22 @@ public struct HighlighterRoomExplorerSnapshot {
     public var curatorPubkeyHex: String
     public var isLoading: Bool
     public var isBrowseLoading: Bool
+    /**
+     * Group id of an in-flight join request; empty when none. Set before the
+     * off-actor join op is submitted, cleared when its outcome resolves, so
+     * the UI can show per-room joining feedback for the up-to-30s wait.
+     */
+    public var joiningGroupId: String
     public var errorMessage: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(featured: [CommunitySummary], featuredCount: UInt64, newNoteworthy: [CommunitySummary], newNoteworthyCount: UInt64, friendsShelf: [RoomRecommendation], friendsShelfCount: UInt64, authorsShelf: [RoomRecommendation], authorsShelfCount: UInt64, allRooms: [CommunitySummary], allRoomCount: UInt64, curatorPubkeyHex: String, isLoading: Bool, isBrowseLoading: Bool, errorMessage: String?) {
+    public init(featured: [CommunitySummary], featuredCount: UInt64, newNoteworthy: [CommunitySummary], newNoteworthyCount: UInt64, friendsShelf: [RoomRecommendation], friendsShelfCount: UInt64, authorsShelf: [RoomRecommendation], authorsShelfCount: UInt64, allRooms: [CommunitySummary], allRoomCount: UInt64, curatorPubkeyHex: String, isLoading: Bool, isBrowseLoading: Bool,
+        /**
+         * Group id of an in-flight join request; empty when none. Set before the
+         * off-actor join op is submitted, cleared when its outcome resolves, so
+         * the UI can show per-room joining feedback for the up-to-30s wait.
+         */joiningGroupId: String, errorMessage: String?) {
         self.featured = featured
         self.featuredCount = featuredCount
         self.newNoteworthy = newNoteworthy
@@ -7905,6 +7952,7 @@ public struct HighlighterRoomExplorerSnapshot {
         self.curatorPubkeyHex = curatorPubkeyHex
         self.isLoading = isLoading
         self.isBrowseLoading = isBrowseLoading
+        self.joiningGroupId = joiningGroupId
         self.errorMessage = errorMessage
     }
 }
@@ -7955,6 +8003,9 @@ extension HighlighterRoomExplorerSnapshot: Equatable, Hashable {
         if lhs.isBrowseLoading != rhs.isBrowseLoading {
             return false
         }
+        if lhs.joiningGroupId != rhs.joiningGroupId {
+            return false
+        }
         if lhs.errorMessage != rhs.errorMessage {
             return false
         }
@@ -7975,6 +8026,7 @@ extension HighlighterRoomExplorerSnapshot: Equatable, Hashable {
         hasher.combine(curatorPubkeyHex)
         hasher.combine(isLoading)
         hasher.combine(isBrowseLoading)
+        hasher.combine(joiningGroupId)
         hasher.combine(errorMessage)
     }
 }
@@ -8001,6 +8053,7 @@ public struct FfiConverterTypeHighlighterRoomExplorerSnapshot: FfiConverterRustB
                 curatorPubkeyHex: FfiConverterString.read(from: &buf),
                 isLoading: FfiConverterBool.read(from: &buf),
                 isBrowseLoading: FfiConverterBool.read(from: &buf),
+                joiningGroupId: FfiConverterString.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -8019,6 +8072,7 @@ public struct FfiConverterTypeHighlighterRoomExplorerSnapshot: FfiConverterRustB
         FfiConverterString.write(value.curatorPubkeyHex, into: &buf)
         FfiConverterBool.write(value.isLoading, into: &buf)
         FfiConverterBool.write(value.isBrowseLoading, into: &buf)
+        FfiConverterString.write(value.joiningGroupId, into: &buf)
         FfiConverterOptionString.write(value.errorMessage, into: &buf)
     }
 }
@@ -10950,8 +11004,6 @@ public enum DataChangeType {
      */
     case highlightShared(groupId: String, highlightId: String, sharedByPubkey: String
     )
-    case myHighlightUpserted(eventId: String
-    )
     /**
      * Something that affects the profile view for `pubkey` arrived. `kind`
      * is the event kind (0 metadata, 3 contacts, 30023 article, 9802
@@ -11082,42 +11134,39 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
         case 7: return .highlightShared(groupId: try FfiConverterString.read(from: &buf), highlightId: try FfiConverterString.read(from: &buf), sharedByPubkey: try FfiConverterString.read(from: &buf)
         )
 
-        case 8: return .myHighlightUpserted(eventId: try FfiConverterString.read(from: &buf)
+        case 8: return .userProfileUpdated(pubkey: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
         )
 
-        case 9: return .userProfileUpdated(pubkey: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
+        case 9: return .articleUpdated(address: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
         )
 
-        case 10: return .articleUpdated(address: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
+        case 10: return .followingReadsUpdated
+
+        case 11: return .followingHighlightsUpdated
+
+        case 12: return .feedbackThreadsUpdated
+
+        case 13: return .feedbackThreadEventUpserted(eventId: try FfiConverterString.read(from: &buf)
         )
 
-        case 11: return .followingReadsUpdated
-
-        case 12: return .followingHighlightsUpdated
-
-        case 13: return .feedbackThreadsUpdated
-
-        case 14: return .feedbackThreadEventUpserted(eventId: try FfiConverterString.read(from: &buf)
+        case 14: return .searchArticlesUpdated(query: try FfiConverterString.read(from: &buf)
         )
 
-        case 15: return .searchArticlesUpdated(query: try FfiConverterString.read(from: &buf)
+        case 15: return .bookmarksUpdated
+
+        case 16: return .bookmarkSetsUpdated
+
+        case 17: return .followingCurationSetsUpdated
+
+        case 18: return .webBookmarksUpdated
+
+        case 19: return .signerConnected(user: try FfiConverterTypeCurrentUser.read(from: &buf)
         )
 
-        case 16: return .bookmarksUpdated
-
-        case 17: return .bookmarkSetsUpdated
-
-        case 18: return .followingCurationSetsUpdated
-
-        case 19: return .webBookmarksUpdated
-
-        case 20: return .signerConnected(user: try FfiConverterTypeCurrentUser.read(from: &buf)
+        case 20: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
         )
 
-        case 21: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
-        )
-
-        case 22: return .relayStatusChanged(url: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRelayStatus.read(from: &buf)
+        case 21: return .relayStatusChanged(url: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRelayStatus.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -11165,73 +11214,68 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
             FfiConverterString.write(sharedByPubkey, into: &buf)
 
 
-        case let .myHighlightUpserted(eventId):
-            writeInt(&buf, Int32(8))
-            FfiConverterString.write(eventId, into: &buf)
-
-
         case let .userProfileUpdated(pubkey,kind):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(8))
             FfiConverterString.write(pubkey, into: &buf)
             FfiConverterUInt32.write(kind, into: &buf)
 
 
         case let .articleUpdated(address,kind):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(9))
             FfiConverterString.write(address, into: &buf)
             FfiConverterUInt32.write(kind, into: &buf)
 
 
         case .followingReadsUpdated:
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(10))
 
 
         case .followingHighlightsUpdated:
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(11))
 
 
         case .feedbackThreadsUpdated:
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(12))
 
 
         case let .feedbackThreadEventUpserted(eventId):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(13))
             FfiConverterString.write(eventId, into: &buf)
 
 
         case let .searchArticlesUpdated(query):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(14))
             FfiConverterString.write(query, into: &buf)
 
 
         case .bookmarksUpdated:
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(15))
 
 
         case .bookmarkSetsUpdated:
-            writeInt(&buf, Int32(17))
+            writeInt(&buf, Int32(16))
 
 
         case .followingCurationSetsUpdated:
-            writeInt(&buf, Int32(18))
+            writeInt(&buf, Int32(17))
 
 
         case .webBookmarksUpdated:
-            writeInt(&buf, Int32(19))
+            writeInt(&buf, Int32(18))
 
 
         case let .signerConnected(user):
-            writeInt(&buf, Int32(20))
+            writeInt(&buf, Int32(19))
             FfiConverterTypeCurrentUser.write(user, into: &buf)
 
 
         case let .bunkerSignRequest(requestId):
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(20))
             FfiConverterString.write(requestId, into: &buf)
 
 
         case let .relayStatusChanged(url,state):
-            writeInt(&buf, Int32(22))
+            writeInt(&buf, Int32(21))
             FfiConverterString.write(url, into: &buf)
             FfiConverterTypeRelayStatus.write(state, into: &buf)
 
@@ -15198,6 +15242,25 @@ fileprivate func uniffiFutureContinuationCallback(handle: UInt64, pollResult: In
         print("uniffiFutureContinuationCallback invalid handle")
     }
 }
+/**
+ * Install the platform tracing subscriber at `info` level. Idempotent.
+ */
+public func initPlatformLogging()  {try! rustCall() {
+    uniffi_highlighter_core_fn_func_init_platform_logging($0
+    )
+}
+}
+/**
+ * Install the platform tracing subscriber with an explicit filter directive
+ * (e.g. `"debug"` or `"highlighter_core=trace,nmp_core=debug"`). Idempotent —
+ * the first call wins.
+ */
+public func initPlatformLoggingWithFilter(filter: String)  {try! rustCall() {
+    uniffi_highlighter_core_fn_func_init_platform_logging_with_filter(
+        FfiConverterString.lower(filter),$0
+    )
+}
+}
 public func normalizeIsbn(raw: String) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_func_normalize_isbn(
@@ -15220,6 +15283,12 @@ private let initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_highlighter_core_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_init_platform_logging() != 63949) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_init_platform_logging_with_filter() != 12210) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_func_normalize_isbn() != 9244) {
         return InitializationResult.apiChecksumMismatch

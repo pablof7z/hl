@@ -47,6 +47,7 @@ fn isolated_app() -> (Arc<HighlighterNmpApp>, Receiver<TestUpdate>, TempDir) {
         data_dir: Some(tmp.path().join("ndb").to_string_lossy().into_owned()),
         visible_limit: 8,
         emit_hz: 30,
+        relay_policy_json: None,
     });
     let (tx, rx) = channel();
     app.listen_for_updates(Arc::new(TestReconciler { tx }));
@@ -145,8 +146,18 @@ fn current_user_reflects_login_state() {
     assert_eq!(user.pubkey, keys.public_key().to_hex());
 
     app.dispatch(HighlighterAppAction::Logout);
-    let state = next_state(&rx);
-    assert!(state.chrome.current_user.is_none());
+    // Sign-in resolutions are async (OpRunner): late pre-logout emissions
+    // (e.g. the SignerConnected -> RefreshAppChrome chain) may still be
+    // queued, so poll until the logout snapshot lands rather than asserting
+    // on the first state after the dispatch.
+    let mut logged_out = false;
+    for _ in 0..16 {
+        if next_state(&rx).chrome.current_user.is_none() {
+            logged_out = true;
+            break;
+        }
+    }
+    assert!(logged_out, "logout snapshot must land");
 }
 
 #[test]

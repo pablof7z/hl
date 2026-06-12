@@ -15,9 +15,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
 use std::sync::Arc;
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use nmp_defaults::{NmpAppBuilder, RunConfig};
 use nmp_core::planner::{
     InterestId, InterestLifecycle, InterestScope, InterestShape, LogicalInterest,
 };
@@ -30,13 +29,14 @@ use nmp_core::typed_projections::{
     RELAY_DIAGNOSTICS_SCHEMA_ID,
 };
 use nmp_core::{
-    ActorCommand, KindFilter, RawEventObserver, RawEventObserverId, SignContinuation, SignerSource,
-    TypedProjectionData,
+    decode_snapshot_typed_projections, ActorCommand, KindFilter, RawEventObserver,
+    RawEventObserverId, SignContinuation, SignerSource, TypedProjectionData,
 };
+use nmp_defaults::{NmpAppBuilder, RunConfig};
 use nmp_ffi::{
-    nmp_app_add_relay, nmp_app_dispatch_action, nmp_app_free, nmp_app_free_string,
-    nmp_app_lifecycle_background, nmp_app_lifecycle_foreground, nmp_app_nostrconnect_uri,
-    nmp_app_remove_relay, nmp_broker_free_string, nmp_signer_broker_init, NmpApp,
+    nmp_app_add_relay, nmp_app_dispatch_action, nmp_app_free, nmp_app_lifecycle_background,
+    nmp_app_lifecycle_foreground, nmp_app_nostrconnect_uri, nmp_app_remove_relay,
+    nmp_app_set_update_callback, nmp_free_string, nmp_signer_broker_init, NmpApp,
 };
 use nostr_sdk::prelude::*;
 use nostrdb::Ndb;
@@ -68,6 +68,10 @@ pub(crate) struct HighlighterNmpRuntime {
     action_result_stop: Arc<AtomicBool>,
     action_result_wake: SyncSender<()>,
     action_result_worker: Option<JoinHandle<()>>,
+    /// Keep-alive for the C update callback context pointer. The callback
+    /// reads this Arc via raw pointer; Drop clears the registration before
+    /// releasing it.
+    _update_frames: Arc<UpdateFrameSidecar>,
     typed_projection_drain_lock: Arc<Mutex<()>>,
     raw_mirror_id: RawEventObserverId,
     raw_mirror_worker: Option<JoinHandle<()>>,
@@ -81,6 +85,10 @@ unsafe impl Sync for HighlighterNmpRuntime {}
 
 impl Drop for HighlighterNmpRuntime {
     fn drop(&mut self) {
+        // Clear the update callback first: the setter's quiescence contract
+        // guarantees no in-flight invocation after it returns, so the context
+        // pointer (`update_frames`) can never be used past this point.
+        nmp_app_set_update_callback(self.app.as_ptr(), std::ptr::null_mut(), None);
         self.action_result_stop.store(true, Ordering::Release);
         let _ = self.action_result_wake.try_send(());
         if let Some(worker) = self.action_result_worker.take() {
@@ -334,17 +342,33 @@ impl NmpActionResultsState {
             rx
         };
 
+        // Unconditional cleanup, including when this future is DROPPED
+        // mid-await (an off-actor op aborted by supersession/logout): without
+        // it the dead sender would linger in `waiters` until a matching row
+        // happened to arrive — never, on a dead network. Removing an entry
+        // that `apply_row` already consumed is a no-op.
+        struct WaiterCleanup<'a> {
+            inner: &'a Mutex<NmpActionResultsSnapshot>,
+            correlation_id: &'a str,
+        }
+        impl Drop for WaiterCleanup<'_> {
+            fn drop(&mut self) {
+                self.inner.lock().waiters.remove(self.correlation_id);
+            }
+        }
+        let _cleanup = WaiterCleanup {
+            inner: &self.inner,
+            correlation_id,
+        };
+
         match tokio::time::timeout(timeout, rx).await {
             Ok(Ok(row)) => Ok(row),
             Ok(Err(_)) => Err(CoreError::Other(format!(
                 "NMP action result waiter dropped for {correlation_id}"
             ))),
-            Err(_) => {
-                self.inner.lock().waiters.remove(correlation_id);
-                Err(CoreError::Other(format!(
-                    "NMP action result timed out for {correlation_id}"
-                )))
-            }
+            Err(_) => Err(CoreError::Other(format!(
+                "NMP action result timed out for {correlation_id}"
+            ))),
         }
     }
 }
@@ -483,11 +507,16 @@ impl HighlighterNmpRuntime {
         });
 
         let (action_result_wake, action_result_rx) = sync_channel::<()>(1);
+        let update_frames = Arc::new(UpdateFrameSidecar {
+            latest: Mutex::new(None),
+            wake: action_result_wake.clone(),
+        });
         let action_result_worker = spawn_action_result_drain(
             app.as_ptr() as usize,
             action_result_rx,
             action_results.clone(),
             diagnostics.clone(),
+            update_frames.clone(),
             typed_projection_drain_lock.clone(),
             action_result_stop.clone(),
         )?;
@@ -495,6 +524,15 @@ impl HighlighterNmpRuntime {
         app_ref.register_snapshot_tick_observer(move || match action_result_tick_tx.try_send(()) {
             Ok(()) | Err(TrySendError::Full(())) | Err(TrySendError::Disconnected(())) => {}
         });
+        // Receive every emitted snapshot frame — the only transport carrying
+        // the kernel's built-in typed sidecars (relay diagnostics included).
+        // The context Arc lives in `Self::_update_frames`; Drop clears the
+        // registration before it is released.
+        nmp_app_set_update_callback(
+            app.as_ptr(),
+            Arc::as_ptr(&update_frames) as *mut std::ffi::c_void,
+            Some(on_nmp_update_frame),
+        );
 
         let (raw_mirror_observer, raw_mirror_worker) = spawn_raw_mirror(ndb)?;
         let raw_mirror_id =
@@ -520,6 +558,7 @@ impl HighlighterNmpRuntime {
             action_result_stop,
             action_result_wake,
             action_result_worker: Some(action_result_worker),
+            _update_frames: update_frames,
             typed_projection_drain_lock,
             raw_mirror_id,
             raw_mirror_worker: Some(raw_mirror_worker),
@@ -568,7 +607,7 @@ impl HighlighterNmpRuntime {
         let uri = unsafe { CStr::from_ptr(uri_ptr) }
             .to_string_lossy()
             .into_owned();
-        nmp_broker_free_string(uri_ptr);
+        nmp_free_string(uri_ptr);
         apply_nostrconnect_options(uri, options)
     }
 
@@ -588,6 +627,29 @@ impl HighlighterNmpRuntime {
         // same sender, so NMP will install the key before any publish/sign
         // request that follows this call. The app projection can move
         // immediately instead of waiting for a throttled snapshot tick.
+        //
+        // Before mirroring the identity locally, briefly wait for NMP's own
+        // `active_account_handle` to reflect this pubkey. The queued `add_signer`
+        // is purely local (no relay I/O) so this settles in milliseconds. Without
+        // it, the snapshot-tick observer (which mirrors `active_account_handle`
+        // into `self.identity` on every tick) can fire in the window before the
+        // actor processes the queued add, reading `None` and clobbering the
+        // optimistic apply below — which would make a rapid superseding sign-in
+        // observe an unset prior identity.
+        let confirm_deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            let nmp_active = self
+                .app_ref()
+                .active_account_handle()
+                .lock()
+                .ok()
+                .and_then(|guard| guard.clone());
+            if nmp_active.as_deref() == Some(pubkey.as_str()) || Instant::now() >= confirm_deadline
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(2));
+        }
         self.identity.apply(Some(pubkey.clone()));
         Ok(pubkey)
     }
@@ -802,7 +864,7 @@ impl HighlighterNmpRuntime {
         let response = unsafe { CStr::from_ptr(response_ptr) }
             .to_string_lossy()
             .into_owned();
-        nmp_app_free_string(response_ptr);
+        nmp_free_string(response_ptr);
 
         let value: serde_json::Value = serde_json::from_str(&response)
             .map_err(|e| CoreError::Relay(format!("{source}: invalid NMP response: {e}")))?;
@@ -852,11 +914,43 @@ fn register_nmp_protocol_actions(app: &mut impl ActionRegistrar) {
     app.register_action::<nmp_nip29::action::JoinGroupAction>();
 }
 
+/// Mailbox for snapshot frames delivered by `nmp_app_set_update_callback`.
+///
+/// The kernel's built-in typed projections (relay diagnostics, action
+/// results) are merged into emitted frames ONLY — they never appear in
+/// `run_typed_snapshot_projections()`, which runs just host-registered
+/// closures. Capturing the frame here is therefore the only way to observe
+/// relay connection status. Only the newest frame matters; older ones are
+/// overwritten.
+pub(crate) struct UpdateFrameSidecar {
+    latest: Mutex<Option<Vec<u8>>>,
+    wake: SyncSender<()>,
+}
+
+/// C update callback registered with the NMP kernel. Runs on the kernel
+/// actor thread — copy the bytes and signal the drain; never block here.
+extern "C" fn on_nmp_update_frame(ctx: *mut std::ffi::c_void, bytes: *const u8, len: usize) {
+    if ctx.is_null() || bytes.is_null() || len == 0 {
+        return;
+    }
+    // SAFETY: `ctx` is the `Arc<UpdateFrameSidecar>` registered in
+    // `HighlighterNmpRuntime::new`; the runtime holds the Arc for the app's
+    // lifetime and clears the registration (with quiescence) in Drop before
+    // releasing it.
+    let sidecar = unsafe { &*(ctx as *const UpdateFrameSidecar) };
+    let frame = unsafe { std::slice::from_raw_parts(bytes, len) }.to_vec();
+    *sidecar.latest.lock() = Some(frame);
+    match sidecar.wake.try_send(()) {
+        Ok(()) | Err(TrySendError::Full(())) | Err(TrySendError::Disconnected(())) => {}
+    }
+}
+
 fn spawn_action_result_drain(
     app_ptr: usize,
     wake_rx: std::sync::mpsc::Receiver<()>,
     action_results: Arc<NmpActionResultsState>,
     diagnostics: Arc<NmpRelayDiagnosticsState>,
+    update_frames: Arc<UpdateFrameSidecar>,
     drain_lock: Arc<Mutex<()>>,
     stop: Arc<AtomicBool>,
 ) -> Result<JoinHandle<()>, CoreError> {
@@ -867,11 +961,23 @@ fn spawn_action_result_drain(
                 if stop.load(Ordering::Acquire) {
                     break;
                 }
-                let typed = {
+                let mut typed = {
                     let _guard = drain_lock.lock();
                     let app_ref = unsafe { &*(app_ptr as *const NmpApp) };
                     app_ref.run_typed_snapshot_projections()
                 };
+                // The kernel's built-in sidecars (relay diagnostics, action
+                // results) travel only in emitted frames; fold the newest
+                // frame's entries in alongside the host-registered ones.
+                let frame = update_frames.latest.lock().take();
+                if let Some(frame) = frame {
+                    match decode_snapshot_typed_projections(&frame) {
+                        Ok(entries) => typed.extend(entries),
+                        Err(err) => {
+                            tracing::warn!(error = ?err, "decode NMP snapshot frame sidecars");
+                        }
+                    }
+                }
                 apply_typed_projection_sidecars(&typed, &action_results, &diagnostics);
             }
         })

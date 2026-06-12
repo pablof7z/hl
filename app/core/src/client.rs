@@ -34,7 +34,6 @@ use crate::reads;
 use crate::recommendations;
 use crate::relays::RelayConfig;
 use crate::session::{current_user_from_pubkey, Session};
-use crate::share_links;
 use crate::subscriptions::{SubscriptionKind, SubscriptionRegistry};
 use crate::web_metadata::{self, WebMetadata, WebMetadataStore};
 
@@ -64,6 +63,21 @@ impl HighlighterCore {
     }
 
     // -- Auth (sync) --
+
+    /// Establish the nsec identity synchronously without the network-bound
+    /// signer install (the fast half of `login_nsec`). Returns the active pubkey
+    /// hex. Idempotent — a subsequent `login_nsec` for the same secret re-applies
+    /// harmlessly (NMP dedups). The sign-in dispatch path calls this on the actor
+    /// thread before submitting the off-actor sign-in op so that a rapid
+    /// superseding sign-in (e.g. bunker) observes this identity as the prior
+    /// active account instead of racing an unset one.
+    pub fn apply_nsec_identity(&self, nsec: &str) -> Result<String, CoreError> {
+        let trimmed = nsec.trim();
+        if trimmed.is_empty() {
+            return Err(CoreError::InvalidInput("nsec must not be empty".into()));
+        }
+        self.runtime.apply_nsec_identity(trimmed)
+    }
 
     pub fn login_nsec(&self, nsec: String) -> Result<CurrentUser, CoreError> {
         // Project the user from the nsec without committing session state
@@ -276,13 +290,6 @@ impl HighlighterCore {
             .register(&self.runtime, SubscriptionKind::RoomChat { group_id })
     }
 
-    /// Vault view-scope subscription for the current user's own highlights.
-    pub async fn subscribe_vault(&self) -> Result<u64, CoreError> {
-        let user_pubkey = self.require_user_pubkey()?;
-        self.subscriptions
-            .register(&self.runtime, SubscriptionKind::Vault { user_pubkey })
-    }
-
     /// Profile view-scope subscription. Fires `UserProfileUpdated` deltas
     /// when any event relevant to `pubkey_hex`'s profile arrives. Install on
     /// profile view appearance; `unsubscribe(handle)` on disappearance.
@@ -439,13 +446,6 @@ impl HighlighterCore {
         limit: u32,
     ) -> Result<Vec<HydratedHighlight>, CoreError> {
         crate::highlights::query_for_group(self.runtime.ndb(), &group_id, limit)
-    }
-
-    pub async fn get_my_highlights(&self, limit: u32) -> Result<Vec<HighlightRecord>, CoreError> {
-        let Some(user) = self.inner.read().session.current_user() else {
-            return Err(CoreError::NotAuthenticated);
-        };
-        highlights::query_highlights_by_author(self.runtime.ndb(), &user.pubkey, limit)
     }
 
     /// Following Reads feed — articles surfaced through the user's follow
@@ -788,22 +788,6 @@ impl HighlighterCore {
         Ok(list.addresses)
     }
 
-    /// Read-only predicate: is `address` currently bookmarked for the logged-in
-    /// user? Always `false` when no user is logged in.
-    pub async fn is_article_bookmarked(&self, address: String) -> Result<bool, CoreError> {
-        let user_hex = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .map(|u| u.pubkey)
-            .unwrap_or_default();
-        if user_hex.is_empty() {
-            return Ok(false);
-        }
-        crate::bookmarks::is_bookmarked(self.runtime.ndb(), &user_hex, &address)
-    }
-
     /// Toggle `address` in the user's kind:10003 list. Returns the new
     /// membership state — `true` if the address is now bookmarked, `false`
     /// if it was removed.
@@ -1097,17 +1081,6 @@ impl HighlighterCore {
         root_event_id: String,
     ) -> Result<Vec<FeedbackEventRecord>, CoreError> {
         feedback::query_thread_events(self.runtime.ndb(), &root_event_id)
-    }
-
-    /// First `p` tag of the project's kind:31933 event by addressable
-    /// coordinate. The shake-to-share composer uses this to pick the agent
-    /// pubkey for the root note's `p` tag. `None` if the project event isn't
-    /// cached or has no agents.
-    pub async fn get_project_first_agent_pubkey(
-        &self,
-        coordinate: String,
-    ) -> Result<Option<String>, CoreError> {
-        feedback::query_first_agent_pubkey(self.runtime.ndb(), &coordinate)
     }
 
     // -- Writes --
@@ -1465,30 +1438,6 @@ impl HighlighterCore {
         )))
     }
 
-    /// Classify a NIP-19 entity (`npub1…`, `nprofile1…`, `note1…`,
-    /// `nevent1…`, `naddr1…`) into a renderable variant. Strips an
-    /// optional `nostr:` URI prefix. Used by the iOS rich-text renderer
-    /// to walk event content for inline mentions and event-ref cards.
-    pub fn decode_nostr_entity(
-        &self,
-        input: String,
-    ) -> Result<crate::nostr_entities::NostrEntityRef, CoreError> {
-        crate::nostr_entities::decode_nostr_entity(&input)
-    }
-
-    /// Build the canonical public share URL for a kind:9802 highlight.
-    ///
-    /// The shell receives only the final route. Rust owns the NIP-19 event
-    /// reference, kind hint, and relay hint so platform UI cannot choose relay
-    /// routing policy.
-    pub fn highlight_share_url(
-        &self,
-        event_id_hex: String,
-        author_pubkey_hex: Option<String>,
-    ) -> Option<String> {
-        share_links::highlight_share_url(event_id_hex, author_pubkey_hex).ok()
-    }
-
     /// Resolve a [`NostrEntityRef`] from nostrdb, fetching once from relay hints
     /// plus the indexer pool when the local cache is cold.
     pub async fn resolve_nostr_entity(
@@ -1568,20 +1517,6 @@ impl HighlighterCore {
             .current_user()
             .ok_or(CoreError::NotAuthenticated)?;
         blossom::init_default_blossom_servers(&self.runtime, &user.pubkey).await
-    }
-
-    /// Sign a NIP-98 HTTP auth event (kind:27235) for a Blossom upload
-    /// request. Returns the raw JSON of the signed event; the Swift caller
-    /// base64-encodes it and uses it as `Authorization: Nostr <base64>`.
-    /// `payload_hash` is the hex SHA-256 of the file bytes (required for PUT).
-    pub async fn sign_nip98_auth(
-        &self,
-        url: String,
-        method: String,
-        payload_hash: Option<String>,
-    ) -> Result<String, CoreError> {
-        let _ = self.require_user_pubkey()?;
-        blossom::sign_nip98_auth(&self.runtime, &url, &method, payload_hash.as_deref()).await
     }
 
     /// Sign a NIP-05 registration authorization event (kind:27235) for
@@ -1728,14 +1663,6 @@ impl HighlighterCore {
             .collect();
         rows.sort_by(|a, b| a.url.cmp(&b.url));
         Ok(rows)
-    }
-
-    /// Handle the Swift side uses to match `RelayStatusChanged` deltas on the
-    /// event bus. Relay status changes are app-scoped and ride
-    /// `subscription_id == 0`, so this returns `0` unconditionally — the
-    /// value is a stable contract, not a unique sub id.
-    pub async fn subscribe_relay_status(&self) -> Result<u64, CoreError> {
-        Ok(0)
     }
 
     /// Nudge NMP to resume foreground relay activity and reconcile the current

@@ -127,12 +127,6 @@ pub async fn share_to_community(
     Ok(())
 }
 
-/// Port of `hydrateHighlights`. Given a set of highlights, look up the
-/// artifact each references and return joined records.
-pub fn hydrate(_highlights: Vec<HighlightRecord>) -> Result<Vec<HydratedHighlight>, CoreError> {
-    todo!()
-}
-
 /// Read highlights referencing the given NIP-23 article address
 /// (`30023:<pubkey>:<d>`) from nostrdb, newest first. Used by the article
 /// reader to overlay existing highlights on the body.

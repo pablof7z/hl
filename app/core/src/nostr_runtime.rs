@@ -355,6 +355,18 @@ impl NostrRuntime {
         self.client.set_signer(signer).await;
     }
 
+    /// Apply the nsec identity WITHOUT the network-bound signer install. This is
+    /// the fast, synchronous half of `set_local_nsec_signer`: it parses the
+    /// secret, registers the local signer, and marks it active in NMP's identity
+    /// reducer (no relay I/O). Used by the sign-in dispatch path to establish the
+    /// active account synchronously on the actor thread, so a subsequent
+    /// superseding sign-in observes the correct prior identity. Idempotent:
+    /// NMP's `add_signer`/`identity.add` dedup by pubkey, so the later full
+    /// `set_local_nsec_signer` re-apply is a no-op.
+    pub fn apply_nsec_identity(&self, nsec: &str) -> Result<String, CoreError> {
+        self.nmp.sign_in_nsec(nsec)
+    }
+
     /// Install a local signer through NMP, then bind the compatibility
     /// event-builder client to NMP's signer port.
     pub fn set_local_nsec_signer(&self, nsec: &str) -> Result<String, CoreError> {

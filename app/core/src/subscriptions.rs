@@ -74,9 +74,6 @@ pub(crate) enum SubscriptionKind {
     RoomChat {
         group_id: String,
     },
-    Vault {
-        user_pubkey: PublicKey,
-    },
     /// Powers the profile page: listens for every event that could affect
     /// what renders on a profile (kind:0 metadata, kind:3 contacts, kind:30023
     /// articles, kind:9802 highlights authored by `pubkey`, plus kind:39001 /
@@ -298,12 +295,6 @@ fn install_nmp_interests(
                 runtime.rooms_urls(),
             )?;
         }
-        SubscriptionKind::Vault { user_pubkey } => {
-            let filter = Filter::new()
-                .kinds([Kind::Custom(9802)])
-                .author(*user_pubkey);
-            open_nmp_auto(runtime, &mut ids, "vault/highlights", filter)?;
-        }
         SubscriptionKind::UserProfile { pubkey } => {
             // Two separate filters: author-based for self-published kinds,
             // #p-based for membership events.
@@ -341,7 +332,7 @@ fn install_nmp_interests(
             // matching `d`) and its highlights (kind:9802 referencing the
             // `a`-tag). Keeping them as distinct subs keeps relay-side
             // filtering precise and costs no more than the single sub the
-            // Room/Vault kinds install — the pool batches.
+            // Room-kind installs — the pool batches.
             let author_pk = *author;
             let body_filter = Filter::new()
                 .kinds([Kind::Custom(KIND_LONG_FORM)])
@@ -566,13 +557,6 @@ fn build_ndb_filters(kind: &SubscriptionKind) -> Vec<NdbFilter> {
         SubscriptionKind::RoomChat { .. } => vec![NdbFilter::new()
             .kinds([crate::chat::KIND_CHAT_MESSAGE as u64])
             .build()],
-        SubscriptionKind::Vault { user_pubkey } => {
-            let pk_bytes: [u8; 32] = user_pubkey.to_bytes();
-            vec![NdbFilter::new()
-                .kinds([9802u64])
-                .authors([&pk_bytes])
-                .build()]
-        }
         SubscriptionKind::UserProfile { pubkey } => {
             let pk_bytes: [u8; 32] = pubkey.to_bytes();
             let pk_hex = pubkey.to_hex();
@@ -713,7 +697,7 @@ async fn run_pump(
     // JoinedCommunities deltas belong on the app-scope bus (`subscription_id
     // == 0`) — the CommunitySummary / MembershipChanged payloads mutate
     // `HighlighterStore.joinedCommunities`, not a view-scoped store. The
-    // handle returned to Swift is only for cancellation. Room / Vault deltas
+    // handle returned to Swift is only for cancellation. Room deltas
     // are view-scoped and route by handle.
     let delivery_id = match kind {
         SubscriptionKind::JoinedCommunities { .. } => 0,
@@ -757,6 +741,7 @@ async fn run_pump(
         let mut saw_following_highlights_update = false;
         let mut saw_feedback_threads_update = false;
         let mut saw_search_articles_update = false;
+        let mut deferred_community_upserts = std::collections::BTreeSet::new();
         for key in note_keys {
             let Ok(note) = runtime.ndb().get_note_by_key(&txn, key) else {
                 continue;
@@ -785,6 +770,7 @@ async fn run_pump(
                 // — must not pollute joinedCommunities.
                 if let DataChangeType::CommunityUpserted { group_id } = &change {
                     if !hydrated.contains(group_id) {
+                        deferred_community_upserts.insert(group_id.clone());
                         continue;
                     }
                 }
@@ -811,6 +797,18 @@ async fn run_pump(
             }
         }
         drop(txn);
+
+        // nostrdb can deliver membership + metadata in one batch without
+        // preserving ingest order. Re-check metadata skipped earlier in the
+        // batch after membership events had a chance to update `hydrated`.
+        for group_id in deferred_community_upserts {
+            if hydrated.contains(&group_id) {
+                deltas.push(Delta {
+                    subscription_id: delivery_id,
+                    change: DataChangeType::CommunityUpserted { group_id },
+                });
+            }
+        }
 
         if saw_following_reads_update {
             deltas.push(Delta {
@@ -989,17 +987,6 @@ fn build_change(kind: &SubscriptionKind, event: &Event) -> Option<DataChangeType
             crate::chat::record_from_event(event)?;
             Some(DataChangeType::ChatMessageUpserted {
                 group_id: group_id.clone(),
-            })
-        }
-        SubscriptionKind::Vault { user_pubkey } => {
-            if event.pubkey != *user_pubkey {
-                return None;
-            }
-            if event.kind.as_u16() != 9802 {
-                return None;
-            }
-            Some(DataChangeType::MyHighlightUpserted {
-                event_id: event.id.to_hex(),
             })
         }
         SubscriptionKind::UserProfile { pubkey } => {
@@ -1369,19 +1356,15 @@ mod tests {
             "",
         );
 
-        // Membership must arrive before metadata so "alpha" is in the hydrated
-        // set when the 39000 fires — the pump only delivers CommunityUpserted
-        // for groups it has confirmed the user belongs to.
         process(core.runtime().ndb(), &members);
-        process(core.runtime().ndb(), &meta);
 
-        // JoinedCommunities deltas ride the app-scope bus (subscription_id
-        // == 0); the handle is kept only for `unsubscribe()`. Skip the
-        // `SignerConnected` seed the callback fires on `set_event_callback`.
-        let mut saw_community = false;
+        // JoinedCommunities deltas ride the app-scope bus (subscription_id == 0);
+        // the handle is kept only for `unsubscribe()`. Make the ordering
+        // deterministic: first wait until membership hydrates "alpha", then
+        // ingest metadata and assert the community upsert.
         let mut saw_membership = false;
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
-        while std::time::Instant::now() < deadline && (!saw_community || !saw_membership) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(15);
+        while std::time::Instant::now() < deadline && !saw_membership {
             let Ok(delta) = rx.recv_timeout(Duration::from_millis(200)) else {
                 continue;
             };
@@ -1393,20 +1376,35 @@ mod tests {
                 delta.subscription_id, 0,
                 "joined-communities rides app-scope bus"
             );
-            match delta.change {
-                DataChangeType::CommunityUpserted { group_id } => {
-                    assert_eq!(group_id, "alpha");
-                    saw_community = true;
-                }
-                DataChangeType::MembershipChanged { group_id } => {
-                    assert_eq!(group_id, "alpha");
-                    saw_membership = true;
-                }
-                _ => {}
+            if let DataChangeType::MembershipChanged { group_id } = delta.change {
+                assert_eq!(group_id, "alpha");
+                saw_membership = true;
+            }
+        }
+        assert!(saw_membership, "membership change delta must arrive");
+
+        process(core.runtime().ndb(), &meta);
+
+        let mut saw_community = false;
+        let deadline = std::time::Instant::now() + Duration::from_secs(15);
+        while std::time::Instant::now() < deadline && !saw_community {
+            let Ok(delta) = rx.recv_timeout(Duration::from_millis(200)) else {
+                continue;
+            };
+            if matches!(delta.change, DataChangeType::SignerConnected { .. }) {
+                assert_eq!(delta.subscription_id, 0);
+                continue;
+            }
+            assert_eq!(
+                delta.subscription_id, 0,
+                "joined-communities rides app-scope bus"
+            );
+            if let DataChangeType::CommunityUpserted { group_id } = delta.change {
+                assert_eq!(group_id, "alpha");
+                saw_community = true;
             }
         }
         assert!(saw_community, "community upsert delta must arrive");
-        assert!(saw_membership, "membership change delta must arrive");
     }
 
     #[test]
@@ -1451,7 +1449,9 @@ mod tests {
         process(core.runtime().ndb(), &meta);
 
         // Drain until we see a community-shaped delta (skip SignerConnected).
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        // Delivery assertion, not a latency bound: generous so full-suite
+        // scheduler load can't flake it (the pump normally delivers in ms).
+        let deadline = std::time::Instant::now() + Duration::from_secs(15);
         let mut drained = false;
         while std::time::Instant::now() < deadline {
             let Ok(delta) = rx.recv_timeout(Duration::from_millis(200)) else {
@@ -1549,7 +1549,9 @@ mod tests {
         process(core.runtime().ndb(), &share_bravo);
 
         let mut alpha_seen = false;
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        // Delivery assertion, not a latency bound: generous so full-suite
+        // scheduler load can't flake it (the pump normally delivers in ms).
+        let deadline = std::time::Instant::now() + Duration::from_secs(15);
         while std::time::Instant::now() < deadline {
             let Some(delta) = recv_view_delta(&rx, Duration::from_millis(200)) else {
                 continue;
@@ -1564,61 +1566,6 @@ mod tests {
             }
         }
         assert!(alpha_seen, "expected alpha artifact delta");
-    }
-
-    #[test]
-    fn subscribe_vault_filters_by_author() {
-        let (core, _tmp) = isolated_core();
-        let me = Keys::generate();
-        let other = Keys::generate();
-
-        core.login_nsec(me.secret_key().to_bech32().unwrap())
-            .expect("login");
-        let (cb, rx) = channel_callback();
-        core.set_event_callback(cb);
-
-        let handle = {
-            let core = core.clone();
-            std::thread::spawn(move || futures::executor::block_on(core.subscribe_vault()))
-                .join()
-                .expect("join")
-                .expect("subscribe")
-        };
-
-        // Highlight authored by `me` — should deliver.
-        let mine = sign(
-            &me,
-            9802,
-            vec![Tag::parse(vec!["r".to_string(), "https://example.com".to_string()]).unwrap()],
-            "my quote",
-        );
-        // Highlight authored by `other` — must not deliver.
-        let theirs = sign(
-            &other,
-            9802,
-            vec![Tag::parse(vec!["r".to_string(), "https://example.com".to_string()]).unwrap()],
-            "their quote",
-        );
-
-        process(core.runtime().ndb(), &mine);
-        process(core.runtime().ndb(), &theirs);
-
-        let mut mine_seen = false;
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
-        while std::time::Instant::now() < deadline {
-            let Some(delta) = recv_view_delta(&rx, Duration::from_millis(200)) else {
-                continue;
-            };
-            assert_eq!(delta.subscription_id, handle);
-            match delta.change {
-                DataChangeType::MyHighlightUpserted { event_id } => {
-                    assert_eq!(event_id, mine.id.to_hex());
-                    mine_seen = true;
-                }
-                other => panic!("unexpected delta: {other:?}"),
-            }
-        }
-        assert!(mine_seen, "vault sub must deliver self-authored highlight");
     }
 
     #[test]
@@ -1692,7 +1639,9 @@ mod tests {
         process(core.runtime().ndb(), &meta_mine);
         process(core.runtime().ndb(), &members_mine);
 
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        // Delivery assertion, not a latency bound: generous so full-suite
+        // scheduler load can't flake it (the pump normally delivers in ms).
+        let deadline = std::time::Instant::now() + Duration::from_secs(15);
         let mut saw_mine = false;
         while std::time::Instant::now() < deadline {
             let Ok(delta) = rx.recv_timeout(Duration::from_millis(200)) else {
@@ -1772,7 +1721,9 @@ mod tests {
         process(core.runtime().ndb(), &chat_bravo);
 
         let mut alpha_seen = false;
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        // Delivery assertion, not a latency bound: generous so full-suite
+        // scheduler load can't flake it (the pump normally delivers in ms).
+        let deadline = std::time::Instant::now() + Duration::from_secs(15);
         while std::time::Instant::now() < deadline {
             let Some(delta) = recv_view_delta(&rx, Duration::from_millis(200)) else {
                 continue;

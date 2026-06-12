@@ -42,13 +42,82 @@ struct RelayPolicy {
     seed_defaults: Vec<RelayConfig>,
 }
 
-static RELAY_POLICY: OnceLock<RelayPolicy> = OnceLock::new();
+fn parse_relay_policy(raw: &str) -> RelayPolicy {
+    serde_json::from_str(raw).expect("relay policy must contain valid relay policy JSON")
+}
 
+// -- Production policy storage ----------------------------------------------
+//
+// In production the policy is read once and never changes, so a `OnceLock`
+// initialised from an optional process-wide override (set via
+// `HighlighterAppConfig::relay_policy_json` before first use) or the bundled
+// `relay_policy.json` is exactly right.
+#[cfg(not(test))]
+static RELAY_POLICY: OnceLock<RelayPolicy> = OnceLock::new();
+#[cfg(not(test))]
+static RELAY_POLICY_OVERRIDE: OnceLock<String> = OnceLock::new();
+
+/// Install a relay-policy override (design §4.6). First writer wins; ignored
+/// once the policy has been read. In production this stays unused.
+#[cfg(not(test))]
+pub(crate) fn set_relay_policy_override(json: &str) {
+    let _ = RELAY_POLICY_OVERRIDE.set(json.to_string());
+}
+
+#[cfg(not(test))]
 fn relay_policy() -> &'static RelayPolicy {
     RELAY_POLICY.get_or_init(|| {
-        serde_json::from_str(include_str!("relay_policy.json"))
-            .expect("relay_policy.json must contain valid relay policy")
+        let raw = RELAY_POLICY_OVERRIDE
+            .get()
+            .map(String::as_str)
+            .unwrap_or(include_str!("relay_policy.json"));
+        parse_relay_policy(raw)
     })
+}
+
+// -- Test policy storage ----------------------------------------------------
+//
+// Tests need per-test isolation AND a `'static` return (consumers return
+// `&'static str`). We store a raw pointer to a leaked `Box<RelayPolicy>`; each
+// override leaks a fresh policy (test binaries are short-lived, so the leak is
+// acceptable) and swaps the pointer atomically. Default is the bundled policy.
+#[cfg(test)]
+static TEST_RELAY_POLICY: std::sync::atomic::AtomicPtr<RelayPolicy> =
+    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+
+#[cfg(test)]
+pub(crate) fn set_relay_policy_override(json: &str) {
+    set_relay_policy_for_test(json);
+}
+
+/// Test seam: install a relay policy for the current test. The previous
+/// policy (if any) is intentionally leaked; test processes are ephemeral.
+#[cfg(test)]
+pub(crate) fn set_relay_policy_for_test(json: &str) {
+    let leaked: *mut RelayPolicy = Box::into_raw(Box::new(parse_relay_policy(json)));
+    TEST_RELAY_POLICY.store(leaked, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Test seam: restore the bundled relay policy. Call at the end of any test
+/// that installed an override so it cannot leak into a later test under
+/// `--test-threads=1`.
+#[cfg(test)]
+pub(crate) fn reset_relay_policy_for_test() {
+    TEST_RELAY_POLICY.store(std::ptr::null_mut(), std::sync::atomic::Ordering::SeqCst);
+}
+
+#[cfg(test)]
+fn relay_policy() -> &'static RelayPolicy {
+    use std::sync::atomic::Ordering;
+    let ptr = TEST_RELAY_POLICY.load(Ordering::SeqCst);
+    if ptr.is_null() {
+        static BUNDLED: OnceLock<RelayPolicy> = OnceLock::new();
+        BUNDLED.get_or_init(|| parse_relay_policy(include_str!("relay_policy.json")))
+    } else {
+        // SAFETY: `ptr` came from `Box::into_raw` of a `RelayPolicy` that is
+        // never freed (leaked for the lifetime of the test process).
+        unsafe { &*ptr }
+    }
 }
 
 pub fn highlighter_relay() -> &'static str {

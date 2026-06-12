@@ -35,9 +35,6 @@ pub enum DataChangeType {
         highlight_id: String,
         shared_by_pubkey: String,
     },
-    MyHighlightUpserted {
-        event_id: String,
-    },
     /// Something that affects the profile view for `pubkey` arrived. `kind`
     /// is the event kind (0 metadata, 3 contacts, 30023 article, 9802
     /// highlight, 39001/39002 membership) so the Swift store can re-query

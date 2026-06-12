@@ -48,6 +48,7 @@ fn isolated_app() -> (Arc<HighlighterNmpApp>, Receiver<TestUpdate>, TempDir) {
         data_dir: Some(tmp.path().join("ndb").to_string_lossy().into_owned()),
         visible_limit: 8,
         emit_hz: 30,
+        relay_policy_json: None,
     });
     let (tx, rx) = channel();
     app.listen_for_updates(Arc::new(TestReconciler { tx }));
