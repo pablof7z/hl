@@ -118,6 +118,7 @@ internal fun LoginScreen(
                             HighlighterAppAction.SignInNip55(
                                 signerPackage = signer.packageName,
                                 persist = true,
+                                clearStoredOnFailure = false,
                             ),
                         )
                     },

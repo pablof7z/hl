@@ -18,6 +18,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.highlighter.app.nip55.ExternalSignerCapabilityBridge
+import uniffi.highlighter_core.HighlighterSignerRequestDrain
 import com.highlighter.app.ui.RootScene
 import com.highlighter.app.ui.theme.HighlighterTheme
 import com.highlighter.app.util.LocalDispatch
@@ -28,8 +29,9 @@ class MainActivity : ComponentActivity() {
     private val viewModel: HighlighterViewModel by viewModels()
 
     // NIP-55 external signer bridge. Registered in onCreate (before onStart),
-    // unregistered in onDestroy. The drain thread polls nextSignerRequest() and
-    // hands each JSON string to the bridge for Intent/ContentResolver dispatch.
+    // unregistered in onDestroy. The drain thread loops on the BLOCKING
+    // nextSignerRequest() drain and hands each JSON payload to the bridge for
+    // Intent/ContentResolver dispatch.
     private lateinit var signerBridge: ExternalSignerCapabilityBridge
 
     @Volatile private var drainRunning = false
@@ -49,6 +51,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Force ViewModel creation HERE, on the main thread, before the drain
+        // thread can touch the lazy `by viewModels()` delegate: ViewModelStore
+        // access is main-thread-only, and a background-thread first access
+        // throws IllegalStateException — which would silently kill the drain
+        // loop (observed: Amber Intent never fired because the drain thread
+        // lost the init race and died on its first call).
+        val vm = viewModel
+
         // NIP-55 bridge must be registered before the first onStart (Android
         // Activity Result API requirement). The bridge fires onResult on the
         // main thread; we forward it to Rust on the main thread too (safe
@@ -56,25 +66,32 @@ class MainActivity : ComponentActivity() {
         signerBridge = ExternalSignerCapabilityBridge(
             activity = this,
             onResult = { responseJson ->
-                viewModel.deliverExternalSignerResponse(responseJson)
+                vm.deliverExternalSignerResponse(responseJson)
             },
         )
         signerBridge.register()
 
-        // Drain thread: polls nextSignerRequest() in a tight spin with a short
-        // park when the channel is empty. Rust's sync_channel has capacity 16,
-        // so a 20 ms poll period adds at most ~20 ms of latency per request.
-        // No-polling rule applies to production data paths; this is the
-        // OS-IPC boundary which has no blocking-recv equivalent across the
-        // UniFFI boundary. Park duration is bounded; it does not grow.
+        // Drain thread: BLOCKING timed drain (D8 — no polling). Each
+        // nextSignerRequest() call parks INSIDE the Rust channel's
+        // recv_timeout (≤250 ms tick); a request arriving while parked wakes
+        // the thread immediately, and the Idle tick exists only so the
+        // drainRunning flag is observed with bounded latency on activity
+        // teardown. Closed (channel sender gone = session teardown) and an
+        // app handle destroyed mid-call both terminate the loop.
         drainRunning = true
         drainThread = Thread {
-            while (drainRunning) {
-                val requestJson = viewModel.nextSignerRequest()
-                if (requestJson != null) {
-                    runOnUiThread { signerBridge.handleJson(requestJson) }
-                } else {
-                    Thread.sleep(20)
+            drain@ while (drainRunning) {
+                val drained = try {
+                    vm.nextSignerRequest()
+                } catch (_: IllegalStateException) {
+                    // UniFFI object destroyed (ViewModel cleared) — stop.
+                    break@drain
+                }
+                when (drained) {
+                    is HighlighterSignerRequestDrain.Request ->
+                        runOnUiThread { signerBridge.handleJson(drained.requestJson) }
+                    is HighlighterSignerRequestDrain.Idle -> Unit // parked in channel wait
+                    is HighlighterSignerRequestDrain.Closed -> break@drain
                 }
             }
         }.also { it.name = "nip55-drain"; it.isDaemon = true; it.start() }
@@ -134,8 +151,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        // The drain thread observes the flag on its next Idle tick (≤250 ms;
+        // it is parked inside the Rust recv_timeout, which Java interrupt
+        // cannot unblock — the bounded tick IS the teardown latency).
         drainRunning = false
-        drainThread?.interrupt()
         drainThread = null
         signerBridge.unregister()
         super.onDestroy()

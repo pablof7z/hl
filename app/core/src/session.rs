@@ -58,8 +58,17 @@ pub struct Session {
 }
 
 enum ActiveSigner {
-    Nsec { user: CurrentUser },
-    Bunker { user: CurrentUser },
+    Nsec {
+        user: CurrentUser,
+    },
+    Bunker {
+        user: CurrentUser,
+    },
+    /// NIP-55 external signer (Amber). Pubkey-only — no key material in
+    /// the process; signing round-trips through the OS signer app.
+    External {
+        user: CurrentUser,
+    },
 }
 
 impl Session {
@@ -84,6 +93,11 @@ impl Session {
     /// Record a NIP-46 signer that NMP has already activated.
     pub fn set_bunker(&mut self, user: CurrentUser) {
         self.signer = Some(ActiveSigner::Bunker { user });
+    }
+
+    /// Record a NIP-55 external signer that NMP has already activated.
+    pub fn set_external(&mut self, user: CurrentUser) {
+        self.signer = Some(ActiveSigner::External { user });
     }
 
     pub fn logout(&mut self) {
@@ -186,6 +200,7 @@ impl Session {
         match &self.signer {
             Some(ActiveSigner::Nsec { user }) => Some(user.clone()),
             Some(ActiveSigner::Bunker { user, .. }) => Some(user.clone()),
+            Some(ActiveSigner::External { user }) => Some(user.clone()),
             None => None,
         }
     }
@@ -196,6 +211,7 @@ impl Session {
         match &self.signer {
             Some(ActiveSigner::Nsec { user }) => PublicKey::from_hex(&user.pubkey).ok(),
             Some(ActiveSigner::Bunker { user, .. }) => PublicKey::from_hex(&user.pubkey).ok(),
+            Some(ActiveSigner::External { user }) => PublicKey::from_hex(&user.pubkey).ok(),
             None => None,
         }
     }

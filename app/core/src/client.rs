@@ -171,7 +171,7 @@ impl HighlighterCore {
         let runtime = self.runtime.clone();
         let callback_slot = self.callback_slot.clone();
         self.runtime.runtime_handle().spawn(async move {
-            let result = runtime.wait_for_bunker_pair_after(previous).await;
+            let result = runtime.wait_for_signer_pair_after(previous).await;
             match result {
                 Ok(user_pubkey_hex) => {
                     match PublicKey::from_hex(&user_pubkey_hex)
@@ -226,27 +226,48 @@ impl HighlighterCore {
         Ok(user)
     }
 
-    /// Begin a NIP-55 (Amber / external signer) sign-in (ADR-0048 Stage 2).
+    /// NIP-55 (Amber / external signer) sign-in (ADR-0048 Stage 2).
     ///
-    /// Delegates to `HighlighterNmpRuntime::sign_in_nip55`; does not block.
-    /// The `SignerConnected` delta fires once the NIP-55 driver resolves the
-    /// `get_public_key` handshake and issues `AddSigner` into the actor.
-    pub fn nmp_sign_in_nip55(&self, signer_package: Option<&str>) {
-        self.runtime.nmp_sign_in_nip55(signer_package);
+    /// Fires the `Nip55Driver` `get_public_key` handshake, waits for the
+    /// identity actor to expose the paired account, then installs the
+    /// session user and the post-login projections — the exact
+    /// [`Self::pair_bunker`] shape, NIP-55 backend (V-78: same completion
+    /// semantics regardless of signer backend).
+    pub async fn pair_nip55(
+        &self,
+        signer_package: Option<String>,
+    ) -> Result<CurrentUser, CoreError> {
+        let user_pubkey_hex = self
+            .runtime
+            .sign_in_nip55(signer_package.as_deref())
+            .await?;
+        let user_pubkey = PublicKey::from_hex(&user_pubkey_hex)
+            .map_err(|e| CoreError::Signer(format!("NMP nip55 pubkey decode: {e}")))?;
+        let user = current_user_from_pubkey(&user_pubkey)?;
+        {
+            let mut guard = self.inner.write();
+            guard.session.set_external(user.clone());
+        }
+
+        spawn_login_bootstrap(self.runtime.clone(), self.inner.clone(), user_pubkey);
+
+        Ok(user)
     }
 
     /// Deliver a raw `ExternalSignerResponse` JSON to the NIP-55 driver (D7).
     pub fn nmp_deliver_external_signer_response(&self, response_json: &str) {
-        self.runtime.nmp_deliver_external_signer_response(response_json);
+        self.runtime
+            .nmp_deliver_external_signer_response(response_json);
     }
 
-    /// Drain the next outbound `ExternalSignerRequest` JSON payload from the
-    /// capability trampoline channel. Returns `None` when no request is
-    /// pending (idle tick).
+    /// Blocking timed drain of the next outbound `ExternalSignerRequest`
+    /// JSON payload from the capability trampoline channel (D8 — the caller
+    /// parks inside the channel `recv_timeout`, never in a sleep loop).
     ///
-    /// The Kotlin side calls this in a polling loop from a background thread
-    /// and routes each payload to `ExternalSignerCapabilityBridge.handleJson`.
-    pub fn nmp_next_signer_request(&self) -> Option<String> {
+    /// The Kotlin side loops on this from a dedicated daemon thread and
+    /// routes each payload to `ExternalSignerCapabilityBridge.handleJson`;
+    /// `Closed` terminates the loop.
+    pub fn nmp_next_signer_request(&self) -> crate::nmp_runtime::SignerRequestDrain {
         self.runtime.nmp_next_signer_request()
     }
 

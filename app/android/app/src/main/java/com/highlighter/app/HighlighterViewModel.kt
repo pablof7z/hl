@@ -20,6 +20,7 @@ import uniffi.highlighter_core.HighlighterAppReconciler
 import uniffi.highlighter_core.HighlighterAppState
 import uniffi.highlighter_core.HighlighterNmpApp
 import uniffi.highlighter_core.HighlighterSessionCredential
+import uniffi.highlighter_core.HighlighterSignerRequestDrain
 import uniffi.highlighter_core.NostrEntityRef
 import uniffi.highlighter_core.initPlatformLogging
 import java.io.File
@@ -112,6 +113,7 @@ class HighlighterViewModel(application: Application) :
                         HighlighterAppAction.SignInNip55(
                             signerPackage = credential.signerPackage,
                             persist = false,
+                            clearStoredOnFailure = true,
                         ),
                     )
             }
@@ -127,11 +129,13 @@ class HighlighterViewModel(application: Application) :
     }
 
     /**
-     * Drain one pending signer request from Rust. Returns JSON-serialised
-     * `ExternalSignerRequest` or null when the channel is empty.
-     * Called by the signer-request drain thread in MainActivity.
+     * Blocking timed drain of one signer-request tick from Rust (≤250 ms;
+     * the calling thread parks INSIDE the Rust channel's `recv_timeout` —
+     * never a sleep+check poll). Called by the `nip55-drain` daemon thread
+     * in MainActivity. `Request` carries `ExternalSignerRequest` JSON;
+     * `Idle` is the bounded shutdown-flag check window; `Closed` ends the loop.
      */
-    fun nextSignerRequest(): String? = app.nextSignerRequest()
+    fun nextSignerRequest(): HighlighterSignerRequestDrain = app.nextSignerRequest()
 
     /**
      * Deliver a raw `ExternalSignerResponse` JSON back to Rust.
