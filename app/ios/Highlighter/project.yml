@@ -158,3 +158,28 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.highlighter.app.share
         TARGETED_DEVICE_FAMILY: "1"
+
+# Explicit scheme definition so `xcodegen generate` always emits a SHARED
+# scheme under Highlighter.xcodeproj/xcshareddata/xcschemes/. Xcode Cloud can
+# only build shared schemes; a hand-committed .xcscheme gets clobbered on the
+# next xcodegen run (this happened at 617f477), so the scheme must be declared
+# here — the single source of truth — not committed as a standalone file.
+schemes:
+  Highlighter:
+    build:
+      targets:
+        Highlighter: all
+      parallelizeBuild: true
+      buildImplicitDependencies: true
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - HighlighterTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
