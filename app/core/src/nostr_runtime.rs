@@ -397,11 +397,11 @@ impl NostrRuntime {
             .await
     }
 
-    pub async fn wait_for_bunker_pair_after(
+    pub async fn wait_for_signer_pair_after(
         &self,
         previous: Option<String>,
     ) -> Result<String, CoreError> {
-        let pubkey = self.nmp.wait_for_bunker_pair_after(previous).await?;
+        let pubkey = self.nmp.wait_for_signer_pair_after(previous).await?;
         self.install_nmp_signer_async().await;
         Ok(pubkey)
     }
@@ -411,7 +411,43 @@ impl NostrRuntime {
     pub async fn sign_in_bunker_uri(&self, uri: &str) -> Result<String, CoreError> {
         let previous = self.nmp.active_pubkey();
         self.nmp.sign_in_bunker_uri(uri)?;
-        self.wait_for_bunker_pair_after(previous).await
+        self.wait_for_signer_pair_after(previous).await
+    }
+
+    /// Begin a NIP-55 sign-in (ADR-0048 Stage 2) and wait until the identity
+    /// actor exposes the paired account.
+    ///
+    /// The wait deliberately uses `previous = None` ("any active account"),
+    /// not the dispatch-time account: on a fresh interactive sign-in the app
+    /// is signed out (None == change-wait), and on a session restore NMP's
+    /// own external-signer restore hook may have re-activated the account
+    /// BEFORE this call — a change-wait would then dead-wait into a timeout
+    /// and wrongly clear the stored credential. hl has no account switching
+    /// (logout tears the session down first), so "any active account" is
+    /// exactly the paired one.
+    pub async fn sign_in_nip55(&self, signer_package: Option<&str>) -> Result<String, CoreError> {
+        // Kernel-side session restore (the external-signer Restore hook) may
+        // have already re-activated the NIP-55 account before this dispatch.
+        // Complete immediately instead of re-running the interactive
+        // get_public_key handshake — re-prompting the signer app on every
+        // cold start is both redundant and hostile UX.
+        if let Some(active) = self.nmp.active_pubkey() {
+            self.install_nmp_signer_async().await;
+            return Ok(active);
+        }
+        self.nmp.sign_in_nip55(signer_package);
+        self.wait_for_signer_pair_after(None).await
+    }
+
+    /// Deliver a raw `ExternalSignerResponse` JSON back to the NIP-55 driver (D7).
+    pub fn nmp_deliver_external_signer_response(&self, response_json: &str) {
+        self.nmp.deliver_external_signer_response(response_json);
+    }
+
+    /// Blocking timed drain of the next outbound `ExternalSignerRequest`
+    /// (D8 — parks in the channel `recv_timeout`, never a poll).
+    pub fn nmp_next_signer_request(&self) -> crate::nmp_runtime::SignerRequestDrain {
+        self.nmp.next_signer_request()
     }
 
     /// Remove the active account from the NMP identity reducer.

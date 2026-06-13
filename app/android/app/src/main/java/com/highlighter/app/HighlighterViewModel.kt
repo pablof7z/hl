@@ -20,6 +20,7 @@ import uniffi.highlighter_core.HighlighterAppReconciler
 import uniffi.highlighter_core.HighlighterAppState
 import uniffi.highlighter_core.HighlighterNmpApp
 import uniffi.highlighter_core.HighlighterSessionCredential
+import uniffi.highlighter_core.HighlighterSignerRequestDrain
 import uniffi.highlighter_core.NostrEntityRef
 import uniffi.highlighter_core.initPlatformLogging
 import java.io.File
@@ -103,6 +104,18 @@ class HighlighterViewModel(application: Application) :
                             clearStoredOnFailure = true,
                         ),
                     )
+                is HighlighterSessionCredential.Nip55SignerPackage ->
+                    // Restore NIP-55: pass the stored signer_package so Rust can
+                    // re-issue get_public_key without prompting for app selection.
+                    // persist=false (already stored); clearStoredOnFailure=true so
+                    // a revoked package doesn't retry forever.
+                    app.dispatch(
+                        HighlighterAppAction.SignInNip55(
+                            signerPackage = credential.signerPackage,
+                            persist = false,
+                            clearStoredOnFailure = true,
+                        ),
+                    )
             }
         }
     }
@@ -113,6 +126,24 @@ class HighlighterViewModel(application: Application) :
 
     fun dispatch(action: HighlighterAppAction) {
         app.dispatch(action)
+    }
+
+    /**
+     * Blocking timed drain of one signer-request tick from Rust (≤250 ms;
+     * the calling thread parks INSIDE the Rust channel's `recv_timeout` —
+     * never a sleep+check poll). Called by the `nip55-drain` daemon thread
+     * in MainActivity. `Request` carries `ExternalSignerRequest` JSON;
+     * `Idle` is the bounded shutdown-flag check window; `Closed` ends the loop.
+     */
+    fun nextSignerRequest(): HighlighterSignerRequestDrain = app.nextSignerRequest()
+
+    /**
+     * Deliver a raw `ExternalSignerResponse` JSON back to Rust.
+     * Called by `ExternalSignerCapabilityBridge` after the Intent/ContentResolver
+     * round-trip completes. D7: the host never interprets the payload.
+     */
+    fun deliverExternalSignerResponse(responseJson: String) {
+        app.dispatch(HighlighterAppAction.DeliverExternalSignerResponse(responseJson))
     }
 
     /**

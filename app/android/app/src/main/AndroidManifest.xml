@@ -2,6 +2,21 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!--
+        Required for NIP-55 external signer detection on Android 11+ (API 30+).
+        Without this block PackageManager.queryIntentActivities returns an empty
+        list even when Amber (com.greenart7c3.nostrsigner) is installed.
+        Each signer's intentScheme here MUST match KNOWN_NOSTR_SIGNERS in
+        app/src/main/java/com/highlighter/app/nip55/ExternalSignerWire.kt.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="nostrsigner" />
+        </intent>
+        <package android:name="com.greenart7c3.nostrsigner" />
+    </queries>
+
     <application
         android:allowBackup="false"
         android:enableOnBackInvokedCallback="true"

@@ -26,6 +26,7 @@ use crate::models::{
     Nip11Document, NostrConnectOptions, PictureDraft, ProfileMetadata, ProfileUpdateDraft,
     ReadingFeedItem, RelayDiagnostic, RelayStatus, RoomRecommendation, WebBookmarkRecord,
 };
+use crate::nmp_runtime::SignerRequestDrain;
 use crate::relays::RelayConfig;
 use crate::web_metadata::WebMetadata;
 
@@ -1164,6 +1165,25 @@ pub enum HighlighterAppAction {
         persist: bool,
         clear_stored_on_failure: bool,
     },
+    /// Begin a NIP-55 (Amber / external signer) sign-in (ADR-0048).
+    ///
+    /// `signer_package` is the Android package name of the signer app (e.g.
+    /// `com.greenart7c3.nostrsigner` for Amber). `None` lets the OS resolver
+    /// pick any installed NIP-55 signer. `persist` controls whether the
+    /// `Nip55SignerPackage` credential is persisted after a successful
+    /// sign-in; `clear_stored_on_failure` drops the stored credential when
+    /// the pairing fails (restore path — a revoked signer must not retry
+    /// forever). Same contract as [`Self::PairBunker`].
+    SignInNip55 {
+        signer_package: Option<String>,
+        persist: bool,
+        clear_stored_on_failure: bool,
+    },
+    /// Deliver a raw `ExternalSignerResponse` JSON from the Kotlin
+    /// `ExternalSignerCapabilityBridge` back to the NIP-55 driver (D7).
+    DeliverExternalSignerResponse {
+        response_json: String,
+    },
     SetCreateAccountDisplayName {
         display_name: String,
     },
@@ -1515,6 +1535,8 @@ impl HighlighterAppAction {
             Self::AppForegrounded => "app_foregrounded",
             Self::SignInNsec { .. } => "sign_in_nsec",
             Self::PairBunker { .. } => "pair_bunker",
+            Self::SignInNip55 { .. } => "sign_in_nip55",
+            Self::DeliverExternalSignerResponse { .. } => "deliver_external_signer_response",
             Self::SetCreateAccountDisplayName { .. } => "set_create_account_display_name",
             Self::SetCreateAccountUsername { .. } => "set_create_account_username",
             Self::SubmitCreateAccount => "submit_create_account",
@@ -1665,8 +1687,37 @@ impl HighlighterAppAction {
 
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum HighlighterSessionCredential {
-    Nsec { nsec: String },
-    BunkerUri { uri: String },
+    Nsec {
+        nsec: String,
+    },
+    BunkerUri {
+        uri: String,
+    },
+    /// NIP-55 external-signer (Amber). Persists only the signer app's
+    /// package name; no key material ever enters the Rust process (ADR-0048
+    /// D4). On next launch the host restores this credential and calls
+    /// `signInNip55` so NMP reconstructs the `Nip55Signer` without a
+    /// fresh user interaction.
+    Nip55SignerPackage {
+        signer_package: String,
+    },
+}
+
+/// Result of one [`HighlighterNmpApp::next_signer_request`] drain tick
+/// (ADR-0048 Stage 2). Mirrors `nmp-android-ffi`'s `NextSignerRequest`
+/// contract:
+/// - `Request` carries one `ExternalSignerRequest` JSON payload to hand to
+///   `ExternalSignerCapabilityBridge.handleJson` (D7 — verbatim).
+/// - `Idle` is a normal ≤250 ms timeout tick; the reader parked INSIDE the
+///   channel wait (D8 — never a sleep+check poll) and uses the tick only to
+///   re-check its shutdown flag.
+/// - `Closed` means the channel sender is gone (session teardown); the
+///   reader must exit its loop.
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum HighlighterSignerRequestDrain {
+    Request { request_json: String },
+    Idle,
+    Closed,
 }
 
 #[uniffi::export(with_foreign)]
@@ -1832,6 +1883,23 @@ impl HighlighterNmpApp {
 
     pub fn clear_core_event_callback(&self) {
         *self.core_event_callback.write() = None;
+    }
+
+    /// Blocking timed drain of the NIP-55 signer-request channel (ADR-0048
+    /// Stage 2). Blocks the calling thread for up to 250 ms INSIDE the
+    /// channel's `recv_timeout` (D8 — no polling; zero wake-ups while parked).
+    ///
+    /// Call from a dedicated Kotlin daemon thread:
+    /// `Request` → route to `ExternalSignerCapabilityBridge.handleJson`;
+    /// `Idle` → re-check the shutdown flag and loop; `Closed` → exit.
+    pub fn next_signer_request(&self) -> HighlighterSignerRequestDrain {
+        match self.core.nmp_next_signer_request() {
+            SignerRequestDrain::Request(request_json) => {
+                HighlighterSignerRequestDrain::Request { request_json }
+            }
+            SignerRequestDrain::Idle => HighlighterSignerRequestDrain::Idle,
+            SignerRequestDrain::Closed => HighlighterSignerRequestDrain::Closed,
+        }
     }
 }
 
@@ -2286,6 +2354,13 @@ enum OpOutcome {
         clear_stored_on_failure: bool,
         result: Result<CurrentUser, String>,
     },
+    Nip55SignIn {
+        generation: u64,
+        signer_package: Option<String>,
+        persist: bool,
+        clear_stored_on_failure: bool,
+        result: Result<CurrentUser, String>,
+    },
     AccountCreate {
         generation: u64,
         result: Box<Result<CreateAccountOutcome, String>>,
@@ -2401,6 +2476,15 @@ fn op_timeout_message(domain: OpDomain) -> String {
 
 /// Class A/B deadline (UI cannot wait the protocol's 360s / 65s worst case).
 const OP_DEADLINE_NETWORK: Duration = Duration::from_secs(30);
+/// Interactive signer-pairing deadline (NIP-55). The op's inner wait
+/// (`NMP_SIGNER_PAIR_TIMEOUT`, 300s) is the real budget — the user is
+/// reading and approving a dialog in the signer app, which routinely takes
+/// longer than the 30s network deadline (observed: a deliberate Amber
+/// approval truncated by `OP_DEADLINE_NETWORK` left the kernel signed in
+/// with the hl state stuck signed-out). Slightly above the inner timeout so
+/// the fallback only fires if the future itself wedges. The user can always
+/// bail early by rejecting in the signer app (resolves as `Rejected`).
+const OP_DEADLINE_SIGNER_PAIR: Duration = Duration::from_secs(310);
 /// Class C probe deadlines (keep the existing bounds; the worker enforces).
 const OP_DEADLINE_RELAY_PROBE: Duration = Duration::from_secs(6);
 const OP_DEADLINE_RELAY_IMPORT: Duration = Duration::from_secs(5);
@@ -3189,6 +3273,23 @@ fn apply_op_outcome(
                 result,
             );
         }
+        OpOutcome::Nip55SignIn {
+            generation,
+            signer_package,
+            persist,
+            clear_stored_on_failure,
+            result,
+        } => {
+            handle_nip55_sign_in_resolved(
+                ctx,
+                runtimes,
+                generation,
+                signer_package,
+                persist,
+                clear_stored_on_failure,
+                result,
+            );
+        }
         OpOutcome::AccountCreate { generation, result } => {
             handle_account_create_resolved(
                 ctx,
@@ -3469,6 +3570,59 @@ fn handle_action(
                     }
                 },
             );
+        }
+        HighlighterAppAction::SignInNip55 {
+            signer_package,
+            persist,
+            clear_stored_on_failure,
+        } => {
+            // NIP-55 sign-in (ADR-0048 Stage 2) — the PairBunker shape, NIP-55
+            // backend (V-78: completion semantics are signer-backend-neutral).
+            // `pair_nip55` fires the `Nip55Driver` `get_public_key` handshake
+            // (Amber Intent round-trip via the capability trampoline + the
+            // Kotlin drain thread + `DeliverExternalSignerResponse`), waits
+            // for the identity actor to expose the paired account, installs
+            // the session user and login bootstrap, and resolves here so
+            // `is_signing_in` always clears — success, rejection, or timeout.
+            set_signing_in(state, true);
+            emit(state, reconciler);
+            *auth_generation = auth_generation.saturating_add(1);
+            let generation = *auth_generation;
+            let core_for_op = core.clone();
+            let timeout_package = signer_package.clone();
+            let op_package = signer_package.clone();
+            ops.submit_op(
+                OpDomain::Auth,
+                OP_DEADLINE_SIGNER_PAIR,
+                // Truthful timeout fallback: a user who abandons the Amber
+                // dialog clears `is_signing_in` with an error toast instead
+                // of wedging the login screen.
+                OpOutcome::Nip55SignIn {
+                    generation,
+                    signer_package: timeout_package,
+                    persist,
+                    clear_stored_on_failure,
+                    result: Err(op_timeout_message(OpDomain::Auth)),
+                },
+                async move {
+                    let result = core_for_op
+                        .pair_nip55(op_package.clone())
+                        .await
+                        .map_err(|err| err.to_string());
+                    OpOutcome::Nip55SignIn {
+                        generation,
+                        signer_package: op_package,
+                        persist,
+                        clear_stored_on_failure,
+                        result,
+                    }
+                },
+            );
+        }
+        HighlighterAppAction::DeliverExternalSignerResponse { response_json } => {
+            // Route the host's raw result back to the NIP-55 driver (D7 —
+            // verbatim; the driver owns correlation routing and all policy).
+            core.nmp_deliver_external_signer_response(&response_json);
         }
         HighlighterAppAction::SetCreateAccountDisplayName { display_name } => {
             let next_username =
@@ -7352,6 +7506,58 @@ fn handle_bunker_sign_in_resolved(
                     reconciler,
                     HighlighterSessionCredential::BunkerUri { uri },
                 );
+            }
+        }
+        Err(message) => {
+            set_toast(
+                state,
+                Some(HighlighterToast {
+                    kind: HighlighterToastKind::Error,
+                    message,
+                }),
+            );
+            set_signing_in(state, false);
+            emit(state, reconciler);
+            if clear_stored_on_failure {
+                emit_clear_session_credentials(reconciler);
+            }
+        }
+    }
+}
+
+/// Resolve a finished NIP-55 sign-in op — the [`handle_bunker_sign_in_resolved`]
+/// shape for the external-signer backend (V-78). Persists the
+/// `Nip55SignerPackage` credential only AFTER a successful pairing (matching
+/// the bunker rule: never store a credential the signer hasn't honoured).
+fn handle_nip55_sign_in_resolved(
+    ctx: &ActorContext,
+    runtimes: &mut ActorRuntimes,
+    generation: u64,
+    signer_package: Option<String>,
+    persist: bool,
+    clear_stored_on_failure: bool,
+    result: Result<CurrentUser, String>,
+) {
+    if generation != runtimes.auth_generation {
+        return;
+    }
+
+    let state = &ctx.state;
+    let reconciler = &ctx.reconciler;
+    match result {
+        Ok(user) => {
+            set_toast(state, None);
+            set_signed_in_user(state, user);
+            emit(state, reconciler);
+            if persist {
+                if let Some(pkg) = signer_package.filter(|s| !s.trim().is_empty()) {
+                    emit_session_credential(
+                        reconciler,
+                        HighlighterSessionCredential::Nip55SignerPackage {
+                            signer_package: pkg,
+                        },
+                    );
+                }
             }
         }
         Err(message) => {

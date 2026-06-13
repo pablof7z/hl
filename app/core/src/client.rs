@@ -171,7 +171,7 @@ impl HighlighterCore {
         let runtime = self.runtime.clone();
         let callback_slot = self.callback_slot.clone();
         self.runtime.runtime_handle().spawn(async move {
-            let result = runtime.wait_for_bunker_pair_after(previous).await;
+            let result = runtime.wait_for_signer_pair_after(previous).await;
             match result {
                 Ok(user_pubkey_hex) => {
                     match PublicKey::from_hex(&user_pubkey_hex)
@@ -224,6 +224,51 @@ impl HighlighterCore {
         spawn_login_bootstrap(self.runtime.clone(), self.inner.clone(), user_pubkey);
 
         Ok(user)
+    }
+
+    /// NIP-55 (Amber / external signer) sign-in (ADR-0048 Stage 2).
+    ///
+    /// Fires the `Nip55Driver` `get_public_key` handshake, waits for the
+    /// identity actor to expose the paired account, then installs the
+    /// session user and the post-login projections — the exact
+    /// [`Self::pair_bunker`] shape, NIP-55 backend (V-78: same completion
+    /// semantics regardless of signer backend).
+    pub async fn pair_nip55(
+        &self,
+        signer_package: Option<String>,
+    ) -> Result<CurrentUser, CoreError> {
+        let user_pubkey_hex = self
+            .runtime
+            .sign_in_nip55(signer_package.as_deref())
+            .await?;
+        let user_pubkey = PublicKey::from_hex(&user_pubkey_hex)
+            .map_err(|e| CoreError::Signer(format!("NMP nip55 pubkey decode: {e}")))?;
+        let user = current_user_from_pubkey(&user_pubkey)?;
+        {
+            let mut guard = self.inner.write();
+            guard.session.set_external(user.clone());
+        }
+
+        spawn_login_bootstrap(self.runtime.clone(), self.inner.clone(), user_pubkey);
+
+        Ok(user)
+    }
+
+    /// Deliver a raw `ExternalSignerResponse` JSON to the NIP-55 driver (D7).
+    pub fn nmp_deliver_external_signer_response(&self, response_json: &str) {
+        self.runtime
+            .nmp_deliver_external_signer_response(response_json);
+    }
+
+    /// Blocking timed drain of the next outbound `ExternalSignerRequest`
+    /// JSON payload from the capability trampoline channel (D8 — the caller
+    /// parks inside the channel `recv_timeout`, never in a sleep loop).
+    ///
+    /// The Kotlin side loops on this from a dedicated daemon thread and
+    /// routes each payload to `ExternalSignerCapabilityBridge.handleJson`;
+    /// `Closed` terminates the loop.
+    pub fn nmp_next_signer_request(&self) -> crate::nmp_runtime::SignerRequestDrain {
+        self.runtime.nmp_next_signer_request()
     }
 
     // -- Subscriptions --

@@ -17,6 +17,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.highlighter.app.nip55.ExternalSignerCapabilityBridge
+import uniffi.highlighter_core.HighlighterSignerRequestDrain
 import com.highlighter.app.ui.RootScene
 import com.highlighter.app.ui.theme.HighlighterTheme
 import com.highlighter.app.util.LocalDispatch
@@ -25,6 +27,15 @@ import com.highlighter.app.util.LocalWebMetadata
 
 class MainActivity : ComponentActivity() {
     private val viewModel: HighlighterViewModel by viewModels()
+
+    // NIP-55 external signer bridge. Registered in onCreate (before onStart),
+    // unregistered in onDestroy. The drain thread loops on the BLOCKING
+    // nextSignerRequest() drain and hands each JSON payload to the bridge for
+    // Intent/ContentResolver dispatch.
+    private lateinit var signerBridge: ExternalSignerCapabilityBridge
+
+    @Volatile private var drainRunning = false
+    private var drainThread: Thread? = null
 
     // Re-emitted whenever a new ACTION_SEND arrives (initial launch or while the
     // app is already running via singleTop -> onNewIntent), so Compose can pick
@@ -39,6 +50,52 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Force ViewModel creation HERE, on the main thread, before the drain
+        // thread can touch the lazy `by viewModels()` delegate: ViewModelStore
+        // access is main-thread-only, and a background-thread first access
+        // throws IllegalStateException — which would silently kill the drain
+        // loop (observed: Amber Intent never fired because the drain thread
+        // lost the init race and died on its first call).
+        val vm = viewModel
+
+        // NIP-55 bridge must be registered before the first onStart (Android
+        // Activity Result API requirement). The bridge fires onResult on the
+        // main thread; we forward it to Rust on the main thread too (safe
+        // because deliverExternalSignerResponse posts onto the actor inbox).
+        signerBridge = ExternalSignerCapabilityBridge(
+            activity = this,
+            onResult = { responseJson ->
+                vm.deliverExternalSignerResponse(responseJson)
+            },
+        )
+        signerBridge.register()
+
+        // Drain thread: BLOCKING timed drain (D8 — no polling). Each
+        // nextSignerRequest() call parks INSIDE the Rust channel's
+        // recv_timeout (≤250 ms tick); a request arriving while parked wakes
+        // the thread immediately, and the Idle tick exists only so the
+        // drainRunning flag is observed with bounded latency on activity
+        // teardown. Closed (channel sender gone = session teardown) and an
+        // app handle destroyed mid-call both terminate the loop.
+        drainRunning = true
+        drainThread = Thread {
+            drain@ while (drainRunning) {
+                val drained = try {
+                    vm.nextSignerRequest()
+                } catch (_: IllegalStateException) {
+                    // UniFFI object destroyed (ViewModel cleared) — stop.
+                    break@drain
+                }
+                when (drained) {
+                    is HighlighterSignerRequestDrain.Request ->
+                        runOnUiThread { signerBridge.handleJson(drained.requestJson) }
+                    is HighlighterSignerRequestDrain.Idle -> Unit // parked in channel wait
+                    is HighlighterSignerRequestDrain.Closed -> break@drain
+                }
+            }
+        }.also { it.name = "nip55-drain"; it.isDaemon = true; it.start() }
+
         enableEdgeToEdge()
         handleShareIntent(intent)
         handleViewIntent(intent)
@@ -91,6 +148,16 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        // The drain thread observes the flag on its next Idle tick (≤250 ms;
+        // it is parked inside the Rust recv_timeout, which Java interrupt
+        // cannot unblock — the bounded tick IS the teardown latency).
+        drainRunning = false
+        drainThread = null
+        signerBridge.unregister()
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {
