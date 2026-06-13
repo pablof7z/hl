@@ -1724,14 +1724,40 @@ impl HighlighterCore {
         Ok(())
     }
 
-    /// Fetch the target relay's NIP-11 information document via an HTTPS
-    /// GET to the `ws[s]://` URL's HTTP equivalent with
-    /// `Accept: application/nostr+json`. Fails fast on timeout.
+    /// Every NIP-11 document NMP has fetched for pool relays (ADR-0051).
+    /// Snapshot read of NMP's cache — no network.
+    pub fn relay_info_documents(&self) -> Vec<crate::models::Nip11Document> {
+        self.runtime.relay_info_documents()
+    }
+
+    /// The target relay's NIP-11 information document, provided entirely by
+    /// NMP (ADR-0051). Pool relays resolve instantly from the documents NMP
+    /// fetched on connect; URLs not yet in the pool (the add-relay preview)
+    /// fall back to NMP's on-demand probe on a blocking worker. Highlighter
+    /// performs no HTTP request and no JSON parsing either way.
     pub async fn probe_relay_nip11(
         &self,
         url: String,
     ) -> Result<crate::models::Nip11Document, CoreError> {
-        crate::relay_polish::probe_nip11(&url).await
+        if let Some(doc) = self.runtime.relay_info(&url) {
+            return Ok(doc);
+        }
+        let probe_url = url.clone();
+        let doc = tokio::task::spawn_blocking(move || nmp_nip11::probe_relay_info(&probe_url))
+            .await
+            .map_err(|e| CoreError::Network(format!("NIP-11 probe worker: {e}")))?
+            .map_err(CoreError::Network)?;
+        Ok(crate::models::Nip11Document {
+            url,
+            name: doc.name,
+            description: doc.description,
+            pubkey: doc.pubkey,
+            contact: doc.contact,
+            software: doc.software,
+            version: doc.version,
+            supported_nips: doc.supported_nips,
+            icon: doc.icon,
+        })
     }
 
     /// Fetch another user's kind:10002 via the indexer pool and return the

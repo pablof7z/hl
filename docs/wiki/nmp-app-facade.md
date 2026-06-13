@@ -2,7 +2,7 @@
 title: NMP App Facade
 slug: nmp-app-facade
 topic: nmp-app
-summary: The app uses the NMP app facade (nmp_app.rs) from core, with HighlighterStore holding a HighlighterNmpApp instance and a HighlighterAppStateReconciler that rece
+summary: The app uses the NMP app facade (nmp_app.rs) from core, with HighlighterStore conforming to the NostrProfileHost protocol via an adapter file (HighlighterStore+
 tags:
   - capture
 volatility: warm
@@ -14,17 +14,21 @@ compiled-from: conversation
 sources:
   - session:d9710893-bea1-487e-9bb2-499a23d553a6
   - session:0c7b6c09-7d1f-4cb2-b178-1adf69cd09ef
+  - session:f54b4a16-dacb-41e6-b32f-b737d606254f
+  - session:cd5f3967-ddef-43db-91ca-0d6b810bcfea
 ---
 
 # NMP App Facade
 
 ## NMP App Facade Architecture
 
-The app uses the NMP app facade (nmp_app.rs) from core, with HighlighterStore holding a HighlighterNmpApp instance and a HighlighterAppStateReconciler that receives state pushes via the onState callback. iOS screens have migrated from old per-feature stores (BookmarkStore, ProfileStore, etc.) to data flowing through nmpState: HighlighterAppState on the store, with the old per-feature stores deleted. The NMP pattern (fire-and-forget action dispatch, bounded state snapshots via reconciler) is fully adopted across Rust core, iOS, and Android; the web app intentionally uses NDK directly without NMP. The Android app shares business logic with iOS through the HighlighterNmpApp Rust facade rather than reimplementing it. On iOS, PodcastPlayerStore (AVPlayer position) and CaptureStore (local OCR pipeline) are legitimate device-local state exceptions that remain outside the Rust core. The committed codebase includes an NMP-style app facade in core, iOS store consolidation, an Android skeleton, and share_links.
+The app uses the NMP app facade (nmp_app.rs) from core, with HighlighterStore conforming to the NostrProfileHost protocol via an adapter file (HighlighterStore+NostrProfileHost.swift) located in the Core directory; App.swift injects the HighlighterStore as the nostrProfileHost into the SwiftUI environment, providing profile data to NMP UI components. The store holds a HighlighterNmpApp instance and a HighlighterAppStateReconciler that receives state pushes via the onState callback. iOS screens have migrated from old per-feature stores (BookmarkStore, ProfileStore, etc.) to data flowing through nmpState: HighlighterAppState on the store, with the old per-feature stores deleted. The NMP pattern (fire-and-forget action dispatch, bounded state snapshots via reconciler) is fully adopted across Rust core, iOS, and Android; the web app intentionally uses NDK directly without NMP. The Android app shares business logic with iOS through the HighlighterNmpApp Rust facade rather than reimplementing it. On iOS, PodcastPlayerStore (AVPlayer position) and CaptureStore (local OCR pipeline) are legitimate device-local state exceptions that remain outside the Rust core. The committed codebase includes an NMP-style app facade in core, iOS store consolidation, an Android skeleton, and share_links.
 
 The NMP app module is exposed to Swift via UniFFI.
 
 The app does not use any external NMP package (no nmp UI, no nmp nip29 crate).
+
+NMP must provide NIP-11 relay information (including the icon) directly to apps so that Highlighter iOS and Android require no extra work, no direct HTTP requests, no parsing, and no awareness of NIP-11. When the NIP-11 relay information feature lands on the master branch of ~/Work/nostr-multi-platform, a new NMP version is deployed and Highlighter is updated to use it.
 
 The web app is intentionally outside the NMP architecture, using NDK directly with no NMP integration, duplicating logic the Rust core owns. A decision must be made explicitly on whether the web app stays permanently outside NMP or adopts the Rust core via a WASM build.
 
@@ -44,4 +48,4 @@ The curation menu is a ModalBottomSheet driven by state.curationMenu, with check
 
 ~92 blocking network awaits inside the NMP actor loop are an architectural defect that causes the actor to wedge on dead networks; a Fable agent is researching the proper fix with a phased design doc.
 
-<!-- citations: [^0c7b6-83] [^d9710-1] [^d9710-2] [^d9710-3] [^0c7b6-6] [^0c7b6-5] [^0c7b6-14] [^0c7b6-18] [^0c7b6-33] [^0c7b6-44] [^0c7b6-56] [^0c7b6-69] [^0c7b6-82] [^0c7b6-97] [^0c7b6-165] -->
+<!-- citations: [^0c7b6-83] [^d9710-1] [^d9710-2] [^d9710-3] [^0c7b6-6] [^0c7b6-5] [^0c7b6-14] [^0c7b6-18] [^0c7b6-33] [^0c7b6-44] [^0c7b6-56] [^0c7b6-69] [^0c7b6-82] [^0c7b6-97] [^0c7b6-165] [^f54b4-2] [^cd5f3-1] [^cd5f3-4] -->

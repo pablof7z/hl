@@ -1,6 +1,7 @@
 //! Features that sit on top of `relays.rs` but are optional / user-initiated:
-//! NIP-11 probe, import-from-npub, cache stats. Kept out of `relays.rs` so
-//! the core persistence + reconciliation module stays lean.
+//! import-from-npub and cache stats. Kept out of `relays.rs` so the core
+//! persistence + reconciliation module stays lean. (NIP-11 lives entirely in
+//! NMP per ADR-0051 — see `HighlighterCore::probe_relay_nip11`.)
 
 use std::path::Path;
 use std::time::Duration;
@@ -9,101 +10,12 @@ use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
-use crate::models::{CacheStats, Nip11Document};
+use crate::models::CacheStats;
 use crate::nostr_runtime::NostrRuntime;
 use crate::relays::RelayConfig;
 
-const NIP11_PROBE_TIMEOUT: Duration = Duration::from_secs(6);
 const IMPORT_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
 const KIND_RELAY_LIST: u16 = 10002;
-
-/// Convert a `ws[s]://` URL to the `http[s]://` form used for NIP-11 GET.
-fn http_url_for_nip11(relay_url: &str) -> Option<String> {
-    let trimmed = relay_url.trim();
-    if let Some(rest) = trimmed.strip_prefix("wss://") {
-        return Some(format!("https://{rest}"));
-    }
-    if let Some(rest) = trimmed.strip_prefix("ws://") {
-        return Some(format!("http://{rest}"));
-    }
-    None
-}
-
-/// GET the relay's NIP-11 information document. Returns a parsed
-/// `Nip11Document` or `CoreError::Network` on any transport/JSON failure.
-pub async fn probe_nip11(relay_url: &str) -> Result<Nip11Document, CoreError> {
-    let http = http_url_for_nip11(relay_url)
-        .ok_or_else(|| CoreError::InvalidInput(format!("unsupported scheme: {relay_url}")))?;
-    let client = reqwest::Client::builder()
-        .timeout(NIP11_PROBE_TIMEOUT)
-        .build()
-        .map_err(|e| CoreError::Network(format!("build http client: {e}")))?;
-    let resp = client
-        .get(&http)
-        .header("Accept", "application/nostr+json")
-        .send()
-        .await
-        .map_err(|e| CoreError::Network(format!("nip11 GET: {e}")))?;
-    let status = resp.status();
-    if !status.is_success() {
-        return Err(CoreError::Network(format!("nip11 HTTP {status}")));
-    }
-    let json: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| CoreError::Network(format!("nip11 JSON: {e}")))?;
-
-    let name = json
-        .get("name")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
-    let description = json
-        .get("description")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
-    let pubkey = json
-        .get("pubkey")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
-    let contact = json
-        .get("contact")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
-    let software = json
-        .get("software")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
-    let version = json
-        .get("version")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
-    let supported_nips: Vec<u32> = json
-        .get("supported_nips")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|n| n.as_u64())
-                .map(|n| n as u32)
-                .collect()
-        })
-        .unwrap_or_default();
-    let icon = json
-        .get("icon")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
-
-    Ok(Nip11Document {
-        url: relay_url.trim().to_string(),
-        name,
-        description,
-        pubkey,
-        contact,
-        software,
-        version,
-        supported_nips,
-        icon,
-    })
-}
 
 /// Fetch another user's kind:10002 via the indexer pool and parse it into a
 /// list of `RelayConfig` rows (read/write only — rooms/indexer flags are
@@ -234,20 +146,3 @@ fn dir_size(path: &Path) -> std::io::Result<u64> {
     Ok(total)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn http_url_for_nip11_maps_schemes() {
-        assert_eq!(
-            http_url_for_nip11("wss://relay.example"),
-            Some("https://relay.example".to_string())
-        );
-        assert_eq!(
-            http_url_for_nip11("ws://relay.example"),
-            Some("http://relay.example".to_string())
-        );
-        assert_eq!(http_url_for_nip11("https://relay.example"), None);
-    }
-}

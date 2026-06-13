@@ -2140,7 +2140,13 @@ enum OpDomain {
     JoinRoom,
     RoomChatPublish,
     BlossomUpload(UploadSlot),
-    RelayProbe,
+    /// NIP-11 probe keyed by a stable hash of the relay URL. The relay list
+    /// probes every row on appear; an unkeyed slot would let each row's probe
+    /// abort the previous one, leaving all but the last row unresolved. Same
+    /// URL still supersedes (re-probe wins); different URLs run independently.
+    RelayProbe {
+        target: u64,
+    },
     RelayImport,
     RoomCreate,
     RoomInvite,
@@ -2399,7 +2405,7 @@ fn op_timeout_message(domain: OpDomain) -> String {
         OpDomain::BlossomUpload(_) => {
             "Upload timed out. Check your connection and try again.".into()
         }
-        OpDomain::RelayProbe => "Couldn't reach the relay — you can still add it.".into(),
+        OpDomain::RelayProbe { .. } => "Couldn't reach the relay — you can still add it.".into(),
         OpDomain::RelayImport => "Import timed out. Check your connection and try again.".into(),
         OpDomain::RoomCreate => {
             "Creating the room timed out. Check your connection and try again.".into()
@@ -5507,7 +5513,9 @@ fn handle_action(
                 let op_url = url.clone();
                 let timeout_url = url.clone();
                 ops.submit_op(
-                    OpDomain::RelayProbe,
+                    OpDomain::RelayProbe {
+                        target: op_target_hash(&url),
+                    },
                     OP_DEADLINE_RELAY_PROBE,
                     // A failed probe is recorded as `document: None` for the real
                     // url; the apply arm surfaces the unreachable-relay copy.
@@ -6435,6 +6443,11 @@ async fn refresh_network_settings(
     let visible_relay_count = relays.len().saturating_add(auto_connected_relays.len()) as u64;
     let has_outbox = relays.iter().any(|relay| relay.write);
 
+    // NIP-11 documents NMP fetched for pool relays (ADR-0051). Seeded into
+    // the nip11 projection so rows resolve without any per-row probe; the
+    // change-guard keeps the projection order stable across refreshes.
+    let info_documents = core.relay_info_documents();
+
     let mut current = state.write();
     current.network.relay_count = relays.len() as u64;
     current.network.relays = relays;
@@ -6442,6 +6455,23 @@ async fn refresh_network_settings(
     current.network.auto_connected_relays = auto_connected_relays;
     current.network.diagnostic_count = diagnostics.len() as u64;
     current.network.diagnostics = diagnostics;
+    for doc in info_documents {
+        let unchanged = current.network.nip11.iter().any(|row| {
+            row.url == doc.url && !row.is_loading && row.document.as_ref() == Some(&doc)
+        });
+        if unchanged {
+            continue;
+        }
+        upsert_network_nip11_projection(
+            &mut current.network,
+            HighlighterRelayNip11Snapshot {
+                url: doc.url.clone(),
+                document: Some(doc),
+                is_loading: false,
+                error_message: None,
+            },
+        );
+    }
     current.network.cache_stats = cache_stats;
     current.network.connected_count = connected_count;
     current.network.visible_relay_count = visible_relay_count;
@@ -12429,10 +12459,15 @@ mod tests {
 
         app.dispatch(HighlighterAppAction::OpenRoomExplorer);
 
-        let loading = next_state(&rx);
-        assert!(loading.room_explorer.is_loading);
-        let state = next_state(&rx);
-        assert!(!state.room_explorer.is_loading);
+        // Poll rather than asserting on fixed snapshot positions: emissions
+        // from app construction / ticks can interleave with the loading and
+        // loaded snapshots (the long-standing one-shot `next_state` flake).
+        let _ = wait_for_state(&rx, "room explorer loading snapshot", |state| {
+            state.room_explorer.is_loading
+        });
+        let state = wait_for_state(&rx, "room explorer loaded snapshot", |state| {
+            !state.room_explorer.is_loading
+        });
         assert_eq!(
             state.room_explorer.curator_pubkey_hex,
             ROOM_EXPLORER_CURATOR_PUBKEY_HEX
@@ -13441,10 +13476,13 @@ mod tests {
         crate::relays::reset_relay_policy_for_test();
     }
 
-    /// Acceptance 3 — supersession. Two probes for the same domain; only the
-    /// second generation's resolution may land (the first is aborted/dropped).
+    /// Acceptance 3 — keyed supersession. `RelayProbe` slots are keyed by
+    /// URL: probes for two different relays run independently (the relay
+    /// list probes every row on appear), so BOTH must resolve. Same-URL
+    /// supersession is still exercised: re-probing `/first` mid-flight
+    /// bumps its generation and the row still resolves exactly once.
     #[test]
-    fn acceptance_supersession_drops_first_generation() {
+    fn acceptance_keyed_probes_resolve_independently() {
         let port = spawn_black_hole_listener();
         let app = black_hole_app(port);
         let (tx, rx) = channel();
@@ -13454,12 +13492,16 @@ mod tests {
         app.dispatch(HighlighterAppAction::OpenNetworkSettings);
         let _ = drain_states(&rx);
 
-        // First probe (will be superseded) and immediately a second.
+        // Two different relays back-to-back, then a same-URL re-probe of the
+        // first (supersedes only its own slot, never the second relay's).
         app.dispatch(HighlighterAppAction::ProbeNetworkRelayNip11 {
             url: format!("ws://127.0.0.1:{port}/first"),
         });
         app.dispatch(HighlighterAppAction::ProbeNetworkRelayNip11 {
             url: format!("ws://127.0.0.1:{port}/second"),
+        });
+        app.dispatch(HighlighterAppAction::ProbeNetworkRelayNip11 {
+            url: format!("ws://127.0.0.1:{port}/first"),
         });
 
         // Wait past the probe deadline; collect all resolved (non-loading) rows.
@@ -13477,19 +13519,21 @@ mod tests {
                 Ok(_) => {}
                 Err(_) => {}
             }
-            // Stop early once the second resolves.
-            if resolved_urls.iter().any(|u| u.ends_with("/second")) {
+            // Stop early once both relays have resolved.
+            if resolved_urls.iter().any(|u| u.ends_with("/first"))
+                && resolved_urls.iter().any(|u| u.ends_with("/second"))
+            {
                 break;
             }
         }
 
         assert!(
             resolved_urls.iter().any(|u| u.ends_with("/second")),
-            "second-generation probe must resolve"
+            "second relay's probe must resolve"
         );
         assert!(
-            !resolved_urls.iter().any(|u| u.ends_with("/first")),
-            "first-generation probe was superseded and must not resolve a row"
+            resolved_urls.iter().any(|u| u.ends_with("/first")),
+            "first relay's probe must resolve — keyed slots must not let another relay's probe abort it"
         );
 
         crate::relays::reset_relay_policy_for_test();

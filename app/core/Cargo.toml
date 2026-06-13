@@ -23,6 +23,7 @@ nmp-core = { path = "../../../nostr-multi-platform/crates/nmp-core" }
 nmp-ffi = { path = "../../../nostr-multi-platform/crates/nmp-ffi", features = ["signer-broker", "external-signer"] }
 nmp-defaults = { path = "../../../nostr-multi-platform/crates/nmp-defaults" }
 nmp-signers = { path = "../../../nostr-multi-platform/crates/nmp-signers" }
+nmp-nip11 = { path = "../../../nostr-multi-platform/crates/nmp-nip11" }
 nmp-nip29 = { path = "../../../nostr-multi-platform/crates/nmp-nip29" }
 nmp-blossom = { path = "../../../nostr-multi-platform/crates/nmp-blossom" }
 nmp-content = { path = "../../../nostr-multi-platform/crates/nmp-content" }

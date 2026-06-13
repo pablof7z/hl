@@ -905,6 +905,17 @@ impl NostrRuntime {
         self.nmp.relay_diagnostics_snapshot()
     }
 
+    /// NIP-11 documents NMP fetched for pool relays (ADR-0051) — Highlighter
+    /// does no HTTP or parsing of its own.
+    pub fn relay_info_documents(&self) -> Vec<crate::models::Nip11Document> {
+        self.nmp.relay_info_documents()
+    }
+
+    /// Cached NIP-11 document for one relay URL, if NMP has fetched it.
+    pub fn relay_info(&self, url: &str) -> Option<crate::models::Nip11Document> {
+        self.nmp.relay_info(url)
+    }
+
     pub fn reconnect_all(&self) {
         self.nmp.foreground();
         let rows = self.current_relays();
