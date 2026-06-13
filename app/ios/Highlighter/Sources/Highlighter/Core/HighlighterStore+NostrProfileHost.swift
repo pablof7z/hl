@@ -3,7 +3,7 @@ import Foundation
 extension HighlighterStore: NostrProfileHost {
     public func profile(forPubkey pubkey: String) -> ProfileWire? {
         guard let meta = profile(pubkeyHex: pubkey) else { return nil }
-        let display = firstNonEmpty(meta.displayName, meta.name)
+        let display = Self.firstNonEmpty(meta.displayName, meta.name)
         let hexShort = String(pubkey.prefix(10))
         return ProfileWire(
             pubkey: pubkey,
@@ -23,7 +23,7 @@ extension HighlighterStore: NostrProfileHost {
     public func releaseProfile(pubkey: String, consumerID: String) {}
 
     static func profileWire(from meta: ProfileMetadata, pubkeyHex: String) -> ProfileWire {
-        let display = firstNonEmpty(meta.displayName, meta.name)
+        let display = Self.firstNonEmpty(meta.displayName, meta.name)
         return ProfileWire(
             pubkey: pubkeyHex,
             displayName: display,

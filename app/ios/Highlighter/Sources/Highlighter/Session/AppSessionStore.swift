@@ -36,6 +36,15 @@ final class AppSessionStore {
                 Logger.highlighter.error("Failed to persist bunker URI credential to keychain: \(error.localizedDescription, privacy: .public)")
             }
             KeychainService.deleteNsec()
+        case .nip55SignerPackage:
+            // NIP-55 (Amber / external signer) is Android-only. iOS has no signer
+            // app to hand off to, so a NIP-55 package is never a usable iOS
+            // credential and is not written to the iOS keychain. Clear any other
+            // stored credential to keep a single source of truth, matching the
+            // mutual exclusion the other cases enforce.
+            Logger.highlighter.error("Ignoring NIP-55 signer-package credential on iOS: external signers are Android-only; not persisting to keychain.")
+            KeychainService.deleteNsec()
+            KeychainService.deleteBunkerURI()
         }
     }
 
