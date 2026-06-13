@@ -1,0 +1,9 @@
+appId: com.highlighter.app
+---
+# Launch without clearing state so a persisted session skips login entirely.
+- launchApp:
+    clearState: false
+
+# ── Assertion: home feed is visible ──────────────────────────────────────────
+- assertVisible: "Highlights"
+- takeScreenshot: login_complete

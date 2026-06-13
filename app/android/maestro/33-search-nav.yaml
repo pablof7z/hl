@@ -1,0 +1,23 @@
+appId: com.highlighter.app
+---
+# Search → type query → tap a PERSON result → assert a profile screen opens.
+- launchApp:
+    clearState: false
+- tapOn: "Search"
+- tapOn:
+    text: "Quotes, essays, people, rooms"
+- inputText: "nostr"
+- pressKey: Enter
+- extendedWaitUntil:
+    visible:
+      id: "search_person_row"
+    timeout: 20000
+- takeScreenshot: search_results
+- tapOn:
+    id: "search_person_row"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      text: "Profile"
+    timeout: 8000
+- takeScreenshot: search_profile_opened

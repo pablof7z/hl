@@ -2,6 +2,7 @@ package com.highlighter.app.util
 
 import androidx.compose.runtime.compositionLocalOf
 import uniffi.highlighter_core.HighlighterAppAction
+import uniffi.highlighter_core.HighlighterIsbnPreview
 import uniffi.highlighter_core.HighlighterProfile
 import uniffi.highlighter_core.HighlighterWebMetadata
 
@@ -22,6 +23,13 @@ val LocalProfiles = compositionLocalOf<List<HighlighterProfile>> { emptyList() }
  * in their text. Defaults to empty: no provider == no previews, never a crash.
  */
 val LocalWebMetadata = compositionLocalOf<List<HighlighterWebMetadata>> { emptyList() }
+
+/**
+ * Host-side ISBN preview cache (Rust-owned `state.isbnPreviews`). Threaded the
+ * same way as [LocalProfiles] so feed cards can resolve book cover + title
+ * without additional prop drilling. Defaults to empty.
+ */
+val LocalIsbnPreviews = compositionLocalOf<List<HighlighterIsbnPreview>> { emptyList() }
 
 /**
  * Action dispatcher, exposed to leaf rows that need to request enrichment (e.g.

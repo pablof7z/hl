@@ -18,7 +18,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import com.highlighter.app.util.LocalDispatch
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -233,9 +235,12 @@ internal fun ArticleSearchRow(
 
 @Composable
 internal fun CommunitySearchRow(community: CommunitySummary) {
+    val dispatch = LocalDispatch.current
     SearchResultRow(
         title = community.name.ifBlank { community.id },
         subtitle = community.about,
+        onClick = { dispatch(HighlighterAppAction.OpenRoom(community.id)) },
+        modifier = Modifier.testTag("search_community_row"),
         leading = {
             AvatarImage(
                 url = community.picture,
@@ -248,13 +253,17 @@ internal fun CommunitySearchRow(community: CommunitySummary) {
 
 @Composable
 private fun ProfileSearchRow(profile: ProfileMetadata) {
+    val dispatch = LocalDispatch.current
+    val displayName = profile.displayName.ifBlank { profile.name.ifBlank { profile.pubkey } }
     SearchResultRow(
-        title = profile.displayName.ifBlank { profile.name.ifBlank { profile.pubkey } },
-        subtitle = profile.about.ifBlank { profile.nip05 },
+        title = displayName,
+        subtitle = profile.nip05.ifBlank { profile.about },
+        onClick = { dispatch(HighlighterAppAction.OpenProfile(profile.pubkey)) },
+        modifier = Modifier.testTag("search_person_row"),
         leading = {
             AvatarImage(
                 url = profile.picture,
-                name = profile.displayName.ifBlank { profile.name.ifBlank { profile.pubkey } },
+                name = displayName,
                 size = 40.dp,
             )
         },
@@ -266,19 +275,20 @@ internal fun SearchResultRow(
     title: String,
     subtitle: String,
     onClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
     leading: (@Composable () -> Unit)? = null,
 ) {
-    val modifier = if (onClick == null) {
-        Modifier
+    val rowModifier = if (onClick == null) {
+        modifier
             .fillMaxWidth()
             .padding(vertical = 7.dp)
     } else {
-        Modifier
+        modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(vertical = 7.dp)
     }
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier = rowModifier, verticalAlignment = Alignment.CenterVertically) {
         if (leading != null) {
             leading()
             Spacer(modifier = Modifier.size(12.dp))

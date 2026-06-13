@@ -1,6 +1,5 @@
 package com.highlighter.app.ui.profile
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -112,14 +110,6 @@ internal fun ProfilePanel(
         }
         Spacer(modifier = Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
-                onClick = { dispatch(HighlighterAppAction.RefreshProfile) },
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                enabled = !profile.isLoading && !profile.isMutatingFollow,
-            ) {
-                Text(if (profile.isLoading) "Refreshing" else "Refresh")
-            }
             if (profile.isOwnProfile) {
                 Button(
                     onClick = onEditProfile,

@@ -1,0 +1,21 @@
+appId: com.highlighter.app
+---
+# Verify the "New room" FAB opens the create-room modal sheet.
+- launchApp:
+    clearState: false
+
+- tapOn: "Rooms"
+
+# FAB is the FloatingActionButton on the Rooms tab.
+- assertVisible:
+    id: create_room_fab
+
+- tapOn:
+    id: create_room_fab
+
+# CreateRoomPanel inside the ModalBottomSheet renders a SectionHeader with
+# title "Create room" and badge "NIP-29".
+- assertVisible: "Create room"
+- assertVisible: "NIP-29"
+
+- takeScreenshot: create_room_sheet

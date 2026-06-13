@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
+use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -2520,7 +2520,48 @@ fn spawn_actor(rx: Receiver<KernelMsg>, ctx: ActorContext, emit_hz: u32) -> Join
                 .build()
                 .expect("build highlighter NMP actor runtime");
             let mut runtimes = ActorRuntimes::new(ctx.actor_tx.clone());
-            while let Ok(msg) = rx.recv() {
+
+            // Rate-limit OpResolved emits to at most emit_hz per second.
+            // Action/CoreDelta emits (user-initiated, infrequent) are always
+            // delivered immediately by handle_action/handle_core_delta — only the
+            // burst from concurrent op resolutions is coalesced here.
+            let op_emit_interval =
+                Duration::from_millis((1000u64 / emit_hz.clamp(1, 120) as u64).max(1));
+            let mut last_op_emit = Instant::now() - op_emit_interval; // allow first emit immediately
+            let mut op_emit_dirty = false;
+
+            loop {
+                // Block for at most one emit interval so a queued dirty emit is
+                // never delayed more than op_emit_interval even when the channel
+                // is quiet.
+                let recv_timeout = if op_emit_dirty {
+                    let elapsed = last_op_emit.elapsed();
+                    if elapsed >= op_emit_interval {
+                        Duration::ZERO
+                    } else {
+                        op_emit_interval - elapsed
+                    }
+                } else {
+                    // Nothing dirty — wait indefinitely (use a long timeout to
+                    // avoid busy-looping while preserving the recv_timeout API).
+                    Duration::from_secs(3600)
+                };
+
+                let msg = match rx.recv_timeout(recv_timeout) {
+                    Ok(msg) => msg,
+                    Err(RecvTimeoutError::Timeout) => {
+                        // Interval elapsed with no new message — flush the
+                        // pending dirty emit (trailing-emit guarantee).
+                        if op_emit_dirty {
+                            emit(&ctx.state, &ctx.reconciler);
+                            last_op_emit = Instant::now();
+                            op_emit_dirty = false;
+                        }
+                        continue;
+                    }
+                    Err(RecvTimeoutError::Disconnected) => break,
+                };
+
                 // Per-message duration watchdog (design §4.6). Tag captured
                 // before the match consumes `msg`.
                 let msg_tag = kernel_msg_tag(&msg);
@@ -2529,6 +2570,11 @@ fn spawn_actor(rx: Receiver<KernelMsg>, ctx: ActorContext, emit_hz: u32) -> Join
                     KernelMsg::Action(action) => {
                         tracing::debug!(action = action.tag(), "highlighter app action");
                         handle_action(*action, &runtime, &ctx, &mut runtimes);
+                        // Action emits are handled inside handle_action; mark the
+                        // op-level dirty state clean so the next interval timeout
+                        // does not fire a redundant extra emit.
+                        op_emit_dirty = false;
+                        last_op_emit = Instant::now();
                     }
                     KernelMsg::CoreDelta(delta) => {
                         // Phase 3 (actor-blocking-fix §4.4): `handle_core_delta`
@@ -2542,6 +2588,8 @@ fn spawn_actor(rx: Receiver<KernelMsg>, ctx: ActorContext, emit_hz: u32) -> Join
                         // non-blocking invariant structurally rather than by
                         // convention.
                         handle_core_delta(*delta, &runtime, &ctx, &mut runtimes);
+                        op_emit_dirty = false;
+                        last_op_emit = Instant::now();
                     }
                     KernelMsg::OpResolved {
                         domain,
@@ -2552,7 +2600,16 @@ fn spawn_actor(rx: Receiver<KernelMsg>, ctx: ActorContext, emit_hz: u32) -> Join
                             // Drop the in-flight record now that it has resolved.
                             runtimes.ops.in_flight.remove(&domain);
                             apply_op_outcome(&runtime, &ctx, &mut runtimes, domain, *outcome);
-                            emit(&ctx.state, &ctx.reconciler);
+                            // Rate-limit: emit immediately if the interval has
+                            // elapsed; otherwise mark dirty and let the timeout
+                            // flush the trailing emit within op_emit_interval.
+                            if last_op_emit.elapsed() >= op_emit_interval {
+                                emit(&ctx.state, &ctx.reconciler);
+                                last_op_emit = Instant::now();
+                                op_emit_dirty = false;
+                            } else {
+                                op_emit_dirty = true;
+                            }
                         }
                     }
                     KernelMsg::Stop => {
@@ -8900,13 +8957,11 @@ fn handle_isbn_preview_resolved(
             let isbn = isbn_key_for_preview(&requested, &preview);
             insert_isbn_preview(state, isbn, preview, visible_limit);
         }
-        Err(message) => set_toast(
-            state,
-            Some(HighlighterToast {
-                kind: HighlighterToastKind::Error,
-                message,
-            }),
-        ),
+        Err(message) => {
+            // Benign background lookup failure (dead/missing ISBN) — do not
+            // surface as a global error toast; just log and move on.
+            tracing::debug!(isbn = %requested, error = %message, "isbn preview not found");
+        }
     }
 }
 
@@ -8968,13 +9023,11 @@ fn handle_web_metadata_resolved(
     pending_web_metadata.remove(&requested);
     match result {
         Ok(metadata) => insert_web_metadata(state, requested, metadata, visible_limit),
-        Err(message) => set_toast(
-            state,
-            Some(HighlighterToast {
-                kind: HighlighterToastKind::Error,
-                message,
-            }),
-        ),
+        Err(message) => {
+            // Benign background lookup failure (dead link / non-HTML page) — do
+            // not surface as a global error toast; just log and move on.
+            tracing::debug!(url = %requested, error = %message, "web metadata not found");
+        }
     }
 }
 
@@ -9534,13 +9587,9 @@ fn request_profile(
                 profile_pubkeys_by_handle.insert(handle, pubkey_hex);
             }
             Err(err) => {
-                set_toast(
-                    state,
-                    Some(HighlighterToast {
-                        kind: HighlighterToastKind::Error,
-                        message: err.to_string(),
-                    }),
-                );
+                // Benign background profile subscription failure — not user-actionable;
+                // log instead of raising a global error toast.
+                tracing::debug!(pubkey = %pubkey_hex, error = %err, "profile subscription failed");
                 changed = true;
             }
         }

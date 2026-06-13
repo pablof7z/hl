@@ -54,26 +54,18 @@ internal fun MediaSettingsPanel(
             label = { Text("Blossom server") },
         )
         Spacer(modifier = Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = {
-                    val url = serverUrl.trim()
-                    if (url.isNotEmpty()) {
-                        dispatch(HighlighterAppAction.AddBlossomServer(url))
-                        serverUrl = ""
-                    }
-                },
-                shape = RoundedCornerShape(8.dp),
-                enabled = serverUrl.isNotBlank() && !media.isSaving,
-            ) {
-                Text(if (media.isSaving) "Saving" else "Add")
-            }
-            OutlinedButton(
-                onClick = { dispatch(HighlighterAppAction.RefreshMediaSettings) },
-                shape = RoundedCornerShape(8.dp),
-            ) {
-                Text(if (media.isLoading) "Loading" else "Refresh")
-            }
+        Button(
+            onClick = {
+                val url = serverUrl.trim()
+                if (url.isNotEmpty()) {
+                    dispatch(HighlighterAppAction.AddBlossomServer(url))
+                    serverUrl = ""
+                }
+            },
+            shape = RoundedCornerShape(8.dp),
+            enabled = serverUrl.isNotBlank() && !media.isSaving,
+        ) {
+            Text(if (media.isSaving) "Saving" else "Add")
         }
         media.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
             Spacer(modifier = Modifier.height(6.dp))

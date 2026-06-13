@@ -1,6 +1,8 @@
 package com.highlighter.app.util
 
+import uniffi.highlighter_core.ArtifactPreview
 import uniffi.highlighter_core.HighlighterAppState
+import uniffi.highlighter_core.HighlighterIsbnPreview
 import uniffi.highlighter_core.HighlighterProfile
 import uniffi.highlighter_core.HighlighterWebMetadata
 import uniffi.highlighter_core.ProfileMetadata
@@ -52,4 +54,14 @@ fun List<HighlighterWebMetadata>.webMetadataFor(url: String): WebMetadata? {
     val key = url.trim()
     if (key.isEmpty()) return null
     return firstOrNull { it.url == key }?.metadata
+}
+
+/**
+ * Resolve cached ISBN preview for a bare isbn string (e.g. "9780141187761").
+ * Mirrors iOS `app.isbnPreview(isbn:)`.
+ */
+fun List<HighlighterIsbnPreview>.previewForIsbn(isbn: String): ArtifactPreview? {
+    val key = isbn.trim()
+    if (key.isEmpty()) return null
+    return firstOrNull { it.isbn == key }?.preview
 }

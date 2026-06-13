@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,20 +40,12 @@ internal fun FeedbackPanel(
             label = { Text("New feedback") },
         )
         Spacer(modifier = Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = { dispatch(HighlighterAppAction.PublishFeedbackNewThread) },
-                shape = RoundedCornerShape(8.dp),
-                enabled = feedback.newThreadDraft.isNotBlank() && !feedback.isPublishingNewThread,
-            ) {
-                Text(if (feedback.isPublishingNewThread) "Sending" else "Send")
-            }
-            OutlinedButton(
-                onClick = { dispatch(HighlighterAppAction.RefreshFeedbackThreads) },
-                shape = RoundedCornerShape(8.dp),
-            ) {
-                Text(if (feedback.isLoadingThreads) "Loading" else "Refresh")
-            }
+        Button(
+            onClick = { dispatch(HighlighterAppAction.PublishFeedbackNewThread) },
+            shape = RoundedCornerShape(8.dp),
+            enabled = feedback.newThreadDraft.isNotBlank() && !feedback.isPublishingNewThread,
+        ) {
+            Text(if (feedback.isPublishingNewThread) "Sending" else "Send")
         }
         feedback.publishErrorMessage?.takeIf { it.isNotBlank() }?.let { message ->
             Spacer(modifier = Modifier.height(6.dp))
@@ -92,12 +83,6 @@ internal fun FeedbackPanel(
                     enabled = feedback.replyDraft.isNotBlank() && !feedback.isPublishingReply,
                 ) {
                     Text(if (feedback.isPublishingReply) "Sending" else "Reply")
-                }
-                OutlinedButton(
-                    onClick = { dispatch(HighlighterAppAction.RefreshFeedbackThread) },
-                    shape = RoundedCornerShape(8.dp),
-                ) {
-                    Text(if (feedback.isLoadingThread) "Loading" else "Refresh")
                 }
                 TextButton(onClick = { dispatch(HighlighterAppAction.CloseFeedbackThread) }) {
                     Text("Close")
