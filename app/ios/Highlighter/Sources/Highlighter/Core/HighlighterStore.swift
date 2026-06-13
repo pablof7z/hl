@@ -1071,6 +1071,22 @@ final class HighlighterStore {
                     clearStoredOnFailure: true
                 )
             )
+        case let .nip55SignerPackage(signerPackage):
+            // NIP-55 is an Android-only external-signer (Amber) flow. A persisted
+            // NIP-55 package only reaches an iOS install when the identity store
+            // is shared with Android. Restore it symmetrically with the other
+            // credentials: dispatch the stored package and let NMP own the
+            // outcome. There is no signer app on iOS, so pairing fails and
+            // `clearStoredOnFailure: true` drops the unusable credential (the
+            // documented self-cleaning restore contract), after which the user
+            // can re-authenticate with an iOS-supported method.
+            nmpApp.dispatch(
+                action: .signInNip55(
+                    signerPackage: signerPackage,
+                    persist: false,
+                    clearStoredOnFailure: true
+                )
+            )
         }
     }
 
