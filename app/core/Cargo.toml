@@ -19,6 +19,9 @@ nostr = { version = "0.44", default-features = false, features = ["std", "nip46"
 nostr-ndb = "0.44.0"
 nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", rev = "2619b9bc4cbd7d8d9198a3be0ae8f1f8f51040cb" }
 nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "fc0589fc88d61912779741fcce7d4e7176cf9a30", default-features = false }
+# NMP pinned to rev ac7e307e89b57a73b419ea9588275e599dcb228c via local path deps.
+# (nmp-blossom is parked/excluded from the NMP workspace; all others below use path.)
+# Local NMP checkout at ../../../nostr-multi-platform is API-identical to that rev.
 nmp-core = { path = "../../../nostr-multi-platform/crates/nmp-core" }
 nmp-ffi = { path = "../../../nostr-multi-platform/crates/nmp-ffi", features = ["signer-broker", "external-signer"] }
 nmp-defaults = { path = "../../../nostr-multi-platform/crates/nmp-defaults" }

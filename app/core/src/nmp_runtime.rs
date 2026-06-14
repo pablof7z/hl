@@ -742,6 +742,7 @@ impl HighlighterNmpRuntime {
         builder.set_nostrconnect_bootstrap_relay(nostr_connect_relay().to_string());
         let app = builder
             .storage_path(storage_dir.to_string_lossy().into_owned())
+            .consume_all_builtin_projections()
             .start(RunConfig::default());
         let app = NonNull::new(app)
             .ok_or_else(|| CoreError::Other("NMP app initialization returned null".into()))?;
@@ -1273,11 +1274,11 @@ impl HighlighterNmpRuntime {
 }
 
 fn register_nmp_protocol_actions(app: &mut impl ActionRegistrar) {
-    app.register_action::<nmp_nip29::action::PostChatMessageAction>();
-    app.register_action::<nmp_nip29::action::ReactInGroupAction>();
-    app.register_action::<nmp_nip29::action::CreatePublicGroupAction>();
-    app.register_action::<nmp_nip29::action::DiscoverGroupsAction>();
-    app.register_action::<nmp_nip29::action::JoinGroupAction>();
+    app.register_action(nmp_nip29::action::PostChatMessageAction);
+    app.register_action(nmp_nip29::action::ReactInGroupAction);
+    app.register_action(nmp_nip29::action::CreatePublicGroupAction);
+    app.register_action(nmp_nip29::action::DiscoverGroupsAction);
+    app.register_action(nmp_nip29::action::JoinGroupAction);
 }
 
 /// Mailbox for snapshot frames delivered by `nmp_app_set_update_callback`.
