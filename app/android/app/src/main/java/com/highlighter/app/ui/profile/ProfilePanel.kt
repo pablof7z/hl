@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,12 +43,13 @@ internal fun ProfilePanel(
     onEditProfile: () -> Unit = {},
 ) {
     Panel {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SectionHeader("Profile", profile.pubkeyHex.take(8))
+        Column(modifier = Modifier.testTag("profile_screen")) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SectionHeader("Profile", profile.pubkeyHex.take(8))
         }
         profile.profile?.banner?.takeIf { it.isNotBlank() }?.let { banner ->
             Spacer(modifier = Modifier.height(10.dp))
@@ -113,6 +115,7 @@ internal fun ProfilePanel(
             if (profile.isOwnProfile) {
                 Button(
                     onClick = onEditProfile,
+                    modifier = Modifier.testTag("profile_edit_button"),
                     shape = RoundedCornerShape(8.dp),
                 ) {
                     Text("Edit profile")
@@ -120,6 +123,7 @@ internal fun ProfilePanel(
             } else if (profile.viewerPubkeyHex != null) {
                 Button(
                     onClick = { dispatch(HighlighterAppAction.ToggleProfileFollow) },
+                    modifier = Modifier.testTag("profile_follow_button"),
                     shape = RoundedCornerShape(8.dp),
                     enabled = !profile.isMutatingFollow,
                 ) {
@@ -170,6 +174,7 @@ internal fun ProfilePanel(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
         }
     }
 }

@@ -1,0 +1,34 @@
+appId: com.highlighter.app
+---
+# Open Network settings via: gear icon → SettingsScreen → NetworkPanel is
+# rendered as the first item in the settings LazyColumn (no sub-navigation
+# needed — it's directly on the Settings screen).
+#
+# Nav path: gear icon (Settings) → Settings screen → NetworkPanel (network_settings)
+#           is always visible as the first panel.
+#
+# Assumes session persisted (run 00-login first).
+- launchApp:
+    clearState: false
+
+# Ensure we're on the main scaffold.
+- assertVisible: "Highlights"
+
+# Tap the gear icon to open Settings.
+- tapOn:
+    id: "settings_button"
+
+# Settings screen should appear.
+- assertVisible: "Settings"
+
+# NetworkPanel is rendered directly on the Settings screen (no sub-nav needed).
+# Wait for the network_settings panel to be present.
+- extendedWaitUntil:
+    visible:
+      id: network_settings
+    timeout: 10000
+
+# The NetworkPanel always shows a "Network" title text and relay-related UI.
+- assertVisible: "Network"
+
+- takeScreenshot: network_settings

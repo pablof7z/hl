@@ -1,0 +1,33 @@
+appId: com.highlighter.app
+---
+# Open an author profile (same path as 27-profile) then tap Follow and assert
+# the button is still visible (text may change to Following/Saving).
+# Assumes session persisted and the account is logged in (not own profile).
+- launchApp:
+    clearState: false
+
+# Wait for feed content.
+- extendedWaitUntil:
+    visible:
+      id: feed_highlight_card
+    timeout: 30000
+
+# Open a profile via the author byline.
+- tapOn:
+    id: card_author
+    index: 0
+
+- extendedWaitUntil:
+    visible:
+      id: profile_screen
+    timeout: 10000
+
+# Tap the Follow button (only present on non-own profiles for logged-in users).
+- tapOn:
+    id: profile_follow_button
+
+# The button should still be visible (it may now read "Following" or "Saving").
+- assertVisible:
+    id: profile_follow_button
+
+- takeScreenshot: follow_toggled

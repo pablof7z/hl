@@ -8,7 +8,7 @@ tags:
 volatility: warm
 confidence: medium
 created: 2026-06-11
-updated: 2026-06-12
+updated: 2026-06-14
 verified: 2026-06-11
 compiled-from: conversation
 sources:
@@ -16,15 +16,18 @@ sources:
   - session:0c7b6c09-7d1f-4cb2-b178-1adf69cd09ef
   - session:f54b4a16-dacb-41e6-b32f-b737d606254f
   - session:cd5f3967-ddef-43db-91ca-0d6b810bcfea
+  - session:847487cd-e15b-4222-85ee-4a5a2b6f590b
 ---
 
 # NMP App Facade
 
 ## NMP App Facade Architecture
 
-The app uses the NMP app facade (nmp_app.rs) from core, with HighlighterStore conforming to the NostrProfileHost protocol via an adapter file (HighlighterStore+NostrProfileHost.swift) located in the Core directory; App.swift injects the HighlighterStore as the nostrProfileHost into the SwiftUI environment, providing profile data to NMP UI components. The store holds a HighlighterNmpApp instance and a HighlighterAppStateReconciler that receives state pushes via the onState callback. iOS screens have migrated from old per-feature stores (BookmarkStore, ProfileStore, etc.) to data flowing through nmpState: HighlighterAppState on the store, with the old per-feature stores deleted. The NMP pattern (fire-and-forget action dispatch, bounded state snapshots via reconciler) is fully adopted across Rust core, iOS, and Android; the web app intentionally uses NDK directly without NMP. The Android app shares business logic with iOS through the HighlighterNmpApp Rust facade rather than reimplementing it. On iOS, PodcastPlayerStore (AVPlayer position) and CaptureStore (local OCR pipeline) are legitimate device-local state exceptions that remain outside the Rust core. The committed codebase includes an NMP-style app facade in core, iOS store consolidation, an Android skeleton, and share_links.
+The app uses the NMP app facade (nmp_app.rs) from core, with HighlighterStore conforming to the NostrProfileHost protocol via an adapter file (HighlighterStore+NostrProfileHost.swift) located in the Core directory; App.swift injects the HighlighterStore as the nostrProfileHost into the SwiftUI environment, providing profile data to NMP UI components. The store holds a HighlighterNmpApp instance and a HighlighterAppStateReconciler that receives state pushes via the onState callback. syncNetworkCallback in HighlighterViewModel.onState is only called when wifiOnlyEnabled actually changes (tracked via lastWifiOnly field), eliminating spurious OS registerNetworkCallback/unregisterNetworkCallback calls on every state emission. iOS screens have migrated from old per-feature stores (BookmarkStore, ProfileStore, etc.) to data flowing through nmpState: HighlighterAppState on the store, with the old per-feature stores deleted. The NMP pattern (fire-and-forget action dispatch, bounded state snapshots via reconciler) is fully adopted across Rust core, iOS, and Android; the web app intentionally uses NDK directly without NMP. Android uses the core's single Rust state machine (dispatch(HighlighterAppAction) + state() snapshot tree), so parity is rendering/IA/navigation work, not new business logic. On iOS, PodcastPlayerStore (AVPlayer position) and CaptureStore (local OCR pipeline) are legitimate device-local state exceptions that remain outside the Rust core. The committed codebase includes an NMP-style app facade in core, iOS store consolidation, an Android skeleton, and share_links.
 
 The NMP app module is exposed to Swift via UniFFI.
+
+The core was migrated to the latest NMP ADR-0052 API: consume_all_builtin_projections() must be called before .start(), and register_action now takes the module instance by value.
 
 The app does not use any external NMP package (no nmp UI, no nmp nip29 crate).
 
@@ -48,4 +51,4 @@ The curation menu is a ModalBottomSheet driven by state.curationMenu, with check
 
 ~92 blocking network awaits inside the NMP actor loop are an architectural defect that causes the actor to wedge on dead networks; a Fable agent is researching the proper fix with a phased design doc.
 
-<!-- citations: [^0c7b6-83] [^d9710-1] [^d9710-2] [^d9710-3] [^0c7b6-6] [^0c7b6-5] [^0c7b6-14] [^0c7b6-18] [^0c7b6-33] [^0c7b6-44] [^0c7b6-56] [^0c7b6-69] [^0c7b6-82] [^0c7b6-97] [^0c7b6-165] [^f54b4-2] [^cd5f3-1] [^cd5f3-4] -->
+<!-- citations: [^0c7b6-83] [^d9710-1] [^d9710-2] [^d9710-3] [^0c7b6-6] [^0c7b6-5] [^0c7b6-14] [^0c7b6-18] [^0c7b6-33] [^0c7b6-44] [^0c7b6-56] [^0c7b6-69] [^0c7b6-82] [^0c7b6-97] [^0c7b6-165] [^f54b4-2] [^cd5f3-1] [^cd5f3-4] [^84748-117] [^84748-192] [^84748-205] -->

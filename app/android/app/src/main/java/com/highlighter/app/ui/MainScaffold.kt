@@ -228,7 +228,10 @@ internal fun MainScaffold(
                             }
                         },
                     )
-                    IconButton(onClick = { route = ScaffoldRoute.SETTINGS }) {
+                    IconButton(
+                        onClick = { route = ScaffoldRoute.SETTINGS },
+                        modifier = Modifier.testTag("settings_button"),
+                    ) {
                         Icon(
                             imageVector = Icons.Outlined.Settings,
                             contentDescription = "Settings",

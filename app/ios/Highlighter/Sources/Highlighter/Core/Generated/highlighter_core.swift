@@ -1027,6 +1027,17 @@ public protocol HighlighterNmpAppProtocol: AnyObject, Sendable {
 
     func networkRemovalImpact(url: String)  -> HighlighterRelayRemovalImpact?
 
+    /**
+     * Blocking timed drain of the NIP-55 signer-request channel (ADR-0048
+     * Stage 2). Blocks the calling thread for up to 250 ms INSIDE the
+     * channel's `recv_timeout` (D8 — no polling; zero wake-ups while parked).
+     *
+     * Call from a dedicated Kotlin daemon thread:
+     * `Request` → route to `ExternalSignerCapabilityBridge.handleJson`;
+     * `Idle` → re-check the shutdown flag and loop; `Closed` → exit.
+     */
+    func nextSignerRequest()  -> HighlighterSignerRequestDrain
+
     func publishUrlShare(url: String, groupId: String, note: String?) async  -> Bool
 
     func resolveNostrEntity(entity: NostrEntityRef) async  -> NostrEntityEvent?
@@ -1155,6 +1166,22 @@ open func networkRemovalImpact(url: String) -> HighlighterRelayRemovalImpact?  {
     return try!  FfiConverterOptionTypeHighlighterRelayRemovalImpact.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlighternmpapp_network_removal_impact(self.uniffiClonePointer(),
         FfiConverterString.lower(url),$0
+    )
+})
+}
+
+    /**
+     * Blocking timed drain of the NIP-55 signer-request channel (ADR-0048
+     * Stage 2). Blocks the calling thread for up to 250 ms INSIDE the
+     * channel's `recv_timeout` (D8 — no polling; zero wake-ups while parked).
+     *
+     * Call from a dedicated Kotlin daemon thread:
+     * `Request` → route to `ExternalSignerCapabilityBridge.handleJson`;
+     * `Idle` → re-check the shutdown flag and loop; `Closed` → exit.
+     */
+open func nextSignerRequest() -> HighlighterSignerRequestDrain  {
+    return try!  FfiConverterTypeHighlighterSignerRequestDrain_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighternmpapp_next_signer_request(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -9190,9 +9217,10 @@ public func FfiConverterTypeHydratedHighlight_lower(_ value: HydratedHighlight) 
 
 /**
  * Minimal projection of a relay's NIP-11 information document. Populated
- * by `probe_relay_nip11` via a one-shot HTTPS GET to the relay's base URL
- * with `Accept: application/nostr+json`. All fields are optional because
- * relay operators configure NIP-11 loosely — many skip most fields.
+ * entirely by NMP (ADR-0051): fetched automatically when a relay connects
+ * and carried on the `relay_diagnostics` projection, or via NMP's on-demand
+ * probe for not-yet-added relays. All fields are optional because relay
+ * operators configure NIP-11 loosely — many skip most fields.
  */
 public struct Nip11Document {
     public var url: String
@@ -11318,6 +11346,25 @@ public enum HighlighterAppAction {
     )
     case pairBunker(uri: String, persist: Bool, clearStoredOnFailure: Bool
     )
+    /**
+     * Begin a NIP-55 (Amber / external signer) sign-in (ADR-0048).
+     *
+     * `signer_package` is the Android package name of the signer app (e.g.
+     * `com.greenart7c3.nostrsigner` for Amber). `None` lets the OS resolver
+     * pick any installed NIP-55 signer. `persist` controls whether the
+     * `Nip55SignerPackage` credential is persisted after a successful
+     * sign-in; `clear_stored_on_failure` drops the stored credential when
+     * the pairing fails (restore path — a revoked signer must not retry
+     * forever). Same contract as [`Self::PairBunker`].
+     */
+    case signInNip55(signerPackage: String?, persist: Bool, clearStoredOnFailure: Bool
+    )
+    /**
+     * Deliver a raw `ExternalSignerResponse` JSON from the Kotlin
+     * `ExternalSignerCapabilityBridge` back to the NIP-55 driver (D7).
+     */
+    case deliverExternalSignerResponse(responseJson: String
+    )
     case setCreateAccountDisplayName(displayName: String
     )
     case setCreateAccountUsername(username: String
@@ -11562,364 +11609,370 @@ public struct FfiConverterTypeHighlighterAppAction: FfiConverterRustBuffer {
         case 5: return .pairBunker(uri: try FfiConverterString.read(from: &buf), persist: try FfiConverterBool.read(from: &buf), clearStoredOnFailure: try FfiConverterBool.read(from: &buf)
         )
 
-        case 6: return .setCreateAccountDisplayName(displayName: try FfiConverterString.read(from: &buf)
+        case 6: return .signInNip55(signerPackage: try FfiConverterOptionString.read(from: &buf), persist: try FfiConverterBool.read(from: &buf), clearStoredOnFailure: try FfiConverterBool.read(from: &buf)
         )
 
-        case 7: return .setCreateAccountUsername(username: try FfiConverterString.read(from: &buf)
+        case 7: return .deliverExternalSignerResponse(responseJson: try FfiConverterString.read(from: &buf)
         )
 
-        case 8: return .submitCreateAccount
+        case 8: return .setCreateAccountDisplayName(displayName: try FfiConverterString.read(from: &buf)
+        )
+
+        case 9: return .setCreateAccountUsername(username: try FfiConverterString.read(from: &buf)
+        )
+
+        case 10: return .submitCreateAccount
 
-        case 9: return .uploadCreateRoomCover(bytes: try FfiConverterData.read(from: &buf), mime: try FfiConverterString.read(from: &buf), width: try FfiConverterUInt32.read(from: &buf), height: try FfiConverterUInt32.read(from: &buf), alt: try FfiConverterString.read(from: &buf)
+        case 11: return .uploadCreateRoomCover(bytes: try FfiConverterData.read(from: &buf), mime: try FfiConverterString.read(from: &buf), width: try FfiConverterUInt32.read(from: &buf), height: try FfiConverterUInt32.read(from: &buf), alt: try FfiConverterString.read(from: &buf)
         )
 
-        case 10: return .createRoomCapabilityFailed(message: try FfiConverterString.read(from: &buf)
+        case 12: return .createRoomCapabilityFailed(message: try FfiConverterString.read(from: &buf)
         )
 
-        case 11: return .clearCreateRoomCover
+        case 13: return .clearCreateRoomCover
 
-        case 12: return .submitCreateRoom(name: try FfiConverterString.read(from: &buf), about: try FfiConverterString.read(from: &buf), visibility: try FfiConverterTypeRoomVisibility.read(from: &buf), access: try FfiConverterTypeRoomAccess.read(from: &buf)
+        case 14: return .submitCreateRoom(name: try FfiConverterString.read(from: &buf), about: try FfiConverterString.read(from: &buf), visibility: try FfiConverterTypeRoomVisibility.read(from: &buf), access: try FfiConverterTypeRoomAccess.read(from: &buf)
         )
 
-        case 13: return .clearCreateRoomResult
+        case 15: return .clearCreateRoomResult
 
-        case 14: return .clearCreateRoomError
+        case 16: return .clearCreateRoomError
 
-        case 15: return .openRoomInvite(groupId: try FfiConverterString.read(from: &buf)
+        case 17: return .openRoomInvite(groupId: try FfiConverterString.read(from: &buf)
         )
 
-        case 16: return .refreshRoomInvite
+        case 18: return .refreshRoomInvite
 
-        case 17: return .setRoomInviteQuery(query: try FfiConverterString.read(from: &buf)
+        case 19: return .setRoomInviteQuery(query: try FfiConverterString.read(from: &buf)
         )
 
-        case 18: return .toggleRoomInviteCandidate(pubkeyHex: try FfiConverterString.read(from: &buf), source: try FfiConverterTypeHighlighterRoomInviteCandidateSource.read(from: &buf)
+        case 20: return .toggleRoomInviteCandidate(pubkeyHex: try FfiConverterString.read(from: &buf), source: try FfiConverterTypeHighlighterRoomInviteCandidateSource.read(from: &buf)
         )
 
-        case 19: return .removeRoomInviteCandidate(pubkeyHex: try FfiConverterString.read(from: &buf)
+        case 21: return .removeRoomInviteCandidate(pubkeyHex: try FfiConverterString.read(from: &buf)
         )
 
-        case 20: return .acceptRoomInvitePastedCandidate
+        case 22: return .acceptRoomInvitePastedCandidate
 
-        case 21: return .mintRoomInviteLink
+        case 23: return .mintRoomInviteLink
 
-        case 22: return .submitRoomInviteMembers
+        case 24: return .submitRoomInviteMembers
 
-        case 23: return .clearRoomInviteAddError
+        case 25: return .clearRoomInviteAddError
 
-        case 24: return .clearRoomInviteInviteLinkError
+        case 26: return .clearRoomInviteInviteLinkError
 
-        case 25: return .clearRoomInviteToast
+        case 27: return .clearRoomInviteToast
 
-        case 26: return .closeRoomInvite
+        case 28: return .closeRoomInvite
 
-        case 27: return .openComments(rootTagName: try FfiConverterString.read(from: &buf), rootTagValue: try FfiConverterString.read(from: &buf), rootKind: try FfiConverterUInt16.read(from: &buf)
+        case 29: return .openComments(rootTagName: try FfiConverterString.read(from: &buf), rootTagValue: try FfiConverterString.read(from: &buf), rootKind: try FfiConverterUInt16.read(from: &buf)
         )
 
-        case 28: return .refreshComments
+        case 30: return .refreshComments
 
-        case 29: return .setCommentDraft(parentEventId: try FfiConverterOptionString.read(from: &buf), body: try FfiConverterString.read(from: &buf)
+        case 31: return .setCommentDraft(parentEventId: try FfiConverterOptionString.read(from: &buf), body: try FfiConverterString.read(from: &buf)
         )
 
-        case 30: return .publishComment(parentEventId: try FfiConverterOptionString.read(from: &buf)
+        case 32: return .publishComment(parentEventId: try FfiConverterOptionString.read(from: &buf)
         )
 
-        case 31: return .clearCommentPublishError
+        case 33: return .clearCommentPublishError
 
-        case 32: return .toggleCommentLike(eventId: try FfiConverterString.read(from: &buf)
+        case 34: return .toggleCommentLike(eventId: try FfiConverterString.read(from: &buf)
         )
 
-        case 33: return .toggleCommentBookmark(eventId: try FfiConverterString.read(from: &buf)
+        case 35: return .toggleCommentBookmark(eventId: try FfiConverterString.read(from: &buf)
         )
 
-        case 34: return .clearCommentInteractionError
+        case 36: return .clearCommentInteractionError
 
-        case 35: return .closeComments
+        case 37: return .closeComments
 
-        case 36: return .openFeedback(coordinate: try FfiConverterString.read(from: &buf)
+        case 38: return .openFeedback(coordinate: try FfiConverterString.read(from: &buf)
         )
 
-        case 37: return .refreshFeedbackThreads
+        case 39: return .refreshFeedbackThreads
 
-        case 38: return .setFeedbackNewThreadDraft(body: try FfiConverterString.read(from: &buf)
+        case 40: return .setFeedbackNewThreadDraft(body: try FfiConverterString.read(from: &buf)
         )
 
-        case 39: return .publishFeedbackNewThread
+        case 41: return .publishFeedbackNewThread
 
-        case 40: return .openFeedbackThread(rootEventId: try FfiConverterString.read(from: &buf)
+        case 42: return .openFeedbackThread(rootEventId: try FfiConverterString.read(from: &buf)
         )
 
-        case 41: return .refreshFeedbackThread
+        case 43: return .refreshFeedbackThread
 
-        case 42: return .setFeedbackReplyDraft(body: try FfiConverterString.read(from: &buf)
+        case 44: return .setFeedbackReplyDraft(body: try FfiConverterString.read(from: &buf)
         )
 
-        case 43: return .publishFeedbackReply
+        case 45: return .publishFeedbackReply
 
-        case 44: return .clearFeedbackPublishError
+        case 46: return .clearFeedbackPublishError
 
-        case 45: return .closeFeedbackThread
+        case 47: return .closeFeedbackThread
 
-        case 46: return .closeFeedback
+        case 48: return .closeFeedback
 
-        case 47: return .openMediaSettings
+        case 49: return .openMediaSettings
 
-        case 48: return .refreshMediaSettings
+        case 50: return .refreshMediaSettings
 
-        case 49: return .addBlossomServer(url: try FfiConverterString.read(from: &buf)
+        case 51: return .addBlossomServer(url: try FfiConverterString.read(from: &buf)
         )
 
-        case 50: return .removeBlossomServer(url: try FfiConverterString.read(from: &buf)
+        case 52: return .removeBlossomServer(url: try FfiConverterString.read(from: &buf)
         )
 
-        case 51: return .moveBlossomServers(fromIndices: try FfiConverterSequenceUInt32.read(from: &buf), toIndex: try FfiConverterUInt32.read(from: &buf)
+        case 53: return .moveBlossomServers(fromIndices: try FfiConverterSequenceUInt32.read(from: &buf), toIndex: try FfiConverterUInt32.read(from: &buf)
         )
 
-        case 52: return .clearMediaSettingsError
+        case 54: return .clearMediaSettingsError
 
-        case 53: return .closeMediaSettings
+        case 55: return .closeMediaSettings
 
-        case 54: return .openEditProfile(seed: try FfiConverterOptionTypeProfileMetadata.read(from: &buf)
+        case 56: return .openEditProfile(seed: try FfiConverterOptionTypeProfileMetadata.read(from: &buf)
         )
 
-        case 55: return .setEditProfileDisplayName(value: try FfiConverterString.read(from: &buf)
+        case 57: return .setEditProfileDisplayName(value: try FfiConverterString.read(from: &buf)
         )
 
-        case 56: return .setEditProfileName(value: try FfiConverterString.read(from: &buf)
+        case 58: return .setEditProfileName(value: try FfiConverterString.read(from: &buf)
         )
 
-        case 57: return .setEditProfileAbout(value: try FfiConverterString.read(from: &buf)
+        case 59: return .setEditProfileAbout(value: try FfiConverterString.read(from: &buf)
         )
 
-        case 58: return .setEditProfilePicture(value: try FfiConverterString.read(from: &buf)
+        case 60: return .setEditProfilePicture(value: try FfiConverterString.read(from: &buf)
         )
 
-        case 59: return .setEditProfileBanner(value: try FfiConverterString.read(from: &buf)
+        case 61: return .setEditProfileBanner(value: try FfiConverterString.read(from: &buf)
         )
 
-        case 60: return .setEditProfileNip05(value: try FfiConverterString.read(from: &buf)
+        case 62: return .setEditProfileNip05(value: try FfiConverterString.read(from: &buf)
         )
 
-        case 61: return .setEditProfileWebsite(value: try FfiConverterString.read(from: &buf)
+        case 63: return .setEditProfileWebsite(value: try FfiConverterString.read(from: &buf)
         )
 
-        case 62: return .setEditProfileLud16(value: try FfiConverterString.read(from: &buf)
+        case 64: return .setEditProfileLud16(value: try FfiConverterString.read(from: &buf)
         )
 
-        case 63: return .uploadEditProfileImage(target: try FfiConverterTypeHighlighterEditProfileImageTarget.read(from: &buf), bytes: try FfiConverterData.read(from: &buf), mime: try FfiConverterString.read(from: &buf), width: try FfiConverterUInt32.read(from: &buf), height: try FfiConverterUInt32.read(from: &buf), alt: try FfiConverterString.read(from: &buf)
+        case 65: return .uploadEditProfileImage(target: try FfiConverterTypeHighlighterEditProfileImageTarget.read(from: &buf), bytes: try FfiConverterData.read(from: &buf), mime: try FfiConverterString.read(from: &buf), width: try FfiConverterUInt32.read(from: &buf), height: try FfiConverterUInt32.read(from: &buf), alt: try FfiConverterString.read(from: &buf)
         )
 
-        case 64: return .editProfileCapabilityFailed(message: try FfiConverterString.read(from: &buf)
+        case 66: return .editProfileCapabilityFailed(message: try FfiConverterString.read(from: &buf)
         )
 
-        case 65: return .submitEditProfile
+        case 67: return .submitEditProfile
 
-        case 66: return .clearEditProfileError
+        case 68: return .clearEditProfileError
 
-        case 67: return .clearEditProfileResult
+        case 69: return .clearEditProfileResult
 
-        case 68: return .closeEditProfile
+        case 70: return .closeEditProfile
 
-        case 69: return .startNostrConnect(callbackUrl: try FfiConverterString.read(from: &buf)
+        case 71: return .startNostrConnect(callbackUrl: try FfiConverterString.read(from: &buf)
         )
 
-        case 70: return .externalUrlOpenFailed(url: try FfiConverterString.read(from: &buf)
+        case 72: return .externalUrlOpenFailed(url: try FfiConverterString.read(from: &buf)
         )
 
-        case 71: return .logout
+        case 73: return .logout
 
-        case 72: return .toggleArticleBookmark(address: try FfiConverterString.read(from: &buf)
+        case 74: return .toggleArticleBookmark(address: try FfiConverterString.read(from: &buf)
         )
 
-        case 73: return .openBookmarks
+        case 75: return .openBookmarks
 
-        case 74: return .refreshBookmarks
+        case 76: return .refreshBookmarks
 
-        case 75: return .closeBookmarks
+        case 77: return .closeBookmarks
 
-        case 76: return .openBookmarkCollection(pubkeyHex: try FfiConverterString.read(from: &buf), dTag: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
+        case 78: return .openBookmarkCollection(pubkeyHex: try FfiConverterString.read(from: &buf), dTag: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
         )
 
-        case 77: return .refreshBookmarkCollection
+        case 79: return .refreshBookmarkCollection
 
-        case 78: return .openCurationMenu(articleAddress: try FfiConverterString.read(from: &buf)
+        case 80: return .openCurationMenu(articleAddress: try FfiConverterString.read(from: &buf)
         )
 
-        case 79: return .closeCurationMenu
+        case 81: return .closeCurationMenu
 
-        case 80: return .setAddressInCurationSet(dTag: try FfiConverterString.read(from: &buf), address: try FfiConverterString.read(from: &buf), member: try FfiConverterBool.read(from: &buf)
+        case 82: return .setAddressInCurationSet(dTag: try FfiConverterString.read(from: &buf), address: try FfiConverterString.read(from: &buf), member: try FfiConverterBool.read(from: &buf)
         )
 
-        case 81: return .createCurationSetAndAdd(title: try FfiConverterString.read(from: &buf), address: try FfiConverterString.read(from: &buf)
+        case 83: return .createCurationSetAndAdd(title: try FfiConverterString.read(from: &buf), address: try FfiConverterString.read(from: &buf)
         )
 
-        case 82: return .openRoomExplorer
+        case 84: return .openRoomExplorer
 
-        case 83: return .refreshRoomExplorer
+        case 85: return .refreshRoomExplorer
 
-        case 84: return .refreshRoomBrowseAll
+        case 86: return .refreshRoomBrowseAll
 
-        case 85: return .requestJoinRoom(groupId: try FfiConverterString.read(from: &buf), roomName: try FfiConverterString.read(from: &buf)
+        case 87: return .requestJoinRoom(groupId: try FfiConverterString.read(from: &buf), roomName: try FfiConverterString.read(from: &buf)
         )
 
-        case 86: return .requestIsbnPreview(isbn: try FfiConverterString.read(from: &buf)
+        case 88: return .requestIsbnPreview(isbn: try FfiConverterString.read(from: &buf)
         )
 
-        case 87: return .requestWebMetadata(url: try FfiConverterString.read(from: &buf)
+        case 89: return .requestWebMetadata(url: try FfiConverterString.read(from: &buf)
         )
 
-        case 88: return .requestReferenceHighlights(tagName: try FfiConverterString.read(from: &buf), tagValue: try FfiConverterString.read(from: &buf), limit: try FfiConverterUInt32.read(from: &buf)
+        case 90: return .requestReferenceHighlights(tagName: try FfiConverterString.read(from: &buf), tagValue: try FfiConverterString.read(from: &buf), limit: try FfiConverterUInt32.read(from: &buf)
         )
 
-        case 89: return .requestBookPickerRecents(limit: try FfiConverterUInt32.read(from: &buf)
+        case 91: return .requestBookPickerRecents(limit: try FfiConverterUInt32.read(from: &buf)
         )
 
-        case 90: return .searchBookPickerArtifacts(query: try FfiConverterString.read(from: &buf), limit: try FfiConverterUInt32.read(from: &buf)
+        case 92: return .searchBookPickerArtifacts(query: try FfiConverterString.read(from: &buf), limit: try FfiConverterUInt32.read(from: &buf)
         )
 
-        case 91: return .clearBookPickerSearch
+        case 93: return .clearBookPickerSearch
 
-        case 92: return .uploadCapturePhoto(bytes: try FfiConverterData.read(from: &buf), mime: try FfiConverterString.read(from: &buf), width: try FfiConverterUInt32.read(from: &buf), height: try FfiConverterUInt32.read(from: &buf), alt: try FfiConverterString.read(from: &buf)
+        case 94: return .uploadCapturePhoto(bytes: try FfiConverterData.read(from: &buf), mime: try FfiConverterString.read(from: &buf), width: try FfiConverterUInt32.read(from: &buf), height: try FfiConverterUInt32.read(from: &buf), alt: try FfiConverterString.read(from: &buf)
         )
 
-        case 93: return .clearCaptureUpload
+        case 95: return .clearCaptureUpload
 
-        case 94: return .publishCaptureHighlight(selection: try FfiConverterTypeHighlighterCaptureArtifact.read(from: &buf), targetGroupId: try FfiConverterOptionString.read(from: &buf), draft: try FfiConverterTypeHighlightDraft.read(from: &buf)
+        case 96: return .publishCaptureHighlight(selection: try FfiConverterTypeHighlighterCaptureArtifact.read(from: &buf), targetGroupId: try FfiConverterOptionString.read(from: &buf), draft: try FfiConverterTypeHighlightDraft.read(from: &buf)
         )
 
-        case 95: return .publishCapturePicture(selection: try FfiConverterOptionTypeHighlighterCaptureArtifact.read(from: &buf), targetGroupId: try FfiConverterOptionString.read(from: &buf), image: try FfiConverterTypeBlossomUpload.read(from: &buf), note: try FfiConverterString.read(from: &buf)
+        case 97: return .publishCapturePicture(selection: try FfiConverterOptionTypeHighlighterCaptureArtifact.read(from: &buf), targetGroupId: try FfiConverterOptionString.read(from: &buf), image: try FfiConverterTypeBlossomUpload.read(from: &buf), note: try FfiConverterString.read(from: &buf)
         )
 
-        case 96: return .publishClipHighlight(artifact: try FfiConverterTypeArtifactRecord.read(from: &buf), targetGroupId: try FfiConverterOptionString.read(from: &buf), draft: try FfiConverterTypeHighlightDraft.read(from: &buf)
+        case 98: return .publishClipHighlight(artifact: try FfiConverterTypeArtifactRecord.read(from: &buf), targetGroupId: try FfiConverterOptionString.read(from: &buf), draft: try FfiConverterTypeHighlightDraft.read(from: &buf)
         )
 
-        case 97: return .clearCaptureResult
+        case 99: return .clearCaptureResult
 
-        case 98: return .clearCaptureError
+        case 100: return .clearCaptureError
 
-        case 99: return .requestProfile(pubkeyHex: try FfiConverterString.read(from: &buf)
+        case 101: return .requestProfile(pubkeyHex: try FfiConverterString.read(from: &buf)
         )
 
-        case 100: return .openProfile(pubkeyHex: try FfiConverterString.read(from: &buf)
+        case 102: return .openProfile(pubkeyHex: try FfiConverterString.read(from: &buf)
         )
 
-        case 101: return .refreshProfile
+        case 103: return .refreshProfile
 
-        case 102: return .closeProfile
+        case 104: return .closeProfile
 
-        case 103: return .toggleProfileFollow
+        case 105: return .toggleProfileFollow
 
-        case 104: return .openArticleReader(pubkeyHex: try FfiConverterString.read(from: &buf), dTag: try FfiConverterString.read(from: &buf), seed: try FfiConverterOptionTypeArticleRecord.read(from: &buf)
+        case 106: return .openArticleReader(pubkeyHex: try FfiConverterString.read(from: &buf), dTag: try FfiConverterString.read(from: &buf), seed: try FfiConverterOptionTypeArticleRecord.read(from: &buf)
         )
 
-        case 105: return .refreshArticleReader
+        case 107: return .refreshArticleReader
 
-        case 106: return .closeArticleReader
+        case 108: return .closeArticleReader
 
-        case 107: return .publishArticleHighlight(quote: try FfiConverterString.read(from: &buf), context: try FfiConverterString.read(from: &buf), note: try FfiConverterString.read(from: &buf)
+        case 109: return .publishArticleHighlight(quote: try FfiConverterString.read(from: &buf), context: try FfiConverterString.read(from: &buf), note: try FfiConverterString.read(from: &buf)
         )
 
-        case 108: return .publishArtifactShare(preview: try FfiConverterTypeArtifactPreview.read(from: &buf), groupId: try FfiConverterString.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf)
+        case 110: return .publishArtifactShare(preview: try FfiConverterTypeArtifactPreview.read(from: &buf), groupId: try FfiConverterString.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf)
         )
 
-        case 109: return .publishUrlShare(url: try FfiConverterString.read(from: &buf), groupId: try FfiConverterString.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf)
+        case 111: return .publishUrlShare(url: try FfiConverterString.read(from: &buf), groupId: try FfiConverterString.read(from: &buf), note: try FfiConverterOptionString.read(from: &buf)
         )
 
-        case 110: return .shareHighlightRepost(eventId: try FfiConverterString.read(from: &buf), authorPubkeyHex: try FfiConverterString.read(from: &buf), relayHint: try FfiConverterString.read(from: &buf), targetGroupId: try FfiConverterString.read(from: &buf)
+        case 112: return .shareHighlightRepost(eventId: try FfiConverterString.read(from: &buf), authorPubkeyHex: try FfiConverterString.read(from: &buf), relayHint: try FfiConverterString.read(from: &buf), targetGroupId: try FfiConverterString.read(from: &buf)
         )
 
-        case 111: return .clearShareComposerResult
+        case 113: return .clearShareComposerResult
 
-        case 112: return .clearShareComposerError
+        case 114: return .clearShareComposerError
 
-        case 113: return .openRoom(groupId: try FfiConverterString.read(from: &buf)
+        case 115: return .openRoom(groupId: try FfiConverterString.read(from: &buf)
         )
 
-        case 114: return .refreshRoom
+        case 116: return .refreshRoom
 
-        case 115: return .publishRoomDiscussion(title: try FfiConverterString.read(from: &buf), body: try FfiConverterString.read(from: &buf), attachmentUrl: try FfiConverterOptionString.read(from: &buf)
+        case 117: return .publishRoomDiscussion(title: try FfiConverterString.read(from: &buf), body: try FfiConverterString.read(from: &buf), attachmentUrl: try FfiConverterOptionString.read(from: &buf)
         )
 
-        case 116: return .clearRoomDiscussionError
+        case 118: return .clearRoomDiscussionError
 
-        case 117: return .loadMoreRoomChat
+        case 119: return .loadMoreRoomChat
 
-        case 118: return .publishRoomChatMessage(content: try FfiConverterString.read(from: &buf), replyToEventId: try FfiConverterOptionString.read(from: &buf)
+        case 120: return .publishRoomChatMessage(content: try FfiConverterString.read(from: &buf), replyToEventId: try FfiConverterOptionString.read(from: &buf)
         )
 
-        case 119: return .clearRoomChatError
+        case 121: return .clearRoomChatError
 
-        case 120: return .closeRoom
+        case 122: return .closeRoom
 
-        case 121: return .openHomeFeed
+        case 123: return .openHomeFeed
 
-        case 122: return .refreshHomeFeed
+        case 124: return .refreshHomeFeed
 
-        case 123: return .closeHomeFeed
+        case 125: return .closeHomeFeed
 
-        case 124: return .searchOpened
+        case 126: return .searchOpened
 
-        case 125: return .searchClosed
+        case 127: return .searchClosed
 
-        case 126: return .setSearchQuery(query: try FfiConverterString.read(from: &buf)
+        case 128: return .setSearchQuery(query: try FfiConverterString.read(from: &buf)
         )
 
-        case 127: return .submitSearch(query: try FfiConverterString.read(from: &buf)
+        case 129: return .submitSearch(query: try FfiConverterString.read(from: &buf)
         )
 
-        case 128: return .clearSearch
+        case 130: return .clearSearch
 
-        case 129: return .recordRecentSearch(query: try FfiConverterString.read(from: &buf)
+        case 131: return .recordRecentSearch(query: try FfiConverterString.read(from: &buf)
         )
 
-        case 130: return .clearRecentSearches
+        case 132: return .clearRecentSearches
 
-        case 131: return .openNetworkSettings
+        case 133: return .openNetworkSettings
 
-        case 132: return .refreshNetworkSettings
+        case 134: return .refreshNetworkSettings
 
-        case 133: return .upsertNetworkRelay(config: try FfiConverterTypeRelayConfig.read(from: &buf)
+        case 135: return .upsertNetworkRelay(config: try FfiConverterTypeRelayConfig.read(from: &buf)
         )
 
-        case 134: return .removeNetworkRelay(url: try FfiConverterString.read(from: &buf)
+        case 136: return .removeNetworkRelay(url: try FfiConverterString.read(from: &buf)
         )
 
-        case 135: return .setNetworkRelayRoles(url: try FfiConverterString.read(from: &buf), read: try FfiConverterBool.read(from: &buf), write: try FfiConverterBool.read(from: &buf), rooms: try FfiConverterBool.read(from: &buf), indexer: try FfiConverterBool.read(from: &buf)
+        case 137: return .setNetworkRelayRoles(url: try FfiConverterString.read(from: &buf), read: try FfiConverterBool.read(from: &buf), write: try FfiConverterBool.read(from: &buf), rooms: try FfiConverterBool.read(from: &buf), indexer: try FfiConverterBool.read(from: &buf)
         )
 
-        case 136: return .probeNetworkRelayNip11(url: try FfiConverterString.read(from: &buf)
+        case 138: return .probeNetworkRelayNip11(url: try FfiConverterString.read(from: &buf)
         )
 
-        case 137: return .setNetworkImportNpub(npub: try FfiConverterString.read(from: &buf)
+        case 139: return .setNetworkImportNpub(npub: try FfiConverterString.read(from: &buf)
         )
 
-        case 138: return .fetchNetworkImportRelays
+        case 140: return .fetchNetworkImportRelays
 
-        case 139: return .toggleNetworkImportRelay(url: try FfiConverterString.read(from: &buf)
+        case 141: return .toggleNetworkImportRelay(url: try FfiConverterString.read(from: &buf)
         )
 
-        case 140: return .applyNetworkImportRelays
+        case 142: return .applyNetworkImportRelays
 
-        case 141: return .clearNetworkError
+        case 143: return .clearNetworkError
 
-        case 142: return .closeNetworkSettings
+        case 144: return .closeNetworkSettings
 
-        case 143: return .setNetworkWifiOnly(enabled: try FfiConverterBool.read(from: &buf)
+        case 145: return .setNetworkWifiOnly(enabled: try FfiConverterBool.read(from: &buf)
         )
 
-        case 144: return .networkPathChanged(isWifi: try FfiConverterBool.read(from: &buf)
+        case 146: return .networkPathChanged(isWifi: try FfiConverterBool.read(from: &buf)
         )
 
-        case 145: return .reconnectNetwork
+        case 147: return .reconnectNetwork
 
-        case 146: return .dismissWhatsNew
+        case 148: return .dismissWhatsNew
 
-        case 147: return .toggleOnboardingInterest(interestId: try FfiConverterString.read(from: &buf)
+        case 149: return .toggleOnboardingInterest(interestId: try FfiConverterString.read(from: &buf)
         )
 
-        case 148: return .completeOnboarding
+        case 150: return .completeOnboarding
 
-        case 149: return .clearToast
+        case 151: return .clearToast
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -11955,22 +12008,34 @@ public struct FfiConverterTypeHighlighterAppAction: FfiConverterRustBuffer {
             FfiConverterBool.write(clearStoredOnFailure, into: &buf)
 
 
-        case let .setCreateAccountDisplayName(displayName):
+        case let .signInNip55(signerPackage,persist,clearStoredOnFailure):
             writeInt(&buf, Int32(6))
+            FfiConverterOptionString.write(signerPackage, into: &buf)
+            FfiConverterBool.write(persist, into: &buf)
+            FfiConverterBool.write(clearStoredOnFailure, into: &buf)
+
+
+        case let .deliverExternalSignerResponse(responseJson):
+            writeInt(&buf, Int32(7))
+            FfiConverterString.write(responseJson, into: &buf)
+
+
+        case let .setCreateAccountDisplayName(displayName):
+            writeInt(&buf, Int32(8))
             FfiConverterString.write(displayName, into: &buf)
 
 
         case let .setCreateAccountUsername(username):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(9))
             FfiConverterString.write(username, into: &buf)
 
 
         case .submitCreateAccount:
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(10))
 
 
         case let .uploadCreateRoomCover(bytes,mime,width,height,alt):
-            writeInt(&buf, Int32(9))
+            writeInt(&buf, Int32(11))
             FfiConverterData.write(bytes, into: &buf)
             FfiConverterString.write(mime, into: &buf)
             FfiConverterUInt32.write(width, into: &buf)
@@ -11979,16 +12044,16 @@ public struct FfiConverterTypeHighlighterAppAction: FfiConverterRustBuffer {
 
 
         case let .createRoomCapabilityFailed(message):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(12))
             FfiConverterString.write(message, into: &buf)
 
 
         case .clearCreateRoomCover:
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(13))
 
 
         case let .submitCreateRoom(name,about,visibility,access):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(14))
             FfiConverterString.write(name, into: &buf)
             FfiConverterString.write(about, into: &buf)
             FfiConverterTypeRoomVisibility.write(visibility, into: &buf)
@@ -11996,237 +12061,237 @@ public struct FfiConverterTypeHighlighterAppAction: FfiConverterRustBuffer {
 
 
         case .clearCreateRoomResult:
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(15))
 
 
         case .clearCreateRoomError:
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(16))
 
 
         case let .openRoomInvite(groupId):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(17))
             FfiConverterString.write(groupId, into: &buf)
 
 
         case .refreshRoomInvite:
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(18))
 
 
         case let .setRoomInviteQuery(query):
-            writeInt(&buf, Int32(17))
+            writeInt(&buf, Int32(19))
             FfiConverterString.write(query, into: &buf)
 
 
         case let .toggleRoomInviteCandidate(pubkeyHex,source):
-            writeInt(&buf, Int32(18))
+            writeInt(&buf, Int32(20))
             FfiConverterString.write(pubkeyHex, into: &buf)
             FfiConverterTypeHighlighterRoomInviteCandidateSource.write(source, into: &buf)
 
 
         case let .removeRoomInviteCandidate(pubkeyHex):
-            writeInt(&buf, Int32(19))
+            writeInt(&buf, Int32(21))
             FfiConverterString.write(pubkeyHex, into: &buf)
 
 
         case .acceptRoomInvitePastedCandidate:
-            writeInt(&buf, Int32(20))
-
-
-        case .mintRoomInviteLink:
-            writeInt(&buf, Int32(21))
-
-
-        case .submitRoomInviteMembers:
             writeInt(&buf, Int32(22))
 
 
-        case .clearRoomInviteAddError:
+        case .mintRoomInviteLink:
             writeInt(&buf, Int32(23))
 
 
-        case .clearRoomInviteInviteLinkError:
+        case .submitRoomInviteMembers:
             writeInt(&buf, Int32(24))
 
 
-        case .clearRoomInviteToast:
+        case .clearRoomInviteAddError:
             writeInt(&buf, Int32(25))
 
 
-        case .closeRoomInvite:
+        case .clearRoomInviteInviteLinkError:
             writeInt(&buf, Int32(26))
 
 
-        case let .openComments(rootTagName,rootTagValue,rootKind):
+        case .clearRoomInviteToast:
             writeInt(&buf, Int32(27))
+
+
+        case .closeRoomInvite:
+            writeInt(&buf, Int32(28))
+
+
+        case let .openComments(rootTagName,rootTagValue,rootKind):
+            writeInt(&buf, Int32(29))
             FfiConverterString.write(rootTagName, into: &buf)
             FfiConverterString.write(rootTagValue, into: &buf)
             FfiConverterUInt16.write(rootKind, into: &buf)
 
 
         case .refreshComments:
-            writeInt(&buf, Int32(28))
+            writeInt(&buf, Int32(30))
 
 
         case let .setCommentDraft(parentEventId,body):
-            writeInt(&buf, Int32(29))
+            writeInt(&buf, Int32(31))
             FfiConverterOptionString.write(parentEventId, into: &buf)
             FfiConverterString.write(body, into: &buf)
 
 
         case let .publishComment(parentEventId):
-            writeInt(&buf, Int32(30))
+            writeInt(&buf, Int32(32))
             FfiConverterOptionString.write(parentEventId, into: &buf)
 
 
         case .clearCommentPublishError:
-            writeInt(&buf, Int32(31))
+            writeInt(&buf, Int32(33))
 
 
         case let .toggleCommentLike(eventId):
-            writeInt(&buf, Int32(32))
+            writeInt(&buf, Int32(34))
             FfiConverterString.write(eventId, into: &buf)
 
 
         case let .toggleCommentBookmark(eventId):
-            writeInt(&buf, Int32(33))
+            writeInt(&buf, Int32(35))
             FfiConverterString.write(eventId, into: &buf)
 
 
         case .clearCommentInteractionError:
-            writeInt(&buf, Int32(34))
+            writeInt(&buf, Int32(36))
 
 
         case .closeComments:
-            writeInt(&buf, Int32(35))
+            writeInt(&buf, Int32(37))
 
 
         case let .openFeedback(coordinate):
-            writeInt(&buf, Int32(36))
+            writeInt(&buf, Int32(38))
             FfiConverterString.write(coordinate, into: &buf)
 
 
         case .refreshFeedbackThreads:
-            writeInt(&buf, Int32(37))
+            writeInt(&buf, Int32(39))
 
 
         case let .setFeedbackNewThreadDraft(body):
-            writeInt(&buf, Int32(38))
+            writeInt(&buf, Int32(40))
             FfiConverterString.write(body, into: &buf)
 
 
         case .publishFeedbackNewThread:
-            writeInt(&buf, Int32(39))
+            writeInt(&buf, Int32(41))
 
 
         case let .openFeedbackThread(rootEventId):
-            writeInt(&buf, Int32(40))
+            writeInt(&buf, Int32(42))
             FfiConverterString.write(rootEventId, into: &buf)
 
 
         case .refreshFeedbackThread:
-            writeInt(&buf, Int32(41))
+            writeInt(&buf, Int32(43))
 
 
         case let .setFeedbackReplyDraft(body):
-            writeInt(&buf, Int32(42))
+            writeInt(&buf, Int32(44))
             FfiConverterString.write(body, into: &buf)
 
 
         case .publishFeedbackReply:
-            writeInt(&buf, Int32(43))
-
-
-        case .clearFeedbackPublishError:
-            writeInt(&buf, Int32(44))
-
-
-        case .closeFeedbackThread:
             writeInt(&buf, Int32(45))
 
 
-        case .closeFeedback:
+        case .clearFeedbackPublishError:
             writeInt(&buf, Int32(46))
 
 
-        case .openMediaSettings:
+        case .closeFeedbackThread:
             writeInt(&buf, Int32(47))
 
 
-        case .refreshMediaSettings:
+        case .closeFeedback:
             writeInt(&buf, Int32(48))
 
 
-        case let .addBlossomServer(url):
+        case .openMediaSettings:
             writeInt(&buf, Int32(49))
+
+
+        case .refreshMediaSettings:
+            writeInt(&buf, Int32(50))
+
+
+        case let .addBlossomServer(url):
+            writeInt(&buf, Int32(51))
             FfiConverterString.write(url, into: &buf)
 
 
         case let .removeBlossomServer(url):
-            writeInt(&buf, Int32(50))
+            writeInt(&buf, Int32(52))
             FfiConverterString.write(url, into: &buf)
 
 
         case let .moveBlossomServers(fromIndices,toIndex):
-            writeInt(&buf, Int32(51))
+            writeInt(&buf, Int32(53))
             FfiConverterSequenceUInt32.write(fromIndices, into: &buf)
             FfiConverterUInt32.write(toIndex, into: &buf)
 
 
         case .clearMediaSettingsError:
-            writeInt(&buf, Int32(52))
+            writeInt(&buf, Int32(54))
 
 
         case .closeMediaSettings:
-            writeInt(&buf, Int32(53))
+            writeInt(&buf, Int32(55))
 
 
         case let .openEditProfile(seed):
-            writeInt(&buf, Int32(54))
+            writeInt(&buf, Int32(56))
             FfiConverterOptionTypeProfileMetadata.write(seed, into: &buf)
 
 
         case let .setEditProfileDisplayName(value):
-            writeInt(&buf, Int32(55))
-            FfiConverterString.write(value, into: &buf)
-
-
-        case let .setEditProfileName(value):
-            writeInt(&buf, Int32(56))
-            FfiConverterString.write(value, into: &buf)
-
-
-        case let .setEditProfileAbout(value):
             writeInt(&buf, Int32(57))
             FfiConverterString.write(value, into: &buf)
 
 
-        case let .setEditProfilePicture(value):
+        case let .setEditProfileName(value):
             writeInt(&buf, Int32(58))
             FfiConverterString.write(value, into: &buf)
 
 
-        case let .setEditProfileBanner(value):
+        case let .setEditProfileAbout(value):
             writeInt(&buf, Int32(59))
             FfiConverterString.write(value, into: &buf)
 
 
-        case let .setEditProfileNip05(value):
+        case let .setEditProfilePicture(value):
             writeInt(&buf, Int32(60))
             FfiConverterString.write(value, into: &buf)
 
 
-        case let .setEditProfileWebsite(value):
+        case let .setEditProfileBanner(value):
             writeInt(&buf, Int32(61))
             FfiConverterString.write(value, into: &buf)
 
 
-        case let .setEditProfileLud16(value):
+        case let .setEditProfileNip05(value):
             writeInt(&buf, Int32(62))
             FfiConverterString.write(value, into: &buf)
 
 
-        case let .uploadEditProfileImage(target,bytes,mime,width,height,alt):
+        case let .setEditProfileWebsite(value):
             writeInt(&buf, Int32(63))
+            FfiConverterString.write(value, into: &buf)
+
+
+        case let .setEditProfileLud16(value):
+            writeInt(&buf, Int32(64))
+            FfiConverterString.write(value, into: &buf)
+
+
+        case let .uploadEditProfileImage(target,bytes,mime,width,height,alt):
+            writeInt(&buf, Int32(65))
             FfiConverterTypeHighlighterEditProfileImageTarget.write(target, into: &buf)
             FfiConverterData.write(bytes, into: &buf)
             FfiConverterString.write(mime, into: &buf)
@@ -12236,142 +12301,142 @@ public struct FfiConverterTypeHighlighterAppAction: FfiConverterRustBuffer {
 
 
         case let .editProfileCapabilityFailed(message):
-            writeInt(&buf, Int32(64))
+            writeInt(&buf, Int32(66))
             FfiConverterString.write(message, into: &buf)
 
 
         case .submitEditProfile:
-            writeInt(&buf, Int32(65))
-
-
-        case .clearEditProfileError:
-            writeInt(&buf, Int32(66))
-
-
-        case .clearEditProfileResult:
             writeInt(&buf, Int32(67))
 
 
-        case .closeEditProfile:
+        case .clearEditProfileError:
             writeInt(&buf, Int32(68))
 
 
-        case let .startNostrConnect(callbackUrl):
+        case .clearEditProfileResult:
             writeInt(&buf, Int32(69))
+
+
+        case .closeEditProfile:
+            writeInt(&buf, Int32(70))
+
+
+        case let .startNostrConnect(callbackUrl):
+            writeInt(&buf, Int32(71))
             FfiConverterString.write(callbackUrl, into: &buf)
 
 
         case let .externalUrlOpenFailed(url):
-            writeInt(&buf, Int32(70))
+            writeInt(&buf, Int32(72))
             FfiConverterString.write(url, into: &buf)
 
 
         case .logout:
-            writeInt(&buf, Int32(71))
+            writeInt(&buf, Int32(73))
 
 
         case let .toggleArticleBookmark(address):
-            writeInt(&buf, Int32(72))
+            writeInt(&buf, Int32(74))
             FfiConverterString.write(address, into: &buf)
 
 
         case .openBookmarks:
-            writeInt(&buf, Int32(73))
-
-
-        case .refreshBookmarks:
-            writeInt(&buf, Int32(74))
-
-
-        case .closeBookmarks:
             writeInt(&buf, Int32(75))
 
 
-        case let .openBookmarkCollection(pubkeyHex,dTag,kind):
+        case .refreshBookmarks:
             writeInt(&buf, Int32(76))
+
+
+        case .closeBookmarks:
+            writeInt(&buf, Int32(77))
+
+
+        case let .openBookmarkCollection(pubkeyHex,dTag,kind):
+            writeInt(&buf, Int32(78))
             FfiConverterString.write(pubkeyHex, into: &buf)
             FfiConverterString.write(dTag, into: &buf)
             FfiConverterUInt32.write(kind, into: &buf)
 
 
         case .refreshBookmarkCollection:
-            writeInt(&buf, Int32(77))
+            writeInt(&buf, Int32(79))
 
 
         case let .openCurationMenu(articleAddress):
-            writeInt(&buf, Int32(78))
+            writeInt(&buf, Int32(80))
             FfiConverterString.write(articleAddress, into: &buf)
 
 
         case .closeCurationMenu:
-            writeInt(&buf, Int32(79))
+            writeInt(&buf, Int32(81))
 
 
         case let .setAddressInCurationSet(dTag,address,member):
-            writeInt(&buf, Int32(80))
+            writeInt(&buf, Int32(82))
             FfiConverterString.write(dTag, into: &buf)
             FfiConverterString.write(address, into: &buf)
             FfiConverterBool.write(member, into: &buf)
 
 
         case let .createCurationSetAndAdd(title,address):
-            writeInt(&buf, Int32(81))
+            writeInt(&buf, Int32(83))
             FfiConverterString.write(title, into: &buf)
             FfiConverterString.write(address, into: &buf)
 
 
         case .openRoomExplorer:
-            writeInt(&buf, Int32(82))
-
-
-        case .refreshRoomExplorer:
-            writeInt(&buf, Int32(83))
-
-
-        case .refreshRoomBrowseAll:
             writeInt(&buf, Int32(84))
 
 
-        case let .requestJoinRoom(groupId,roomName):
+        case .refreshRoomExplorer:
             writeInt(&buf, Int32(85))
+
+
+        case .refreshRoomBrowseAll:
+            writeInt(&buf, Int32(86))
+
+
+        case let .requestJoinRoom(groupId,roomName):
+            writeInt(&buf, Int32(87))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterString.write(roomName, into: &buf)
 
 
         case let .requestIsbnPreview(isbn):
-            writeInt(&buf, Int32(86))
+            writeInt(&buf, Int32(88))
             FfiConverterString.write(isbn, into: &buf)
 
 
         case let .requestWebMetadata(url):
-            writeInt(&buf, Int32(87))
+            writeInt(&buf, Int32(89))
             FfiConverterString.write(url, into: &buf)
 
 
         case let .requestReferenceHighlights(tagName,tagValue,limit):
-            writeInt(&buf, Int32(88))
+            writeInt(&buf, Int32(90))
             FfiConverterString.write(tagName, into: &buf)
             FfiConverterString.write(tagValue, into: &buf)
             FfiConverterUInt32.write(limit, into: &buf)
 
 
         case let .requestBookPickerRecents(limit):
-            writeInt(&buf, Int32(89))
+            writeInt(&buf, Int32(91))
             FfiConverterUInt32.write(limit, into: &buf)
 
 
         case let .searchBookPickerArtifacts(query,limit):
-            writeInt(&buf, Int32(90))
+            writeInt(&buf, Int32(92))
             FfiConverterString.write(query, into: &buf)
             FfiConverterUInt32.write(limit, into: &buf)
 
 
         case .clearBookPickerSearch:
-            writeInt(&buf, Int32(91))
+            writeInt(&buf, Int32(93))
 
 
         case let .uploadCapturePhoto(bytes,mime,width,height,alt):
-            writeInt(&buf, Int32(92))
+            writeInt(&buf, Int32(94))
             FfiConverterData.write(bytes, into: &buf)
             FfiConverterString.write(mime, into: &buf)
             FfiConverterUInt32.write(width, into: &buf)
@@ -12380,18 +12445,18 @@ public struct FfiConverterTypeHighlighterAppAction: FfiConverterRustBuffer {
 
 
         case .clearCaptureUpload:
-            writeInt(&buf, Int32(93))
+            writeInt(&buf, Int32(95))
 
 
         case let .publishCaptureHighlight(selection,targetGroupId,draft):
-            writeInt(&buf, Int32(94))
+            writeInt(&buf, Int32(96))
             FfiConverterTypeHighlighterCaptureArtifact.write(selection, into: &buf)
             FfiConverterOptionString.write(targetGroupId, into: &buf)
             FfiConverterTypeHighlightDraft.write(draft, into: &buf)
 
 
         case let .publishCapturePicture(selection,targetGroupId,image,note):
-            writeInt(&buf, Int32(95))
+            writeInt(&buf, Int32(97))
             FfiConverterOptionTypeHighlighterCaptureArtifact.write(selection, into: &buf)
             FfiConverterOptionString.write(targetGroupId, into: &buf)
             FfiConverterTypeBlossomUpload.write(image, into: &buf)
@@ -12399,80 +12464,80 @@ public struct FfiConverterTypeHighlighterAppAction: FfiConverterRustBuffer {
 
 
         case let .publishClipHighlight(artifact,targetGroupId,draft):
-            writeInt(&buf, Int32(96))
+            writeInt(&buf, Int32(98))
             FfiConverterTypeArtifactRecord.write(artifact, into: &buf)
             FfiConverterOptionString.write(targetGroupId, into: &buf)
             FfiConverterTypeHighlightDraft.write(draft, into: &buf)
 
 
         case .clearCaptureResult:
-            writeInt(&buf, Int32(97))
+            writeInt(&buf, Int32(99))
 
 
         case .clearCaptureError:
-            writeInt(&buf, Int32(98))
+            writeInt(&buf, Int32(100))
 
 
         case let .requestProfile(pubkeyHex):
-            writeInt(&buf, Int32(99))
+            writeInt(&buf, Int32(101))
             FfiConverterString.write(pubkeyHex, into: &buf)
 
 
         case let .openProfile(pubkeyHex):
-            writeInt(&buf, Int32(100))
+            writeInt(&buf, Int32(102))
             FfiConverterString.write(pubkeyHex, into: &buf)
 
 
         case .refreshProfile:
-            writeInt(&buf, Int32(101))
-
-
-        case .closeProfile:
-            writeInt(&buf, Int32(102))
-
-
-        case .toggleProfileFollow:
             writeInt(&buf, Int32(103))
 
 
-        case let .openArticleReader(pubkeyHex,dTag,seed):
+        case .closeProfile:
             writeInt(&buf, Int32(104))
+
+
+        case .toggleProfileFollow:
+            writeInt(&buf, Int32(105))
+
+
+        case let .openArticleReader(pubkeyHex,dTag,seed):
+            writeInt(&buf, Int32(106))
             FfiConverterString.write(pubkeyHex, into: &buf)
             FfiConverterString.write(dTag, into: &buf)
             FfiConverterOptionTypeArticleRecord.write(seed, into: &buf)
 
 
         case .refreshArticleReader:
-            writeInt(&buf, Int32(105))
+            writeInt(&buf, Int32(107))
 
 
         case .closeArticleReader:
-            writeInt(&buf, Int32(106))
+            writeInt(&buf, Int32(108))
 
 
         case let .publishArticleHighlight(quote,context,note):
-            writeInt(&buf, Int32(107))
+            writeInt(&buf, Int32(109))
             FfiConverterString.write(quote, into: &buf)
             FfiConverterString.write(context, into: &buf)
             FfiConverterString.write(note, into: &buf)
 
 
         case let .publishArtifactShare(preview,groupId,note):
-            writeInt(&buf, Int32(108))
+            writeInt(&buf, Int32(110))
             FfiConverterTypeArtifactPreview.write(preview, into: &buf)
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterOptionString.write(note, into: &buf)
 
 
         case let .publishUrlShare(url,groupId,note):
-            writeInt(&buf, Int32(109))
+            writeInt(&buf, Int32(111))
             FfiConverterString.write(url, into: &buf)
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterOptionString.write(note, into: &buf)
 
 
         case let .shareHighlightRepost(eventId,authorPubkeyHex,relayHint,targetGroupId):
-            writeInt(&buf, Int32(110))
+            writeInt(&buf, Int32(112))
             FfiConverterString.write(eventId, into: &buf)
             FfiConverterString.write(authorPubkeyHex, into: &buf)
             FfiConverterString.write(relayHint, into: &buf)
@@ -12480,114 +12545,114 @@ public struct FfiConverterTypeHighlighterAppAction: FfiConverterRustBuffer {
 
 
         case .clearShareComposerResult:
-            writeInt(&buf, Int32(111))
+            writeInt(&buf, Int32(113))
 
 
         case .clearShareComposerError:
-            writeInt(&buf, Int32(112))
+            writeInt(&buf, Int32(114))
 
 
         case let .openRoom(groupId):
-            writeInt(&buf, Int32(113))
+            writeInt(&buf, Int32(115))
             FfiConverterString.write(groupId, into: &buf)
 
 
         case .refreshRoom:
-            writeInt(&buf, Int32(114))
+            writeInt(&buf, Int32(116))
 
 
         case let .publishRoomDiscussion(title,body,attachmentUrl):
-            writeInt(&buf, Int32(115))
+            writeInt(&buf, Int32(117))
             FfiConverterString.write(title, into: &buf)
             FfiConverterString.write(body, into: &buf)
             FfiConverterOptionString.write(attachmentUrl, into: &buf)
 
 
         case .clearRoomDiscussionError:
-            writeInt(&buf, Int32(116))
+            writeInt(&buf, Int32(118))
 
 
         case .loadMoreRoomChat:
-            writeInt(&buf, Int32(117))
+            writeInt(&buf, Int32(119))
 
 
         case let .publishRoomChatMessage(content,replyToEventId):
-            writeInt(&buf, Int32(118))
+            writeInt(&buf, Int32(120))
             FfiConverterString.write(content, into: &buf)
             FfiConverterOptionString.write(replyToEventId, into: &buf)
 
 
         case .clearRoomChatError:
-            writeInt(&buf, Int32(119))
-
-
-        case .closeRoom:
-            writeInt(&buf, Int32(120))
-
-
-        case .openHomeFeed:
             writeInt(&buf, Int32(121))
 
 
-        case .refreshHomeFeed:
+        case .closeRoom:
             writeInt(&buf, Int32(122))
 
 
-        case .closeHomeFeed:
+        case .openHomeFeed:
             writeInt(&buf, Int32(123))
 
 
-        case .searchOpened:
+        case .refreshHomeFeed:
             writeInt(&buf, Int32(124))
 
 
-        case .searchClosed:
+        case .closeHomeFeed:
             writeInt(&buf, Int32(125))
 
 
-        case let .setSearchQuery(query):
+        case .searchOpened:
             writeInt(&buf, Int32(126))
+
+
+        case .searchClosed:
+            writeInt(&buf, Int32(127))
+
+
+        case let .setSearchQuery(query):
+            writeInt(&buf, Int32(128))
             FfiConverterString.write(query, into: &buf)
 
 
         case let .submitSearch(query):
-            writeInt(&buf, Int32(127))
-            FfiConverterString.write(query, into: &buf)
-
-
-        case .clearSearch:
-            writeInt(&buf, Int32(128))
-
-
-        case let .recordRecentSearch(query):
             writeInt(&buf, Int32(129))
             FfiConverterString.write(query, into: &buf)
 
 
-        case .clearRecentSearches:
+        case .clearSearch:
             writeInt(&buf, Int32(130))
 
 
-        case .openNetworkSettings:
+        case let .recordRecentSearch(query):
             writeInt(&buf, Int32(131))
+            FfiConverterString.write(query, into: &buf)
 
 
-        case .refreshNetworkSettings:
+        case .clearRecentSearches:
             writeInt(&buf, Int32(132))
 
 
-        case let .upsertNetworkRelay(config):
+        case .openNetworkSettings:
             writeInt(&buf, Int32(133))
+
+
+        case .refreshNetworkSettings:
+            writeInt(&buf, Int32(134))
+
+
+        case let .upsertNetworkRelay(config):
+            writeInt(&buf, Int32(135))
             FfiConverterTypeRelayConfig.write(config, into: &buf)
 
 
         case let .removeNetworkRelay(url):
-            writeInt(&buf, Int32(134))
+            writeInt(&buf, Int32(136))
             FfiConverterString.write(url, into: &buf)
 
 
         case let .setNetworkRelayRoles(url,read,write,rooms,indexer):
-            writeInt(&buf, Int32(135))
+            writeInt(&buf, Int32(137))
             FfiConverterString.write(url, into: &buf)
             FfiConverterBool.write(read, into: &buf)
             FfiConverterBool.write(write, into: &buf)
@@ -12596,65 +12661,65 @@ public struct FfiConverterTypeHighlighterAppAction: FfiConverterRustBuffer {
 
 
         case let .probeNetworkRelayNip11(url):
-            writeInt(&buf, Int32(136))
+            writeInt(&buf, Int32(138))
             FfiConverterString.write(url, into: &buf)
 
 
         case let .setNetworkImportNpub(npub):
-            writeInt(&buf, Int32(137))
+            writeInt(&buf, Int32(139))
             FfiConverterString.write(npub, into: &buf)
 
 
         case .fetchNetworkImportRelays:
-            writeInt(&buf, Int32(138))
+            writeInt(&buf, Int32(140))
 
 
         case let .toggleNetworkImportRelay(url):
-            writeInt(&buf, Int32(139))
+            writeInt(&buf, Int32(141))
             FfiConverterString.write(url, into: &buf)
 
 
         case .applyNetworkImportRelays:
-            writeInt(&buf, Int32(140))
-
-
-        case .clearNetworkError:
-            writeInt(&buf, Int32(141))
-
-
-        case .closeNetworkSettings:
             writeInt(&buf, Int32(142))
 
 
-        case let .setNetworkWifiOnly(enabled):
+        case .clearNetworkError:
             writeInt(&buf, Int32(143))
+
+
+        case .closeNetworkSettings:
+            writeInt(&buf, Int32(144))
+
+
+        case let .setNetworkWifiOnly(enabled):
+            writeInt(&buf, Int32(145))
             FfiConverterBool.write(enabled, into: &buf)
 
 
         case let .networkPathChanged(isWifi):
-            writeInt(&buf, Int32(144))
+            writeInt(&buf, Int32(146))
             FfiConverterBool.write(isWifi, into: &buf)
 
 
         case .reconnectNetwork:
-            writeInt(&buf, Int32(145))
+            writeInt(&buf, Int32(147))
 
 
         case .dismissWhatsNew:
-            writeInt(&buf, Int32(146))
+            writeInt(&buf, Int32(148))
 
 
         case let .toggleOnboardingInterest(interestId):
-            writeInt(&buf, Int32(147))
+            writeInt(&buf, Int32(149))
             FfiConverterString.write(interestId, into: &buf)
 
 
         case .completeOnboarding:
-            writeInt(&buf, Int32(148))
+            writeInt(&buf, Int32(150))
 
 
         case .clearToast:
-            writeInt(&buf, Int32(149))
+            writeInt(&buf, Int32(151))
 
         }
     }
@@ -13139,6 +13204,15 @@ public enum HighlighterSessionCredential {
     )
     case bunkerUri(uri: String
     )
+    /**
+     * NIP-55 external-signer (Amber). Persists only the signer app's
+     * package name; no key material ever enters the Rust process (ADR-0048
+     * D4). On next launch the host restores this credential and calls
+     * `signInNip55` so NMP reconstructs the `Nip55Signer` without a
+     * fresh user interaction.
+     */
+    case nip55SignerPackage(signerPackage: String
+    )
 }
 
 
@@ -13162,6 +13236,9 @@ public struct FfiConverterTypeHighlighterSessionCredential: FfiConverterRustBuff
         case 2: return .bunkerUri(uri: try FfiConverterString.read(from: &buf)
         )
 
+        case 3: return .nip55SignerPackage(signerPackage: try FfiConverterString.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -13178,6 +13255,11 @@ public struct FfiConverterTypeHighlighterSessionCredential: FfiConverterRustBuff
         case let .bunkerUri(uri):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(uri, into: &buf)
+
+
+        case let .nip55SignerPackage(signerPackage):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(signerPackage, into: &buf)
 
         }
     }
@@ -13200,6 +13282,98 @@ public func FfiConverterTypeHighlighterSessionCredential_lower(_ value: Highligh
 
 
 extension HighlighterSessionCredential: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Result of one [`HighlighterNmpApp::next_signer_request`] drain tick
+ * (ADR-0048 Stage 2). Mirrors `nmp-android-ffi`'s `NextSignerRequest`
+ * contract:
+ * - `Request` carries one `ExternalSignerRequest` JSON payload to hand to
+ * `ExternalSignerCapabilityBridge.handleJson` (D7 — verbatim).
+ * - `Idle` is a normal ≤250 ms timeout tick; the reader parked INSIDE the
+ * channel wait (D8 — never a sleep+check poll) and uses the tick only to
+ * re-check its shutdown flag.
+ * - `Closed` means the channel sender is gone (session teardown); the
+ * reader must exit its loop.
+ */
+
+public enum HighlighterSignerRequestDrain {
+
+    case request(requestJson: String
+    )
+    case idle
+    case closed
+}
+
+
+#if compiler(>=6)
+extension HighlighterSignerRequestDrain: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterSignerRequestDrain: FfiConverterRustBuffer {
+    typealias SwiftType = HighlighterSignerRequestDrain
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterSignerRequestDrain {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .request(requestJson: try FfiConverterString.read(from: &buf)
+        )
+
+        case 2: return .idle
+
+        case 3: return .closed
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: HighlighterSignerRequestDrain, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .request(requestJson):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(requestJson, into: &buf)
+
+
+        case .idle:
+            writeInt(&buf, Int32(2))
+
+
+        case .closed:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterSignerRequestDrain_lift(_ buf: RustBuffer) throws -> HighlighterSignerRequestDrain {
+    return try FfiConverterTypeHighlighterSignerRequestDrain.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterSignerRequestDrain_lower(_ value: HighlighterSignerRequestDrain) -> RustBuffer {
+    return FfiConverterTypeHighlighterSignerRequestDrain.lower(value)
+}
+
+
+extension HighlighterSignerRequestDrain: Equatable, Hashable {}
 
 
 
@@ -15327,6 +15501,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlighternmpapp_network_removal_impact() != 42619) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighternmpapp_next_signer_request() != 57472) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlighternmpapp_publish_url_share() != 35144) {

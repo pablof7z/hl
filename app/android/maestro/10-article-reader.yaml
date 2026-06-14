@@ -1,0 +1,27 @@
+appId: com.highlighter.app
+---
+# Tap a reading/article card (feed_reading_card) in the feed — these cards
+# dispatch OpenArticleReader directly on tap — then assert the article reader
+# overlay is visible.
+# Assumes session persisted (run 00-login first) and feed has article cards.
+- launchApp:
+    clearState: false
+
+# Wait for the feed to populate with at least one reading card.
+- extendedWaitUntil:
+    visible:
+      id: feed_reading_card
+    timeout: 30000
+
+# Tap the first reading/article card.
+- tapOn:
+    id: feed_reading_card
+    index: 0
+
+# Article reader overlay should appear.
+- extendedWaitUntil:
+    visible:
+      id: article_reader
+    timeout: 15000
+
+- takeScreenshot: article_reader_opened
