@@ -336,6 +336,7 @@ private fun HighlightFeedCard(
                             contentDescription = null,
                             modifier = Modifier.size(44.dp),
                             shape = RoundedCornerShape(6.dp),
+                            targetSize = 44.dp,
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                     }
@@ -502,6 +503,7 @@ private fun ReadingFeedCard(
                             .size(56.dp)
                             .testTag("card_cover"),
                         shape = CoverShape,
+                        targetSize = 56.dp,
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                 }

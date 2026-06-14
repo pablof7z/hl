@@ -211,6 +211,7 @@ private fun RoomTile(
                         .size(48.dp)
                         .testTag("room_tile_cover"),
                     shape = CoverShape,
+                    targetSize = 48.dp,
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 // Room name — show a short truncated id only as absolute last resort,

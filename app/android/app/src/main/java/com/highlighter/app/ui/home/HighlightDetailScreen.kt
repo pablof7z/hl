@@ -300,6 +300,7 @@ private fun ResourceHeader(
                     contentDescription = null,
                     modifier = Modifier.size(40.dp),
                     shape = RoundedCornerShape(6.dp),
+                    targetSize = 40.dp,
                 )
             }
             Column(modifier = Modifier.weight(1f)) {

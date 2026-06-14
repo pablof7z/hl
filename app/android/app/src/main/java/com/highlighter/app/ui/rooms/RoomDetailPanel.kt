@@ -391,6 +391,7 @@ private fun RoomHighlightCard(
                             contentDescription = null,
                             modifier = Modifier.size(44.dp),
                             shape = RoundedCornerShape(6.dp),
+                            targetSize = 44.dp,
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                     }
@@ -511,6 +512,7 @@ private fun ArtifactCard(artifact: ArtifactRecord) {
                     contentDescription = null,
                     modifier = Modifier.size(48.dp),
                     shape = CoverShape,
+                    targetSize = 48.dp,
                 )
                 Spacer(modifier = Modifier.width(12.dp))
             }

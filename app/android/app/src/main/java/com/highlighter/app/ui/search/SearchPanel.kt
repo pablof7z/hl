@@ -227,6 +227,7 @@ internal fun ArticleSearchRow(
                     contentDescription = null,
                     modifier = Modifier.size(40.dp),
                     shape = CoverShape,
+                    targetSize = 40.dp,
                 )
             }
         },

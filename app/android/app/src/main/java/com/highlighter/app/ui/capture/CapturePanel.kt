@@ -885,6 +885,7 @@ private fun ArtifactPickerRow(
                 contentDescription = null,
                 modifier = Modifier.size(40.dp),
                 shape = CoverShape,
+                targetSize = 40.dp,
             )
             Spacer(modifier = Modifier.width(12.dp))
         }
