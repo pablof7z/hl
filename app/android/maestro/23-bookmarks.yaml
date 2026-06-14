@@ -1,0 +1,35 @@
+appId: com.highlighter.app
+---
+# Open Bookmarks via: gear icon (Settings) → "Bookmarks" button in the Library
+# panel of SettingsScreen (OutlinedButton text "Bookmarks", onClick triggers
+# onOpenBookmarks which sets ScaffoldRoute.BOOKMARKS in MainScaffold).
+#
+# Nav path: gear icon (Settings) → Settings screen → tap "Bookmarks" button
+#           → BookmarkLibraryPanel (bookmarks_screen)
+#
+# Assumes session persisted (run 00-login first).
+- launchApp:
+    clearState: false
+
+# Ensure we're on the main scaffold.
+- assertVisible: "Highlights"
+
+# Tap the gear icon to open Settings.
+# The IconButton has contentDescription "Settings" (used as accessibility label).
+- tapOn:
+    id: "settings_button"
+
+# Wait for the Settings screen title.
+- assertVisible: "Settings"
+
+# Tap the "Bookmarks" button inside the Library panel.
+- tapOn:
+    id: "library_bookmarks_button"
+
+# BookmarkLibraryPanel root column should be visible.
+- extendedWaitUntil:
+    visible:
+      id: bookmarks_screen
+    timeout: 10000
+
+- takeScreenshot: bookmarks_screen

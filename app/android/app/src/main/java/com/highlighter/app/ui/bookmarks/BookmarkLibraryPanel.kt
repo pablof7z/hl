@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.highlighter.app.ui.components.CoverShape
 import com.highlighter.app.ui.components.EmptyPanel
@@ -32,7 +33,7 @@ internal fun BookmarkLibraryPanel(
     bookmarks: HighlighterBookmarksSnapshot,
     dispatch: (HighlighterAppAction) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(modifier = Modifier.testTag("bookmarks_screen"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionHeader("Bookmarks", bookmarks.articleCount.toString())
         bookmarks.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
             Text(

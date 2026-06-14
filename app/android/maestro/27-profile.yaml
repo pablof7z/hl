@@ -1,0 +1,26 @@
+appId: com.highlighter.app
+---
+# From the feed, tap the author byline (card_author) on a highlight card to
+# open that author's profile, then assert the profile_screen is visible.
+# Assumes session persisted (run 00-login first) and feed has content.
+- launchApp:
+    clearState: false
+
+# Wait for the feed to populate.
+- extendedWaitUntil:
+    visible:
+      id: feed_highlight_card
+    timeout: 30000
+
+# Tap the author byline row on the first highlight card.
+- tapOn:
+    id: card_author
+    index: 0
+
+# Profile overlay should appear — wait for its root tag.
+- extendedWaitUntil:
+    visible:
+      id: profile_screen
+    timeout: 10000
+
+- takeScreenshot: author_profile_opened

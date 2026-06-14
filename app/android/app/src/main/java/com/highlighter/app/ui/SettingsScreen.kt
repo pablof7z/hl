@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.highlighter.app.ui.components.MetricRow
 import com.highlighter.app.ui.components.Panel
@@ -59,7 +60,9 @@ internal fun SettingsScreen(
                     SectionHeader("Library", state.chrome.bookmarkedArticleAddressCount.toString())
                     OutlinedButton(
                         onClick = onOpenBookmarks,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("library_bookmarks_button"),
                         shape = RoundedCornerShape(8.dp),
                     ) {
                         Text("Bookmarks")

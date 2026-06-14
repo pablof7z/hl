@@ -1,0 +1,37 @@
+appId: com.highlighter.app
+---
+# Open own profile via the top-bar avatar button (AvatarButton in MainScaffold
+# dispatches OpenProfile for the current user), then tap the Edit profile button
+# to navigate to the edit-profile screen.
+#
+# Nav path: top-bar avatar (top_bar_avatar) → profile_screen (isOwnProfile=true)
+#           → profile_edit_button → edit_profile_screen
+#
+# Assumes session persisted (run 00-login first) and onboarding is complete.
+- launchApp:
+    clearState: false
+
+# Ensure we're on the main scaffold (Highlights tab visible).
+- assertVisible: "Highlights"
+
+# Tap the current user's avatar in the top bar to open own profile overlay.
+- tapOn:
+    id: top_bar_avatar
+
+# Wait for the profile overlay.
+- extendedWaitUntil:
+    visible:
+      id: profile_screen
+    timeout: 10000
+
+# Own profile shows "Edit profile" button (isOwnProfile == true).
+- tapOn:
+    id: profile_edit_button
+
+# Edit profile screen should be visible.
+- extendedWaitUntil:
+    visible:
+      id: edit_profile_screen
+    timeout: 8000
+
+- takeScreenshot: edit_profile_screen

@@ -366,9 +366,13 @@ private fun HighlightFeedCard(
             }
 
             // Author byline row: avatar + resolved display name
+            // Independent click target: child clickable consumes the tap so tapping
+            // the author row opens the profile rather than the card detail action.
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.testTag("card_author"),
+                modifier = Modifier
+                    .testTag("card_author")
+                    .clickable { dispatch(HighlighterAppAction.OpenProfile(lead.pubkey)) },
             ) {
                 AvatarImage(
                     url = authorAvatarUrl,
@@ -533,9 +537,13 @@ private fun ReadingFeedCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             // Author byline row
+            // Independent click target: child clickable consumes the tap so tapping
+            // the author row opens the profile rather than the card's article reader action.
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.testTag("card_author"),
+                modifier = Modifier
+                    .testTag("card_author")
+                    .clickable { dispatch(HighlighterAppAction.OpenProfile(read.pubkey)) },
             ) {
                 AvatarImage(
                     url = authorAvatarUrl,
