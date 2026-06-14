@@ -1918,6 +1918,7 @@ dependencies = [
  "nostr",
  "serde",
  "serde_json",
+ "sha2",
  "tracing",
  "ureq 2.12.1",
 ]
@@ -1926,9 +1927,7 @@ dependencies = [
 name = "nmp-nip59"
 version = "0.6.2"
 dependencies = [
- "futures",
  "nmp-kinds",
- "nmp-signer-iface",
  "nostr",
 ]
 

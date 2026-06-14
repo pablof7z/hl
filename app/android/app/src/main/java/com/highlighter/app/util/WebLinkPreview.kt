@@ -62,6 +62,7 @@ fun WebLinkPreview(text: String, modifier: Modifier = Modifier) {
                     contentDescription = null,
                     modifier = Modifier.size(44.dp),
                     shape = CoverShape,
+                    targetSize = 44.dp,
                 )
                 Spacer(modifier = Modifier.width(10.dp))
             }

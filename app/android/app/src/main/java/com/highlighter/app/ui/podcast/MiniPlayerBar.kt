@@ -65,6 +65,7 @@ internal fun MiniPlayerBar(
                 contentDescription = null,
                 modifier = Modifier.size(40.dp),
                 shape = RoundedCornerShape(6.dp),
+                targetSize = 40.dp,
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {

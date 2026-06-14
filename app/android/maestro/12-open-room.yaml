@@ -1,0 +1,30 @@
+appId: com.highlighter.app
+---
+# Open the first room tile in the explorer and verify the detail screen.
+- launchApp:
+    clearState: false
+
+- tapOn: "Rooms"
+
+# Wait for room tiles to load.
+- extendedWaitUntil:
+    visible:
+      id: room_tile_name
+    timeout: 20000
+
+# Each RoomTile has a TextButton "Join" (or "Joined" for joined rooms) and a
+# "Open" TextButton after creation — but in the explorer the tile itself is
+# clickable (the whole Surface dispatches OpenRoom).  Tap the first tile name.
+- tapOn:
+    id: room_tile_name
+    index: 0
+
+# RoomDetailPanel top-bar title has testTag "room_detail_name".
+- assertVisible:
+    id: room_detail_name
+
+# The pill tab bar always starts on "Home" tab.
+- assertVisible:
+    id: room_tab_home
+
+- takeScreenshot: room_detail

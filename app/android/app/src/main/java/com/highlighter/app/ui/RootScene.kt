@@ -5,18 +5,24 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import com.highlighter.app.PendingShare
 import com.highlighter.app.ui.auth.CreateAccountScreen
@@ -67,7 +73,7 @@ internal fun RootScene(
         mutableStateOf(if (onboardingComplete) AuthRoute.LOGIN else AuthRoute.WELCOME)
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
         Crossfade(
             targetState = Triple(loggedIn, onboardingComplete, authRoute),
             animationSpec = tween(250),
@@ -158,12 +164,27 @@ internal fun RootScene(
             }
         }
 
-        // Toast host — pinned to the top, above the active scene.
+        // Toast host — positioned below the top app bar so it never overlaps
+        // the status line, avatar, or gear. Uses WindowInsets.statusBars to
+        // skip the system status bar height, plus the standard M3 TopAppBar
+        // height (64.dp), then an 8.dp gap, matching how iOS places its
+        // ShareToastBanner below the navigation bar.
         state.toast?.let { toast ->
+            // Auto-expire: keyed on the toast object so each new toast resets
+            // the timer. After 4 s the banner clears itself without user action.
+            LaunchedEffect(toast) {
+                delay(4_000)
+                dispatch(HighlighterAppAction.ClearToast)
+            }
+            val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp),
+                    .padding(
+                        top = statusBarTop + 64.dp + 8.dp,
+                        start = 16.dp,
+                        end = 16.dp,
+                    ),
                 contentAlignment = Alignment.TopCenter,
             ) {
                 ToastBanner(
@@ -227,9 +248,16 @@ private fun Overlays(
         }
     }
     if (state.roomDetail.groupId.isNotBlank()) {
-        OverlayDestination(title = "Room", onBack = { dispatch(HighlighterAppAction.CloseRoom) }) {
-            RoomDetailPanel(room = state.roomDetail, dispatch = dispatch)
-        }
+        val roomName = state.chrome.joinedCommunities
+            .firstOrNull { it.id == state.roomDetail.groupId }
+            ?.name?.takeIf { it.isNotBlank() }
+            ?: "Room"
+        RoomDetailPanel(
+            room = state.roomDetail,
+            roomName = roomName,
+            onBack = { dispatch(HighlighterAppAction.CloseRoom) },
+            dispatch = dispatch,
+        )
     }
     if (state.roomInvite.groupId.isNotBlank()) {
         OverlayDestination(title = "Invite", onBack = { dispatch(HighlighterAppAction.CloseRoomInvite) }) {

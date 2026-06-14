@@ -1,6 +1,7 @@
 package com.highlighter.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,6 +19,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -25,14 +27,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,7 +46,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.highlighter.app.ui.bookmarks.BookmarkLibraryPanel
 import com.highlighter.app.ui.components.AvatarButton
 import com.highlighter.app.ui.feedback.FeedbackPanel
-import com.highlighter.app.ui.home.HomeFeedPanel
+import com.highlighter.app.ui.home.HighlightDetailScreen
+import com.highlighter.app.ui.home.homeFeedItems
 import com.highlighter.app.ui.podcast.MiniPlayerBar
 import com.highlighter.app.ui.podcast.PodcastListeningScreen
 import com.highlighter.app.ui.podcast.rememberPodcastPlayerController
@@ -50,6 +57,7 @@ import com.highlighter.app.ui.search.SearchPanel
 import com.highlighter.app.util.statusLabel
 import uniffi.highlighter_core.HighlighterAppAction
 import uniffi.highlighter_core.HighlighterAppState
+import uniffi.highlighter_core.HydratedHighlight
 
 /** The three primary tabs, mirroring the iOS `MainTabView`. */
 internal enum class MainTab(val title: String) {
@@ -86,6 +94,8 @@ internal fun MainScaffold(
 ) {
     var route by rememberSaveable { mutableStateOf(ScaffoldRoute.TABS) }
     var selectedTab by rememberSaveable { mutableStateOf(MainTab.HIGHLIGHTS) }
+    // Controls the "New room" create-room modal sheet on the Rooms tab.
+    var createRoomOpen by rememberSaveable { mutableStateOf(false) }
 
     // Process-wide podcast player (the same singleton any Play affordance
     // resolves via rememberPodcastPlayerController), so the mini player and
@@ -264,10 +274,22 @@ internal fun MainScaffold(
             }
         },
         floatingActionButton = {
-            if (selectedTab == MainTab.HIGHLIGHTS) {
-                FloatingActionButton(onClick = { route = ScaffoldRoute.CAPTURE }) {
-                    Icon(Icons.Filled.Add, contentDescription = "Capture highlight")
+            when (selectedTab) {
+                MainTab.HIGHLIGHTS -> {
+                    FloatingActionButton(onClick = { route = ScaffoldRoute.CAPTURE }) {
+                        Icon(Icons.Filled.Add, contentDescription = "Capture highlight")
+                    }
                 }
+                MainTab.ROOMS -> {
+                    // "New room" FAB — presents the create-room sheet as a modal.
+                    FloatingActionButton(
+                        onClick = { createRoomOpen = true },
+                        modifier = Modifier.testTag("create_room_fab"),
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = "New room")
+                    }
+                }
+                else -> Unit
             }
         },
     ) { padding ->
@@ -283,6 +305,16 @@ internal fun MainScaffold(
             }
         }
     }
+
+    // "New room" modal — presented from the Rooms-tab FAB. Lives outside the
+    // Scaffold composable so the sheet isn't clipped by the scaffold padding.
+    if (createRoomOpen) {
+        CreateRoomSheet(
+            state = state,
+            dispatch = dispatch,
+            onDismiss = { createRoomOpen = false },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -291,20 +323,51 @@ private fun HighlightsTab(
     state: HighlighterAppState,
     dispatch: (HighlighterAppAction) -> Unit,
 ) {
+    // Host-side detail navigation: no core state involved — the HydratedHighlight
+    // is already present in the feed item so no round-trip is needed. When non-null,
+    // the full-screen detail view is rendered in place of (on top of) the feed.
+    var selectedHighlight by remember { mutableStateOf<HydratedHighlight?>(null) }
+
     DisposableEffect(Unit) {
         dispatch(HighlighterAppAction.OpenHomeFeed)
         onDispose { dispatch(HighlighterAppAction.CloseHomeFeed) }
     }
+
+    // If a highlight is selected, show its detail screen instead of the feed.
+    if (selectedHighlight != null) {
+        val highlight = selectedHighlight!!
+        BackHandler { selectedHighlight = null }
+        DestinationScaffold(
+            title = "Highlight",
+            onBack = { selectedHighlight = null },
+        ) { _ ->
+            HighlightDetailScreen(
+                item = highlight,
+                dispatch = dispatch,
+            )
+        }
+        return
+    }
+
     PullToRefreshBox(
         isRefreshing = state.homeFeed.isLoading,
         onRefresh = { dispatch(HighlighterAppAction.RefreshHomeFeed) },
         modifier = Modifier.fillMaxSize(),
     ) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("feed_item_list"),
             contentPadding = PaddingValues(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            item { HomeFeedPanel(feed = state.homeFeed, dispatch = dispatch) }
+            homeFeedItems(
+                feed = state.homeFeed,
+                dispatch = dispatch,
+                onOpenHighlightDetail = { hydratedHighlight ->
+                    selectedHighlight = hydratedHighlight
+                },
+            )
         }
     }
 }
@@ -315,9 +378,13 @@ private fun RoomsTab(
     state: HighlighterAppState,
     dispatch: (HighlighterAppAction) -> Unit,
 ) {
+    // Open the explorer on enter; do NOT dispatch CloseRoom on leave — the room
+    // overlay's own lifecycle (RootScene Overlays / RoomDetailPanel) owns CloseRoom.
+    // Dispatching CloseRoom here caused "opening a room does nothing" because any
+    // tab switch or recomposition would tear down the just-opened room overlay.
     DisposableEffect(Unit) {
         dispatch(HighlighterAppAction.OpenRoomExplorer)
-        onDispose { dispatch(HighlighterAppAction.CloseRoom) }
+        onDispose { /* explorer teardown is handled by OpenRoomExplorer on re-entry */ }
     }
     PullToRefreshBox(
         isRefreshing = false,
@@ -325,20 +392,66 @@ private fun RoomsTab(
         modifier = Modifier.fillMaxSize(),
     ) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("room_explorer_list"),
             contentPadding = PaddingValues(18.dp),
         ) {
+            // The create-room form was previously rendered here as the first item,
+            // which caused it to appear above the explorer on every Rooms visit.
+            // It is now presented as a modal sheet via the "New room" FAB.
             item {
-                CreateRoomPanel(createRoom = state.createRoom, dispatch = dispatch)
-            }
-            item {
+                // Memoize the ID set so each recomposition (triggered by the
+                // coalesced state flow) doesn't allocate a fresh Set and List.
+                val joinedRoomIds by remember(state.chrome.joinedCommunities) {
+                    derivedStateOf { state.chrome.joinedCommunities.map { it.id }.toSet() }
+                }
                 RoomExplorerPanel(
                     explorer = state.roomExplorer,
-                    joinedRoomIds = state.chrome.joinedCommunities.map { it.id }.toSet(),
+                    joinedRoomIds = joinedRoomIds,
                     dispatch = dispatch,
                 )
             }
         }
+    }
+}
+
+/**
+ * Modal bottom sheet containing [CreateRoomPanel]. Mirrors iOS `CreateRoomSheet`
+ * which is presented modally from the `+` toolbar button in `RoomExplorerView`.
+ * On successful creation (`createRoom.createdGroupId` non-blank) automatically
+ * routes to the invite/welcome screen and dismisses the sheet.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreateRoomSheet(
+    state: HighlighterAppState,
+    dispatch: (HighlighterAppAction) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // When the core reports a created group, open the invite screen and dismiss
+    // the sheet — mirroring iOS `CreateRoomSheet` which routes to `RoomInviteView`
+    // on success.
+    LaunchedEffect(state.createRoom.createdGroupId) {
+        val groupId = state.createRoom.createdGroupId
+        if (!groupId.isNullOrBlank()) {
+            dispatch(HighlighterAppAction.OpenRoomInvite(groupId))
+            dispatch(HighlighterAppAction.ClearCreateRoomResult)
+            onDismiss()
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        CreateRoomPanel(
+            createRoom = state.createRoom,
+            dispatch = dispatch,
+        )
     }
 }
 

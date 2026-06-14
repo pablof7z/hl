@@ -10,9 +10,14 @@ import android.net.NetworkRequest
 import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.sample
+import kotlinx.coroutines.flow.stateIn
 import com.highlighter.app.ui.share.firstUrlIn
 import uniffi.highlighter_core.HighlighterAppAction
 import uniffi.highlighter_core.HighlighterAppConfig
@@ -56,8 +61,23 @@ class HighlighterViewModel(application: Application) :
     private var eventBridge: EventBridge? = null
     private var hasBootstrapped = false
 
+    // Track the last wifiOnlyEnabled value so onState can skip the OS-level
+    // ConnectivityManager registration call on every emit and only invoke it
+    // when the setting actually changes.
+    private var lastWifiOnly: Boolean? = null
+
     private val _state = MutableStateFlow(app.state())
-    val state: StateFlow<HighlighterAppState> = _state.asStateFlow()
+
+    // Coalesce full-state snapshots so Compose recomposes at most once per
+    // frame (~16 ms) instead of once per resolved hydration op. `sample` drops
+    // intermediate emissions during a burst and delivers only the latest;
+    // `stateIn(Eagerly)` keeps the hot StateFlow contract for `collectAsState`.
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
+    val state: StateFlow<HighlighterAppState> by lazy {
+        _state
+            .sample(16.milliseconds)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, _state.value)
+    }
 
     // Presentation-only state for an inbound ACTION_SEND. The Rust core exposes
     // no "composer is open" / "shared payload" field — its share composer
@@ -68,7 +88,9 @@ class HighlighterViewModel(application: Application) :
 
     init {
         app.listenForUpdates(this)
-        syncNetworkCallback(_state.value.network.wifiOnlyEnabled)
+        val initialWifiOnly = _state.value.network.wifiOnlyEnabled
+        lastWifiOnly = initialWifiOnly
+        syncNetworkCallback(initialWifiOnly)
     }
 
     fun bootstrap() {
@@ -231,7 +253,15 @@ class HighlighterViewModel(application: Application) :
 
     override fun onState(state: HighlighterAppState) {
         _state.value = state
-        syncNetworkCallback(state.network.wifiOnlyEnabled)
+        // Guard against redundant OS-level ConnectivityManager calls: the core
+        // emits full state snapshots on every resolved op, so onState runs at
+        // high frequency on the actor thread. Only update the network callback
+        // registration when wifiOnlyEnabled actually changes.
+        val wifiOnly = state.network.wifiOnlyEnabled
+        if (wifiOnly != lastWifiOnly) {
+            lastWifiOnly = wifiOnly
+            syncNetworkCallback(wifiOnly)
+        }
     }
 
     override fun onPersistSessionCredential(credential: HighlighterSessionCredential) {

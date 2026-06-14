@@ -22,6 +22,7 @@ import uniffi.highlighter_core.HighlighterSignerRequestDrain
 import com.highlighter.app.ui.RootScene
 import com.highlighter.app.ui.theme.HighlighterTheme
 import com.highlighter.app.util.LocalDispatch
+import com.highlighter.app.util.LocalIsbnPreviews
 import com.highlighter.app.util.LocalProfiles
 import com.highlighter.app.util.LocalWebMetadata
 
@@ -137,6 +138,7 @@ class MainActivity : ComponentActivity() {
                 CompositionLocalProvider(
                     LocalProfiles provides state.profiles,
                     LocalWebMetadata provides state.webMetadata,
+                    LocalIsbnPreviews provides state.isbnPreviews,
                     LocalDispatch provides viewModel::dispatch,
                 ) {
                     RootScene(

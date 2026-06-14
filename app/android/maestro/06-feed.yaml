@@ -1,0 +1,20 @@
+appId: com.highlighter.app
+---
+# Assumes session is already persisted (run 00-login first).
+- launchApp:
+    clearState: false
+
+# Ensure we are on the Highlights tab (default after login).
+- assertVisible: "Highlights"
+
+# Wait for at least one highlight card to appear (async relay fetch).
+- extendedWaitUntil:
+    visible:
+      id: feed_highlight_card
+    timeout: 30000
+
+- takeScreenshot: feed_populated
+
+# Spot-check structural elements present in a loaded feed.
+- assertVisible:
+    id: feed_item_list

@@ -185,6 +185,16 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
+    // CameraX — document/page capture and ISBN barcode scanning.
+    val cameraVersion = "1.4.2"
+    implementation("androidx.camera:camera-camera2:$cameraVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraVersion")
+    implementation("androidx.camera:camera-view:$cameraVersion")
+
+    // ML Kit on-device OCR (text recognition) and barcode scanning.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+
     // Podcast playback (platform-local; the Rust core only supplies metadata).
     // Media3 1.4.1 is the current stable line compatible with AGP 8.7 /
     // compileSdk 35. ExoPlayer is the engine; -ui supplies player notification

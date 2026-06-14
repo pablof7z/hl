@@ -1,6 +1,5 @@
 package com.highlighter.app.ui.reader
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,7 +10,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,18 +50,8 @@ internal fun ArticleReaderPanel(
         ) {
             SectionHeader("Reader", snapshot.highlightCount.toString())
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
-                onClick = { dispatch(HighlighterAppAction.RefreshArticleReader) },
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                enabled = !snapshot.isLoading,
-            ) {
-                Text(if (snapshot.isLoading) "Refreshing" else "Refresh")
-            }
-            TextButton(onClick = { dispatch(HighlighterAppAction.CloseArticleReader) }) {
-                Text("Close")
-            }
+        TextButton(onClick = { dispatch(HighlighterAppAction.CloseArticleReader) }) {
+            Text("Close")
         }
         snapshot.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
             Spacer(modifier = Modifier.height(8.dp))

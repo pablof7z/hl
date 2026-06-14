@@ -116,12 +116,6 @@ internal fun RoomInvitePanel(
         Spacer(modifier = Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
-                onClick = { dispatch(HighlighterAppAction.RefreshRoomInvite) },
-                shape = RoundedCornerShape(8.dp),
-            ) {
-                Text(if (invite.isLoadingFollows) "Loading" else "Refresh")
-            }
-            OutlinedButton(
                 onClick = { dispatch(HighlighterAppAction.MintRoomInviteLink) },
                 shape = RoundedCornerShape(8.dp),
                 enabled = !invite.isMintingInviteLink,

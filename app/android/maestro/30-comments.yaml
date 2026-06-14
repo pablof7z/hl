@@ -1,0 +1,27 @@
+appId: com.highlighter.app
+---
+# Navigate to a highlight detail, then open the comments overlay.
+# Assumes session persisted (run 00-login first).
+- launchApp:
+    clearState: false
+
+- extendedWaitUntil:
+    visible:
+      id: feed_highlight_card
+    timeout: 30000
+
+- tapOn:
+    id: feed_highlight_card
+    index: 0
+
+- assertVisible:
+    id: highlight_detail
+
+# Open the comments overlay via the comment icon button.
+- tapOn:
+    id: highlight_detail_comment
+
+# CommentsPanel renders an OutlinedTextField with label "Add comment".
+- assertVisible: "Add comment"
+
+- takeScreenshot: comments_open

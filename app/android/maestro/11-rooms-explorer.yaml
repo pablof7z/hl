@@ -1,0 +1,24 @@
+appId: com.highlighter.app
+---
+# Navigate to the Rooms tab and verify the explorer layout.
+- launchApp:
+    clearState: false
+
+# Tap the "Rooms" bottom-nav item (visible text label on NavigationBarItem).
+- tapOn: "Rooms"
+
+# The FAB for creating a new room should be visible on the Rooms tab.
+- assertVisible:
+    id: create_room_fab
+
+# The explorer list (LazyColumn) should be visible — not replaced by a create form.
+- assertVisible:
+    id: room_explorer_list
+
+# Wait briefly for rooms to load (shelf content is async).
+- extendedWaitUntil:
+    visible:
+      id: room_tile_name
+    timeout: 20000
+
+- takeScreenshot: rooms_explorer

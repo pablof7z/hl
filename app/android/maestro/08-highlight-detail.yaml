@@ -1,0 +1,30 @@
+appId: com.highlighter.app
+---
+# Assumes session persisted and feed has loaded (run 06-feed first).
+- launchApp:
+    clearState: false
+
+# Make sure the feed is loaded.
+- extendedWaitUntil:
+    visible:
+      id: feed_highlight_card
+    timeout: 30000
+
+# Tap the first highlight card in the feed.
+- tapOn:
+    id: feed_highlight_card
+    index: 0
+
+# The detail screen has the testTag "highlight_detail" on its LazyColumn.
+- assertVisible:
+    id: highlight_detail
+
+# Author byline row ("highlight_detail_author" testTag on the Row).
+- assertVisible:
+    id: highlight_detail_author
+
+# Comment icon button ("highlight_detail_comment" testTag on the IconButton).
+- assertVisible:
+    id: highlight_detail_comment
+
+- takeScreenshot: highlight_detail
