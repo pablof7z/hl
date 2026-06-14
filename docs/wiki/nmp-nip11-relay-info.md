@@ -8,11 +8,12 @@ tags:
 volatility: warm
 confidence: medium
 created: 2026-06-12
-updated: 2026-06-12
+updated: 2026-06-13
 verified: 2026-06-12
 compiled-from: conversation
 sources:
   - session:f54b4a16-dacb-41e6-b32f-b737d606254f
+  - session:847487cd-e15b-4222-85ee-4a5a2b6f590b
 ---
 
 # NMP NIP-11 Relay Info
@@ -20,6 +21,8 @@ sources:
 ## Purpose
 
 NMP (nostr-multi-platform) provides first-class NIP-11 relay info (name, icon, description, pubkey, contact, software, version, supported_nips, payment_required, auth_required, restricted_writes) through the relay_diagnostics projection, eliminating the need for apps to perform their own HTTP fetching or NIP-11 parsing. Relay list rows display the relay icon from the NIP-11 document, falling back to a monogram when no icon is available. NIP-11 fetching and parsing is implemented entirely within NMP, not in Highlighter; Highlighter apps receive relay info through NMP's diagnostics surface with zero awareness of NIP-11.
+
+The default relay set includes wss://relay.highlighter.com (NIP-29 group relay, read+write+rooms), wss://relay.damus.io (read+write, main home feed source), wss://purplepag.es and wss://relay.primal.net (indexers), plus wss://nos.lol for outbox-model relay discovery. <!-- [^84748-64] -->
 
 <!-- citations: [^f54b4-3] [^f54b4-10] [^f54b4-20] [^f54b4-26] -->
 ## Highlighter Integration

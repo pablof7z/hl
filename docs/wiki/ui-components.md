@@ -8,13 +8,14 @@ tags:
 volatility: warm
 confidence: medium
 created: 2026-06-11
-updated: 2026-06-12
+updated: 2026-06-13
 verified: 2026-06-11
 compiled-from: conversation
 sources:
   - session:d9710893-bea1-487e-9bb2-499a23d553a6
   - session:0c7b6c09-7d1f-4cb2-b178-1adf69cd09ef
   - session:cd5f3967-ddef-43db-91ca-0d6b810bcfea
+  - session:847487cd-e15b-4222-85ee-4a5a2b6f590b
 ---
 
 # UI Components
@@ -39,6 +40,8 @@ The Android app requires a standalone book view to match iOS feature parity. <!-
 ## Navigation & Routing
 
 ProfileDestination must conform to Identifiable for use with .navigationDestination(item:). The iOS CommentRow has a 'View profile' menu item that navigates to ProfileView, using a local @State profileDestination and .navigationDestination(item:) pattern matching ThreadView's existing contract.
+
+Search person rows dispatch OpenProfile(pubkey) and community rows dispatch OpenRoom(groupId), making both tappable like iOS. <!-- [^84748-148] -->
 
 <!-- citations: [^0c7b6-46] [^0c7b6-58] -->
 
