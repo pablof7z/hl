@@ -19,20 +19,24 @@ nostr = { version = "0.44", default-features = false, features = ["std", "nip46"
 nostr-ndb = "0.44.0"
 nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", rev = "2619b9bc4cbd7d8d9198a3be0ae8f1f8f51040cb" }
 nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "fc0589fc88d61912779741fcce7d4e7176cf9a30", default-features = false }
-# NMP pinned to rev 1b64e6aece35591066990d88f5f41d435f9c576d (nmp-v0.8.0) via local path deps.
-# (nmp-blossom is parked/excluded from the NMP workspace; all others below use path.)
-# Local NMP checkout at ../../../nostr-multi-platform is API-identical to that rev.
+# NMP pinned to rev 1b64e6aece35591066990d88f5f41d435f9c576d (nmp-v0.8.0) via GIT deps.
+# These are git-rev pins (NOT local path deps) so hl is decoupled from the local
+# monorepo checkout, which floats on master. Path deps would compile hl against
+# whatever the checkout is currently at — masking real behavior deltas. v0.8.0's
+# profile-resolution fix (outbox kind:10002 discovery) is a behavior change in
+# nmp-core, not an API change, so the only correct way to get it is to pin the rev.
+# Matches sibling consumer podcast-player's pinning of the same rev.
 # v0.8.0 delta vs the prior pin: nmp_app_claim_profile gained a 5th `liveness: c_int`
 # arg (0=CacheOk, non-zero=Live). hl does not call that symbol, so no FFI adaptation.
-nmp-core = { path = "../../../nostr-multi-platform/crates/nmp-core" }
-nmp-ffi = { path = "../../../nostr-multi-platform/crates/nmp-ffi", features = ["signer-broker", "external-signer"] }
-nmp-defaults = { path = "../../../nostr-multi-platform/crates/nmp-defaults" }
-nmp-signers = { path = "../../../nostr-multi-platform/crates/nmp-signers" }
-nmp-nip11 = { path = "../../../nostr-multi-platform/crates/nmp-nip11" }
-nmp-nip29 = { path = "../../../nostr-multi-platform/crates/nmp-nip29" }
-nmp-blossom = { path = "../../../nostr-multi-platform/crates/nmp-blossom" }
-nmp-content = { path = "../../../nostr-multi-platform/crates/nmp-content" }
-nmp-kinds = { path = "../../../nostr-multi-platform/crates/nmp-kinds" }
+nmp-core = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "1b64e6aece35591066990d88f5f41d435f9c576d" }
+nmp-ffi = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "1b64e6aece35591066990d88f5f41d435f9c576d", features = ["signer-broker", "external-signer"] }
+nmp-defaults = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "1b64e6aece35591066990d88f5f41d435f9c576d" }
+nmp-signers = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "1b64e6aece35591066990d88f5f41d435f9c576d" }
+nmp-nip11 = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "1b64e6aece35591066990d88f5f41d435f9c576d" }
+nmp-nip29 = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "1b64e6aece35591066990d88f5f41d435f9c576d" }
+nmp-blossom = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "1b64e6aece35591066990d88f5f41d435f9c576d" }
+nmp-content = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "1b64e6aece35591066990d88f5f41d435f9c576d" }
+nmp-kinds = { version = "0.8.0", git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "1b64e6aece35591066990d88f5f41d435f9c576d" }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 futures = "0.3"
