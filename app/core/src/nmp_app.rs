@@ -41,7 +41,6 @@ const SEARCH_HIGHLIGHT_LIMIT: u32 = 30;
 const SEARCH_ARTICLE_LIMIT: u32 = 30;
 const SEARCH_COMMUNITY_LIMIT: u32 = 20;
 const SEARCH_PROFILE_LIMIT: u32 = 20;
-const NIP05_API_URL: &str = "https://beta.highlighter.com/api/nip05";
 const ROOM_EXPLORER_CURATOR_PUBKEY_HEX: &str =
     "7e1eabe25256545cfe0c534a99bfa5c6cd224e04b614182a9993feff54196c95";
 const ROOM_EXPLORER_FEATURED_LIMIT: u32 = 16;
@@ -2194,11 +2193,6 @@ enum OpDomain {
     /// (checked in the apply arm exactly as the old resolver did), and the
     /// resolver re-drives the worker if the query moved on.
     SearchLocal,
-    /// NIP-05 username availability check. Keyed unkeyed (one create-account
-    /// form open at a time); the apply arm re-validates against
-    /// `create_account_runtime.username_generation` AND the live form text,
-    /// byte-for-byte with the former resolver.
-    UsernameCheck,
     /// nsec + bunker sign-in SHARE this single domain so that, exactly as
     /// today (both bumped the one `auth_generation`), a bunker attempt
     /// supersedes an in-flight nsec attempt and vice-versa — last sign-in
@@ -2335,11 +2329,6 @@ enum OpOutcome {
         query: String,
         result: Result<SearchResults, String>,
     },
-    UsernameCheck {
-        generation: u64,
-        username: String,
-        result: Result<Nip05Availability, String>,
-    },
     NsecSignIn {
         generation: u64,
         nsec: String,
@@ -2463,7 +2452,6 @@ fn op_timeout_message(domain: OpDomain) -> String {
         // submitted future; the generic timeout fallback copy mirrors the
         // shipped strings (account-create keeps its exact on-device message).
         OpDomain::SearchLocal => "Search timed out. Check your connection and try again.".into(),
-        OpDomain::UsernameCheck => "Username check timed out.".into(),
         OpDomain::Auth => "Sign-in timed out. Check your connection and try again.".into(),
         OpDomain::AccountCreate => {
             "Account creation timed out. Check your connection and try again.".into()
@@ -3283,19 +3271,6 @@ fn apply_op_outcome(
                 },
             );
         }
-        OpOutcome::UsernameCheck {
-            generation,
-            username,
-            result,
-        } => {
-            handle_username_availability_resolved(
-                state,
-                &mut runtimes.create_account_runtime,
-                generation,
-                username,
-                result,
-            );
-        }
         OpOutcome::NsecSignIn {
             generation,
             nsec,
@@ -3682,19 +3657,11 @@ fn handle_action(
             core.nmp_deliver_external_signer_response(&response_json);
         }
         HighlighterAppAction::SetCreateAccountDisplayName { display_name } => {
-            let next_username =
-                update_create_account_display_name(state, display_name, create_account_runtime);
-            if let Some((generation, username)) = next_username {
-                submit_username_availability_op(ops, generation, username);
-            }
+            update_create_account_display_name(state, display_name);
             emit(state, reconciler);
         }
         HighlighterAppAction::SetCreateAccountUsername { username } => {
-            let next_username =
-                update_create_account_username(state, username, create_account_runtime);
-            if let Some((generation, username)) = next_username {
-                submit_username_availability_op(ops, generation, username);
-            }
+            update_create_account_username(state, username);
             emit(state, reconciler);
         }
         HighlighterAppAction::SubmitCreateAccount => {
@@ -7320,181 +7287,35 @@ fn append_callback_url(uri: String, callback_url: &str) -> String {
 fn update_create_account_display_name(
     state: &Arc<RwLock<HighlighterAppState>>,
     display_name: String,
-    runtime: &mut CreateAccountRuntime,
-) -> Option<(u64, String)> {
+) {
     let mut current = state.write();
-    let trimmed = display_name.trim().to_string();
-    let should_suggest_username = current.create_account.username.is_empty();
     current.create_account.display_name = display_name;
+    current.create_account.username.clear();
+    current.create_account.username_status = HighlighterUsernameStatus::Idle;
+    current.create_account.username_identifier.clear();
+    current.create_account.username_domain.clear();
     current.create_account.error_message = None;
     current.create_account.created_user = None;
 
-    let next_username = if should_suggest_username {
-        let suggested = slugify_username(&trimmed);
-        apply_create_account_username(&mut current.create_account, suggested)
-    } else {
-        None
-    };
-
     recompute_create_account_submit(&mut current.create_account);
     current.bump();
-
-    next_username.map(|username| {
-        runtime.username_generation = runtime.username_generation.saturating_add(1);
-        (runtime.username_generation, username)
-    })
 }
 
-fn update_create_account_username(
-    state: &Arc<RwLock<HighlighterAppState>>,
-    username: String,
-    runtime: &mut CreateAccountRuntime,
-) -> Option<(u64, String)> {
+fn update_create_account_username(state: &Arc<RwLock<HighlighterAppState>>, username: String) {
     let mut current = state.write();
     current.create_account.error_message = None;
     current.create_account.created_user = None;
-    let next_username = apply_create_account_username(&mut current.create_account, username);
+    current.create_account.username = username.trim().to_ascii_lowercase();
+    current.create_account.username_status = HighlighterUsernameStatus::Idle;
+    current.create_account.username_identifier.clear();
+    current.create_account.username_domain.clear();
     recompute_create_account_submit(&mut current.create_account);
     current.bump();
-
-    next_username.map(|username| {
-        runtime.username_generation = runtime.username_generation.saturating_add(1);
-        (runtime.username_generation, username)
-    })
-}
-
-fn apply_create_account_username(
-    snapshot: &mut HighlighterCreateAccountSnapshot,
-    username: String,
-) -> Option<String> {
-    let normalized = normalize_username(&username);
-    snapshot.username = normalized.clone();
-    snapshot.username_identifier.clear();
-    snapshot.username_domain.clear();
-
-    if normalized.is_empty() {
-        snapshot.username_status = HighlighterUsernameStatus::Idle;
-        return None;
-    }
-
-    if !is_valid_username(&normalized) {
-        snapshot.username_status = HighlighterUsernameStatus::Invalid;
-        return None;
-    }
-
-    snapshot.username_status = HighlighterUsernameStatus::Checking;
-    Some(normalized)
 }
 
 fn recompute_create_account_submit(snapshot: &mut HighlighterCreateAccountSnapshot) {
     let has_name = !snapshot.display_name.trim().is_empty();
-    // `Error` means the availability check itself failed (API/network), not
-    // that the name is unavailable. The username is an optional nicety, so a
-    // broken check must not brick signup — submit proceeds without the claim
-    // (see `prepare_create_account_request`).
-    let username_ok = snapshot.username.is_empty()
-        || matches!(
-            snapshot.username_status,
-            HighlighterUsernameStatus::Available | HighlighterUsernameStatus::Error
-        );
-    snapshot.can_submit = has_name && username_ok && !snapshot.is_creating;
-}
-
-fn normalize_username(username: &str) -> String {
-    username.trim().to_ascii_lowercase()
-}
-
-fn slugify_username(display_name: &str) -> String {
-    display_name
-        .trim()
-        .to_ascii_lowercase()
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
-                ch
-            } else if ch.is_whitespace() {
-                '_'
-            } else {
-                '\0'
-            }
-        })
-        .filter(|ch| *ch != '\0')
-        .take(64)
-        .collect()
-}
-
-fn is_valid_username(username: &str) -> bool {
-    let len = username.len();
-    (1..=64).contains(&len)
-        && username
-            .chars()
-            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_' || ch == '-')
-}
-
-/// Submit a NIP-05 username availability check off-actor (Phase 4 fold of the
-/// former `highlighter-nip05-check` worker). The `username_generation` carried
-/// here is re-checked against the live form in `handle_username_availability_resolved`,
-/// exactly as before; OpRunner's `UsernameCheck` slot supersedes an in-flight
-/// check on each keystroke.
-fn submit_username_availability_op(ops: &mut OpRunner, generation: u64, username: String) {
-    let timeout_username = username.clone();
-    ops.submit_op(
-        OpDomain::UsernameCheck,
-        OP_DEADLINE_NETWORK,
-        OpOutcome::UsernameCheck {
-            generation,
-            username: timeout_username,
-            result: Err(op_timeout_message(OpDomain::UsernameCheck)),
-        },
-        async move {
-            let result = check_nip05_availability(&username).await;
-            OpOutcome::UsernameCheck {
-                generation,
-                username,
-                result,
-            }
-        },
-    );
-}
-
-fn handle_username_availability_resolved(
-    state: &Arc<RwLock<HighlighterAppState>>,
-    runtime: &mut CreateAccountRuntime,
-    generation: u64,
-    username: String,
-    result: Result<Nip05Availability, String>,
-) {
-    if generation != runtime.username_generation {
-        return;
-    }
-
-    let mut current = state.write();
-    if current.create_account.username != username {
-        return;
-    }
-
-    match result {
-        Ok(availability) if availability.available => {
-            current.create_account.username_status = HighlighterUsernameStatus::Available;
-            current.create_account.username_identifier = availability.identifier;
-            current.create_account.username_domain = availability.domain;
-            current.create_account.error_message = None;
-        }
-        Ok(_) => {
-            current.create_account.username_status = HighlighterUsernameStatus::Taken;
-            current.create_account.username_identifier.clear();
-            current.create_account.username_domain.clear();
-            current.create_account.error_message = None;
-        }
-        Err(message) => {
-            current.create_account.username_status = HighlighterUsernameStatus::Error;
-            current.create_account.username_identifier.clear();
-            current.create_account.username_domain.clear();
-            current.create_account.error_message = Some(message);
-        }
-    }
-    recompute_create_account_submit(&mut current.create_account);
-    current.bump();
+    snapshot.can_submit = has_name && !snapshot.is_creating;
 }
 
 fn handle_nsec_sign_in_resolved(
@@ -7651,23 +7472,6 @@ fn prepare_create_account_request(
         return None;
     }
 
-    let mut username = current.create_account.username.trim().to_string();
-    if !username.is_empty() {
-        match current.create_account.username_status {
-            HighlighterUsernameStatus::Available => {}
-            // The check itself failed (API/network): create the account
-            // without claiming the username rather than blocking signup.
-            HighlighterUsernameStatus::Error => username = String::new(),
-            _ => {
-                current.create_account.error_message =
-                    Some("Choose an available username or leave it blank".into());
-                recompute_create_account_submit(&mut current.create_account);
-                current.bump();
-                return None;
-            }
-        }
-    }
-
     runtime.create_generation = runtime.create_generation.saturating_add(1);
     current.create_account.is_creating = true;
     current.create_account.can_submit = false;
@@ -7678,9 +7482,6 @@ fn prepare_create_account_request(
     Some(CreateAccountRequest {
         generation: runtime.create_generation,
         display_name,
-        username,
-        identifier: current.create_account.username_identifier.clone(),
-        domain: current.create_account.username_domain.clone(),
     })
 }
 
@@ -8984,44 +8785,6 @@ fn handle_account_create_resolved(
     }
 }
 
-fn nip05_http_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|err| format!("HTTP client init failed: {err}"))
-}
-
-async fn check_nip05_availability(username: &str) -> Result<Nip05Availability, String> {
-    let url = reqwest::Url::parse_with_params(NIP05_API_URL, [("name", username)])
-        .map_err(|err| format!("Invalid username check URL: {err}"))?;
-    let response = nip05_http_client()?
-        .get(url)
-        .send()
-        .await
-        .map_err(|err| format!("Username check failed: {err}"))?;
-    let status = response.status();
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|err| format!("Username check failed: {err}"))?;
-    if !status.is_success() {
-        return Err(format!("Username check failed ({})", status.as_u16()));
-    }
-    let decoded: Nip05AvailabilityResponse =
-        serde_json::from_slice(&bytes).map_err(|err| format!("Username check failed: {err}"))?;
-    let domain = decoded
-        .identifier
-        .split('@')
-        .next_back()
-        .unwrap_or("highlighter.com")
-        .to_string();
-    Ok(Nip05Availability {
-        available: decoded.available,
-        identifier: decoded.identifier,
-        domain,
-    })
-}
-
 async fn create_account(
     core: &Arc<HighlighterCore>,
     request: CreateAccountRequest,
@@ -9029,23 +8792,8 @@ async fn create_account(
     let account = core
         .generate_account()
         .map_err(|err| format!("Account creation failed: {err}"))?;
-    let mut nip05 = String::new();
+    let nip05 = String::new();
     let mut warning = None;
-
-    if !request.username.is_empty() {
-        let registration = match core
-            .sign_nip05_registration_auth(request.username.clone(), request.domain.clone())
-            .await
-            .map_err(|err| format!("Username registration failed: {err}"))
-        {
-            Ok(auth) => async_register_nip05(&request.username, &auth).await,
-            Err(message) => Err(message),
-        };
-        match registration {
-            Ok(()) => nip05 = request.identifier.clone(),
-            Err(message) => warning = Some(format!("Account created; {message}")),
-        }
-    }
 
     if let Err(err) = core
         .update_profile(ProfileUpdateDraft {
@@ -9065,38 +8813,6 @@ async fn create_account(
         nsec: account.nsec,
         warning,
     })
-}
-
-async fn async_register_nip05(username: &str, auth_json: &str) -> Result<(), String> {
-    let auth: serde_json::Value =
-        serde_json::from_str(auth_json).map_err(|err| format!("Username auth failed: {err}"))?;
-    let body = serde_json::json!({
-        "name": username,
-        "auth": auth,
-    });
-    let response = nip05_http_client()?
-        .post(NIP05_API_URL)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|err| format!("Username registration failed: {err}"))?;
-    let status = response.status();
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|err| format!("Username registration failed: {err}"))?;
-    if status.is_success() {
-        return Ok(());
-    }
-    if let Ok(error) = serde_json::from_slice::<Nip05ErrorResponse>(&bytes) {
-        if !error.error.trim().is_empty() {
-            return Err(error.error);
-        }
-    }
-    Err(format!(
-        "Username registration failed ({})",
-        status.as_u16()
-    ))
 }
 
 /// Submit an ISBN preview lookup off-actor (Phase 4 fold of the former
@@ -11500,39 +11216,18 @@ struct RoomExplorerRuntime {
 
 #[derive(Default)]
 struct CreateAccountRuntime {
-    username_generation: u64,
     create_generation: u64,
 }
 
 struct CreateAccountRequest {
     generation: u64,
     display_name: String,
-    username: String,
-    identifier: String,
-    domain: String,
 }
 
 struct CreateAccountOutcome {
     user: CurrentUser,
     nsec: String,
     warning: Option<String>,
-}
-
-struct Nip05Availability {
-    available: bool,
-    identifier: String,
-    domain: String,
-}
-
-#[derive(serde::Deserialize)]
-struct Nip05AvailabilityResponse {
-    available: bool,
-    identifier: String,
-}
-
-#[derive(serde::Deserialize)]
-struct Nip05ErrorResponse {
-    error: String,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
@@ -12243,34 +11938,24 @@ mod tests {
     }
 
     #[test]
-    fn create_account_username_validation_is_rust_owned() {
+    fn create_account_requires_only_display_name() {
         let app = test_app();
         let (tx, rx) = channel();
         app.listen_for_updates(Arc::new(TestReconciler { tx }));
         let _ = next_state(&rx);
-
-        app.dispatch(HighlighterAppAction::SetCreateAccountUsername {
-            username: "Bad Name!".into(),
-        });
-        let state = next_state(&rx);
-
-        assert_eq!(
-            state.create_account.username_status,
-            HighlighterUsernameStatus::Invalid
-        );
-        assert_eq!(state.create_account.username, "bad name!");
-        assert!(!state.create_account.can_submit);
 
         app.dispatch(HighlighterAppAction::SetCreateAccountDisplayName {
             display_name: "Alice Reader".into(),
         });
         let state = next_state(&rx);
 
+        assert_eq!(state.create_account.display_name, "Alice Reader");
+        assert!(state.create_account.username.is_empty());
         assert_eq!(
             state.create_account.username_status,
-            HighlighterUsernameStatus::Invalid
+            HighlighterUsernameStatus::Idle
         );
-        assert!(!state.create_account.can_submit);
+        assert!(state.create_account.can_submit);
     }
 
     #[test]

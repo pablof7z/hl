@@ -145,4 +145,3 @@ fn dir_size(path: &Path) -> std::io::Result<u64> {
     }
     Ok(total)
 }
-

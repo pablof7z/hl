@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -856,7 +856,6 @@
 				};
 			};
 			buildConfigurationList = C6B8D44965599E33DF88E458 /* Build configuration list for PBXProject "Highlighter" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -869,7 +868,8 @@
 				FB7EF9EA9634F818A24E8CBE /* XCRemoteSwiftPackageReference "Kingfisher" */,
 				606904F7AC6AFD8CD87A1B33 /* XCRemoteSwiftPackageReference "swift-markdown" */,
 			);
-			preferredProjectObjectVersion = 54;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 9288D1FF044AFA08F6DE9CC7 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (

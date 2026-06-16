@@ -2,6 +2,12 @@
   "schema_version": 1,
   "entries": [
     {
+      "shipped_at": "2026-06-16T00:00:00Z",
+      "lines": [
+        "Account creation now skips username registration and stores the generated local key for signing."
+      ]
+    },
+    {
       "shipped_at": "2026-06-12T18:45:00Z",
       "lines": [
         "Share links now open directly in Highlighter, with native logging and relay diagnostics wired across app surfaces.",

@@ -22,7 +22,8 @@ use nmp_core::planner::{
 };
 use nmp_core::publish::{PublishAction, PublishTarget};
 use nmp_core::substrate::{
-    ActionRegistrar, AppHost, SignedEvent as NmpSignedEvent, UnsignedEvent as NmpUnsignedEvent,
+    ActionRegistrar, RoutingFactoryRegistrar, SignedEvent as NmpSignedEvent,
+    UnsignedEvent as NmpUnsignedEvent,
 };
 use nmp_core::typed_projections::{
     decode_action_results, decode_relay_diagnostics, ActionResultRow, ACTION_RESULTS_SCHEMA_ID,
