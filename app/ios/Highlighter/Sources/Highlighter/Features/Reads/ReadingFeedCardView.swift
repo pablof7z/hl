@@ -6,129 +6,90 @@ import SwiftUI
 struct ReadingFeedCardView: View {
     @Environment(HighlighterStore.self) private var app
 
-    let item: HighlighterHomeReadItem
+    let item: ReadingFeedItem
 
     var body: some View {
+        let author = authorDisplay
+        let projection = cardProjection
+
         ReadingCard(
-            title: item.title,
-            summary: item.summary,
-            imageURL: coverURL,
-            authorName: authorDisplayName,
-            authorPubkey: item.pubkey,
-            relativeDate: relativeDate,
-            metaBits: metaBits,
-            showTrailing: hasSocialSignal,
+            title: projection.displayTitle,
+            titleIsFallback: projection.titleIsFallback,
+            summary: item.article.summary,
+            imageURL: projection.imageUrl.flatMap { URL(string: $0) },
+            authorName: author.displayName,
+            authorPubkey: item.article.pubkey,
+            relativeDate: relativeDate(projection.relativeUnixSeconds),
+            metaText: projection.metaText,
+            showTrailing: projection.showSocialSignal,
             avatar: {
                 AuthorAvatar(
-                    pubkey: item.pubkey,
-                    pictureURL: app.profile(pubkeyHex: item.pubkey)?.picture ?? "",
-                    displayInitial: authorInitial,
+                    pubkey: item.article.pubkey,
+                    pictureURL: author.pictureUrl,
+                    displayInitial: author.displayInitial,
                     size: 22
                 )
             },
-            trailing: { socialBadge }
+            trailing: { socialBadge(projection) }
         )
-        .task(id: item.pubkey) {
-            app.requestProfile(pubkeyHex: item.pubkey)
+        .task(id: item.article.pubkey) {
+            await app.requestProfile(pubkeyHex: item.article.pubkey)
         }
-        .task(id: primaryInteractor ?? "") {
-            guard let pk = primaryInteractor else { return }
-            app.requestProfile(pubkeyHex: pk)
+        .task(id: projection.primaryInteractorPubkey ?? "") {
+            guard let pk = projection.primaryInteractorPubkey else { return }
+            await app.requestProfile(pubkeyHex: pk)
         }
-    }
-
-    // MARK: - Meta bits
-
-    private var metaBits: [String] {
-        var out: [String] = []
-        if let mins = readTimeMinutes { out.append("\(mins) min read") }
-        if let tag = item.firstHashtag, !tag.isEmpty { out.append("#\(tag)") }
-        return out
     }
 
     // MARK: - Social signal
 
-    private var hasSocialSignal: Bool {
-        !item.interactorPubkeys.isEmpty || (item.authorFollowed && item.interactorPubkeys.isEmpty)
-    }
-
     @ViewBuilder
-    private var socialBadge: some View {
-        let interactors = Array(item.interactorPubkeys.prefix(3))
+    private func socialBadge(_ projection: ReadingFeedCardProjection) -> some View {
         HStack(spacing: 6) {
-            if !interactors.isEmpty {
+            if !projection.visibleInteractorPubkeys.isEmpty {
                 HStack(spacing: -6) {
-                    ForEach(interactors, id: \.self) { pk in
+                    ForEach(projection.visibleInteractorPubkeys, id: \.self) { pk in
                         AuthorAvatar(pubkey: pk, size: 18, ringWidth: 1.5)
                     }
                 }
             }
-            Text(socialText)
+            Text(projection.socialText)
                 .font(.caption)
                 .foregroundStyle(Color.highlighterInkMuted)
                 .lineLimit(1)
         }
     }
 
-    private var socialText: String {
-        let interactors = item.interactorPubkeys
-        let authorFollowed = item.authorFollowed
+    // MARK: - Author display
 
-        if authorFollowed && interactors.isEmpty {
-            return "From someone you follow"
-        }
-
-        switch interactors.count {
-        case 0:
-            return ""
-        case 1:
-            let name = firstInteractorName
-            return authorFollowed
-                ? "\(name) and the author liked this"
-                : "\(name) liked this"
-        case 2:
-            return "\(firstInteractorName) and 1 other"
-        default:
-            let more = interactors.count - 1
-            return "\(firstInteractorName) and \(more) others"
-        }
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: item.article.pubkey,
+                profile: app.profileSnapshots[item.article.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
-    // MARK: - Author name / initial resolution
-
-    private var authorDisplayName: String {
-        let profile = app.profile(pubkeyHex: item.pubkey)
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return shortPubkey(item.pubkey)
-    }
-
-    private var authorInitial: String {
-        authorDisplayName.first.map { String($0).uppercased() } ?? ""
-    }
-
-    private var firstInteractorName: String {
-        guard let pk = primaryInteractor else { return "Someone" }
-        let profile = app.profile(pubkeyHex: pk)
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return shortPubkey(pk)
-    }
-
-    private var primaryInteractor: String? {
-        item.interactorPubkeys.first
+    private var cardProjection: ReadingFeedCardProjection {
+        app.safeCore.projectReadingFeedCard(
+            input: ReadingFeedCardProjectionInput(
+                item: item,
+                interactorProfiles: item.interactorPubkeys.map { pubkey in
+                    ReadingFeedInteractorProfile(
+                        pubkey: pubkey,
+                        profile: app.profileSnapshots[pubkey]
+                    )
+                }
+            )
+        )
     }
 
     // MARK: - Derived bits
 
-    private var coverURL: URL? {
-        guard !item.image.isEmpty else { return nil }
-        return URL(string: item.image)
-    }
-
-    private var relativeDate: String? {
-        let seconds = item.publishedAt ?? item.createdAt ?? 0
-        guard seconds > 0 else { return nil }
+    private func relativeDate(_ seconds: UInt64?) -> String? {
+        guard let seconds else { return nil }
         let date = Date(timeIntervalSince1970: TimeInterval(seconds))
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
@@ -136,12 +97,4 @@ struct ReadingFeedCardView: View {
         return formatter.localizedString(for: date, relativeTo: Date())
     }
 
-    /// Rough read-time estimate: 240 wpm. Matches the reader view.
-    private var readTimeMinutes: Int? {
-        item.readTimeMinutes.map(Int.init)
-    }
-
-    private func shortPubkey(_ hex: String) -> String {
-        String(hex.prefix(10))
-    }
 }

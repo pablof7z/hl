@@ -1,14 +1,19 @@
 import SwiftUI
 
-/// New-discussion composer. Swift owns the transient form text; Rust owns URL
-/// validation, publishing, error state, and the room projection refresh.
+/// New-discussion composer. A discussion is a kind:11 thread with the
+/// `t=discussion` marker, optionally carrying an attached URL (rendered as
+/// an artifact preview chip). Publishing is synchronous from the user's
+/// POV — we hold the sheet open until the core confirms the publish so
+/// callers can refresh their Rust-backed projection.
 struct DiscussionComposerView: View {
     let groupId: String
     let navigationTitle: String
+    let onPublished: () -> Void
 
-    init(groupId: String, navigationTitle: String = "New discussion") {
+    init(groupId: String, navigationTitle: String = "New discussion", onPublished: @escaping () -> Void) {
         self.groupId = groupId
         self.navigationTitle = navigationTitle
+        self.onPublished = onPublished
     }
 
     @Environment(HighlighterStore.self) private var app
@@ -17,10 +22,11 @@ struct DiscussionComposerView: View {
     @State private var title: String = ""
     @State private var messageBody: String = ""
     @State private var attachmentURL: String = ""
-    @State private var waitingForPublish: Bool = false
+    @State private var isPublishing: Bool = false
+    @State private var errorMessage: String?
 
     private var canPublish: Bool {
-        !title.trimmingCharacters(in: .whitespaces).isEmpty && !isPublishing
+        composerProjection.canPublish
     }
 
     var body: some View {
@@ -51,16 +57,6 @@ struct DiscussionComposerView: View {
                     }
                 }
             }
-            .onChange(of: publishedDiscussionId) { _, eventId in
-                guard waitingForPublish, eventId != nil else { return }
-                waitingForPublish = false
-                dismiss()
-            }
-            .onChange(of: errorMessage) { _, message in
-                if message != nil {
-                    waitingForPublish = false
-                }
-            }
             .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -70,7 +66,7 @@ struct DiscussionComposerView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(isPublishing ? "Posting…" : "Post") {
-                        publish()
+                        Task { await publish() }
                     }
                     .disabled(!canPublish)
                 }
@@ -78,29 +74,43 @@ struct DiscussionComposerView: View {
         }
     }
 
-    private var activeRoomDetail: HighlighterRoomDetailSnapshot {
-        app.roomDetail
-    }
-
-    private var isPublishing: Bool {
-        activeRoomDetail.groupId == groupId && activeRoomDetail.isPublishingDiscussion
-    }
-
-    private var errorMessage: String? {
-        activeRoomDetail.groupId == groupId ? activeRoomDetail.discussionErrorMessage : nil
-    }
-
-    private var publishedDiscussionId: String? {
-        activeRoomDetail.groupId == groupId ? activeRoomDetail.lastPublishedDiscussionId : nil
-    }
-
-    private func publish() {
-        waitingForPublish = true
-        app.clearRoomDiscussionError()
-        app.publishRoomDiscussion(
-            title: title,
-            body: messageBody,
-            attachmentUrl: attachmentURL
+    private var composerProjection: DiscussionComposerProjection {
+        app.safeCore.projectDiscussionComposer(
+            input: DiscussionComposerProjectionInput(
+                title: title,
+                body: messageBody,
+                attachmentUrl: attachmentURL,
+                isPublishing: isPublishing
+            )
         )
+    }
+
+    private func publish() async {
+        let projection = composerProjection
+        guard projection.canPublish else { return }
+        isPublishing = true
+        errorMessage = nil
+        defer { isPublishing = false }
+
+        let outcome = await app.safeCore.publishDiscussionFromComposer(
+            input: DiscussionComposerPublishInput(
+                groupId: groupId,
+                title: projection.submitTitle,
+                body: projection.submitBody,
+                attachmentUrl: projection.submitAttachmentUrl
+            )
+        )
+        let result = app.safeCore.projectDiscussionPublishResult(
+            input: DiscussionPublishResultInput(
+                error: outcome.error,
+                hasDiscussion: outcome.discussion != nil
+            )
+        )
+        guard result.didPublish else {
+            errorMessage = result.errorMessage
+            return
+        }
+        onPublished()
+        dismiss()
     }
 }

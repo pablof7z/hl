@@ -99,7 +99,9 @@ struct CaptureMetadataSheet: View {
 
     @ViewBuilder
     private var bookCover: some View {
-        if let sel = store.selectedBook, !sel.coverURL.isEmpty, let url = URL(string: sel.coverURL) {
+        if let sel = store.selectedBook,
+           let imageURL = bookDisplay(sel).imageUrl,
+           let url = URL(string: imageURL) {
             KFImage(url)
                 .placeholder { bookCoverPlaceholder }
                 .fade(duration: 0.15)
@@ -129,13 +131,15 @@ struct CaptureMetadataSheet: View {
     @ViewBuilder
     private var bookText: some View {
         if let sel = store.selectedBook {
+            let projection = bookDisplay(sel)
+
             VStack(alignment: .leading, spacing: 2) {
-                Text(sel.title.isEmpty ? "Untitled" : sel.title)
+                Text(projection.displayTitle)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(1)
-                if !sel.author.isEmpty {
-                    Text(sel.author)
+                if let author = projection.author {
+                    Text(author)
                         .font(.caption)
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineLimit(1)
@@ -157,7 +161,9 @@ struct CaptureMetadataSheet: View {
     // MARK: - Community row
 
     private var communityRow: some View {
-        Button { showCommunityPicker = true } label: {
+        let projection = communitySelection
+
+        return Button { showCommunityPicker = true } label: {
             HStack(spacing: 8) {
                 Image(systemName: "number")
                     .font(.caption)
@@ -167,9 +173,9 @@ struct CaptureMetadataSheet: View {
                     .font(.callout)
                     .foregroundStyle(Color.highlighterInkStrong)
                 Spacer()
-                Text(communityName.isEmpty ? "Optional" : communityName)
+                Text(projection.displayName)
                     .font(.callout)
-                    .foregroundStyle(communityName.isEmpty ? Color.highlighterInkMuted : Color.highlighterAccent)
+                    .foregroundStyle(projection.hasSelection ? Color.highlighterAccent : Color.highlighterInkMuted)
                     .lineLimit(1)
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.medium))
@@ -184,9 +190,19 @@ struct CaptureMetadataSheet: View {
         .padding(.horizontal, 16)
     }
 
-    private var communityName: String {
-        guard let id = store.selectedGroupId else { return "" }
-        return appStore.joinedCommunities.first(where: { $0.id == id })?.name ?? id
+    private var communitySelection: CaptureCommunitySelectionProjection {
+        appStore.safeCore.projectCaptureCommunitySelection(
+            input: CaptureCommunitySelectionProjectionInput(
+                selectedGroupId: store.selectedGroupId,
+                joinedCommunities: appStore.joinedCommunities
+            )
+        )
+    }
+
+    private func bookDisplay(_ selection: BookSelection) -> CaptureBookDisplayProjection {
+        appStore.safeCore.projectCaptureBookDisplay(
+            input: CaptureBookDisplayProjectionInput(preview: selection.preview)
+        )
     }
 
     // MARK: - Publish button

@@ -16,15 +16,16 @@ struct CommentRow: View {
     /// own author (article author, podcaster, …).
     let isAuthorReply: Bool
     let onTap: () -> Void
-    /// Pushes the comment author's profile. Owned by the parent so the push
-    /// lives in the enclosing NavigationStack (same contract as `onTap`).
-    /// When `nil` the "View profile" menu item is hidden.
-    var onViewProfile: ((String) -> Void)? = nil
+
+    let store: CommentsStore
 
     @Environment(HighlighterStore.self) private var app
+    @State private var showProfile = false
 
     var body: some View {
         Button(action: onTap) {
+            let author = authorDisplay
+
             HStack(alignment: .top, spacing: 0) {
                 if depth > 0 {
                     threadRail
@@ -34,8 +35,8 @@ struct CommentRow: View {
                 HStack(alignment: .top, spacing: 12) {
                     AuthorAvatar(
                         pubkey: node.record.pubkey,
-                        pictureURL: app.profile(pubkeyHex: node.record.pubkey)?.picture ?? "",
-                        displayInitial: initial(for: node.record.pubkey),
+                        pictureURL: author.pictureUrl,
+                        displayInitial: author.displayInitial,
                         size: depth == 0 ? 40 : 30,
                         ringWidth: 1.5
                     )
@@ -62,8 +63,11 @@ struct CommentRow: View {
         .contextMenu {
             actionMenu
         }
+        .navigationDestination(isPresented: $showProfile) {
+            ProfileView(pubkey: node.record.pubkey)
+        }
         .task(id: node.record.pubkey) {
-            app.requestProfile(pubkeyHex: node.record.pubkey)
+            await app.requestProfile(pubkeyHex: node.record.pubkey)
         }
     }
 
@@ -71,8 +75,11 @@ struct CommentRow: View {
 
     @ViewBuilder
     private var headerLine: some View {
+        let author = authorDisplay
+        let chrome = nodeChrome
+
         HStack(spacing: 6) {
-            Text(displayName)
+            Text(author.displayName)
                 .font(.system(size: depth == 0 ? 15 : 13, weight: .semibold))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineLimit(1)
@@ -84,15 +91,15 @@ struct CommentRow: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
-            if !node.children.isEmpty {
-                replyChevron
+            if chrome.showsReplyChevron {
+                replyChevron(count: Int(chrome.replyCount))
             }
         }
     }
 
-    private var replyChevron: some View {
+    private func replyChevron(count: Int) -> some View {
         HStack(spacing: 2) {
-            Text("\(node.children.count)")
+            Text("\(count)")
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(Color.highlighterInkMuted)
                 .monospacedDigit()
@@ -106,15 +113,16 @@ struct CommentRow: View {
 
     @ViewBuilder
     private var footer: some View {
-        let liked = isLiked(node.record.eventId)
-        let count = likeCount(node.record.eventId)
-        if liked || count > 0 {
+        let chrome = actionChrome
+        if chrome.showsFooter {
             HStack(spacing: 6) {
-                Image(systemName: liked ? "heart.fill" : "heart")
+                Image(systemName: chrome.footerSystemImage)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(liked ? Color.highlighterAccent : Color.highlighterInkMuted)
-                if count > 0 {
-                    Text("\(count)")
+                    .foregroundStyle(
+                        chrome.footerIsAccented ? Color.highlighterAccent : Color.highlighterInkMuted
+                    )
+                if chrome.showsFooterCount {
+                    Text(chrome.footerCountLabel)
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(Color.highlighterInkMuted)
                         .monospacedDigit()
@@ -122,9 +130,7 @@ struct CommentRow: View {
                 Spacer(minLength: 0)
             }
             .padding(.top, 2)
-            .opacity(liked ? 1.0 : 0.65)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(liked ? "Liked, \(count) likes" : "\(count) likes")
+            .opacity(chrome.footerIsAccented ? 1.0 : 0.65)
         }
     }
 
@@ -146,21 +152,26 @@ struct CommentRow: View {
 
     @ViewBuilder
     private var actionMenu: some View {
-        let isBookmarked = isBookmarked(node.record.eventId)
+        let chrome = actionChrome
         Button {
-            app.toggleCommentLike(eventId: node.record.eventId)
+            showProfile = true
+        } label: {
+            Label("View profile", systemImage: "person.crop.circle")
+        }
+        Button {
+            Task { await store.toggleLike(node.record) }
         } label: {
             Label(
-                isLiked(node.record.eventId) ? "Unlike" : "Like",
-                systemImage: isLiked(node.record.eventId) ? "heart.slash" : "heart"
+                chrome.likeTitle,
+                systemImage: chrome.likeSystemImage
             )
         }
         Button {
-            app.toggleCommentBookmark(eventId: node.record.eventId)
+            Task { await store.toggleBookmark(node.record) }
         } label: {
             Label(
-                isBookmarked ? "Remove bookmark" : "Bookmark",
-                systemImage: isBookmarked ? "bookmark.slash" : "bookmark"
+                chrome.bookmarkTitle,
+                systemImage: chrome.bookmarkSystemImage
             )
         }
         Button {
@@ -168,26 +179,37 @@ struct CommentRow: View {
         } label: {
             Label("Copy text", systemImage: "doc.on.doc")
         }
-        if let onViewProfile {
-            Button {
-                onViewProfile(node.record.pubkey)
-            } label: {
-                Label("View profile", systemImage: "person.crop.circle")
-            }
-        }
     }
 
     // MARK: - Helpers
 
-    private var displayName: String {
-        let profile = app.profile(pubkeyHex: node.record.pubkey)
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(node.record.pubkey.prefix(10))
+    private var actionChrome: CommentActionChromeProjection {
+        app.safeCore.projectCommentActionChrome(
+            input: CommentActionChromeProjectionInput(
+                isLiked: store.isLiked(node.record.eventId),
+                isBookmarked: store.isBookmarked(node.record.eventId),
+                likeCount: UInt32(store.likeCount(node.record.eventId))
+            )
+        )
     }
 
-    private func initial(for _: String) -> String {
-        displayName.first.map { String($0).uppercased() } ?? ""
+    private var nodeChrome: CommentNodeChromeProjection {
+        app.safeCore.projectCommentNodeChrome(
+            input: CommentNodeChromeProjectionInput(
+                node: node,
+                artifactAuthorPubkey: nil
+            )
+        )
+    }
+
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: node.record.pubkey,
+                profile: app.profileSnapshots[node.record.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
     private var relativeTime: String? {
@@ -197,21 +219,5 @@ struct CommentRow: View {
         formatter.unitsStyle = .abbreviated
         formatter.dateTimeStyle = .numeric
         return formatter.localizedString(for: date, relativeTo: Date())
-    }
-
-    private func interaction(for eventId: String) -> HighlighterCommentInteraction? {
-        app.comments.interactions.first { $0.eventId == eventId }
-    }
-
-    private func isLiked(_ eventId: String) -> Bool {
-        interaction(for: eventId)?.myLikeEventId != nil
-    }
-
-    private func likeCount(_ eventId: String) -> Int {
-        Int(interaction(for: eventId)?.likeCount ?? 0)
-    }
-
-    private func isBookmarked(_ eventId: String) -> Bool {
-        interaction(for: eventId)?.isBookmarked ?? false
     }
 }

@@ -2,33 +2,53 @@ import SwiftUI
 
 struct MediaSettingsView: View {
     @Environment(HighlighterStore.self) private var store
+    @State private var servers: [String] = []
+    @State private var isLoading = true
     @State private var showAddSheet = false
+    @State private var isSaving = false
 
     var body: some View {
         List {
             Section {
-                if store.mediaSettings.isLoading {
+                if isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 8)
                 } else {
-                    ForEach(store.mediaSettings.blossomServers, id: \.self) { server in
+                    ForEach(servers, id: \.self) { server in
                         Text(server)
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
                     .onMove { indices, newOffset in
-                        store.moveBlossomServers(fromOffsets: indices, toOffset: newOffset)
-                    }
-                    .onDelete { indices in
-                        for idx in indices where idx < store.mediaSettings.blossomServers.count {
-                            store.removeBlossomServer(url: store.mediaSettings.blossomServers[idx])
+                        let projection = store.safeCore.projectBlossomServerList(
+                            input: BlossomServerListProjectionInput(
+                                servers: servers,
+                                addUrl: nil,
+                                removeIndexes: [],
+                                moveIndexes: indices.map(UInt64.init),
+                                moveToIndex: UInt64(newOffset)
+                            )
+                        )
+                        servers = projection.servers
+                        if projection.canSave {
+                            Task { await save() }
                         }
                     }
-                    if let error = store.mediaSettings.errorMessage {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
+                    .onDelete { indices in
+                        let projection = store.safeCore.projectBlossomServerList(
+                            input: BlossomServerListProjectionInput(
+                                servers: servers,
+                                addUrl: nil,
+                                removeIndexes: indices.map(UInt64.init),
+                                moveIndexes: [],
+                                moveToIndex: nil
+                            )
+                        )
+                        servers = projection.servers
+                        if projection.canSave {
+                            Task { await save() }
+                        }
                     }
                 }
             } header: {
@@ -47,32 +67,66 @@ struct MediaSettingsView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
-                .accessibilityLabel("Add media server")
-                .disabled(store.mediaSettings.isSaving || store.mediaSettings.isLoading)
+                .disabled(isSaving || isLoading)
             }
             ToolbarItem(placement: .topBarLeading) {
-                if !store.mediaSettings.isLoading {
+                if !isLoading {
                     EditButton()
                 }
             }
         }
         .sheet(isPresented: $showAddSheet) {
-            AddBlossomServerSheet()
+            AddBlossomServerSheet(existingServers: servers) { url in
+                let projection = store.safeCore.projectBlossomServerList(
+                    input: BlossomServerListProjectionInput(
+                        servers: servers,
+                        addUrl: url,
+                        removeIndexes: [],
+                        moveIndexes: [],
+                        moveToIndex: nil
+                    )
+                )
+                servers = projection.servers
+                if projection.canSave {
+                    Task { await save() }
+                }
+            }
         }
-        .task { store.openMediaSettings() }
-        .onDisappear { store.closeMediaSettings() }
+        .task { await load() }
+    }
+
+    private func load() async {
+        let snapshot = await store.safeCore.getBlossomServerSettingsSnapshot()
+        servers = snapshot.servers
+        isLoading = false
+    }
+
+    private func save() async {
+        let projection = store.safeCore.projectBlossomServerList(
+            input: BlossomServerListProjectionInput(
+                servers: servers,
+                addUrl: nil,
+                removeIndexes: [],
+                moveIndexes: [],
+                moveToIndex: nil
+            )
+        )
+        guard projection.canSave else { return }
+        servers = projection.servers
+        isSaving = true
+        let snapshot = await store.safeCore.setBlossomServerSettings(servers)
+        servers = snapshot.servers
+        isSaving = false
     }
 }
 
 private struct AddBlossomServerSheet: View {
+    let existingServers: [String]
+    let onAdd: (String) -> Void
+
     @Environment(HighlighterStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var urlText = ""
-
-    private var isValid: Bool {
-        let t = urlText.trimmingCharacters(in: .whitespaces)
-        return t.hasPrefix("https://") || t.hasPrefix("http://")
-    }
 
     var body: some View {
         NavigationStack {
@@ -96,14 +150,22 @@ private struct AddBlossomServerSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Add") {
-                        let trimmed = urlText.trimmingCharacters(in: .whitespaces)
-                        store.addBlossomServer(url: trimmed)
+                        onAdd(entryProjection.submitUrl)
                         dismiss()
                     }
-                    .disabled(!isValid)
+                    .disabled(!entryProjection.canAdd)
                 }
             }
         }
         .presentationDetents([.medium])
+    }
+
+    private var entryProjection: BlossomServerEntryProjection {
+        store.safeCore.projectBlossomServerEntry(
+            input: BlossomServerEntryProjectionInput(
+                url: urlText,
+                existingServers: existingServers
+            )
+        )
     }
 }

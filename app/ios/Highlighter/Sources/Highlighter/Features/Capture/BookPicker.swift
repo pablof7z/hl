@@ -20,7 +20,11 @@ struct BookPicker: View {
 
     @Binding var selection: BookSelection?
 
+    @State private var recents: [ArtifactRecord] = []
+    @State private var searchResults: [ArtifactRecord] = []
     @State private var query: String = ""
+    @State private var loadingRecents = true
+    @State private var searching = false
     @State private var showScanner = false
     @State private var showManualEntry = false
     @State private var resolvingISBN: String?
@@ -35,7 +39,7 @@ struct BookPicker: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         searchScanBar
-                        if !query.isEmpty {
+                        if queryProjection.hasQuery {
                             searchResultsSection
                         } else {
                             recentsSection
@@ -55,15 +59,13 @@ struct BookPicker: View {
                 }
             }
             .task {
-                if appStore.bookPicker.recentBooks.isEmpty, !appStore.bookPicker.isLoadingRecents {
-                    appStore.requestBookPickerRecents(limit: 24)
+                if loadingRecents {
+                    apply(await appStore.safeCore.getBookPickerSnapshot(query: ""))
+                    loadingRecents = false
                 }
             }
             .task(id: query) {
                 await runSearch()
-            }
-            .onChange(of: appStore.nmpState.rev) { _, _ in
-                applyResolvedPreviewIfAvailable()
             }
             .fullScreenCover(isPresented: $showScanner) {
                 BookScannerView { isbn in
@@ -138,7 +140,6 @@ struct BookPicker: View {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(Color.highlighterInkMuted.opacity(0.7))
                     }
-                    .accessibilityLabel("Clear search")
                 }
             }
             .padding(.horizontal, 12)
@@ -160,14 +161,6 @@ struct BookPicker: View {
     }
 
     // MARK: - Recents
-
-    private var recents: [ArtifactRecord] {
-        appStore.bookPicker.recentBooks
-    }
-
-    private var loadingRecents: Bool {
-        appStore.bookPicker.isLoadingRecents
-    }
 
     private var recentsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -277,18 +270,6 @@ struct BookPicker: View {
 
     // MARK: - Search
 
-    private var searchResults: [ArtifactRecord] {
-        guard appStore.bookPicker.searchQuery == query.trimmingCharacters(in: .whitespacesAndNewlines) else {
-            return []
-        }
-        return appStore.bookPicker.searchResults
-    }
-
-    private var searching: Bool {
-        appStore.bookPicker.searchQuery == query.trimmingCharacters(in: .whitespacesAndNewlines)
-            && appStore.bookPicker.isSearching
-    }
-
     private var searchResultsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             if searching {
@@ -327,7 +308,7 @@ struct BookPicker: View {
             Text("If you know the ISBN, scan the back cover or paste it into the search field.")
                 .font(.footnote)
                 .foregroundStyle(Color.highlighterInkMuted)
-            if let isbn = ISBNValidator.validate(query) {
+            if let isbn = queryProjection.normalizedIsbn {
                 Button {
                     beginResolve(isbn)
                 } label: {
@@ -347,8 +328,10 @@ struct BookPicker: View {
     }
 
     private func searchRow(_ book: ArtifactRecord) -> some View {
-        HStack(spacing: 12) {
-            if !book.preview.image.isEmpty, let url = URL(string: book.preview.image) {
+        let projection = bookDisplay(book.preview)
+
+        return HStack(spacing: 12) {
+            if let imageURL = projection.imageUrl, let url = URL(string: imageURL) {
                 KFImage(url)
                     .placeholder { coverPlaceholder(title: book.preview.title) }
                     .fade(duration: 0.15)
@@ -362,12 +345,12 @@ struct BookPicker: View {
                     .clipShape(RoundedRectangle(cornerRadius: 4))
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(book.preview.title.isEmpty ? "Untitled" : book.preview.title)
+                Text(projection.displayTitle)
                     .font(.body)
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(2)
-                if !book.preview.author.isEmpty {
-                    Text(book.preview.author)
+                if let author = projection.author {
+                    Text(author)
                         .font(.caption)
                         .foregroundStyle(Color.highlighterInkMuted)
                 }
@@ -379,6 +362,12 @@ struct BookPicker: View {
         }
         .padding(12)
         .background(Color.white.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func bookDisplay(_ preview: ArtifactPreview) -> CaptureBookDisplayProjection {
+        appStore.safeCore.projectCaptureBookDisplay(
+            input: CaptureBookDisplayProjectionInput(preview: preview)
+        )
     }
 
     // MARK: - Photo-only
@@ -408,18 +397,20 @@ struct BookPicker: View {
 
     // MARK: - Actions
 
+    private var queryProjection: BookPickerQueryProjection {
+        appStore.safeCore.projectBookPickerQuery(
+            input: BookPickerQueryProjectionInput(query: query)
+        )
+    }
+
     private func handleSubmit() {
-        if let isbn = ISBNValidator.validate(query) {
+        if let isbn = queryProjection.normalizedIsbn {
             beginResolve(isbn)
         }
     }
 
     private func beginResolve(_ isbn: String) {
-        // Dedup: if this ISBN already matches a book in the user's recents,
-        // pick it directly and skip the catalog lookup + auto-publish. The
-        // scan-for-already-known path is a discovery moment, not a form.
-        let catalogId = "isbn:\(isbn)"
-        if let existing = recents.first(where: { $0.preview.catalogId == catalogId }) {
+        if let existing = appStore.safeCore.findExistingBookForIsbn(isbn, recents: recents) {
             selection = .existing(existing)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             dismiss()
@@ -429,28 +420,44 @@ struct BookPicker: View {
         resolvingISBN = isbn
         resolvedPreview = nil
         resolveError = nil
-        if let preview = appStore.isbnPreview(isbn: isbn) {
-            resolvedPreview = preview
-        } else {
-            appStore.requestIsbnPreview(isbn: isbn)
+        Task {
+            let outcome = await appStore.safeCore.lookupIsbn(isbn)
+            // Only commit the preview if we're still on the same ISBN
+            // (user could have cancelled mid-flight).
+            if resolvingISBN == isbn {
+                let projection = appStore.safeCore.projectIsbnPreviewLookupApply(
+                    input: IsbnPreviewLookupApplyInput(
+                        preview: outcome.preview,
+                        error: outcome.error
+                    )
+                )
+                if let preview = projection.preview {
+                    resolvedPreview = preview
+                } else {
+                    resolveError = projection.errorMessage
+                }
+            }
         }
     }
 
     private func runSearch() async {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            appStore.clearBookPickerSearch()
+        let projection = queryProjection
+        guard projection.hasQuery else {
+            searchResults = []
+            searching = false
             return
         }
-        appStore.searchBookPickerArtifacts(query: trimmed)
+        searching = true
+        guard !Task.isCancelled, queryProjection.searchQuery == projection.searchQuery else { return }
+        let snapshot = await appStore.safeCore.getBookPickerSnapshot(query: projection.searchQuery)
+        guard !Task.isCancelled, queryProjection.searchQuery == projection.searchQuery else { return }
+        apply(snapshot)
+        searching = false
     }
 
-    private func applyResolvedPreviewIfAvailable() {
-        guard let isbn = resolvingISBN,
-              resolvedPreview == nil,
-              let preview = appStore.isbnPreview(isbn: isbn)
-        else { return }
-        resolvedPreview = preview
+    private func apply(_ snapshot: BookPickerSnapshot) {
+        recents = snapshot.recents
+        searchResults = snapshot.searchResults
     }
 }
 
@@ -501,7 +508,7 @@ private struct ISBNPreviewSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Use") { commit() }
                         .fontWeight(.semibold)
-                        .disabled(effectiveTitle.isEmpty)
+                        .disabled(!manualProjection.canUse)
                 }
             }
             .onAppear {
@@ -521,8 +528,13 @@ private struct ISBNPreviewSheet: View {
         }
     }
 
-    private var effectiveTitle: String {
-        manualTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    private var manualProjection: IsbnManualPreviewProjection {
+        appStore.safeCore.projectIsbnManualPreview(
+            input: IsbnManualPreviewProjectionInput(
+                title: manualTitle,
+                author: manualAuthor
+            )
+        )
     }
 
     @ViewBuilder
@@ -606,39 +618,15 @@ private struct ISBNPreviewSheet: View {
     }
 
     private func commit() {
-        guard !effectiveTitle.isEmpty else { return }
-        let base = preview
-        // Always derive reference/highlight tags from the ISBN we scanned —
-        // the catalog API may return these empty or wrong.
-        let catalogId = "isbn:\(isbn)"
-        let updated = ArtifactPreview(
-            id: base?.id ?? "",
-            url: base?.url ?? "",
-            title: effectiveTitle,
-            author: manualAuthor.trimmingCharacters(in: .whitespacesAndNewlines),
-            image: base?.image ?? "",
-            description: base?.description ?? "",
-            source: "book",
-            domain: base?.domain ?? "",
-            catalogId: catalogId,
-            catalogKind: "isbn",
-            podcastGuid: "",
-            podcastItemGuid: "",
-            podcastShowTitle: "",
-            audioUrl: "",
-            audioPreviewUrl: "",
-            transcriptUrl: "",
-            feedUrl: "",
-            publishedAt: base?.publishedAt ?? "",
-            durationSeconds: nil,
-            referenceTagName: "i",
-            referenceTagValue: catalogId,
-            referenceKind: "isbn",
-            highlightTagName: "i",
-            highlightTagValue: catalogId,
-            highlightReferenceKey: "i:\(catalogId)",
-            chapters: []
+        let projection = manualProjection
+        guard projection.canUse else { return }
+        let outcome = appStore.safeCore.buildEditedBookPreview(
+            isbn: isbn,
+            basePreview: preview,
+            title: projection.title,
+            author: projection.author
         )
+        guard let updated = outcome.preview else { return }
         onEditTitle(updated)
         onUse(updated)
         dismiss()

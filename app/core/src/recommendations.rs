@@ -18,13 +18,113 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
 use crate::follows;
-use crate::groups::{build_community_summary, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA};
-use crate::models::{RoomRecommendation, RoomRecommendationReason};
+use crate::groups::{
+    build_community_summary, is_public_open_room, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA,
+};
+use crate::models::{ProfileMetadata, RoomRecommendation, RoomRecommendationReason};
+use crate::profile::{
+    profile_handle_projection, ProfileDisplayFallback, ProfileDisplayProjectionInput,
+};
 
 /// NIP-51 "simple groups" list (kind:10009). A user publishes this to
 /// enumerate the NIP-29 rooms they're in; we read one from each follow to
 /// build the "Friends are here" shelf.
 const KIND_SIMPLE_GROUPS_LIST: u16 = 10009;
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomRecommendationReasonProfile {
+    pub pubkey: String,
+    pub profile: Option<ProfileMetadata>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomRecommendationCardProjectionInput {
+    pub recommendation: RoomRecommendation,
+    pub reason_profiles: Vec<RoomRecommendationReasonProfile>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomRecommendationAvatarProjection {
+    pub pubkey: String,
+    pub picture_url: String,
+    pub display_initial: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomRecommendationCardProjection {
+    pub byline: String,
+    pub visible_avatars: Vec<RoomRecommendationAvatarProjection>,
+    pub preload_pubkeys: Vec<String>,
+    pub overflow_label: Option<String>,
+}
+
+/// Presentation projection for the "Friends are here" room card. Rust owns
+/// the social-proof copy, visible avatar cap, preload list, and overflow badge.
+pub fn room_recommendation_card_projection(
+    input: RoomRecommendationCardProjectionInput,
+) -> RoomRecommendationCardProjection {
+    let reason_pubkeys = input.recommendation.reason_pubkeys;
+    let total = reason_pubkeys.len();
+    let byline = match reason_pubkeys.first() {
+        None => {
+            let about = input.recommendation.summary.about.trim();
+            if about.is_empty() {
+                "Rooms you may like".to_string()
+            } else {
+                about.to_string()
+            }
+        }
+        Some(primary_pubkey) => {
+            let first_handle =
+                recommendation_profile_handle(primary_pubkey, &input.reason_profiles).display_name;
+            match total {
+                1 => format!("@{first_handle} is here"),
+                2 => format!("@{first_handle} + 1 you follow"),
+                _ => format!("@{first_handle} + {} you follow", total - 1),
+            }
+        }
+    };
+
+    let visible_pubkeys: Vec<String> = reason_pubkeys.into_iter().take(3).collect();
+    let visible_avatars = visible_pubkeys
+        .iter()
+        .map(|pubkey| {
+            let display = recommendation_profile_handle(pubkey, &input.reason_profiles);
+            RoomRecommendationAvatarProjection {
+                pubkey: pubkey.clone(),
+                picture_url: display.picture_url,
+                display_initial: display.display_initial,
+            }
+        })
+        .collect();
+
+    let overflow_label = total
+        .checked_sub(3)
+        .filter(|count| *count > 0)
+        .map(|count| format!("+{count}"));
+
+    RoomRecommendationCardProjection {
+        byline,
+        visible_avatars,
+        preload_pubkeys: visible_pubkeys,
+        overflow_label,
+    }
+}
+
+fn recommendation_profile_handle(
+    pubkey: &str,
+    profiles: &[RoomRecommendationReasonProfile],
+) -> crate::profile::ProfileDisplayProjection {
+    let profile = profiles
+        .iter()
+        .find(|snapshot| snapshot.pubkey == pubkey)
+        .and_then(|snapshot| snapshot.profile.clone());
+    profile_handle_projection(ProfileDisplayProjectionInput {
+        pubkey: pubkey.to_string(),
+        profile,
+        fallback: ProfileDisplayFallback::Pubkey6,
+    })
+}
 
 /// Rooms where 2+ of the user's follows are members. Rooms the user is
 /// already in are excluded — the explorer's "Your rooms" shelf is elsewhere.
@@ -235,6 +335,9 @@ pub fn query_rooms_with_friends(
         let Ok(summary) = build_community_summary(meta_event) else {
             continue;
         };
+        if !is_public_open_room(&summary) {
+            continue;
+        }
         let mut reasons: Vec<String> = pubkeys.into_iter().collect();
         reasons.sort();
         reasons.truncate(5);
@@ -418,6 +521,9 @@ pub fn query_rooms_from_read_authors(
         let Ok(summary) = build_community_summary(meta_event) else {
             continue;
         };
+        if !is_public_open_room(&summary) {
+            continue;
+        }
         let mut reasons: Vec<String> = groups_to_authors
             .get(&id)
             .map(|set| set.iter().cloned().collect())
@@ -449,6 +555,7 @@ fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
 
     fn isolated_ndb() -> (Ndb, tempfile::TempDir) {
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -460,12 +567,7 @@ mod tests {
     }
 
     fn ingest(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).expect("process event");
-    }
-
-    fn wait_for_ndb() {
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        process_event_and_wait(ndb, event);
     }
 
     fn sign(keys: &Keys, kind: u16, tags: Vec<Tag>, content: &str) -> Event {
@@ -484,14 +586,24 @@ mod tests {
     }
 
     fn meta(author: &Keys, id: &str, name: &str) -> Event {
+        meta_with_markers(author, id, name, "public", "open")
+    }
+
+    fn meta_with_markers(
+        author: &Keys,
+        id: &str,
+        name: &str,
+        visibility: &str,
+        access: &str,
+    ) -> Event {
         sign(
             author,
             KIND_GROUP_METADATA,
             vec![
                 Tag::identifier(id),
                 Tag::parse(vec!["name".to_string(), name.to_string()]).unwrap(),
-                Tag::parse(vec!["public".to_string()]).unwrap(),
-                Tag::parse(vec!["open".to_string()]).unwrap(),
+                Tag::parse(vec![visibility.to_string()]).unwrap(),
+                Tag::parse(vec![access.to_string()]).unwrap(),
             ],
             "",
         )
@@ -530,7 +642,6 @@ mod tests {
         // Only f1 in bravo → doesn't meet threshold.
         ingest(&ndb, &meta(&author, "bravo", "Bravo"));
         ingest(&ndb, &members(&author, "bravo", &[&f1, &stranger]));
-        wait_for_ndb();
 
         let out = query_rooms_with_friends(&ndb, &me.public_key().to_hex(), 32).unwrap();
         assert_eq!(out.len(), 1);
@@ -571,12 +682,38 @@ mod tests {
         // Both follows list "alpha" as a group they're in. No 39002 needed.
         ingest(&ndb, &groups_list(&f1, &["alpha"], "wss://relay", 100));
         ingest(&ndb, &groups_list(&f2, &["alpha"], "wss://relay", 100));
-        wait_for_ndb();
 
         let out = query_rooms_with_friends(&ndb, &me.public_key().to_hex(), 32).unwrap();
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].summary.id, "alpha");
         assert_eq!(out[0].reason_pubkeys.len(), 2);
+    }
+
+    #[test]
+    fn friends_recommendations_drop_private_or_closed_rooms() {
+        let (ndb, _tmp) = isolated_ndb();
+        let me = Keys::generate();
+        let f1 = Keys::generate();
+        let f2 = Keys::generate();
+        let author = Keys::generate();
+
+        ingest(&ndb, &contacts(&me, &[&f1, &f2]));
+        ingest(
+            &ndb,
+            &meta_with_markers(&author, "private", "Private", "private", "open"),
+        );
+        ingest(
+            &ndb,
+            &meta_with_markers(&author, "closed", "Closed", "public", "closed"),
+        );
+        ingest(&ndb, &meta(&author, "alpha", "Alpha"));
+        ingest(&ndb, &members(&author, "private", &[&f1, &f2]));
+        ingest(&ndb, &members(&author, "closed", &[&f1, &f2]));
+        ingest(&ndb, &members(&author, "alpha", &[&f1, &f2]));
+
+        let out = query_rooms_with_friends(&ndb, &me.public_key().to_hex(), 32).unwrap();
+        let ids: Vec<_> = out.iter().map(|r| r.summary.id.as_str()).collect();
+        assert_eq!(ids, vec!["alpha"]);
     }
 
     #[test]
@@ -595,7 +732,6 @@ mod tests {
         // Even with two follows matching, user is already in alpha → exclude.
         ingest(&ndb, &groups_list(&f1, &["alpha"], "wss://relay", 100));
         ingest(&ndb, &groups_list(&f2, &["alpha"], "wss://relay", 100));
-        wait_for_ndb();
 
         let out = query_rooms_with_friends(&ndb, &me.public_key().to_hex(), 32).unwrap();
         assert!(out.is_empty());
@@ -613,7 +749,6 @@ mod tests {
         ingest(&ndb, &meta(&author, "alpha", "Alpha"));
         // Me + two follows — user is already a member.
         ingest(&ndb, &members(&author, "alpha", &[&me, &f1, &f2]));
-        wait_for_ndb();
 
         let out = query_rooms_with_friends(&ndb, &me.public_key().to_hex(), 32).unwrap();
         assert!(
@@ -667,12 +802,162 @@ mod tests {
 
         ingest(&ndb, &meta(&group_author, "alpha", "Alpha"));
         ingest(&ndb, &meta(&group_author, "bravo", "Bravo"));
-        wait_for_ndb();
 
         let out = query_rooms_from_read_authors(&ndb, &me.public_key().to_hex(), 32).unwrap();
         let ids: Vec<_> = out.iter().map(|r| r.summary.id.as_str()).collect();
         assert_eq!(ids, vec!["alpha"]);
         assert_eq!(out[0].reason_kind, RoomRecommendationReason::Authors);
         assert_eq!(out[0].reason_pubkeys.len(), 1);
+    }
+
+    #[test]
+    fn read_author_recommendations_drop_private_or_closed_rooms() {
+        let (ndb, _tmp) = isolated_ndb();
+        let me = Keys::generate();
+        let author_a = Keys::generate();
+        let group_author = Keys::generate();
+
+        let article_addr = format!("30023:{}:essay-1", author_a.public_key().to_hex());
+        ingest(
+            &ndb,
+            &sign(
+                &me,
+                9802,
+                vec![Tag::parse(vec!["a".to_string(), article_addr]).unwrap()],
+                "a quote",
+            ),
+        );
+        for id in ["private", "closed", "alpha"] {
+            ingest(
+                &ndb,
+                &sign(
+                    &author_a,
+                    11,
+                    vec![
+                        Tag::parse(vec!["h".to_string(), id.to_string()]).unwrap(),
+                        Tag::identifier(format!("art-{id}")),
+                    ],
+                    "",
+                ),
+            );
+        }
+        ingest(
+            &ndb,
+            &meta_with_markers(&group_author, "private", "Private", "private", "open"),
+        );
+        ingest(
+            &ndb,
+            &meta_with_markers(&group_author, "closed", "Closed", "public", "closed"),
+        );
+        ingest(&ndb, &meta(&group_author, "alpha", "Alpha"));
+
+        let out = query_rooms_from_read_authors(&ndb, &me.public_key().to_hex(), 32).unwrap();
+        let ids: Vec<_> = out.iter().map(|r| r.summary.id.as_str()).collect();
+        assert_eq!(ids, vec!["alpha"]);
+    }
+
+    #[test]
+    fn room_recommendation_card_projection_matches_friend_byline_and_avatar_cap() {
+        let pubkeys = vec![
+            "aaaaaa111111".to_string(),
+            "bbbbbb222222".to_string(),
+            "cccccc333333".to_string(),
+            "dddddd444444".to_string(),
+            "eeeeee555555".to_string(),
+        ];
+        let projection =
+            room_recommendation_card_projection(RoomRecommendationCardProjectionInput {
+                recommendation: RoomRecommendation {
+                    summary: summary_fixture(""),
+                    reason_pubkeys: pubkeys.clone(),
+                    reason_kind: RoomRecommendationReason::Friends,
+                },
+                reason_profiles: vec![RoomRecommendationReasonProfile {
+                    pubkey: pubkeys[0].clone(),
+                    profile: Some(profile_fixture(
+                        &pubkeys[0],
+                        "alice",
+                        "Alice",
+                        "https://img",
+                    )),
+                }],
+            });
+
+        assert_eq!(projection.byline, "@alice + 4 you follow");
+        assert_eq!(projection.preload_pubkeys, pubkeys[..3].to_vec());
+        assert_eq!(projection.overflow_label, Some("+2".into()));
+        assert_eq!(
+            projection
+                .visible_avatars
+                .iter()
+                .map(|avatar| avatar.pubkey.as_str())
+                .collect::<Vec<_>>(),
+            vec!["aaaaaa111111", "bbbbbb222222", "cccccc333333"]
+        );
+        assert_eq!(projection.visible_avatars[0].picture_url, "https://img");
+        assert_eq!(projection.visible_avatars[0].display_initial, "a");
+    }
+
+    #[test]
+    fn room_recommendation_card_projection_preserves_empty_reason_fallbacks() {
+        let with_about =
+            room_recommendation_card_projection(RoomRecommendationCardProjectionInput {
+                recommendation: RoomRecommendation {
+                    summary: summary_fixture("Members are discussing books"),
+                    reason_pubkeys: Vec::new(),
+                    reason_kind: RoomRecommendationReason::Friends,
+                },
+                reason_profiles: Vec::new(),
+            });
+        let without_about =
+            room_recommendation_card_projection(RoomRecommendationCardProjectionInput {
+                recommendation: RoomRecommendation {
+                    summary: summary_fixture(""),
+                    reason_pubkeys: Vec::new(),
+                    reason_kind: RoomRecommendationReason::Friends,
+                },
+                reason_profiles: Vec::new(),
+            });
+
+        assert_eq!(with_about.byline, "Members are discussing books");
+        assert_eq!(without_about.byline, "Rooms you may like");
+        assert!(without_about.visible_avatars.is_empty());
+        assert_eq!(without_about.overflow_label, None);
+    }
+
+    fn summary_fixture(about: &str) -> crate::models::CommunitySummary {
+        crate::models::CommunitySummary {
+            id: "alpha".into(),
+            name: "Alpha".into(),
+            about: about.into(),
+            picture: String::new(),
+            access: "open".into(),
+            visibility: "public".into(),
+            admin_pubkeys: Vec::new(),
+            member_count: None,
+            relay_url: String::new(),
+            metadata_event_id: String::new(),
+            created_at: None,
+        }
+    }
+
+    fn profile_fixture(
+        pubkey: &str,
+        name: &str,
+        display_name: &str,
+        picture: &str,
+    ) -> ProfileMetadata {
+        ProfileMetadata {
+            pubkey: pubkey.into(),
+            name: name.into(),
+            display_name: display_name.into(),
+            about: String::new(),
+            picture: picture.into(),
+            banner: String::new(),
+            nip05: String::new(),
+            website: String::new(),
+            lud16: String::new(),
+            created_at: None,
+        }
     }
 }

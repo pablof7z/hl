@@ -20,6 +20,8 @@ struct RoomShareCard: View {
 
     @State private var qrShown = false
     @State private var copied = false
+    @State private var linkSnapshot: RoomShareLinkSnapshot?
+    @State private var copiedResetTimer = OneShotUITimer()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -91,14 +93,13 @@ struct RoomShareCard: View {
                             )
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(qrShown ? "Hide QR code" : "Show QR code")
                     .disabled(shareURL == nil)
                     .opacity(shareURL == nil ? 0.4 : 1)
                     .accessibilityLabel(qrShown ? "Hide QR" : "Show QR")
                 }
 
-                if let inviteLinkError {
-                    Text(inviteLinkError)
+                if let mintError {
+                    Text(mintError)
                         .font(.caption)
                         .foregroundStyle(Color.highlighterAccent)
                 }
@@ -117,26 +118,25 @@ struct RoomShareCard: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 18))
         .task(id: groupId) {
-            guard appStore.roomInvite.groupId == groupId else { return }
-            guard shareURL == nil, !appStore.roomInvite.isMintingInviteLink else { return }
-            appStore.mintRoomInviteLink()
+            await loadShareLinkIfNeeded()
         }
     }
 
     private var shareURL: String? {
-        guard appStore.roomInvite.groupId == groupId else { return nil }
-        return appStore.roomInvite.inviteUrl
-    }
-
-    private var inviteLinkError: String? {
-        guard appStore.roomInvite.groupId == groupId else { return nil }
-        return appStore.roomInvite.inviteLinkErrorMessage
+        linkSnapshot?.shareUrl
     }
 
     private var linkLabel: String {
-        if let url = shareURL { return url }
-        if inviteLinkError != nil { return "Couldn't create invite link" }
-        return "Creating invite link…"
+        linkSnapshot?.linkLabel ?? "Creating invite link…"
+    }
+
+    private var mintError: String? {
+        linkSnapshot?.errorMessage
+    }
+
+    private func loadShareLinkIfNeeded() async {
+        let snapshot = await appStore.safeCore.getRoomShareLinkSnapshot(groupId: groupId)
+        await MainActor.run { linkSnapshot = snapshot }
     }
 
     private func copy() {
@@ -144,14 +144,16 @@ struct RoomShareCard: View {
         UIPasteboard.general.string = url
         UISelectionFeedbackGenerator().selectionChanged()
         copied = true
+        copiedResetTimer.schedule(after: 2) {
+            copied = false
+        }
     }
 
     @ViewBuilder
     private var heroBackdrop: some View {
         ZStack {
             if let url = URL(string: room?.picture ?? ""),
-               !(room?.picture ?? "").isEmpty
-            {
+               !(room?.picture ?? "").isEmpty {
                 KFImage(url)
                     .resizable()
                     .scaledToFill()

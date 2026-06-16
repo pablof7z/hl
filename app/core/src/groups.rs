@@ -11,14 +11,169 @@ use std::collections::{BTreeMap, HashSet};
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
+use crate::blossom::BlossomUploadSnapshot;
 use crate::errors::CoreError;
-use crate::models::CommunitySummary;
-use crate::nostr_runtime::{signed_event_from_action_result, NostrRuntime};
+use crate::models::{BlossomUpload, CommunitySummary};
+use crate::nostr_runtime::NostrRuntime;
 use crate::relays::highlighter_relay;
 
 pub const KIND_GROUP_METADATA: u16 = 39000;
 pub const KIND_GROUP_ADMINS: u16 = 39001;
 pub const KIND_GROUP_MEMBERS: u16 = 39002;
+
+pub(crate) fn is_public_open_room(summary: &CommunitySummary) -> bool {
+    summary.visibility == "public" && summary.access == "open"
+}
+
+pub(crate) fn room_names_for_relay(
+    communities: Vec<CommunitySummary>,
+    relay_url: &str,
+) -> Vec<String> {
+    let target = relay_url.trim();
+    communities
+        .into_iter()
+        .filter(|community| community.relay_url.trim() == target)
+        .map(|community| {
+            if community.name.is_empty() {
+                community.id
+            } else {
+                community.name
+            }
+        })
+        .collect()
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomAvatarProjectionInput {
+    pub name: String,
+    pub picture_url: String,
+    pub uppercase_initial: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomAvatarProjection {
+    pub picture_url: String,
+    pub display_initial: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommunityRowProjectionInput {
+    pub community: CommunitySummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommunityRowProjection {
+    pub display_name: String,
+    pub picture_url: Option<String>,
+    pub subtitle: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct JoinedCommunitiesSnapshot {
+    pub communities: Vec<CommunitySummary>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct JoinedCommunitiesSnapshotApplyInput {
+    pub snapshot: JoinedCommunitiesSnapshot,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct JoinedCommunitiesSnapshotApplyProjection {
+    pub should_apply_communities: bool,
+    pub communities: Vec<CommunitySummary>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomCoverCardProjectionInput {
+    pub room: CommunitySummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RoomCoverCardProjection {
+    pub subtitle: String,
+}
+
+/// Room cover/avatar projection. Rust owns room-picture fallback identity;
+/// native shells render the returned fields with platform-native image views.
+pub fn room_avatar_projection(input: RoomAvatarProjectionInput) -> RoomAvatarProjection {
+    let raw_initial: String = input
+        .name
+        .chars()
+        .next()
+        .map(|first| first.to_string())
+        .unwrap_or_default();
+    let display_initial = if input.uppercase_initial {
+        raw_initial.to_uppercase()
+    } else {
+        raw_initial
+    };
+
+    RoomAvatarProjection {
+        picture_url: input.picture_url,
+        display_initial,
+    }
+}
+
+/// Generic community row projection. Rust owns room-name/id fallback and
+/// optional picture presence; native shells render row layout and images.
+pub fn community_row_projection(input: CommunityRowProjectionInput) -> CommunityRowProjection {
+    let community = input.community;
+    let subtitle = if let Some(about) = non_empty_string(&community.about) {
+        Some(about)
+    } else {
+        community.member_count.map(member_count_label)
+    };
+
+    CommunityRowProjection {
+        display_name: if community.name.is_empty() {
+            community.id.clone()
+        } else {
+            community.name.clone()
+        },
+        picture_url: non_empty_string(&community.picture),
+        subtitle,
+    }
+}
+
+/// Projection for portrait room cover cards. Rust owns membership/access
+/// fallback labels; native shells render the returned text.
+pub fn room_cover_card_projection(input: RoomCoverCardProjectionInput) -> RoomCoverCardProjection {
+    let room = input.room;
+    let subtitle = match room.member_count {
+        Some(count) if count > 0 => member_count_label(count),
+        _ if room.access == "open" => "Open room".to_string(),
+        _ => "Closed room".to_string(),
+    };
+
+    RoomCoverCardProjection { subtitle }
+}
+
+fn member_count_label(count: u64) -> String {
+    if count == 1 {
+        "1 member".to_string()
+    } else {
+        format!("{count} members")
+    }
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+pub fn query_joined_room_names_for_relay_from_ndb(
+    ndb: &Ndb,
+    current_pubkey_hex: &str,
+    relay_url: &str,
+) -> Result<Vec<String>, CoreError> {
+    let communities = query_joined_communities_from_ndb(ndb, current_pubkey_hex)?;
+    Ok(room_names_for_relay(communities, relay_url))
+}
 /// NIP-29 chat message. Flat conversational event scoped to the group via
 /// the `["h", <group_id>]` tag. Defined here next to the other NIP-29
 /// kind constants; the actual chat reader/writer lives in `chat.rs`.
@@ -197,8 +352,38 @@ pub fn build_joined_communities(
     joined
 }
 
-/// Publish a NIP-29 kind:9021 join-request event for `group_id`. The NMP
-/// actor owns relay dispatch; the user's actual membership state flips when a
+pub fn joined_communities_snapshot(
+    result: Result<Vec<CommunitySummary>, CoreError>,
+) -> JoinedCommunitiesSnapshot {
+    match result {
+        Ok(communities) => JoinedCommunitiesSnapshot {
+            communities,
+            error: String::new(),
+        },
+        Err(error) => JoinedCommunitiesSnapshot {
+            communities: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+pub fn joined_communities_snapshot_apply_projection(
+    input: JoinedCommunitiesSnapshotApplyInput,
+) -> JoinedCommunitiesSnapshotApplyProjection {
+    let should_apply_communities = input.snapshot.error.trim().is_empty();
+    JoinedCommunitiesSnapshotApplyProjection {
+        should_apply_communities,
+        communities: if should_apply_communities {
+            input.snapshot.communities
+        } else {
+            Vec::new()
+        },
+    }
+}
+
+/// Publish a NIP-29 kind:9021 join-request event for `group_id`. Fire-and-
+/// forget from the UI's perspective: returns the event id once the relay
+/// accepts the event. The user's actual membership state flips when a
 /// matching kind:39002 arrives in the ndb stream — the subscription pump
 /// delivers that as `MembershipChanged` and the UI promotes the
 /// "Join requested" toast to "You're in ✓".
@@ -211,16 +396,22 @@ pub async fn publish_join_request(
         return Err(CoreError::InvalidInput("group_id must not be empty".into()));
     }
 
-    let action = nmp_nip29::action::JoinGroupInput {
-        group: nmp_nip29::GroupId::new(highlighter_relay(), group_id),
-        invite_code: None,
-        reason: None,
-    };
-    let row = runtime
-        .dispatch_nmp_action_for_result("join-request-publish", "nmp.nip29.join", &action)
-        .await?;
-    let event = signed_event_from_action_result("join-request-publish", row.result.as_deref())?;
-    runtime.cache_accepted_event("join-request-publish", &event)?;
+    let builder =
+        EventBuilder::new(Kind::Custom(KIND_JOIN_REQUEST), "").tags(vec![Tag::parse(vec![
+            "h".to_string(),
+            group_id.to_string(),
+        ])
+        .map_err(|e| CoreError::Other(format!("build h tag: {e}")))?]);
+
+    let client = runtime.client();
+    let event = client
+        .sign_event_builder(builder)
+        .await
+        .map_err(|e| CoreError::Signer(format!("sign join request: {e}")))?;
+    client
+        .send_event(&event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish join request: {e}")))?;
     Ok(event.id.to_hex())
 }
 
@@ -242,6 +433,75 @@ pub enum RoomAccess {
     Closed,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CreateRoomProjectionInput {
+    pub name: String,
+    pub about: String,
+    pub visibility: RoomVisibility,
+    pub access: RoomAccess,
+    pub is_creating: bool,
+    pub cover_is_uploading: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CreateRoomVisibilityOption {
+    pub id: String,
+    pub title: String,
+    pub summary: String,
+    pub glyph: String,
+    pub visibility: RoomVisibility,
+    pub access: RoomAccess,
+    pub is_selected: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CreateRoomProjection {
+    pub can_create: bool,
+    pub create_name: String,
+    pub create_about: String,
+    pub visibility_glyph: String,
+    pub visibility_summary: String,
+    pub visibility_options: Vec<CreateRoomVisibilityOption>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct JoinRoomRequestSnapshot {
+    pub group_id: String,
+    pub event_id: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CreateRoomPublishSnapshot {
+    pub group_id: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CreateRoomCoverUploadResultInput {
+    pub snapshot: BlossomUploadSnapshot,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CreateRoomCoverUploadResultProjection {
+    pub upload: Option<BlossomUpload>,
+    pub error_message: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CreateRoomPublishResultInput {
+    pub group_id: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CreateRoomPublishResultProjection {
+    pub did_create: bool,
+    pub group_id: String,
+    pub should_emit_success_feedback: bool,
+    pub error_message: Option<String>,
+}
+
 impl RoomVisibility {
     fn marker(self) -> &'static str {
         match self {
@@ -257,6 +517,156 @@ impl RoomAccess {
             Self::Open => "open",
             Self::Closed => "closed",
         }
+    }
+}
+
+pub fn create_room_projection(input: CreateRoomProjectionInput) -> CreateRoomProjection {
+    let create_name = input.name.trim().to_string();
+    let create_about = input.about.trim().to_string();
+    let (visibility_glyph, visibility_summary) =
+        create_room_visibility_display(input.visibility, input.access);
+
+    CreateRoomProjection {
+        can_create: create_name.chars().count() >= 2
+            && !input.is_creating
+            && !input.cover_is_uploading,
+        create_name,
+        create_about,
+        visibility_glyph: visibility_glyph.into(),
+        visibility_summary: visibility_summary.into(),
+        visibility_options: create_room_visibility_options(input.visibility, input.access),
+    }
+}
+
+fn create_room_visibility_display(
+    visibility: RoomVisibility,
+    access: RoomAccess,
+) -> (&'static str, &'static str) {
+    match (visibility, access) {
+        (RoomVisibility::Public, RoomAccess::Open) => ("globe", "Public · Anyone can join"),
+        (RoomVisibility::Public, RoomAccess::Closed) => {
+            ("globe.badge.chevron.backward", "Public · You approve joins")
+        }
+        (RoomVisibility::Private, _) => ("lock", "Private · Invite only"),
+    }
+}
+
+fn create_room_visibility_options(
+    selected_visibility: RoomVisibility,
+    selected_access: RoomAccess,
+) -> Vec<CreateRoomVisibilityOption> {
+    [
+        (
+            "public-open",
+            "Public",
+            "Anyone can find and join this room.",
+            "globe",
+            RoomVisibility::Public,
+            RoomAccess::Open,
+        ),
+        (
+            "public-closed",
+            "Public · By approval",
+            "Anyone can find it, but you approve who joins.",
+            "globe.badge.chevron.backward",
+            RoomVisibility::Public,
+            RoomAccess::Closed,
+        ),
+        (
+            "private",
+            "Private",
+            "Hidden from the explorer. Invite only.",
+            "lock",
+            RoomVisibility::Private,
+            RoomAccess::Closed,
+        ),
+    ]
+    .into_iter()
+    .map(
+        |(id, title, summary, glyph, visibility, access)| CreateRoomVisibilityOption {
+            id: id.into(),
+            title: title.into(),
+            summary: summary.into(),
+            glyph: glyph.into(),
+            visibility,
+            access,
+            is_selected: visibility == selected_visibility
+                && (visibility == RoomVisibility::Private || access == selected_access),
+        },
+    )
+    .collect()
+}
+
+pub fn join_room_request_snapshot(
+    group_id: &str,
+    result: Result<String, CoreError>,
+) -> JoinRoomRequestSnapshot {
+    match result {
+        Ok(event_id) => JoinRoomRequestSnapshot {
+            group_id: group_id.trim().to_string(),
+            event_id,
+            error: String::new(),
+        },
+        Err(error) => JoinRoomRequestSnapshot {
+            group_id: group_id.trim().to_string(),
+            event_id: String::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+pub fn create_room_publish_snapshot(
+    result: Result<String, CoreError>,
+) -> CreateRoomPublishSnapshot {
+    match result {
+        Ok(group_id) => CreateRoomPublishSnapshot {
+            group_id,
+            error: String::new(),
+        },
+        Err(error) => CreateRoomPublishSnapshot {
+            group_id: String::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+pub fn create_room_cover_upload_result_projection(
+    input: CreateRoomCoverUploadResultInput,
+) -> CreateRoomCoverUploadResultProjection {
+    if let Some(upload) = input.snapshot.upload {
+        return CreateRoomCoverUploadResultProjection {
+            upload: Some(upload),
+            error_message: None,
+        };
+    }
+
+    CreateRoomCoverUploadResultProjection {
+        upload: None,
+        error_message: Some(format!(
+            "Couldn't upload cover: {}",
+            input.snapshot.error.trim()
+        )),
+    }
+}
+
+pub fn create_room_publish_result_projection(
+    input: CreateRoomPublishResultInput,
+) -> CreateRoomPublishResultProjection {
+    let error = input.error.trim().to_string();
+    if error.is_empty() {
+        return CreateRoomPublishResultProjection {
+            did_create: true,
+            group_id: input.group_id,
+            should_emit_success_feedback: true,
+            error_message: None,
+        };
+    }
+
+    CreateRoomPublishResultProjection {
+        did_create: false,
+        group_id: String::new(),
+        should_emit_success_feedback: false,
+        error_message: Some(format!("Couldn't publish: {error}")),
     }
 }
 
@@ -300,11 +710,10 @@ pub async fn create_room(
         .sign_event_builder(create_builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign create-group: {e}")))?;
-    runtime.publish_signed_event_to_relays(
-        "create-group-publish",
-        &create_event,
-        runtime.rooms_urls(),
-    )?;
+    client
+        .send_event(&create_event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish create-group: {e}")))?;
 
     // 2. edit-metadata: name + about + picture + visibility/access markers.
     //    Marker tags use the convention the local reader (`build_summary`)
@@ -330,11 +739,10 @@ pub async fn create_room(
         .sign_event_builder(metadata_builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign edit-metadata: {e}")))?;
-    runtime.publish_signed_event_to_relays(
-        "edit-metadata-publish",
-        &metadata_event,
-        runtime.rooms_urls(),
-    )?;
+    client
+        .send_event(&metadata_event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish edit-metadata: {e}")))?;
 
     Ok(group_id)
 }
@@ -363,7 +771,10 @@ pub async fn add_member(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign put-user: {e}")))?;
-    runtime.publish_signed_event_to_relays("put-user-publish", &event, runtime.rooms_urls())?;
+    client
+        .send_event(&event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish put-user: {e}")))?;
     Ok(event.id.to_hex())
 }
 
@@ -406,11 +817,10 @@ pub async fn create_invite_codes(
             .sign_event_builder(builder)
             .await
             .map_err(|e| CoreError::Signer(format!("sign create-invite: {e}")))?;
-        runtime.publish_signed_event_to_relays(
-            "create-invite-publish",
-            &event,
-            runtime.rooms_urls(),
-        )?;
+        client
+            .send_event(&event)
+            .await
+            .map_err(|e| CoreError::Relay(format!("publish create-invite: {e}")))?;
 
         all_codes.extend(batch);
         remaining -= batch_size;
@@ -635,10 +1045,168 @@ mod tests {
         Tag::parse(vec![name.to_string(), value.to_string()]).expect("named tag")
     }
 
+    fn summary(id: &str, name: &str, relay_url: &str) -> CommunitySummary {
+        CommunitySummary {
+            id: id.to_string(),
+            name: name.to_string(),
+            about: String::new(),
+            picture: String::new(),
+            access: "open".to_string(),
+            visibility: "public".to_string(),
+            admin_pubkeys: Vec::new(),
+            member_count: None,
+            relay_url: relay_url.to_string(),
+            metadata_event_id: String::new(),
+            created_at: None,
+        }
+    }
+
     #[test]
     fn empty_pubkey_returns_empty() {
         let out = build_joined_communities("", &[], &[]);
         assert!(out.is_empty());
+    }
+
+    #[test]
+    fn joined_communities_snapshot_projects_rows_or_error_state() {
+        let ok = joined_communities_snapshot(Ok(vec![summary("alpha", "Alpha", "")]));
+        assert_eq!(ok.communities.len(), 1);
+        assert_eq!(ok.communities[0].id, "alpha");
+        assert!(ok.error.is_empty());
+
+        let err = joined_communities_snapshot(Err(CoreError::NotAuthenticated));
+        assert!(err.communities.is_empty());
+        assert_eq!(err.error, "not authenticated");
+    }
+
+    #[test]
+    fn joined_communities_snapshot_apply_projection_applies_only_success() {
+        let ok =
+            joined_communities_snapshot_apply_projection(JoinedCommunitiesSnapshotApplyInput {
+                snapshot: joined_communities_snapshot(Ok(vec![summary("alpha", "Alpha", "")])),
+            });
+        assert!(ok.should_apply_communities);
+        assert_eq!(ok.communities.len(), 1);
+        assert_eq!(ok.communities[0].id, "alpha");
+
+        let failed =
+            joined_communities_snapshot_apply_projection(JoinedCommunitiesSnapshotApplyInput {
+                snapshot: joined_communities_snapshot(Err(CoreError::NotAuthenticated)),
+            });
+        assert!(!failed.should_apply_communities);
+        assert!(failed.communities.is_empty());
+    }
+
+    #[test]
+    fn room_names_for_relay_filters_in_rust() {
+        let rooms = vec![
+            summary("alpha", "Alpha", "wss://relay.example.com"),
+            summary("bravo", "", " wss://relay.example.com "),
+            summary("charlie", "Charlie", "wss://other.example.com"),
+        ];
+
+        let names = room_names_for_relay(rooms, "wss://relay.example.com");
+
+        assert_eq!(names, vec!["Alpha", "bravo"]);
+    }
+
+    #[test]
+    fn room_avatar_projection_uppercases_room_initial() {
+        let projection = room_avatar_projection(RoomAvatarProjectionInput {
+            name: "alpha readers".into(),
+            picture_url: "https://example.com/cover.png".into(),
+            uppercase_initial: true,
+        });
+
+        assert_eq!(
+            projection,
+            RoomAvatarProjection {
+                picture_url: "https://example.com/cover.png".into(),
+                display_initial: "A".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn room_avatar_projection_allows_empty_name_fallback() {
+        let projection = room_avatar_projection(RoomAvatarProjectionInput {
+            name: String::new(),
+            picture_url: String::new(),
+            uppercase_initial: true,
+        });
+
+        assert_eq!(
+            projection,
+            RoomAvatarProjection {
+                picture_url: String::new(),
+                display_initial: String::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn room_avatar_projection_can_preserve_initial_case() {
+        let projection = room_avatar_projection(RoomAvatarProjectionInput {
+            name: "alpha readers".into(),
+            picture_url: String::new(),
+            uppercase_initial: false,
+        });
+
+        assert_eq!(projection.display_initial, "a");
+    }
+
+    #[test]
+    fn community_row_projection_uses_name_or_group_id_and_picture_presence() {
+        let mut community = summary("group", "Readers", "");
+        community.picture = "https://example.com/room.jpg".into();
+        community.about = "Books and essays".into();
+        community.member_count = Some(12);
+
+        let projection = community_row_projection(CommunityRowProjectionInput { community });
+
+        assert_eq!(projection.display_name, "Readers");
+        assert_eq!(
+            projection.picture_url,
+            Some("https://example.com/room.jpg".into())
+        );
+        assert_eq!(projection.subtitle, Some("Books and essays".into()));
+
+        let mut community = summary("group", "", "");
+        community.picture.clear();
+        community.member_count = Some(0);
+
+        let projection = community_row_projection(CommunityRowProjectionInput { community });
+
+        assert_eq!(projection.display_name, "group");
+        assert_eq!(projection.picture_url, None);
+        assert_eq!(projection.subtitle, Some("0 members".into()));
+    }
+
+    #[test]
+    fn room_cover_card_projection_matches_member_and_access_fallbacks() {
+        let mut room = summary("group", "Readers", "");
+        room.member_count = Some(1);
+
+        let projection = room_cover_card_projection(RoomCoverCardProjectionInput { room });
+        assert_eq!(projection.subtitle, "1 member");
+
+        let mut room = summary("group", "Readers", "");
+        room.member_count = Some(22);
+
+        let projection = room_cover_card_projection(RoomCoverCardProjectionInput { room });
+        assert_eq!(projection.subtitle, "22 members");
+
+        let mut room = summary("group", "Readers", "");
+        room.member_count = Some(0);
+
+        let projection = room_cover_card_projection(RoomCoverCardProjectionInput { room });
+        assert_eq!(projection.subtitle, "Open room");
+
+        let mut room = summary("group", "Readers", "");
+        room.access = "closed".into();
+
+        let projection = room_cover_card_projection(RoomCoverCardProjectionInput { room });
+        assert_eq!(projection.subtitle, "Closed room");
     }
 
     #[test]
@@ -823,6 +1391,166 @@ mod tests {
     }
 
     #[test]
+    fn create_room_projection_trims_and_enables_create() {
+        let projection = create_room_projection(CreateRoomProjectionInput {
+            name: "  HL Book Club  ".into(),
+            about: "  Reading together  ".into(),
+            visibility: RoomVisibility::Public,
+            access: RoomAccess::Open,
+            is_creating: false,
+            cover_is_uploading: false,
+        });
+
+        assert!(projection.can_create);
+        assert_eq!(projection.create_name, "HL Book Club");
+        assert_eq!(projection.create_about, "Reading together");
+        assert_eq!(projection.visibility_glyph, "globe");
+        assert_eq!(projection.visibility_summary, "Public · Anyone can join");
+        assert_eq!(projection.visibility_options.len(), 3);
+        assert!(projection.visibility_options[0].is_selected);
+        assert!(!projection.visibility_options[1].is_selected);
+        assert!(!projection.visibility_options[2].is_selected);
+    }
+
+    #[test]
+    fn create_room_projection_enforces_min_name_and_busy_flags() {
+        let short = create_room_projection(CreateRoomProjectionInput {
+            name: " a ".into(),
+            about: String::new(),
+            visibility: RoomVisibility::Public,
+            access: RoomAccess::Open,
+            is_creating: false,
+            cover_is_uploading: false,
+        });
+        assert!(!short.can_create);
+
+        let creating = create_room_projection(CreateRoomProjectionInput {
+            name: "Room".into(),
+            about: String::new(),
+            visibility: RoomVisibility::Public,
+            access: RoomAccess::Open,
+            is_creating: true,
+            cover_is_uploading: false,
+        });
+        assert!(!creating.can_create);
+
+        let uploading = create_room_projection(CreateRoomProjectionInput {
+            name: "Room".into(),
+            about: String::new(),
+            visibility: RoomVisibility::Public,
+            access: RoomAccess::Open,
+            is_creating: false,
+            cover_is_uploading: true,
+        });
+        assert!(!uploading.can_create);
+    }
+
+    #[test]
+    fn create_room_projection_matches_visibility_copy_and_private_selection() {
+        let closed = create_room_projection(CreateRoomProjectionInput {
+            name: "Room".into(),
+            about: String::new(),
+            visibility: RoomVisibility::Public,
+            access: RoomAccess::Closed,
+            is_creating: false,
+            cover_is_uploading: false,
+        });
+        assert_eq!(closed.visibility_glyph, "globe.badge.chevron.backward");
+        assert_eq!(closed.visibility_summary, "Public · You approve joins");
+        assert!(closed.visibility_options[1].is_selected);
+
+        let private = create_room_projection(CreateRoomProjectionInput {
+            name: "Room".into(),
+            about: String::new(),
+            visibility: RoomVisibility::Private,
+            access: RoomAccess::Open,
+            is_creating: false,
+            cover_is_uploading: false,
+        });
+        assert_eq!(private.visibility_glyph, "lock");
+        assert_eq!(private.visibility_summary, "Private · Invite only");
+        assert!(private.visibility_options[2].is_selected);
+    }
+
+    #[test]
+    fn join_room_request_snapshot_projects_event_and_error_state() {
+        let ok = join_room_request_snapshot("  readers  ", Ok("event123".into()));
+        assert_eq!(ok.group_id, "readers");
+        assert_eq!(ok.event_id, "event123");
+        assert!(ok.error.is_empty());
+
+        let err = join_room_request_snapshot(
+            "readers",
+            Err(CoreError::InvalidInput("missing group".into())),
+        );
+        assert_eq!(err.group_id, "readers");
+        assert!(err.event_id.is_empty());
+        assert_eq!(err.error, "invalid input: missing group");
+    }
+
+    #[test]
+    fn create_room_publish_snapshot_projects_group_and_error_state() {
+        let ok = create_room_publish_snapshot(Ok("room123".into()));
+        assert_eq!(ok.group_id, "room123");
+        assert!(ok.error.is_empty());
+
+        let err = create_room_publish_snapshot(Err(CoreError::Relay("offline".into())));
+        assert!(err.group_id.is_empty());
+        assert_eq!(err.error, "relay error: offline");
+    }
+
+    #[test]
+    fn create_room_cover_upload_result_projects_upload_or_error() {
+        let ok = create_room_cover_upload_result_projection(CreateRoomCoverUploadResultInput {
+            snapshot: BlossomUploadSnapshot {
+                upload: Some(upload()),
+                error: String::new(),
+            },
+        });
+        assert_eq!(
+            ok.upload.as_ref().map(|upload| upload.url.as_str()),
+            Some("https://blossom.example/cover.jpg")
+        );
+        assert_eq!(ok.error_message, None);
+
+        let failed = create_room_cover_upload_result_projection(CreateRoomCoverUploadResultInput {
+            snapshot: BlossomUploadSnapshot {
+                upload: None,
+                error: " offline ".into(),
+            },
+        });
+        assert!(failed.upload.is_none());
+        assert_eq!(
+            failed.error_message.as_deref(),
+            Some("Couldn't upload cover: offline")
+        );
+    }
+
+    #[test]
+    fn create_room_publish_result_projects_success_feedback_and_error_copy() {
+        let ok = create_room_publish_result_projection(CreateRoomPublishResultInput {
+            group_id: "room123".into(),
+            error: String::new(),
+        });
+        assert!(ok.did_create);
+        assert!(ok.should_emit_success_feedback);
+        assert_eq!(ok.group_id, "room123");
+        assert_eq!(ok.error_message, None);
+
+        let failed = create_room_publish_result_projection(CreateRoomPublishResultInput {
+            group_id: "ignored".into(),
+            error: " relay offline ".into(),
+        });
+        assert!(!failed.did_create);
+        assert!(!failed.should_emit_success_feedback);
+        assert_eq!(failed.group_id, "");
+        assert_eq!(
+            failed.error_message.as_deref(),
+            Some("Couldn't publish: relay offline")
+        );
+    }
+
+    #[test]
     fn generated_group_ids_are_well_formed_and_distinct() {
         let a = generate_group_id();
         let b = generate_group_id();
@@ -833,6 +1561,18 @@ mod tests {
                 .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
             "group id must satisfy [a-z0-9]+: {a}"
         );
+    }
+
+    fn upload() -> BlossomUpload {
+        BlossomUpload {
+            url: "https://blossom.example/cover.jpg".into(),
+            sha256_hex: "abc".into(),
+            mime: "image/jpeg".into(),
+            size_bytes: 123,
+            width: 640,
+            height: 480,
+            alt: String::new(),
+        }
     }
 
     #[test]

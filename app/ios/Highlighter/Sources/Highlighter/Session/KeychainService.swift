@@ -1,9 +1,8 @@
 import Foundation
 import Security
 
-/// Minimal iOS Keychain wrapper for the user's nsec (and later, bunker URI).
-/// Simpler than TENEX's cross-platform version because Highlighter v1 is
-/// iPhone-only.
+/// iOS Keychain capability wrapper for the user's nsec and bunker URI.
+/// Swift executes secure-storage calls; Rust owns session restore policy.
 enum KeychainService {
     private static let service = "com.highlighter.app"
     private static let nsecAccount = "nsec"
@@ -11,19 +10,19 @@ enum KeychainService {
 
     // MARK: - Nsec
 
-    static func saveNsec(_ nsec: String) throws { try save(nsec, account: nsecAccount) }
+    static func saveNsec(_ nsec: String) -> Bool { save(nsec, account: nsecAccount) }
     static func loadNsec() -> String? { load(account: nsecAccount) }
     static func deleteNsec() { delete(account: nsecAccount) }
 
     // MARK: - Bunker URI
 
-    static func saveBunkerURI(_ uri: String) throws { try save(uri, account: bunkerAccount) }
+    static func saveBunkerURI(_ uri: String) -> Bool { save(uri, account: bunkerAccount) }
     static func loadBunkerURI() -> String? { load(account: bunkerAccount) }
     static func deleteBunkerURI() { delete(account: bunkerAccount) }
 
     // MARK: - Private helpers
 
-    private static func save(_ value: String, account: String) throws {
+    private static func save(_ value: String, account: String) -> Bool {
         let data = Data(value.utf8)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -36,13 +35,7 @@ enum KeychainService {
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
         ]) { $1 }
         let status = SecItemAdd(add as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw NSError(
-                domain: NSOSStatusErrorDomain,
-                code: Int(status),
-                userInfo: [NSLocalizedDescriptionKey: "Keychain save failed (\(status))"]
-            )
-        }
+        return status == errSecSuccess
     }
 
     private static func load(account: String) -> String? {

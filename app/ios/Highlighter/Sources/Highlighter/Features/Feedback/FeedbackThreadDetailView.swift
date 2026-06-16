@@ -5,8 +5,12 @@ import SwiftUI
 /// the bottom for replies.
 struct FeedbackThreadDetailView: View {
     let thread: FeedbackThreadRecord
+    let listStore: FeedbackStore
 
     @Environment(HighlighterStore.self) private var app
+    @State private var detailStore = FeedbackThreadStore()
+    @State private var draft: String = ""
+    @State private var sendError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -14,12 +18,17 @@ struct FeedbackThreadDetailView: View {
             Divider()
             composer
         }
-        .navigationTitle(thread.title ?? "Feedback")
+        .navigationTitle(threadPresentation.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: thread.rootEventId) {
-            app.openFeedbackThread(rootEventId: thread.rootEventId)
+        .task {
+            await detailStore.start(
+                rootEventId: thread.rootEventId,
+                coordinate: FeedbackProject.coordinate,
+                core: app.safeCore,
+                bridge: app.eventBridge
+            )
         }
-        .onDisappear { app.closeFeedbackThread() }
+        .onDisappear { detailStore.stop() }
     }
 
     @ViewBuilder
@@ -27,7 +36,7 @@ struct FeedbackThreadDetailView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
-                    if let summary = thread.summary, !summary.isEmpty {
+                    if let summary = threadPresentation.detailSummary {
                         Text(summary)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -35,34 +44,26 @@ struct FeedbackThreadDetailView: View {
                             .padding(.top, 8)
                             .padding(.bottom, 6)
                     }
-                    ForEach(Array(events.enumerated()), id: \.element.eventId) { index, event in
+                    ForEach(detailStore.rows, id: \.event.eventId) { row in
                         FeedbackMessageBubble(
-                            event: event,
-                            isFromMe: event.authorPubkey == app.currentUser?.pubkey,
-                            showHeader: shouldShowHeader(at: index),
-                            profile: app.profile(pubkeyHex: event.authorPubkey)
+                            event: row.event,
+                            projection: messagePresentation(for: row)
                         )
-                        .id(event.eventId)
-                        .task(id: event.authorPubkey) {
-                            app.requestProfile(pubkeyHex: event.authorPubkey)
+                        .id(row.event.eventId)
+                        .task(id: row.event.authorPubkey) {
+                            await app.requestProfile(pubkeyHex: row.event.authorPubkey)
                         }
                     }
-                    if app.feedback.isLoadingThread && events.isEmpty {
+                    if detailStore.isLoading && detailStore.rows.isEmpty {
                         ProgressView().padding()
-                    }
-                    if let error = app.feedback.threadErrorMessage, events.isEmpty {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .padding()
                     }
                 }
                 .padding(.vertical, 8)
             }
-            .onChange(of: events.count) { _, _ in
-                if let last = events.last {
+            .onChange(of: detailStore.rows.count) { _, _ in
+                if let last = detailStore.rows.last {
                     withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(last.eventId, anchor: .bottom)
+                        proxy.scrollTo(last.event.eventId, anchor: .bottom)
                     }
                 }
             }
@@ -72,78 +73,95 @@ struct FeedbackThreadDetailView: View {
     @ViewBuilder
     private var composer: some View {
         VStack(spacing: 6) {
-            if let sendError = app.feedback.publishErrorMessage {
+            if let sendError {
                 Text(sendError)
                     .font(.caption)
                     .foregroundStyle(.red)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack(alignment: .bottom, spacing: 8) {
-                TextField("Reply…", text: replyDraft, axis: .vertical)
+                TextField("Reply…", text: $draft, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
-                    .lineLimit(1 ... 5)
+                    .lineLimit(1...5)
                 Button {
-                    app.publishFeedbackReply()
+                    Task { await send() }
                 } label: {
                     Image(systemName: "paperplane.fill")
                         .font(.title3)
                         .frame(width: 36, height: 36)
-                        .background(Color.accentColor.opacity(canSend ? 1 : 0.4), in: .circle)
+                        .background(
+                            Color.accentColor.opacity(composerProjection.canSend ? 1 : 0.4),
+                            in: .circle
+                        )
                         .foregroundStyle(.white)
                 }
-                .accessibilityLabel("Send reply")
-                .disabled(!canSend)
+                .disabled(!composerProjection.canSend)
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
     }
 
-    private var canSend: Bool {
-        !app.feedback.replyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !app.feedback.isPublishingReply
-    }
-
-    private var events: [FeedbackEventRecord] {
-        app.feedback.selectedRootEventId == thread.rootEventId
-            ? app.feedback.selectedEvents
-            : []
-    }
-
-    private var replyDraft: Binding<String> {
-        Binding(
-            get: { app.feedback.replyDraft },
-            set: { app.setFeedbackReplyDraft($0) }
+    private var composerProjection: FeedbackComposerProjection {
+        app.safeCore.projectFeedbackComposer(
+            input: FeedbackComposerProjectionInput(
+                body: draft,
+                isPublishing: detailStore.isPublishing
+            )
         )
     }
 
-    private func shouldShowHeader(at index: Int) -> Bool {
-        guard index > 0 else { return true }
-        let prev = events[index - 1]
-        let curr = events[index]
-        if prev.authorPubkey != curr.authorPubkey { return true }
-        if curr.createdAt > prev.createdAt + 300 { return true }
-        return false
+    private var threadPresentation: FeedbackThreadPresentationProjection {
+        app.safeCore.projectFeedbackThreadPresentation(thread: thread)
+    }
+
+    private func send() async {
+        let projection = composerProjection
+        guard projection.canSend else { return }
+
+        sendError = nil
+        let outcome = await detailStore.sendReply(body: projection.submitBody)
+        guard let outcome else { return }
+        let result = app.safeCore.projectFeedbackPublishResult(
+            input: FeedbackPublishResultInput(error: outcome.error)
+        )
+        if result.didPublish {
+            draft = ""
+            await listStore.refreshThreads()
+        } else {
+            sendError = result.errorMessage
+        }
+    }
+
+    private func messagePresentation(
+        for row: FeedbackMessageRowProjection
+    ) -> FeedbackMessagePresentationProjection {
+        app.safeCore.projectFeedbackMessagePresentation(
+            input: FeedbackMessagePresentationInput(
+                event: row.event,
+                showHeader: row.showHeader,
+                currentUserPubkey: app.currentUser?.pubkey,
+                profile: app.profileSnapshots[row.event.authorPubkey]
+            )
+        )
     }
 }
 
 private struct FeedbackMessageBubble: View {
     let event: FeedbackEventRecord
-    let isFromMe: Bool
-    let showHeader: Bool
-    let profile: ProfileMetadata?
+    let projection: FeedbackMessagePresentationProjection
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 6) {
-            if isFromMe {
+            if projection.isFromMe {
                 Spacer(minLength: 40)
             } else {
                 avatarSlot
             }
 
-            VStack(alignment: isFromMe ? .trailing : .leading, spacing: 2) {
-                if showHeader {
-                    Text(displayName)
+            VStack(alignment: projection.isFromMe ? .trailing : .leading, spacing: 2) {
+                if projection.showHeader {
+                    Text(projection.displayName)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 4)
@@ -151,11 +169,11 @@ private struct FeedbackMessageBubble: View {
                 }
                 Text(markdownContent)
                     .font(.body)
-                    .foregroundStyle(isFromMe ? Color.white : Color.primary)
+                    .foregroundStyle(projection.isFromMe ? Color.white : Color.primary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(
-                        isFromMe
+                        projection.isFromMe
                             ? Color.accentColor
                             : Color(.secondarySystemBackground),
                         in: .rect(cornerRadius: 14)
@@ -166,23 +184,23 @@ private struct FeedbackMessageBubble: View {
                     .padding(.horizontal, 4)
             }
 
-            if isFromMe {
+            if projection.isFromMe {
                 avatarSlot
             } else {
                 Spacer(minLength: 40)
             }
         }
         .padding(.horizontal, 12)
-        .padding(.top, showHeader ? 4 : 1)
+        .padding(.top, projection.showHeader ? 4 : 1)
     }
 
     @ViewBuilder
     private var avatarSlot: some View {
-        if showHeader {
+        if projection.showHeader {
             AuthorAvatar(
                 pubkey: event.authorPubkey,
-                pictureURL: profile?.picture ?? "",
-                displayInitial: displayInitial,
+                pictureURL: projection.pictureUrl,
+                displayInitial: projection.displayInitial,
                 size: 28
             )
         } else {
@@ -197,18 +215,6 @@ private struct FeedbackMessageBubble: View {
                 interpretedSyntax: .inlineOnlyPreservingWhitespace
             )
         )) ?? AttributedString(event.content)
-    }
-
-    private var displayName: String {
-        if let p = profile {
-            if !p.displayName.isEmpty { return p.displayName }
-            if !p.name.isEmpty { return p.name }
-        }
-        return String(event.authorPubkey.prefix(8))
-    }
-
-    private var displayInitial: String {
-        displayName.first.map { String($0).uppercased() } ?? ""
     }
 
     private func timeLabel(_ ts: UInt64) -> String {

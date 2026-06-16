@@ -9,12 +9,126 @@
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
+use crate::artifacts;
+use crate::clock::Clock;
 use crate::errors::CoreError;
 use crate::models::{ArtifactPreview, DiscussionAttachment, DiscussionRecord};
 use crate::nostr_runtime::NostrRuntime;
 
 pub const KIND_DISCUSSION: u16 = 11;
 pub const DISCUSSION_MARKER_TAG: &str = "discussion";
+pub const ROOM_DISCUSSION_LIMIT: u32 = 64;
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomDiscussionSnapshot {
+    pub discussions: Vec<DiscussionRecord>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct DiscussionPublishSnapshot {
+    pub discussion: Option<DiscussionRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct DiscussionAttachmentProjectionInput {
+    pub attachment: DiscussionAttachment,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DiscussionAttachmentProjection {
+    pub label: Option<String>,
+    pub image_url: Option<String>,
+    pub author: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct DiscussionComposerProjectionInput {
+    pub title: String,
+    pub body: String,
+    pub attachment_url: String,
+    pub is_publishing: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DiscussionComposerProjection {
+    pub submit_title: String,
+    pub submit_body: String,
+    pub submit_attachment_url: Option<String>,
+    pub can_publish: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct DiscussionComposerPublishInput {
+    pub group_id: String,
+    pub title: String,
+    pub body: String,
+    pub attachment_url: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DiscussionPublishResultInput {
+    pub error: String,
+    pub has_discussion: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DiscussionPublishResultProjection {
+    pub did_publish: bool,
+    pub error_message: String,
+}
+
+/// Project a discussion attachment for native list/detail rendering. Rust owns
+/// the title->URL label fallback and optional metadata presence.
+pub fn attachment_projection(
+    input: DiscussionAttachmentProjectionInput,
+) -> DiscussionAttachmentProjection {
+    let attachment = input.attachment;
+    let label = if attachment.title.is_empty() {
+        attachment.url
+    } else {
+        attachment.title
+    };
+    DiscussionAttachmentProjection {
+        label: non_empty(label),
+        image_url: non_empty(attachment.image),
+        author: non_empty(attachment.author),
+    }
+}
+
+/// Discussion composer projection. Rust owns submit normalization and publish
+/// eligibility; native shells render fields and execute the user action.
+pub fn composer_projection(
+    input: DiscussionComposerProjectionInput,
+) -> DiscussionComposerProjection {
+    let submit_title = input.title.trim().to_string();
+    let submit_body = input.body.trim().to_string();
+    let submit_attachment_url = non_empty(input.attachment_url.trim().to_string());
+
+    DiscussionComposerProjection {
+        can_publish: !submit_title.is_empty() && !input.is_publishing,
+        submit_title,
+        submit_body,
+        submit_attachment_url,
+    }
+}
+
+pub fn publish_result_projection(
+    input: DiscussionPublishResultInput,
+) -> DiscussionPublishResultProjection {
+    let error_message = input.error.trim().to_string();
+    let did_publish = error_message.is_empty() && input.has_discussion;
+    DiscussionPublishResultProjection {
+        did_publish,
+        error_message: if did_publish {
+            String::new()
+        } else if error_message.is_empty() {
+            "Failed to publish.".to_string()
+        } else {
+            error_message
+        },
+    }
+}
 
 /// Query cached discussions for a room from nostrdb. Filters kind:11 by
 /// `#h=group_id`, then keeps only events whose `t` tags contain
@@ -61,6 +175,44 @@ pub fn query_for_group(
     Ok(records)
 }
 
+/// Full discussion-tab read model for a room. Cache errors become an empty
+/// list so native shells render the same cold-cache state consistently.
+pub fn query_room_discussion_snapshot(ndb: &Ndb, group_id: &str) -> RoomDiscussionSnapshot {
+    let group_id = group_id.trim();
+    if group_id.is_empty() {
+        return RoomDiscussionSnapshot {
+            discussions: Vec::new(),
+        };
+    }
+    let discussions = match query_for_group(ndb, group_id, ROOM_DISCUSSION_LIMIT) {
+        Ok(values) => values,
+        Err(error) => {
+            tracing::warn!(error = %error, "room discussion snapshot failed");
+            Vec::new()
+        }
+    };
+    RoomDiscussionSnapshot { discussions }
+}
+
+/// Build and publish a composer submission. Rust owns the optional URL
+/// attachment conversion; the native shell never fabricates preview records.
+pub async fn publish_from_composer(
+    runtime: &NostrRuntime,
+    input: DiscussionComposerPublishInput,
+    clock: &dyn Clock,
+) -> Result<DiscussionRecord, CoreError> {
+    let attachment = composer_attachment_preview(input.attachment_url.as_deref())?;
+    publish(
+        runtime,
+        &input.group_id,
+        &input.title,
+        &input.body,
+        attachment,
+        clock,
+    )
+    .await
+}
+
 /// Build + sign + publish a kind:11 discussion thread into a NIP-29 group.
 /// Optional `attachment` attaches a previously-built artifact preview so the
 /// discussion shows "started from this podcast/article/book" in the UI.
@@ -70,6 +222,7 @@ pub async fn publish(
     title: &str,
     body: &str,
     attachment: Option<ArtifactPreview>,
+    clock: &dyn Clock,
 ) -> Result<DiscussionRecord, CoreError> {
     if group_id.trim().is_empty() {
         return Err(CoreError::InvalidInput("group_id must not be empty".into()));
@@ -79,16 +232,32 @@ pub async fn publish(
         return Err(CoreError::InvalidInput("discussion title required".into()));
     }
 
-    let builder = build_event(group_id, title, body, attachment.as_ref())?;
+    let builder = build_event(group_id, title, body, attachment.as_ref(), clock)?;
     let client = runtime.client();
     let event = client
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign discussion: {e}")))?;
-    runtime.publish_signed_event_to_relays("discussion-publish", &event, runtime.rooms_urls())?;
+    client
+        .send_event(&event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish discussion: {e}")))?;
 
     record_from_event(&event)
         .ok_or_else(|| CoreError::Other("signed discussion event failed to parse back".into()))
+}
+
+pub fn publish_snapshot(result: Result<DiscussionRecord, CoreError>) -> DiscussionPublishSnapshot {
+    match result {
+        Ok(discussion) => DiscussionPublishSnapshot {
+            discussion: Some(discussion),
+            error: String::new(),
+        },
+        Err(error) => DiscussionPublishSnapshot {
+            discussion: None,
+            error: error.to_string(),
+        },
+    }
 }
 
 pub fn is_discussion(event: &Event) -> bool {
@@ -176,8 +345,9 @@ fn build_event(
     title: &str,
     body: &str,
     attachment: Option<&ArtifactPreview>,
+    clock: &dyn Clock,
 ) -> Result<EventBuilder, CoreError> {
-    let slug = slug_from_title(title);
+    let slug = slug_from_title(title, clock);
 
     let mut tags: Vec<Tag> = vec![
         parse_tag(&["h", group_id])?,
@@ -227,7 +397,16 @@ fn build_event(
     Ok(EventBuilder::new(Kind::Custom(KIND_DISCUSSION), body.trim()).tags(tags))
 }
 
-fn slug_from_title(title: &str) -> String {
+fn composer_attachment_preview(
+    attachment_url: Option<&str>,
+) -> Result<Option<ArtifactPreview>, CoreError> {
+    let Some(url) = attachment_url.map(str::trim).filter(|url| !url.is_empty()) else {
+        return Ok(None);
+    };
+    artifacts::build_preview(url).map(Some)
+}
+
+fn slug_from_title(title: &str, clock: &dyn Clock) -> String {
     let mut out = String::with_capacity(title.len());
     let mut last_dash = false;
     for ch in title.trim().chars() {
@@ -243,8 +422,9 @@ fn slug_from_title(title: &str) -> String {
         out.pop();
     }
     if out.is_empty() {
-        // Never emit an empty `d` tag — fall back to timestamp-ish ms.
-        format!("d{}", nostr_sdk::Timestamp::now().as_secs())
+        // Never emit an empty `d` tag. Non-ASCII titles can land here, so the
+        // kernel clock owns the deterministic fallback identifier.
+        format!("d{}", clock.now_unix_seconds())
     } else {
         out
     }
@@ -265,15 +445,213 @@ fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
     None
 }
 
+fn non_empty(value: String) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[derive(Debug)]
+    struct FixedClock(u64);
+
+    impl Clock for FixedClock {
+        fn now_unix_seconds(&self) -> u64 {
+            self.0
+        }
+    }
 
     fn sign(keys: &Keys, tags: Vec<Tag>, content: &str) -> Event {
         EventBuilder::new(Kind::Custom(KIND_DISCUSSION), content)
             .tags(tags)
             .sign_with_keys(keys)
             .expect("sign")
+    }
+
+    fn process(ndb: &Ndb, event: &Event) {
+        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
+        ndb.process_event(&line).unwrap();
+    }
+
+    #[test]
+    fn attachment_projection_uses_title_or_url_and_optional_metadata() {
+        let mut attachment = discussion_attachment();
+        attachment.title = "Episode".into();
+        attachment.url = "https://example.com/episode".into();
+        attachment.author = "Host".into();
+        attachment.image = "https://example.com/image.jpg".into();
+
+        let projection = attachment_projection(DiscussionAttachmentProjectionInput { attachment });
+
+        assert_eq!(projection.label, Some("Episode".into()));
+        assert_eq!(projection.author, Some("Host".into()));
+        assert_eq!(
+            projection.image_url,
+            Some("https://example.com/image.jpg".into())
+        );
+
+        let mut attachment = discussion_attachment();
+        attachment.title.clear();
+        attachment.url = "https://example.com/fallback".into();
+
+        let projection = attachment_projection(DiscussionAttachmentProjectionInput { attachment });
+
+        assert_eq!(
+            projection.label,
+            Some("https://example.com/fallback".into())
+        );
+        assert_eq!(projection.author, None);
+        assert_eq!(projection.image_url, None);
+    }
+
+    #[test]
+    fn room_discussion_snapshot_reads_discussions_for_room() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().to_str().unwrap().to_owned();
+        let cfg = nostrdb::Config::new().set_mapsize(64 * 1024 * 1024);
+        let keys = Keys::generate();
+        let matching = sign(
+            &keys,
+            vec![
+                Tag::parse(vec!["h".to_string(), "room-a".to_string()]).unwrap(),
+                Tag::parse(vec!["t".to_string(), DISCUSSION_MARKER_TAG.to_string()]).unwrap(),
+                Tag::parse(vec!["title".to_string(), "Room topic".to_string()]).unwrap(),
+            ],
+            "body",
+        );
+        let other_room = sign(
+            &keys,
+            vec![
+                Tag::parse(vec!["h".to_string(), "room-b".to_string()]).unwrap(),
+                Tag::parse(vec!["t".to_string(), DISCUSSION_MARKER_TAG.to_string()]).unwrap(),
+                Tag::parse(vec!["title".to_string(), "Other".to_string()]).unwrap(),
+            ],
+            "body",
+        );
+        let artifact_share = sign(
+            &keys,
+            vec![Tag::parse(vec!["h".to_string(), "room-a".to_string()]).unwrap()],
+            "not a discussion",
+        );
+
+        {
+            let ndb = Ndb::new(&db_path, &cfg).unwrap();
+            for event in [&matching, &other_room, &artifact_share] {
+                process(&ndb, event);
+            }
+        }
+
+        let ndb = Ndb::new(&db_path, &cfg).unwrap();
+        let snapshot = query_room_discussion_snapshot(&ndb, "room-a");
+
+        assert_eq!(snapshot.discussions.len(), 1);
+        assert_eq!(snapshot.discussions[0].title, "Room topic");
+    }
+
+    #[test]
+    fn composer_projection_trims_and_blocks_blank_or_publishing_title() {
+        let projection = composer_projection(DiscussionComposerProjectionInput {
+            title: "  Launch thread  ".into(),
+            body: "  body copy  ".into(),
+            attachment_url: "  https://example.com/post  ".into(),
+            is_publishing: false,
+        });
+
+        assert_eq!(projection.submit_title, "Launch thread");
+        assert_eq!(projection.submit_body, "body copy");
+        assert_eq!(
+            projection.submit_attachment_url,
+            Some("https://example.com/post".into())
+        );
+        assert!(projection.can_publish);
+
+        let blank = composer_projection(DiscussionComposerProjectionInput {
+            title: " \n\t ".into(),
+            body: "body".into(),
+            attachment_url: " \n\t ".into(),
+            is_publishing: false,
+        });
+        let publishing = composer_projection(DiscussionComposerProjectionInput {
+            title: "Launch thread".into(),
+            body: "body".into(),
+            attachment_url: String::new(),
+            is_publishing: true,
+        });
+
+        assert!(!blank.can_publish);
+        assert_eq!(blank.submit_attachment_url, None);
+        assert!(!publishing.can_publish);
+    }
+
+    #[test]
+    fn publish_snapshot_projects_discussion_or_error_state() {
+        let discussion = DiscussionRecord {
+            id: "thread-1".into(),
+            event_id: "event123".into(),
+            group_id: "room-a".into(),
+            pubkey: "pubkey".into(),
+            title: "Launch thread".into(),
+            body: "body".into(),
+            summary: "summary".into(),
+            created_at: Some(42),
+            attachment: None,
+        };
+
+        let ok = publish_snapshot(Ok(discussion));
+        assert_eq!(
+            ok.discussion
+                .as_ref()
+                .map(|discussion| discussion.event_id.as_str()),
+            Some("event123")
+        );
+        assert!(ok.error.is_empty());
+
+        let err = publish_snapshot(Err(CoreError::Signer("missing key".into())));
+        assert!(err.discussion.is_none());
+        assert_eq!(err.error, "signer error: missing key");
+    }
+
+    #[test]
+    fn publish_result_projection_requires_record_and_empty_error() {
+        let ok = publish_result_projection(DiscussionPublishResultInput {
+            error: String::new(),
+            has_discussion: true,
+        });
+        assert!(ok.did_publish);
+        assert!(ok.error_message.is_empty());
+
+        let missing_record = publish_result_projection(DiscussionPublishResultInput {
+            error: " \n\t ".into(),
+            has_discussion: false,
+        });
+        assert!(!missing_record.did_publish);
+        assert_eq!(missing_record.error_message, "Failed to publish.");
+
+        let failed = publish_result_projection(DiscussionPublishResultInput {
+            error: " relay failed ".into(),
+            has_discussion: true,
+        });
+        assert!(!failed.did_publish);
+        assert_eq!(failed.error_message, "relay failed");
+    }
+
+    #[test]
+    fn composer_attachment_preview_builds_real_preview_or_rejects_invalid_url() {
+        let preview = composer_attachment_preview(Some(" https://example.com/post?ref=abc "))
+            .expect("preview")
+            .expect("attachment");
+
+        assert_eq!(preview.url, "https://example.com/post");
+        assert_eq!(preview.reference_tag_name, "i");
+        assert_eq!(preview.reference_kind, "web");
+        assert!(composer_attachment_preview(Some(" \n\t "))
+            .expect("blank")
+            .is_none());
+        assert!(composer_attachment_preview(Some("not a url")).is_err());
     }
 
     #[test]
@@ -338,16 +716,40 @@ mod tests {
         assert_eq!(att.url, "https://example.com/ep");
     }
 
+    fn discussion_attachment() -> DiscussionAttachment {
+        DiscussionAttachment {
+            reference_tag_name: "r".into(),
+            reference_tag_value: "https://example.com".into(),
+            reference_kind: String::new(),
+            url: String::new(),
+            title: String::new(),
+            author: String::new(),
+            image: String::new(),
+            summary: String::new(),
+        }
+    }
+
+    #[test]
+    fn slug_fallback_uses_injected_clock() {
+        let clock = FixedClock(42);
+        assert_eq!(slug_from_title("!!!", &clock), "d42");
+    }
+
     #[test]
     fn slug_from_title_is_sane() {
-        assert_eq!(slug_from_title("Hello World!"), "hello-world");
-        assert_eq!(slug_from_title("  Many   spaces "), "many-spaces");
-        assert_eq!(slug_from_title("emoji 🎧 in title"), "emoji-in-title");
+        let clock = FixedClock(42);
+        assert_eq!(slug_from_title("Hello World!", &clock), "hello-world");
+        assert_eq!(slug_from_title("  Many   spaces ", &clock), "many-spaces");
+        assert_eq!(
+            slug_from_title("emoji 🎧 in title", &clock),
+            "emoji-in-title"
+        );
     }
 
     #[test]
     fn build_event_emits_required_tags() {
-        let builder = build_event("room-a", "Title", "body", None).expect("build");
+        let clock = FixedClock(42);
+        let builder = build_event("room-a", "Title", "body", None, &clock).expect("build");
         let keys = Keys::generate();
         let e = builder.sign_with_keys(&keys).expect("sign");
         let has = |name: &str, val: &str| {

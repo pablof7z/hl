@@ -12,6 +12,8 @@ struct FriendsOnRoomCard: View {
     private let width: CGFloat = 96
 
     var body: some View {
+        let projection = cardProjection
+
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .bottomLeading) {
                 cover
@@ -23,7 +25,7 @@ struct FriendsOnRoomCard: View {
                             .stroke(Color.highlighterRule, lineWidth: 0.5)
                     )
 
-                avatarCluster
+                avatarCluster(projection)
                     .padding(8)
             }
 
@@ -34,41 +36,34 @@ struct FriendsOnRoomCard: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
-                Text(friendsByline)
+                Text(projection.byline)
                     .font(.caption2)
                     .foregroundStyle(Color.highlighterInkMuted)
                     .lineLimit(1)
             }
             .frame(width: width, alignment: .leading)
         }
-        .task {
+        .task(id: projection.preloadPubkeys) {
             // Warm the profile cache for the friends shown in the cluster
             // so avatars render with actual pictures, not initials.
-            for pubkey in recommendation.reasonPubkeys.prefix(3) {
-                store.requestProfile(pubkeyHex: pubkey)
+            for pubkey in projection.preloadPubkeys {
+                await store.requestProfile(pubkeyHex: pubkey)
             }
         }
     }
 
-    private var friendsByline: String {
-        let total = recommendation.reasonPubkeys.count
-        if total == 0 { return recommendation.summary.about.isEmpty ? "Rooms you may like" : recommendation.summary.about }
-        let firstHandle = handle(for: recommendation.reasonPubkeys[0])
-        if total == 1 {
-            return "@\(firstHandle) is here"
-        }
-        if total == 2 {
-            return "@\(firstHandle) + 1 you follow"
-        }
-        return "@\(firstHandle) + \(total - 1) you follow"
-    }
-
-    private func handle(for pubkey: String) -> String {
-        if let profile = store.profile(pubkeyHex: pubkey) {
-            if !profile.name.isEmpty { return profile.name }
-            if !profile.displayName.isEmpty { return profile.displayName }
-        }
-        return String(pubkey.prefix(6))
+    private var cardProjection: RoomRecommendationCardProjection {
+        store.safeCore.projectRoomRecommendationCard(
+            input: RoomRecommendationCardProjectionInput(
+                recommendation: recommendation,
+                reasonProfiles: recommendation.reasonPubkeys.map { pubkey in
+                    RoomRecommendationReasonProfile(
+                        pubkey: pubkey,
+                        profile: store.profileSnapshots[pubkey]
+                    )
+                }
+            )
+        )
     }
 
     @ViewBuilder
@@ -95,24 +90,24 @@ struct FriendsOnRoomCard: View {
         )
     }
 
-    private var avatarCluster: some View {
-        let show = recommendation.reasonPubkeys.prefix(3)
-        return HStack(spacing: -8) {
-            ForEach(Array(show.enumerated()), id: \.offset) { item in
+    private func avatarCluster(_ projection: RoomRecommendationCardProjection) -> some View {
+        HStack(spacing: -8) {
+            ForEach(Array(projection.visibleAvatars.enumerated()), id: \.offset) { item in
+                let avatar = item.element
                 AuthorAvatar(
-                    pubkey: item.element,
-                    pictureURL: store.profile(pubkeyHex: item.element)?.picture ?? "",
-                    displayInitial: String(item.element.prefix(1)),
+                    pubkey: avatar.pubkey,
+                    pictureURL: avatar.pictureUrl,
+                    displayInitial: avatar.displayInitial,
                     size: 26
                 )
                 .overlay(
                     Circle().stroke(Color.white, lineWidth: 2)
                 )
             }
-            if recommendation.reasonPubkeys.count > 3 {
+            if let overflowLabel = projection.overflowLabel {
                 ZStack {
                     Circle().fill(Color.black.opacity(0.55))
-                    Text("+\(recommendation.reasonPubkeys.count - 3)")
+                    Text(overflowLabel)
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(.white)
                 }

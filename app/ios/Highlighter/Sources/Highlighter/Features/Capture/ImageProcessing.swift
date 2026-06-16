@@ -11,17 +11,7 @@ enum ImageProcessing {
         let mime: String
     }
 
-    enum Error: Swift.Error, LocalizedError {
-        case noCGImage
-        case encodingFailed
-
-        var errorDescription: String? {
-            switch self {
-            case .noCGImage: return "Couldn't read the captured image."
-            case .encodingFailed: return "Couldn't prepare the image for upload."
-            }
-        }
-    }
+    static let failureMessage = "Couldn't prepare the image for upload."
 
     /// Re-encode `image` as JPEG, scaling its long edge to at most `maxEdge`
     /// and stripping all metadata (EXIF, GPS, TIFF, IPTC). The output is safe
@@ -30,10 +20,10 @@ enum ImageProcessing {
         _ image: UIImage,
         maxEdge: CGFloat = 2048,
         quality: CGFloat = 0.85
-    ) throws -> Result {
+    ) -> Result? {
         let scaled = image.resizedRespectingOrientation(maxEdge: maxEdge)
         guard let cgImage = scaled.cgImage else {
-            throw Error.noCGImage
+            return nil
         }
 
         let buffer = NSMutableData()
@@ -44,7 +34,7 @@ enum ImageProcessing {
             1,
             nil
         ) else {
-            throw Error.encodingFailed
+            return nil
         }
 
         // Pass an empty properties dictionary (plus quality) so the destination
@@ -55,7 +45,7 @@ enum ImageProcessing {
         ]
         CGImageDestinationAddImage(destination, cgImage, properties as CFDictionary)
         guard CGImageDestinationFinalize(destination) else {
-            throw Error.encodingFailed
+            return nil
         }
 
         return Result(
@@ -74,7 +64,7 @@ enum ImageProcessing {
         _ processed: Result,
         pageRect: CGRect,
         quality: CGFloat = 0.88
-    ) throws -> Result {
+    ) -> Result? {
         guard let provider = CGDataProvider(data: processed.data as CFData),
               let sourceImage = CGImage(
                 jpegDataProviderSource: provider,
@@ -82,7 +72,7 @@ enum ImageProcessing {
                 shouldInterpolate: true,
                 intent: .defaultIntent
               ) else {
-            throw Error.noCGImage
+            return nil
         }
 
         let imageBounds = CGRect(
@@ -100,9 +90,9 @@ enum ImageProcessing {
 
         guard !pixelRect.isNull, !pixelRect.isEmpty,
               let cropped = sourceImage.cropping(to: pixelRect) else {
-            throw Error.noCGImage
+            return nil
         }
-        let data = try encodeJPEG(cropped, quality: quality)
+        guard let data = encodeJPEG(cropped, quality: quality) else { return nil }
         return Result(
             data: data,
             width: cropped.width,
@@ -111,36 +101,14 @@ enum ImageProcessing {
         )
     }
 
-    /// Build a normalized crop box around the selected OCR boxes. Coordinates
-    /// use Vision's normalized bottom-left origin.
-    static func defaultHighlightCropBox(
-        highlightBoxes: [CGRect],
-        imageSize: CGSize,
-        marginFraction: CGFloat = 0.08
-    ) -> CGRect? {
-        guard let selectedBounds = highlightBoxes
-            .filter({ !$0.isNull && !$0.isEmpty })
-            .union()
-        else {
-            return nil
-        }
-
-        let marginX = max(marginFraction, 48 / max(imageSize.width, 1))
-        let marginY = max(marginFraction, selectedBounds.height * 0.55, 48 / max(imageSize.height, 1))
-        return selectedBounds
-            .insetBy(dx: -marginX, dy: -marginY)
-            .intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
-    }
-
     /// Crop the already-sanitized capture around the selected OCR boxes and
     /// bake the yellow highlight treatment into the pixels that get uploaded.
     static func cropAndAnnotateHighlight(
         _ processed: Result,
         highlightBoxes: [CGRect],
-        cropBox: CGRect? = nil,
-        marginFraction: CGFloat = 0.08,
+        cropBox: CGRect,
         quality: CGFloat = 0.88
-    ) throws -> Result {
+    ) -> Result? {
         guard let provider = CGDataProvider(data: processed.data as CFData),
               let sourceImage = CGImage(
                 jpegDataProviderSource: provider,
@@ -148,7 +116,7 @@ enum ImageProcessing {
                 shouldInterpolate: true,
                 intent: .defaultIntent
               ) else {
-            throw Error.noCGImage
+            return nil
         }
 
         let imageBounds = CGRect(
@@ -161,26 +129,16 @@ enum ImageProcessing {
             .map { visionToPixelRect($0, imageSize: imageBounds.size) }
             .filter { !$0.isNull && !$0.isEmpty }
 
-        guard let selectedBounds = pixelRects.union() else {
+        guard !pixelRects.isEmpty else {
             return processed
         }
 
-        let cropRect: CGRect
-        if let cropBox {
-            cropRect = visionToPixelRect(cropBox, imageSize: imageBounds.size)
-                .intersection(imageBounds)
-                .integral
-        } else {
-            let marginX = max(imageBounds.width * marginFraction, 48)
-            let marginY = max(imageBounds.height * marginFraction, selectedBounds.height * 0.55, 48)
-            cropRect = selectedBounds
-                .insetBy(dx: -marginX, dy: -marginY)
-                .intersection(imageBounds)
-                .integral
-        }
+        let cropRect = visionToPixelRect(cropBox, imageSize: imageBounds.size)
+            .intersection(imageBounds)
+            .integral
 
         guard let croppedImage = sourceImage.cropping(to: cropRect) else {
-            throw Error.noCGImage
+            return nil
         }
 
         let cropSize = CGSize(width: cropRect.width, height: cropRect.height)
@@ -218,9 +176,9 @@ enum ImageProcessing {
         }
 
         guard let cgImage = annotated.cgImage else {
-            throw Error.noCGImage
+            return nil
         }
-        let data = try encodeJPEG(cgImage, quality: quality)
+        guard let data = encodeJPEG(cgImage, quality: quality) else { return nil }
         return Result(
             data: data,
             width: cgImage.width,
@@ -238,7 +196,7 @@ enum ImageProcessing {
         ).integral
     }
 
-    private static func encodeJPEG(_ cgImage: CGImage, quality: CGFloat) throws -> Data {
+    private static func encodeJPEG(_ cgImage: CGImage, quality: CGFloat) -> Data? {
         let buffer = NSMutableData()
         let type = UTType.jpeg.identifier as CFString
         guard let destination = CGImageDestinationCreateWithData(
@@ -247,26 +205,16 @@ enum ImageProcessing {
             1,
             nil
         ) else {
-            throw Error.encodingFailed
+            return nil
         }
         let properties: [CFString: Any] = [
             kCGImageDestinationLossyCompressionQuality: quality
         ]
         CGImageDestinationAddImage(destination, cgImage, properties as CFDictionary)
         guard CGImageDestinationFinalize(destination) else {
-            throw Error.encodingFailed
+            return nil
         }
         return buffer as Data
-    }
-}
-
-private extension Array where Element == CGRect {
-    func union() -> CGRect? {
-        guard var result = first else { return nil }
-        for rect in dropFirst() {
-            result = result.union(rect)
-        }
-        return result
     }
 }
 

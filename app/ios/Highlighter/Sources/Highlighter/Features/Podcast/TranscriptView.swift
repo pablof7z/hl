@@ -6,7 +6,7 @@ import SwiftUI
 struct TranscriptView: View {
     let segments: [TranscriptSegment]
     let currentTime: TimeInterval
-    let selectedSegmentIds: Set<String>
+    let selectedSegmentIds: [String]
     let onTapSegment: (TranscriptSegment) -> Void
 
     var body: some View {

@@ -4,6 +4,7 @@ struct ChatView: View {
     let groupId: String
 
     @Environment(HighlighterStore.self) private var app
+    @State private var store = ChatStore()
     @State private var draft: String = ""
     @FocusState private var inputFocused: Bool
     @State private var replyTo: ChatMessageRecord? = nil
@@ -30,11 +31,11 @@ struct ChatView: View {
         }
         .background(Color.highlighterPaper.ignoresSafeArea())
         .task {
-            app.openRoom(groupId: groupId)
+            await store.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
         }
-        .onChange(of: messages.count) { oldCount, newCount in
-            let added = max(0, newCount - oldCount)
-            guard added > 0 else { return }
+        .onDisappear { store.stop() }
+        .onChange(of: store.activityRevision) { _, _ in
+            let added = max(1, store.activityDelta)
             if isAtBottom {
                 scrollRevision += 1
             } else {
@@ -44,12 +45,12 @@ struct ChatView: View {
             }
         }
         .alert("Couldn't send", isPresented: Binding(
-            get: { chatErrorMessage != nil },
-            set: { if !$0 { app.clearRoomChatError() } }
+            get: { store.sendError != nil },
+            set: { if !$0 { store.sendError = nil } }
         )) {
-            Button("OK", role: .cancel) { app.clearRoomChatError() }
+            Button("OK", role: .cancel) { store.sendError = nil }
         } message: {
-            Text(chatErrorMessage ?? "")
+            Text(store.sendError ?? "")
         }
     }
 
@@ -57,20 +58,20 @@ struct ChatView: View {
 
     @ViewBuilder
     private var messageList: some View {
-        if isLoading && messages.isEmpty {
+        if store.isLoading && store.rows.isEmpty {
             ProgressView()
                 .controlSize(.large)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if messages.isEmpty {
+        } else if store.rows.isEmpty {
             emptyState
         } else {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         // Load-more trigger — invisible when idle, spinner when fetching.
-                        if hasMore || isLoadingMore {
+                        if store.hasMore || store.isLoadingMore {
                             Group {
-                                if isLoadingMore {
+                                if store.isLoadingMore {
                                     ProgressView()
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 12)
@@ -80,34 +81,36 @@ struct ChatView: View {
                                         .frame(height: 1)
                                         .id("load-more-trigger")
                                         .onAppear {
-                                            loadMoreAnchorId = messages.first?.eventId
-                                            app.loadMoreRoomChat()
+                                            loadMoreAnchorId = store.rows.first?.message.eventId
+                                            Task { await store.loadMore() }
                                         }
                                 }
                             }
                         }
 
-                        ForEach(Array(messages.enumerated()), id: \.element.eventId) { index, message in
+                        ForEach(Array(store.rows.enumerated()), id: \.element.message.eventId) { index, row in
+                            let message = row.message
+
                             ChatMessageRow(
                                 message: message,
-                                profile: app.profile(pubkeyHex: message.authorPubkey),
-                                showHeader: shouldShowHeader(at: index),
-                                replyToMessage: parentMessage(for: message),
-                                replyToProfile: parentProfile(for: message),
+                                authorDisplay: profileDisplay(for: message.authorPubkey),
+                                showHeader: row.showHeader,
+                                replyToMessage: row.replyToMessage,
+                                replyToAuthorDisplay: row.replyToMessage.map { profileDisplay(for: $0.authorPubkey) },
                                 onReply: { replyTo = message; inputFocused = true }
                             )
                             .id(message.eventId)
                             .task(id: message.authorPubkey) {
-                                app.requestProfile(pubkeyHex: message.authorPubkey)
+                                await app.requestProfile(pubkeyHex: message.authorPubkey)
                             }
                             .onAppear {
-                                if index == messages.count - 1 {
+                                if index == store.rows.count - 1 {
                                     isAtBottom = true
                                     pendingNewCount = 0
                                 }
                             }
                             .onDisappear {
-                                if index == messages.count - 1 {
+                                if index == store.rows.count - 1 {
                                     isAtBottom = false
                                 }
                             }
@@ -116,17 +119,17 @@ struct ChatView: View {
                     .padding(.vertical, 12)
                 }
                 .onAppear {
-                    if let last = messages.last {
+                    if let last = store.rows.last?.message {
                         proxy.scrollTo(last.eventId, anchor: .bottom)
                     }
                 }
                 .onChange(of: scrollRevision) { _, _ in
-                    guard let last = messages.last else { return }
+                    guard let last = store.rows.last?.message else { return }
                     withAnimation(.easeOut(duration: 0.2)) {
                         proxy.scrollTo(last.eventId, anchor: .bottom)
                     }
                 }
-                .onChange(of: isLoadingMore) { wasLoading, isLoading in
+                .onChange(of: store.isLoadingMore) { wasLoading, isLoading in
                     // After prepending older messages, snap back to where the
                     // user was so the view doesn't jump to the new top.
                     guard wasLoading, !isLoading, let anchorId = loadMoreAnchorId else { return }
@@ -196,7 +199,7 @@ struct ChatView: View {
                 .frame(width: 2)
                 .clipShape(Capsule())
             VStack(alignment: .leading, spacing: 2) {
-                Text(displayName(for: message.authorPubkey))
+                Text(profileDisplay(for: message.authorPubkey).displayName)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.highlighterAccent)
                 Text(message.content)
@@ -213,7 +216,6 @@ struct ChatView: View {
                     .foregroundStyle(Color.highlighterInkMuted)
                     .padding(4)
             }
-            .accessibilityLabel("Cancel reply")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -226,7 +228,7 @@ struct ChatView: View {
             TextField("Message", text: $draft, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.body)
-                .lineLimit(1 ... 6)
+                .lineLimit(1...6)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
@@ -235,108 +237,66 @@ struct ChatView: View {
                 )
                 .focused($inputFocused)
 
-            if canSend {
+            if composerProjection.canSend {
                 Button {
-                    send()
+                    Task { await send() }
                 } label: {
-                    if isSending {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 30))
-                            .foregroundStyle(Color.highlighterAccent)
-                    }
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(Color.highlighterAccent)
                 }
                 .accessibilityLabel("Send message")
-                .disabled(isSending)
                 .transition(.scale.combined(with: .opacity))
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: canSend)
+        .animation(
+            .spring(response: 0.25, dampingFraction: 0.7),
+            value: composerProjection.canSend
+        )
     }
 
     // MARK: - Helpers
 
-    private var canSend: Bool {
-        !isSending && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private var composerProjection: ChatComposerProjection {
+        app.safeCore.projectChatComposer(
+            input: ChatComposerProjectionInput(body: draft)
+        )
     }
 
-    private var activeRoomDetail: HighlighterRoomDetailSnapshot {
-        app.roomDetail
-    }
+    private func send() async {
+        let projection = composerProjection
+        guard projection.canSend else { return }
 
-    private var messages: [ChatMessageRecord] {
-        activeRoomDetail.groupId == groupId ? activeRoomDetail.chatMessages : []
-    }
-
-    private var isLoading: Bool {
-        activeRoomDetail.groupId == groupId && activeRoomDetail.isLoading
-    }
-
-    private var hasMore: Bool {
-        activeRoomDetail.groupId == groupId && activeRoomDetail.chatHasMore
-    }
-
-    private var isLoadingMore: Bool {
-        activeRoomDetail.groupId == groupId && activeRoomDetail.isChatLoadingMore
-    }
-
-    private var isSending: Bool {
-        activeRoomDetail.groupId == groupId && activeRoomDetail.isSendingChatMessage
-    }
-
-    private var chatErrorMessage: String? {
-        activeRoomDetail.groupId == groupId ? activeRoomDetail.chatErrorMessage : nil
-    }
-
-    private func send() {
-        let text = draft
         let reply = replyTo
         draft = ""
         replyTo = nil
-        app.publishRoomChatMessage(content: text, replyToEventId: reply?.eventId)
+        await store.send(text: projection.submitBody, replyTo: reply)
         scrollRevision += 1
     }
 
-    private func shouldShowHeader(at index: Int) -> Bool {
-        guard index > 0 else { return true }
-        let prev = messages[index - 1]
-        let curr = messages[index]
-        if prev.authorPubkey != curr.authorPubkey { return true }
-        if curr.createdAt > prev.createdAt + 300 { return true }
-        return false
+    private func profileDisplay(for pubkey: String) -> ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: pubkey,
+                profile: app.profileSnapshots[pubkey],
+                fallback: .pubkey8
+            )
+        )
     }
 
-    private func parentMessage(for message: ChatMessageRecord) -> ChatMessageRecord? {
-        guard let id = message.replyToEventId else { return nil }
-        return messages.first { $0.eventId == id }
-    }
 
-    private func parentProfile(for message: ChatMessageRecord) -> ProfileMetadata? {
-        guard let parent = parentMessage(for: message) else { return nil }
-        return app.profile(pubkeyHex: parent.authorPubkey)
-    }
-
-    private func displayName(for pubkey: String) -> String {
-        if let p = app.profile(pubkeyHex: pubkey) {
-            if !p.displayName.isEmpty { return p.displayName }
-            if !p.name.isEmpty { return p.name }
-        }
-        return String(pubkey.prefix(8))
-    }
 }
 
 // MARK: - ChatMessageRow
 
 private struct ChatMessageRow: View {
     let message: ChatMessageRecord
-    let profile: ProfileMetadata?
+    let authorDisplay: ProfileDisplayProjection
     let showHeader: Bool
     let replyToMessage: ChatMessageRecord?
-    let replyToProfile: ProfileMetadata?
+    let replyToAuthorDisplay: ProfileDisplayProjection?
     let onReply: () -> Void
 
     @State private var swipeOffset: CGFloat = 0
@@ -362,7 +322,7 @@ private struct ChatMessageRow: View {
                     let dy = value.translation.height
                     guard dx > 0, dx > abs(dy) else { return }
                     swipeOffset = min(dx * 0.55, 60)
-                    if swipeOffset >= 40, !swipeTriggered {
+                    if swipeOffset >= 40 && !swipeTriggered {
                         swipeTriggered = true
                         onReply()
                     }
@@ -391,14 +351,14 @@ private struct ChatMessageRow: View {
     private var rowContent: some View {
         HStack(alignment: .top, spacing: 10) {
             if showHeader {
-                ProfileAvatar(profile: profile, pubkey: message.authorPubkey, size: 28)
+                ProfileAvatar(display: authorDisplay, size: 28)
             } else {
                 Color.clear.frame(width: 28, height: 1)
             }
             VStack(alignment: .leading, spacing: 3) {
                 if showHeader {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(authorName)
+                        Text(authorDisplay.displayName)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(Color.highlighterInkStrong)
                         Text(timeLabel(message.createdAt))
@@ -425,7 +385,7 @@ private struct ChatMessageRow: View {
                 .frame(width: 2)
                 .clipShape(Capsule())
             VStack(alignment: .leading, spacing: 1) {
-                Text(quotedAuthorName(quoted))
+                Text(replyToAuthorDisplay?.displayName ?? "")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.highlighterAccent)
                 Text(quoted.content)
@@ -441,22 +401,6 @@ private struct ChatMessageRow: View {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(Color.highlighterAccent.opacity(0.06))
         )
-    }
-
-    private var authorName: String {
-        if let p = profile {
-            if !p.displayName.isEmpty { return p.displayName }
-            if !p.name.isEmpty { return p.name }
-        }
-        return String(message.authorPubkey.prefix(8))
-    }
-
-    private func quotedAuthorName(_ msg: ChatMessageRecord) -> String {
-        if let p = replyToProfile {
-            if !p.displayName.isEmpty { return p.displayName }
-            if !p.name.isEmpty { return p.name }
-        }
-        return String(msg.authorPubkey.prefix(8))
     }
 
     private func timeLabel(_ ts: UInt64) -> String {
@@ -480,16 +424,15 @@ private struct ChatMessageRow: View {
 // MARK: - ProfileAvatar
 
 private struct ProfileAvatar: View {
-    let profile: ProfileMetadata?
-    let pubkey: String
+    let display: ProfileDisplayProjection
     let size: CGFloat
 
     var body: some View {
         Group {
-            if let urlString = profile?.picture, !urlString.isEmpty, let url = URL(string: urlString) {
+            if !display.pictureUrl.isEmpty, let url = URL(string: display.pictureUrl) {
                 AsyncImage(url: url) { phase in
                     switch phase {
-                    case let .success(image):
+                    case .success(let image):
                         image.resizable().scaledToFill()
                     default:
                         placeholder
@@ -507,16 +450,9 @@ private struct ProfileAvatar: View {
     private var placeholder: some View {
         ZStack {
             Color.highlighterRule.opacity(0.5)
-            Text(initial)
+            Text(display.displayInitial)
                 .font(.system(size: size * 0.42, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color.highlighterInkMuted)
         }
-    }
-
-    private var initial: String {
-        if let c = profile?.displayName.first ?? profile?.name.first {
-            return String(c).uppercased()
-        }
-        return String(pubkey.prefix(1)).uppercased()
     }
 }

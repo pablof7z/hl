@@ -7,35 +7,38 @@ import SwiftUI
 /// and provide the avatar + optional trailing meta view via builder slots.
 struct ReadingCard<Avatar: View, Trailing: View>: View {
     let title: String
+    let titleIsFallback: Bool
     let summary: String
     let imageURL: URL?
     let authorName: String
     let authorPubkey: String?
     let relativeDate: String?
-    let metaBits: [String]
+    let metaText: String?
     let showTrailing: Bool
     @ViewBuilder let avatar: () -> Avatar
     @ViewBuilder let trailing: () -> Trailing
 
     init(
         title: String,
+        titleIsFallback: Bool,
         summary: String,
         imageURL: URL?,
         authorName: String,
         authorPubkey: String? = nil,
         relativeDate: String?,
-        metaBits: [String],
+        metaText: String?,
         showTrailing: Bool,
         @ViewBuilder avatar: @escaping () -> Avatar,
         @ViewBuilder trailing: @escaping () -> Trailing
     ) {
         self.title = title
+        self.titleIsFallback = titleIsFallback
         self.summary = summary
         self.imageURL = imageURL
         self.authorName = authorName
         self.authorPubkey = authorPubkey
         self.relativeDate = relativeDate
-        self.metaBits = metaBits
+        self.metaText = metaText
         self.showTrailing = showTrailing
         self.avatar = avatar
         self.trailing = trailing
@@ -45,10 +48,10 @@ struct ReadingCard<Avatar: View, Trailing: View>: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(title.isEmpty ? "Untitled" : title)
+                    Text(title)
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(
-                            title.isEmpty
+                            titleIsFallback
                                 ? Color.highlighterInkMuted
                                 : Color.highlighterInkStrong
                         )
@@ -62,7 +65,7 @@ struct ReadingCard<Avatar: View, Trailing: View>: View {
                 thumbnail
             }
 
-            if !metaBits.isEmpty || showTrailing {
+            if metaText != nil || showTrailing {
                 metaRow
             }
         }
@@ -130,8 +133,8 @@ struct ReadingCard<Avatar: View, Trailing: View>: View {
 
     private var metaRow: some View {
         HStack(spacing: 8) {
-            if !metaBits.isEmpty {
-                Text(metaBits.joined(separator: " · "))
+            if let metaText {
+                Text(metaText)
                     .font(.caption)
                     .foregroundStyle(Color.highlighterInkMuted)
                     .lineLimit(1)

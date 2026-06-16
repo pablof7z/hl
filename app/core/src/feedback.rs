@@ -8,29 +8,255 @@
 
 use std::collections::HashMap;
 
-use nmp_feedback::{
-    FeedbackConfig, DEFAULT_FEEDBACK_RELAY, KIND_FEEDBACK_NOTE as NMP_KIND_FEEDBACK_NOTE,
-    KIND_FEEDBACK_THREAD_METADATA as NMP_KIND_FEEDBACK_THREAD_METADATA,
-};
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
-use crate::models::{FeedbackEventRecord, FeedbackThreadRecord};
+use crate::models::{FeedbackEventRecord, FeedbackThreadRecord, ProfileMetadata};
 use crate::nostr_runtime::NostrRuntime;
+use crate::relays::feedback_relay;
 
 pub const HIGHLIGHTER_PROJECT_COORDINATE: &str =
     "31933:09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7:highlighter";
 
-/// Single relay used for the shake-to-share feedback surface. Feedback events
-/// are scoped to this relay only — they do NOT fan out to the user's general
-/// relay set. Both publishes and subscriptions for kind:1/513 with the
-/// project `a` tag are pinned here.
-pub const FEEDBACK_RELAY: &str = DEFAULT_FEEDBACK_RELAY;
-
-pub const KIND_FEEDBACK_NOTE: u16 = NMP_KIND_FEEDBACK_NOTE as u16;
-pub const KIND_FEEDBACK_THREAD_META: u16 = NMP_KIND_FEEDBACK_THREAD_METADATA as u16;
+pub const KIND_FEEDBACK_NOTE: u16 = 1;
+pub const KIND_FEEDBACK_THREAD_META: u16 = 513;
 pub const KIND_PROJECT_DEFINITION: u16 = 31933;
+pub const FEEDBACK_THREAD_LIMIT: i32 = 256;
+pub const FEEDBACK_THREAD_META_LIMIT: i32 = 512;
+pub const FEEDBACK_THREAD_EVENT_LIMIT: i32 = 4096;
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackThreadsSnapshot {
+    pub threads: Vec<FeedbackThreadRecord>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackMessageRowProjection {
+    pub event: FeedbackEventRecord,
+    pub show_header: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackThreadSnapshot {
+    pub rows: Vec<FeedbackMessageRowProjection>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackRootPublishSnapshot {
+    pub snapshot: FeedbackThreadsSnapshot,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackReplyPublishSnapshot {
+    pub snapshot: FeedbackThreadSnapshot,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeedbackComposerProjectionInput {
+    pub body: String,
+    pub is_publishing: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeedbackComposerProjection {
+    pub submit_body: String,
+    pub can_send: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeedbackPublishResultInput {
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeedbackPublishResultProjection {
+    pub did_publish: bool,
+    pub error_message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeedbackSnapshotApplyInput {
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeedbackSnapshotApplyProjection {
+    pub should_apply_snapshot: bool,
+    pub load_error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeedbackThreadPresentationProjection {
+    pub navigation_title: String,
+    pub row_title: String,
+    pub row_secondary_text: Option<String>,
+    pub detail_summary: Option<String>,
+    pub status_label: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct FeedbackMessagePresentationInput {
+    pub event: FeedbackEventRecord,
+    pub show_header: bool,
+    pub current_user_pubkey: Option<String>,
+    pub profile: Option<ProfileMetadata>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FeedbackMessagePresentationProjection {
+    pub is_from_me: bool,
+    pub show_header: bool,
+    pub display_name: String,
+    pub display_initial: String,
+    pub picture_url: String,
+}
+
+pub fn feedback_composer_projection(
+    input: FeedbackComposerProjectionInput,
+) -> FeedbackComposerProjection {
+    let submit_body = input.body.trim().to_string();
+    FeedbackComposerProjection {
+        can_send: !submit_body.is_empty() && !input.is_publishing,
+        submit_body,
+    }
+}
+
+pub fn feedback_publish_result_projection(
+    input: FeedbackPublishResultInput,
+) -> FeedbackPublishResultProjection {
+    let error_message = input.error.trim().to_string();
+    FeedbackPublishResultProjection {
+        did_publish: error_message.is_empty(),
+        error_message,
+    }
+}
+
+pub fn feedback_snapshot_apply_projection(
+    input: FeedbackSnapshotApplyInput,
+) -> FeedbackSnapshotApplyProjection {
+    let error_message = input.error.trim().to_string();
+    let load_error = if error_message.is_empty() {
+        None
+    } else {
+        Some(error_message)
+    };
+    FeedbackSnapshotApplyProjection {
+        should_apply_snapshot: load_error.is_none(),
+        load_error,
+    }
+}
+
+pub fn feedback_message_presentation(
+    input: FeedbackMessagePresentationInput,
+) -> FeedbackMessagePresentationProjection {
+    let is_from_me = input
+        .current_user_pubkey
+        .as_deref()
+        .is_some_and(|pubkey| pubkey == input.event.author_pubkey);
+    let display_name = profile_display_name(input.profile.as_ref(), &input.event.author_pubkey);
+    let display_initial = display_initial(&display_name);
+    let picture_url = input
+        .profile
+        .as_ref()
+        .map(|profile| profile.picture.clone())
+        .unwrap_or_default();
+
+    FeedbackMessagePresentationProjection {
+        is_from_me,
+        show_header: input.show_header,
+        display_name,
+        display_initial,
+        picture_url,
+    }
+}
+
+pub fn feedback_thread_presentation(
+    thread: FeedbackThreadRecord,
+) -> FeedbackThreadPresentationProjection {
+    let row_title = thread
+        .title
+        .clone()
+        .unwrap_or_else(|| thread.preview.clone());
+    let navigation_title = thread.title.clone().unwrap_or_else(|| "Feedback".into());
+    let row_secondary_text = renderable_text(thread.summary.clone()).or_else(|| {
+        if thread.title.is_some() && !thread.preview.is_empty() {
+            Some(thread.preview.clone())
+        } else {
+            None
+        }
+    });
+    let detail_summary = renderable_text(thread.summary);
+    let status_label = renderable_text(thread.status_label);
+
+    FeedbackThreadPresentationProjection {
+        navigation_title,
+        row_title,
+        row_secondary_text,
+        detail_summary,
+        status_label,
+    }
+}
+
+pub fn query_threads_snapshot(
+    ndb: &Ndb,
+    coordinate: &str,
+    current_user_pubkey: Option<&str>,
+) -> FeedbackThreadsSnapshot {
+    let current_user_pubkey = current_user_pubkey.unwrap_or_default().trim();
+    if current_user_pubkey.is_empty() {
+        return FeedbackThreadsSnapshot {
+            threads: Vec::new(),
+            error: String::new(),
+        };
+    }
+
+    match query_threads(ndb, coordinate, current_user_pubkey) {
+        Ok(threads) => FeedbackThreadsSnapshot {
+            threads,
+            error: String::new(),
+        },
+        Err(error) => FeedbackThreadsSnapshot {
+            threads: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+pub fn query_thread_snapshot(ndb: &Ndb, root_event_id: &str) -> FeedbackThreadSnapshot {
+    match query_thread_events(ndb, root_event_id) {
+        Ok(events) => snapshot_from_events(events, String::new()),
+        Err(error) => FeedbackThreadSnapshot {
+            rows: Vec::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+pub fn threads_snapshot_with_root(
+    snapshot: FeedbackThreadsSnapshot,
+    root_event: &FeedbackEventRecord,
+) -> FeedbackThreadsSnapshot {
+    FeedbackThreadsSnapshot {
+        threads: optimistically_insert_root_thread(&snapshot.threads, root_event),
+        error: snapshot.error,
+    }
+}
+
+pub fn thread_snapshot_with_event(
+    snapshot: FeedbackThreadSnapshot,
+    event: &FeedbackEventRecord,
+) -> FeedbackThreadSnapshot {
+    let events: Vec<FeedbackEventRecord> = snapshot.rows.into_iter().map(|row| row.event).collect();
+    FeedbackThreadSnapshot {
+        rows: rows_for_events(upsert_thread_event(&events, event)),
+        error: snapshot.error,
+    }
+}
 
 /// Threads authored by `current_user_pubkey` that `a`-tag `coordinate`. Each
 /// returned root is enriched with the latest matching kind:513 metadata
@@ -69,10 +295,10 @@ pub fn query_threads(
         .build();
 
     let root_results = ndb
-        .query(&txn, &[roots_filter], 256)
+        .query(&txn, &[roots_filter], FEEDBACK_THREAD_LIMIT)
         .map_err(|e| CoreError::Cache(format!("query feedback roots: {e}")))?;
     let meta_results = ndb
-        .query(&txn, &[meta_filter], 512)
+        .query(&txn, &[meta_filter], FEEDBACK_THREAD_META_LIMIT)
         .map_err(|e| CoreError::Cache(format!("query feedback meta: {e}")))?;
 
     let mut roots: Vec<Event> = Vec::with_capacity(root_results.len());
@@ -161,7 +387,7 @@ pub fn query_thread_events(
         events.push(event);
     }
     let reply_results = ndb
-        .query(&txn, &[replies_filter], 4096)
+        .query(&txn, &[replies_filter], FEEDBACK_THREAD_EVENT_LIMIT)
         .map_err(|e| CoreError::Cache(format!("query feedback replies: {e}")))?;
     for r in &reply_results {
         let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
@@ -231,31 +457,13 @@ pub fn query_first_agent_pubkey(ndb: &Ndb, coordinate: &str) -> Result<Option<St
     Ok(latest.and_then(|e| first_tag_value(&e, "p").map(str::to_string)))
 }
 
-fn resolve_agent_pubkey(
-    ndb: &Ndb,
-    coordinate: &str,
-    supplied_agent_pubkey: Option<&str>,
-) -> Result<Option<String>, CoreError> {
-    match supplied_agent_pubkey
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        Some(pk) => {
-            PublicKey::from_hex(pk)
-                .map_err(|e| CoreError::InvalidInput(format!("invalid agent pubkey: {e}")))?;
-            Ok(Some(pk.to_string()))
-        }
-        None => query_first_agent_pubkey(ndb, coordinate),
-    }
-}
-
 /// Build, sign and send a kind:1 feedback note. The event always carries an
-/// `a` tag for the project coordinate; a `p` tag is added from an explicitly
-/// supplied agent pubkey or, when omitted, the first cached project agent.
-/// Missing project metadata is allowed — the note still ships, and the agent
-/// can discover it via the `a`-tag subscription. When `parent_event_id` is
-/// `Some`, an `["e", root, "", "root"]` marker is added so the reply attaches
-/// to an existing thread. Published only to [`FEEDBACK_RELAY`].
+/// `a` tag for the project coordinate; a `p` tag is added when an
+/// `agent_pubkey` is supplied (`None` is allowed when the project event isn't
+/// cached yet — the note still ships, the agent will just discover it via
+/// the `a`-tag subscription). When `parent_event_id` is `Some`, an
+/// `["e", root, "", "root"]` marker is added so the reply attaches to an
+/// existing thread. Published only to the feedback relay.
 pub async fn publish_note(
     runtime: &NostrRuntime,
     coordinate: &str,
@@ -276,7 +484,14 @@ pub async fn publish_note(
         ));
     }
     parse_coordinate(coordinate)?;
-    let agent_pubkey = resolve_agent_pubkey(runtime.ndb(), coordinate, agent_pubkey)?;
+    let agent_pubkey = match agent_pubkey.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(pk) => {
+            PublicKey::from_hex(pk)
+                .map_err(|e| CoreError::InvalidInput(format!("invalid agent pubkey: {e}")))?;
+            Some(pk.to_string())
+        }
+        None => None,
+    };
     let parent_root = match parent_event_id.map(str::trim).filter(|s| !s.is_empty()) {
         Some(s) => Some(
             EventId::from_hex(s)
@@ -285,12 +500,14 @@ pub async fn publish_note(
         None => None,
     };
 
-    let parent_root_hex = parent_root.as_ref().map(EventId::to_hex);
-    let mut feedback_config = FeedbackConfig::new(coordinate).with_relay(FEEDBACK_RELAY);
+    let mut tags: Vec<Tag> = Vec::with_capacity(3);
+    tags.push(parse_tag(&["a", coordinate])?);
     if let Some(agent) = &agent_pubkey {
-        feedback_config = feedback_config.with_agent_pubkey(agent.clone());
+        tags.push(parse_tag(&["p", agent])?);
     }
-    let tags = build_feedback_tags(&feedback_config, "bug", parent_root_hex.as_deref(), None)?;
+    if let Some(parent) = parent_root {
+        tags.push(parse_tag(&["e", &parent.to_hex(), "", "root"])?);
+    }
 
     let builder = EventBuilder::new(Kind::Custom(KIND_FEEDBACK_NOTE), body).tags(tags);
     let client = runtime.client();
@@ -299,11 +516,12 @@ pub async fn publish_note(
         .await
         .map_err(|e| CoreError::Signer(format!("sign feedback note: {e}")))?;
 
-    runtime.publish_signed_event_to_relays(
-        "feedback-publish",
-        &event,
-        vec![FEEDBACK_RELAY.to_string()],
-    )?;
+    ensure_feedback_relay(client).await;
+    let relay = feedback_relay();
+    client
+        .send_event_to([relay], &event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish feedback note: {e}")))?;
 
     let root_id = parent_root
         .map(|id| id.to_hex())
@@ -311,7 +529,98 @@ pub async fn publish_note(
     Ok(event_record(&event, &root_id))
 }
 
+/// Idempotently add + connect the feedback relay to the runtime's relay pool
+/// before any feedback publish/subscribe runs. Errors are logged but never
+/// propagated — `add_relay` returns `Ok(false)` if the relay is already
+/// known, and `connect_relay` is fine to call again on a connected relay.
+pub async fn ensure_feedback_relay(client: &Client) {
+    let relay = feedback_relay();
+    if let Err(e) = client.add_relay(relay).await {
+        tracing::warn!(relay = %relay, error = %e, "feedback relay add_relay");
+    }
+    if let Err(e) = client.connect_relay(relay).await {
+        tracing::warn!(relay = %relay, error = %e, "feedback relay connect");
+    }
+}
+
+/// Insert a freshly-published root event into a thread list before the relay
+/// echo is indexed. Rust owns the root-only guard, preview policy, dedupe, and
+/// newest-activity ordering.
+pub fn optimistically_insert_root_thread(
+    threads: &[FeedbackThreadRecord],
+    root_event: &FeedbackEventRecord,
+) -> Vec<FeedbackThreadRecord> {
+    let mut out = threads.to_vec();
+    if root_event.root_event_id != root_event.event_id {
+        out.sort_by(|a, b| b.last_activity_at.cmp(&a.last_activity_at));
+        return out;
+    }
+    if !out
+        .iter()
+        .any(|thread| thread.root_event_id == root_event.event_id)
+    {
+        out.push(FeedbackThreadRecord {
+            root_event_id: root_event.event_id.clone(),
+            author_pubkey: root_event.author_pubkey.clone(),
+            created_at: root_event.created_at,
+            last_activity_at: root_event.created_at,
+            title: None,
+            summary: None,
+            status_label: None,
+            preview: trim_preview(&root_event.content),
+        });
+    }
+    out.sort_by(|a, b| b.last_activity_at.cmp(&a.last_activity_at));
+    out
+}
+
+/// Upsert a streamed feedback-thread event into a bounded view snapshot.
+/// Rust owns replacement identity and oldest-first chat ordering.
+pub fn upsert_thread_event(
+    events: &[FeedbackEventRecord],
+    event: &FeedbackEventRecord,
+) -> Vec<FeedbackEventRecord> {
+    let mut out = Vec::with_capacity(events.len() + 1);
+    let mut replaced = false;
+    for existing in events {
+        if existing.event_id == event.event_id {
+            out.push(event.clone());
+            replaced = true;
+        } else {
+            out.push(existing.clone());
+        }
+    }
+    if !replaced {
+        out.push(event.clone());
+    }
+    out.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+    out
+}
+
 // --- helpers ---------------------------------------------------------------
+
+fn snapshot_from_events(events: Vec<FeedbackEventRecord>, error: String) -> FeedbackThreadSnapshot {
+    FeedbackThreadSnapshot {
+        rows: rows_for_events(events),
+        error,
+    }
+}
+
+fn rows_for_events(events: Vec<FeedbackEventRecord>) -> Vec<FeedbackMessageRowProjection> {
+    events
+        .iter()
+        .enumerate()
+        .map(|(index, event)| {
+            let show_header = index == 0
+                || events[index - 1].author_pubkey != event.author_pubkey
+                || event.created_at > events[index - 1].created_at.saturating_add(300);
+            FeedbackMessageRowProjection {
+                event: event.clone(),
+                show_header,
+            }
+        })
+        .collect()
+}
 
 fn record_from_root(root: &Event, latest_meta: Option<&Event>) -> FeedbackThreadRecord {
     let title = latest_meta.and_then(|m| {
@@ -369,6 +678,30 @@ fn trim_preview(content: &str) -> String {
     }
 }
 
+fn renderable_text(value: Option<String>) -> Option<String> {
+    value.filter(|text| !text.is_empty())
+}
+
+fn profile_display_name(profile: Option<&ProfileMetadata>, fallback_pubkey: &str) -> String {
+    if let Some(profile) = profile {
+        if !profile.display_name.is_empty() {
+            return profile.display_name.clone();
+        }
+        if !profile.name.is_empty() {
+            return profile.name.clone();
+        }
+    }
+    fallback_pubkey.chars().take(8).collect()
+}
+
+fn display_initial(display_name: &str) -> String {
+    display_name
+        .chars()
+        .next()
+        .map(|ch| ch.to_uppercase().collect())
+        .unwrap_or_default()
+}
+
 fn has_root_e_marker(event: &Event) -> bool {
     event.tags.iter().any(|tag| {
         let s = tag.as_slice();
@@ -399,17 +732,9 @@ fn parse_coordinate(coordinate: &str) -> Result<(u16, String, String), CoreError
     Ok((kind, pubkey.to_string(), d_tag.to_string()))
 }
 
-fn build_feedback_tags(
-    config: &FeedbackConfig,
-    category: &str,
-    parent_event_id: Option<&str>,
-    reply_to_pubkey: Option<&str>,
-) -> Result<Vec<Tag>, CoreError> {
-    config
-        .tags(category, parent_event_id, reply_to_pubkey)
-        .into_iter()
-        .map(|parts| Tag::parse(parts).map_err(|e| CoreError::Other(format!("build tag: {e}"))))
-        .collect()
+fn parse_tag(parts: &[&str]) -> Result<Tag, CoreError> {
+    Tag::parse(parts.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+        .map_err(|e| CoreError::Other(format!("build tag: {e}")))
 }
 
 fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
@@ -426,12 +751,12 @@ fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
 mod tests {
     use super::*;
     use nostrdb::{Config as NdbConfig, Ndb};
-    use tempfile::tempdir;
+    use tempfile::{tempdir, TempDir};
 
     const TEST_COORD: &str =
         "31933:0000000000000000000000000000000000000000000000000000000000000001:demo";
 
-    fn open_ndb() -> (Ndb, tempfile::TempDir) {
+    fn open_ndb() -> (Ndb, TempDir) {
         let tmp = tempdir().expect("tempdir");
         let ndb = Ndb::new(
             tmp.path().to_str().unwrap(),
@@ -441,9 +766,34 @@ mod tests {
         (ndb, tmp)
     }
 
-    fn process(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).expect("process event");
+    fn ndb_with_events(events: &[&Event]) -> (Ndb, TempDir) {
+        let tmp = tempdir().expect("tempdir");
+        let cfg = NdbConfig::new().set_mapsize(64 * 1024 * 1024);
+        let db_path = tmp.path().to_str().unwrap().to_owned();
+        {
+            let ndb = Ndb::new(&db_path, &cfg).expect("open ndb");
+            for event in events {
+                let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
+                ndb.process_event(&line).expect("process event");
+            }
+        }
+        let ndb = Ndb::new(&db_path, &cfg).expect("reopen ndb");
+        (ndb, tmp)
+    }
+
+    fn ndb_with_json_events(json_events: &[&str]) -> (Ndb, TempDir) {
+        let tmp = tempdir().expect("tempdir");
+        let cfg = NdbConfig::new().set_mapsize(64 * 1024 * 1024);
+        let db_path = tmp.path().to_str().unwrap().to_owned();
+        {
+            let ndb = Ndb::new(&db_path, &cfg).expect("open ndb");
+            for json in json_events {
+                let line = format!("[\"EVENT\",\"sub\",{}]", json);
+                ndb.process_event(&line).expect("process event");
+            }
+        }
+        let ndb = Ndb::new(&db_path, &cfg).expect("reopen ndb");
+        (ndb, tmp)
     }
 
     fn sign(keys: &Keys, kind: u16, tags: Vec<Tag>, content: &str, ts: u64) -> Event {
@@ -455,16 +805,11 @@ mod tests {
     }
 
     fn tag(parts: &[&str]) -> Tag {
-        Tag::parse(parts.iter().map(|s| s.to_string()).collect::<Vec<_>>()).expect("tag")
-    }
-
-    fn flush() {
-        std::thread::sleep(std::time::Duration::from_millis(150));
+        parse_tag(parts).expect("tag")
     }
 
     #[test]
     fn query_threads_filters_by_author_and_coordinate_and_picks_latest_meta() {
-        let (ndb, _tmp) = open_ndb();
         let me = Keys::generate();
         let agent = Keys::generate();
         let other = Keys::generate();
@@ -530,16 +875,13 @@ mod tests {
             2_000,
         );
 
-        for e in [
+        let (ndb, _tmp) = ndb_with_events(&[
             &root,
             &other_root,
             &other_project_root,
             &earlier_meta,
             &later_meta,
-        ] {
-            process(&ndb, e);
-        }
-        flush();
+        ]);
 
         let threads =
             query_threads(&ndb, TEST_COORD, &me.public_key().to_hex()).expect("query_threads");
@@ -555,7 +897,6 @@ mod tests {
 
     #[test]
     fn query_threads_drops_replies_so_they_dont_appear_as_their_own_thread() {
-        let (ndb, _tmp) = open_ndb();
         let me = Keys::generate();
         let agent = Keys::generate();
 
@@ -580,9 +921,7 @@ mod tests {
             "follow up from me",
             1_500,
         );
-        process(&ndb, &root);
-        process(&ndb, &reply);
-        flush();
+        let (ndb, _tmp) = ndb_with_events(&[&root, &reply]);
 
         let threads =
             query_threads(&ndb, TEST_COORD, &me.public_key().to_hex()).expect("query_threads");
@@ -592,7 +931,6 @@ mod tests {
 
     #[test]
     fn query_thread_events_returns_root_plus_every_e_tagged_reply_regardless_of_author() {
-        let (ndb, _tmp) = open_ndb();
         let me = Keys::generate();
         let agent = Keys::generate();
 
@@ -639,11 +977,7 @@ mod tests {
             "different thread",
             2_500,
         );
-        process(&ndb, &root);
-        process(&ndb, &agent_reply);
-        process(&ndb, &user_followup);
-        process(&ndb, &unrelated);
-        flush();
+        let (ndb, _tmp) = ndb_with_events(&[&root, &agent_reply, &user_followup, &unrelated]);
 
         let events = query_thread_events(&ndb, &root.id.to_hex()).expect("query_thread_events");
         let order: Vec<&str> = events.iter().map(|e| e.content.as_str()).collect();
@@ -651,8 +985,64 @@ mod tests {
     }
 
     #[test]
-    fn query_first_agent_pubkey_returns_first_p_tag_of_latest_project_event() {
+    fn query_thread_snapshot_projects_message_rows() {
+        let me = Keys::generate();
+        let agent = Keys::generate();
+
+        let root = sign(
+            &me,
+            KIND_FEEDBACK_NOTE,
+            vec![tag(&["a", TEST_COORD])],
+            "root",
+            1_000,
+        );
+        let grouped_reply = sign(
+            &me,
+            KIND_FEEDBACK_NOTE,
+            vec![tag(&["e", &root.id.to_hex(), "", "root"])],
+            "grouped",
+            1_050,
+        );
+        let agent_reply = sign(
+            &agent,
+            KIND_FEEDBACK_NOTE,
+            vec![tag(&["e", &root.id.to_hex(), "", "root"])],
+            "agent",
+            1_100,
+        );
+        let (ndb, _tmp) = ndb_with_events(&[&root, &grouped_reply, &agent_reply]);
+
+        let snapshot = query_thread_snapshot(&ndb, &root.id.to_hex());
+
+        assert!(snapshot.error.is_empty());
+        assert_eq!(
+            snapshot
+                .rows
+                .iter()
+                .map(|row| row.event.content.as_str())
+                .collect::<Vec<_>>(),
+            vec!["root", "grouped", "agent"]
+        );
+        assert!(snapshot.rows[0].show_header);
+        assert!(!snapshot.rows[1].show_header);
+        assert!(snapshot.rows[2].show_header);
+    }
+
+    #[test]
+    fn query_snapshot_returns_error_state_for_invalid_inputs() {
         let (ndb, _tmp) = open_ndb();
+
+        let threads = query_threads_snapshot(&ndb, "bad-coordinate", Some("also-bad-pubkey"));
+        let events = query_thread_snapshot(&ndb, "not-an-event-id");
+
+        assert!(threads.threads.is_empty());
+        assert!(!threads.error.is_empty());
+        assert!(events.rows.is_empty());
+        assert!(!events.error.is_empty());
+    }
+
+    #[test]
+    fn query_first_agent_pubkey_returns_first_p_tag_of_latest_project_event() {
         // We need keys that match the coordinate's pubkey, so derive the
         // coordinate from the actual key pair.
         let project = Keys::generate();
@@ -677,79 +1067,12 @@ mod tests {
             "",
             1_000,
         );
-        process(&ndb, &project_event);
-        flush();
+        let (ndb, _tmp) = ndb_with_events(&[&project_event]);
 
         let agent = query_first_agent_pubkey(&ndb, &coord)
             .expect("query")
             .expect("agent present");
         assert_eq!(agent, agent_a.public_key().to_hex());
-    }
-
-    #[test]
-    fn resolve_agent_pubkey_prefers_valid_supplied_agent() {
-        let (ndb, _tmp) = open_ndb();
-        let project = Keys::generate();
-        let coord = format!(
-            "{}:{}:{}",
-            KIND_PROJECT_DEFINITION,
-            project.public_key().to_hex(),
-            "demo"
-        );
-        let supplied = Keys::generate().public_key().to_hex();
-
-        let agent = resolve_agent_pubkey(&ndb, &coord, Some(&format!(" {supplied} ")))
-            .expect("resolve")
-            .expect("agent");
-
-        assert_eq!(agent, supplied);
-    }
-
-    #[test]
-    fn resolve_agent_pubkey_uses_cached_project_when_omitted() {
-        let (ndb, _tmp) = open_ndb();
-        let project = Keys::generate();
-        let coord = format!(
-            "{}:{}:{}",
-            KIND_PROJECT_DEFINITION,
-            project.public_key().to_hex(),
-            "demo"
-        );
-        let agent = Keys::generate();
-        let project_event = sign(
-            &project,
-            KIND_PROJECT_DEFINITION,
-            vec![
-                tag(&["d", "demo"]),
-                tag(&["p", &agent.public_key().to_hex()]),
-            ],
-            "",
-            1_000,
-        );
-        process(&ndb, &project_event);
-        flush();
-
-        let resolved = resolve_agent_pubkey(&ndb, &coord, None)
-            .expect("resolve")
-            .expect("agent");
-
-        assert_eq!(resolved, agent.public_key().to_hex());
-    }
-
-    #[test]
-    fn resolve_agent_pubkey_allows_missing_project_metadata() {
-        let (ndb, _tmp) = open_ndb();
-        let project = Keys::generate();
-        let coord = format!(
-            "{}:{}:{}",
-            KIND_PROJECT_DEFINITION,
-            project.public_key().to_hex(),
-            "demo"
-        );
-
-        let resolved = resolve_agent_pubkey(&ndb, &coord, None).expect("resolve");
-
-        assert!(resolved.is_none());
     }
 
     #[test]
@@ -766,10 +1089,255 @@ mod tests {
     #[test]
     fn trim_preview_collapses_whitespace_and_truncates() {
         assert_eq!(trim_preview("hello   world"), "hello world");
-        let long: String = std::iter::repeat('x').take(200).collect();
+        let long = "x".repeat(200);
         let out = trim_preview(&long);
         assert_eq!(out.chars().count(), 140);
         assert!(out.ends_with('…'));
+    }
+
+    #[test]
+    fn feedback_composer_projection_trims_submit_body_and_allows_send() {
+        let projection = feedback_composer_projection(FeedbackComposerProjectionInput {
+            body: "  hello feedback  \n".into(),
+            is_publishing: false,
+        });
+
+        assert_eq!(projection.submit_body, "hello feedback");
+        assert!(projection.can_send);
+    }
+
+    #[test]
+    fn feedback_composer_projection_blocks_blank_or_publishing_body() {
+        let blank = feedback_composer_projection(FeedbackComposerProjectionInput {
+            body: "  \n\t ".into(),
+            is_publishing: false,
+        });
+        let publishing = feedback_composer_projection(FeedbackComposerProjectionInput {
+            body: "ready".into(),
+            is_publishing: true,
+        });
+
+        assert_eq!(blank.submit_body, "");
+        assert!(!blank.can_send);
+        assert_eq!(publishing.submit_body, "ready");
+        assert!(!publishing.can_send);
+    }
+
+    #[test]
+    fn feedback_publish_result_projection_classifies_success_and_error() {
+        let success = feedback_publish_result_projection(FeedbackPublishResultInput {
+            error: String::new(),
+        });
+        assert!(success.did_publish);
+        assert_eq!(success.error_message, "");
+
+        let failed = feedback_publish_result_projection(FeedbackPublishResultInput {
+            error: " publish failed ".into(),
+        });
+        assert!(!failed.did_publish);
+        assert_eq!(failed.error_message, "publish failed");
+    }
+
+    #[test]
+    fn feedback_snapshot_apply_projection_blocks_error_snapshots() {
+        let success = feedback_snapshot_apply_projection(FeedbackSnapshotApplyInput {
+            error: String::new(),
+        });
+        assert!(success.should_apply_snapshot);
+        assert_eq!(success.load_error, None);
+
+        let failed = feedback_snapshot_apply_projection(FeedbackSnapshotApplyInput {
+            error: " refresh failed ".into(),
+        });
+        assert!(!failed.should_apply_snapshot);
+        assert_eq!(failed.load_error.as_deref(), Some("refresh failed"));
+    }
+
+    #[test]
+    fn feedback_thread_presentation_uses_title_summary_status_and_detail_title() {
+        let projection = feedback_thread_presentation(FeedbackThreadRecord {
+            root_event_id: "root".into(),
+            author_pubkey: "pubkey".into(),
+            created_at: 1,
+            last_activity_at: 2,
+            title: Some("Title".into()),
+            summary: Some("Summary".into()),
+            status_label: Some("waiting".into()),
+            preview: "Preview".into(),
+        });
+
+        assert_eq!(projection.navigation_title, "Title");
+        assert_eq!(projection.row_title, "Title");
+        assert_eq!(projection.row_secondary_text.as_deref(), Some("Summary"));
+        assert_eq!(projection.detail_summary.as_deref(), Some("Summary"));
+        assert_eq!(projection.status_label.as_deref(), Some("waiting"));
+    }
+
+    #[test]
+    fn feedback_thread_presentation_preserves_preview_fallbacks() {
+        let no_title = feedback_thread_presentation(FeedbackThreadRecord {
+            root_event_id: "root".into(),
+            author_pubkey: "pubkey".into(),
+            created_at: 1,
+            last_activity_at: 2,
+            title: None,
+            summary: None,
+            status_label: Some(String::new()),
+            preview: "Preview".into(),
+        });
+        let titled_without_summary = feedback_thread_presentation(FeedbackThreadRecord {
+            root_event_id: "root".into(),
+            author_pubkey: "pubkey".into(),
+            created_at: 1,
+            last_activity_at: 2,
+            title: Some("Title".into()),
+            summary: Some(String::new()),
+            status_label: None,
+            preview: "Preview".into(),
+        });
+
+        assert_eq!(no_title.navigation_title, "Feedback");
+        assert_eq!(no_title.row_title, "Preview");
+        assert_eq!(no_title.row_secondary_text, None);
+        assert_eq!(no_title.detail_summary, None);
+        assert_eq!(no_title.status_label, None);
+        assert_eq!(
+            titled_without_summary.row_secondary_text.as_deref(),
+            Some("Preview")
+        );
+    }
+
+    #[test]
+    fn feedback_message_presentation_marks_current_user_and_profile_name() {
+        let event = feedback_event("event", "root", 100, "body");
+        let projection = feedback_message_presentation(FeedbackMessagePresentationInput {
+            event: FeedbackEventRecord {
+                author_pubkey: "me".into(),
+                ..event
+            },
+            show_header: true,
+            current_user_pubkey: Some("me".into()),
+            profile: Some(profile("alice", "Alice Smith", "https://example.com/a.png")),
+        });
+
+        assert!(projection.is_from_me);
+        assert!(projection.show_header);
+        assert_eq!(projection.display_name, "Alice Smith");
+        assert_eq!(projection.display_initial, "A");
+        assert_eq!(projection.picture_url, "https://example.com/a.png");
+    }
+
+    #[test]
+    fn feedback_message_presentation_groups_adjacent_messages() {
+        let previous = FeedbackEventRecord {
+            author_pubkey: "agent".into(),
+            ..feedback_event("previous", "root", 100, "previous")
+        };
+        let current = FeedbackEventRecord {
+            author_pubkey: "agent".into(),
+            ..feedback_event("current", "root", 399, "current")
+        };
+        let later = FeedbackEventRecord {
+            author_pubkey: "agent".into(),
+            ..feedback_event("later", "root", 401, "later")
+        };
+
+        let grouped = feedback_message_presentation(FeedbackMessagePresentationInput {
+            event: current.clone(),
+            show_header: rows_for_events(vec![previous.clone(), current])[1].show_header,
+            current_user_pubkey: Some("me".into()),
+            profile: Some(profile("agent-name", "", "")),
+        });
+        let separated = feedback_message_presentation(FeedbackMessagePresentationInput {
+            event: later.clone(),
+            show_header: rows_for_events(vec![previous, later])[1].show_header,
+            current_user_pubkey: Some("me".into()),
+            profile: None,
+        });
+
+        assert!(!grouped.is_from_me);
+        assert!(!grouped.show_header);
+        assert_eq!(grouped.display_name, "agent-name");
+        assert_eq!(grouped.display_initial, "A");
+        assert!(separated.show_header);
+        assert_eq!(separated.display_name, "agent");
+        assert_eq!(separated.picture_url, "");
+    }
+
+    #[test]
+    fn feedback_message_presentation_shows_header_when_author_changes() {
+        let previous = FeedbackEventRecord {
+            author_pubkey: "agent".into(),
+            ..feedback_event("previous", "root", 100, "previous")
+        };
+        let current = FeedbackEventRecord {
+            author_pubkey: "user".into(),
+            ..feedback_event("current", "root", 120, "current")
+        };
+
+        let projection = feedback_message_presentation(FeedbackMessagePresentationInput {
+            event: current.clone(),
+            show_header: rows_for_events(vec![previous, current])[1].show_header,
+            current_user_pubkey: None,
+            profile: None,
+        });
+
+        assert!(projection.show_header);
+        assert_eq!(projection.display_name, "user");
+        assert_eq!(projection.display_initial, "U");
+    }
+
+    #[test]
+    fn optimistically_insert_root_thread_dedupes_previews_and_sorts() {
+        let older = feedback_thread("older", 10);
+        let root = feedback_event("new", "new", 30, "hello   world");
+
+        let out = optimistically_insert_root_thread(&[older], &root);
+
+        assert_eq!(
+            out.iter()
+                .map(|thread| thread.root_event_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["new", "older"]
+        );
+        assert_eq!(out[0].preview, "hello world");
+
+        let duplicate = optimistically_insert_root_thread(&out, &root);
+        assert_eq!(
+            duplicate
+                .iter()
+                .filter(|thread| thread.root_event_id == "new")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn optimistically_insert_root_thread_ignores_replies() {
+        let older = feedback_thread("older", 10);
+        let reply = feedback_event("reply", "root", 30, "reply");
+
+        let out = optimistically_insert_root_thread(&[older], &reply);
+
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].root_event_id, "older");
+    }
+
+    #[test]
+    fn upsert_thread_event_replaces_and_orders_oldest_first() {
+        let older = feedback_event("older", "root", 10, "older");
+        let newer = feedback_event("newer", "root", 30, "newer");
+        let replacement = feedback_event("newer", "root", 5, "replacement");
+
+        let out = upsert_thread_event(&[older, newer], &replacement);
+
+        assert_eq!(
+            out.iter()
+                .map(|event| event.event_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["newer", "older"]
+        );
+        assert_eq!(out[0].content, "replacement");
     }
 
     /// Reproduces the user-reported bug: replies arrive on relay.tenex.chat
@@ -778,17 +1346,11 @@ mod tests {
     /// the relay and verify `query_thread_events` returns all three.
     #[test]
     fn query_thread_events_returns_replies_from_real_relay_payload() {
-        let (ndb, _tmp) = open_ndb();
-
         let root_json = r#"{"kind":1,"id":"4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949","pubkey":"fcccc04fd113df1e58740c270733b33b211d1dfe2f730861ac7080125f86503f","created_at":1777553395,"tags":[["a","31933:09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7:highlighter"]],"content":"Sending from outside","sig":"5eb7e2be92a0b46feeb82383c6144083c2ed5b6b5de91964f0e7f0b2f1956de54baee92be5e4010d9926c3d81540052f0699175037c246678f70489ae1f48abe"}"#;
         let user_followup_json = r#"{"kind":1,"id":"58c920d4533c45e1354c861182ada0d8441235356a24630928c07d62452ed6bc","pubkey":"09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7","created_at":1777553426,"tags":[["e","4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949","","root"],["a","31933:09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7:highlighter"],["client","tenex-tui"],["p","4108cd882d5bd7446b4b5cb0688b14694f3d0dbb52bd24f16e1e29ff1636adab"]],"content":"from where did I send this?","sig":"fe430bcf9e064819f942d15f033ed4261ecd7cf1a3cadaecb37b12cb774c55a37ea8c601e30402251dfa48d3b2fb9ff4dbdb56c364c1dbe2cf63b9f816ad0a21"}"#;
         let agent_reply_json = r##"{"kind":1,"id":"7035a5148075421b71eda6f76426c89bc49bce7d3a89a3122e8d859dc1963cd1","pubkey":"4108cd882d5bd7446b4b5cb0688b14694f3d0dbb52bd24f16e1e29ff1636adab","created_at":1777553548,"tags":[["e","4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949","","root"],["e","58c920d4533c45e1354c861182ada0d8441235356a24630928c07d62452ed6bc","","reply"],["p","09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7"],["status","completed"],["llm-prompt-tokens","10711"],["llm-completion-tokens","126"],["llm-total-tokens","10837"],["llm-cached-input-tokens","0"],["a","31933:09d48a1a5dbe13404a729634f1d6ba722d40513468dd713c8ea38ca9b7b6f2c7:highlighter"],["llm-model","openrouter:openai/gpt-4o-mini"],["llm-ral","1"],["branch","main"]],"content":"It looks like the message you sent may have originated from one of the active conversations in the \"Highlighter\" project. Here are the currently active conversations:\n\n1. **Message from Tenex-TUI** [id: 0cbd143a] — last activity 2 minutes ago\n2. **Agent Category Discussion** [id: 28640a67] — last activity 7 minutes ago\n3. **Initial Greeting** [id: d89c7624] — last activity 11 minutes ago\n\nIf you have a specific message in mind, could you clarify which one you are referring to?","sig":"016faba108484dbb1a00a12372d428e6f9980d54a41c5889fd2e0e9fb6296690bb25bb3873e5a38e49ecc3feb05258216114e93ccb4fc2a1232b501516026c5f"}"##;
 
-        for json in [root_json, user_followup_json, agent_reply_json] {
-            let line = format!("[\"EVENT\",\"sub\",{}]", json);
-            ndb.process_event(&line).expect("process event");
-        }
-        flush();
+        let (ndb, _tmp) = ndb_with_json_events(&[root_json, user_followup_json, agent_reply_json]);
 
         let root_id = "4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949";
         let events = query_thread_events(&ndb, root_id).expect("query");
@@ -820,21 +1382,30 @@ mod tests {
 
         let ndb_database = nostr_ndb::NdbDatabase::from(ndb.clone());
         let client = Client::builder().database(ndb_database).build();
-        client.add_relay(FEEDBACK_RELAY).await.expect("add relay");
-        client.connect_relay(FEEDBACK_RELAY).await.expect("connect");
+        let relay = feedback_relay();
+        client.add_relay(relay).await.expect("add relay");
+        client.connect_relay(relay).await.expect("connect");
 
         let root_hex = "4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949";
+        let wait_sub = ndb
+            .subscribe(&[NdbFilter::new().kinds([KIND_FEEDBACK_NOTE as u64]).build()])
+            .expect("subscribe ndb wait");
         let id = SubscriptionId::generate();
         let filter = Filter::new()
             .kinds([Kind::Custom(KIND_FEEDBACK_NOTE)])
             .custom_tag(SingleLetterTag::lowercase(Alphabet::E), root_hex);
         client
-            .subscribe_with_id_to([FEEDBACK_RELAY], id, filter, None)
+            .subscribe_with_id_to([relay], id, filter, None)
             .await
             .expect("subscribe");
 
-        // Wait for events to arrive and be persisted.
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            ndb.wait_for_notes(wait_sub, 3),
+        )
+        .await
+        .expect("timed out waiting for feedback notes")
+        .expect("feedback notes");
 
         let txn = Transaction::new(&ndb).expect("txn");
         let all = ndb
@@ -854,7 +1425,7 @@ mod tests {
 
     /// Mirrors the iOS app's full path: spin up a real `HighlighterCore`,
     /// call `subscribe_feedback_thread`, wait, then call
-    /// `get_feedback_thread_events` — the same Swift-facing functions
+    /// `get_feedback_thread_snapshot` — the same Swift-facing functions
     /// `FeedbackThreadStore.start()` calls in order. Verifies the events the
     /// user is missing actually surface end-to-end.
     /// Requires network — run with `--ignored --nocapture`.
@@ -868,29 +1439,38 @@ mod tests {
             "4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949".to_string();
 
         // Step 1 (cache miss expected on a fresh ndb).
-        let initial = core
-            .get_feedback_thread_events(root_hex.clone())
-            .await
-            .expect("initial query");
+        let initial = core.get_feedback_thread_snapshot(root_hex.clone()).await;
+        assert!(initial.error.is_empty(), "initial query: {}", initial.error);
+        let initial = initial.rows;
         eprintln!("initial cache events: {}", initial.len());
+
+        let wait_sub = core
+            .runtime()
+            .ndb()
+            .subscribe(&[NdbFilter::new().kinds([KIND_FEEDBACK_NOTE as u64]).build()])
+            .expect("subscribe ndb wait");
 
         // Step 2: open the subscription — this is where ensure_feedback_relay
         // adds + connects the relay and the REQ goes out.
-        let _handle = core
-            .subscribe_feedback_thread(root_hex.clone())
-            .await
-            .expect("subscribe");
+        let outcome = core.subscribe_feedback_thread(root_hex.clone()).await;
+        assert!(outcome.error.is_empty(), "subscribe: {}", outcome.error);
+        let _handle = outcome.handle;
 
-        // Wait for the relay to backfill historical events.
-        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            core.runtime().ndb().wait_for_notes(wait_sub, 3),
+        )
+        .await
+        .expect("timed out waiting for feedback notes")
+        .expect("feedback notes");
 
         // Step 3: re-query — by now the subscription should have populated ndb.
-        let after = core
-            .get_feedback_thread_events(root_hex.clone())
-            .await
-            .expect("after query");
+        let after = core.get_feedback_thread_snapshot(root_hex.clone()).await;
+        assert!(after.error.is_empty(), "after query: {}", after.error);
+        let after = after.rows;
         eprintln!("after subscription: {} events", after.len());
-        for e in &after {
+        for row in &after {
+            let e = &row.event;
             eprintln!("  id={} content={:?}", e.event_id, e.content);
         }
         assert!(
@@ -898,5 +1478,48 @@ mod tests {
             "expected root + both replies, got {}",
             after.len()
         );
+    }
+
+    fn feedback_thread(root_event_id: &str, last_activity_at: u64) -> FeedbackThreadRecord {
+        FeedbackThreadRecord {
+            root_event_id: root_event_id.into(),
+            author_pubkey: "pubkey".into(),
+            created_at: last_activity_at,
+            last_activity_at,
+            title: None,
+            summary: None,
+            status_label: None,
+            preview: String::new(),
+        }
+    }
+
+    fn feedback_event(
+        event_id: &str,
+        root_event_id: &str,
+        created_at: u64,
+        content: &str,
+    ) -> FeedbackEventRecord {
+        FeedbackEventRecord {
+            event_id: event_id.into(),
+            root_event_id: root_event_id.into(),
+            author_pubkey: "pubkey".into(),
+            created_at,
+            content: content.into(),
+        }
+    }
+
+    fn profile(name: &str, display_name: &str, picture: &str) -> ProfileMetadata {
+        ProfileMetadata {
+            pubkey: "profile-pubkey".into(),
+            name: name.into(),
+            display_name: display_name.into(),
+            about: String::new(),
+            picture: picture.into(),
+            banner: String::new(),
+            nip05: String::new(),
+            website: String::new(),
+            lud16: String::new(),
+            created_at: None,
+        }
     }
 }

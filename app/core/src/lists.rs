@@ -7,19 +7,249 @@
 
 use std::collections::HashMap;
 
+use ::url::Url;
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
+use crate::articles;
 use crate::artifacts::first_tag_value;
+use crate::clock::Clock;
 use crate::errors::CoreError;
-use crate::models::{BookmarkSetRecord, WebBookmarkRecord};
+use crate::models::{ArticleRecord, BookmarkSetRecord, CurationMenuItem, WebBookmarkRecord};
 use crate::nostr_runtime::NostrRuntime;
 
 pub const KIND_BOOKMARK_SETS: u16 = 30003;
 pub const KIND_CURATION_SETS: u16 = 30004;
 pub const KIND_WEB_BOOKMARK: u16 = 39701;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum BookmarkLibraryScope {
+    Mine,
+    Explore,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum BookmarkLibraryFilter {
+    Articles,
+    Collections,
+    Web,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum BookmarkLibraryPane {
+    Articles,
+    Collections,
+    Web,
+    Explore,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookmarkLibraryProjectionInput {
+    pub scope: BookmarkLibraryScope,
+    pub selected_filter: BookmarkLibraryFilter,
+    pub article_count: u64,
+    pub collection_count: u64,
+    pub web_bookmark_count: u64,
+    pub explore_count: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkLibraryScopeOptionProjection {
+    pub scope: BookmarkLibraryScope,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkLibraryFilterChipProjection {
+    pub filter: BookmarkLibraryFilter,
+    pub label: String,
+    pub icon_system_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkLibraryProjection {
+    pub scope_options: Vec<BookmarkLibraryScopeOptionProjection>,
+    pub filter_chips: Vec<BookmarkLibraryFilterChipProjection>,
+    pub selected_pane: BookmarkLibraryPane,
+    pub is_empty: bool,
+    pub empty_icon_system_name: String,
+    pub empty_title: String,
+    pub empty_message: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookmarkLibrarySnapshot {
+    pub my_articles: Vec<ArticleRecord>,
+    pub my_bookmark_sets: Vec<BookmarkSetRecord>,
+    pub my_curation_sets: Vec<BookmarkSetRecord>,
+    pub my_web_bookmarks: Vec<WebBookmarkRecord>,
+    pub following_curation_sets: Vec<BookmarkSetRecord>,
+}
+
+impl BookmarkLibrarySnapshot {
+    fn empty() -> Self {
+        Self {
+            my_articles: Vec::new(),
+            my_bookmark_sets: Vec::new(),
+            my_curation_sets: Vec::new(),
+            my_web_bookmarks: Vec::new(),
+            following_curation_sets: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookmarkedArticleRowProjectionInput {
+    pub article: ArticleRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkedArticleRowProjection {
+    pub title: String,
+    pub summary: Option<String>,
+    pub image_url: Option<String>,
+    pub display_unix_seconds: Option<u64>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookmarkSetRowProjectionInput {
+    pub record: BookmarkSetRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookmarkSetRowProjection {
+    pub display_title: String,
+    pub kind_label: String,
+    pub kind_icon_system_name: String,
+    pub item_count_label: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BookmarkSetDetailSnapshot {
+    pub display_title: String,
+    pub articles: Vec<ArticleRecord>,
+    pub is_empty: bool,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CurationMenuSnapshot {
+    pub items: Vec<CurationMenuItem>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CurationMenuSnapshotApplyInput {
+    pub items: Vec<CurationMenuItem>,
+    pub error: String,
+    pub error_prefix: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CurationMenuSnapshotApplyProjection {
+    pub items: Vec<CurationMenuItem>,
+    pub should_apply_error_message: bool,
+    pub error_message: Option<String>,
+}
+
+/// Native create-collection sheet input. Rust owns title normalization.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CurationSetCreateProjectionInput {
+    pub title: String,
+}
+
+/// Native create-collection sheet projection. Rust owns submit eligibility.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CurationSetCreateProjection {
+    pub submit_title: String,
+    pub can_create: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct WebBookmarkRowProjectionInput {
+    pub bookmark: WebBookmarkRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct WebBookmarkRowProjection {
+    pub display_title: String,
+    pub host: Option<String>,
+    pub description: Option<String>,
+    pub display_unix_seconds: Option<u64>,
+}
+
 // -- Public query API --------------------------------------------------------
+
+/// Full bookmark-library read model. Rust owns the current user's bookmark
+/// address lookup, section query ordering, explore-set filtering, and fallback
+/// policy when one cached section fails to read.
+pub fn query_bookmark_library_snapshot(ndb: &Ndb, user_hex: &str) -> BookmarkLibrarySnapshot {
+    let user_hex = user_hex.trim();
+    if user_hex.is_empty() {
+        return BookmarkLibrarySnapshot::empty();
+    }
+
+    let bookmarked_addresses = match crate::bookmarks::query_bookmarks(ndb, user_hex) {
+        Ok(list) => list.addresses,
+        Err(error) => {
+            tracing::warn!(error = %error, "failed to query bookmark addresses");
+            Vec::new()
+        }
+    };
+    let my_articles = bookmark_library_section_or_empty(
+        "bookmarked articles",
+        articles::query_articles_for_addresses(ndb, &bookmarked_addresses),
+    );
+    let my_bookmark_sets = bookmark_library_section_or_empty(
+        "bookmark sets",
+        query_user_sets(ndb, user_hex, KIND_BOOKMARK_SETS),
+    );
+    let my_curation_sets = bookmark_library_section_or_empty(
+        "curation sets",
+        query_user_sets(ndb, user_hex, KIND_CURATION_SETS),
+    );
+    let my_web_bookmarks =
+        bookmark_library_section_or_empty("web bookmarks", query_user_web_bookmarks(ndb, user_hex));
+
+    let follows =
+        bookmark_library_section_or_empty("follows", crate::follows::query_follows(ndb, user_hex));
+    let following_curation_sets = bookmark_library_section_or_empty(
+        "following curation sets",
+        query_following_curation_sets(ndb, &follows),
+    );
+
+    BookmarkLibrarySnapshot {
+        my_articles,
+        my_bookmark_sets,
+        my_curation_sets,
+        my_web_bookmarks,
+        following_curation_sets: explorable_curation_sets(ndb, following_curation_sets),
+    }
+}
+
+/// Bookmark/curation-set detail read model. Rust owns the title fallback,
+/// NIP-33 article-address resolution, and whether the collection should render
+/// the empty state.
+pub fn query_bookmark_set_detail_snapshot(
+    ndb: &Ndb,
+    record: BookmarkSetRecord,
+) -> BookmarkSetDetailSnapshot {
+    let display_title = bookmark_set_display_title(&record, "Collection");
+    match articles::query_articles_for_addresses(ndb, &record.article_addresses) {
+        Ok(articles) => BookmarkSetDetailSnapshot {
+            is_empty: articles.is_empty() && record.note_ids.is_empty(),
+            articles,
+            display_title,
+            error: String::new(),
+        },
+        Err(error) => BookmarkSetDetailSnapshot {
+            display_title,
+            articles: Vec::new(),
+            is_empty: record.note_ids.is_empty(),
+            error: error.to_string(),
+        },
+    }
+}
 
 /// Return all kind:30003 or kind:30004 sets authored by `user_hex`, newest
 /// first. Deduplicates in Rust so callers always get one record per d-tag.
@@ -122,6 +352,19 @@ pub fn query_following_curation_sets(
     Ok(records)
 }
 
+fn bookmark_library_section_or_empty<T>(
+    section: &'static str,
+    result: Result<Vec<T>, CoreError>,
+) -> Vec<T> {
+    match result {
+        Ok(values) => values,
+        Err(error) => {
+            tracing::warn!(section, error = %error, "bookmark library section failed");
+            Vec::new()
+        }
+    }
+}
+
 /// Return all NIP-B0 kind:39701 web bookmarks authored by `user_hex`,
 /// newest first. The `url` field is prefixed with `https://`.
 pub fn query_user_web_bookmarks(
@@ -166,17 +409,313 @@ pub fn query_user_web_bookmarks(
     Ok(records)
 }
 
+/// Project curation sets into menu rows for a single article address.
+/// Preserves the order already established by `query_user_sets`.
+pub fn curation_menu_items_for_address(
+    sets: Vec<BookmarkSetRecord>,
+    address: &str,
+) -> Vec<CurationMenuItem> {
+    let address = address.trim();
+    sets.into_iter()
+        .map(|set| CurationMenuItem {
+            id: set.id.clone(),
+            title: curation_set_display_title(&set),
+            is_member: !address.is_empty() && set.article_addresses.iter().any(|a| a == address),
+        })
+        .collect()
+}
+
+pub fn curation_menu_snapshot_for_address(
+    sets: Vec<BookmarkSetRecord>,
+    address: &str,
+) -> CurationMenuSnapshot {
+    CurationMenuSnapshot {
+        items: curation_menu_items_for_address(sets, address),
+        error: String::new(),
+    }
+}
+
+pub fn curation_menu_error_snapshot(error: impl ToString) -> CurationMenuSnapshot {
+    CurationMenuSnapshot {
+        items: Vec::new(),
+        error: error.to_string(),
+    }
+}
+
+pub fn curation_menu_snapshot_apply_projection(
+    input: CurationMenuSnapshotApplyInput,
+) -> CurationMenuSnapshotApplyProjection {
+    let error = input.error.trim().to_string();
+    if error.is_empty() {
+        return CurationMenuSnapshotApplyProjection {
+            items: input.items,
+            should_apply_error_message: true,
+            error_message: None,
+        };
+    }
+    let error_prefix = input
+        .error_prefix
+        .map(|prefix| prefix.trim().to_string())
+        .filter(|prefix| !prefix.is_empty());
+    CurationMenuSnapshotApplyProjection {
+        items: input.items,
+        should_apply_error_message: error_prefix.is_some(),
+        error_message: error_prefix.map(|prefix| format!("{prefix} — {error}")),
+    }
+}
+
+pub fn bookmark_library_projection(
+    input: BookmarkLibraryProjectionInput,
+) -> BookmarkLibraryProjection {
+    let selected_pane = match input.scope {
+        BookmarkLibraryScope::Mine => match input.selected_filter {
+            BookmarkLibraryFilter::Articles => BookmarkLibraryPane::Articles,
+            BookmarkLibraryFilter::Collections => BookmarkLibraryPane::Collections,
+            BookmarkLibraryFilter::Web => BookmarkLibraryPane::Web,
+        },
+        BookmarkLibraryScope::Explore => BookmarkLibraryPane::Explore,
+    };
+    let item_count = match selected_pane {
+        BookmarkLibraryPane::Articles => input.article_count,
+        BookmarkLibraryPane::Collections => input.collection_count,
+        BookmarkLibraryPane::Web => input.web_bookmark_count,
+        BookmarkLibraryPane::Explore => input.explore_count,
+    };
+    let empty = bookmark_library_empty_state(selected_pane);
+
+    BookmarkLibraryProjection {
+        scope_options: vec![
+            BookmarkLibraryScopeOptionProjection {
+                scope: BookmarkLibraryScope::Mine,
+                label: "Mine".into(),
+            },
+            BookmarkLibraryScopeOptionProjection {
+                scope: BookmarkLibraryScope::Explore,
+                label: "Explore".into(),
+            },
+        ],
+        filter_chips: vec![
+            bookmark_library_filter_chip(BookmarkLibraryFilter::Articles),
+            bookmark_library_filter_chip(BookmarkLibraryFilter::Collections),
+            bookmark_library_filter_chip(BookmarkLibraryFilter::Web),
+        ],
+        selected_pane,
+        is_empty: item_count == 0,
+        empty_icon_system_name: empty.0.into(),
+        empty_title: empty.1.into(),
+        empty_message: empty.2.into(),
+    }
+}
+
+pub fn bookmarked_article_row_projection(
+    input: BookmarkedArticleRowProjectionInput,
+) -> BookmarkedArticleRowProjection {
+    let article = input.article;
+    BookmarkedArticleRowProjection {
+        title: title_or_untitled(article.title),
+        summary: non_empty_string(article.summary),
+        image_url: non_empty_string(article.image),
+        display_unix_seconds: article.published_at.or(article.created_at),
+    }
+}
+
+pub fn bookmark_set_row_projection(
+    input: BookmarkSetRowProjectionInput,
+) -> BookmarkSetRowProjection {
+    let record = input.record;
+    let item_count = record.article_addresses.len() + record.note_ids.len();
+    let is_bookmark_set = record.kind == KIND_BOOKMARK_SETS as u32;
+    BookmarkSetRowProjection {
+        display_title: bookmark_set_display_title(&record, "Untitled"),
+        kind_label: if is_bookmark_set {
+            "Bookmarks".to_string()
+        } else {
+            "Curation".to_string()
+        },
+        kind_icon_system_name: if is_bookmark_set {
+            "bookmark.fill".to_string()
+        } else {
+            "rectangle.stack.fill".to_string()
+        },
+        item_count_label: if item_count == 0 {
+            None
+        } else {
+            Some(format!(
+                "{item_count} item{}",
+                if item_count == 1 { "" } else { "s" }
+            ))
+        },
+    }
+}
+
+/// Project the create-collection sheet. Native shells render controls and pass
+/// the returned `submit_title` to the publish action.
+pub fn curation_set_create_projection(
+    input: CurationSetCreateProjectionInput,
+) -> CurationSetCreateProjection {
+    let submit_title = input.title.trim().to_string();
+    CurationSetCreateProjection {
+        can_create: !submit_title.is_empty(),
+        submit_title,
+    }
+}
+
+pub fn web_bookmark_row_projection(
+    input: WebBookmarkRowProjectionInput,
+) -> WebBookmarkRowProjection {
+    let bookmark = input.bookmark;
+    WebBookmarkRowProjection {
+        display_title: if bookmark.title.is_empty() {
+            bookmark.url.clone()
+        } else {
+            bookmark.title
+        },
+        host: web_bookmark_host(&bookmark.url),
+        description: non_empty_string(bookmark.description),
+        display_unix_seconds: bookmark.published_at.or(bookmark.created_at),
+    }
+}
+
+fn bookmark_library_filter_chip(
+    filter: BookmarkLibraryFilter,
+) -> BookmarkLibraryFilterChipProjection {
+    let (label, icon_system_name) = match filter {
+        BookmarkLibraryFilter::Articles => ("Articles", "doc.text"),
+        BookmarkLibraryFilter::Collections => ("Collections", "rectangle.stack"),
+        BookmarkLibraryFilter::Web => ("Web", "globe"),
+    };
+    BookmarkLibraryFilterChipProjection {
+        filter,
+        label: label.into(),
+        icon_system_name: icon_system_name.into(),
+    }
+}
+
+fn bookmark_library_empty_state(
+    pane: BookmarkLibraryPane,
+) -> (&'static str, &'static str, &'static str) {
+    match pane {
+        BookmarkLibraryPane::Articles => (
+            "bookmark",
+            "No bookmarks yet",
+            "Save articles from anywhere in Highlighter to find them here.",
+        ),
+        BookmarkLibraryPane::Collections => (
+            "rectangle.stack",
+            "No collections yet",
+            "Create bookmark or curation sets to organise your saved content.",
+        ),
+        BookmarkLibraryPane::Web => (
+            "globe",
+            "No web bookmarks yet",
+            "Web pages you bookmark via Nostr will appear here.",
+        ),
+        BookmarkLibraryPane::Explore => (
+            "rectangle.stack",
+            "Nothing to explore",
+            "People you follow haven't created any curation sets yet.",
+        ),
+    }
+}
+
+/// Keep only curation sets that can render a visible Explore row.
+///
+/// Note-backed sets are visible even when no article is cached. Address-only
+/// sets need at least one locally resolvable NIP-23 article; malformed,
+/// uncached, or storage-failed address sets are hidden, matching the previous
+/// iOS Explore behavior without making Swift fan out per set.
+pub fn explorable_curation_sets(ndb: &Ndb, sets: Vec<BookmarkSetRecord>) -> Vec<BookmarkSetRecord> {
+    filter_explorable_curation_sets(sets, |set| {
+        match articles::query_articles_for_addresses(ndb, &set.article_addresses) {
+            Ok(articles) => !articles.is_empty(),
+            Err(error) => {
+                tracing::warn!(
+                    set_id = %set.id,
+                    error = %error,
+                    "failed to resolve curation set articles"
+                );
+                false
+            }
+        }
+    })
+}
+
+fn filter_explorable_curation_sets<F>(
+    sets: Vec<BookmarkSetRecord>,
+    mut resolves_article: F,
+) -> Vec<BookmarkSetRecord>
+where
+    F: FnMut(&BookmarkSetRecord) -> bool,
+{
+    sets.into_iter()
+        .filter(|set| {
+            !set.note_ids.is_empty() || (!set.article_addresses.is_empty() && resolves_article(set))
+        })
+        .collect()
+}
+
+fn curation_set_display_title(set: &BookmarkSetRecord) -> String {
+    bookmark_set_display_title(set, "Untitled")
+}
+
+fn bookmark_set_display_title(set: &BookmarkSetRecord, empty_fallback: &str) -> String {
+    if !set.title.is_empty() {
+        return set.title.clone();
+    }
+    if !set.id.is_empty() {
+        return set.id.clone();
+    }
+    empty_fallback.to_string()
+}
+
+fn title_or_untitled(title: String) -> String {
+    if title.is_empty() {
+        "Untitled".to_string()
+    } else {
+        title
+    }
+}
+
+fn non_empty_string(value: String) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
+}
+
+fn web_bookmark_host(url: &str) -> Option<String> {
+    Url::parse(url)
+        .ok()
+        .and_then(|parsed| parsed.host_str().map(str::to_string))
+}
+
 // -- Publish API (curation sets) --------------------------------------------
 
-/// Create a brand-new empty kind:30004 curation set authored by the
-/// current user. `title` is the user-supplied display name; description /
-/// image stay empty until the editor publishes those fields. Returns the
-/// freshly published record so the caller can immediately use its `id`
-/// (d-tag) for further edits.
-pub async fn create_curation_set(
+/// Create a kind:30004 curation set and include `address` in the published
+/// event from the start. Used by the native bookmark menu so creation and
+/// membership are one atomic Rust operation.
+pub async fn create_curation_set_with_address(
     runtime: &NostrRuntime,
     user_hex: &str,
     title: &str,
+    address: &str,
+    clock: &dyn Clock,
+) -> Result<BookmarkSetRecord, CoreError> {
+    let address = address.trim();
+    if address.is_empty() {
+        return Err(CoreError::InvalidInput("address must not be empty".into()));
+    }
+    create_curation_set_with_addresses(runtime, user_hex, title, vec![address.to_string()], clock)
+        .await
+}
+
+async fn create_curation_set_with_addresses(
+    runtime: &NostrRuntime,
+    user_hex: &str,
+    title: &str,
+    article_addresses: Vec<String>,
+    clock: &dyn Clock,
 ) -> Result<BookmarkSetRecord, CoreError> {
     let title = title.trim();
     if title.is_empty() {
@@ -185,14 +724,30 @@ pub async fn create_curation_set(
         ));
     }
 
-    let d_tag = new_curation_set_d_tag();
+    // Stable identifier — UNIX nanoseconds, unique-per-user since each
+    // author generates their own. NIP-33 only requires uniqueness within
+    // the (author, d-tag) keyspace, not globally.
+    let nanos = clock.now_unix_nanos();
+    let d_tag = format!("c-{nanos:x}");
 
-    let tags = vec![
+    let mut tags = vec![
         Tag::parse(vec!["d".to_string(), d_tag.clone()])
             .map_err(|e| CoreError::Other(format!("build d tag: {e}")))?,
         Tag::parse(vec!["title".to_string(), title.to_string()])
             .map_err(|e| CoreError::Other(format!("build title tag: {e}")))?,
     ];
+    let mut normalized_addresses = Vec::new();
+    for address in article_addresses {
+        let address = address.trim();
+        if address.is_empty() {
+            continue;
+        }
+        tags.push(
+            Tag::parse(vec!["a".to_string(), address.to_string()])
+                .map_err(|e| CoreError::Other(format!("build article tag: {e}")))?,
+        );
+        normalized_addresses.push(address.to_string());
+    }
 
     let builder = EventBuilder::new(Kind::Custom(KIND_CURATION_SETS), "").tags(tags);
     let client = runtime.client();
@@ -200,7 +755,10 @@ pub async fn create_curation_set(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign curation set: {e}")))?;
-    runtime.publish_signed_event("curation-set-publish", &event)?;
+    client
+        .send_event(&event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish curation set: {e}")))?;
 
     let _ = user_hex; // unused — pubkey comes from the signer
     Ok(BookmarkSetRecord {
@@ -210,30 +768,30 @@ pub async fn create_curation_set(
         title: title.to_string(),
         description: String::new(),
         image: String::new(),
-        article_addresses: Vec::new(),
+        article_addresses: normalized_addresses,
         note_ids: Vec::new(),
         created_at: Some(event.created_at.as_secs()),
     })
 }
 
-fn new_curation_set_d_tag() -> String {
-    format!("c-{}", uuid::Uuid::new_v4().simple())
-}
-
-/// Idempotently add or remove an `a`-tag (NIP-33 article address) from
-/// the curation set keyed by `(user_hex, d_tag)`. Reads the newest
-/// cached version, mutates the membership, re-publishes the full set
-/// preserving every other tag. Returns the new membership state.
-///
-/// `member == true` ensures the address is present; `member == false`
-/// ensures it's absent. No-op if already in the desired state — still
-/// returns the current state without re-publishing.
-pub async fn set_address_in_curation_set(
+/// Toggle an `a`-tag (NIP-33 article address) in the curation set keyed
+/// by `(user_hex, d_tag)`. Reads the newest cached version, mutates the
+/// membership, re-publishes the full set preserving every other tag.
+/// Returns the new membership state.
+pub async fn toggle_address_in_curation_set(
     runtime: &NostrRuntime,
     user_hex: &str,
     d_tag: &str,
     address: &str,
-    member: bool,
+) -> Result<bool, CoreError> {
+    update_address_in_curation_set(runtime, user_hex, d_tag, address).await
+}
+
+async fn update_address_in_curation_set(
+    runtime: &NostrRuntime,
+    user_hex: &str,
+    d_tag: &str,
+    address: &str,
 ) -> Result<bool, CoreError> {
     let d_tag = d_tag.trim();
     let address = address.trim();
@@ -267,10 +825,8 @@ pub async fn set_address_in_curation_set(
     }
 
     let was_present = a_addresses.iter().any(|a| a == address);
-    if was_present == member {
-        return Ok(member);
-    }
-    if member {
+    let next_member = !was_present;
+    if next_member {
         a_addresses.push(address.to_string());
     } else {
         a_addresses.retain(|a| a != address);
@@ -296,9 +852,12 @@ pub async fn set_address_in_curation_set(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign curation set: {e}")))?;
-    runtime.publish_signed_event("curation-set-publish", &new_event)?;
+    client
+        .send_event(&new_event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish curation set: {e}")))?;
 
-    Ok(member)
+    Ok(next_member)
 }
 
 /// Read the newest cached event for `(user_hex, kind, d_tag)`. Used by
@@ -415,16 +974,487 @@ fn parse_web_bookmark_event(event: Event) -> WebBookmarkRecord {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        bookmark_library_projection, bookmark_set_row_projection,
+        bookmarked_article_row_projection, curation_menu_error_snapshot,
+        curation_menu_items_for_address, curation_menu_snapshot_apply_projection,
+        curation_menu_snapshot_for_address, curation_set_create_projection,
+        filter_explorable_curation_sets, query_bookmark_library_snapshot,
+        query_bookmark_set_detail_snapshot, web_bookmark_row_projection, BookmarkLibraryFilter,
+        BookmarkLibraryFilterChipProjection, BookmarkLibraryPane, BookmarkLibraryProjectionInput,
+        BookmarkLibraryScope, BookmarkLibraryScopeOptionProjection, BookmarkSetRowProjectionInput,
+        BookmarkedArticleRowProjectionInput, CurationMenuSnapshotApplyInput,
+        CurationSetCreateProjectionInput, WebBookmarkRowProjectionInput, KIND_BOOKMARK_SETS,
+        KIND_CURATION_SETS, KIND_WEB_BOOKMARK,
+    };
+    use crate::models::{ArticleRecord, BookmarkSetRecord, WebBookmarkRecord};
+    use crate::test_ndb::process_event_and_wait;
+    use nostr_sdk::prelude::*;
+    use nostrdb::{Config, Ndb};
+    use tempfile::TempDir;
+
+    fn fresh_ndb() -> (Ndb, TempDir) {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = Config::new();
+        let ndb = Ndb::new(tmp.path().to_str().unwrap(), &cfg).unwrap();
+        (ndb, tmp)
+    }
+
+    fn process(ndb: &Ndb, event: &Event) {
+        process_event_and_wait(ndb, event);
+    }
+
+    fn set(id: &str, title: &str, article_addresses: Vec<&str>) -> BookmarkSetRecord {
+        set_with_notes(id, title, article_addresses, Vec::new())
+    }
+
+    fn set_with_notes(
+        id: &str,
+        title: &str,
+        article_addresses: Vec<&str>,
+        note_ids: Vec<&str>,
+    ) -> BookmarkSetRecord {
+        BookmarkSetRecord {
+            id: id.to_string(),
+            pubkey: "author".to_string(),
+            kind: KIND_CURATION_SETS as u32,
+            title: title.to_string(),
+            description: String::new(),
+            image: String::new(),
+            article_addresses: article_addresses.into_iter().map(str::to_string).collect(),
+            note_ids: note_ids.into_iter().map(str::to_string).collect(),
+            created_at: Some(1),
+        }
+    }
 
     #[test]
-    fn curation_set_d_tags_are_random_and_prefixed() {
-        let first = new_curation_set_d_tag();
-        let second = new_curation_set_d_tag();
+    fn curation_menu_items_project_exact_membership() {
+        let items = curation_menu_items_for_address(
+            vec![
+                set("first", "First", vec!["30023:abc:one"]),
+                set("second", "Second", vec!["30023:abc:one-two"]),
+            ],
+            "30023:abc:one",
+        );
 
-        assert!(first.starts_with("c-"));
-        assert_eq!(first.len(), 34);
-        assert!(first[2..].chars().all(|ch| ch.is_ascii_hexdigit()));
-        assert_ne!(first, second);
+        assert_eq!(items.len(), 2);
+        assert!(items[0].is_member);
+        assert!(!items[1].is_member);
+    }
+
+    #[test]
+    fn curation_menu_items_apply_title_fallbacks() {
+        let items = curation_menu_items_for_address(
+            vec![
+                set("with-id", "", Vec::new()),
+                set("", "", Vec::new()),
+                set("with-title", "Named", Vec::new()),
+            ],
+            "",
+        );
+
+        assert_eq!(items[0].title, "with-id");
+        assert_eq!(items[1].title, "Untitled");
+        assert_eq!(items[2].title, "Named");
+        assert!(items.iter().all(|item| !item.is_member));
+    }
+
+    #[test]
+    fn curation_menu_snapshot_wraps_projected_rows() {
+        let snapshot = curation_menu_snapshot_for_address(
+            vec![set("first", "First", vec!["30023:abc:one"])],
+            "30023:abc:one",
+        );
+
+        assert!(snapshot.error.is_empty());
+        assert_eq!(snapshot.items.len(), 1);
+        assert_eq!(snapshot.items[0].title, "First");
+        assert!(snapshot.items[0].is_member);
+    }
+
+    #[test]
+    fn curation_menu_error_snapshot_preserves_error() {
+        let snapshot = curation_menu_error_snapshot("cache unavailable");
+
+        assert!(snapshot.items.is_empty());
+        assert_eq!(snapshot.error, "cache unavailable");
+    }
+
+    #[test]
+    fn curation_menu_snapshot_apply_projects_rows_and_error_state() {
+        let item = curation_menu_items_for_address(
+            vec![set("first", "First", vec!["30023:abc:one"])],
+            "30023:abc:one",
+        );
+
+        let success = curation_menu_snapshot_apply_projection(CurationMenuSnapshotApplyInput {
+            items: item.clone(),
+            error: String::new(),
+            error_prefix: None,
+        });
+        assert_eq!(success.items, item);
+        assert!(success.should_apply_error_message);
+        assert_eq!(success.error_message, None);
+
+        let failed_mutation =
+            curation_menu_snapshot_apply_projection(CurationMenuSnapshotApplyInput {
+                items: Vec::new(),
+                error: " relay failed ".into(),
+                error_prefix: Some("Couldn't update collection".into()),
+            });
+        assert!(failed_mutation.should_apply_error_message);
+        assert_eq!(
+            failed_mutation.error_message.as_deref(),
+            Some("Couldn't update collection — relay failed")
+        );
+
+        let failed_load = curation_menu_snapshot_apply_projection(CurationMenuSnapshotApplyInput {
+            items: Vec::new(),
+            error: " cache failed ".into(),
+            error_prefix: None,
+        });
+        assert!(!failed_load.should_apply_error_message);
+        assert_eq!(failed_load.error_message, None);
+    }
+
+    #[test]
+    fn bookmark_library_projection_projects_mine_articles_chrome() {
+        let projection = bookmark_library_projection(BookmarkLibraryProjectionInput {
+            scope: BookmarkLibraryScope::Mine,
+            selected_filter: BookmarkLibraryFilter::Articles,
+            article_count: 0,
+            collection_count: 2,
+            web_bookmark_count: 3,
+            explore_count: 4,
+        });
+
+        assert_eq!(projection.selected_pane, BookmarkLibraryPane::Articles);
+        assert!(projection.is_empty);
+        assert_eq!(
+            projection.scope_options,
+            vec![
+                BookmarkLibraryScopeOptionProjection {
+                    scope: BookmarkLibraryScope::Mine,
+                    label: "Mine".into()
+                },
+                BookmarkLibraryScopeOptionProjection {
+                    scope: BookmarkLibraryScope::Explore,
+                    label: "Explore".into()
+                },
+            ]
+        );
+        assert_eq!(
+            projection.filter_chips,
+            vec![
+                BookmarkLibraryFilterChipProjection {
+                    filter: BookmarkLibraryFilter::Articles,
+                    label: "Articles".into(),
+                    icon_system_name: "doc.text".into()
+                },
+                BookmarkLibraryFilterChipProjection {
+                    filter: BookmarkLibraryFilter::Collections,
+                    label: "Collections".into(),
+                    icon_system_name: "rectangle.stack".into()
+                },
+                BookmarkLibraryFilterChipProjection {
+                    filter: BookmarkLibraryFilter::Web,
+                    label: "Web".into(),
+                    icon_system_name: "globe".into()
+                },
+            ]
+        );
+        assert_eq!(projection.empty_icon_system_name, "bookmark");
+        assert_eq!(projection.empty_title, "No bookmarks yet");
+        assert_eq!(
+            projection.empty_message,
+            "Save articles from anywhere in Highlighter to find them here."
+        );
+    }
+
+    #[test]
+    fn bookmark_library_projection_projects_mine_selected_counts() {
+        let collections = bookmark_library_projection(BookmarkLibraryProjectionInput {
+            scope: BookmarkLibraryScope::Mine,
+            selected_filter: BookmarkLibraryFilter::Collections,
+            article_count: 0,
+            collection_count: 1,
+            web_bookmark_count: 0,
+            explore_count: 0,
+        });
+        let web = bookmark_library_projection(BookmarkLibraryProjectionInput {
+            scope: BookmarkLibraryScope::Mine,
+            selected_filter: BookmarkLibraryFilter::Web,
+            article_count: 0,
+            collection_count: 0,
+            web_bookmark_count: 0,
+            explore_count: 0,
+        });
+
+        assert_eq!(collections.selected_pane, BookmarkLibraryPane::Collections);
+        assert!(!collections.is_empty);
+        assert_eq!(collections.empty_icon_system_name, "rectangle.stack");
+        assert_eq!(collections.empty_title, "No collections yet");
+
+        assert_eq!(web.selected_pane, BookmarkLibraryPane::Web);
+        assert!(web.is_empty);
+        assert_eq!(web.empty_icon_system_name, "globe");
+        assert_eq!(web.empty_title, "No web bookmarks yet");
+        assert_eq!(
+            web.empty_message,
+            "Web pages you bookmark via Nostr will appear here."
+        );
+    }
+
+    #[test]
+    fn bookmark_library_projection_explore_overrides_selected_filter() {
+        let projection = bookmark_library_projection(BookmarkLibraryProjectionInput {
+            scope: BookmarkLibraryScope::Explore,
+            selected_filter: BookmarkLibraryFilter::Articles,
+            article_count: 10,
+            collection_count: 10,
+            web_bookmark_count: 10,
+            explore_count: 0,
+        });
+
+        assert_eq!(projection.selected_pane, BookmarkLibraryPane::Explore);
+        assert!(projection.is_empty);
+        assert_eq!(projection.empty_icon_system_name, "rectangle.stack");
+        assert_eq!(projection.empty_title, "Nothing to explore");
+        assert_eq!(
+            projection.empty_message,
+            "People you follow haven't created any curation sets yet."
+        );
+    }
+
+    #[test]
+    fn bookmark_library_snapshot_reads_user_sections() {
+        let (ndb, _tmp) = fresh_ndb();
+        let user = Keys::generate();
+        let address = format!("30023:{}:essay", user.public_key().to_hex());
+
+        let article = EventBuilder::new(Kind::Custom(crate::articles::KIND_LONG_FORM), "body")
+            .tags([
+                Tag::parse(vec!["d".to_string(), "essay".to_string()]).unwrap(),
+                Tag::parse(vec!["title".to_string(), "Saved Essay".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&user)
+            .unwrap();
+        let bookmarks = EventBuilder::new(Kind::Custom(crate::bookmarks::KIND_BOOKMARKS), "")
+            .tags([Tag::parse(vec!["a".to_string(), address]).unwrap()])
+            .sign_with_keys(&user)
+            .unwrap();
+        let bookmark_set = EventBuilder::new(Kind::Custom(KIND_BOOKMARK_SETS), "")
+            .tags([
+                Tag::parse(vec!["d".to_string(), "saved".to_string()]).unwrap(),
+                Tag::parse(vec!["title".to_string(), "Saved Set".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&user)
+            .unwrap();
+        let curation_set = EventBuilder::new(Kind::Custom(KIND_CURATION_SETS), "")
+            .tags([
+                Tag::parse(vec!["d".to_string(), "curated".to_string()]).unwrap(),
+                Tag::parse(vec!["title".to_string(), "Curated Set".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&user)
+            .unwrap();
+        let web_bookmark = EventBuilder::new(Kind::Custom(KIND_WEB_BOOKMARK), "Page summary")
+            .tags([
+                Tag::parse(vec!["d".to_string(), "example.com/page".to_string()]).unwrap(),
+                Tag::parse(vec!["title".to_string(), "Example Page".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&user)
+            .unwrap();
+
+        for event in [
+            &article,
+            &bookmarks,
+            &bookmark_set,
+            &curation_set,
+            &web_bookmark,
+        ] {
+            process(&ndb, event);
+        }
+
+        let snapshot = query_bookmark_library_snapshot(&ndb, &user.public_key().to_hex());
+        assert_eq!(snapshot.my_articles.len(), 1);
+        assert_eq!(snapshot.my_articles[0].title, "Saved Essay");
+        assert_eq!(snapshot.my_bookmark_sets.len(), 1);
+        assert_eq!(snapshot.my_bookmark_sets[0].title, "Saved Set");
+        assert_eq!(snapshot.my_curation_sets.len(), 1);
+        assert_eq!(snapshot.my_curation_sets[0].title, "Curated Set");
+        assert_eq!(snapshot.my_web_bookmarks.len(), 1);
+        assert_eq!(snapshot.my_web_bookmarks[0].title, "Example Page");
+        assert!(snapshot.following_curation_sets.is_empty());
+    }
+
+    #[test]
+    fn bookmark_article_rows_project_display_fallbacks() {
+        let projection = bookmarked_article_row_projection(BookmarkedArticleRowProjectionInput {
+            article: article("", "", "", None, Some(42)),
+        });
+
+        assert_eq!(projection.title, "Untitled");
+        assert_eq!(projection.summary, None);
+        assert_eq!(projection.image_url, None);
+        assert_eq!(projection.display_unix_seconds, Some(42));
+
+        let projection = bookmarked_article_row_projection(BookmarkedArticleRowProjectionInput {
+            article: article(
+                "Essay",
+                "Summary",
+                "https://img.example/essay.jpg",
+                Some(100),
+                Some(42),
+            ),
+        });
+
+        assert_eq!(projection.title, "Essay");
+        assert_eq!(projection.summary, Some("Summary".into()));
+        assert_eq!(
+            projection.image_url,
+            Some("https://img.example/essay.jpg".into())
+        );
+        assert_eq!(projection.display_unix_seconds, Some(100));
+    }
+
+    #[test]
+    fn bookmark_set_rows_project_title_kind_and_count() {
+        let mut record = set("with-id", "", vec!["30023:author:one"]);
+        record.kind = KIND_BOOKMARK_SETS as u32;
+
+        let projection = bookmark_set_row_projection(BookmarkSetRowProjectionInput { record });
+
+        assert_eq!(projection.display_title, "with-id");
+        assert_eq!(projection.kind_label, "Bookmarks");
+        assert_eq!(projection.kind_icon_system_name, "bookmark.fill");
+        assert_eq!(projection.item_count_label, Some("1 item".into()));
+
+        let mut record = set_with_notes("", "", Vec::new(), vec!["note-1", "note-2"]);
+        record.kind = KIND_CURATION_SETS as u32;
+
+        let projection = bookmark_set_row_projection(BookmarkSetRowProjectionInput { record });
+
+        assert_eq!(projection.display_title, "Untitled");
+        assert_eq!(projection.kind_label, "Curation");
+        assert_eq!(projection.kind_icon_system_name, "rectangle.stack.fill");
+        assert_eq!(projection.item_count_label, Some("2 items".into()));
+    }
+
+    #[test]
+    fn bookmark_set_detail_snapshot_projects_title_and_empty_state() {
+        let (ndb, _tmp) = fresh_ndb();
+
+        let snapshot = query_bookmark_set_detail_snapshot(&ndb, set("", "", Vec::new()));
+
+        assert_eq!(snapshot.display_title, "Collection");
+        assert!(snapshot.articles.is_empty());
+        assert!(snapshot.is_empty);
+        assert!(snapshot.error.is_empty());
+    }
+
+    #[test]
+    fn bookmark_set_detail_snapshot_note_refs_are_not_empty() {
+        let (ndb, _tmp) = fresh_ndb();
+
+        let snapshot = query_bookmark_set_detail_snapshot(
+            &ndb,
+            set_with_notes("", "Notes", Vec::new(), vec!["note-1"]),
+        );
+
+        assert_eq!(snapshot.display_title, "Notes");
+        assert!(snapshot.articles.is_empty());
+        assert!(!snapshot.is_empty);
+        assert!(snapshot.error.is_empty());
+    }
+
+    #[test]
+    fn curation_set_create_projection_trims_and_requires_title() {
+        let projection = curation_set_create_projection(CurationSetCreateProjectionInput {
+            title: "  Essays  ".into(),
+        });
+        let blank = curation_set_create_projection(CurationSetCreateProjectionInput {
+            title: " \n ".into(),
+        });
+
+        assert_eq!(projection.submit_title, "Essays");
+        assert!(projection.can_create);
+        assert_eq!(blank.submit_title, "");
+        assert!(!blank.can_create);
+    }
+
+    #[test]
+    fn web_bookmark_rows_project_title_host_description_and_date() {
+        let projection = web_bookmark_row_projection(WebBookmarkRowProjectionInput {
+            bookmark: web_bookmark("", "", "https://example.com/path", Some(5), Some(4)),
+        });
+
+        assert_eq!(projection.display_title, "https://example.com/path");
+        assert_eq!(projection.host, Some("example.com".into()));
+        assert_eq!(projection.description, None);
+        assert_eq!(projection.display_unix_seconds, Some(5));
+
+        let projection = web_bookmark_row_projection(WebBookmarkRowProjectionInput {
+            bookmark: web_bookmark("Page title", "Description", "not a url", None, Some(4)),
+        });
+
+        assert_eq!(projection.display_title, "Page title");
+        assert_eq!(projection.host, None);
+        assert_eq!(projection.description, Some("Description".into()));
+        assert_eq!(projection.display_unix_seconds, Some(4));
+    }
+
+    #[test]
+    fn explorable_curation_sets_keep_only_visible_explore_rows() {
+        let sets = vec![
+            set("empty", "Empty", Vec::new()),
+            set("unresolved", "Unresolved", vec!["30023:author:missing"]),
+            set_with_notes("notes", "Notes", Vec::new(), vec!["note-id"]),
+            set("article", "Article", vec!["30023:author:cached"]),
+        ];
+
+        let rows = filter_explorable_curation_sets(sets, |set| set.id == "article");
+        let ids = rows.into_iter().map(|set| set.id).collect::<Vec<_>>();
+
+        assert_eq!(ids, vec!["notes", "article"]);
+    }
+
+    fn article(
+        title: &str,
+        summary: &str,
+        image: &str,
+        published_at: Option<u64>,
+        created_at: Option<u64>,
+    ) -> ArticleRecord {
+        ArticleRecord {
+            event_id: "article".into(),
+            address: "30023:author:d".into(),
+            pubkey: "author".into(),
+            identifier: "d".into(),
+            title: title.into(),
+            summary: summary.into(),
+            image: image.into(),
+            content: String::new(),
+            hashtags: Vec::new(),
+            published_at,
+            created_at,
+        }
+    }
+
+    fn web_bookmark(
+        title: &str,
+        description: &str,
+        url: &str,
+        published_at: Option<u64>,
+        created_at: Option<u64>,
+    ) -> WebBookmarkRecord {
+        WebBookmarkRecord {
+            url: url.into(),
+            pubkey: "author".into(),
+            title: title.into(),
+            description: description.into(),
+            topics: Vec::new(),
+            published_at,
+            created_at,
+        }
     }
 }

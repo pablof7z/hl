@@ -17,40 +17,23 @@ hex = "0.4"
 nostr-sdk = { version = "0.44.1", features = ["nip49", "nip04", "nip44"] }
 nostr = { version = "0.44", default-features = false, features = ["std", "nip46"] }
 nostr-ndb = "0.44.0"
-nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", rev = "2619b9bc4cbd7d8d9198a3be0ae8f1f8f51040cb" }
-nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "fc0589fc88d61912779741fcce7d4e7176cf9a30", default-features = false }
-# NMP pinned to rev ac7e307e89b57a73b419ea9588275e599dcb228c via local path deps.
-# (nmp-blossom is parked/excluded from the NMP workspace; all others below use path.)
-# Local NMP checkout at ../../../nostr-multi-platform is API-identical to that rev.
-nmp-core = { path = "../../../nostr-multi-platform/crates/nmp-core" }
-nmp-ffi = { path = "../../../nostr-multi-platform/crates/nmp-ffi", features = ["signer-broker", "external-signer"] }
-nmp-defaults = { path = "../../../nostr-multi-platform/crates/nmp-defaults" }
-nmp-signers = { path = "../../../nostr-multi-platform/crates/nmp-signers" }
-nmp-nip11 = { path = "../../../nostr-multi-platform/crates/nmp-nip11" }
-nmp-nip29 = { path = "../../../nostr-multi-platform/crates/nmp-nip29" }
-nmp-blossom = { path = "../../../nostr-multi-platform/crates/nmp-blossom" }
-nmp-content = { path = "../../../nostr-multi-platform/crates/nmp-content" }
-nmp-kinds = { path = "../../../nostr-multi-platform/crates/nmp-kinds" }
+nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", branch = "master" }
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
 futures = "0.3"
 sha2 = "0.10"
 base64 = "0.22"
 parking_lot = "0.12"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uniffi = { version = "0.29", features = ["cli", "tokio"] }
 dirs = "5"
 uuid = { version = "1", features = ["v4"] }
 url = "2"
 scraper = "0.20"
-zeroize = "1"
-
-[target.'cfg(target_os = "android")'.dependencies]
-tracing-android = "0.2"
+regex = "1"
 
 [patch.crates-io]
-nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", rev = "2619b9bc4cbd7d8d9198a3be0ae8f1f8f51040cb" }
+nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", branch = "master" }
 
 [[bin]]
 name = "uniffi-bindgen"

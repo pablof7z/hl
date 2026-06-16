@@ -25,49 +25,60 @@ struct HighlightFeedCardView: View {
     private var lead: HydratedHighlight { items[0] }
 
     @State private var sourceArticle: ArticleRecord?
+    @State private var sourceArticleAuthorPubkey: String?
 
     private var bookPreview: ArtifactPreview? {
         guard let isbn = isbnFromLead else { return nil }
-        return app.isbnPreview(isbn: isbn)
+        return app.isbnPreviewCache[isbn]
     }
 
     private var isbnFromLead: String? {
-        let extRef = lead.highlight.externalReference.trimmingCharacters(in: .whitespacesAndNewlines)
-        if extRef.hasPrefix("isbn:") { return String(extRef.dropFirst("isbn:".count)) }
-        let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        if addr.hasPrefix("isbn:") { return String(addr.dropFirst("isbn:".count)) }
-        return nil
+        app.safeCore.getHighlightBookRoute(
+            externalReference: lead.highlight.externalReference,
+            artifactAddress: lead.highlight.artifactAddress
+        )?.isbn
     }
 
     var body: some View {
+        let groupProjection = groupProjection
+        let resourceProjection = resourceProjection
+
         VStack(alignment: .leading, spacing: 14) {
-            resourceHeader
-            if showHighlightersStrip {
-                highlightersStrip
+            resourceHeader(resourceProjection)
+            if groupProjection.showHighlightersStrip {
+                highlightersStrip(groupProjection)
             }
             highlightsBody
         }
         .padding(.vertical, 18)
-        .task(id: lead.highlight.artifactAddress + lead.highlight.externalReference) {
-            await resolveSource()
+        .task(id: lead.highlight.pubkey) {
+            await app.requestProfile(pubkeyHex: lead.highlight.pubkey)
         }
-        .task(id: webMetadataURL) {
-            if let url = webMetadataURL {
-                app.requestWebMetadata(url: url)
+        .task(id: resourceSourceTaskId(resourceProjection)) {
+            await resolveSource(resourceProjection)
+        }
+        .task(id: resourceProjection.articleAuthorPubkey) {
+            if !resourceProjection.articleAuthorPubkey.isEmpty {
+                await app.requestProfile(pubkeyHex: resourceProjection.articleAuthorPubkey)
+            }
+        }
+        .task(id: resourceProjection.webMetadataUrl) {
+            if let url = resourceProjection.webMetadataUrl {
+                await app.requestWebMetadata(url: url)
             }
         }
     }
 
     // MARK: - Resource header
 
-    private var resourceHeader: some View {
+    private func resourceHeader(_ resource: HighlightResourceHeaderProjection) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            resourceCover
+            resourceCover(resource)
                 .frame(width: 44, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(resourceTitle)
+                Text(resource.title)
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(2)
@@ -75,15 +86,15 @@ struct HighlightFeedCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                resourceSubtitleRow
+                resourceSubtitleRow(resource)
             }
         }
     }
 
-    private var resourceSubtitleRow: some View {
+    private func resourceSubtitleRow(_ resource: HighlightResourceHeaderProjection) -> some View {
         HStack(spacing: 4) {
-            let author = resourceAuthorOrDomain
-            let time = resourceTimeLabel
+            let author = resource.authorOrDomain
+            let time = resource.timeLabel
             if !author.isEmpty {
                 Text(author.uppercased())
                     .font(.caption2.weight(.bold))
@@ -110,26 +121,25 @@ struct HighlightFeedCardView: View {
     }
 
     @ViewBuilder
-    private var resourceCover: some View {
-        if let urlString = resourceCoverURL,
+    private func resourceCover(_ resource: HighlightResourceHeaderProjection) -> some View {
+        if let urlString = resource.coverUrl,
            !urlString.isEmpty,
-           let url = URL(string: urlString)
-        {
+           let url = URL(string: urlString) {
             Color.clear
                 .overlay(
                     KFImage(url)
-                        .placeholder { coverFallback }
+                        .placeholder { coverFallback(resource) }
                         .fade(duration: 0.15)
                         .resizable()
                         .scaledToFill()
                 )
                 .clipped()
         } else {
-            coverFallback
+            coverFallback(resource)
         }
     }
 
-    private var coverFallback: some View {
+    private func coverFallback(_ resource: HighlightResourceHeaderProjection) -> some View {
         ZStack {
             LinearGradient(
                 colors: [
@@ -139,7 +149,7 @@ struct HighlightFeedCardView: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            Image(systemName: kindIconName)
+            Image(systemName: resource.iconSystemName)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color.highlighterInkStrong.opacity(0.55))
         }
@@ -147,21 +157,29 @@ struct HighlightFeedCardView: View {
 
     // MARK: - Highlighters strip (only when 2+ unique highlighters)
 
-    private var highlightersStrip: some View {
+    private func highlightersStrip(_ projection: HighlightGroupCardProjection) -> some View {
         HStack(spacing: 8) {
             HStack(spacing: -6) {
-                ForEach(uniqueHighlighters.prefix(3), id: \.highlight.pubkey) { h in
-                    NostrAvatar(pubkey: h.highlight.pubkey, size: 20)
-                        .overlay(
-                            Circle().stroke(Color.highlighterPaperTint, lineWidth: 1.5)
-                        )
+                ForEach(projection.visibleHighlighters, id: \.pubkey) { highlighter in
+                    AuthorAvatar(
+                        pubkey: highlighter.pubkey,
+                        pictureURL: highlighter.pictureUrl,
+                        displayInitial: highlighter.displayInitial,
+                        size: 20
+                    )
+                    .overlay(
+                        Circle().stroke(Color.highlighterPaperTint, lineWidth: 1.5)
+                    )
+                    .task(id: highlighter.pubkey) {
+                        await app.requestProfile(pubkeyHex: highlighter.pubkey)
+                    }
                 }
-                if uniqueHighlighters.count > 3 {
+                if projection.overflowCount > 0 {
                     ZStack {
                         Circle()
                             .fill(Color.highlighterPaper)
                             .overlay(Circle().stroke(Color.highlighterRule, lineWidth: 0.5))
-                        Text("+\(uniqueHighlighters.count - 3)")
+                        Text("+\(projection.overflowCount)")
                             .font(.system(size: 8, weight: .bold))
                             .foregroundStyle(Color.highlighterInkMuted)
                     }
@@ -170,7 +188,7 @@ struct HighlightFeedCardView: View {
                 }
             }
 
-            Text(highlightersLabel)
+            Text(highlightersLabel(projection.highlightersLabelSegments))
                 .font(.caption)
                 .foregroundStyle(Color.highlighterInkMuted)
                 .lineLimit(1)
@@ -178,37 +196,19 @@ struct HighlightFeedCardView: View {
         }
     }
 
-    private var highlightersLabel: AttributedString {
-        let names = uniqueHighlighters.map { displayName(for: $0.highlight.pubkey) }
-        var out = AttributedString("Highlighted by ")
-        out.foregroundColor = Color.highlighterInkMuted
-
-        switch names.count {
-        case 0:
-            return out
-        case 1:
-            return out + boldName(names[0])
-        case 2:
-            return out + boldName(names[0]) + plain(" and ") + boldName(names[1])
-        default:
-            // First two by name, then "+N others"
-            let lead = boldName(names[0]) + plain(", ") + boldName(names[1])
-            let othersCount = names.count - 2
-            return out + lead + plain(" and ") + boldName("\(othersCount) others")
+    private func highlightersLabel(_ segments: [HighlightGroupLabelSegment]) -> AttributedString {
+        var out = AttributedString()
+        for segment in segments {
+            var text = AttributedString(segment.text)
+            if segment.emphasized {
+                text.font = .caption.weight(.semibold)
+                text.foregroundColor = Color.highlighterInkStrong
+            } else {
+                text.foregroundColor = Color.highlighterInkMuted
+            }
+            out += text
         }
-    }
-
-    private func boldName(_ name: String) -> AttributedString {
-        var s = AttributedString(name)
-        s.font = .caption.weight(.semibold)
-        s.foregroundColor = Color.highlighterInkStrong
-        return s
-    }
-
-    private func plain(_ str: String) -> AttributedString {
-        var s = AttributedString(str)
-        s.foregroundColor = Color.highlighterInkMuted
-        return s
+        return out
     }
 
     // MARK: - Highlight body (single inline OR reel)
@@ -223,27 +223,29 @@ struct HighlightFeedCardView: View {
     }
 
     private func singleHighlight(_ h: HydratedHighlight) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let content = highlightFeedContent(for: h.highlight)
+
+        return VStack(alignment: .leading, spacing: 12) {
             highlighterByline(for: h)
 
-            if let pageURL = pageImageURL(for: h.highlight) {
-                pageHighlight(h, pageURL: pageURL)
+            if let pageImage = content.pageImageUrl, let pageURL = URL(string: pageImage) {
+                pageHighlight(content: content, pageURL: pageURL)
             } else {
-                textHighlight(h)
+                textHighlight(content)
             }
         }
     }
 
     /// Text-only treatment: accent rail + serif italic pull-quote + note.
-    private func textHighlight(_ h: HydratedHighlight) -> some View {
-        HStack(alignment: .top, spacing: 14) {
+    private func textHighlight(_ content: HighlightFeedContentProjection) -> some View {
+        return HStack(alignment: .top, spacing: 14) {
             Rectangle()
                 .fill(Color.highlighterAccent)
                 .frame(width: 3)
                 .clipShape(RoundedRectangle(cornerRadius: 1.5))
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(h.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+                Text(content.quoteText)
                     .font(.system(size: 18, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineSpacing(4)
@@ -252,8 +254,8 @@ struct HighlightFeedCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if !h.highlight.note.isEmpty {
-                    Text(h.highlight.note)
+                if let note = content.noteText {
+                    Text(note)
                         .font(.system(.subheadline, design: .default))
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineSpacing(2)
@@ -266,12 +268,15 @@ struct HighlightFeedCardView: View {
 
     /// Page-photo treatment: the scan is the centerpiece, with the quote as
     /// a serif pull-quote underneath. No accent rail — let the image breathe.
-    private func pageHighlight(_ h: HydratedHighlight, pageURL: URL) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private func pageHighlight(
+        content: HighlightFeedContentProjection,
+        pageURL: URL
+    ) -> some View {
+        return VStack(alignment: .leading, spacing: 12) {
             HighlightPageImage(url: pageURL, treatment: .feature)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(h.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+                Text(content.quoteText)
                     .font(.system(size: 18, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineSpacing(4)
@@ -280,8 +285,8 @@ struct HighlightFeedCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if !h.highlight.note.isEmpty {
-                    Text(h.highlight.note)
+                if let note = content.noteText {
+                    Text(note)
                         .font(.system(.subheadline, design: .default))
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineSpacing(2)
@@ -293,10 +298,10 @@ struct HighlightFeedCardView: View {
         }
     }
 
-    private func pageImageURL(for highlight: HighlightRecord) -> URL? {
-        let raw = highlight.imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return nil }
-        return URL(string: raw)
+    private func highlightFeedContent(for highlight: HighlightRecord) -> HighlightFeedContentProjection {
+        app.safeCore.projectHighlightFeedContent(
+            input: HighlightFeedContentProjectionInput(highlight: highlight)
+        )
     }
 
     private var reel: some View {
@@ -310,14 +315,21 @@ struct HighlightFeedCardView: View {
         }
     }
 
+    @ViewBuilder
     private func highlighterByline(for h: HydratedHighlight) -> some View {
+        let highlighter = profileDisplay(for: h.highlight.pubkey)
+
         HStack(spacing: 8) {
-            NostrAvatar(pubkey: h.highlight.pubkey, size: 22)
-            NostrProfileName(
-                profile: profileWire(for: h.highlight.pubkey),
-                font: .footnote.weight(.semibold),
-                color: Color.highlighterInkStrong
+            AuthorAvatar(
+                pubkey: h.highlight.pubkey,
+                pictureURL: highlighter.pictureUrl,
+                displayInitial: highlighter.displayInitial,
+                size: 22
             )
+            Text(highlighter.displayName)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.highlighterInkStrong)
+                .lineLimit(1)
             if let rel = relativeDate(h.highlight.createdAt) {
                 Text("·").foregroundStyle(Color.highlighterInkMuted)
                 Text(rel)
@@ -327,257 +339,122 @@ struct HighlightFeedCardView: View {
             }
             Spacer(minLength: 0)
         }
-    }
-
-    // MARK: - Derived: artifact kind
-
-    /// Canonical artifact kind for header rendering. Falls back to
-    /// inspecting `artifactAddress` / `sourceUrl` when the highlight has
-    /// no resolved artifact.
-    private enum ArtifactKind {
-        case article, web, podcast, book, video, paper, unknown
-    }
-
-    private var artifactKind: ArtifactKind {
-        if let source = lead.artifact?.preview.source.lowercased(), !source.isEmpty {
-            switch source {
-            case "article": return .article
-            case "web": return .web
-            case "podcast": return .podcast
-            case "book": return .book
-            case "video": return .video
-            case "paper": return .paper
-            default: return .unknown
-            }
-        }
-        let extRef = lead.highlight.externalReference.trimmingCharacters(in: .whitespacesAndNewlines)
-        if extRef.hasPrefix("isbn:") { return .book }
-        let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        if addr.hasPrefix("30023:") { return .article }
-        if addr.hasPrefix("isbn:") { return .book }
-        if !lead.highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return .web
-        }
-        return .unknown
-    }
-
-    private var kindIconName: String {
-        switch artifactKind {
-        case .article: return "doc.text"
-        case .web: return "globe"
-        case .podcast: return "waveform"
-        case .book: return "book.closed"
-        case .video: return "play.rectangle"
-        case .paper: return "doc.richtext"
-        case .unknown: return "quote.bubble"
+        .task(id: h.highlight.pubkey) {
+            await app.requestProfile(pubkeyHex: h.highlight.pubkey)
         }
     }
 
-    // MARK: - Derived: resource fields
+    // MARK: - Derived: resource projection
 
-    private var resourceCoverURL: String? {
-        if let img = lead.artifact?.preview.image, !img.isEmpty { return img }
-        if artifactKind == .book, let img = bookPreview?.image, !img.isEmpty { return img }
-        if artifactKind == .article, let img = sourceArticle?.image, !img.isEmpty { return img }
-        if artifactKind == .web, let m = webMetadata {
-            if !m.image.isEmpty { return m.image }
-            if !m.favicon.isEmpty { return m.favicon }
+    private var resourceProjection: HighlightResourceHeaderProjection {
+        let base = app.safeCore.projectHighlightResourceHeader(
+            input: resourceProjectionInput(webMetadata: nil)
+        )
+        guard let url = base.webMetadataUrl,
+              let metadata = app.webMetadataCache[url] else {
+            return base
         }
-        return nil
+        return app.safeCore.projectHighlightResourceHeader(
+            input: resourceProjectionInput(webMetadata: metadata)
+        )
     }
 
-    private var resourceAuthorOrDomain: String {
-        switch artifactKind {
-        case .article:
-            if let name = articleAuthorDisplayName, !name.isEmpty { return name }
-            return lead.artifact?.preview.author ?? ""
-        case .podcast:
-            let show = lead.artifact?.preview.podcastShowTitle ?? ""
-            if !show.isEmpty { return show }
-            return lead.artifact?.preview.author ?? ""
-        case .book:
-            return lead.artifact?.preview.author ?? bookPreview?.author ?? ""
-        case .web:
-            if let m = webMetadata {
-                if !m.siteName.isEmpty { return m.siteName }
-                if !m.author.isEmpty { return m.author }
-            }
-            if let domain = lead.artifact?.preview.domain, !domain.isEmpty {
-                return domain
-            }
-            return urlHost ?? ""
-        case .video, .paper:
-            return lead.artifact?.preview.author ?? (lead.artifact?.preview.domain ?? "")
-        case .unknown:
-            return urlHost ?? ""
+    private func resourceProjectionInput(webMetadata: WebMetadata?) -> HighlightResourceHeaderProjectionInput {
+        HighlightResourceHeaderProjectionInput(
+            lead: lead,
+            sourceArticle: sourceArticle,
+            sourceArticleAuthorPubkey: sourceArticleAuthorPubkey ?? "",
+            articleAuthorProfiles: articleAuthorProfileCandidates,
+            bookPreview: bookPreview,
+            webMetadata: webMetadata
+        )
+    }
+
+    private var articleAuthorProfileCandidates: [HighlightResourceAuthorProfile] {
+        var candidates: [HighlightResourceAuthorProfile] = []
+        if let pubkey = sourceArticle?.pubkey, !pubkey.isEmpty {
+            candidates.append(
+                HighlightResourceAuthorProfile(
+                    pubkey: pubkey,
+                    profile: app.profileSnapshots[pubkey]
+                )
+            )
         }
-    }
-
-    private var resourceTitle: String {
-        switch artifactKind {
-        case .article:
-            if let t = sourceArticle?.title, !t.isEmpty { return t }
-            if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
-            return "Untitled"
-        case .podcast, .video, .paper:
-            if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
-            return "Untitled"
-        case .book:
-            if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
-            if let t = bookPreview?.title, !t.isEmpty { return t }
-            return "Untitled"
-        case .web:
-            if let m = webMetadata, !m.title.isEmpty { return m.title }
-            if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
-            return urlHost ?? "Web page"
-        case .unknown:
-            if let t = lead.artifact?.preview.title, !t.isEmpty { return t }
-            return urlHost ?? "Highlight"
+        if let pubkey = sourceArticleAuthorPubkey,
+           !pubkey.isEmpty,
+           !candidates.contains(where: { $0.pubkey == pubkey }) {
+            candidates.append(
+                HighlightResourceAuthorProfile(
+                    pubkey: pubkey,
+                    profile: app.profileSnapshots[pubkey]
+                )
+            )
         }
+        return candidates
     }
 
-    private var resourceTimeLabel: String? {
-        switch artifactKind {
-        case .article:
-            guard let mins = articleReadMinutes else { return nil }
-            return "\(mins) min"
-        case .podcast:
-            guard let secs = lead.artifact?.preview.durationSeconds, secs > 0 else { return nil }
-            return formatDuration(seconds: Int(secs))
-        default: return nil
-        }
-    }
+    // MARK: - Derived: group projection
 
-    private var urlHost: String? {
-        let raw = lead.highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty, let url = URL(string: raw), let host = url.host else { return nil }
-        return host
-    }
-
-    /// Source URL the OG/favicon fetcher should hit. Only populated for
-    /// the web kind — article/podcast/book branches own their own
-    /// hydration path. Prefers the artifact's normalized URL (when a
-    /// kind:11 share exists) over the raw highlight `sourceUrl` so the
-    /// cache key matches what Rust would store.
-    private var webMetadataURL: String? {
-        guard artifactKind == .web else { return nil }
-        if let u = lead.artifact?.preview.url, !u.isEmpty { return u }
-        let raw = lead.highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        return raw.isEmpty ? nil : raw
-    }
-
-    /// Rust-owned enrichment for the web URL (if any). Returns nil for
-    /// non-web kinds until the NMP snapshot carries the resolved metadata.
-    private var webMetadata: WebMetadata? {
-        guard let url = webMetadataURL else { return nil }
-        return app.webMetadata(url: url)
-    }
-
-    // MARK: - Derived: profile / article resolution
-
-    /// Profile-resolved display name for a NIP-23 article author.
-    /// Returns nil for non-article kinds or unresolved profiles.
-    private var articleAuthorDisplayName: String? {
-        guard let pubkey = articleAuthorPubkey else { return nil }
-        let profile = app.profile(pubkeyHex: pubkey)
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return nil
-    }
-
-    private var articleAuthorPubkey: String? {
-        let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty else { return nil }
-        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[0] == "30023" else { return nil }
-        let pubkey = String(parts[1])
-        return pubkey.isEmpty ? nil : pubkey
-    }
-
-    private var articleReadMinutes: Int? {
-        guard let content = sourceArticle?.content, !content.isEmpty else { return nil }
-        let words = content.split(whereSeparator: { $0.isWhitespace }).count
-        guard words > 60 else { return nil }
-        return max(1, words / 240)
-    }
-
-    private func formatDuration(seconds: Int) -> String {
-        let h = seconds / 3600
-        let m = (seconds % 3600) / 60
-        if h > 0 { return "\(h)h \(m)m" }
-        return "\(m)m"
-    }
-
-    // MARK: - Derived: highlighters
-
-    private var uniqueHighlighters: [HydratedHighlight] {
-        var seen = Set<String>()
-        var out: [HydratedHighlight] = []
-        for h in items {
-            if seen.insert(h.highlight.pubkey).inserted {
-                out.append(h)
-            }
-        }
-        return out
-    }
-
-    private var showHighlightersStrip: Bool {
-        items.count >= 2 && uniqueHighlighters.count >= 2
+    private var groupProjection: HighlightGroupCardProjection {
+        app.safeCore.projectHighlightGroupCard(
+            input: HighlightGroupCardProjectionInput(
+                items: items,
+                highlighterProfiles: items.map { h in
+                    HighlightGroupHighlighterProfile(
+                        pubkey: h.highlight.pubkey,
+                        profile: app.profileSnapshots[h.highlight.pubkey]
+                    )
+                }
+            )
+        )
     }
 
     // MARK: - Derived: profile helpers
 
-    private func displayName(for pubkey: String) -> String {
-        let profile = app.profile(pubkeyHex: pubkey)
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(pubkey.prefix(10))
-    }
-
-    /// `ProfileWire` for the NMP name/avatar components. Falls back to the
-    /// pubkey-hex `npubShort` when the kernel hasn't resolved a kind:0 yet, so
-    /// the label matches the legacy rendering until the profile lands.
-    private func profileWire(for pubkey: String) -> ProfileWire {
-        if let meta = app.profile(pubkeyHex: pubkey) {
-            return HighlighterStore.profileWire(from: meta, pubkeyHex: pubkey)
-        }
-        return ProfileWire(pubkey: pubkey, npub: pubkey, npubShort: String(pubkey.prefix(10)))
+    private func profileDisplay(for pubkey: String) -> ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: pubkey,
+                profile: app.profileSnapshots[pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
-        guard let s = seconds, s > 0 else { return nil }
-        let now = Date().timeIntervalSince1970
-        let delta = now - TimeInterval(s)
-        guard delta >= 0 else { return nil }
-        switch delta {
-        case ..<60: return "just now"
-        case ..<3600: return "\(Int(delta / 60))m"
-        case ..<86400: return "\(Int(delta / 3600))h"
-        case ..<(86400 * 7): return "\(Int(delta / 86400))d"
-        case ..<(86400 * 30): return "\(Int(delta / (86400 * 7)))w"
-        default: return "\(Int(delta / (86400 * 30)))mo"
-        }
+        app.safeCore.projectRelativeTimeLabel(
+            input: RelativeTimeLabelInput(
+                unixSeconds: seconds,
+                style: .compact
+            )
+        ).label
     }
 
-    private func resolveSource() async {
-        sourceArticle = nil
+    private func resourceSourceTaskId(_ resource: HighlightResourceHeaderProjection) -> String {
+        "\(lead.highlight.eventId)|\(resource.bookIsbn ?? "")|\(resource.articleAddress ?? "")"
+    }
 
-        if let isbn = isbnFromLead {
-            app.requestIsbnPreview(isbn: isbn)
+    private func resolveSource(_ resource: HighlightResourceHeaderProjection) async {
+        sourceArticle = nil
+        sourceArticleAuthorPubkey = nil
+
+        if let isbn = resource.bookIsbn {
+            await app.requestIsbnPreview(isbn: isbn)
             return
         }
 
-        let addr = lead.highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty else { return }
+        guard let addr = resource.articleAddress else { return }
 
-        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[0] == "30023" else { return }
-        let pubkey = String(parts[1])
-        let dTag = String(parts[2])
-        guard !pubkey.isEmpty, !dTag.isEmpty else { return }
-
-        sourceArticle = await app.article(pubkeyHex: pubkey, dTag: dTag)
-        app.requestProfile(pubkeyHex: pubkey)
+        sourceArticle = await app.safeCore.getArticleByAddress(address: addr)
+        if let pubkey = sourceArticle?.pubkey, !pubkey.isEmpty {
+            sourceArticleAuthorPubkey = pubkey
+            await app.requestProfile(pubkeyHex: pubkey)
+            return
+        }
+        if let pubkey = await app.safeCore.getArticleAddressAuthor(address: addr), !pubkey.isEmpty {
+            sourceArticleAuthorPubkey = pubkey
+            await app.requestProfile(pubkeyHex: pubkey)
+        }
     }
 }
 
@@ -593,6 +470,10 @@ private struct HighlightQuoteCard: View {
     let highlight: HydratedHighlight
 
     var body: some View {
+        let content = app.safeCore.projectHighlightFeedContent(
+            input: HighlightFeedContentProjectionInput(highlight: highlight.highlight)
+        )
+
         VStack(alignment: .leading, spacing: 0) {
             byline
                 .padding(12)
@@ -604,10 +485,10 @@ private struct HighlightQuoteCard: View {
                         .padding(.horizontal, 12)
                 }
 
-            if let pageURL = pageImageURL {
+            if let pageImage = content.pageImageUrl, let pageURL = URL(string: pageImage) {
                 VStack(alignment: .leading, spacing: 8) {
                     HighlightPageImage(url: pageURL, treatment: .card)
-                    quoteBlock
+                    quoteBlock(content)
                 }
                 .padding(12)
             } else {
@@ -617,7 +498,7 @@ private struct HighlightQuoteCard: View {
                         .frame(width: 3)
                         .clipShape(RoundedRectangle(cornerRadius: 1.5))
 
-                    quoteBlock
+                    quoteBlock(content)
                 }
                 .padding(12)
             }
@@ -627,11 +508,14 @@ private struct HighlightQuoteCard: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.highlighterPaper)
         )
+        .task(id: highlight.highlight.pubkey) {
+            await app.requestProfile(pubkeyHex: highlight.highlight.pubkey)
+        }
     }
 
-    private var quoteBlock: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(highlight.highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+    private func quoteBlock(_ content: HighlightFeedContentProjection) -> some View {
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(content.quoteText)
                 .font(.system(size: 14, design: .default).italic())
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineSpacing(3)
@@ -640,8 +524,8 @@ private struct HighlightQuoteCard: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            if !highlight.highlight.note.isEmpty {
-                Text(highlight.highlight.note)
+            if let note = content.noteText {
+                Text(note)
                     .font(.caption)
                     .foregroundStyle(Color.highlighterInkMuted)
                     .lineLimit(2)
@@ -651,20 +535,21 @@ private struct HighlightQuoteCard: View {
         }
     }
 
-    private var pageImageURL: URL? {
-        let raw = highlight.highlight.imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return nil }
-        return URL(string: raw)
-    }
-
+    @ViewBuilder
     private var byline: some View {
+        let highlighter = authorDisplay
+
         HStack(spacing: 7) {
-            NostrAvatar(pubkey: highlight.highlight.pubkey, size: 22)
-            NostrProfileName(
-                profile: profileWire,
-                font: .caption.weight(.semibold),
-                color: Color.highlighterInkStrong
+            AuthorAvatar(
+                pubkey: highlight.highlight.pubkey,
+                pictureURL: highlighter.pictureUrl,
+                displayInitial: highlighter.displayInitial,
+                size: 22
             )
+            Text(highlighter.displayName)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.highlighterInkStrong)
+                .lineLimit(1)
             if let rel = relative {
                 Text("·")
                     .font(.caption2)
@@ -678,26 +563,22 @@ private struct HighlightQuoteCard: View {
         }
     }
 
-    private var profileWire: ProfileWire {
-        let pubkey = highlight.highlight.pubkey
-        if let meta = app.profile(pubkeyHex: pubkey) {
-            return HighlighterStore.profileWire(from: meta, pubkeyHex: pubkey)
-        }
-        return ProfileWire(pubkey: pubkey, npub: pubkey, npubShort: String(pubkey.prefix(10)))
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: highlight.highlight.pubkey,
+                profile: app.profileSnapshots[highlight.highlight.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
     private var relative: String? {
-        guard let s = highlight.highlight.createdAt, s > 0 else { return nil }
-        let now = Date().timeIntervalSince1970
-        let delta = now - TimeInterval(s)
-        guard delta >= 0 else { return nil }
-        switch delta {
-        case ..<60: return "just now"
-        case ..<3600: return "\(Int(delta / 60))m"
-        case ..<86400: return "\(Int(delta / 3600))h"
-        case ..<(86400 * 7): return "\(Int(delta / 86400))d"
-        case ..<(86400 * 30): return "\(Int(delta / (86400 * 7)))w"
-        default: return "\(Int(delta / (86400 * 30)))mo"
-        }
+        app.safeCore.projectRelativeTimeLabel(
+            input: RelativeTimeLabelInput(
+                unixSeconds: highlight.highlight.createdAt,
+                style: .compact
+            )
+        ).label
     }
 }

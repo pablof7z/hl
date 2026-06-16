@@ -6,62 +6,48 @@ import SwiftUI
 ///   surfaces (mounted on `MainTabView`); back chevron returns to the room.
 /// - `article` → NIP-23 reader, built from the artifact's `a`-tag reference
 ///   (`30023:<pubkey>:<d>`).
-/// - everything else → "Coming soon" placeholder.
+/// - URL-backed sources → existing web reader.
 struct ArtifactDetailView: View {
     let artifact: ArtifactRecord
 
     @Environment(HighlighterStore.self) private var app
 
     var body: some View {
+        let projection = app.core.getArtifactDetailProjection(artifact: artifact)
+        let route = projection.route
+
         Group {
-            switch artifact.preview.source {
-            case "podcast":
+            switch route.target {
+            case .podcast:
                 PodcastListeningView(presentation: .pushed, artifact: artifact)
-            case "article":
-                if let target = articleTarget {
+            case .article:
+                if let target = ArticleReaderTarget(artifactRoute: route) {
                     ArticleReaderView(target: target)
                 } else {
-                    ContentUnavailableView(
-                        "Missing article reference",
-                        systemImage: "doc.text",
-                        description: Text("This share doesn't carry a valid NIP-23 address.")
-                    )
+                    missingReferenceView
                 }
-            case "book":
-                let catalogId = artifact.preview.catalogId.isEmpty
-                    ? artifact.preview.highlightTagValue
-                    : artifact.preview.catalogId
-                BookView(catalogId: catalogId)
+            case .book:
+                BookView(catalogId: route.bookCatalogId)
                     .environment(app)
-            default:
-                ContentUnavailableView(
-                    "Coming soon",
-                    systemImage: "doc.text",
-                    description: Text("This artifact type doesn't have a dedicated view yet.")
-                )
+            case .web:
+                if let url = URL(string: route.url) {
+                    WebReaderView(target: WebReaderTarget(url: url, highlightQuote: ""))
+                } else {
+                    missingReferenceView
+                }
+            case .unavailable:
+                missingReferenceView
             }
         }
-        .navigationTitle(artifact.preview.title.isEmpty ? "Artifact" : artifact.preview.title)
+        .navigationTitle(projection.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    /// Parse the NIP-33 `a`-tag (`30023:<pubkey>:<d>`) out of the artifact's
-    /// highlight reference. Falls back to the generic reference fields if
-    /// the artifact wasn't explicitly tagged for highlights.
-    private var articleTarget: ArticleReaderTarget? {
-        let raw: String
-        if artifact.preview.highlightTagName == "a", !artifact.preview.highlightTagValue.isEmpty {
-            raw = artifact.preview.highlightTagValue
-        } else if artifact.preview.referenceTagName == "a", !artifact.preview.referenceTagValue.isEmpty {
-            raw = artifact.preview.referenceTagValue
-        } else {
-            return nil
-        }
-        let parts = raw.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[0] == "30023" else { return nil }
-        let pubkey = String(parts[1])
-        let dTag = String(parts[2])
-        guard !pubkey.isEmpty, !dTag.isEmpty else { return nil }
-        return ArticleReaderTarget(pubkey: pubkey, dTag: dTag, seed: nil)
+    private var missingReferenceView: some View {
+        ContentUnavailableView(
+            "Missing artifact reference",
+            systemImage: "doc.text",
+            description: Text("This share doesn't carry an openable artifact reference.")
+        )
     }
 }

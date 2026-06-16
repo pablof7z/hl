@@ -1,19 +1,46 @@
 import SwiftUI
 
-/// Lets the user import another nostr account's relay list. Rust owns the
-/// fetch, candidate projection, selection set, and apply operation.
+/// Lets the user import another nostr account's relay list. Takes an npub
+/// (or hex pubkey), fetches that user's kind:10002 via the Indexer pool,
+/// and shows the discovered relays with checkboxes. Merging is opt-in —
+/// only rows the user ticks get upserted.
 struct ImportRelaysSheet: View {
+    let store: NetworkSettingsStore
+
     @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
 
+    @State private var npubText: String = ""
+    @State private var fetched: [RelayConfig] = []
+    @State private var selectedUrls: [String] = []
+    @State private var isFetching = false
+    @State private var errorText: String?
+    @State private var isApplying = false
+
+    private var projection: ImportRelaysProjection {
+        appStore.safeCore.projectImportRelays(input: ImportRelaysProjectionInput(
+            fetched: fetched,
+            selectedUrls: selectedUrls
+        ))
+    }
+
+    private var sourceProjection: ImportRelaysSourceProjection {
+        appStore.safeCore.projectImportRelaysSource(input: ImportRelaysSourceProjectionInput(
+            npub: npubText,
+            isFetching: isFetching
+        ))
+    }
+
     var body: some View {
+        let currentProjection = projection
+
         NavigationStack {
             Form {
                 npubSection
-                if !importState.candidates.isEmpty {
-                    foundSection
+                if !currentProjection.rows.isEmpty {
+                    foundSection(currentProjection)
                 }
-                if let err = importState.errorMessage {
+                if let err = errorText {
                     errorSection(err)
                 }
             }
@@ -24,45 +51,27 @@ struct ImportRelaysSheet: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Add \(importState.selectedUrls.count)") {
-                        appStore.applyNetworkImportRelays()
+                    Button("Add \(currentProjection.selectedCount)") {
+                        Task { await applySelected() }
                     }
-                    .disabled(importState.selectedUrls.isEmpty || importState.isApplying)
-                }
-            }
-            .onChange(of: importState.isApplying) { wasApplying, isApplying in
-                if wasApplying, !isApplying, importState.errorMessage == nil {
-                    dismiss()
+                    .disabled(!currentProjection.canApply || isApplying)
                 }
             }
         }
     }
 
-    private var importState: HighlighterNetworkImportSnapshot {
-        appStore.network.importRelays
-    }
-
-    private var npubBinding: Binding<String> {
-        Binding(
-            get: { importState.npub },
-            set: { appStore.setNetworkImportNpub($0) }
-        )
-    }
-
-    private var selectedUrls: Set<String> {
-        Set(importState.selectedUrls)
-    }
+    // MARK: - Sections
 
     private var npubSection: some View {
         Section {
-            TextField("npub1… or hex pubkey", text: npubBinding)
+            TextField("npub1… or hex pubkey", text: $npubText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .monospaced()
             Button {
-                appStore.fetchNetworkImportRelays()
+                Task { await fetch() }
             } label: {
-                if importState.isFetching {
+                if isFetching {
                     HStack {
                         ProgressView().scaleEffect(0.7)
                         Text("Fetching…")
@@ -71,7 +80,7 @@ struct ImportRelaysSheet: View {
                     Label("Fetch relays", systemImage: "arrow.down.circle")
                 }
             }
-            .disabled(importState.npub.trimmingCharacters(in: .whitespaces).isEmpty || importState.isFetching)
+            .disabled(!sourceProjection.canFetch)
         } header: {
             Text("Source")
         } footer: {
@@ -79,21 +88,21 @@ struct ImportRelaysSheet: View {
         }
     }
 
-    private var foundSection: some View {
+    private func foundSection(_ projection: ImportRelaysProjection) -> some View {
         Section {
-            ForEach(importState.candidates, id: \.url) { row in
+            ForEach(projection.rows, id: \.config.url) { row in
                 Button {
-                    appStore.toggleNetworkImportRelay(url: row.url)
+                    toggle(row.config.url)
                 } label: {
                     HStack {
-                        Image(systemName: selectedUrls.contains(row.url) ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(selectedUrls.contains(row.url) ? Color.accentColor : .secondary)
+                        Image(systemName: row.isSelected ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(row.isSelected ? Color.accentColor : .secondary)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(displayURL(row.url))
+                            Text(row.displayUrl)
                                 .font(.subheadline)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
-                            Text(roleLabel(row))
+                            Text(row.roleLabel)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -103,7 +112,7 @@ struct ImportRelaysSheet: View {
                 .buttonStyle(.plain)
             }
         } header: {
-            Text("Found \(importState.candidates.count) relay\(importState.candidates.count == 1 ? "" : "s")")
+            Text(projection.foundTitle)
         } footer: {
             Text("Selected relays will be added or updated in your list with their original Read/Write roles. Rooms and Indexer stay off — tap a relay later to turn them on.")
         }
@@ -117,17 +126,41 @@ struct ImportRelaysSheet: View {
         }
     }
 
-    private func displayURL(_ raw: String) -> String {
-        if raw.hasPrefix("wss://") { return String(raw.dropFirst(6)) }
-        return raw
+    // MARK: - Actions
+
+    private func fetch() async {
+        let source = sourceProjection
+        guard source.canFetch else { return }
+        errorText = nil
+        fetched = []
+        selectedUrls = []
+        isFetching = true
+        defer { isFetching = false }
+        let snapshot = await appStore.safeCore
+            .importRelaysFromNpubSnapshot(source.submitNpub)
+        let apply = appStore.safeCore.projectImportRelaysFetchApply(
+            input: ImportRelaysFetchApplyInput(snapshot: snapshot)
+        )
+        fetched = apply.fetched
+        selectedUrls = apply.selectedUrls
+        errorText = apply.errorMessage
     }
 
-    private func roleLabel(_ row: RelayConfig) -> String {
-        switch (row.read, row.write) {
-        case (true, true): return "Read + Write"
-        case (true, false): return "Read"
-        case (false, true): return "Write"
-        default: return "No roles"
+    private func applySelected() async {
+        isApplying = true
+        defer { isApplying = false }
+        let selectedConfigs = projection.selectedConfigs
+        for row in selectedConfigs {
+            await store.upsert(row)
         }
+        dismiss()
+    }
+
+    private func toggle(_ url: String) {
+        selectedUrls = appStore.safeCore.toggleImportRelaySelection(
+            fetched: fetched,
+            selectedUrls: selectedUrls,
+            url: url
+        )
     }
 }

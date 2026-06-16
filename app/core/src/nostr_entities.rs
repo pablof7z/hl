@@ -10,11 +10,17 @@
 //!   prefixes and whitespace are stripped.
 //! - [`resolve_from_cache`] — if the referenced event is already in
 //!   nostrdb, return a [`NostrEntityEvent`] the UI can render
-//!   directly. Returns `None` when the cache is cold.
-//! - The subscription side (`spawn_entity_backfill` over in
-//!   `nostr_runtime`) installs a one-shot REQ on the indexer pool + any
-//!   relay hints carried by the entity, so a cold cache warms up
+//!   directly. Returns `None` when the cache is cold. Rust also carries the
+//!   semantic render kind so native shells do not duplicate event-kind policy.
+//! - [`tokenize_nostr_content`] — split display text into literal runs and
+//!   decoded NIP-21 entity references without native shells duplicating
+//!   Nostr URI parsing.
+//! - The subscription registry installs a view-scoped REQ on the indexer
+//!   pool + any relay hints carried by the entity, so a cold cache warms up
 //!   without blocking the first paint.
+
+use std::collections::HashSet;
+use std::ops::Range;
 
 use nostr_sdk::nips::nip19::{
     FromBech32, Nip19, Nip19Coordinate, Nip19Event, Nip19Profile, ToBech32,
@@ -22,13 +28,17 @@ use nostr_sdk::nips::nip19::{
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
+use crate::articles;
 use crate::errors::CoreError;
+use crate::models::ArticleReaderRoute;
 
-pub(crate) const NOSTR_ENTITY_FETCH_TIMEOUT: std::time::Duration =
-    std::time::Duration::from_secs(4);
+const KIND_METADATA: u32 = 0;
+const KIND_SHORT_NOTE: u32 = 1;
+const KIND_HIGHLIGHT: u32 = 9802;
+const KIND_LONG_FORM: u32 = 30023;
 
 /// Parsed reference to a Nostr entity encoded as a NIP-19 bech32.
-#[derive(Debug, Clone, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum NostrEntityRef {
     /// `npub1…` / `nprofile1…` — reference to a user's profile.
     Profile {
@@ -56,15 +66,42 @@ pub enum NostrEntityRef {
     },
 }
 
+/// Semantic card renderer for a resolved NIP-19 entity. The raw event kind
+/// remains on [`NostrEntityEvent`] for diagnostics and generic fallback copy,
+/// but Rust owns the mapping from protocol kind to UI semantic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum NostrEntityRenderKind {
+    Article,
+    Note,
+    Highlight,
+    Profile,
+    Generic,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum NostrEntityInlineRender {
+    Profile {
+        pubkey_hex: String,
+        fallback_label: String,
+    },
+    Reference {
+        chip_label: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum NostrContentRun {
+    Text { value: String },
+    Entity { entity: NostrEntityRef },
+}
+
 /// Resolved event data for a [`NostrEntityRef`]. Returned by
-/// [`resolve_from_cache`] when the underlying event is already in
-/// nostrdb; the Swift layer switches on `kind` to pick the right
-/// inline card (30023 → article, 1 → note, 9802 → highlight quote,
-/// etc.) and falls back to a generic "Event <id>" rendering otherwise.
-#[derive(Debug, Clone, uniffi::Record)]
+/// [`resolve_from_cache`] when the underlying event is already in nostrdb.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct NostrEntityEvent {
     pub event_id_hex: String,
     pub kind: u32,
+    pub render_kind: NostrEntityRenderKind,
     pub pubkey_hex: String,
     pub content: String,
     pub created_at: u64,
@@ -72,6 +109,33 @@ pub struct NostrEntityEvent {
     /// `image` etc. for an article card without needing a second FFI
     /// record schema per kind.
     pub tags_json: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NostrEntityRefSnapshot {
+    pub entity: Option<NostrEntityRef>,
+    pub decoded: bool,
+    pub error_message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NostrEntityResolutionSnapshot {
+    pub event: Option<NostrEntityEvent>,
+    pub resolved: bool,
+    pub error_message: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct NostrEntityArticleCardProjectionInput {
+    pub event: NostrEntityEvent,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NostrEntityArticleCardProjection {
+    pub display_title: String,
+    pub image_url: Option<String>,
+    pub summary: Option<String>,
+    pub reader_route: Option<ArticleReaderRoute>,
 }
 
 /// Accept the bare bech32 (`npub1…`) and the `nostr:` URI form
@@ -134,6 +198,270 @@ pub fn decode_nostr_entity(input: &str) -> Result<NostrEntityRef, CoreError> {
             ))
         }
     })
+}
+
+pub fn ref_snapshot(result: Result<NostrEntityRef, CoreError>) -> NostrEntityRefSnapshot {
+    match result {
+        Ok(entity) => NostrEntityRefSnapshot {
+            entity: Some(entity),
+            decoded: true,
+            error_message: String::new(),
+        },
+        Err(error) => NostrEntityRefSnapshot {
+            entity: None,
+            decoded: false,
+            error_message: error.to_string(),
+        },
+    }
+}
+
+pub fn resolution_snapshot(
+    result: Result<Option<NostrEntityEvent>, CoreError>,
+) -> NostrEntityResolutionSnapshot {
+    match result {
+        Ok(event) => NostrEntityResolutionSnapshot {
+            resolved: event.is_some(),
+            event,
+            error_message: String::new(),
+        },
+        Err(error) => NostrEntityResolutionSnapshot {
+            event: None,
+            resolved: false,
+            error_message: error.to_string(),
+        },
+    }
+}
+
+pub fn fallback_label(entity: &NostrEntityRef) -> String {
+    match entity {
+        NostrEntityRef::Profile { pubkey_hex, .. } => {
+            format!("Profile · {}…", first_chars(pubkey_hex, 12))
+        }
+        NostrEntityRef::Event {
+            event_id_hex,
+            kind_hint,
+            ..
+        } => match kind_hint {
+            Some(kind) => format!("Event kind {kind} · {}…", first_chars(event_id_hex, 12)),
+            None => format!("Event · {}…", first_chars(event_id_hex, 12)),
+        },
+        NostrEntityRef::Address { kind, d_tag, .. } => format!("Kind {kind} · {d_tag}"),
+    }
+}
+
+pub fn inline_render(entity: &NostrEntityRef) -> NostrEntityInlineRender {
+    match entity {
+        NostrEntityRef::Profile { pubkey_hex, .. } => NostrEntityInlineRender::Profile {
+            pubkey_hex: pubkey_hex.clone(),
+            fallback_label: format!("@{}", first_chars(pubkey_hex, 8)),
+        },
+        NostrEntityRef::Event { event_id_hex, .. } => NostrEntityInlineRender::Reference {
+            chip_label: format!("note:{}…", first_chars(event_id_hex, 8)),
+        },
+        NostrEntityRef::Address { d_tag, .. } => NostrEntityInlineRender::Reference {
+            chip_label: if d_tag.is_empty() {
+                "article".into()
+            } else {
+                d_tag.clone()
+            },
+        },
+    }
+}
+
+pub fn identity_key(entity: &NostrEntityRef) -> String {
+    match entity {
+        NostrEntityRef::Profile { pubkey_hex, .. } => format!("p:{pubkey_hex}"),
+        NostrEntityRef::Event { event_id_hex, .. } => format!("e:{event_id_hex}"),
+        NostrEntityRef::Address {
+            kind,
+            pubkey_hex,
+            d_tag,
+            ..
+        } => format!("a:{kind}:{pubkey_hex}:{d_tag}"),
+    }
+}
+
+pub fn tokenize_nostr_content(content: &str) -> Vec<NostrContentRun> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < content.len() {
+        if let Some((range, body)) = scan_nostr_uri(content, i) {
+            if range.start > i {
+                out.push(NostrContentRun::Text {
+                    value: content[i..range.start].to_string(),
+                });
+            }
+            match decode_nostr_entity(body) {
+                Ok(entity) => out.push(NostrContentRun::Entity { entity }),
+                Err(_) => out.push(NostrContentRun::Text {
+                    value: body.to_string(),
+                }),
+            }
+            i = range.end;
+        } else {
+            out.push(NostrContentRun::Text {
+                value: content[i..].to_string(),
+            });
+            break;
+        }
+    }
+    out
+}
+
+pub fn tokenize_nostr_markdown_inline(content: &str) -> Vec<NostrContentRun> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < content.len() {
+        let Some(prefix) = find_nostr_prefix(content, i) else {
+            out.push(NostrContentRun::Text {
+                value: content[i..].to_string(),
+            });
+            break;
+        };
+        if prefix.start > i {
+            out.push(NostrContentRun::Text {
+                value: content[i..prefix.start].to_string(),
+            });
+        }
+
+        let (end, body) = scan_nostr_body(content, prefix.end);
+        if end == prefix.end {
+            out.push(NostrContentRun::Text {
+                value: "nostr:".into(),
+            });
+            i = end;
+            continue;
+        }
+
+        if is_known_nip19_body(body) {
+            if let Ok(entity) = decode_nostr_entity(body) {
+                out.push(NostrContentRun::Entity { entity });
+            }
+        }
+        i = end;
+    }
+    out
+}
+
+pub fn standalone_nostr_entity(content: &str) -> Option<NostrEntityRef> {
+    let trimmed = content.trim();
+    let prefix = find_nostr_prefix(trimmed, 0)?;
+    if prefix.start != 0 {
+        return None;
+    }
+    let (end, body) = scan_nostr_body(trimmed, prefix.end);
+    if end == prefix.end || !is_known_nip19_body(body) {
+        return None;
+    }
+    decode_nostr_entity(body).ok()
+}
+
+pub fn extract_event_refs(content: &str) -> Vec<NostrEntityRef> {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for run in tokenize_nostr_content(content) {
+        let NostrContentRun::Entity { entity } = run else {
+            continue;
+        };
+        if matches!(entity, NostrEntityRef::Profile { .. }) {
+            continue;
+        }
+        if seen.insert(identity_key(&entity)) {
+            out.push(entity);
+        }
+    }
+    out
+}
+
+/// Presentation projection for a resolved NIP-23 entity card. Rust owns event
+/// tag decoding, title fallback, optional media/summary presence, and native
+/// reader route construction.
+pub fn article_card_projection(
+    input: NostrEntityArticleCardProjectionInput,
+) -> NostrEntityArticleCardProjection {
+    let event = input.event;
+    let tags = tags_from_json(&event.tags_json);
+    let d_tag = tag_value(&tags, "d");
+    let title = tag_value(&tags, "title");
+    NostrEntityArticleCardProjection {
+        display_title: if title.is_empty() {
+            "Untitled".into()
+        } else {
+            title
+        },
+        image_url: non_empty_string(&tag_value(&tags, "image")),
+        summary: non_empty_string(&tag_value(&tags, "summary")),
+        reader_route: articles::article_reader_route(&event.pubkey_hex, &d_tag),
+    }
+}
+
+fn tags_from_json(json: &str) -> Vec<Vec<String>> {
+    serde_json::from_str(json).unwrap_or_default()
+}
+
+fn tag_value(tags: &[Vec<String>], name: &str) -> String {
+    tags.iter()
+        .find(|tag| tag.first().is_some_and(|tag_name| tag_name == name) && tag.len() > 1)
+        .and_then(|tag| tag.get(1))
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn scan_nostr_uri(content: &str, start: usize) -> Option<(Range<usize>, &str)> {
+    let prefix = find_nostr_prefix(content, start)?;
+    let (end, body) = scan_nostr_body(content, prefix.end);
+    if end == prefix.end {
+        return None;
+    }
+    if is_known_nip19_body(body) {
+        Some((prefix.start..end, body))
+    } else {
+        None
+    }
+}
+
+fn find_nostr_prefix(content: &str, start: usize) -> Option<Range<usize>> {
+    let prefix_relative = content[start..].to_ascii_lowercase().find("nostr:")?;
+    let prefix_start = start + prefix_relative;
+    let prefix_end = prefix_start + "nostr:".len();
+    Some(prefix_start..prefix_end)
+}
+
+fn scan_nostr_body(content: &str, body_start: usize) -> (usize, &str) {
+    let mut end = body_start;
+    for (offset, ch) in content[body_start..].char_indices() {
+        if is_nostr_uri_body_char(ch) {
+            end = body_start + offset + ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+    (end, &content[body_start..end])
+}
+
+fn is_nostr_uri_body_char(ch: char) -> bool {
+    ch.is_ascii_digit() || ch.is_ascii_lowercase()
+}
+
+fn is_known_nip19_body(body: &str) -> bool {
+    let lower = body.to_ascii_lowercase();
+    lower.starts_with("npub1")
+        || lower.starts_with("nprofile1")
+        || lower.starts_with("note1")
+        || lower.starts_with("nevent1")
+        || lower.starts_with("naddr1")
+}
+
+fn first_chars(value: &str, count: usize) -> String {
+    value.chars().take(count).collect()
 }
 
 /// Encode a NIP-19 `nevent` for an event id, optionally carrying an
@@ -206,23 +534,26 @@ pub fn resolve_from_cache(
     }
 }
 
-pub(crate) fn relay_hints(entity: &NostrEntityRef) -> Vec<String> {
-    match entity {
+pub(crate) fn relay_targets(entity: &NostrEntityRef, fallback: Vec<String>) -> Vec<String> {
+    let mut targets: Vec<String> = match entity {
         NostrEntityRef::Profile { relays, .. }
         | NostrEntityRef::Event { relays, .. }
         | NostrEntityRef::Address { relays, .. } => relays.clone(),
+    };
+    for url in fallback {
+        if !targets.iter().any(|existing| existing == &url) {
+            targets.push(url);
+        }
     }
+    targets
 }
 
-pub(crate) fn fetch_filter(entity: &NostrEntityRef) -> Result<Filter, CoreError> {
+pub(crate) fn relay_filter(entity: &NostrEntityRef) -> Result<Filter, CoreError> {
     match entity {
         NostrEntityRef::Profile { pubkey_hex, .. } => {
-            let author = PublicKey::from_hex(pubkey_hex)
+            let pk = PublicKey::from_hex(pubkey_hex)
                 .map_err(|e| CoreError::InvalidInput(format!("bad pubkey: {e}")))?;
-            Ok(Filter::new()
-                .kinds([Kind::Custom(0)])
-                .author(author)
-                .limit(16))
+            Ok(Filter::new().kinds([Kind::Custom(0)]).author(pk).limit(1))
         }
         NostrEntityRef::Event { event_id_hex, .. } => {
             let id = EventId::from_hex(event_id_hex)
@@ -235,30 +566,30 @@ pub(crate) fn fetch_filter(entity: &NostrEntityRef) -> Result<Filter, CoreError>
             d_tag,
             ..
         } => {
-            let author = PublicKey::from_hex(pubkey_hex)
+            let pk = PublicKey::from_hex(pubkey_hex)
                 .map_err(|e| CoreError::InvalidInput(format!("bad pubkey: {e}")))?;
             Ok(Filter::new()
                 .kinds([Kind::Custom(*kind as u16)])
-                .author(author)
+                .author(pk)
                 .custom_tag(SingleLetterTag::lowercase(Alphabet::D), d_tag.clone())
-                .limit(16))
+                .limit(1))
         }
     }
 }
 
-pub(crate) fn ndb_filter(entity: &NostrEntityRef) -> Result<NdbFilter, CoreError> {
-    match entity {
+pub(crate) fn ndb_filters(entity: &NostrEntityRef) -> Result<Vec<NdbFilter>, CoreError> {
+    Ok(match entity {
         NostrEntityRef::Profile { pubkey_hex, .. } => {
-            let pk = PublicKey::from_hex(pubkey_hex)
+            let author = PublicKey::from_hex(pubkey_hex)
                 .map_err(|e| CoreError::InvalidInput(format!("bad pubkey: {e}")))?;
-            let pk_bytes: [u8; 32] = pk.to_bytes();
-            Ok(NdbFilter::new().kinds([0u64]).authors([&pk_bytes]).build())
+            let pk_bytes: [u8; 32] = author.to_bytes();
+            vec![NdbFilter::new().kinds([0u64]).authors([&pk_bytes]).build()]
         }
         NostrEntityRef::Event { event_id_hex, .. } => {
             let id = EventId::from_hex(event_id_hex)
                 .map_err(|e| CoreError::InvalidInput(format!("bad event id: {e}")))?;
             let id_bytes: [u8; 32] = id.to_bytes();
-            Ok(NdbFilter::new().ids([&id_bytes]).build())
+            vec![NdbFilter::new().ids([&id_bytes]).build()]
         }
         NostrEntityRef::Address {
             kind,
@@ -266,15 +597,48 @@ pub(crate) fn ndb_filter(entity: &NostrEntityRef) -> Result<NdbFilter, CoreError
             d_tag,
             ..
         } => {
-            let pk = PublicKey::from_hex(pubkey_hex)
+            let author = PublicKey::from_hex(pubkey_hex)
                 .map_err(|e| CoreError::InvalidInput(format!("bad pubkey: {e}")))?;
-            let pk_bytes: [u8; 32] = pk.to_bytes();
-            Ok(NdbFilter::new()
+            let pk_bytes: [u8; 32] = author.to_bytes();
+            vec![NdbFilter::new()
                 .kinds([*kind as u64])
                 .authors([&pk_bytes])
                 .tags([d_tag.as_str()], 'd')
-                .build())
+                .build()]
         }
+    })
+}
+
+pub(crate) fn event_matches_ref(event: &Event, entity: &NostrEntityRef) -> bool {
+    match entity {
+        NostrEntityRef::Profile { pubkey_hex, .. } => {
+            event.kind.as_u16() == 0 && event.pubkey.to_hex() == *pubkey_hex
+        }
+        NostrEntityRef::Event { event_id_hex, .. } => event.id.to_hex() == *event_id_hex,
+        NostrEntityRef::Address {
+            kind,
+            pubkey_hex,
+            d_tag,
+            ..
+        } => {
+            event.kind.as_u16() as u32 == *kind
+                && event.pubkey.to_hex() == *pubkey_hex
+                && event_d_tag(event).as_deref() == Some(d_tag.as_str())
+        }
+    }
+}
+
+pub(crate) fn entity_event_from_event(event: &Event) -> NostrEntityEvent {
+    to_entity_event(event)
+}
+
+pub fn render_kind_for_event_kind(kind: u32) -> NostrEntityRenderKind {
+    match kind {
+        KIND_LONG_FORM => NostrEntityRenderKind::Article,
+        KIND_SHORT_NOTE => NostrEntityRenderKind::Note,
+        KIND_HIGHLIGHT => NostrEntityRenderKind::Highlight,
+        KIND_METADATA => NostrEntityRenderKind::Profile,
+        _ => NostrEntityRenderKind::Generic,
     }
 }
 
@@ -363,6 +727,7 @@ fn to_entity_event(event: &Event) -> NostrEntityEvent {
     NostrEntityEvent {
         event_id_hex: event.id.to_hex(),
         kind: event.kind.as_u16() as u32,
+        render_kind: render_kind_for_event_kind(event.kind.as_u16() as u32),
         pubkey_hex: event.pubkey.to_hex(),
         content: event.content.clone(),
         created_at: event.created_at.as_secs(),
@@ -404,6 +769,257 @@ mod tests {
         let err =
             decode_nostr_entity("nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5");
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn ref_snapshot_projects_decode_and_error_states() {
+        let entity = NostrEntityRef::Profile {
+            pubkey_hex: "abcdef".into(),
+            relays: Vec::new(),
+        };
+        let success = ref_snapshot(Ok(entity.clone()));
+        assert_eq!(success.entity, Some(entity));
+        assert!(success.decoded);
+        assert!(success.error_message.is_empty());
+
+        let failure = ref_snapshot(Err(CoreError::InvalidInput("bad entity".into())));
+        assert_eq!(failure.entity, None);
+        assert!(!failure.decoded);
+        assert_eq!(failure.error_message, "invalid input: bad entity");
+    }
+
+    #[test]
+    fn resolution_snapshot_projects_hit_miss_and_error_states() {
+        let event = NostrEntityEvent {
+            event_id_hex: "event".into(),
+            kind: 1,
+            render_kind: NostrEntityRenderKind::Note,
+            pubkey_hex: "author".into(),
+            content: "hello".into(),
+            created_at: 1,
+            tags_json: "[]".into(),
+        };
+        let hit = resolution_snapshot(Ok(Some(event.clone())));
+        assert_eq!(hit.event, Some(event));
+        assert!(hit.resolved);
+        assert!(hit.error_message.is_empty());
+
+        let miss = resolution_snapshot(Ok(None));
+        assert_eq!(miss.event, None);
+        assert!(!miss.resolved);
+        assert!(miss.error_message.is_empty());
+
+        let failure = resolution_snapshot(Err(CoreError::Cache("query failed".into())));
+        assert_eq!(failure.event, None);
+        assert!(!failure.resolved);
+        assert_eq!(failure.error_message, "cache error: query failed");
+    }
+
+    #[test]
+    fn fallback_labels_match_ios_fallbacks() {
+        assert_eq!(
+            fallback_label(&NostrEntityRef::Profile {
+                pubkey_hex: "abcdef0123456789".into(),
+                relays: Vec::new(),
+            }),
+            "Profile · abcdef012345…"
+        );
+        assert_eq!(
+            fallback_label(&NostrEntityRef::Event {
+                event_id_hex: "1234567890abcdef".into(),
+                relays: Vec::new(),
+                author_hint_hex: None,
+                kind_hint: Some(9802),
+            }),
+            "Event kind 9802 · 1234567890ab…"
+        );
+        assert_eq!(
+            fallback_label(&NostrEntityRef::Address {
+                kind: 30023,
+                pubkey_hex: "abcdef".into(),
+                d_tag: "article-slug".into(),
+                relays: Vec::new(),
+            }),
+            "Kind 30023 · article-slug"
+        );
+    }
+
+    #[test]
+    fn inline_render_matches_markdown_fallbacks() {
+        assert_eq!(
+            inline_render(&NostrEntityRef::Profile {
+                pubkey_hex: "abcdef0123456789".into(),
+                relays: Vec::new(),
+            }),
+            NostrEntityInlineRender::Profile {
+                pubkey_hex: "abcdef0123456789".into(),
+                fallback_label: "@abcdef01".into(),
+            }
+        );
+        assert_eq!(
+            inline_render(&NostrEntityRef::Event {
+                event_id_hex: "1234567890abcdef".into(),
+                relays: Vec::new(),
+                author_hint_hex: None,
+                kind_hint: None,
+            }),
+            NostrEntityInlineRender::Reference {
+                chip_label: "note:12345678…".into(),
+            }
+        );
+        assert_eq!(
+            inline_render(&NostrEntityRef::Address {
+                kind: 30023,
+                pubkey_hex: "abcdef".into(),
+                d_tag: "article-slug".into(),
+                relays: Vec::new(),
+            }),
+            NostrEntityInlineRender::Reference {
+                chip_label: "article-slug".into(),
+            }
+        );
+        assert_eq!(
+            inline_render(&NostrEntityRef::Address {
+                kind: 30023,
+                pubkey_hex: "abcdef".into(),
+                d_tag: String::new(),
+                relays: Vec::new(),
+            }),
+            NostrEntityInlineRender::Reference {
+                chip_label: "article".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn identity_keys_match_entity_identity() {
+        assert_eq!(
+            identity_key(&NostrEntityRef::Profile {
+                pubkey_hex: "abcdef0123456789".into(),
+                relays: Vec::new(),
+            }),
+            "p:abcdef0123456789"
+        );
+        assert_eq!(
+            identity_key(&NostrEntityRef::Event {
+                event_id_hex: "1234567890abcdef".into(),
+                relays: Vec::new(),
+                author_hint_hex: None,
+                kind_hint: None,
+            }),
+            "e:1234567890abcdef"
+        );
+        assert_eq!(
+            identity_key(&NostrEntityRef::Address {
+                kind: 30023,
+                pubkey_hex: "abcdef".into(),
+                d_tag: "article-slug".into(),
+                relays: Vec::new(),
+            }),
+            "a:30023:abcdef:article-slug"
+        );
+    }
+
+    #[test]
+    fn tokenize_nostr_content_splits_text_and_entities() {
+        let runs = tokenize_nostr_content(
+            "Read nostr:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6!",
+        );
+        assert_eq!(
+            runs.first(),
+            Some(&NostrContentRun::Text {
+                value: "Read ".into(),
+            })
+        );
+        assert_eq!(
+            runs.get(2),
+            Some(&NostrContentRun::Text { value: "!".into() })
+        );
+        match runs.get(1) {
+            Some(NostrContentRun::Entity {
+                entity: NostrEntityRef::Profile { pubkey_hex, .. },
+            }) => assert_eq!(
+                pubkey_hex,
+                "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+            ),
+            other => panic!("wrong token: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tokenize_nostr_content_preserves_malformed_known_body_fallback() {
+        assert_eq!(
+            tokenize_nostr_content("x nostr:npub1notvalid y"),
+            vec![
+                NostrContentRun::Text { value: "x ".into() },
+                NostrContentRun::Text {
+                    value: "npub1notvalid".into()
+                },
+                NostrContentRun::Text { value: " y".into() },
+            ]
+        );
+    }
+
+    #[test]
+    fn extract_event_refs_excludes_profiles_and_dedupes_by_identity() {
+        let event_id_hex =
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string();
+        let nevent =
+            encode_event_to_nevent(event_id_hex.clone(), None, Vec::new(), None).expect("encode");
+        let refs = extract_event_refs(&format!(
+            "nostr:{nevent} nostr:npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6 nostr:{nevent}"
+        ));
+        assert_eq!(refs.len(), 1);
+        match &refs[0] {
+            NostrEntityRef::Event {
+                event_id_hex: id, ..
+            } => assert_eq!(id, &event_id_hex),
+            other => panic!("wrong ref: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tokenize_nostr_markdown_inline_drops_unknown_or_undecodable_entities() {
+        assert_eq!(
+            tokenize_nostr_markdown_inline("x nostr:nope y"),
+            vec![
+                NostrContentRun::Text { value: "x ".into() },
+                NostrContentRun::Text { value: " y".into() },
+            ]
+        );
+        assert_eq!(
+            tokenize_nostr_markdown_inline("x nostr:npub1notvalid y"),
+            vec![
+                NostrContentRun::Text { value: "x ".into() },
+                NostrContentRun::Text { value: " y".into() },
+            ]
+        );
+        assert_eq!(
+            tokenize_nostr_markdown_inline("x nostr: y"),
+            vec![
+                NostrContentRun::Text { value: "x ".into() },
+                NostrContentRun::Text {
+                    value: "nostr:".into()
+                },
+                NostrContentRun::Text { value: " y".into() },
+            ]
+        );
+    }
+
+    #[test]
+    fn standalone_nostr_entity_decodes_first_entity_body() {
+        let event_id_hex =
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string();
+        let nevent =
+            encode_event_to_nevent(event_id_hex.clone(), None, Vec::new(), None).expect("encode");
+        let entity = standalone_nostr_entity(&format!("  nostr:{nevent} trailing text  "))
+            .expect("standalone entity");
+        match entity {
+            NostrEntityRef::Event {
+                event_id_hex: id, ..
+            } => assert_eq!(id, event_id_hex),
+            other => panic!("wrong entity: {other:?}"),
+        }
     }
 
     #[test]
@@ -483,5 +1099,75 @@ mod tests {
     fn encode_nevent_rejects_bad_event_id() {
         let err = encode_event_to_nevent("not-hex".to_string(), None, Vec::new(), None);
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn render_kind_for_event_kind_matches_rich_text_cards() {
+        assert_eq!(
+            render_kind_for_event_kind(30023),
+            NostrEntityRenderKind::Article
+        );
+        assert_eq!(render_kind_for_event_kind(1), NostrEntityRenderKind::Note);
+        assert_eq!(
+            render_kind_for_event_kind(9802),
+            NostrEntityRenderKind::Highlight
+        );
+        assert_eq!(
+            render_kind_for_event_kind(0),
+            NostrEntityRenderKind::Profile
+        );
+        assert_eq!(
+            render_kind_for_event_kind(11),
+            NostrEntityRenderKind::Generic
+        );
+    }
+
+    #[test]
+    fn article_card_projection_projects_article_tags_and_route() {
+        let projection = article_card_projection(NostrEntityArticleCardProjectionInput {
+            event: entity_article_event(
+                "authorpubkey",
+                r#"[["d","essay"],["title","Article"],["image","https://example.com/cover.jpg"],["summary","Summary"]]"#,
+            ),
+        });
+
+        assert_eq!(projection.display_title, "Article");
+        assert_eq!(
+            projection.image_url,
+            Some("https://example.com/cover.jpg".into())
+        );
+        assert_eq!(projection.summary, Some("Summary".into()));
+        assert_eq!(
+            projection.reader_route,
+            Some(ArticleReaderRoute {
+                address: "30023:authorpubkey:essay".into(),
+                pubkey: "authorpubkey".into(),
+                d_tag: "essay".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn article_card_projection_falls_back_without_optional_tags() {
+        let projection = article_card_projection(NostrEntityArticleCardProjectionInput {
+            event: entity_article_event("authorpubkey", r#"[["d",""]]"#),
+        });
+
+        assert_eq!(projection.display_title, "Untitled");
+        assert_eq!(projection.image_url, None);
+        assert_eq!(projection.summary, None);
+        assert_eq!(projection.reader_route, None);
+    }
+
+    fn entity_article_event(pubkey_hex: &str, tags_json: &str) -> NostrEntityEvent {
+        NostrEntityEvent {
+            event_id_hex: "event".into(),
+            kind: KIND_LONG_FORM,
+            render_kind: NostrEntityRenderKind::Article,
+            pubkey_hex: pubkey_hex.into(),
+            content: String::new(),
+            created_at: 123,
+            tags_json: tags_json.into(),
+        }
     }
 }

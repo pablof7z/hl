@@ -6,37 +6,35 @@ import SwiftUI
 /// and shows live state + role chips. Chips here are display-only; the
 /// detail view makes them tappable.
 struct RelayRowView: View {
-    let config: RelayConfig
-    let diagnostic: RelayDiagnostic?
-    let nip11: Nip11Document?
+    let projection: RelayRowProjection
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            RelayAvatar(url: config.url, nip11: nip11, size: 36)
+            RelayAvatar(projection: projection.avatar, size: 36)
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    stateDot
-                    Text(primaryLabel)
+                    stateDot(projection.statusTone)
+                    Text(projection.primaryLabel)
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Spacer()
-                    if let rtt = diagnostic?.rttMs {
-                        Text("\(rtt) ms")
+                    if let rtt = projection.rttLabel {
+                        Text(rtt)
                             .font(.caption.monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
                 }
-                Text(displayURL(config.url))
+                Text(projection.displayUrl)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 HStack(spacing: 6) {
-                    roleChip("Read", isOn: config.read)
-                    roleChip("Write", isOn: config.write)
-                    roleChip("Rooms", isOn: config.rooms)
-                    roleChip("Indexer", isOn: config.indexer)
+                    roleChip("Read", isOn: projection.read)
+                    roleChip("Write", isOn: projection.write)
+                    roleChip("Rooms", isOn: projection.rooms)
+                    roleChip("Indexer", isOn: projection.indexer)
                 }
             }
         }
@@ -45,28 +43,9 @@ struct RelayRowView: View {
 
     // MARK: - Pieces
 
-    /// Prefer the NIP-11 name; fall back to the URL host. Typed as a single
-    /// computed property so the row lays out identically whether or not
-    /// the probe has resolved yet.
-    private var primaryLabel: String {
-        if let name = nip11?.name?.trimmingCharacters(in: .whitespaces), !name.isEmpty {
-            return name
-        }
-        return displayURL(config.url)
-    }
-
-    @ViewBuilder
-    private var stateDot: some View {
-        let color: Color = {
-            switch diagnostic?.state {
-            case .connected: return .green
-            case .connecting: return .yellow
-            case .disconnected, .terminated, .banned: return .red
-            case .none: return .gray
-            }
-        }()
+    private func stateDot(_ tone: RelayStatusTone) -> some View {
         Circle()
-            .fill(color)
+            .fill(statusColor(tone))
             .frame(width: 8, height: 8)
     }
 
@@ -81,11 +60,6 @@ struct RelayRowView: View {
             )
             .foregroundStyle(isOn ? Color.accentColor : .secondary)
     }
-
-    private func displayURL(_ raw: String) -> String {
-        if raw.hasPrefix("wss://") { return String(raw.dropFirst(6)) }
-        return raw
-    }
 }
 
 /// Leading-edge avatar for a relay row. Loads `nip11.icon` via Kingfisher
@@ -94,13 +68,12 @@ struct RelayRowView: View {
 /// fallback also shows while the NIP-11 probe is in flight, so rows look
 /// right from the first frame.
 struct RelayAvatar: View {
-    let url: String
-    let nip11: Nip11Document?
+    let projection: RelayAvatarProjection
     var size: CGFloat = 36
 
     var body: some View {
         Group {
-            if let iconURL = nip11?.icon.flatMap({ URL(string: $0) }) {
+            if let iconURL = projection.iconUrl.flatMap(URL.init(string:)) {
                 KFImage(iconURL)
                     .resizable()
                     .placeholder { monogram }
@@ -118,27 +91,19 @@ struct RelayAvatar: View {
     private var monogram: some View {
         ZStack {
             RoundedRectangle(cornerRadius: size / 4, style: .continuous)
-                .fill(hueFromHost())
-            Text(initial)
+                .fill(Color(hue: projection.hue, saturation: 0.55, brightness: 0.65))
+            Text(projection.initial)
                 .font(.system(size: size * 0.45, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white)
         }
     }
+}
 
-    /// First letter of the relay host (e.g. `r` for `relay.damus.io`).
-    private var initial: String {
-        let host = url
-            .replacingOccurrences(of: "wss://", with: "")
-            .replacingOccurrences(of: "ws://", with: "")
-        return host.first.map { String($0).uppercased() } ?? "?"
-    }
-
-    /// Stable, pleasant fill color derived from the URL's characters.
-    /// Avoids a palette lookup or per-host storage — same URL always lands
-    /// on the same hue.
-    private func hueFromHost() -> Color {
-        let seed: Double = url.unicodeScalars.reduce(0) { $0 + Double($1.value) }
-        let hue = (seed.truncatingRemainder(dividingBy: 360)) / 360
-        return Color(hue: hue, saturation: 0.55, brightness: 0.65)
+func statusColor(_ tone: RelayStatusTone) -> Color {
+    switch tone {
+    case .connected: return .green
+    case .connecting: return .yellow
+    case .error: return .red
+    case .unknown: return .gray
     }
 }

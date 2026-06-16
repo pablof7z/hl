@@ -12,41 +12,10 @@ enum BookSelection: Equatable {
     case existing(ArtifactRecord)
     case pending(ArtifactPreview)
 
-    var title: String {
+    var preview: ArtifactPreview {
         switch self {
-        case .existing(let record): return record.preview.title
-        case .pending(let preview): return preview.title
-        }
-    }
-
-    var author: String {
-        switch self {
-        case .existing(let record): return record.preview.author
-        case .pending(let preview): return preview.author
-        }
-    }
-
-    var coverURL: String {
-        switch self {
-        case .existing(let record): return record.preview.image
-        case .pending(let preview): return preview.image
-        }
-    }
-
-    var catalogId: String {
-        switch self {
-        case .existing(let record): return record.preview.catalogId
-        case .pending(let preview): return preview.catalogId
-        }
-    }
-
-    /// Stable key for dedup across `existing` and `pending` — two selections
-    /// that point at the same ISBN should compare equal by this key even if
-    /// one has a published share and the other doesn't yet.
-    var referenceKey: String {
-        switch self {
-        case .existing(let record): return record.preview.highlightReferenceKey
-        case .pending(let preview): return preview.highlightReferenceKey
+        case .existing(let record): return record.preview
+        case .pending(let preview): return preview
         }
     }
 }

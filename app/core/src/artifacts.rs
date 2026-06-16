@@ -1,6 +1,8 @@
 //! Artifact share (kind:11) building, publishing, and querying. Ports
 //! `web/src/lib/ndk/artifacts.ts`.
 
+use std::collections::BTreeMap;
+
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
@@ -10,6 +12,9 @@ use crate::nostr_runtime::NostrRuntime;
 
 /// kind:11 "Thread" is used both for artifact shares and for discussions.
 const KIND_ARTIFACT_SHARE: u16 = 11;
+const LOCAL_SCAN_MULTIPLIER: i32 = 8;
+const LOCAL_SCAN_FLOOR: i32 = 256;
+const LOCAL_SCAN_CEILING: i32 = 4096;
 
 const TRACKING_PARAMS: &[&str] = &[
     "fbclid", "gclid", "mc_cid", "mc_eid", "ref", "ref_src", "ref_url",
@@ -58,6 +63,12 @@ pub struct PreviewInput {
     pub reference_kind: String,
     pub highlight_tag_name: Option<String>,
     pub highlight_tag_value: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArtifactPublishSnapshot {
+    pub artifact: Option<ArtifactRecord>,
+    pub error: String,
 }
 
 pub fn build_preview_with(input: PreviewInput) -> Result<ArtifactPreview, CoreError> {
@@ -183,16 +194,17 @@ fn podcast_item_guid_from_catalog_value(value: &str) -> String {
 }
 
 /// Publish a kind:11 artifact share into a NIP-29 group. Port of
-/// `publishArtifact` (`web/src/lib/ndk/artifacts.ts:468-507`), minus the
-/// "existing artifact" merge path — that's an MVP-later concern; if a
-/// duplicate kind:11 with the same `d` tag exists the relay will upsert.
+/// `publishArtifact` (`web/src/lib/ndk/artifacts.ts:468-507`). The relay
+/// replaceable-event upsert is the canonical duplicate path for a matching
+/// kind:11 `d` tag.
 pub async fn publish(
     runtime: &NostrRuntime,
     preview: ArtifactPreview,
     group_id: &str,
     note: Option<&str>,
 ) -> Result<ArtifactRecord, CoreError> {
-    if group_id.trim().is_empty() {
+    let group_id = group_id.trim();
+    if group_id.is_empty() {
         return Err(CoreError::InvalidInput("group_id must not be empty".into()));
     }
 
@@ -203,11 +215,10 @@ pub async fn publish(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign artifact share: {e}")))?;
-    runtime.publish_signed_event_to_relays(
-        "artifact-share-publish",
-        &event,
-        runtime.rooms_urls(),
-    )?;
+    client
+        .send_event(&event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish artifact share: {e}")))?;
 
     Ok(ArtifactRecord {
         preview,
@@ -219,11 +230,31 @@ pub async fn publish(
     })
 }
 
-/// Port of `fetchArtifactSharesForGroup`. Room data is hydrated through the
-/// nostrdb-backed query path and live subscription pump, so this compatibility
-/// entry point intentionally has no separate network fetch path.
-pub async fn fetch_shares(_group_id: &str, _limit: u32) -> Result<Vec<ArtifactRecord>, CoreError> {
-    Ok(Vec::new())
+/// Wrap a local preview in the artifact record shape expected by publish paths
+/// before a kind:11 share exists. Rust owns the sentinel defaults so platform
+/// shells do not invent partial artifact records.
+pub fn unpublished_record(preview: ArtifactPreview) -> ArtifactRecord {
+    ArtifactRecord {
+        preview,
+        group_id: String::new(),
+        share_event_id: String::new(),
+        pubkey: String::new(),
+        created_at: None,
+        note: String::new(),
+    }
+}
+
+pub fn publish_snapshot(result: Result<ArtifactRecord, CoreError>) -> ArtifactPublishSnapshot {
+    match result {
+        Ok(artifact) => ArtifactPublishSnapshot {
+            artifact: Some(artifact),
+            error: String::new(),
+        },
+        Err(error) => ArtifactPublishSnapshot {
+            artifact: None,
+            error: error.to_string(),
+        },
+    }
 }
 
 /// Read kind:11 artifact shares for `group_id` from nostrdb, newest first.
@@ -275,21 +306,20 @@ pub fn query_for_group(
     Ok(records)
 }
 
-/// Simple title/author/source substring search over cached artifacts.
+/// Simple title/author substring search over cached artifacts.
 pub fn search_cached(ndb: &Ndb, query: &str, limit: u32) -> Result<Vec<ArtifactRecord>, CoreError> {
     let q = query.trim();
-    if q.is_empty() {
+    if q.is_empty() || limit == 0 {
         return Ok(Vec::new());
     }
 
     let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
-    let cap = (limit.saturating_mul(8)).max(256) as i32;
     let filter = NdbFilter::new().kinds([KIND_ARTIFACT_SHARE as u64]).build();
     let results = ndb
-        .query(&txn, &[filter], cap)
-        .map_err(|e| CoreError::Cache(format!("query artifacts: {e}")))?;
+        .query(&txn, &[filter], scan_cap(limit))
+        .map_err(|e| CoreError::Cache(format!("query artifact search: {e}")))?;
 
-    let mut by_ref = std::collections::BTreeMap::<String, ArtifactRecord>::new();
+    let mut best_by_reference: BTreeMap<String, (u8, ArtifactRecord)> = BTreeMap::new();
     for r in &results {
         let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
             continue;
@@ -298,63 +328,110 @@ pub fn search_cached(ndb: &Ndb, query: &str, limit: u32) -> Result<Vec<ArtifactR
         let Ok(event) = Event::from_json(&json) else {
             continue;
         };
-        if crate::discussions::is_discussion(&event) {
-            continue;
-        }
         let Some(group_id) = first_tag_value(&event, "h") else {
             continue;
         };
+        if crate::discussions::is_discussion(&event) {
+            continue;
+        }
         let Some(record) = artifact_record_from_event(&event, group_id) else {
             continue;
         };
-        if !artifact_matches(&record, q) {
+        let Some(rank) = artifact_match_rank(&record, q) else {
             continue;
-        }
-        let key = artifact_reference_key(&record);
-        if key.is_empty() {
-            continue;
-        }
-        match by_ref.get(&key) {
-            Some(existing)
-                if existing.created_at.unwrap_or(0) >= record.created_at.unwrap_or(0) => {}
+        };
+        let key = artifact_identity(&record);
+        match best_by_reference.get(&key) {
+            Some((existing_rank, existing))
+                if *existing_rank < rank
+                    || (*existing_rank == rank
+                        && existing.created_at.unwrap_or(0) >= record.created_at.unwrap_or(0)) => {}
             _ => {
-                by_ref.insert(key, record);
+                best_by_reference.insert(key, (rank, record));
             }
         }
     }
 
-    let mut records: Vec<ArtifactRecord> = by_ref.into_values().collect();
-    records.sort_by(|a, b| b.created_at.unwrap_or(0).cmp(&a.created_at.unwrap_or(0)));
+    let mut records: Vec<(u8, ArtifactRecord)> = best_by_reference.into_values().collect();
+    records.sort_by(|(rank_a, a), (rank_b, b)| {
+        rank_a
+            .cmp(rank_b)
+            .then_with(|| b.created_at.unwrap_or(0).cmp(&a.created_at.unwrap_or(0)))
+    });
     records.truncate(limit as usize);
-    Ok(records)
-}
-
-fn artifact_matches(record: &ArtifactRecord, query: &str) -> bool {
-    contains_ci(&record.preview.title, query)
-        || contains_ci(&record.preview.author, query)
-        || contains_ci(&record.preview.source, query)
-        || contains_ci(&record.preview.catalog_id, query)
-        || contains_ci(&record.preview.reference_tag_value, query)
-}
-
-fn contains_ci(value: &str, query: &str) -> bool {
-    value.to_lowercase().contains(&query.to_lowercase())
-}
-
-fn artifact_reference_key(record: &ArtifactRecord) -> String {
-    let name = record.preview.reference_tag_name.trim();
-    let value = record.preview.reference_tag_value.trim();
-    if !name.is_empty() && !value.is_empty() {
-        return format!("{name}:{value}");
-    }
-    let url = record.preview.url.trim();
-    if !url.is_empty() {
-        return format!("r:{url}");
-    }
-    record.share_event_id.clone()
+    Ok(records.into_iter().map(|(_, record)| record).collect())
 }
 
 // -- Event helpers -----------------------------------------------------------
+
+fn scan_cap(limit: u32) -> i32 {
+    let raw = (limit as i32).saturating_mul(LOCAL_SCAN_MULTIPLIER);
+    raw.clamp(LOCAL_SCAN_FLOOR, LOCAL_SCAN_CEILING)
+}
+
+fn contains_ci(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    haystack.to_lowercase().contains(&needle.to_lowercase())
+}
+
+fn starts_ci(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    haystack.to_lowercase().starts_with(&needle.to_lowercase())
+}
+
+fn artifact_match_rank(record: &ArtifactRecord, query: &str) -> Option<u8> {
+    let preview = &record.preview;
+    if starts_ci(&preview.title, query) {
+        return Some(0);
+    }
+    if starts_ci(&preview.author, query) {
+        return Some(1);
+    }
+    if contains_ci(&preview.title, query) {
+        return Some(2);
+    }
+    if contains_ci(&preview.author, query) {
+        return Some(3);
+    }
+    if contains_ci(&record.note, query) || contains_ci(&preview.description, query) {
+        return Some(4);
+    }
+    if contains_ci(&preview.url, query)
+        || contains_ci(&preview.source, query)
+        || contains_ci(&preview.catalog_id, query)
+        || contains_ci(&preview.catalog_kind, query)
+        || contains_ci(&preview.reference_tag_value, query)
+        || contains_ci(&preview.reference_kind, query)
+    {
+        return Some(5);
+    }
+    None
+}
+
+fn artifact_identity(record: &ArtifactRecord) -> String {
+    let preview = &record.preview;
+    let name = preview.reference_tag_name.trim();
+    let value = preview.reference_tag_value.trim();
+    if !name.is_empty() && !value.is_empty() {
+        return format!("{name}:{value}");
+    }
+    let name = preview.highlight_tag_name.trim();
+    let value = preview.highlight_tag_value.trim();
+    if !name.is_empty() && !value.is_empty() {
+        return format!("{name}:{value}");
+    }
+    if !preview.url.trim().is_empty() {
+        return format!("r:{}", preview.url.trim());
+    }
+    if !preview.id.trim().is_empty() {
+        return format!("d:{}", preview.id.trim());
+    }
+    record.share_event_id.clone()
+}
 
 pub(crate) fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
     for tag in event.tags.iter() {
@@ -445,6 +522,10 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
                 .unwrap_or_default()
         });
 
+    let (highlight_tag_name, highlight_tag_value) =
+        highlight_reference_for_artifact(&ref_name, &ref_value, &k, &url);
+    let highlight_reference_key = reference_key_for_tag(&highlight_tag_name, &highlight_tag_value);
+
     let preview = ArtifactPreview {
         id: d,
         url,
@@ -480,9 +561,9 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
         reference_tag_name: ref_name.clone(),
         reference_tag_value: ref_value,
         reference_kind: k,
-        highlight_tag_name: String::new(),
-        highlight_tag_value: String::new(),
-        highlight_reference_key: String::new(),
+        highlight_tag_name,
+        highlight_tag_value,
+        highlight_reference_key,
         chapters: read_chapters(event),
     };
 
@@ -494,6 +575,43 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
         created_at: Some(event.created_at.as_secs()),
         note: event.content.clone(),
     })
+}
+
+fn highlight_reference_for_artifact(
+    reference_tag_name: &str,
+    reference_tag_value: &str,
+    reference_kind: &str,
+    url: &str,
+) -> (String, String) {
+    let reference_tag_name = reference_tag_name.trim();
+    let reference_tag_value = reference_tag_value.trim();
+    match reference_tag_name {
+        "a" | "e" if !reference_tag_value.is_empty() => (
+            reference_tag_name.to_string(),
+            reference_tag_value.to_string(),
+        ),
+        "i" if is_external_content_reference(reference_tag_value, reference_kind) => (
+            reference_tag_name.to_string(),
+            reference_tag_value.to_string(),
+        ),
+        _ if !url.trim().is_empty() => ("r".to_string(), url.trim().to_string()),
+        "i" if !reference_tag_value.is_empty() => (
+            reference_tag_name.to_string(),
+            reference_tag_value.to_string(),
+        ),
+        _ => (String::new(), String::new()),
+    }
+}
+
+fn is_external_content_reference(value: &str, kind: &str) -> bool {
+    let value = value.to_ascii_lowercase();
+    let kind = kind.to_ascii_lowercase();
+    value.starts_with("isbn:")
+        || value.starts_with("podcast:")
+        || value.starts_with("spotify:")
+        || kind.starts_with("isbn")
+        || kind.starts_with("podcast")
+        || kind.starts_with("spotify")
 }
 
 // -- URL helpers -------------------------------------------------------------
@@ -819,6 +937,7 @@ fn parse_tag(parts: &[&str]) -> Result<Tag, CoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
 
     #[test]
     fn normalize_strips_tracking_and_default_ports() {
@@ -919,6 +1038,63 @@ mod tests {
         assert!(has("i", "https://example.com/post"));
         assert!(has("k", "web"));
         assert!(has("r", "https://example.com/post"));
+    }
+
+    #[test]
+    fn build_share_event_trims_note_content() {
+        let preview = build_preview("https://example.com/post").unwrap();
+        let keys = Keys::generate();
+
+        let event = build_share_event("room-a", &preview, Some("  hello\n"))
+            .unwrap()
+            .sign_with_keys(&keys)
+            .expect("sign");
+        assert_eq!(event.content, "hello");
+
+        let event = build_share_event("room-a", &preview, Some(" \n\t"))
+            .unwrap()
+            .sign_with_keys(&keys)
+            .expect("sign");
+        assert!(event.content.is_empty());
+    }
+
+    #[test]
+    fn unpublished_record_wraps_preview_with_empty_share_fields() {
+        let preview = build_preview("https://example.com/post").unwrap();
+        let expected_key = preview.highlight_reference_key.clone();
+        let record = unpublished_record(preview);
+        assert_eq!(record.preview.highlight_reference_key, expected_key);
+        assert!(record.group_id.is_empty());
+        assert!(record.share_event_id.is_empty());
+        assert!(record.pubkey.is_empty());
+        assert_eq!(record.created_at, None);
+        assert!(record.note.is_empty());
+    }
+
+    #[test]
+    fn publish_snapshot_projects_artifact_or_error_state() {
+        let preview = build_preview("https://example.com/post").unwrap();
+        let record = ArtifactRecord {
+            preview,
+            group_id: "room-a".into(),
+            share_event_id: "event123".into(),
+            pubkey: "pubkey".into(),
+            created_at: Some(42),
+            note: "hello".into(),
+        };
+
+        let ok = publish_snapshot(Ok(record));
+        assert_eq!(
+            ok.artifact
+                .as_ref()
+                .map(|artifact| artifact.share_event_id.as_str()),
+            Some("event123")
+        );
+        assert!(ok.error.is_empty());
+
+        let err = publish_snapshot(Err(CoreError::Relay("offline".into())));
+        assert!(err.artifact.is_none());
+        assert_eq!(err.error, "relay error: offline");
     }
 
     #[test]
@@ -1082,55 +1258,81 @@ mod tests {
     }
 
     fn ingest(ndb: &nostrdb::Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).expect("process event");
+        process_event_and_wait(ndb, event);
     }
 
-    fn wait_for_group(
-        ndb: &nostrdb::Ndb,
-        group_id: &str,
-        limit: u32,
-        ready: impl Fn(&[ArtifactRecord]) -> bool,
-    ) -> Vec<ArtifactRecord> {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-        loop {
-            let records = query_for_group(ndb, group_id, limit).expect("query");
-            if ready(&records) || std::time::Instant::now() >= deadline {
-                return records;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
+    struct SearchableShare<'a> {
+        group_id: &'a str,
+        d: &'a str,
+        title: &'a str,
+        author: &'a str,
+        url: &'a str,
+        source: &'a str,
+        catalog_id: &'a str,
+        note: &'a str,
+        created_at: u64,
     }
 
-    fn wait_for_search(
-        ndb: &nostrdb::Ndb,
-        query: &str,
-        limit: u32,
-        ready: impl Fn(&[ArtifactRecord]) -> bool,
-    ) -> Vec<ArtifactRecord> {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-        loop {
-            let records = search_cached(ndb, query, limit).expect("search");
-            if ready(&records) || std::time::Instant::now() >= deadline {
-                return records;
+    impl<'a> SearchableShare<'a> {
+        fn new(group_id: &'a str, d: &'a str, title: &'a str) -> Self {
+            Self {
+                group_id,
+                d,
+                title,
+                author: "",
+                url: "",
+                source: "article",
+                catalog_id: "",
+                note: "",
+                created_at: 1_000,
             }
-            std::thread::sleep(std::time::Duration::from_millis(10));
         }
     }
 
     fn make_share(keys: &Keys, group_id: &str, d: &str, title: &str) -> Event {
-        EventBuilder::new(Kind::Custom(KIND_ARTIFACT_SHARE), "")
-            .tags(vec![
-                Tag::parse(vec!["h".to_string(), group_id.to_string()]).unwrap(),
-                Tag::identifier(d),
-                Tag::parse(vec!["title".to_string(), title.to_string()]).unwrap(),
-                Tag::parse(vec!["source".to_string(), "article".to_string()]).unwrap(),
-                Tag::parse(vec![
-                    "r".to_string(),
-                    "https://example.com/post".to_string(),
-                ])
-                .unwrap(),
-            ])
+        let url = format!("https://example.com/{d}");
+        make_searchable_share(
+            keys,
+            SearchableShare {
+                url: &url,
+                ..SearchableShare::new(group_id, d, title)
+            },
+        )
+    }
+
+    fn make_searchable_share(keys: &Keys, share: SearchableShare<'_>) -> Event {
+        let mut tags = vec![
+            Tag::parse(vec!["h".to_string(), share.group_id.to_string()]).unwrap(),
+            Tag::identifier(share.d),
+            Tag::parse(vec!["title".to_string(), share.title.to_string()]).unwrap(),
+            Tag::parse(vec!["source".to_string(), share.source.to_string()]).unwrap(),
+        ];
+        if !share.author.is_empty() {
+            tags.push(Tag::parse(vec!["author".to_string(), share.author.to_string()]).unwrap());
+        }
+        if !share.catalog_id.is_empty() {
+            if !share.url.is_empty() {
+                tags.push(
+                    Tag::parse(vec![
+                        "i".to_string(),
+                        share.catalog_id.to_string(),
+                        share.url.to_string(),
+                    ])
+                    .unwrap(),
+                );
+            } else {
+                tags.push(Tag::parse(vec!["i".to_string(), share.catalog_id.to_string()]).unwrap());
+            }
+            let kind = share.catalog_id.split(':').next().unwrap_or("web");
+            tags.push(Tag::parse(vec!["k".to_string(), kind.to_string()]).unwrap());
+        }
+        if !share.url.is_empty() {
+            tags.push(Tag::parse(vec!["r".to_string(), share.url.to_string()]).unwrap());
+        }
+
+        EventBuilder::new(Kind::Custom(KIND_ARTIFACT_SHARE), share.note)
+            .tags(tags)
+            .custom_created_at(Timestamp::from(share.created_at))
             .sign_with_keys(keys)
             .expect("sign")
     }
@@ -1142,7 +1344,7 @@ mod tests {
         let share = make_share(&keys, "alpha", "art-1", "Alpha Article");
         ingest(&ndb, &share);
 
-        let records = wait_for_group(&ndb, "alpha", 32, |records| records.len() == 1);
+        let records = query_for_group(&ndb, "alpha", 32).expect("query");
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].preview.title, "Alpha Article");
         assert_eq!(records[0].group_id, "alpha");
@@ -1155,27 +1357,13 @@ mod tests {
         ingest(&ndb, &make_share(&keys, "alpha", "a1", "Alpha"));
         ingest(&ndb, &make_share(&keys, "bravo", "b1", "Bravo"));
 
-        let alpha = wait_for_group(&ndb, "alpha", 32, |records| records.len() == 1);
+        let alpha = query_for_group(&ndb, "alpha", 32).expect("alpha");
         assert_eq!(alpha.len(), 1);
         assert_eq!(alpha[0].preview.title, "Alpha");
 
-        let bravo = wait_for_group(&ndb, "bravo", 32, |records| records.len() == 1);
+        let bravo = query_for_group(&ndb, "bravo", 32).expect("bravo");
         assert_eq!(bravo.len(), 1);
         assert_eq!(bravo[0].preview.title, "Bravo");
-    }
-
-    #[test]
-    fn search_cached_matches_and_dedupes_artifacts() {
-        let (ndb, _tmp) = isolated_ndb();
-        let keys = Keys::generate();
-        ingest(&ndb, &make_share(&keys, "alpha", "same", "Old Rust Book"));
-        ingest(&ndb, &make_share(&keys, "bravo", "same", "New Rust Book"));
-        ingest(&ndb, &make_share(&keys, "alpha", "other", "Unrelated"));
-
-        let records = wait_for_search(&ndb, "rust", 10, |records| records.len() == 1);
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0].preview.title, "New Rust Book");
-        assert_eq!(records[0].group_id, "bravo");
     }
 
     #[test]
@@ -1195,7 +1383,7 @@ mod tests {
         ingest(&ndb, &discussion);
         ingest(&ndb, &make_share(&keys, "alpha", "art-1", "Real Article"));
 
-        let records = wait_for_group(&ndb, "alpha", 32, |records| records.len() == 1);
+        let records = query_for_group(&ndb, "alpha", 32).expect("query");
         assert_eq!(records.len(), 1, "discussion must be excluded");
         assert_eq!(records[0].preview.title, "Real Article");
     }
@@ -1210,7 +1398,191 @@ mod tests {
                 &make_share(&keys, "alpha", &format!("a{i}"), &format!("T{i}")),
             );
         }
-        let records = wait_for_group(&ndb, "alpha", 3, |records| records.len() == 3);
+        let records = query_for_group(&ndb, "alpha", 3).expect("query");
         assert_eq!(records.len(), 3);
+    }
+
+    #[test]
+    fn artifact_record_sets_publishable_highlight_reference_for_isbn() {
+        let keys = Keys::generate();
+        let event = make_searchable_share(
+            &keys,
+            SearchableShare {
+                author: "Steve Klabnik",
+                url: "https://openlibrary.org/isbn/9781593278281",
+                source: "book",
+                catalog_id: "isbn:9781593278281",
+                ..SearchableShare::new("books", "book-1", "The Rust Book")
+            },
+        );
+
+        let record = artifact_record_from_event(&event, "books").expect("record");
+        assert_eq!(record.preview.reference_tag_name, "i");
+        assert_eq!(record.preview.reference_tag_value, "isbn:9781593278281");
+        assert_eq!(record.preview.highlight_tag_name, "i");
+        assert_eq!(record.preview.highlight_tag_value, "isbn:9781593278281");
+        assert_eq!(
+            record.preview.highlight_reference_key,
+            "i:isbn:9781593278281"
+        );
+    }
+
+    #[test]
+    fn artifact_record_uses_url_highlight_reference_for_web_share() {
+        let preview = build_preview("https://example.com/post").unwrap();
+        let keys = Keys::generate();
+        let event = build_share_event("room-a", &preview, None)
+            .unwrap()
+            .sign_with_keys(&keys)
+            .expect("sign");
+
+        let record = artifact_record_from_event(&event, "room-a").expect("record");
+        assert_eq!(record.preview.reference_tag_name, "i");
+        assert_eq!(
+            record.preview.reference_tag_value,
+            "https://example.com/post"
+        );
+        assert_eq!(record.preview.reference_kind, "web");
+        assert_eq!(record.preview.highlight_tag_name, "r");
+        assert_eq!(
+            record.preview.highlight_tag_value,
+            "https://example.com/post"
+        );
+        assert_eq!(
+            record.preview.highlight_reference_key,
+            "r:https://example.com/post"
+        );
+    }
+
+    #[test]
+    fn search_cached_noops_for_blank_or_zero_limit() {
+        let (ndb, _tmp) = isolated_ndb();
+        assert!(search_cached(&ndb, "   ", 20).unwrap().is_empty());
+        assert!(search_cached(&ndb, "rust", 0).unwrap().is_empty());
+    }
+
+    #[test]
+    fn search_cached_matches_title_author_note_and_reference() {
+        let (ndb, _tmp) = isolated_ndb();
+        let keys = Keys::generate();
+        let rust_book = make_searchable_share(
+            &keys,
+            SearchableShare {
+                author: "Steve Klabnik",
+                url: "https://openlibrary.org/isbn/9781593278281",
+                source: "book",
+                catalog_id: "isbn:9781593278281",
+                note: "Systems programming study group",
+                created_at: 2_000,
+                ..SearchableShare::new("books", "rust-book", "The Rust Programming Language")
+            },
+        );
+        let management = make_searchable_share(
+            &keys,
+            SearchableShare {
+                author: "Andrew Grove",
+                url: "https://openlibrary.org/isbn/9780679762881",
+                source: "book",
+                catalog_id: "isbn:9780679762881",
+                ..SearchableShare::new("books", "high-output", "High Output Management")
+            },
+        );
+        ingest(&ndb, &rust_book);
+        ingest(&ndb, &management);
+
+        let by_title = search_cached(&ndb, "RUST programming", 20).expect("title search");
+        assert_eq!(by_title.len(), 1);
+        assert_eq!(by_title[0].preview.title, "The Rust Programming Language");
+
+        let by_author = search_cached(&ndb, "grove", 20).expect("author search");
+        assert_eq!(by_author.len(), 1);
+        assert_eq!(by_author[0].preview.title, "High Output Management");
+
+        let by_note = search_cached(&ndb, "study group", 20).expect("note search");
+        assert_eq!(by_note.len(), 1);
+        assert_eq!(by_note[0].preview.title, "The Rust Programming Language");
+
+        let by_reference = search_cached(&ndb, "9780679762881", 20).expect("reference search");
+        assert_eq!(by_reference.len(), 1);
+        assert_eq!(
+            by_reference[0].preview.highlight_reference_key,
+            "i:isbn:9780679762881"
+        );
+    }
+
+    #[test]
+    fn search_cached_excludes_discussions_and_honors_limit() {
+        let (ndb, _tmp) = isolated_ndb();
+        let keys = Keys::generate();
+        let discussion = EventBuilder::new(Kind::Custom(KIND_ARTIFACT_SHARE), "rust thread")
+            .tags(vec![
+                Tag::parse(vec!["h".to_string(), "books".to_string()]).unwrap(),
+                Tag::identifier("discussion"),
+                Tag::parse(vec!["t".to_string(), "discussion".to_string()]).unwrap(),
+                Tag::parse(vec!["title".to_string(), "Rust Discussion".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&keys)
+            .expect("sign");
+        ingest(&ndb, &discussion);
+        for i in 0..3 {
+            let d = format!("rust-{i}");
+            let title = format!("Rust Volume {i}");
+            let url = format!("https://example.com/rust-{i}");
+            let catalog_id = format!("isbn:978000000000{i}");
+            ingest(
+                &ndb,
+                &make_searchable_share(
+                    &keys,
+                    SearchableShare {
+                        url: &url,
+                        source: "book",
+                        catalog_id: &catalog_id,
+                        created_at: 1_000 + i,
+                        ..SearchableShare::new("books", &d, &title)
+                    },
+                ),
+            );
+        }
+
+        let hits = search_cached(&ndb, "rust", 2).expect("search");
+        assert_eq!(hits.len(), 2);
+        assert!(hits
+            .iter()
+            .all(|hit| hit.preview.title != "Rust Discussion"));
+    }
+
+    #[test]
+    fn search_cached_dedupes_references_and_keeps_best_record() {
+        let (ndb, _tmp) = isolated_ndb();
+        let keys = Keys::generate();
+        let older = make_searchable_share(
+            &keys,
+            SearchableShare {
+                author: "Robert Martin",
+                url: "https://openlibrary.org/isbn/9780134494166",
+                source: "book",
+                catalog_id: "isbn:9780134494166",
+                ..SearchableShare::new("alpha", "clean-older", "Clean Architecture")
+            },
+        );
+        let newer = make_searchable_share(
+            &keys,
+            SearchableShare {
+                author: "Robert C. Martin",
+                url: "https://openlibrary.org/isbn/9780134494166",
+                source: "book",
+                catalog_id: "isbn:9780134494166",
+                created_at: 2_000,
+                ..SearchableShare::new("bravo", "clean-newer", "Clean Architecture")
+            },
+        );
+        ingest(&ndb, &older);
+        ingest(&ndb, &newer);
+
+        let hits = search_cached(&ndb, "clean architecture", 20).expect("search");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].group_id, "bravo");
+        assert_eq!(hits[0].created_at, Some(2_000));
+        assert_eq!(hits[0].preview.author, "Robert C. Martin");
     }
 }

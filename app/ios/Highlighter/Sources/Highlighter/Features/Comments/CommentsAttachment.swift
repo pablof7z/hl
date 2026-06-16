@@ -2,70 +2,75 @@ import SwiftUI
 
 /// Attaches NIP-22 comments to any reader by injecting a top-bar toolbar
 /// button (bubble icon + count) that pushes a CommentsView onto the
-/// enclosing NavigationStack. Opens the Rust comments slice so the
+/// enclosing NavigationStack. Owns the CommentsStore lifecycle so the
 /// count is live before the user ever taps.
 struct CommentsAttachment: ViewModifier {
-    let artifact: ArtifactRef
+    let scope: CommentScope
     let artifactAuthorPubkey: String?
     let artifactHeader: AnyView?
 
     @Environment(HighlighterStore.self) private var app
+    @State private var store = CommentsStore()
     @State private var showComments = false
+    @State private var didStart = false
 
     func body(content: Content) -> some View {
+        let projection = toolbarProjection
+
         content
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showComments = true } label: {
-                        commentsLabel
+                        commentsLabel(projection)
                     }
-                    .accessibilityLabel(
-                        commentCount == 0
-                            ? "Start the thread"
-                            : "\(commentCount) comments"
-                    )
+                    .accessibilityLabel(projection.accessibilityLabel)
                 }
             }
             .navigationDestination(isPresented: $showComments) {
                 CommentsView(
-                    artifact: artifact,
+                    scope: scope,
                     artifactAuthorPubkey: artifactAuthorPubkey,
-                    artifactHeader: artifactHeader
+                    artifactHeader: artifactHeader,
+                    store: store
                 )
             }
-            .task(id: artifact) {
-                app.openComments(artifact: artifact)
+            .task(id: scope) {
+                guard !didStart else { return }
+                didStart = true
+                await store.start(
+                    scope: scope,
+                    core: app.safeCore
+                )
             }
     }
 
-    private var commentsLabel: some View {
+    private func commentsLabel(_ projection: CommentToolbarProjection) -> some View {
         HStack(spacing: 4) {
             Image(systemName: "bubble.left")
                 .font(.system(size: 15, weight: .medium))
-            if commentCount > 0 {
-                Text("\(commentCount)")
+            if projection.showsCount {
+                Text(projection.countLabel)
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .monospacedDigit()
             }
         }
     }
 
-    private var commentCount: Int {
-        guard app.comments.rootTagName == artifact.rootTagName,
-              app.comments.rootTagValue == artifact.rootTagValue
-        else { return 0 }
-        return Int(app.comments.recordCount)
+    private var toolbarProjection: CommentToolbarProjection {
+        app.safeCore.projectCommentToolbar(
+            input: CommentToolbarProjectionInput(records: store.records)
+        )
     }
 }
 
 extension View {
     func commentsAttachment(
-        artifact: ArtifactRef,
+        scope: CommentScope,
         artifactAuthorPubkey: String? = nil,
         artifactHeader: AnyView? = nil
     ) -> some View {
         modifier(CommentsAttachment(
-            artifact: artifact,
+            scope: scope,
             artifactAuthorPubkey: artifactAuthorPubkey,
             artifactHeader: artifactHeader
         ))

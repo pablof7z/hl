@@ -1,15 +1,12 @@
 import SwiftUI
 
 struct KeysView: View {
-    @State private var nsec: String? = KeychainService.loadNsec()
     @State private var isRevealed = false
-    @State private var copiedKey: CopiedKey?
+    @State private var copiedNsec = false
+    @State private var copiedNpub = false
+    @State private var nsecCopyResetTimer = OneShotUITimer()
+    @State private var npubCopyResetTimer = OneShotUITimer()
     @Environment(HighlighterStore.self) private var store
-
-    private enum CopiedKey {
-        case nsec
-        case npub
-    }
 
     var body: some View {
         List {
@@ -29,10 +26,11 @@ struct KeysView: View {
     @ViewBuilder
     private var nsecSection: some View {
         Section {
-            if let nsec {
+            let snapshot = secretKeySnapshot
+            if snapshot.hasSecretKey {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Text(isRevealed ? nsec : maskedKey(nsec))
+                        Text(snapshot.displayValue)
                             .font(.system(.footnote, design: .monospaced))
                             .foregroundStyle(isRevealed ? .primary : .secondary)
                             .lineLimit(isRevealed ? nil : 1)
@@ -51,24 +49,25 @@ struct KeysView: View {
                                 .frame(width: 28, height: 28)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel(isRevealed ? "Hide secret key" : "Reveal secret key")
                     }
 
                     Button {
-                        UIPasteboard.general.string = nsec
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            copiedKey = .nsec
+                        UIPasteboard.general.string = snapshot.copyValue
+                        copiedNsec = true
+                        nsecCopyResetTimer.schedule(after: 2) {
+                            copiedNsec = false
                         }
                     } label: {
                         Label(
-                            copiedKey == .nsec ? "Copied" : "Copy Secret Key",
-                            systemImage: copiedKey == .nsec ? "checkmark" : "doc.on.doc"
+                            copiedNsec ? "Copied!" : "Copy Secret Key",
+                            systemImage: copiedNsec ? "checkmark" : "doc.on.doc"
                         )
                         .font(.subheadline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                     }
                     .buttonStyle(.glassProminent)
+                    .disabled(copiedNsec)
                 }
                 .padding(.vertical, 6)
             } else {
@@ -99,19 +98,21 @@ struct KeysView: View {
 
                     Button {
                         UIPasteboard.general.string = user.npub
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            copiedKey = .npub
+                        copiedNpub = true
+                        npubCopyResetTimer.schedule(after: 2) {
+                            copiedNpub = false
                         }
                     } label: {
                         Label(
-                            copiedKey == .npub ? "Copied" : "Copy Public Key",
-                            systemImage: copiedKey == .npub ? "checkmark" : "doc.on.doc"
+                            copiedNpub ? "Copied!" : "Copy Public Key",
+                            systemImage: copiedNpub ? "checkmark" : "doc.on.doc"
                         )
                         .font(.subheadline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
                     }
                     .buttonStyle(.glass)
+                    .disabled(copiedNpub)
                 }
                 .padding(.vertical, 6)
             } header: {
@@ -140,8 +141,7 @@ struct KeysView: View {
 
     // MARK: - Helpers
 
-    private func maskedKey(_ key: String) -> String {
-        guard key.count > 10 else { return String(repeating: "•", count: key.count) }
-        return "\(key.prefix(8))••••••••••••••••••••••••\(key.suffix(6))"
+    private var secretKeySnapshot: SecretKeySettingsSnapshot {
+        store.safeCore.currentSecretKeySettingsSnapshot(isRevealed: isRevealed)
     }
 }

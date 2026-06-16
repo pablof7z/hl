@@ -7,14 +7,18 @@ import SwiftUI
 /// one shot.
 ///
 /// Uses SwiftUI's `Menu(primaryAction:)` so a tap stays one-tap-fast and
-/// long-press surfaces the Rust-owned curation choices.
+/// long-press surfaces the curation choices. Loads curations lazily on
+/// the first appear; refreshes after every membership change so the
+/// checkmark state is always accurate without a full BookmarkStore.
 struct BookmarkMenuButton: View {
     /// NIP-33 a-tag value — `"30023:<pubkey>:<d>"`.
     let articleAddress: String
 
     @Environment(HighlighterStore.self) private var app
 
+    @State private var curationItems: [CurationMenuItem] = []
     @State private var newCollectionPresented: Bool = false
+    @State private var errorMessage: String?
 
     var body: some View {
         Menu {
@@ -26,24 +30,21 @@ struct BookmarkMenuButton: View {
                 Label("New collection…", systemImage: "plus")
             }
         } label: {
-            Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
-                .foregroundStyle(isBookmarked ? Color.highlighterAccent : Color.highlighterInkStrong)
+            Image(systemName: bookmarkChrome.toolbarSystemImage)
+                .foregroundStyle(
+                    bookmarkChrome.usesAccentColor ? Color.highlighterAccent : Color.highlighterInkStrong
+                )
         } primaryAction: {
             Task { await app.toggleBookmark(articleAddress: articleAddress) }
         }
-        .accessibilityLabel(isBookmarked ? "Remove bookmark" : "Bookmark article")
-        .task(id: articleAddress) {
-            app.openCurationMenu(articleAddress: articleAddress)
-        }
-        .onDisappear {
-            app.closeCurationMenu()
-        }
+        .accessibilityLabel(bookmarkChrome.accessibilityLabel)
+        .task { await loadCurations() }
         .sheet(isPresented: $newCollectionPresented) {
             NewCollectionSheet(
                 onCancel: { newCollectionPresented = false },
                 onCreate: { title in
                     newCollectionPresented = false
-                    createAndAdd(title: title)
+                    Task { await createAndAdd(title: title) }
                 }
             )
             .presentationDetents([.medium])
@@ -52,29 +53,21 @@ struct BookmarkMenuButton: View {
 
     @ViewBuilder
     private var curationsSection: some View {
-        let curationSets = app.curationMenu.articleAddress == articleAddress ? app.curationMenu.curationSets : []
-
-        if app.curationMenu.isLoading {
-            Text("Loading collections")
-                .font(.footnote)
-        } else if let errorMessage = app.curationMenu.errorMessage, !errorMessage.isEmpty {
-            Text(errorMessage)
-                .font(.footnote)
-        } else if curationSets.isEmpty {
+        if curationItems.isEmpty {
             // Header-only section so the menu still reads as the
             // collection picker before any sets exist.
             Text("No collections yet")
                 .font(.footnote)
         } else {
             Section("Add to collection") {
-                ForEach(curationSets, id: \.id) { set in
+                ForEach(curationItems, id: \.id) { item in
                     Button {
-                        toggleInCuration(set)
+                        Task { await toggleInCuration(item) }
                     } label: {
-                        if set.articleAddresses.contains(articleAddress) {
-                            Label(displayTitle(set), systemImage: "checkmark")
+                        if item.isMember {
+                            Label(item.title, systemImage: "checkmark")
                         } else {
-                            Text(displayTitle(set))
+                            Text(item.title)
                         }
                     }
                 }
@@ -86,25 +79,46 @@ struct BookmarkMenuButton: View {
         app.isBookmarked(articleAddress: articleAddress)
     }
 
-    private func displayTitle(_ set: BookmarkSetRecord) -> String {
-        if !set.title.isEmpty { return set.title }
-        if !set.id.isEmpty { return set.id }
-        return "Untitled"
+    private var bookmarkChrome: ArticleBookmarkChromeProjection {
+        app.safeCore.projectArticleBookmarkChrome(
+            input: ArticleBookmarkChromeProjectionInput(isBookmarked: isBookmarked)
+        )
     }
 
     // MARK: - Actions
 
-    private func toggleInCuration(_ set: BookmarkSetRecord) {
-        let nowMember = !set.articleAddresses.contains(articleAddress)
-        app.setAddressInCurationSet(
-            dTag: set.id,
-            address: articleAddress,
-            member: nowMember
-        )
+    private func loadCurations() async {
+        apply(await app.safeCore.getCurationMenuSnapshot(address: articleAddress))
     }
 
-    private func createAndAdd(title: String) {
-        app.createCurationSetAndAdd(title: title, address: articleAddress)
+    private func toggleInCuration(_ item: CurationMenuItem) async {
+        let snapshot = await app.safeCore.toggleCurationMenuItemSnapshot(
+            dTag: item.id,
+            address: articleAddress
+        )
+        apply(snapshot, errorPrefix: "Couldn't update collection")
+    }
+
+    private func createAndAdd(title: String) async {
+        let snapshot = await app.safeCore.createCurationSetWithAddressSnapshot(
+            title: title,
+            address: articleAddress
+        )
+        apply(snapshot, errorPrefix: "Couldn't create collection")
+    }
+
+    private func apply(_ snapshot: CurationMenuSnapshot, errorPrefix: String? = nil) {
+        let projection = app.safeCore.projectCurationMenuSnapshotApply(
+            input: CurationMenuSnapshotApplyInput(
+                items: snapshot.items,
+                error: snapshot.error,
+                errorPrefix: errorPrefix
+            )
+        )
+        curationItems = projection.items
+        if projection.shouldApplyErrorMessage {
+            errorMessage = projection.errorMessage
+        }
     }
 }
 
@@ -115,6 +129,7 @@ struct NewCollectionSheet: View {
     var onCancel: () -> Void
     var onCreate: (String) -> Void
 
+    @Environment(HighlighterStore.self) private var app
     @State private var title: String = ""
     @FocusState private var focused: Bool
 
@@ -144,19 +159,22 @@ struct NewCollectionSheet: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") { commit() }
                         .fontWeight(.semibold)
-                        .disabled(trimmed.isEmpty)
+                        .disabled(!createProjection.canCreate)
                 }
             }
             .onAppear { focused = true }
         }
     }
 
-    private var trimmed: String {
-        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    private var createProjection: CurationSetCreateProjection {
+        app.safeCore.projectCurationSetCreate(
+            input: CurationSetCreateProjectionInput(title: title)
+        )
     }
 
     private func commit() {
-        guard !trimmed.isEmpty else { return }
-        onCreate(trimmed)
+        let projection = createProjection
+        guard projection.canCreate else { return }
+        onCreate(projection.submitTitle)
     }
 }

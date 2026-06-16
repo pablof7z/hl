@@ -56,7 +56,10 @@ enum MarkdownRenderer {
         ink: UIColor,
         muted: UIColor,
         bodyPointSize: CGFloat = 18,
-        nostrDecoder: (@Sendable (String) -> NostrEntityRef?)? = nil,
+        nostrStandaloneEntity: (@Sendable (String) -> NostrEntityRef?)? = nil,
+        nostrInlineTokens: (@Sendable (String) -> [NostrContentRun])? = nil,
+        nostrInlineRender: (@Sendable (NostrEntityRef) -> NostrEntityInlineRender)? = nil,
+        highlightContent: @Sendable (HighlightRecord) -> HighlightDetailContentProjection,
         profileNames: [String: String] = [:]
     ) -> Output {
         let preprocessed = FootnotePreprocessor.extract(content)
@@ -69,7 +72,9 @@ enum MarkdownRenderer {
             muted: muted,
             bodyPointSize: bodyPointSize,
             definitionsById: Dictionary(uniqueKeysWithValues: preprocessed.definitions.map { ($0.id, $0) }),
-            nostrDecoder: nostrDecoder,
+            nostrStandaloneEntity: nostrStandaloneEntity,
+            nostrInlineTokens: nostrInlineTokens,
+            nostrInlineRender: nostrInlineRender,
             profileNames: profileNames
         )
         let rawSegments = walker.render(document)
@@ -80,10 +85,9 @@ enum MarkdownRenderer {
         var highlightsById: [String: HighlightRecord] = [:]
         let segments: [BodySegment] = rawSegments.map { segment in
             guard case .text(let attrStr) = segment else { return segment }
-            let mutable = (attrStr.mutableCopy() as? NSMutableAttributedString)
-                ?? NSMutableAttributedString(attributedString: attrStr)
+            let mutable = attrStr.mutableCopy() as! NSMutableAttributedString
             for highlight in highlights {
-                let quote = highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines)
+                let quote = highlightContent(highlight).quoteText
                 guard !quote.isEmpty, quote.count >= 4 else { continue }
                 let plain = mutable.string
                 if let range = plain.range(of: quote) {
@@ -154,7 +158,9 @@ enum MarkdownRenderer {
                 muted: muted,
                 bodyPointSize: smallSize,
                 definitionsById: [:],
-                nostrDecoder: nil,
+                nostrStandaloneEntity: nil,
+                nostrInlineTokens: nil,
+                nostrInlineRender: nil,
                 profileNames: [:]
             )
             let innerDoc = Document(parsing: def.markdown)
@@ -169,17 +175,16 @@ enum MarkdownRenderer {
             }
             out.append(innerString)
 
-            // Back-arrow — tappable. Skip the link attachment (rather than
-            // crash) if the synthetic URL ever fails to parse.
-            var backAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: smallSize),
-                .foregroundColor: accent,
-                footnoteBackAttribute: def.number
-            ]
-            if let backURL = URL(string: "highlighter://footnote-back/\(def.number)") {
-                backAttributes[.link] = backURL
-            }
-            let back = NSAttributedString(string: " ↩", attributes: backAttributes)
+            // Back-arrow — tappable.
+            let back = NSAttributedString(
+                string: " ↩",
+                attributes: [
+                    .font: UIFont.systemFont(ofSize: smallSize),
+                    .foregroundColor: accent,
+                    footnoteBackAttribute: def.number,
+                    .link: URL(string: "highlighter://footnote-back/\(def.number)")!
+                ]
+            )
             out.append(back)
             out.append(NSAttributedString(string: "\n"))
         }
@@ -199,7 +204,9 @@ private struct BodyWalker {
     let muted: UIColor
     let bodyPointSize: CGFloat
     let definitionsById: [String: FootnotePreprocessor.Definition]
-    let nostrDecoder: (@Sendable (String) -> NostrEntityRef?)?
+    let nostrStandaloneEntity: (@Sendable (String) -> NostrEntityRef?)?
+    let nostrInlineTokens: (@Sendable (String) -> [NostrContentRun])?
+    let nostrInlineRender: (@Sendable (NostrEntityRef) -> NostrEntityInlineRender)?
     let profileNames: [String: String]
 
     var footnoteAnchors: [Int: NSRange] = [:]
@@ -249,22 +256,10 @@ private struct BodyWalker {
     }
 
     private func nostrOnlyParagraph(_ para: Paragraph) -> NostrEntityRef? {
-        guard let decoder = nostrDecoder else { return nil }
+        guard let nostrStandaloneEntity else { return nil }
         let children = Array(para.inlineChildren)
         guard children.count == 1, let textNode = children.first as? Markdown.Text else { return nil }
-        let raw = textNode.string.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard raw.lowercased().hasPrefix("nostr:") else { return nil }
-        let body = raw.dropFirst("nostr:".count)
-        let bech32 = String(body.prefix(while: {
-            guard let sc = $0.unicodeScalars.first, $0.unicodeScalars.count == 1 else { return false }
-            let v = sc.value
-            return (0x30...0x39).contains(v) || (0x61...0x7A).contains(v)
-        }))
-        let lower = bech32.lowercased()
-        guard lower.hasPrefix("npub1") || lower.hasPrefix("nprofile1")
-            || lower.hasPrefix("note1") || lower.hasPrefix("nevent1") || lower.hasPrefix("naddr1")
-        else { return nil }
-        return decoder(bech32)
+        return nostrStandaloneEntity(textNode.string)
     }
 
     private func imageOnlyParagraph(_ para: Paragraph) -> (URL, String)? {
@@ -515,117 +510,100 @@ private struct BodyWalker {
         }
     }
 
-    /// Scan plain text for `[^id]` footnote references and `nostr:` profile
-    /// mentions, emitting styled runs for each. Everything else is plain serif.
+    /// Scan plain text for `[^id]` footnote references and Rust-tokenized
+    /// `nostr:` profile mentions, emitting styled runs for each. Everything
+    /// else is plain serif.
     private mutating func renderPlainText(_ s: String) -> NSAttributedString {
         let hasFootnote = s.contains("[^")
-        let hasNostr = nostrDecoder != nil && s.contains("nostr:")
+        let hasNostr = nostrInlineTokens != nil && nostrInlineRender != nil && s.contains("nostr:")
         guard hasFootnote || hasNostr else {
             return NSAttributedString(string: s, attributes: [.font: serif, .foregroundColor: ink])
+        }
+
+        if !hasFootnote {
+            let out = NSMutableAttributedString()
+            appendPlainOrNostr(s, to: out)
+            return out
         }
 
         let out = NSMutableAttributedString()
         var i = s.startIndex
 
         while i < s.endIndex {
-            // Find earliest next footnote or nostr: marker
-            let fn = hasFootnote ? s.range(of: "[^", range: i..<s.endIndex) : nil
-            let ns = hasNostr ? s.range(of: "nostr:", options: .caseInsensitive, range: i..<s.endIndex) : nil
-
-            let next: Range<String.Index>?
-            if let fn, let ns {
-                next = fn.lowerBound <= ns.lowerBound ? fn : ns
-            } else {
-                next = fn ?? ns
-            }
-
-            guard let special = next else {
-                appendPlain(String(s[i...]), to: out)
+            guard let special = s.range(of: "[^", range: i..<s.endIndex) else {
+                appendPlainOrNostr(String(s[i...]), to: out)
                 break
             }
 
-            // Text before the marker
             if special.lowerBound > i {
-                appendPlain(String(s[i..<special.lowerBound]), to: out)
+                appendPlainOrNostr(String(s[i..<special.lowerBound]), to: out)
             }
 
-            if special == fn {
-                // Footnote reference [^id]
-                let afterOpen = s[special.upperBound...]
-                guard let closeRange = afterOpen.range(of: "]") else {
-                    appendPlain(String(s[special.lowerBound...]), to: out)
-                    return out
-                }
-                let id = String(afterOpen[afterOpen.startIndex..<closeRange.lowerBound])
-                if let def = definitionsById[id] {
-                    let marker = "[\(def.number)]"
-                    let rangeStart = out.length
-                    let superSize = max(10, bodyPointSize - 6)
-                    var markerAttributes: [NSAttributedString.Key: Any] = [
-                        .font: UIFont.systemFont(ofSize: superSize, weight: .semibold),
-                        .foregroundColor: accent,
-                        .baselineOffset: bodyPointSize * 0.35,
-                        MarkdownRenderer.footnoteReferenceAttribute: def.number
-                    ]
-                    if let footnoteURL = URL(string: "highlighter://footnote/\(def.number)") {
-                        markerAttributes[.link] = footnoteURL
-                    }
-                    out.append(NSAttributedString(string: marker, attributes: markerAttributes))
-                    footnoteAnchors[def.number] = NSRange(location: rangeStart, length: marker.utf16.count)
-                } else {
-                    appendPlain("[^\(id)]", to: out)
-                }
-                i = closeRange.upperBound
+            let afterOpen = s[special.upperBound...]
+            guard let closeRange = afterOpen.range(of: "]") else {
+                appendPlain(String(s[special.lowerBound...]), to: out)
+                return out
+            }
+            let id = String(afterOpen[afterOpen.startIndex..<closeRange.lowerBound])
+            if let def = definitionsById[id] {
+                let marker = "[\(def.number)]"
+                let rangeStart = out.length
+                let superSize = max(10, bodyPointSize - 6)
+                out.append(NSAttributedString(string: marker, attributes: [
+                    .font: UIFont.systemFont(ofSize: superSize, weight: .semibold),
+                    .foregroundColor: accent,
+                    .baselineOffset: bodyPointSize * 0.35,
+                    MarkdownRenderer.footnoteReferenceAttribute: def.number,
+                    .link: URL(string: "highlighter://footnote/\(def.number)")!
+                ]))
+                footnoteAnchors[def.number] = NSRange(location: rangeStart, length: marker.utf16.count)
             } else {
-                // nostr: entity
-                let bodyStart = special.upperBound
-                var end = bodyStart
-                while end < s.endIndex {
-                    guard let sc = s[end].unicodeScalars.first, s[end].unicodeScalars.count == 1 else { break }
-                    let v = sc.value
-                    if (0x30...0x39).contains(v) || (0x61...0x7A).contains(v) { end = s.index(after: end) }
-                    else { break }
-                }
-                let bech32 = String(s[bodyStart..<end])
-                let lower = bech32.lowercased()
-                let isKnown = lower.hasPrefix("npub1") || lower.hasPrefix("nprofile1")
-                    || lower.hasPrefix("note1") || lower.hasPrefix("nevent1") || lower.hasPrefix("naddr1")
-
-                if isKnown, let decoder = nostrDecoder, let ref = decoder(bech32) {
-                    switch ref {
-                    case .profile(let pk, _):
-                        let label = profileNames[pk] ?? "@" + String(pk.prefix(8))
-                        let atLabel = label.hasPrefix("@") ? label : "@\(label)"
-                        var profileAttributes: [NSAttributedString.Key: Any] = [
-                            .font: serifBold,
-                            .foregroundColor: accent
-                        ]
-                        if let profileURL = URL(string: "highlighter://profile/\(pk)") {
-                            profileAttributes[.link] = profileURL
-                        }
-                        out.append(NSAttributedString(string: atLabel, attributes: profileAttributes))
-                    case .event, .address:
-                        // Inline event refs are unlikely in body paragraphs;
-                        // standalone ones become .nostrEntity segments above.
-                        // Render a short dimmed chip so nothing vanishes.
-                        let kind: String
-                        if case .event(let id, _, _, _) = ref { kind = "note:\(id.prefix(8))…" }
-                        else if case .address(_, _, let d, _) = ref { kind = d.isEmpty ? "article" : d }
-                        else { kind = "…" }
-                        out.append(NSAttributedString(string: "[\(kind)]", attributes: [
-                            .font: mono,
-                            .foregroundColor: muted
-                        ]))
-                    }
-                } else if bech32.isEmpty {
-                    appendPlain("nostr:", to: out)
-                }
-                // Unknown / undecodable entity: silently drop the raw URI
-                i = end
+                appendPlain("[^\(id)]", to: out)
             }
+            i = closeRange.upperBound
         }
 
         return out
+    }
+
+    private func appendPlainOrNostr(_ s: String, to out: NSMutableAttributedString) {
+        guard let tokenizer = nostrInlineTokens,
+              let renderer = nostrInlineRender,
+              s.contains("nostr:") else {
+            appendPlain(s, to: out)
+            return
+        }
+
+        for token in tokenizer(s) {
+            switch token {
+            case .text(let value):
+                appendPlain(value, to: out)
+            case .entity(let ref):
+                appendInlineNostr(ref, renderer: renderer, to: out)
+            }
+        }
+    }
+
+    private func appendInlineNostr(
+        _ ref: NostrEntityRef,
+        renderer: (NostrEntityRef) -> NostrEntityInlineRender,
+        to out: NSMutableAttributedString
+    ) {
+        switch renderer(ref) {
+        case .profile(let pk, let fallbackLabel):
+            let label = profileNames[pk] ?? fallbackLabel
+            let atLabel = label.hasPrefix("@") ? label : "@\(label)"
+            out.append(NSAttributedString(string: atLabel, attributes: [
+                .font: serifBold,
+                .foregroundColor: accent,
+                .link: URL(string: "highlighter://profile/\(pk)")!
+            ]))
+        case .reference(let chipLabel):
+            out.append(NSAttributedString(string: "[\(chipLabel)]", attributes: [
+                .font: mono,
+                .foregroundColor: muted
+            ]))
+        }
     }
 
     private func appendPlain(_ s: String, to out: NSMutableAttributedString) {

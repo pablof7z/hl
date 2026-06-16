@@ -17,6 +17,7 @@ struct BookScannerView: View {
     /// or with `nil` when the user dismisses without scanning.
     var onResult: (String?) -> Void
 
+    @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
     @State private var model = BookScannerModel()
     @State private var showManualEntry = false
@@ -49,7 +50,7 @@ struct BookScannerView: View {
                 return
             }
             await model.start { payload in
-                guard let isbn = ISBNValidator.validate(payload) else {
+                guard let isbn = appStore.safeCore.normalizeIsbnInput(payload) else {
                     model.flashNotABook()
                     return
                 }
@@ -266,11 +267,18 @@ struct CameraPreviewLayer: UIViewRepresentable {
 
         override init(frame: CGRect) {
             super.init(frame: frame)
+            configure()
+        }
+
+        required init?(coder: NSCoder) {
+            super.init(coder: coder)
+            configure()
+        }
+
+        private func configure() {
             let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
             addGestureRecognizer(tap)
         }
-
-        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
         @objc private func handleTap(_ gr: UITapGestureRecognizer) {
             let point = gr.location(in: self)

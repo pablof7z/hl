@@ -2,10 +2,12 @@ import SwiftUI
 
 /// Full-bleed "all results of this kind" sub-screen. Pushed when the user
 /// taps "See all" on a section header in `SearchView`. Reads directly from
-/// the Rust-owned search snapshot so relay results stay in sync across
-/// platforms.
+/// the active `SearchStore` so the list stays in sync with the live query —
+/// if relay results stream in while this screen is open, they appear here
+/// too.
 struct SearchSeeAllView: View {
     let target: SearchSeeAllTarget
+    let store: SearchStore
     @Environment(HighlighterStore.self) private var app
 
     var body: some View {
@@ -31,9 +33,9 @@ struct SearchSeeAllView: View {
     private var highlightsList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(app.search.highlights.enumerated()), id: \.element.eventId) { idx, h in
+                ForEach(Array(store.highlights.enumerated()), id: \.element.eventId) { idx, h in
                     row(for: h)
-                    if idx < app.search.highlights.count - 1 {
+                    if idx < store.highlights.count - 1 {
                         Rectangle()
                             .fill(Color.highlighterRule)
                             .frame(height: 0.5)
@@ -47,13 +49,26 @@ struct SearchSeeAllView: View {
 
     @ViewBuilder
     private func row(for h: HighlightRecord) -> some View {
-        if let target = articleReaderTarget(for: h) {
-            NavigationLink(value: target) {
-                SeeAllHighlightRow(highlight: h, query: app.search.query)
+        let projection = app.safeCore.projectSearchHighlightRow(
+            input: SearchHighlightRowProjectionInput(highlight: h)
+        )
+        if let route = projection.articleRoute {
+            NavigationLink(value: ArticleReaderTarget(route: route)) {
+                SeeAllHighlightRow(
+                    highlight: h,
+                    query: store.query,
+                    pageImageUrl: projection.pageImageUrl,
+                    safeCore: app.safeCore
+                )
             }
             .buttonStyle(.plain)
         } else {
-            SeeAllHighlightRow(highlight: h, query: app.search.query)
+            SeeAllHighlightRow(
+                highlight: h,
+                query: store.query,
+                pageImageUrl: projection.pageImageUrl,
+                safeCore: app.safeCore
+            )
         }
     }
 
@@ -64,8 +79,8 @@ struct SearchSeeAllView: View {
         // `articleRowActions` activates. Styled heavily to preserve the
         // editorial look of the rest of the app.
         List {
-            ForEach(app.search.articles, id: \.eventId) { a in
-                NavigationLink(value: ArticleReaderTarget(pubkey: a.pubkey, dTag: a.identifier, seed: nil)) {
+            ForEach(store.articles, id: \.eventId) { a in
+                NavigationLink(value: ArticleReaderTarget(article: a)) {
                     ArticleCardView(article: a)
                 }
                 .listRowBackground(Color.highlighterPaper)
@@ -84,12 +99,12 @@ struct SearchSeeAllView: View {
     private var communitiesList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(app.search.communities.enumerated()), id: \.element.id) { idx, c in
+                ForEach(Array(store.communities.enumerated()), id: \.element.id) { idx, c in
                     NavigationLink(value: c.id) {
                         SeeAllCommunityRow(community: c)
                     }
                     .buttonStyle(.plain)
-                    if idx < app.search.communities.count - 1 {
+                    if idx < store.communities.count - 1 {
                         Rectangle()
                             .fill(Color.highlighterRule)
                             .frame(height: 0.5)
@@ -106,12 +121,12 @@ struct SearchSeeAllView: View {
     private var peopleList: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(app.search.profiles.enumerated()), id: \.element.pubkey) { idx, p in
+                ForEach(Array(store.profiles.enumerated()), id: \.element.pubkey) { idx, p in
                     NavigationLink(value: ProfileDestination.pubkey(p.pubkey)) {
                         SeeAllPersonRow(profile: p)
                     }
                     .buttonStyle(.plain)
-                    if idx < app.search.profiles.count - 1 {
+                    if idx < store.profiles.count - 1 {
                         Rectangle()
                             .fill(Color.highlighterRule)
                             .frame(height: 0.5)
@@ -123,15 +138,6 @@ struct SearchSeeAllView: View {
         }
     }
 
-    // MARK: - Helpers
-
-    private func articleReaderTarget(for h: HighlightRecord) -> ArticleReaderTarget? {
-        let addr = h.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty else { return nil }
-        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[0] == "30023" else { return nil }
-        return ArticleReaderTarget(pubkey: String(parts[1]), dTag: String(parts[2]), seed: nil)
-    }
 }
 
 // MARK: - See-all row variants (a touch denser than the preview rows)
@@ -139,6 +145,8 @@ struct SearchSeeAllView: View {
 private struct SeeAllHighlightRow: View {
     let highlight: HighlightRecord
     let query: String
+    let pageImageUrl: String?
+    let safeCore: SafeHighlighterCore
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -151,7 +159,7 @@ private struct SeeAllHighlightRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 1.25))
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text(matched(highlight.quote, query))
+                Text(matched(highlight.quote, query, safeCore: safeCore))
                     .font(.system(size: 17, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineSpacing(3)
@@ -169,9 +177,7 @@ private struct SeeAllHighlightRow: View {
     }
 
     private var pageImageURL: URL? {
-        let raw = highlight.imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return nil }
-        return URL(string: raw)
+        pageImageUrl.flatMap(URL.init(string:))
     }
 }
 
@@ -179,7 +185,10 @@ private struct SeeAllHighlightRow: View {
 private struct SeeAllCommunityRow: View {
     let community: CommunitySummary
 
+    @Environment(HighlighterStore.self) private var app
+
     var body: some View {
+        let avatar = avatarProjection
         HStack(spacing: 14) {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(
@@ -194,7 +203,7 @@ private struct SeeAllCommunityRow: View {
                 )
                 .frame(width: 56, height: 56)
                 .overlay {
-                    if !community.picture.isEmpty, let url = URL(string: community.picture) {
+                    if !avatar.pictureUrl.isEmpty, let url = URL(string: avatar.pictureUrl) {
                         AsyncImage(url: url) { phase in
                             if case .success(let img) = phase {
                                 img.resizable().aspectRatio(contentMode: .fill)
@@ -203,7 +212,7 @@ private struct SeeAllCommunityRow: View {
                         .frame(width: 56, height: 56)
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     } else {
-                        Text(String(community.name.prefix(1)))
+                        Text(avatar.displayInitial)
                             .font(.system(size: 22, design: .default).weight(.semibold))
                             .foregroundStyle(Color.highlighterInkStrong.opacity(0.8))
                     }
@@ -232,21 +241,41 @@ private struct SeeAllCommunityRow: View {
         .padding(.vertical, 10)
         .contentShape(Rectangle())
     }
+
+    private var avatarProjection: RoomAvatarProjection {
+        app.safeCore.projectRoomAvatar(
+            input: RoomAvatarProjectionInput(
+                name: community.name,
+                pictureUrl: community.picture,
+                uppercaseInitial: false
+            )
+        )
+    }
 }
 
 private struct SeeAllPersonRow: View {
+    @Environment(HighlighterStore.self) private var app
+
     let profile: ProfileMetadata
 
     var body: some View {
+        let display = app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: profile.pubkey,
+                profile: profile,
+                fallback: .pubkey8
+            )
+        )
+
         HStack(spacing: 14) {
             AuthorAvatar(
                 pubkey: profile.pubkey,
-                pictureURL: profile.picture,
-                displayInitial: String(profile.bestName.prefix(1)),
+                pictureURL: display.pictureUrl,
+                displayInitial: display.displayInitial,
                 size: 46
             )
             VStack(alignment: .leading, spacing: 2) {
-                Text(profile.bestName)
+                Text(display.displayName)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                 if !profile.nip05.isEmpty {
@@ -273,40 +302,30 @@ private struct SeeAllPersonRow: View {
 
 // MARK: - Shared helpers
 
-private extension ProfileMetadata {
-    var bestName: String {
-        if !displayName.isEmpty { return displayName }
-        if !name.isEmpty { return name }
-        return String(pubkey.prefix(8))
-    }
-}
-
 /// Build an `AttributedString` highlighting every case-insensitive occurrence
 /// of `query` within `text`. Free function so every row view can reuse it.
-fileprivate func matched(_ text: String, _ query: String) -> AttributedString {
+fileprivate func matched(
+    _ text: String,
+    _ query: String,
+    safeCore: SafeHighlighterCore
+) -> AttributedString {
     var out = AttributedString(text)
-    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return out }
-
-    let lowerText = text.lowercased()
-    let lowerQuery = trimmed.lowercased()
-    var searchRange = lowerText.startIndex..<lowerText.endIndex
-    while let match = lowerText.range(of: lowerQuery, range: searchRange) {
-        let startOffset = lowerText.distance(from: lowerText.startIndex, to: match.lowerBound)
-        let endOffset = lowerText.distance(from: lowerText.startIndex, to: match.upperBound)
+    let projection = safeCore.projectSearchTextMatches(
+        input: SearchTextMatchesProjectionInput(text: text, query: query)
+    )
+    for span in projection.spans {
         let chars = out.characters
         var s = out.startIndex
         var e = out.startIndex
         var idx = 0
-        while idx < startOffset, s < out.endIndex { s = chars.index(after: s); idx += 1 }
+        while idx < Int(span.start), s < out.endIndex { s = chars.index(after: s); idx += 1 }
         idx = 0
         e = s
-        while idx < (endOffset - startOffset), e < out.endIndex { e = chars.index(after: e); idx += 1 }
+        while idx < Int(span.end - span.start), e < out.endIndex { e = chars.index(after: e); idx += 1 }
         if s < e {
             out[s..<e].foregroundColor = .highlighterAccent
             out[s..<e].backgroundColor = Color.laneArticleHighlightFill
         }
-        searchRange = match.upperBound..<lowerText.endIndex
     }
     return out
 }

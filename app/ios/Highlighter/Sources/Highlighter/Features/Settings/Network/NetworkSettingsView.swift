@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// Network Settings main screen. Renders the Rust-owned relay projection and
-/// dispatches typed actions for all relay policy changes.
+/// Network Settings main screen. Unified list of the user's relays, each row
+/// with live status dot + role chips. Taps open `RelayDetailView`; toolbar
+/// `+` opens `AddRelaySheet`.
 struct NetworkSettingsView: View {
     @Environment(HighlighterStore.self) private var appStore
+    @State private var store: NetworkSettingsStore?
     @State private var showAddSheet = false
     @State private var showImportSheet = false
     @State private var pendingRemove: PendingRemove?
@@ -11,20 +13,19 @@ struct NetworkSettingsView: View {
     private struct PendingRemove: Identifiable {
         let id = UUID()
         let url: String
-        let roomNames: [String]
-        let roomCount: UInt64
+        let projection: RelayRemoveProjection
     }
 
     var body: some View {
         List {
-            if !appStore.network.isLoading || !appStore.network.relays.isEmpty {
-                headerSection
-                safetySection
-                relaysSection
-                autoConnectedSection
-                actionsSection
-                cacheSection
-                connectivitySection
+            if let store, !store.isLoading {
+                headerSection(store)
+                safetySection(store)
+                relaysSection(store)
+                autoConnectedSection(store)
+                actionsSection(store)
+                cacheSection(store)
+                connectivitySection(store)
                 footerSection
             } else {
                 ProgressView()
@@ -42,20 +43,23 @@ struct NetworkSettingsView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
-                .accessibilityLabel("Add relay")
-                .disabled(appStore.network.isLoading || appStore.network.isSaving)
+                .disabled(store == nil)
             }
         }
         .sheet(isPresented: $showAddSheet) {
-            AddRelaySheet()
+            if let store {
+                AddRelaySheet(initialDraft: appStore.safeCore.defaultAddRelayConfig()) { cfg in
+                    Task { await store.upsert(cfg) }
+                }
+            }
         }
         .sheet(isPresented: $showImportSheet) {
-            ImportRelaysSheet()
+            if let store {
+                ImportRelaysSheet(store: store)
+            }
         }
         .confirmationDialog(
-            (pendingRemove?.roomCount ?? 0) > 0
-                ? "Remove — you're a member of rooms here"
-                : "Remove this relay?",
+            pendingRemove?.projection.title ?? "Remove this relay?",
             isPresented: Binding(
                 get: { pendingRemove != nil },
                 set: { if !$0 { pendingRemove = nil } }
@@ -64,37 +68,37 @@ struct NetworkSettingsView: View {
             presenting: pendingRemove
         ) { remove in
             Button("Remove", role: .destructive) {
-                appStore.removeNetworkRelay(url: remove.url)
+                Task { await store?.remove(remove.url) }
             }
             Button("Cancel", role: .cancel) {}
         } message: { remove in
-            if remove.roomCount == 0 {
-                Text("Highlighter will stop sending and receiving events through \(remove.url).")
-            } else {
-                Text("This relay hosts \(remove.roomCount) of your rooms (\(remove.roomNames.prefix(3).joined(separator: ", "))\(remove.roomCount > 3 ? ", …" : "")). Removing it will cut you off from them until you re-add it.")
-            }
+            Text(remove.projection.message)
         }
         .task {
-            appStore.openNetworkSettings()
-        }
-        .onDisappear {
-            appStore.closeNetworkSettings()
+            if store == nil {
+                store = NetworkSettingsStore(core: appStore.safeCore, appStore: appStore)
+                appStore.eventBridge?.registerNetworkStore(store!)
+            }
+            await store?.load()
+            store?.startLiveUpdates()
         }
     }
 
+    // MARK: - Sections
+
     @ViewBuilder
-    private var headerSection: some View {
+    private func headerSection(_ store: NetworkSettingsStore) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     stateDot(
-                        allConnected: appStore.network.connectedCount == appStore.network.visibleRelayCount && appStore.network.visibleRelayCount > 0,
-                        anyConnected: appStore.network.connectedCount > 0
+                        allConnected: store.allConnectedForHeader,
+                        anyConnected: store.anyConnectedForHeader
                     )
-                    Text(aggregateStateLabel)
+                    Text(store.aggregateStateLabel)
                         .font(.headline)
                 }
-                if let err = appStore.network.errorMessage ?? appStore.network.actionErrorMessage {
+                if let err = store.lastError {
                     Text(err)
                         .font(.caption)
                         .foregroundStyle(.red)
@@ -104,32 +108,32 @@ struct NetworkSettingsView: View {
         }
     }
 
-    private var relaysSection: some View {
+    private func relaysSection(_ store: NetworkSettingsStore) -> some View {
         Section {
-            ForEach(appStore.network.relays, id: \.url) { row in
+            ForEach(store.relays, id: \.url) { row in
                 NavigationLink {
-                    RelayDetailView(url: row.url)
+                    RelayDetailView(url: row.url, store: store)
                 } label: {
-                    RelayRowView(
-                        config: row,
-                        diagnostic: appStore.networkDiagnostic(url: row.url),
-                        nip11: appStore.networkNip11(url: row.url)?.document
-                    )
-                }
-                .task(id: row.url) {
-                    appStore.probeNetworkRelayNip11(url: row.url)
+                    RelayRowView(projection: store.relayRowProjection(config: row))
                 }
             }
             .onDelete { indexSet in
-                for idx in indexSet where idx < appStore.network.relays.count {
-                    let url = appStore.network.relays[idx].url
-                    let impact = appStore.networkRemovalImpact(url: url)
-                    pendingRemove = PendingRemove(
-                        url: url,
-                        roomNames: impact?.roomNames ?? [],
-                        roomCount: impact?.roomCount ?? 0
-                    )
-                    break
+                // Route every delete through the confirmation dialog so the
+                // orphan-rooms check applies whether the user swiped or
+                // tapped into the detail view.
+                for idx in indexSet where idx < store.relays.count {
+                    let url = store.relays[idx].url
+                    Task {
+                        let snapshot = await store.relayHostedRooms(hostedOnRelay: url)
+                        pendingRemove = PendingRemove(
+                            url: url,
+                            projection: store.relayRemoveProjection(
+                                url: url,
+                                orphanedRoomNames: snapshot.roomNames
+                            )
+                        )
+                    }
+                    break // confirm one at a time
                 }
             }
         } header: {
@@ -140,30 +144,25 @@ struct NetworkSettingsView: View {
     }
 
     @ViewBuilder
-    private var autoConnectedSection: some View {
-        if !appStore.network.autoConnectedRelays.isEmpty {
+    private func autoConnectedSection(_ store: NetworkSettingsStore) -> some View {
+        if !store.autoConnectedUrls.isEmpty {
             Section {
-                ForEach(appStore.network.autoConnectedRelays, id: \.url) { config in
-                    RelayRowView(
-                        config: config,
-                        diagnostic: appStore.networkDiagnostic(url: config.url),
-                        nip11: appStore.networkNip11(url: config.url)?.document
-                    )
-                    .task(id: config.url) {
-                        appStore.probeNetworkRelayNip11(url: config.url)
+                ForEach(store.autoConnectedUrls, id: \.self) { url in
+                    if let config = store.autoConnectedConfig(for: url) {
+                        RelayRowView(projection: store.relayRowProjection(config: config))
                     }
                 }
             } header: {
                 Text("Auto-connected")
             } footer: {
-                Text("Connected automatically for outbox routing and app indexer coverage. Not part of your published NIP-65.")
+                Text("Connected to support outbox routing for the people you follow and the hardcoded `purplepag.es` indexer. Not part of your published NIP-65.")
             }
         }
     }
 
     @ViewBuilder
-    private var safetySection: some View {
-        if !appStore.network.hasOutbox {
+    private func safetySection(_ store: NetworkSettingsStore) -> some View {
+        if !store.hasOutbox {
             Section {
                 banner(
                     icon: "exclamationmark.triangle.fill",
@@ -173,12 +172,14 @@ struct NetworkSettingsView: View {
                 )
             }
         }
+        // No indexer banner — the core pins its canonical indexer,
+        // so profile / follow-list lookups always have somewhere to go.
     }
 
-    private var actionsSection: some View {
+    private func actionsSection(_ store: NetworkSettingsStore) -> some View {
         Section {
             Button {
-                appStore.reconnectNetwork()
+                Task { await store.reconnectAll() }
             } label: {
                 Label("Reconnect All", systemImage: "arrow.clockwise")
             }
@@ -191,9 +192,9 @@ struct NetworkSettingsView: View {
     }
 
     @ViewBuilder
-    private var cacheSection: some View {
+    private func cacheSection(_ store: NetworkSettingsStore) -> some View {
         Section {
-            if let stats = appStore.network.cacheStats {
+            if let stats = store.cacheStats {
                 LabeledContent("Events", value: "\(stats.eventCountEstimate)")
                 LabeledContent("On disk", value: formatBytes(stats.diskBytes))
             } else {
@@ -210,11 +211,13 @@ struct NetworkSettingsView: View {
     }
 
     @ViewBuilder
-    private var connectivitySection: some View {
+    private func connectivitySection(_ store: NetworkSettingsStore) -> some View {
         Section {
             Toggle(isOn: Binding(
-                get: { appStore.network.wifiOnlyEnabled },
-                set: { appStore.setNetworkWifiOnly($0) }
+                get: { store.wifiOnlyEnabled },
+                set: { enabled in
+                    Task { await store.setWifiOnly(enabled) }
+                }
             )) {
                 Label("Wi-Fi only", systemImage: "wifi")
             }
@@ -231,15 +234,6 @@ struct NetworkSettingsView: View {
         } footer: {
             Text("Tap a relay to see diagnostics, change its roles, or remove it.")
         }
-    }
-
-    private var aggregateStateLabel: String {
-        let total = appStore.network.visibleRelayCount
-        let online = appStore.network.connectedCount
-        if total == 0 { return "No relays" }
-        if online == 0 { return "Offline" }
-        if online == total { return "Online — \(online) of \(total)" }
-        return "\(online) of \(total) online"
     }
 
     private func formatBytes(_ bytes: UInt64) -> String {

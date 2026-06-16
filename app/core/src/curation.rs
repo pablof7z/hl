@@ -17,7 +17,7 @@ use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
-use crate::groups::{build_community_summary, KIND_GROUP_METADATA};
+use crate::groups::{build_community_summary, is_public_open_room, KIND_GROUP_METADATA};
 use crate::models::CommunitySummary;
 
 /// NIP-51 "simple groups" list kind. Replaceable — one list per pubkey,
@@ -119,6 +119,9 @@ pub fn fetch_curated_rooms_from_ndb(
             continue;
         };
         if let Ok(summary) = build_community_summary(event) {
+            if !is_public_open_room(&summary) {
+                continue;
+            }
             out.push(summary);
         }
     }
@@ -181,6 +184,7 @@ fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
 
     fn isolated_ndb() -> (Ndb, tempfile::TempDir) {
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -192,12 +196,7 @@ mod tests {
     }
 
     fn ingest(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).expect("process event");
-    }
-
-    fn wait_for_ndb() {
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        process_event_and_wait(ndb, event);
     }
 
     fn sign(keys: &Keys, kind: u16, tags: Vec<Tag>, content: &str) -> Event {
@@ -208,14 +207,24 @@ mod tests {
     }
 
     fn meta(keys: &Keys, id: &str, name: &str) -> Event {
+        meta_with_markers(keys, id, name, "public", "open")
+    }
+
+    fn meta_with_markers(
+        keys: &Keys,
+        id: &str,
+        name: &str,
+        visibility: &str,
+        access: &str,
+    ) -> Event {
         sign(
             keys,
             KIND_GROUP_METADATA,
             vec![
                 Tag::identifier(id),
                 Tag::parse(vec!["name".to_string(), name.to_string()]).unwrap(),
-                Tag::parse(vec!["public".to_string()]).unwrap(),
-                Tag::parse(vec!["open".to_string()]).unwrap(),
+                Tag::parse(vec![visibility.to_string()]).unwrap(),
+                Tag::parse(vec![access.to_string()]).unwrap(),
             ],
             "",
         )
@@ -262,7 +271,6 @@ mod tests {
             &ndb,
             &list_event(&curator, &["bravo", "alpha"], "wss://relay.example", 100),
         );
-        wait_for_ndb();
 
         let out = fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
         let ids: Vec<_> = out.iter().map(|c| c.id.as_str()).collect();
@@ -281,11 +289,41 @@ mod tests {
             &ndb,
             &list_event(&curator, &["alpha", "bravo"], "wss://relay.example", 100),
         );
-        wait_for_ndb();
 
         let out = fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].id, "alpha");
+    }
+
+    #[test]
+    fn drops_private_or_closed_rooms() {
+        let (ndb, _tmp) = isolated_ndb();
+        let curator = Keys::generate();
+        let author = Keys::generate();
+
+        ingest(&ndb, &meta(&author, "alpha", "Alpha"));
+        ingest(
+            &ndb,
+            &meta_with_markers(&author, "private", "Private", "private", "open"),
+        );
+        ingest(
+            &ndb,
+            &meta_with_markers(&author, "closed", "Closed", "public", "closed"),
+        );
+        ingest(
+            &ndb,
+            &list_event(
+                &curator,
+                &["private", "alpha", "closed"],
+                "wss://relay",
+                100,
+            ),
+        );
+
+        let out =
+            fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("curated");
+        let ids: Vec<_> = out.iter().map(|c| c.id.as_str()).collect();
+        assert_eq!(ids, vec!["alpha"]);
     }
 
     #[test]
@@ -306,7 +344,6 @@ mod tests {
             &ndb,
             &list_event(&curator, &["alpha", "bravo"], "wss://relay.example", 200),
         );
-        wait_for_ndb();
 
         let out = fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
         assert_eq!(out.len(), 2);
@@ -330,7 +367,6 @@ mod tests {
             .sign_with_keys(&curator)
             .expect("sign");
         ingest(&ndb, &list);
-        wait_for_ndb();
 
         let out = fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
         assert_eq!(out.len(), 1);
@@ -348,7 +384,6 @@ mod tests {
             &ndb,
             &list_event(&curator, &["alpha", "alpha", "alpha"], "wss://r", 100),
         );
-        wait_for_ndb();
 
         let out = fetch_curated_rooms_from_ndb(&ndb, &curator.public_key().to_hex()).expect("ok");
         assert_eq!(out.len(), 1);

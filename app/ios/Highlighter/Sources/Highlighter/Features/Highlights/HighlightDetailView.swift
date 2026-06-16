@@ -24,6 +24,8 @@ struct HighlightDetailView: View {
 
     let item: HydratedHighlight
 
+    @State private var commentsStore = CommentsStore()
+    @State private var commentsStarted = false
     @State private var showComments = false
     @State private var shareTarget: ShareToCommunityTarget?
     @State private var shareURL: URL?
@@ -31,15 +33,17 @@ struct HighlightDetailView: View {
     private var highlight: HighlightRecord { item.highlight }
 
     var body: some View {
+        let content = contentProjection
+
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 resourceHeader
                 bylineRow
-                quoteBlock
-                if !highlight.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    noteBlock
+                quoteBlock(content)
+                if let note = content.noteText {
+                    noteBlock(note)
                 }
-                actionBar
+                actionBar(content)
                     .padding(.top, 4)
             }
             .padding(.horizontal, 20)
@@ -50,24 +54,32 @@ struct HighlightDetailView: View {
         .navigationTitle("Highlight")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $showComments) {
-            CommentsView(
-                artifact: commentsArtifactRef,
-                artifactAuthorPubkey: highlight.pubkey,
-                artifactHeader: nil
-            )
+            if let commentsScope {
+                CommentsView(
+                    scope: commentsScope,
+                    artifactAuthorPubkey: highlight.pubkey,
+                    artifactHeader: nil,
+                    store: commentsStore
+                )
+            }
         }
         .sheet(item: $shareTarget) { target in
             ShareToCommunitySheet(target: target)
                 .presentationDetents([.medium, .large])
         }
-        .task(id: highlight.eventId) {
-            app.openComments(artifact: commentsArtifactRef)
+        .task {
+            guard !commentsStarted, let commentsScope else { return }
+            commentsStarted = true
+            await commentsStore.start(
+                scope: commentsScope,
+                core: app.safeCore
+            )
         }
-        .task(id: "\(highlight.eventId):\(highlight.pubkey)") {
-            refreshShareURL()
+        .task(id: highlight.eventId) {
+            await refreshShareURL()
         }
         .task(id: highlight.pubkey) {
-            app.requestProfile(pubkeyHex: highlight.pubkey)
+            await app.requestProfile(pubkeyHex: highlight.pubkey)
         }
     }
 
@@ -75,38 +87,49 @@ struct HighlightDetailView: View {
 
     @ViewBuilder
     private var resourceHeader: some View {
-        if let t = articleReaderTarget {
-            NavigationLink(value: t) { resourceHeaderCard(showsChevron: true) }
+        let resource = resourceProjection
+
+        if let route = resource.articleRoute {
+            NavigationLink(value: ArticleReaderTarget(route: route)) {
+                resourceHeaderCard(resource, showsChevron: true)
+            }
                 .buttonStyle(.plain)
-        } else if let t = bookReaderTarget {
-            NavigationLink(value: t) { resourceHeaderCard(showsChevron: true) }
+        } else if let catalogId = resource.bookCatalogId {
+            NavigationLink(value: BookTarget(catalogId: catalogId)) {
+                resourceHeaderCard(resource, showsChevron: true)
+            }
                 .buttonStyle(.plain)
-        } else if let t = webReaderTarget {
-            NavigationLink(value: t) { resourceHeaderCard(showsChevron: true) }
+        } else if let t = webReaderTarget(resource) {
+            NavigationLink(value: t) {
+                resourceHeaderCard(resource, showsChevron: true)
+            }
                 .buttonStyle(.plain)
         } else {
-            resourceHeaderCard(showsChevron: false)
+            resourceHeaderCard(resource, showsChevron: false)
         }
     }
 
-    private func resourceHeaderCard(showsChevron: Bool) -> some View {
+    private func resourceHeaderCard(
+        _ resource: HighlightDetailResourceProjection,
+        showsChevron: Bool
+    ) -> some View {
         HStack(alignment: .center, spacing: 12) {
-            resourceCover
+            resourceCover(resource)
                 .frame(width: 40, height: 40)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(resourceKindLabel.uppercased())
+                Text(resource.kindLabel.uppercased())
                     .font(.caption2.weight(.bold))
                     .tracking(0.6)
                     .foregroundStyle(Color.highlighterInkMuted)
-                Text(resourceTitle)
+                Text(resource.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                if !resourceAuthor.isEmpty {
-                    Text(resourceAuthor)
+                if !resource.author.isEmpty {
+                    Text(resource.author)
                         .font(.caption)
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineLimit(1)
@@ -128,22 +151,21 @@ struct HighlightDetailView: View {
     }
 
     @ViewBuilder
-    private var resourceCover: some View {
-        if let urlString = item.artifact?.preview.image,
+    private func resourceCover(_ resource: HighlightDetailResourceProjection) -> some View {
+        if let urlString = resource.coverUrl,
            !urlString.isEmpty,
-           let url = URL(string: urlString)
-        {
+           let url = URL(string: urlString) {
             KFImage(url)
-                .placeholder { coverFallback }
+                .placeholder { coverFallback(resource) }
                 .fade(duration: 0.15)
                 .resizable()
                 .scaledToFill()
         } else {
-            coverFallback
+            coverFallback(resource)
         }
     }
 
-    private var coverFallback: some View {
+    private func coverFallback(_ resource: HighlightDetailResourceProjection) -> some View {
         ZStack {
             LinearGradient(
                 colors: [
@@ -153,7 +175,7 @@ struct HighlightDetailView: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            Image(systemName: kindIconName)
+            Image(systemName: resource.iconSystemName)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Color.highlighterInkStrong.opacity(0.55))
         }
@@ -161,17 +183,20 @@ struct HighlightDetailView: View {
 
     // MARK: - Highlighter byline
 
+    @ViewBuilder
     private var bylineRow: some View {
+        let highlighter = highlighterDisplay
+
         NavigationLink(value: ProfileDestination.pubkey(highlight.pubkey)) {
             HStack(spacing: 10) {
                 AuthorAvatar(
                     pubkey: highlight.pubkey,
-                    pictureURL: app.profile(pubkeyHex: highlight.pubkey)?.picture ?? "",
-                    displayInitial: initial(for: highlight.pubkey),
+                    pictureURL: highlighter.pictureUrl,
+                    displayInitial: highlighter.displayInitial,
                     size: 32
                 )
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(displayName(for: highlight.pubkey))
+                    Text(highlighter.displayName)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.highlighterInkStrong)
                         .lineLimit(1)
@@ -190,11 +215,11 @@ struct HighlightDetailView: View {
     // MARK: - Quote
 
     @ViewBuilder
-    private var quoteBlock: some View {
-        if let pageURL = pageImageURL {
+    private func quoteBlock(_ content: HighlightDetailContentProjection) -> some View {
+        if let pageURL = pageImageURL(content) {
             VStack(alignment: .leading, spacing: 14) {
                 HighlightPageImage(url: pageURL, treatment: .feature)
-                quoteText
+                quoteText(content)
             }
         } else {
             HStack(alignment: .top, spacing: 14) {
@@ -202,13 +227,13 @@ struct HighlightDetailView: View {
                     .fill(Color.highlighterAccent)
                     .frame(width: 3)
                     .clipShape(RoundedRectangle(cornerRadius: 1.5))
-                quoteText
+                quoteText(content)
             }
         }
     }
 
-    private var quoteText: some View {
-        Text(highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+    private func quoteText(_ content: HighlightDetailContentProjection) -> some View {
+        Text(content.quoteText)
             .font(.system(size: 21, design: .default).italic())
             .foregroundStyle(Color.highlighterInkStrong)
             .lineSpacing(5)
@@ -217,13 +242,13 @@ struct HighlightDetailView: View {
             .textSelection(.enabled)
     }
 
-    private var noteBlock: some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private func noteBlock(_ note: String) -> some View {
+        return VStack(alignment: .leading, spacing: 6) {
             Text("NOTE")
                 .font(.caption2.weight(.bold))
                 .tracking(0.6)
                 .foregroundStyle(Color.highlighterInkMuted)
-            Text(highlight.note)
+            Text(note)
                 .font(.system(.body, design: .default))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineSpacing(3)
@@ -236,8 +261,8 @@ struct HighlightDetailView: View {
 
     // MARK: - Action bar
 
-    private var actionBar: some View {
-        HStack(spacing: 22) {
+    private func actionBar(_ content: HighlightDetailContentProjection) -> some View {
+        return HStack(spacing: 22) {
             if let articleAddress = articleAddressForBookmark {
                 BookmarkMenuButton(articleAddress: articleAddress)
                     .font(.system(size: 20, weight: .medium))
@@ -249,7 +274,7 @@ struct HighlightDetailView: View {
                 ShareLink(
                     item: url,
                     subject: Text("Highlight"),
-                    message: Text(highlight.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+                    message: Text(content.shareMessage)
                 ) {
                     actionIcon(systemName: "square.and.arrow.up")
                 }
@@ -257,7 +282,7 @@ struct HighlightDetailView: View {
             }
 
             Button {
-                shareTarget = .highlight(highlight)
+                shareTarget = .highlight(highlight, core: app.safeCore)
             } label: {
                 actionIcon(systemName: "rectangle.stack.badge.plus")
             }
@@ -276,25 +301,25 @@ struct HighlightDetailView: View {
     }
 
     private var commentsButton: some View {
-        Button {
+        let projection = app.safeCore.projectCommentToolbar(
+            input: CommentToolbarProjectionInput(records: commentsStore.records)
+        )
+
+        return Button {
             showComments = true
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "bubble.left")
                     .font(.system(size: 20, weight: .medium))
-                if commentsCount > 0 {
-                    Text("\(commentsCount)")
+                if projection.showsCount {
+                    Text(projection.countLabel)
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                 }
             }
             .foregroundStyle(Color.highlighterInkStrong)
         }
-        .accessibilityLabel(
-            commentsCount == 0
-                ? "Start the thread"
-                : "\(commentsCount) comments"
-        )
+        .accessibilityLabel(projection.accessibilityLabel)
     }
 
     private func actionIcon(systemName: String) -> some View {
@@ -305,173 +330,77 @@ struct HighlightDetailView: View {
 
     // MARK: - Comments scope
 
-    private var commentsArtifactRef: ArtifactRef {
-        .event(id: highlight.eventId, kind: 9802)
+    private var commentsScope: CommentScope? {
+        let snapshot = app.safeCore.getHighlightCommentScope(eventIdHex: highlight.eventId)
+        return snapshot.attach ? snapshot.scope : nil
     }
 
-    private var commentsCount: Int {
-        guard app.comments.rootTagName == commentsArtifactRef.rootTagName,
-              app.comments.rootTagValue == commentsArtifactRef.rootTagValue
-        else { return 0 }
-        return Int(app.comments.recordCount)
-    }
-
-    private func refreshShareURL() {
-        guard
-            let urlString = app.highlightShareURL(
-                eventIdHex: highlight.eventId,
-                authorPubkeyHex: highlight.pubkey
-            ),
-            let url = URL(string: urlString)
-        else {
+    /// Public web URL that the share sheet hands to other apps. The
+    /// route at `/highlight/<nevent>` on `beta.highlighter.com` is
+    /// server-rendered with full Open Graph + Twitter Card meta so the
+    /// link unfurls into a social card built around the quote.
+    private func refreshShareURL() async {
+        let snapshot = await app.safeCore.getHighlightShareUrlSnapshot(
+            eventIdHex: highlight.eventId,
+            authorPubkeyHex: highlight.pubkey
+        )
+        guard snapshot.ready, let url = snapshot.shareUrl else {
             shareURL = nil
             return
         }
-        shareURL = url
+        shareURL = URL(string: url)
     }
 
-    // MARK: - Reader-target dispatch (mirror of HighlightsTabView)
+    // MARK: - Resource projection
 
-    /// Article a-tag we can bookmark. Only NIP-23 articles are
-    /// bookmarkable today (the existing curation-set machinery is
-    /// addressable-only).
+    private var resourceProjection: HighlightDetailResourceProjection {
+        app.safeCore.projectHighlightDetailResource(
+            input: HighlightDetailResourceProjectionInput(item: item)
+        )
+    }
+
+    private var contentProjection: HighlightDetailContentProjection {
+        app.safeCore.projectHighlightDetailContent(
+            input: HighlightDetailContentProjectionInput(highlight: highlight)
+        )
+    }
+
+    /// Article a-tag we can bookmark. Only NIP-23 articles are bookmarkable
+    /// today; Rust owns the address interpretation and returns the route.
     private var articleAddressForBookmark: String? {
-        let addr = highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty else { return nil }
-        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[0] == "30023" else { return nil }
-        return addr
+        resourceProjection.articleRoute?.address
     }
 
-    private var articleReaderTarget: ArticleReaderTarget? {
-        let addr = highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addr.isEmpty else { return nil }
-        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3, parts[0] == "30023" else { return nil }
-        let pubkey = String(parts[1])
-        let dTag = String(parts[2])
-        guard !pubkey.isEmpty, !dTag.isEmpty else { return nil }
-        return ArticleReaderTarget(pubkey: pubkey, dTag: dTag, seed: nil)
-    }
-
-    private var bookReaderTarget: BookTarget? {
-        let extRef = highlight.externalReference.trimmingCharacters(in: .whitespacesAndNewlines)
-        if extRef.hasPrefix("isbn:") { return BookTarget(catalogId: extRef) }
-        let addr = highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        if addr.hasPrefix("isbn:") { return BookTarget(catalogId: addr) }
-        return nil
-    }
-
-    private var webReaderTarget: WebReaderTarget? {
-        let raw = highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty, let url = URL(string: raw) else { return nil }
-        guard let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https" else { return nil }
+    private func webReaderTarget(_ resource: HighlightDetailResourceProjection) -> WebReaderTarget? {
+        guard let raw = resource.webUrl, let url = URL(string: raw) else { return nil }
         return WebReaderTarget(url: url, highlightQuote: highlight.quote)
     }
 
     // MARK: - Resource metadata
 
-    private var pageImageURL: URL? {
-        let raw = highlight.imageUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return nil }
+    private func pageImageURL(_ content: HighlightDetailContentProjection) -> URL? {
+        guard let raw = content.pageImageUrl else { return nil }
         return URL(string: raw)
-    }
-
-    private var resourceTitle: String {
-        if let t = item.artifact?.preview.title, !t.isEmpty { return t }
-        if let host = sourceURLHost { return host }
-        return "Untitled"
-    }
-
-    private var resourceAuthor: String {
-        if let a = item.artifact?.preview.author, !a.isEmpty { return a }
-        if let d = item.artifact?.preview.domain, !d.isEmpty { return d }
-        return sourceURLHost ?? ""
-    }
-
-    private var resourceKindLabel: String {
-        switch artifactKind {
-        case .article: return "Article"
-        case .book: return "Book"
-        case .podcast: return "Podcast"
-        case .web: return "Web"
-        case .video: return "Video"
-        case .paper: return "Paper"
-        case .unknown: return "Source"
-        }
-    }
-
-    private var kindIconName: String {
-        switch artifactKind {
-        case .article: return "doc.text"
-        case .web: return "globe"
-        case .podcast: return "waveform"
-        case .book: return "book.closed"
-        case .video: return "play.rectangle"
-        case .paper: return "doc.richtext"
-        case .unknown: return "quote.bubble"
-        }
-    }
-
-    private enum ArtifactKind {
-        case article, web, podcast, book, video, paper, unknown
-    }
-
-    private var artifactKind: ArtifactKind {
-        if let source = item.artifact?.preview.source.lowercased(), !source.isEmpty {
-            switch source {
-            case "article": return .article
-            case "web": return .web
-            case "podcast": return .podcast
-            case "book": return .book
-            case "video": return .video
-            case "paper": return .paper
-            default: return .unknown
-            }
-        }
-        let extRef = highlight.externalReference.trimmingCharacters(in: .whitespacesAndNewlines)
-        if extRef.hasPrefix("isbn:") { return .book }
-        let addr = highlight.artifactAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        if addr.hasPrefix("30023:") { return .article }
-        if addr.hasPrefix("isbn:") { return .book }
-        if !highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return .web
-        }
-        return .unknown
-    }
-
-    private var sourceURLHost: String? {
-        let raw = highlight.sourceUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty, let url = URL(string: raw), let host = url.host else { return nil }
-        return host
     }
 
     // MARK: - Profile helpers
 
-    private func displayName(for pubkey: String) -> String {
-        let profile = app.profile(pubkeyHex: pubkey)
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(pubkey.prefix(10))
-    }
-
-    private func initial(for pubkey: String) -> String {
-        displayName(for: pubkey).first.map { String($0).uppercased() } ?? "?"
+    private var highlighterDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: highlight.pubkey,
+                profile: app.profileSnapshots[highlight.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
-        guard let s = seconds, s > 0 else { return nil }
-        let now = Date().timeIntervalSince1970
-        let delta = now - TimeInterval(s)
-        guard delta >= 0 else { return nil }
-        switch delta {
-        case ..<60: return "just now"
-        case ..<3600: return "\(Int(delta / 60))m ago"
-        case ..<86400: return "\(Int(delta / 3600))h ago"
-        case ..<(86400 * 7): return "\(Int(delta / 86400))d ago"
-        case ..<(86400 * 30): return "\(Int(delta / (86400 * 7)))w ago"
-        default: return "\(Int(delta / (86400 * 30)))mo ago"
-        }
+        app.safeCore.projectRelativeTimeLabel(
+            input: RelativeTimeLabelInput(
+                unixSeconds: seconds,
+                style: .ago
+            )
+        ).label
     }
 }

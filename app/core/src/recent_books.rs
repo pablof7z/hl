@@ -289,6 +289,7 @@ fn reference_key(rec: &ArtifactRecord) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
     use nostrdb::{Config as NdbConfig, Ndb};
     use tempfile::tempdir;
 
@@ -302,12 +303,7 @@ mod tests {
     }
 
     fn ingest(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).expect("process event");
-    }
-
-    fn wait_for_ndb() {
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        process_event_and_wait(ndb, event);
     }
 
     fn membership(keys: &Keys, group_id: &str, user_hex: &str, ts: u64) -> Event {
@@ -389,7 +385,6 @@ mod tests {
             &book_share(&admin, "alpha", "b1", "isbn:111", "Book A", 100),
         );
         ingest(&ndb, &article_share(&admin, "alpha", "a1", 200));
-        wait_for_ndb();
 
         let out = query_recent_books(&ndb, &user, 10).expect("query");
         assert_eq!(out.len(), 1);
@@ -414,7 +409,6 @@ mod tests {
             &ndb,
             &book_share(&admin, "bravo", "b2", "isbn:111", "New Title", 200),
         );
-        wait_for_ndb();
 
         let out = query_recent_books(&ndb, &user, 10).expect("query");
         assert_eq!(out.len(), 1);
@@ -438,7 +432,6 @@ mod tests {
             &ndb,
             &book_share(&admin, "other", "b2", "isbn:222", "Theirs", 200),
         );
-        wait_for_ndb();
 
         let out = query_recent_books(&ndb, &user, 10).expect("query");
         assert_eq!(out.len(), 1);
@@ -455,7 +448,6 @@ mod tests {
         let user = user_keys.public_key().to_hex();
 
         ingest(&ndb, &book_highlight(&user_keys, "111", 500));
-        wait_for_ndb();
 
         let out = query_recent_books(&ndb, &user, 10).expect("query");
         assert_eq!(out.len(), 1);
@@ -481,7 +473,6 @@ mod tests {
             &book_share(&other, "elsewhere", "b1", "isbn:111", "Real Title", 100),
         );
         ingest(&ndb, &book_highlight(&user_keys, "111", 500));
-        wait_for_ndb();
 
         let out = query_recent_books(&ndb, &user, 10).expect("query");
         assert_eq!(out.len(), 1);
@@ -509,7 +500,6 @@ mod tests {
             &book_share(&admin, "alpha", "b2", "isbn:222", "Newer Share", 200),
         );
         ingest(&ndb, &book_highlight(&user_keys, "111", 300));
-        wait_for_ndb();
 
         let out = query_recent_books(&ndb, &user, 10).expect("query");
         assert_eq!(out.len(), 2);
@@ -539,7 +529,6 @@ mod tests {
                 ),
             );
         }
-        wait_for_ndb();
 
         let out = query_recent_books(&ndb, &user, 3).expect("query");
         assert_eq!(out.len(), 3);

@@ -6,6 +6,8 @@ import SwiftUI
 struct RoomSquareTile: View {
     let room: CommunitySummary
 
+    @Environment(HighlighterStore.self) private var store
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             cover
@@ -27,18 +29,19 @@ struct RoomSquareTile: View {
 
     @ViewBuilder
     private var cover: some View {
-        if let url = URL(string: room.picture), !room.picture.isEmpty {
+        let avatar = avatarProjection
+        if let url = URL(string: avatar.pictureUrl), !avatar.pictureUrl.isEmpty {
             KFImage(url)
-                .placeholder { coverFallback }
+                .placeholder { coverFallback(avatar) }
                 .fade(duration: 0.15)
                 .resizable()
                 .scaledToFill()
         } else {
-            coverFallback
+            coverFallback(avatar)
         }
     }
 
-    private var coverFallback: some View {
+    private func coverFallback(_ avatar: RoomAvatarProjection) -> some View {
         ZStack {
             LinearGradient(
                 colors: [
@@ -48,11 +51,21 @@ struct RoomSquareTile: View {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            if let ch = room.name.first {
-                Text(String(ch).uppercased())
+            if !avatar.displayInitial.isEmpty {
+                Text(avatar.displayInitial)
                     .font(.system(size: 40, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.88))
             }
         }
+    }
+
+    private var avatarProjection: RoomAvatarProjection {
+        store.safeCore.projectRoomAvatar(
+            input: RoomAvatarProjectionInput(
+                name: room.name,
+                pictureUrl: room.picture,
+                uppercaseInitial: true
+            )
+        )
     }
 }

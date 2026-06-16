@@ -4,20 +4,18 @@ import SwiftUI
 /// No inner NavigationStack — thread drill-down is handled by
 /// ThreadView's own `.navigationDestination(item:)`.
 struct CommentsView: View {
-    let artifact: ArtifactRef
+    let scope: CommentScope
     let artifactAuthorPubkey: String?
     let artifactHeader: AnyView?
-
-    @Environment(HighlighterStore.self) private var app
+    let store: CommentsStore
 
     var body: some View {
         ThreadView(
             focused: nil,
             artifactHeader: artifactHeader,
+            store: store,
+            scope: scope,
             artifactAuthorPubkey: artifactAuthorPubkey
         )
-        .task(id: artifact) {
-            app.openComments(artifact: artifact)
-        }
     }
 }

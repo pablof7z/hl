@@ -9,12 +9,15 @@ struct RoomCoverCard: View {
     /// When `nil`, the card fills the width its container gives it.
     let fixedWidth: CGFloat?
 
+    @Environment(HighlighterStore.self) private var store
+
     init(room: CommunitySummary, width: CGFloat? = nil) {
         self.room = room
         self.fixedWidth = width
     }
 
     var body: some View {
+        let projection = cardProjection
         VStack(alignment: .leading, spacing: 8) {
             Color.clear
                 .aspectRatio(3 / 4, contentMode: .fit)
@@ -32,7 +35,7 @@ struct RoomCoverCard: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
-                Text(memberSubtitle)
+                Text(projection.subtitle)
                     .font(.caption)
                     .foregroundStyle(Color.highlighterInkMuted)
                     .lineLimit(1)
@@ -42,28 +45,27 @@ struct RoomCoverCard: View {
         .frame(width: fixedWidth)
     }
 
-    private var memberSubtitle: String {
-        if let count = room.memberCount, count > 0 {
-            if count == 1 { return "1 member" }
-            return "\(count) members"
-        }
-        return room.access == "open" ? "Open room" : "Closed room"
+    private var cardProjection: RoomCoverCardProjection {
+        store.safeCore.projectRoomCoverCard(
+            input: RoomCoverCardProjectionInput(room: room)
+        )
     }
 
     @ViewBuilder
     private var cover: some View {
-        if let url = URL(string: room.picture), !room.picture.isEmpty {
+        let avatar = avatarProjection
+        if let url = URL(string: avatar.pictureUrl), !avatar.pictureUrl.isEmpty {
             KFImage(url)
-                .placeholder { coverFallback }
+                .placeholder { coverFallback(avatar) }
                 .fade(duration: 0.15)
                 .resizable()
                 .scaledToFill()
         } else {
-            coverFallback
+            coverFallback(avatar)
         }
     }
 
-    private var coverFallback: some View {
+    private func coverFallback(_ avatar: RoomAvatarProjection) -> some View {
         GeometryReader { geo in
             ZStack {
                 LinearGradient(
@@ -74,12 +76,22 @@ struct RoomCoverCard: View {
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-                if let ch = room.name.first {
-                    Text(String(ch).uppercased())
+                if !avatar.displayInitial.isEmpty {
+                    Text(avatar.displayInitial)
                         .font(.system(size: geo.size.width * 0.42, weight: .semibold))
                         .foregroundStyle(Color.white.opacity(0.88))
                 }
             }
         }
+    }
+
+    private var avatarProjection: RoomAvatarProjection {
+        store.safeCore.projectRoomAvatar(
+            input: RoomAvatarProjectionInput(
+                name: room.name,
+                pictureUrl: room.picture,
+                uppercaseInitial: true
+            )
+        )
     }
 }

@@ -8,29 +8,31 @@ struct RoomLibraryBookCardView: View {
     var commentCount: Int = 0
 
     var body: some View {
+        let projection = cardProjection
+
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(artifact.preview.title.isEmpty ? "Untitled" : artifact.preview.title)
+                    Text(projection.title)
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(
-                            artifact.preview.title.isEmpty
+                            projection.titleIsFallback
                                 ? Color.highlighterInkMuted
                                 : Color.highlighterInkStrong
                         )
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    if !artifact.preview.author.isEmpty {
-                        Text(artifact.preview.author.uppercased())
+                    if let author = projection.authorLabel {
+                        Text(author.uppercased())
                             .font(.caption2.weight(.bold))
                             .tracking(0.6)
                             .foregroundStyle(Color.highlighterInkMuted)
                             .lineLimit(1)
                     }
 
-                    if !artifact.preview.description.isEmpty {
-                        Text(artifact.preview.description)
+                    if let summary = projection.summary {
+                        Text(summary)
                             .font(.subheadline)
                             .foregroundStyle(Color.highlighterInkMuted)
                             .lineLimit(2)
@@ -39,34 +41,37 @@ struct RoomLibraryBookCardView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                bookCover
+                bookCover(projection)
             }
 
-            sharerRow
+            sharerRow(projection)
         }
         .padding(.vertical, 18)
         .contentShape(Rectangle())
-        .task(id: artifact.pubkey) {
-            app.requestProfile(pubkeyHex: artifact.pubkey)
+        .task(id: projection.sharerPubkey) {
+            await app.requestProfile(pubkeyHex: projection.sharerPubkey)
         }
     }
 
-    private var sharerRow: some View {
+    @ViewBuilder
+    private func sharerRow(_ projection: RoomLibraryBookCardProjection) -> some View {
+        let sharer = sharerDisplay(projection)
+
         HStack(spacing: 6) {
             AuthorAvatar(
-                pubkey: artifact.pubkey,
-                pictureURL: app.profile(pubkeyHex: artifact.pubkey)?.picture ?? "",
-                displayInitial: sharerInitial,
+                pubkey: projection.sharerPubkey,
+                pictureURL: sharer.pictureUrl,
+                displayInitial: sharer.displayInitial,
                 size: 18
             )
 
-            Text(sharerName.uppercased())
+            Text(sharer.displayName.uppercased())
                 .font(.caption2.weight(.bold))
                 .tracking(0.6)
                 .foregroundStyle(Color.highlighterInkMuted)
                 .lineLimit(1)
 
-            if let date = relativeDate {
+            if let date = relativeDate(projection.relativeUnixSeconds) {
                 Text("·")
                     .font(.caption2)
                     .foregroundStyle(Color.highlighterInkMuted)
@@ -78,11 +83,11 @@ struct RoomLibraryBookCardView: View {
 
             Spacer(minLength: 0)
 
-            if commentCount > 0 {
+            if let commentBadge = projection.commentBadgeLabel {
                 HStack(spacing: 3) {
                     Image(systemName: "bubble.left")
                         .font(.caption2)
-                    Text("\(commentCount)")
+                    Text(commentBadge)
                         .font(.caption2.weight(.semibold))
                 }
                 .foregroundStyle(Color.highlighterInkMuted)
@@ -91,10 +96,9 @@ struct RoomLibraryBookCardView: View {
     }
 
     @ViewBuilder
-    private var bookCover: some View {
-        let image = artifact.preview.image
+    private func bookCover(_ projection: RoomLibraryBookCardProjection) -> some View {
         Group {
-            if !image.isEmpty, let url = URL(string: image) {
+            if let image = projection.imageUrl, let url = URL(string: image) {
                 KFImage(url)
                     .placeholder { bookPlaceholder }
                     .fade(duration: 0.15)
@@ -122,19 +126,27 @@ struct RoomLibraryBookCardView: View {
         )
     }
 
-    private var sharerName: String {
-        let profile = app.profile(pubkeyHex: artifact.pubkey)
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(artifact.pubkey.prefix(10))
+    private var cardProjection: RoomLibraryBookCardProjection {
+        app.safeCore.projectRoomLibraryBookCard(
+            input: RoomLibraryBookCardProjectionInput(
+                artifact: artifact,
+                commentCount: UInt32(commentCount)
+            )
+        )
     }
 
-    private var sharerInitial: String {
-        sharerName.first.map { String($0).uppercased() } ?? ""
+    private func sharerDisplay(_ projection: RoomLibraryBookCardProjection) -> ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: projection.sharerPubkey,
+                profile: app.profileSnapshots[projection.sharerPubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
-    private var relativeDate: String? {
-        guard let seconds = artifact.createdAt, seconds > 0 else { return nil }
+    private func relativeDate(_ seconds: UInt64?) -> String? {
+        guard let seconds else { return nil }
         let date = Date(timeIntervalSince1970: TimeInterval(seconds))
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated

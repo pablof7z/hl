@@ -5,29 +5,31 @@ import SwiftUI
 /// enclosing `NavigationStack`'s `.navigationDestination(for: String.self)`
 /// into `RoomHomeView`, which already exists.
 struct CommunityRowView: View {
+    @Environment(HighlighterStore.self) private var app
+
     let community: CommunitySummary
 
     var body: some View {
+        let projection = app.safeCore.projectCommunityRow(
+            input: CommunityRowProjectionInput(community: community)
+        )
+
         HStack(spacing: 14) {
-            thumbnail
+            thumbnail(projection)
                 .frame(width: 52, height: 52)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(community.name.isEmpty ? community.id : community.name)
+                Text(projection.displayName)
                     .font(.body.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(1)
 
-                if !community.about.isEmpty {
-                    Text(community.about)
+                if let subtitle = projection.subtitle {
+                    Text(subtitle)
                         .font(.footnote)
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineLimit(2)
-                } else if let count = community.memberCount {
-                    Text("\(count) member\(count == 1 ? "" : "s")")
-                        .font(.footnote)
-                        .foregroundStyle(Color.highlighterInkMuted)
                 }
             }
 
@@ -42,8 +44,8 @@ struct CommunityRowView: View {
     }
 
     @ViewBuilder
-    private var thumbnail: some View {
-        if let url = URL(string: community.picture), !community.picture.isEmpty {
+    private func thumbnail(_ projection: CommunityRowProjection) -> some View {
+        if let picture = projection.pictureUrl, let url = URL(string: picture) {
             KFImage(url)
                 .placeholder { Color.highlighterRule.opacity(0.5) }
                 .fade(duration: 0.15)

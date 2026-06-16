@@ -15,13 +15,26 @@ struct RoomPreviewSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var detent: PresentationDetent = .medium
-    @State private var didOpenPreviewRoom: Bool = false
-
-    private var alreadyJoined: Bool {
-        appStore.joinedCommunities.contains(where: { $0.id == room.id })
-    }
+    @State private var roomStore: RoomStore?
 
     private var isExpanded: Bool { detent == .large }
+
+    private var actionProjection: RoomPreviewActionProjection {
+        appStore.safeCore.projectRoomPreviewAction(
+            input: RoomPreviewActionProjectionInput(
+                roomAccess: room.access,
+                roomId: room.id,
+                joinedRoomIds: appStore.joinedCommunities.map(\.id),
+                isExpanded: isExpanded
+            )
+        )
+    }
+
+    private var headerProjection: RoomPreviewHeaderProjection {
+        appStore.safeCore.projectRoomPreviewHeader(
+            input: RoomPreviewHeaderProjectionInput(room: room)
+        )
+    }
 
     var body: some View {
         ScrollView {
@@ -60,14 +73,10 @@ struct RoomPreviewSheet: View {
         .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
         .onChange(of: isExpanded) { _, expanded in
-            if expanded {
-                openPreviewRoomIfNeeded()
-            }
+            if expanded { startRoomStoreIfNeeded() }
         }
         .onDisappear {
-            if didOpenPreviewRoom {
-                appStore.closeRoom()
-            }
+            roomStore?.stop()
         }
     }
 
@@ -100,11 +109,12 @@ struct RoomPreviewSheet: View {
     }
 
     private var meta: some View {
-        HStack(spacing: 10) {
-            accessBadge
-            if let count = room.memberCount, count > 0 {
+        let projection = headerProjection
+        return HStack(spacing: 10) {
+            accessBadge(projection)
+            if let memberCountLabel = projection.memberCountLabel {
                 Label {
-                    Text(count == 1 ? "1 member" : "\(count) members")
+                    Text(memberCountLabel)
                 } icon: {
                     Image(systemName: "person.2")
                 }
@@ -115,12 +125,12 @@ struct RoomPreviewSheet: View {
         }
     }
 
-    private var accessBadge: some View {
-        let isOpen = room.access == "open"
+    private func accessBadge(_ projection: RoomPreviewHeaderProjection) -> some View {
+        let isOpen = projection.accessIsOpen
         return HStack(spacing: 4) {
-            Image(systemName: isOpen ? "lock.open" : "lock")
+            Image(systemName: projection.accessIconSystemName)
                 .font(.caption2.weight(.semibold))
-            Text(isOpen ? "Open" : "Closed")
+            Text(projection.accessLabel)
                 .font(.caption.weight(.semibold))
         }
         .foregroundStyle(Color.highlighterInkStrong)
@@ -141,11 +151,14 @@ struct RoomPreviewSheet: View {
                 .tracking(1.2)
                 .foregroundStyle(Color.highlighterInkMuted)
 
-            if !previewArtifacts.isEmpty {
+            if let store = roomStore, !store.artifacts.isEmpty {
+                let projection = appStore.safeCore.projectRoomPreviewArtifacts(
+                    input: RoomPreviewArtifactsProjectionInput(artifacts: store.artifacts)
+                )
                 VStack(spacing: 0) {
-                    ForEach(Array(previewArtifacts.prefix(8)), id: \.shareEventId) { artifact in
-                        InsideArtifactRow(artifact: artifact)
-                        if artifact.shareEventId != previewArtifacts.prefix(8).last?.shareEventId {
+                    ForEach(projection.rows, id: \.artifact.shareEventId) { row in
+                        InsideArtifactRow(row: row)
+                        if row.showsDivider {
                             Divider().overlay(Color.highlighterRule)
                         }
                     }
@@ -154,7 +167,7 @@ struct RoomPreviewSheet: View {
                     RoundedRectangle(cornerRadius: 14)
                         .stroke(Color.highlighterRule, lineWidth: 1)
                 )
-            } else if isPreviewRoomLoading || !didOpenPreviewRoom {
+            } else if roomStore?.isLoading == true || roomStore == nil {
                 HStack(spacing: 10) {
                     ProgressView().controlSize(.small)
                     Text("Pulling recent content…")
@@ -175,7 +188,8 @@ struct RoomPreviewSheet: View {
 
     @ViewBuilder
     private var actionStack: some View {
-        if alreadyJoined {
+        let projection = actionProjection
+        if projection.alreadyJoined {
             Button {
                 if let onOpenRoom {
                     onOpenRoom()
@@ -183,7 +197,7 @@ struct RoomPreviewSheet: View {
                     dismiss()
                 }
             } label: {
-                Text("Open room")
+                Text(projection.primaryLabel)
                     .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
@@ -197,7 +211,7 @@ struct RoomPreviewSheet: View {
         } else {
             VStack(spacing: 10) {
                 Button(action: onJoin) {
-                    Text(room.access == "closed" ? "Request to join" : "Join room")
+                    Text(projection.primaryLabel)
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
@@ -209,42 +223,43 @@ struct RoomPreviewSheet: View {
                 }
                 .buttonStyle(.plain)
 
-                if room.access == "open" {
-                    if isExpanded {
-                        Button {
-                            if let onOpenRoom {
-                                onOpenRoom()
-                            } else {
-                                dismiss()
-                            }
-                        } label: {
-                            Text("Open full room")
-                                .font(.subheadline.weight(.medium))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .foregroundStyle(Color.highlighterInkStrong)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .stroke(Color.highlighterRule, lineWidth: 1)
-                                )
+                switch projection.secondaryAction {
+                case .openFullRoom:
+                    Button {
+                        if let onOpenRoom {
+                            onOpenRoom()
+                        } else {
+                            dismiss()
                         }
-                        .buttonStyle(.plain)
-                    } else {
-                        Button {
-                            detent = .large
-                        } label: {
-                            Text("Peek inside")
-                                .font(.subheadline.weight(.medium))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .foregroundStyle(Color.highlighterInkStrong)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14)
-                                        .stroke(Color.highlighterRule, lineWidth: 1)
-                                )
-                        }
-                        .buttonStyle(.plain)
+                    } label: {
+                        Text("Open full room")
+                            .font(.subheadline.weight(.medium))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .foregroundStyle(Color.highlighterInkStrong)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(Color.highlighterRule, lineWidth: 1)
+                            )
                     }
+                    .buttonStyle(.plain)
+                case .peekInside:
+                    Button {
+                        detent = .large
+                    } label: {
+                        Text("Peek inside")
+                            .font(.subheadline.weight(.medium))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .foregroundStyle(Color.highlighterInkStrong)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .stroke(Color.highlighterRule, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                case .none:
+                    EmptyView()
                 }
             }
         }
@@ -263,26 +278,26 @@ struct RoomPreviewSheet: View {
 
     // MARK: - Private
 
-    private func openPreviewRoomIfNeeded() {
-        guard !didOpenPreviewRoom else { return }
-        didOpenPreviewRoom = true
-        appStore.openRoom(groupId: room.id)
-    }
-
-    private var previewArtifacts: [ArtifactRecord] {
-        guard appStore.roomDetail.groupId == room.id else { return [] }
-        return appStore.roomDetail.artifacts
-    }
-
-    private var isPreviewRoomLoading: Bool {
-        appStore.roomDetail.groupId == room.id && appStore.roomDetail.isLoading
+    private func startRoomStoreIfNeeded() {
+        guard roomStore == nil else { return }
+        let store = RoomStore()
+        roomStore = store
+        Task {
+            await store.start(
+                groupId: room.id,
+                core: appStore.safeCore,
+                bridge: appStore.eventBridge
+            )
+        }
     }
 }
 
 /// Compact artifact row used inside the peek sheet. Just the essentials —
 /// title, source, author. Full detail is a tap-through on the room page.
 private struct InsideArtifactRow: View {
-    let artifact: ArtifactRecord
+    let row: RoomPreviewArtifactRowProjection
+
+    private var artifact: ArtifactRecord { row.artifact }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -291,19 +306,14 @@ private struct InsideArtifactRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(displayTitle)
+                Text(row.title)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
-                if !artifact.preview.author.isEmpty {
-                    Text(artifact.preview.author)
-                        .font(.caption)
-                        .foregroundStyle(Color.highlighterInkMuted)
-                        .lineLimit(1)
-                } else if !artifact.preview.domain.isEmpty {
-                    Text(artifact.preview.domain)
+                if let subtitle = row.subtitle {
+                    Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineLimit(1)
@@ -313,11 +323,6 @@ private struct InsideArtifactRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-    }
-
-    private var displayTitle: String {
-        let t = artifact.preview.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.isEmpty ? "Untitled" : t
     }
 
     @ViewBuilder

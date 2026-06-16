@@ -22,7 +22,9 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use crate::articles::KIND_LONG_FORM;
 use crate::errors::CoreError;
 use crate::groups::KIND_GROUP_METADATA;
-use crate::models::{ArticleRecord, CommunitySummary, HighlightRecord, ProfileMetadata};
+use crate::models::{
+    ArticleReaderRoute, ArticleRecord, CommunitySummary, HighlightRecord, ProfileMetadata,
+};
 use crate::profile;
 use crate::relays::highlighter_relay;
 
@@ -33,12 +35,422 @@ const KIND_HIGHLIGHT: u16 = 9802;
 /// kind:0 NIP-01 profile metadata.
 const KIND_METADATA: u16 = 0;
 
+/// Main search screen section limits. Native shells render these buckets but
+/// do not choose limits or per-section fallback policy.
+pub const SEARCH_HIGHLIGHT_RESULTS_LIMIT: u32 = 30;
+pub const SEARCH_ARTICLE_RESULTS_LIMIT: u32 = 30;
+pub const SEARCH_COMMUNITY_RESULTS_LIMIT: u32 = 20;
+pub const SEARCH_PROFILE_RESULTS_LIMIT: u32 = 20;
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchResultsSnapshot {
+    pub highlights: Vec<HighlightRecord>,
+    pub articles: Vec<ArticleRecord>,
+    pub communities: Vec<CommunitySummary>,
+    pub profiles: Vec<ProfileMetadata>,
+}
+
+impl SearchResultsSnapshot {
+    fn empty() -> Self {
+        Self {
+            highlights: Vec::new(),
+            articles: Vec::new(),
+            communities: Vec::new(),
+            profiles: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchArticleResultsSnapshot {
+    pub articles: Vec<ArticleRecord>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchChromeSnapshot {
+    pub recent_queries: Vec<String>,
+    pub search_relays: Vec<String>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchQueryProjectionInput {
+    pub query: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchQueryProjection {
+    pub search_query: String,
+    pub has_query: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchScheduleInput {
+    pub query: String,
+    pub current_token: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchScheduleProjection {
+    pub search_query: String,
+    pub has_query: bool,
+    pub search_token: u64,
+    pub should_run_search: bool,
+    pub should_clear_results: bool,
+    pub is_local_loading: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchResultsApplyInput {
+    pub request_token: u64,
+    pub current_token: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchResultsApplyProjection {
+    pub should_apply: bool,
+    pub is_local_loading: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchRelayRefreshInput {
+    pub requested_query: String,
+    pub active_relay_query: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchRelayRefreshProjection {
+    pub should_refresh: bool,
+    pub subscribe_query: String,
+    pub active_relay_query: String,
+    pub is_relay_loading: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchRelayStartResultInput {
+    pub requested_query: String,
+    pub applied_query: String,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchRelayStartResultProjection {
+    pub should_register_handle: bool,
+    pub should_unsubscribe_handle: bool,
+    pub active_relay_query: String,
+    pub is_relay_loading: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchRelayUpdateInput {
+    pub incoming_query: String,
+    pub applied_query: String,
+    pub current_token: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchRelayUpdateProjection {
+    pub should_refresh_articles: bool,
+    pub article_query: String,
+    pub request_token: u64,
+    pub is_relay_loading: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchRelayArticlesApplyInput {
+    pub request_token: u64,
+    pub current_token: u64,
+    pub request_query: String,
+    pub applied_query: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchRelayArticlesApplyProjection {
+    pub should_apply: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchSuggestionsProjectionInput {
+    pub joined_communities: Vec<CommunitySummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchSuggestionsProjection {
+    pub queries: Vec<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchHighlightRowProjectionInput {
+    pub highlight: HighlightRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchHighlightRowProjection {
+    pub article_route: Option<ArticleReaderRoute>,
+    pub page_image_url: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchCommunityRowProjectionInput {
+    pub community: CommunitySummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchCommunityRowProjection {
+    pub display_name: String,
+    pub about: Option<String>,
+    pub visibility_label: String,
+    pub access_label: String,
+    pub member_count_label: Option<String>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SearchTextMatchesProjectionInput {
+    pub text: String,
+    pub query: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchTextMatchSpan {
+    pub start: u32,
+    pub end: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SearchTextMatchesProjection {
+    pub spans: Vec<SearchTextMatchSpan>,
+}
+
 /// How many candidate notes to pull from ndb before filtering. Higher than the
 /// final `limit` so substring matches still surface when the candidate set is
 /// dominated by non-matching notes.
 const LOCAL_SCAN_MULTIPLIER: i32 = 8;
 const LOCAL_SCAN_FLOOR: i32 = 256;
 const LOCAL_SCAN_CEILING: i32 = 4096;
+const EVERGREEN_SUGGESTED_QUERIES: [&str; 5] =
+    ["Dostoevsky", "Bitcoin", "Attention", "Borges", "Philosophy"];
+
+pub fn search_query_projection(input: SearchQueryProjectionInput) -> SearchQueryProjection {
+    let search_query = input.query.trim().to_string();
+    SearchQueryProjection {
+        has_query: !search_query.is_empty(),
+        search_query,
+    }
+}
+
+pub fn search_schedule_projection(input: SearchScheduleInput) -> SearchScheduleProjection {
+    let query = search_query_projection(SearchQueryProjectionInput { query: input.query });
+    let search_token = input.current_token.wrapping_add(1);
+    SearchScheduleProjection {
+        search_query: query.search_query,
+        has_query: query.has_query,
+        search_token,
+        should_run_search: query.has_query,
+        should_clear_results: !query.has_query,
+        is_local_loading: query.has_query,
+    }
+}
+
+pub fn search_results_apply_projection(
+    input: SearchResultsApplyInput,
+) -> SearchResultsApplyProjection {
+    SearchResultsApplyProjection {
+        should_apply: input.request_token == input.current_token,
+        is_local_loading: false,
+    }
+}
+
+pub fn search_relay_refresh_projection(
+    input: SearchRelayRefreshInput,
+) -> SearchRelayRefreshProjection {
+    let requested = search_query_projection(SearchQueryProjectionInput {
+        query: input.requested_query,
+    });
+    let active = input.active_relay_query.trim().to_string();
+    let should_refresh = requested.has_query && active != requested.search_query;
+    SearchRelayRefreshProjection {
+        should_refresh,
+        subscribe_query: if should_refresh {
+            requested.search_query.clone()
+        } else {
+            String::new()
+        },
+        active_relay_query: if should_refresh {
+            requested.search_query
+        } else {
+            active
+        },
+        is_relay_loading: should_refresh,
+    }
+}
+
+pub fn search_relay_start_result_projection(
+    input: SearchRelayStartResultInput,
+) -> SearchRelayStartResultProjection {
+    let requested = input.requested_query.trim().to_string();
+    let applied = input.applied_query.trim().to_string();
+    let has_error = !input.error.trim().is_empty();
+    let should_register_handle = !has_error && !requested.is_empty() && requested == applied;
+    let should_unsubscribe_handle = !has_error && !should_register_handle;
+    SearchRelayStartResultProjection {
+        should_register_handle,
+        should_unsubscribe_handle,
+        active_relay_query: if should_register_handle {
+            requested
+        } else {
+            String::new()
+        },
+        is_relay_loading: false,
+    }
+}
+
+pub fn search_relay_update_projection(
+    input: SearchRelayUpdateInput,
+) -> SearchRelayUpdateProjection {
+    let incoming = input.incoming_query.trim();
+    let applied = input.applied_query.trim();
+    let should_refresh_articles = !applied.is_empty() && incoming == applied;
+    SearchRelayUpdateProjection {
+        should_refresh_articles,
+        article_query: if should_refresh_articles {
+            applied.to_string()
+        } else {
+            String::new()
+        },
+        request_token: if should_refresh_articles {
+            input.current_token
+        } else {
+            0
+        },
+        is_relay_loading: false,
+    }
+}
+
+pub fn search_relay_articles_apply_projection(
+    input: SearchRelayArticlesApplyInput,
+) -> SearchRelayArticlesApplyProjection {
+    let request = input.request_query.trim();
+    let applied = input.applied_query.trim();
+    SearchRelayArticlesApplyProjection {
+        should_apply: input.request_token == input.current_token
+            && !applied.is_empty()
+            && request == applied,
+    }
+}
+
+pub fn search_suggestions_projection(
+    input: SearchSuggestionsProjectionInput,
+) -> SearchSuggestionsProjection {
+    let mut queries = Vec::new();
+    let mut seen = HashSet::new();
+    for community in input.joined_communities.into_iter().take(4) {
+        push_suggestion(&mut queries, &mut seen, community.name);
+    }
+    for fallback in EVERGREEN_SUGGESTED_QUERIES {
+        if queries.len() >= 8 {
+            break;
+        }
+        push_suggestion(&mut queries, &mut seen, fallback.to_string());
+    }
+    queries.truncate(8);
+    SearchSuggestionsProjection { queries }
+}
+
+fn push_suggestion(queries: &mut Vec<String>, seen: &mut HashSet<String>, value: String) {
+    let trimmed = value.trim().to_string();
+    if trimmed.is_empty() {
+        return;
+    }
+    if seen.insert(trimmed.to_lowercase()) {
+        queries.push(trimmed);
+    }
+}
+
+pub fn search_highlight_row_projection(
+    input: SearchHighlightRowProjectionInput,
+) -> SearchHighlightRowProjection {
+    SearchHighlightRowProjection {
+        article_route: crate::articles::article_reader_route_from_address(
+            &input.highlight.artifact_address,
+        ),
+        page_image_url: page_image_url(&input.highlight.image_url),
+    }
+}
+
+pub fn search_community_row_projection(
+    input: SearchCommunityRowProjectionInput,
+) -> SearchCommunityRowProjection {
+    let community = input.community;
+    SearchCommunityRowProjection {
+        display_name: community.name,
+        about: non_empty_string(&community.about),
+        visibility_label: capitalize_first(&community.visibility),
+        access_label: capitalize_first(&community.access),
+        member_count_label: community
+            .member_count
+            .map(|count| format!("{count} members")),
+    }
+}
+
+pub fn search_text_matches_projection(
+    input: SearchTextMatchesProjectionInput,
+) -> SearchTextMatchesProjection {
+    let query = input.query.trim().to_lowercase();
+    if query.is_empty() {
+        return SearchTextMatchesProjection { spans: Vec::new() };
+    }
+
+    let lower_text = input.text.to_lowercase();
+    let mut spans = Vec::new();
+    let mut search_start = 0usize;
+    while search_start < lower_text.len() {
+        let Some(relative_start) = lower_text[search_start..].find(&query) else {
+            break;
+        };
+        let start_byte = search_start + relative_start;
+        let end_byte = start_byte + query.len();
+        let start = lower_text[..start_byte].chars().count() as u32;
+        let end = lower_text[..end_byte].chars().count() as u32;
+        if start < end {
+            spans.push(SearchTextMatchSpan { start, end });
+        }
+        search_start = end_byte;
+    }
+
+    SearchTextMatchesProjection { spans }
+}
+
+fn page_image_url(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let parsed = url::Url::parse(trimmed).ok()?;
+    match parsed.scheme() {
+        "http" | "https" => Some(trimmed.to_string()),
+        _ => None,
+    }
+}
+
+fn capitalize_first(value: &str) -> String {
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
+    format!(
+        "{}{}",
+        first.to_uppercase().collect::<String>(),
+        chars.as_str()
+    )
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
 
 fn scan_cap(limit: u32) -> i32 {
     let raw = (limit as i32).saturating_mul(LOCAL_SCAN_MULTIPLIER);
@@ -200,6 +612,7 @@ pub fn search_communities(
     let mut records: Vec<CommunitySummary> = best_per_d
         .into_values()
         .filter_map(|ev| crate::groups::build_community_summary(&ev).ok())
+        .filter(crate::groups::is_public_open_room)
         .collect();
     records.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     records.truncate(limit as usize);
@@ -273,6 +686,70 @@ pub fn search_profiles(
     });
     records.truncate(limit as usize);
     Ok(records)
+}
+
+pub fn search_results_snapshot(ndb: &Ndb, query: &str) -> SearchResultsSnapshot {
+    let q = query.trim();
+    if q.is_empty() {
+        return SearchResultsSnapshot::empty();
+    }
+
+    SearchResultsSnapshot {
+        highlights: search_section_or_empty(
+            "highlights",
+            search_highlights(ndb, q, SEARCH_HIGHLIGHT_RESULTS_LIMIT),
+        ),
+        articles: search_section_or_empty(
+            "articles",
+            search_articles(ndb, q, SEARCH_ARTICLE_RESULTS_LIMIT),
+        ),
+        communities: search_section_or_empty(
+            "communities",
+            search_communities(ndb, q, SEARCH_COMMUNITY_RESULTS_LIMIT),
+        ),
+        profiles: search_section_or_empty(
+            "profiles",
+            search_profiles(ndb, q, SEARCH_PROFILE_RESULTS_LIMIT),
+        ),
+    }
+}
+
+pub fn search_article_results_snapshot(ndb: &Ndb, query: &str) -> SearchArticleResultsSnapshot {
+    let q = query.trim();
+    if q.is_empty() {
+        return SearchArticleResultsSnapshot {
+            articles: Vec::new(),
+        };
+    }
+
+    SearchArticleResultsSnapshot {
+        articles: search_section_or_empty(
+            "articles",
+            search_articles(ndb, q, SEARCH_ARTICLE_RESULTS_LIMIT),
+        ),
+    }
+}
+
+pub fn search_chrome_snapshot(
+    recent_queries: Vec<String>,
+    search_relays: Vec<String>,
+    error: impl ToString,
+) -> SearchChromeSnapshot {
+    SearchChromeSnapshot {
+        recent_queries,
+        search_relays,
+        error: error.to_string(),
+    }
+}
+
+fn search_section_or_empty<T>(section: &'static str, result: Result<Vec<T>, CoreError>) -> Vec<T> {
+    match result {
+        Ok(values) => values,
+        Err(error) => {
+            tracing::warn!(section, error = %error, "search snapshot section failed");
+            Vec::new()
+        }
+    }
 }
 
 fn primary_label(p: &ProfileMetadata) -> &str {
@@ -440,6 +917,7 @@ fn article_record_from_event(event: &Event) -> Option<ArticleRecord> {
 
     Some(ArticleRecord {
         event_id: event.id.to_hex(),
+        address: crate::articles::article_address(&event.pubkey.to_hex(), &identifier),
         pubkey: event.pubkey.to_hex(),
         identifier,
         title,
@@ -455,6 +933,7 @@ fn article_record_from_event(event: &Event) -> Option<ArticleRecord> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
     use tempfile::TempDir;
 
     fn fresh_ndb() -> (Ndb, TempDir) {
@@ -465,19 +944,331 @@ mod tests {
     }
 
     fn process(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).unwrap();
+        process_event_and_wait(ndb, event);
     }
 
-    fn wait_until<T>(mut load: impl FnMut() -> T, ready: impl Fn(&T) -> bool) -> T {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-        loop {
-            let value = load();
-            if ready(&value) || std::time::Instant::now() >= deadline {
-                return value;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
+    fn community(name: &str) -> CommunitySummary {
+        CommunitySummary {
+            id: format!("id-{name}"),
+            name: name.into(),
+            about: String::new(),
+            picture: String::new(),
+            access: "open".into(),
+            visibility: "public".into(),
+            admin_pubkeys: Vec::new(),
+            member_count: None,
+            relay_url: String::new(),
+            metadata_event_id: String::new(),
+            created_at: None,
         }
+    }
+
+    fn highlight(artifact_address: &str, image_url: &str) -> HighlightRecord {
+        HighlightRecord {
+            event_id: "event".into(),
+            pubkey: "pubkey".into(),
+            quote: "quote".into(),
+            context: String::new(),
+            note: String::new(),
+            artifact_address: artifact_address.into(),
+            event_reference: String::new(),
+            external_reference: String::new(),
+            source_url: String::new(),
+            source_reference_key: String::new(),
+            clip_start_seconds: None,
+            clip_end_seconds: None,
+            clip_speaker: String::new(),
+            clip_transcript_segment_ids: Vec::new(),
+            image_url: image_url.into(),
+            created_at: None,
+        }
+    }
+
+    #[test]
+    fn search_query_projection_trims_and_blocks_blank_queries() {
+        let ready = search_query_projection(SearchQueryProjectionInput {
+            query: "  nostr books\n".into(),
+        });
+        let blank = search_query_projection(SearchQueryProjectionInput {
+            query: " \n\t ".into(),
+        });
+
+        assert_eq!(ready.search_query, "nostr books");
+        assert!(ready.has_query);
+        assert_eq!(blank.search_query, "");
+        assert!(!blank.has_query);
+    }
+
+    #[test]
+    fn search_schedule_projection_advances_token_for_queries_and_clears() {
+        let ready = search_schedule_projection(SearchScheduleInput {
+            query: "  nostr books\n".into(),
+            current_token: 41,
+        });
+        assert_eq!(ready.search_query, "nostr books");
+        assert_eq!(ready.search_token, 42);
+        assert!(ready.has_query);
+        assert!(ready.should_run_search);
+        assert!(!ready.should_clear_results);
+        assert!(ready.is_local_loading);
+
+        let clear = search_schedule_projection(SearchScheduleInput {
+            query: " \n\t ".into(),
+            current_token: 42,
+        });
+        assert_eq!(clear.search_query, "");
+        assert_eq!(clear.search_token, 43);
+        assert!(!clear.has_query);
+        assert!(!clear.should_run_search);
+        assert!(clear.should_clear_results);
+        assert!(!clear.is_local_loading);
+    }
+
+    #[test]
+    fn search_results_apply_projection_rejects_stale_tokens() {
+        let fresh = search_results_apply_projection(SearchResultsApplyInput {
+            request_token: 7,
+            current_token: 7,
+        });
+        assert!(fresh.should_apply);
+        assert!(!fresh.is_local_loading);
+
+        let stale = search_results_apply_projection(SearchResultsApplyInput {
+            request_token: 6,
+            current_token: 7,
+        });
+        assert!(!stale.should_apply);
+        assert!(!stale.is_local_loading);
+    }
+
+    #[test]
+    fn search_relay_refresh_projection_refreshes_only_for_new_nonblank_queries() {
+        let refresh = search_relay_refresh_projection(SearchRelayRefreshInput {
+            requested_query: "  nostr books ".into(),
+            active_relay_query: "bitcoin".into(),
+        });
+        assert!(refresh.should_refresh);
+        assert_eq!(refresh.subscribe_query, "nostr books");
+        assert_eq!(refresh.active_relay_query, "nostr books");
+        assert!(refresh.is_relay_loading);
+
+        let unchanged = search_relay_refresh_projection(SearchRelayRefreshInput {
+            requested_query: "nostr books".into(),
+            active_relay_query: " nostr books ".into(),
+        });
+        assert!(!unchanged.should_refresh);
+        assert_eq!(unchanged.subscribe_query, "");
+        assert_eq!(unchanged.active_relay_query, "nostr books");
+        assert!(!unchanged.is_relay_loading);
+
+        let blank = search_relay_refresh_projection(SearchRelayRefreshInput {
+            requested_query: " ".into(),
+            active_relay_query: "nostr books".into(),
+        });
+        assert!(!blank.should_refresh);
+        assert_eq!(blank.subscribe_query, "");
+        assert_eq!(blank.active_relay_query, "nostr books");
+        assert!(!blank.is_relay_loading);
+    }
+
+    #[test]
+    fn search_relay_start_result_projection_clears_failed_or_stale_opens() {
+        let success = search_relay_start_result_projection(SearchRelayStartResultInput {
+            requested_query: "nostr books".into(),
+            applied_query: " nostr books ".into(),
+            error: String::new(),
+        });
+        assert!(success.should_register_handle);
+        assert!(!success.should_unsubscribe_handle);
+        assert_eq!(success.active_relay_query, "nostr books");
+        assert!(!success.is_relay_loading);
+
+        let failed = search_relay_start_result_projection(SearchRelayStartResultInput {
+            requested_query: "nostr books".into(),
+            applied_query: "nostr books".into(),
+            error: "relay unavailable".into(),
+        });
+        assert!(!failed.should_register_handle);
+        assert!(!failed.should_unsubscribe_handle);
+        assert_eq!(failed.active_relay_query, "");
+        assert!(!failed.is_relay_loading);
+
+        let stale = search_relay_start_result_projection(SearchRelayStartResultInput {
+            requested_query: "nostr books".into(),
+            applied_query: "bitcoin".into(),
+            error: String::new(),
+        });
+        assert!(!stale.should_register_handle);
+        assert!(stale.should_unsubscribe_handle);
+        assert_eq!(stale.active_relay_query, "");
+        assert!(!stale.is_relay_loading);
+    }
+
+    #[test]
+    fn search_relay_update_projection_accepts_only_current_article_query() {
+        let accepted = search_relay_update_projection(SearchRelayUpdateInput {
+            incoming_query: " nostr books ".into(),
+            applied_query: "nostr books".into(),
+            current_token: 12,
+        });
+        assert!(accepted.should_refresh_articles);
+        assert_eq!(accepted.article_query, "nostr books");
+        assert_eq!(accepted.request_token, 12);
+        assert!(!accepted.is_relay_loading);
+
+        let stale = search_relay_update_projection(SearchRelayUpdateInput {
+            incoming_query: "bitcoin".into(),
+            applied_query: "nostr books".into(),
+            current_token: 12,
+        });
+        assert!(!stale.should_refresh_articles);
+        assert_eq!(stale.article_query, "");
+        assert_eq!(stale.request_token, 0);
+
+        let blank = search_relay_update_projection(SearchRelayUpdateInput {
+            incoming_query: " ".into(),
+            applied_query: " ".into(),
+            current_token: 12,
+        });
+        assert!(!blank.should_refresh_articles);
+    }
+
+    #[test]
+    fn search_relay_articles_apply_projection_rejects_stale_tokens_and_queries() {
+        let accepted = search_relay_articles_apply_projection(SearchRelayArticlesApplyInput {
+            request_token: 8,
+            current_token: 8,
+            request_query: "nostr books".into(),
+            applied_query: " nostr books ".into(),
+        });
+        assert!(accepted.should_apply);
+
+        let stale_token = search_relay_articles_apply_projection(SearchRelayArticlesApplyInput {
+            request_token: 7,
+            current_token: 8,
+            request_query: "nostr books".into(),
+            applied_query: "nostr books".into(),
+        });
+        assert!(!stale_token.should_apply);
+
+        let stale_query = search_relay_articles_apply_projection(SearchRelayArticlesApplyInput {
+            request_token: 8,
+            current_token: 8,
+            request_query: "nostr books".into(),
+            applied_query: "bitcoin".into(),
+        });
+        assert!(!stale_query.should_apply);
+    }
+
+    #[test]
+    fn search_chrome_snapshot_preserves_recent_queries_relays_and_error() {
+        let snapshot = search_chrome_snapshot(
+            vec!["nostr".into(), "books".into()],
+            vec!["wss://relay.highlighter.com".into()],
+            "cache unavailable",
+        );
+
+        assert_eq!(snapshot.recent_queries, vec!["nostr", "books"]);
+        assert_eq!(snapshot.search_relays, vec!["wss://relay.highlighter.com"]);
+        assert_eq!(snapshot.error, "cache unavailable");
+    }
+
+    #[test]
+    fn search_text_matches_projection_returns_case_insensitive_character_spans() {
+        let projection = search_text_matches_projection(SearchTextMatchesProjectionInput {
+            text: "Alpha beta ALPHA".into(),
+            query: " alpha ".into(),
+        });
+        let blank = search_text_matches_projection(SearchTextMatchesProjectionInput {
+            text: "Alpha".into(),
+            query: " ".into(),
+        });
+
+        assert_eq!(
+            projection.spans,
+            vec![
+                SearchTextMatchSpan { start: 0, end: 5 },
+                SearchTextMatchSpan { start: 11, end: 16 },
+            ]
+        );
+        assert!(blank.spans.is_empty());
+    }
+
+    #[test]
+    fn search_suggestions_projection_dedupes_rooms_and_fills_fallbacks() {
+        let projection = search_suggestions_projection(SearchSuggestionsProjectionInput {
+            joined_communities: vec![
+                community("  Bitcoin  "),
+                community(""),
+                community("Sci-Fi"),
+                community("sci-fi"),
+                community("Ignored fifth room"),
+            ],
+        });
+
+        assert_eq!(
+            projection.queries,
+            vec![
+                "Bitcoin",
+                "Sci-Fi",
+                "Dostoevsky",
+                "Attention",
+                "Borges",
+                "Philosophy"
+            ]
+        );
+        assert!(projection.queries.len() <= 8);
+    }
+
+    #[test]
+    fn search_community_row_projection_preserves_row_copy() {
+        let mut community_record = community("Readers");
+        community_record.about = "Books and notes".into();
+        community_record.visibility = "private".into();
+        community_record.access = "closed".into();
+        community_record.member_count = Some(1);
+
+        let projection = search_community_row_projection(SearchCommunityRowProjectionInput {
+            community: community_record,
+        });
+
+        assert_eq!(projection.display_name, "Readers");
+        assert_eq!(projection.about, Some("Books and notes".into()));
+        assert_eq!(projection.visibility_label, "Private");
+        assert_eq!(projection.access_label, "Closed");
+        assert_eq!(projection.member_count_label, Some("1 members".into()));
+
+        let projection = search_community_row_projection(SearchCommunityRowProjectionInput {
+            community: community("Writers"),
+        });
+
+        assert_eq!(projection.about, None);
+        assert_eq!(projection.visibility_label, "Public");
+        assert_eq!(projection.access_label, "Open");
+        assert_eq!(projection.member_count_label, None);
+    }
+
+    #[test]
+    fn search_highlight_row_projection_projects_route_and_page_image() {
+        let pubkey = "a".repeat(64);
+        let projection = search_highlight_row_projection(SearchHighlightRowProjectionInput {
+            highlight: highlight(
+                &format!("  30023:{pubkey}:essay\n"),
+                " https://example.com/page.jpg ",
+            ),
+        });
+        let invalid = search_highlight_row_projection(SearchHighlightRowProjectionInput {
+            highlight: highlight("bad address", "ftp://example.com/page.jpg"),
+        });
+
+        let route = projection.article_route.expect("article route");
+        assert_eq!(route.address, format!("30023:{pubkey}:essay"));
+        assert_eq!(
+            projection.page_image_url.as_deref(),
+            Some("https://example.com/page.jpg")
+        );
+        assert!(invalid.article_route.is_none());
+        assert!(invalid.page_image_url.is_none());
     }
 
     #[test]
@@ -504,15 +1295,9 @@ mod tests {
         process(&ndb, &match_note);
         process(&ndb, &no_match);
 
-        let hits = wait_until(
-            || search_highlights(&ndb, "DOSTOEVSKY", 20).unwrap(),
-            |hits| hits.iter().any(|h| h.note.contains("dostoevsky")),
-        );
+        let hits = search_highlights(&ndb, "DOSTOEVSKY", 20).unwrap();
         assert!(hits.iter().any(|h| h.note.contains("dostoevsky")));
-        let kara = wait_until(
-            || search_highlights(&ndb, "karamazov", 20).unwrap(),
-            |hits| hits.iter().any(|h| h.quote.contains("Karamazov")),
-        );
+        let kara = search_highlights(&ndb, "karamazov", 20).unwrap();
         assert!(kara.iter().any(|h| h.quote.contains("Karamazov")));
     }
 
@@ -554,13 +1339,90 @@ mod tests {
         process(&ndb, &newer);
         process(&ndb, &hashtag_match);
 
-        let hits = wait_until(
-            || search_articles(&ndb, "attention", 20).unwrap(),
-            |hits| hits.len() == 2,
-        );
+        let hits = search_articles(&ndb, "attention", 20).unwrap();
         assert_eq!(hits.len(), 2, "dedupe by (pubkey, d): 2 distinct addresses");
         let essay = hits.iter().find(|a| a.identifier == "essay").unwrap();
         assert_eq!(essay.title, "On Attention (revised)", "newest wins");
+    }
+
+    #[test]
+    fn search_snapshots_read_all_sections_and_article_refresh() {
+        let (ndb, _tmp) = fresh_ndb();
+        let keys = Keys::generate();
+
+        let highlight = EventBuilder::new(Kind::Custom(KIND_HIGHLIGHT), "attention quote")
+            .sign_with_keys(&keys)
+            .unwrap();
+        let article = EventBuilder::new(Kind::Custom(KIND_LONG_FORM), "body")
+            .tags([
+                Tag::parse(vec!["d".to_string(), "attention-essay".to_string()]).unwrap(),
+                Tag::parse(vec!["title".to_string(), "Attention Essay".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&keys)
+            .unwrap();
+        let community = EventBuilder::new(Kind::Custom(KIND_GROUP_METADATA), "")
+            .tags([
+                Tag::identifier("attention-room"),
+                Tag::parse(vec!["name".to_string(), "Attention Room".to_string()]).unwrap(),
+                Tag::parse(vec!["public".to_string()]).unwrap(),
+                Tag::parse(vec!["open".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&keys)
+            .unwrap();
+        let profile = EventBuilder::new(
+            Kind::Custom(KIND_METADATA),
+            r#"{"name":"attentionist","display_name":"Attentionist"}"#,
+        )
+        .sign_with_keys(&keys)
+        .unwrap();
+
+        for event in [&highlight, &article, &community, &profile] {
+            process(&ndb, event);
+        }
+
+        let snapshot = search_results_snapshot(&ndb, " attention ");
+        assert_eq!(snapshot.highlights.len(), 1);
+        assert_eq!(snapshot.articles.len(), 1);
+        assert_eq!(snapshot.communities.len(), 1);
+        assert_eq!(snapshot.profiles.len(), 1);
+
+        let article_snapshot = search_article_results_snapshot(&ndb, "attention");
+        assert_eq!(
+            article_snapshot.articles[0].address,
+            snapshot.articles[0].address
+        );
+
+        let blank = search_results_snapshot(&ndb, " ");
+        assert!(blank.highlights.is_empty());
+        assert!(blank.articles.is_empty());
+        assert!(blank.communities.is_empty());
+        assert!(blank.profiles.is_empty());
+    }
+
+    #[test]
+    fn search_communities_filters_private_or_closed_rooms() {
+        let (ndb, _tmp) = fresh_ndb();
+        let keys = Keys::generate();
+        for (id, visibility, access) in [
+            ("private", "private", "open"),
+            ("closed", "public", "closed"),
+            ("alpha", "public", "open"),
+        ] {
+            let event = EventBuilder::new(Kind::Custom(KIND_GROUP_METADATA), "")
+                .tags([
+                    Tag::identifier(id),
+                    Tag::parse(vec!["name".to_string(), "Reader Room".to_string()]).unwrap(),
+                    Tag::parse(vec![visibility.to_string()]).unwrap(),
+                    Tag::parse(vec![access.to_string()]).unwrap(),
+                ])
+                .sign_with_keys(&keys)
+                .unwrap();
+            process(&ndb, &event);
+        }
+
+        let hits = search_communities(&ndb, "reader", 20).unwrap();
+        let ids: Vec<_> = hits.iter().map(|c| c.id.as_str()).collect();
+        assert_eq!(ids, vec!["alpha"]);
     }
 
     #[test]
@@ -585,10 +1447,7 @@ mod tests {
         process(&ndb, &contains_only);
         process(&ndb, &prefix_match);
 
-        let hits = wait_until(
-            || search_profiles(&ndb, "huxley", 20).unwrap(),
-            |hits| hits.len() == 2,
-        );
+        let hits = search_profiles(&ndb, "huxley", 20).unwrap();
         assert_eq!(hits.len(), 2);
         assert_eq!(
             hits[0].display_name, "Huxley's Fan",
@@ -614,17 +1473,17 @@ mod tests {
             .unwrap();
         process(&ndb, &event);
 
-        let relays = wait_until(
-            || query_search_relays(&ndb, &user.public_key().to_hex()).unwrap(),
-            |relays| relays.iter().any(|r| r == "wss://relay.nostr.band"),
-        );
+        let relays = query_search_relays(&ndb, &user.public_key().to_hex()).unwrap();
         assert_eq!(
             relays.first().map(String::as_str),
             Some(highlighter_relay())
         );
         assert!(relays.iter().any(|r| r == "wss://relay.nostr.band"));
         // No duplicates for the default relay even though the user also listed it.
-        let hl_count = relays.iter().filter(|r| *r == highlighter_relay()).count();
+        let hl_count = relays
+            .iter()
+            .filter(|r| r.as_str() == highlighter_relay())
+            .count();
         assert_eq!(hl_count, 1);
     }
 }

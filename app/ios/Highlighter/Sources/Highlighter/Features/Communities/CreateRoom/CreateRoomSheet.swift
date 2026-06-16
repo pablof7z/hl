@@ -7,9 +7,9 @@ import SwiftUI
 /// the typeface honours that. Visibility is an inline row, not a segmented
 /// control — the default (public · open) is sane, so most users never
 /// touch it. Picking a cover routes through `PhotosPicker` →
-/// the NMP app action so the image lands on the user's Blossom server before
-/// the room is created. On success, pushes `RoomInviteView` in welcome mode so
-/// adding the first guests feels like one continuous act.
+/// `core.uploadPhoto` so the image lands on the user's Blossom server
+/// before the room is created. On success, pushes `RoomInviteView` in
+/// welcome mode so adding the first guests feels like one continuous act.
 struct CreateRoomSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(HighlighterStore.self) private var appStore
@@ -20,18 +20,29 @@ struct CreateRoomSheet: View {
     @State private var access: RoomAccess = .open
     @State private var visibilityPickerPresented = false
     @State private var photoItem: PhotosPickerItem?
-    @State private var didResetCreateRoomState = false
+    @State private var coverUpload: BlossomUpload?
+    @State private var coverIsUploading = false
+    @State private var isCreating = false
+    @State private var error: String?
+    @State private var createdGroupId: String?
 
     @FocusState private var focused: Field?
     private enum Field { case name, about }
 
-    private var canCreate: Bool {
-        name.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
-            && !isCreating
-            && !coverIsUploading
+    private var projection: CreateRoomProjection {
+        appStore.safeCore.projectCreateRoom(input: CreateRoomProjectionInput(
+            name: name,
+            about: about,
+            visibility: visibility,
+            access: access,
+            isCreating: isCreating,
+            coverIsUploading: coverIsUploading
+        ))
     }
 
     var body: some View {
+        let currentProjection = projection
+
         NavigationStack {
             ZStack(alignment: .bottom) {
                 ScrollView {
@@ -41,7 +52,7 @@ struct CreateRoomSheet: View {
                             .padding(.horizontal, 22)
                         Divider().overlay(Color.highlighterRule)
                             .padding(.horizontal, 22)
-                        visibilityRow
+                        visibilityRow(currentProjection)
                             .padding(.horizontal, 22)
                         Spacer(minLength: 120)
                     }
@@ -49,7 +60,7 @@ struct CreateRoomSheet: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
 
-                stickyCTA
+                stickyCTA(currentProjection)
             }
             .background(Color.highlighterPaper.ignoresSafeArea())
             .navigationTitle("")
@@ -60,39 +71,28 @@ struct CreateRoomSheet: View {
                         .foregroundStyle(Color.highlighterInkStrong)
                 }
             }
-            .navigationDestination(item: createdGroupBinding) { groupId in
+            .navigationDestination(item: $createdGroupId) { groupId in
                 RoomInviteView(groupId: groupId, mode: .welcome) {
-                    appStore.clearCreateRoomResult()
                     dismiss()
                 }
             }
             .sheet(isPresented: $visibilityPickerPresented) {
                 VisibilityPickerSheet(
                     visibility: $visibility,
-                    access: $access
+                    access: $access,
+                    options: currentProjection.visibilityOptions
                 )
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
             }
             .alert("Couldn't create room", isPresented: errorBinding, actions: {
-                Button("OK") { appStore.clearCreateRoomError() }
+                Button("OK") { error = nil }
             }, message: {
                 if let error { Text(error) }
             })
             .onChange(of: photoItem) { _, newItem in
                 guard let newItem else { return }
                 Task { await uploadCover(item: newItem) }
-            }
-            .onChange(of: createdGroupId) { _, groupId in
-                if groupId != nil {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                }
-            }
-            .onAppear {
-                guard !didResetCreateRoomState else { return }
-                didResetCreateRoomState = true
-                appStore.clearCreateRoomResult()
-                appStore.clearCreateRoomError()
             }
         }
     }
@@ -139,7 +139,7 @@ struct CreateRoomSheet: View {
         .overlay(alignment: .topTrailing) {
             if coverUpload != nil {
                 Button {
-                    appStore.clearCreateRoomCover()
+                    coverUpload = nil
                     photoItem = nil
                 } label: {
                     Image(systemName: "xmark")
@@ -149,7 +149,6 @@ struct CreateRoomSheet: View {
                         .background(.black.opacity(0.45), in: Circle())
                 }
                 .padding(12)
-                .accessibilityLabel("Remove cover")
             }
         }
         .overlay {
@@ -158,7 +157,6 @@ struct CreateRoomSheet: View {
                 Color.clear
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Choose a cover photo")
         }
     }
 
@@ -186,16 +184,16 @@ struct CreateRoomSheet: View {
             .font(.body)
             .foregroundStyle(Color.highlighterInkStrong)
             .focused($focused, equals: .about)
-            .lineLimit(3 ... 8)
+            .lineLimit(3...8)
         }
     }
 
-    private var visibilityRow: some View {
+    private func visibilityRow(_ projection: CreateRoomProjection) -> some View {
         Button {
             visibilityPickerPresented = true
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: visibilityGlyph)
+                Image(systemName: projection.visibilityGlyph)
                     .font(.body.weight(.medium))
                     .foregroundStyle(Color.highlighterAccent)
                     .frame(width: 22)
@@ -204,7 +202,7 @@ struct CreateRoomSheet: View {
                         .font(.footnote.weight(.semibold))
                         .tracking(0.6)
                         .foregroundStyle(Color.highlighterInkMuted)
-                    Text(visibilitySummary)
+                    Text(projection.visibilitySummary)
                         .font(.body.weight(.medium))
                         .foregroundStyle(Color.highlighterInkStrong)
                 }
@@ -218,7 +216,7 @@ struct CreateRoomSheet: View {
         .buttonStyle(.plain)
     }
 
-    private var stickyCTA: some View {
+    private func stickyCTA(_ projection: CreateRoomProjection) -> some View {
         VStack(spacing: 0) {
             LinearGradient(
                 colors: [Color.highlighterPaper.opacity(0), Color.highlighterPaper],
@@ -241,11 +239,11 @@ struct CreateRoomSheet: View {
                 .padding(.vertical, 16)
                 .background(
                     RoundedRectangle(cornerRadius: 16)
-                        .fill(canCreate ? Color.highlighterAccent : Color.highlighterAccent.opacity(0.35))
+                        .fill(projection.canCreate ? Color.highlighterAccent : Color.highlighterAccent.opacity(0.35))
                 )
             }
             .buttonStyle(.plain)
-            .disabled(!canCreate)
+            .disabled(!projection.canCreate)
             .padding(.horizontal, 22)
             .padding(.bottom, 24)
             .background(Color.highlighterPaper)
@@ -254,43 +252,37 @@ struct CreateRoomSheet: View {
 
     // MARK: - Helpers
 
-    private var visibilityGlyph: String {
-        switch (visibility, access) {
-        case (.public, .open): return "globe"
-        case (.public, .closed): return "globe.badge.chevron.backward"
-        case (.private, _): return "lock"
-        }
-    }
-
-    private var visibilitySummary: String {
-        switch (visibility, access) {
-        case (.public, .open): return "Public · Anyone can join"
-        case (.public, .closed): return "Public · You approve joins"
-        case (.private, _): return "Private · Invite only"
-        }
-    }
-
     private var errorBinding: Binding<Bool> {
-        Binding(get: { error != nil }, set: { if !$0 { appStore.clearCreateRoomError() } })
+        Binding(get: { error != nil }, set: { if !$0 { error = nil } })
     }
 
     private func uploadCover(item: PhotosPickerItem) async {
+        coverIsUploading = true
+        defer { coverIsUploading = false }
         do {
             guard let data = try await item.loadTransferable(type: Data.self) else { return }
             guard let image = UIImage(data: data) else {
-                appStore.createRoomCapabilityFailed(message: "Couldn't read that image.")
+                error = "That image couldn't be read."
                 return
             }
             let prepared = await prepareForUpload(image: image)
-            appStore.uploadCreateRoomCover(
+            let outcome = await appStore.safeCore.uploadPhoto(
                 bytes: prepared.data,
                 mime: "image/jpeg",
                 width: UInt32(prepared.width),
                 height: UInt32(prepared.height),
                 alt: ""
             )
+            let projection = appStore.safeCore.projectCreateRoomCoverUploadResult(
+                input: CreateRoomCoverUploadResultInput(snapshot: outcome)
+            )
+            guard let upload = projection.upload else {
+                self.error = projection.errorMessage
+                return
+            }
+            coverUpload = upload
         } catch {
-            appStore.createRoomCapabilityFailed(message: "Couldn't read that image.")
+            self.error = "Couldn't upload cover: \(error.localizedDescription)"
         }
     }
 
@@ -317,45 +309,36 @@ struct CreateRoomSheet: View {
     }
 
     private func create() {
-        guard canCreate else { return }
+        let draft = projection
+        guard draft.canCreate else { return }
+        let pictureURL = coverUpload?.url ?? ""
+        isCreating = true
         focused = nil
-        appStore.submitCreateRoom(
-            name: name,
-            about: about,
-            visibility: visibility,
-            access: access
-        )
-    }
-
-    private var coverUpload: BlossomUpload? {
-        appStore.createRoom.coverUpload
-    }
-
-    private var coverIsUploading: Bool {
-        appStore.createRoom.isCoverUploading
-    }
-
-    private var isCreating: Bool {
-        appStore.createRoom.isCreating
-    }
-
-    private var error: String? {
-        appStore.createRoom.errorMessage
-    }
-
-    private var createdGroupId: String? {
-        appStore.createRoom.createdGroupId
-    }
-
-    private var createdGroupBinding: Binding<String?> {
-        Binding(
-            get: { createdGroupId },
-            set: { value in
-                if value == nil {
-                    appStore.clearCreateRoomResult()
+        Task {
+            defer { isCreating = false }
+            let outcome = await appStore.safeCore.createRoom(
+                name: draft.createName,
+                about: draft.createAbout,
+                picture: pictureURL,
+                visibility: visibility,
+                access: access
+            )
+            let result = appStore.safeCore.projectCreateRoomPublishResult(
+                input: CreateRoomPublishResultInput(
+                    groupId: outcome.groupId,
+                    error: outcome.error
+                )
+            )
+            if result.didCreate {
+                if result.shouldEmitSuccessFeedback {
+                    let generator = UINotificationFeedbackGenerator()
+                    generator.notificationOccurred(.success)
                 }
+                createdGroupId = result.groupId
+            } else {
+                self.error = result.errorMessage
             }
-        )
+        }
     }
 }
 
@@ -368,49 +351,14 @@ extension String: @retroactive Identifiable {
 private struct VisibilityPickerSheet: View {
     @Binding var visibility: RoomVisibility
     @Binding var access: RoomAccess
+    let options: [CreateRoomVisibilityOption]
     @Environment(\.dismiss) private var dismiss
-
-    private struct Option: Identifiable {
-        let id: String
-        let title: String
-        let summary: String
-        let glyph: String
-        let visibility: RoomVisibility
-        let access: RoomAccess
-    }
-
-    private let options: [Option] = [
-        Option(
-            id: "public-open",
-            title: "Public",
-            summary: "Anyone can find and join this room.",
-            glyph: "globe",
-            visibility: .public,
-            access: .open
-        ),
-        Option(
-            id: "public-closed",
-            title: "Public · By approval",
-            summary: "Anyone can find it, but you approve who joins.",
-            glyph: "globe.badge.chevron.backward",
-            visibility: .public,
-            access: .closed
-        ),
-        Option(
-            id: "private",
-            title: "Private",
-            summary: "Hidden from the explorer. Invite only.",
-            glyph: "lock",
-            visibility: .private,
-            access: .closed
-        ),
-    ]
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 0) {
-                    ForEach(options) { option in
+                    ForEach(options, id: \.id) { option in
                         Button {
                             visibility = option.visibility
                             access = option.access
@@ -433,7 +381,7 @@ private struct VisibilityPickerSheet: View {
                                         .multilineTextAlignment(.leading)
                                 }
                                 Spacer(minLength: 0)
-                                if isSelected(option) {
+                                if option.isSelected {
                                     Image(systemName: "checkmark")
                                         .font(.body.weight(.semibold))
                                         .foregroundStyle(Color.highlighterAccent)
@@ -454,10 +402,5 @@ private struct VisibilityPickerSheet: View {
             .navigationTitle("Visibility")
             .navigationBarTitleDisplayMode(.inline)
         }
-    }
-
-    private func isSelected(_ option: VisibilityPickerSheet.Option) -> Bool {
-        option.visibility == visibility
-            && (option.visibility == .private || option.access == access)
     }
 }

@@ -4,6 +4,7 @@ struct MemberClipRow: View {
     @Environment(HighlighterStore.self) private var app
 
     let highlight: HighlightRecord
+    let rangeLabel: String
     let state: TimelineRowState
     let onSeek: (Double) -> Void
 
@@ -26,6 +27,8 @@ struct MemberClipRow: View {
                     }
                 }
             } label: {
+                let author = authorDisplay
+
                 HStack(alignment: .top, spacing: 14) {
                     Text(rangeLabel)
                         .font(.caption.weight(.medium).monospacedDigit())
@@ -36,13 +39,13 @@ struct MemberClipRow: View {
                         HStack(alignment: .top, spacing: 10) {
                             AuthorAvatar(
                                 pubkey: highlight.pubkey,
-                                pictureURL: app.profile(pubkeyHex: highlight.pubkey)?.picture ?? "",
-                                displayInitial: authorInitial,
+                                pictureURL: author.pictureUrl,
+                                displayInitial: author.displayInitial,
                                 size: 28
                             )
 
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(authorName)
+                                Text(author.displayName)
                                     .font(.footnote.weight(.semibold))
                                     .foregroundStyle(.primary)
                                     .lineLimit(1)
@@ -99,40 +102,37 @@ struct MemberClipRow: View {
             }
         }
         .task(id: highlight.pubkey) {
-            app.requestProfile(pubkeyHex: highlight.pubkey)
+            await app.requestProfile(pubkeyHex: highlight.pubkey)
         }
         .onChange(of: isExpanded) { _, expanded in
             guard expanded else { return }
-            app.openComments(rootTagName: "e", rootTagValue: highlight.eventId, rootKind: 9802)
+            let id = highlight.eventId
+            guard app.podcastPlayer.comments[id] == nil else { return }
+            Task {
+                let scopeSnapshot = app.safeCore.getHighlightCommentScope(eventIdHex: id)
+                guard scopeSnapshot.attach, let scope = scopeSnapshot.scope else {
+                    app.podcastPlayer.comments[id] = []
+                    return
+                }
+                let snapshot = await app.safeCore.getCommentThreadSnapshot(scope: scope, limit: 200)
+                let projection = app.safeCore.projectCommentInlineThreadSnapshotApply(
+                    input: CommentInlineThreadSnapshotApplyInput(
+                        records: snapshot.records,
+                        error: snapshot.error
+                    )
+                )
+                app.podcastPlayer.comments[id] = projection.records
+            }
         }
     }
 
-    private var rangeLabel: String {
-        let s = formatTimestamp(highlight.clipStartSeconds)
-        let e = formatTimestamp(highlight.clipEndSeconds)
-        if let s, let e { return "\(s)–\(e)" }
-        if let s { return s }
-        return "—"
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: highlight.pubkey,
+                profile: app.profileSnapshots[highlight.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
-
-    private var authorName: String {
-        let profile = app.profile(pubkeyHex: highlight.pubkey)
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(highlight.pubkey.prefix(10))
-    }
-
-    private var authorInitial: String {
-        authorName.first.map { String($0).uppercased() } ?? ""
-    }
-}
-
-private func formatTimestamp(_ seconds: Double?) -> String? {
-    guard let s = seconds, s >= 0 else { return nil }
-    let total = Int(s.rounded())
-    let h = total / 3600
-    let m = (total % 3600) / 60
-    let sec = total % 60
-    if h > 0 { return String(format: "%d:%02d:%02d", h, m, sec) }
-    return String(format: "%d:%02d", m, sec)
 }

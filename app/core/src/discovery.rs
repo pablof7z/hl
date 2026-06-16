@@ -7,13 +7,13 @@
 //! arrive via a long-lived relay subscription installed from `client.rs` on
 //! explorer appearance.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
-use crate::groups::{build_community_summary, KIND_GROUP_METADATA};
+use crate::groups::{build_community_summary, is_public_open_room, KIND_GROUP_METADATA};
 use crate::models::CommunitySummary;
 
 /// Return every cached kind:39000 as a `CommunitySummary`, newest first,
@@ -57,6 +57,7 @@ pub fn query_all_rooms_from_ndb(ndb: &Ndb, limit: u32) -> Result<Vec<CommunitySu
     let mut summaries: Vec<CommunitySummary> = newest_by_id
         .values()
         .filter_map(|e| build_community_summary(e).ok())
+        .filter(is_public_open_room)
         .collect();
 
     summaries.sort_by(|a, b| {
@@ -66,6 +67,32 @@ pub fn query_all_rooms_from_ndb(ndb: &Ndb, limit: u32) -> Result<Vec<CommunitySu
     });
     summaries.truncate(limit as usize);
     Ok(summaries)
+}
+
+pub fn exclude_joined_rooms(
+    rooms: &[CommunitySummary],
+    joined: &[CommunitySummary],
+) -> Vec<CommunitySummary> {
+    let joined_ids: HashSet<&str> = joined.iter().map(|room| room.id.as_str()).collect();
+    rooms
+        .iter()
+        .filter(|room| !joined_ids.contains(room.id.as_str()))
+        .cloned()
+        .collect()
+}
+
+pub fn search_rooms(rooms: &[CommunitySummary], query: &str) -> Vec<CommunitySummary> {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() {
+        return rooms.to_vec();
+    }
+    rooms
+        .iter()
+        .filter(|room| {
+            room.name.to_lowercase().contains(&query) || room.about.to_lowercase().contains(&query)
+        })
+        .cloned()
+        .collect()
 }
 
 fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
@@ -81,6 +108,7 @@ fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
 
     fn isolated_ndb() -> (Ndb, tempfile::TempDir) {
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -92,32 +120,27 @@ mod tests {
     }
 
     fn ingest(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).expect("process event");
-    }
-
-    fn wait_for_rooms(
-        limit: u32,
-        ndb: &Ndb,
-        ready: impl Fn(&[CommunitySummary]) -> bool,
-    ) -> Vec<CommunitySummary> {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-        loop {
-            let out = query_all_rooms_from_ndb(ndb, limit).expect("ok");
-            if ready(&out) || std::time::Instant::now() >= deadline {
-                return out;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
+        process_event_and_wait(ndb, event);
     }
 
     fn meta(keys: &Keys, id: &str, name: &str, ts: u64) -> Event {
+        meta_with_markers(keys, id, name, ts, "public", "open")
+    }
+
+    fn meta_with_markers(
+        keys: &Keys,
+        id: &str,
+        name: &str,
+        ts: u64,
+        visibility: &str,
+        access: &str,
+    ) -> Event {
         EventBuilder::new(Kind::Custom(KIND_GROUP_METADATA), "")
             .tags(vec![
                 Tag::identifier(id),
                 Tag::parse(vec!["name".to_string(), name.to_string()]).unwrap(),
-                Tag::parse(vec!["public".to_string()]).unwrap(),
-                Tag::parse(vec!["open".to_string()]).unwrap(),
+                Tag::parse(vec![visibility.to_string()]).unwrap(),
+                Tag::parse(vec![access.to_string()]).unwrap(),
             ])
             .custom_created_at(Timestamp::from(ts))
             .sign_with_keys(keys)
@@ -139,7 +162,7 @@ mod tests {
         ingest(&ndb, &meta(&author, "bravo", "Bravo", 300));
         ingest(&ndb, &meta(&author, "charlie", "Charlie", 200));
 
-        let out = wait_for_rooms(32, &ndb, |out| out.len() == 3);
+        let out = query_all_rooms_from_ndb(&ndb, 32).expect("ok");
         let ids: Vec<_> = out.iter().map(|c| c.id.as_str()).collect();
         assert_eq!(ids, vec!["bravo", "charlie", "alpha"]);
     }
@@ -155,8 +178,28 @@ mod tests {
             );
         }
 
-        let out = wait_for_rooms(4, &ndb, |out| out.len() == 4);
+        let out = query_all_rooms_from_ndb(&ndb, 4).expect("ok");
         assert_eq!(out.len(), 4);
+    }
+
+    #[test]
+    fn filters_private_or_closed_rooms_before_limiting() {
+        let (ndb, _tmp) = isolated_ndb();
+        let author = Keys::generate();
+        ingest(
+            &ndb,
+            &meta_with_markers(&author, "private", "Private", 400, "private", "open"),
+        );
+        ingest(
+            &ndb,
+            &meta_with_markers(&author, "closed", "Closed", 300, "public", "closed"),
+        );
+        ingest(&ndb, &meta(&author, "alpha", "Alpha", 200));
+        ingest(&ndb, &meta(&author, "bravo", "Bravo", 100));
+
+        let out = query_all_rooms_from_ndb(&ndb, 2).expect("ok");
+        let ids: Vec<_> = out.iter().map(|c| c.id.as_str()).collect();
+        assert_eq!(ids, vec!["alpha", "bravo"]);
     }
 
     #[test]
@@ -166,10 +209,56 @@ mod tests {
         ingest(&ndb, &meta(&author, "alpha", "Old Alpha", 100));
         ingest(&ndb, &meta(&author, "alpha", "New Alpha", 200));
 
-        let out = wait_for_rooms(32, &ndb, |out| {
-            out.first().map(|room| room.name.as_str()) == Some("New Alpha")
-        });
+        let out = query_all_rooms_from_ndb(&ndb, 32).expect("ok");
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].name, "New Alpha");
+    }
+
+    #[test]
+    fn exclude_joined_rooms_preserves_order_and_removes_joined_ids() {
+        let rooms = vec![
+            summary("alpha", "Alpha", ""),
+            summary("bravo", "Bravo", ""),
+            summary("charlie", "Charlie", ""),
+        ];
+        let joined = vec![summary("bravo", "Bravo", "")];
+
+        let out = exclude_joined_rooms(&rooms, &joined);
+
+        assert_eq!(
+            out.iter().map(|room| room.id.as_str()).collect::<Vec<_>>(),
+            vec!["alpha", "charlie"]
+        );
+    }
+
+    #[test]
+    fn search_rooms_matches_name_or_about_case_insensitive() {
+        let rooms = vec![
+            summary("alpha", "Design Systems", "quiet product work"),
+            summary("bravo", "Reading Room", "Bitcoin and markets"),
+            summary("charlie", "History", "Archive research"),
+        ];
+
+        let out = search_rooms(&rooms, "  BITCOIN ");
+
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].id, "bravo");
+        assert_eq!(search_rooms(&rooms, "").len(), 3);
+    }
+
+    fn summary(id: &str, name: &str, about: &str) -> CommunitySummary {
+        CommunitySummary {
+            id: id.into(),
+            name: name.into(),
+            about: about.into(),
+            picture: String::new(),
+            access: "open".into(),
+            visibility: "public".into(),
+            admin_pubkeys: Vec::new(),
+            member_count: None,
+            relay_url: String::new(),
+            metadata_event_id: format!("event-{id}"),
+            created_at: None,
+        }
     }
 }

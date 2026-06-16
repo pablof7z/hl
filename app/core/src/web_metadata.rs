@@ -14,9 +14,9 @@
 //!   `Notify` map; the first caller fetches, the rest re-read the cache.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::Duration;
 
 use parking_lot::Mutex;
 use scraper::{Html, Selector};
@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
 use url::Url;
 
+use crate::clock::{Clock, SystemClock};
 use crate::errors::CoreError;
 
 /// Project-default user agent. Matches the rest of the iOS surface so
@@ -55,6 +56,21 @@ pub struct WebMetadata {
     pub fetched_at: u64,
 }
 
+/// Native web metadata request projection. Rust owns URL validity,
+/// canonicalization, and the mirror keys native shells should hydrate.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct WebMetadataRequestProjection {
+    pub canonical_url: String,
+    pub can_request: bool,
+    pub cache_keys: Vec<String>,
+}
+
+/// Native web metadata request input.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct WebMetadataRequestProjectionInput {
+    pub url: String,
+}
+
 impl WebMetadata {
     fn empty(url: String) -> Self {
         Self {
@@ -77,30 +93,40 @@ impl WebMetadata {
     }
 }
 
+pub fn web_metadata_request_projection(
+    input: WebMetadataRequestProjectionInput,
+) -> WebMetadataRequestProjection {
+    let raw_url = input.url.trim().to_string();
+    let Some(canonical_url) = crate::artifacts::normalize_artifact_url(&input.url) else {
+        return WebMetadataRequestProjection {
+            canonical_url: String::new(),
+            can_request: false,
+            cache_keys: Vec::new(),
+        };
+    };
+
+    let mut cache_keys = vec![canonical_url.clone()];
+    if !raw_url.is_empty() && raw_url != canonical_url {
+        cache_keys.push(raw_url);
+    }
+    WebMetadataRequestProjection {
+        canonical_url,
+        can_request: true,
+        cache_keys,
+    }
+}
+
 /// Cache + in-flight coordinator. Holds the JSON-backed map and a per-URL
 /// `Notify` so concurrent fetches for the same URL coalesce into one HTTP
 /// request.
 pub struct WebMetadataStore {
     path: PathBuf,
-    clock: Arc<dyn WebMetadataClock>,
-    /// Cached entry by canonical URL. `last_attempt` is the kernel-clock
+    clock: Arc<dyn Clock>,
+    /// Cached entry by canonical URL. `last_attempt` is the wall-clock
     /// timestamp of the most recent fetch (success or failure) — used for
     /// TTL checks separately from the metadata's own `fetched_at`.
     state: Mutex<CacheState>,
     inflight: Mutex<HashMap<String, Arc<Notify>>>,
-}
-
-trait WebMetadataClock: Send + Sync {
-    fn unix_seconds(&self) -> u64;
-}
-
-#[derive(Debug, Default)]
-struct SystemWebMetadataClock;
-
-impl WebMetadataClock for SystemWebMetadataClock {
-    fn unix_seconds(&self) -> u64 {
-        UNIX_EPOCH.elapsed().map(|d| d.as_secs()).unwrap_or(0)
-    }
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -111,18 +137,18 @@ struct CacheState {
 #[derive(Clone, Serialize, Deserialize)]
 struct CacheEntry {
     metadata: WebMetadata,
-    /// Kernel-clock seconds of the last attempt (success or failure).
+    /// Wall-clock seconds of the last attempt (success or failure).
     last_attempt: u64,
 }
 
 impl WebMetadataStore {
     /// Open a store rooted at `data_dir`. Loads the JSON file if it
     /// already exists; missing or unreadable file is treated as empty.
-    pub fn open(data_dir: &Path) -> Self {
-        Self::open_with_clock(data_dir, Arc::new(SystemWebMetadataClock))
+    pub fn open(data_dir: &std::path::Path) -> Self {
+        Self::open_with_clock(data_dir, Arc::new(SystemClock))
     }
 
-    fn open_with_clock(data_dir: &Path, clock: Arc<dyn WebMetadataClock>) -> Self {
+    pub(crate) fn open_with_clock(data_dir: &std::path::Path, clock: Arc<dyn Clock>) -> Self {
         let path = data_dir.join("web_metadata.json");
         let state = match std::fs::read(&path) {
             Ok(bytes) => serde_json::from_slice::<CacheState>(&bytes).unwrap_or_default(),
@@ -136,14 +162,10 @@ impl WebMetadataStore {
         }
     }
 
-    fn now(&self) -> u64 {
-        self.clock.unix_seconds()
-    }
-
     /// Read a fresh cached entry. Returns `None` if absent or stale per the
     /// applicable TTL (positive or negative).
     pub fn get(&self, url: &str) -> Option<WebMetadata> {
-        let now = self.now();
+        let now = self.clock.now_unix_seconds();
         let guard = self.state.lock();
         let entry = guard.entries.get(url)?;
         let ttl = if entry.metadata.is_negative() {
@@ -165,7 +187,7 @@ impl WebMetadataStore {
         let url = metadata.url.clone();
         let entry = CacheEntry {
             metadata,
-            last_attempt: self.now(),
+            last_attempt: self.clock.now_unix_seconds(),
         };
         let snapshot = {
             let mut guard = self.state.lock();
@@ -250,10 +272,7 @@ pub async fn get_or_fetch(
 
     match store.acquire(&canonical) {
         InflightSlot::Lead(lead) => {
-            let result = fetch_and_parse(&canonical).await.map(|mut metadata| {
-                metadata.fetched_at = store.now();
-                metadata
-            });
+            let result = fetch_and_parse(&canonical, store.clock.now_unix_seconds()).await;
             match &result {
                 Ok(metadata) => store.put(metadata.clone()),
                 Err(_) => store.put(WebMetadata::empty(canonical.clone())),
@@ -271,7 +290,7 @@ pub async fn get_or_fetch(
     }
 }
 
-async fn fetch_and_parse(url: &str) -> Result<WebMetadata, CoreError> {
+async fn fetch_and_parse(url: &str, fetched_at: u64) -> Result<WebMetadata, CoreError> {
     let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .timeout(FETCH_TIMEOUT)
@@ -328,12 +347,17 @@ async fn fetch_and_parse(url: &str) -> Result<WebMetadata, CoreError> {
     let html = String::from_utf8_lossy(&buffer);
     let final_url =
         Url::parse(url).map_err(|e| CoreError::InvalidInput(format!("parse url: {e}")))?;
-    Ok(parse_metadata(&html, &final_url))
+    Ok(parse_metadata_at(&html, &final_url, fetched_at))
 }
 
 /// Parse a metadata block out of an HTML string. Extracted so unit tests
 /// can drive the parser with fixture HTML and a synthetic base URL.
-pub(crate) fn parse_metadata(html: &str, base: &Url) -> WebMetadata {
+#[cfg(test)]
+fn parse_metadata(html: &str, base: &Url) -> WebMetadata {
+    parse_metadata_at(html, base, 0)
+}
+
+fn parse_metadata_at(html: &str, base: &Url, fetched_at: u64) -> WebMetadata {
     let doc = Html::parse_document(html);
 
     // `<base href>` overrides the document URL for relative resolution.
@@ -415,7 +439,7 @@ pub(crate) fn parse_metadata(html: &str, base: &Url) -> WebMetadata {
         site_name,
         author,
         favicon,
-        fetched_at: 0,
+        fetched_at,
     }
 }
 
@@ -522,20 +546,28 @@ fn largest_size_dimension(value: &str) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicU64, Ordering};
 
-    struct FixedWebMetadataClock {
-        now: Arc<AtomicU64>,
+    #[derive(Debug)]
+    struct FixedClock {
+        now: Mutex<u64>,
     }
 
-    impl WebMetadataClock for FixedWebMetadataClock {
-        fn unix_seconds(&self) -> u64 {
-            self.now.load(Ordering::SeqCst)
+    impl FixedClock {
+        fn new(now: u64) -> Self {
+            Self {
+                now: Mutex::new(now),
+            }
+        }
+
+        fn set(&self, now: u64) {
+            *self.now.lock() = now;
         }
     }
 
-    fn fixed_clock(now: Arc<AtomicU64>) -> Arc<dyn WebMetadataClock> {
-        Arc::new(FixedWebMetadataClock { now })
+    impl Clock for FixedClock {
+        fn now_unix_seconds(&self) -> u64 {
+            *self.now.lock()
+        }
     }
 
     fn base_url() -> Url {
@@ -662,11 +694,11 @@ mod tests {
     #[test]
     fn cache_round_trip() {
         let tmp = tempfile::tempdir().expect("tmp");
-        let now = Arc::new(AtomicU64::new(1_000));
-        let store = WebMetadataStore::open_with_clock(tmp.path(), fixed_clock(now.clone()));
+        let clock = Arc::new(FixedClock::new(1_000));
+        let store = WebMetadataStore::open_with_clock(tmp.path(), clock.clone());
         let mut metadata = WebMetadata::empty("https://example.com/post".into());
         metadata.title = "Post".into();
-        metadata.fetched_at = now.load(Ordering::SeqCst);
+        metadata.fetched_at = 1_000;
         store.put(metadata.clone());
 
         let read = store.get("https://example.com/post").expect("hit");
@@ -674,25 +706,22 @@ mod tests {
 
         // Reopen — should survive the round-trip through disk.
         drop(store);
-        let store2 = WebMetadataStore::open_with_clock(tmp.path(), fixed_clock(now));
+        let store2 = WebMetadataStore::open_with_clock(tmp.path(), clock);
         let read2 = store2.get("https://example.com/post").expect("hit2");
         assert_eq!(read2.title, "Post");
     }
 
     #[test]
-    fn cache_expiration_uses_injected_clock() {
+    fn stale_entries_expire_by_injected_clock() {
         let tmp = tempfile::tempdir().expect("tmp");
-        let now = Arc::new(AtomicU64::new(10_000));
-        let store = WebMetadataStore::open_with_clock(tmp.path(), fixed_clock(now.clone()));
+        let clock = Arc::new(FixedClock::new(1_000));
+        let store = WebMetadataStore::open_with_clock(tmp.path(), clock.clone());
         let mut metadata = WebMetadata::empty("https://example.com/post".into());
         metadata.title = "Post".into();
-        metadata.fetched_at = now.load(Ordering::SeqCst);
+        metadata.fetched_at = 1_000;
         store.put(metadata);
 
-        assert!(store.get("https://example.com/post").is_some());
-        now.store(10_000 + HIT_TTL.as_secs(), Ordering::SeqCst);
-        assert!(store.get("https://example.com/post").is_some());
-        now.store(10_000 + HIT_TTL.as_secs() + 1, Ordering::SeqCst);
+        clock.set(1_000 + HIT_TTL.as_secs() + 1);
         assert!(store.get("https://example.com/post").is_none());
     }
 
@@ -705,6 +734,30 @@ mod tests {
         // caller treat it as NotFound without re-fetching.
         let read = store.get("https://example.com/dead").expect("hit");
         assert!(read.is_negative());
+    }
+
+    #[test]
+    fn web_metadata_request_projection_canonicalizes_and_exposes_cache_keys() {
+        let projected = web_metadata_request_projection(WebMetadataRequestProjectionInput {
+            url: " https://Example.com/post/?utm_source=x&b=2&a=1#frag ".into(),
+        });
+        let invalid = web_metadata_request_projection(WebMetadataRequestProjectionInput {
+            url: "ftp://example.com/post".into(),
+        });
+
+        assert_eq!(projected.canonical_url, "https://example.com/post?a=1&b=2");
+        assert!(projected.can_request);
+        assert_eq!(
+            projected.cache_keys,
+            vec![
+                "https://example.com/post?a=1&b=2",
+                "https://Example.com/post/?utm_source=x&b=2&a=1#frag"
+            ]
+        );
+
+        assert_eq!(invalid.canonical_url, "");
+        assert!(!invalid.can_request);
+        assert!(invalid.cache_keys.is_empty());
     }
 
     #[test]

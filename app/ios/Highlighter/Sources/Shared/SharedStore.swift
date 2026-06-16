@@ -1,8 +1,8 @@
 import Foundation
 
 /// App Group glue shared between the main app and the Share Extension.
-/// Both targets compile this file; they talk to each other through the
-/// App Group's `UserDefaults` suite and nothing else.
+/// Both targets compile this file; they talk to each other through small
+/// JSON files in the App Group container and nothing else.
 ///
 /// Design: the extension process is intentionally tiny. It does *not* load
 /// the Rust core, touch the Keychain, or talk to any relay. It writes a
@@ -11,7 +11,45 @@ import Foundation
 /// publishes via the Rust core using whichever signer is installed.
 public enum AppGroup {
     public static let id = "group.com.highlighter.app"
-    public static var defaults: UserDefaults? { UserDefaults(suiteName: id) }
+
+    public static var containerURL: URL? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: id)
+    }
+
+    static func fileURL(_ fileName: String) -> URL? {
+        containerURL?.appendingPathComponent(fileName, isDirectory: false)
+    }
+}
+
+private enum AppGroupJSONFiles {
+    static func load<T: Decodable>(_ type: T.Type, fileName: String) -> T? {
+        guard let url = AppGroup.fileURL(fileName),
+              let data = FileManager.default.contents(atPath: url.path) else { return nil }
+        return try? JSONDecoder().decode(type, from: data)
+    }
+
+    static func save<T: Encodable>(_ value: T, fileName: String) {
+        guard let data = try? JSONEncoder().encode(value) else { return }
+        saveData(data, fileName: fileName)
+    }
+
+    static func saveData(_ data: Data, fileName: String) {
+        guard let url = AppGroup.fileURL(fileName) else { return }
+        do {
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try data.write(to: url, options: [.atomic])
+        } catch {
+            // Share handoff must never crash the host app or extension.
+        }
+    }
+
+    static func remove(fileName: String) {
+        guard let url = AppGroup.fileURL(fileName) else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
 }
 
 /// Snapshot of one of the user's joined communities, flat enough for the
@@ -30,24 +68,19 @@ public struct SharedCommunitySummary: Codable, Hashable {
 
 /// The list of joined communities the main app last observed. The main app
 /// writes on every refresh; the extension reads on launch.
-public enum SharedCommunitiesCache {
-    private static let key = "joinedCommunitiesV1"
+public enum SharedCommunitiesSnapshot {
+    private static let fileName = "joined-communities-v1.json"
 
     public static func load() -> [SharedCommunitySummary] {
-        guard let defaults = AppGroup.defaults,
-              let data = defaults.data(forKey: key) else { return [] }
-        return (try? JSONDecoder().decode([SharedCommunitySummary].self, from: data)) ?? []
+        AppGroupJSONFiles.load([SharedCommunitySummary].self, fileName: fileName) ?? []
     }
 
-    public static func save(_ communities: [SharedCommunitySummary]) {
-        guard let defaults = AppGroup.defaults else { return }
-        if let data = try? JSONEncoder().encode(communities) {
-            defaults.set(data, forKey: key)
-        }
+    public static func save(_ snapshotData: Data) {
+        AppGroupJSONFiles.saveData(snapshotData, fileName: fileName)
     }
 
     public static func clear() {
-        AppGroup.defaults?.removeObject(forKey: key)
+        AppGroupJSONFiles.remove(fileName: fileName)
     }
 }
 
@@ -76,7 +109,7 @@ public struct PendingShare: Codable, Hashable, Identifiable {
 }
 
 public enum ShareQueue {
-    private static let key = "pendingSharesV1"
+    private static let fileName = "pending-shares-v1.json"
 
     public static func enqueue(_ share: PendingShare) {
         var current = load()
@@ -85,14 +118,12 @@ public enum ShareQueue {
     }
 
     public static func load() -> [PendingShare] {
-        guard let defaults = AppGroup.defaults,
-              let data = defaults.data(forKey: key) else { return [] }
-        return (try? JSONDecoder().decode([PendingShare].self, from: data)) ?? []
+        AppGroupJSONFiles.load([PendingShare].self, fileName: fileName) ?? []
     }
 
     public static func drain() -> [PendingShare] {
         let items = load()
-        AppGroup.defaults?.removeObject(forKey: key)
+        AppGroupJSONFiles.remove(fileName: fileName)
         return items
     }
 
@@ -101,10 +132,7 @@ public enum ShareQueue {
     }
 
     private static func save(_ items: [PendingShare]) {
-        guard let defaults = AppGroup.defaults else { return }
-        if let data = try? JSONEncoder().encode(items) {
-            defaults.set(data, forKey: key)
-        }
+        AppGroupJSONFiles.save(items, fileName: fileName)
     }
 }
 

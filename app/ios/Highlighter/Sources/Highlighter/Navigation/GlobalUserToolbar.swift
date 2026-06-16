@@ -46,10 +46,11 @@ private struct GlobalUserToolbar: ViewModifier {
                                 Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
                             }
                         } label: {
+                            let projection = profileDisplay(for: me)
                             AuthorAvatar(
                                 pubkey: me.pubkey,
-                                pictureURL: appStore.currentUserProfile?.picture ?? "",
-                                displayInitial: preferredInitial(for: me),
+                                pictureURL: projection.pictureUrl,
+                                displayInitial: projection.displayInitial,
                                 size: 30
                             )
                         }
@@ -84,12 +85,14 @@ private struct GlobalUserToolbar: ViewModifier {
             }
     }
 
-    private func preferredInitial(for user: CurrentUser) -> String {
-        if let profile = appStore.currentUserProfile {
-            if let ch = profile.displayName.first { return String(ch) }
-            if let ch = profile.name.first { return String(ch) }
-        }
-        return String(user.pubkey.prefix(1))
+    private func profileDisplay(for user: CurrentUser) -> ProfileDisplayProjection {
+        appStore.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: user.pubkey,
+                profile: appStore.currentUserProfile,
+                fallback: .pubkey8
+            )
+        )
     }
 }
 

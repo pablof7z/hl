@@ -2,132 +2,94 @@
 //! input validation paths — neither test actually waits for a live remote
 //! signer to respond.
 
-use highlighter_core::{
-    HighlighterAppAction, HighlighterAppConfig, HighlighterAppReconciler, HighlighterAppState,
-    HighlighterNmpApp, HighlighterSessionCredential, HighlighterToastKind,
-};
-use std::collections::HashMap;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use highlighter_core::{HighlighterCore, LoginInputAction};
 use std::sync::Arc;
-use std::time::Duration;
 use tempfile::TempDir;
 
-#[derive(Debug, Clone)]
-enum TestUpdate {
-    State(HighlighterAppState),
-    PersistSessionCredential,
-    ClearSessionCredentials,
-    OpenExternalUrl(String),
-}
-
-struct TestReconciler {
-    tx: Sender<TestUpdate>,
-}
-
-impl HighlighterAppReconciler for TestReconciler {
-    fn on_state(&self, state: HighlighterAppState) {
-        let _ = self.tx.send(TestUpdate::State(state));
-    }
-
-    fn on_persist_session_credential(&self, _credential: HighlighterSessionCredential) {
-        let _ = self.tx.send(TestUpdate::PersistSessionCredential);
-    }
-
-    fn on_clear_session_credentials(&self) {
-        let _ = self.tx.send(TestUpdate::ClearSessionCredentials);
-    }
-
-    fn on_open_external_url(&self, url: String) {
-        let _ = self.tx.send(TestUpdate::OpenExternalUrl(url));
-    }
-}
-
-fn isolated_app() -> (Arc<HighlighterNmpApp>, Receiver<TestUpdate>, TempDir) {
+fn isolated_core() -> (Arc<HighlighterCore>, TempDir) {
     let tmp = tempfile::tempdir().expect("tempdir");
-    let app = HighlighterNmpApp::new(HighlighterAppConfig {
-        data_dir: Some(tmp.path().join("ndb").to_string_lossy().into_owned()),
-        visible_limit: 8,
-        emit_hz: 30,
-        relay_policy_json: None,
-    });
-    let (tx, rx) = channel();
-    app.listen_for_updates(Arc::new(TestReconciler { tx }));
-    let _ = next_state(&rx);
-    (app, rx, tmp)
+    let core = HighlighterCore::new_with_data_dir(tmp.path().join("ndb"));
+    (core, tmp)
 }
 
-fn next_update(rx: &Receiver<TestUpdate>) -> TestUpdate {
-    rx.recv_timeout(Duration::from_secs(5))
-        .expect("app update within timeout")
-}
+#[tokio::test]
+async fn start_default_nostr_connect_returns_valid_uri_with_callback() {
+    let (core, _tmp) = isolated_core();
 
-fn next_state(rx: &Receiver<TestUpdate>) -> HighlighterAppState {
-    for _ in 0..16 {
-        if let TestUpdate::State(state) = next_update(rx) {
-            return state;
-        }
-    }
-    panic!("state update within timeout")
-}
-
-#[test]
-fn start_nostr_connect_emits_valid_external_uri() {
-    let (app, rx, _tmp) = isolated_app();
-
-    app.dispatch(HighlighterAppAction::StartNostrConnect {
-        callback_url: "highlighter://nip46".into(),
-    });
-
-    let mut uri = None;
-    for _ in 0..16 {
-        match next_update(&rx) {
-            TestUpdate::OpenExternalUrl(url) => {
-                uri = Some(url);
-                break;
-            }
-            TestUpdate::State(_)
-            | TestUpdate::PersistSessionCredential
-            | TestUpdate::ClearSessionCredentials => {}
-        }
-    }
-    let uri = uri.expect("start_nostr_connect should request opening a URI");
-
-    let parsed = url::Url::parse(&uri).expect("nostrconnect URI should parse");
-    assert_eq!(parsed.scheme(), "nostrconnect", "got: {uri}");
-    let pubkey = parsed.host_str().expect("missing nostrconnect pubkey host");
-    assert_eq!(pubkey.len(), 64, "got: {uri}");
-    assert!(pubkey.chars().all(|c| c.is_ascii_hexdigit()), "got: {uri}");
-    let query: HashMap<String, String> = parsed.query_pairs().into_owned().collect();
-
+    let snapshot = core
+        .start_default_nostr_connect("highlighter://nip46".into())
+        .await;
     assert!(
-        query
-            .get("relay")
-            .is_some_and(|v| v == "wss://relay.primal.net"),
-        "missing relay in URI: {uri}"
+        snapshot.started,
+        "start_default_nostr_connect: {}",
+        snapshot.error_message
+    );
+    let uri = snapshot.uri;
+
+    // Shape: nostrconnect://<64-hex pubkey>?<query>
+    assert!(uri.starts_with("nostrconnect://"), "got: {uri}");
+
+    // Relay must be Primal's bunker relay (hardcoded per spec).
+    assert!(
+        uri.contains("relay=wss://relay.primal.net"),
+        "missing primal relay in URI: {uri}"
     );
 
-    // Perms must round-trip. We passed a specific subset — check at least one
-    // entry made it through.
+    // App-owned permission policy must come from Rust defaults.
     assert!(
-        query
-            .get("perms")
-            .is_some_and(|v| v.contains("sign_event:11")),
+        uri.contains("perms=sign_event:11"),
         "missing sign_event:11 perm: {uri}"
     );
 
+    // App name must be URL-encoded in the query string.
     assert!(
-        query.get("name").is_some_and(|v| v == "Highlighter"),
+        uri.contains("name=Highlighter"),
         "missing name param: {uri}"
     );
 
+    // Secret param for the connect handshake.
+    assert!(uri.contains("secret="), "missing secret param: {uri}");
+
+    // Platform callback is supplied by native, but Rust owns query assembly.
     assert!(
-        query.get("secret").is_some_and(|v| !v.is_empty()),
-        "missing secret param: {uri}"
+        uri.contains("callback=highlighter%3A%2F%2Fnip46"),
+        "missing encoded callback param: {uri}"
     );
 }
 
 #[test]
-fn pair_bunker_rejects_garbage() {
+fn classify_login_input_matches_manual_login_policy() {
+    let (core, _tmp) = isolated_core();
+    assert_eq!(
+        core.classify_login_input(" nostr:nsec1example ".into()),
+        LoginInputAction::Nsec {
+            nsec: "nsec1example".into()
+        }
+    );
+    assert_eq!(
+        core.classify_login_input("nostrconnect://example".into()),
+        LoginInputAction::Bunker {
+            uri: "nostrconnect://example".into()
+        }
+    );
+    assert_eq!(
+        core.classify_login_input(" nostr: ".into()),
+        LoginInputAction::Empty
+    );
+    assert_eq!(
+        core.classify_login_input("npub1example".into()),
+        LoginInputAction::Invalid {
+            message: "Enter an nsec1… or bunker:// URI.".into()
+        }
+    );
+}
+
+#[tokio::test]
+async fn pair_bunker_rejects_garbage() {
+    let (core, _tmp) = isolated_core();
+
+    // Leading `nostr:` is the only thing `normalize_bunker_uri` strips —
+    // everything else must parse as a valid NIP-46 URI.
     let cases = [
         "",
         "   ",
@@ -142,23 +104,11 @@ fn pair_bunker_rejects_garbage() {
     ];
 
     for case in cases {
-        let (app, rx, _tmp) = isolated_app();
-        app.dispatch(HighlighterAppAction::PairBunker {
-            uri: case.to_string(),
-            persist: false,
-            clear_stored_on_failure: false,
-        });
-        let mut saw_error = false;
-        for _ in 0..8 {
-            let state = next_state(&rx);
-            saw_error = state
-                .toast
-                .as_ref()
-                .is_some_and(|toast| toast.kind == HighlighterToastKind::Error);
-            if saw_error {
-                break;
-            }
-        }
-        assert!(saw_error, "pair_bunker should reject {case:?}");
+        let res = core.pair_bunker(case.to_string()).await;
+        assert!(
+            !res.error_message.is_empty(),
+            "pair_bunker should reject {case:?} but got {:?}",
+            res
+        );
     }
 }

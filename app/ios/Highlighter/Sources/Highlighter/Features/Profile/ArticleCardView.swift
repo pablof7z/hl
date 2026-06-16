@@ -5,30 +5,32 @@ import SwiftUI
 /// title + summary (2-line clamp) on the left, 96×72 thumbnail on the
 /// right, metadata row underneath.
 struct ArticleCardView: View {
+    @Environment(HighlighterStore.self) private var app
+
     let article: ArticleRecord
 
     var body: some View {
+        let projection = cardProjection
+
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
-                if !article.title.isEmpty {
-                    Text(article.title)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(Color.highlighterInkStrong)
-                        .lineLimit(3)
-                } else {
-                    Text("Untitled")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(Color.highlighterInkMuted)
-                }
+                Text(projection.title)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(
+                        projection.titleIsFallback
+                            ? Color.highlighterInkMuted
+                            : Color.highlighterInkStrong
+                    )
+                    .lineLimit(3)
 
                 if !article.summary.isEmpty {
                     Text(article.summary)
                         .font(.subheadline)
                         .foregroundStyle(Color.highlighterInkMuted)
-                        .lineLimit(2)
+                    .lineLimit(2)
                 }
 
-                metadataRow
+                metadataRow(projection)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -50,15 +52,15 @@ struct ArticleCardView: View {
         return URL(string: article.image)
     }
 
-    private var metadataRow: some View {
+    private func metadataRow(_ projection: ArticleProfileCardProjection) -> some View {
         HStack(spacing: 10) {
-            if let date = displayDate {
+            if let date = displayDate(projection.displayUnixSeconds) {
                 Text(date)
             }
-            if !article.hashtags.isEmpty {
+            if let hashtags = projection.hashtagSummary {
                 Text("·")
                     .foregroundStyle(Color.highlighterInkMuted)
-                Text(article.hashtags.prefix(2).map { "#\($0)" }.joined(separator: " "))
+                Text(hashtags)
                     .lineLimit(1)
             }
         }
@@ -66,9 +68,14 @@ struct ArticleCardView: View {
         .foregroundStyle(Color.highlighterInkMuted)
     }
 
-    private var displayDate: String? {
-        let seconds = article.publishedAt ?? article.createdAt ?? 0
-        guard seconds > 0 else { return nil }
+    private var cardProjection: ArticleProfileCardProjection {
+        app.safeCore.projectArticleProfileCard(
+            input: ArticleProfileCardProjectionInput(article: article)
+        )
+    }
+
+    private func displayDate(_ seconds: UInt64?) -> String? {
+        guard let seconds else { return nil }
         let date = Date(timeIntervalSince1970: TimeInterval(seconds))
         let formatter = DateFormatter()
         formatter.dateStyle = .medium

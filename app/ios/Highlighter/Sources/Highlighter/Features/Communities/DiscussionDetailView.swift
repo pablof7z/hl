@@ -4,12 +4,17 @@ struct DiscussionDetailView: View {
     let discussion: DiscussionRecord
 
     @Environment(HighlighterStore.self) private var app
+    @State private var store = CommentsStore()
     @State private var focusedNode: CommentNode? = nil
-    @State private var profileDestination: ProfileDestination? = nil
 
-    private var artifactRef: ArtifactRef { .event(id: discussion.eventId, kind: 11) }
+    private var commentScope: CommentScope? {
+        let snapshot = app.safeCore.getDiscussionCommentScope(eventIdHex: discussion.eventId)
+        return snapshot.attach ? snapshot.scope : nil
+    }
 
     var body: some View {
+        let projection = rootThreadProjection
+
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -21,51 +26,57 @@ struct DiscussionDetailView: View {
                         .fill(Color.highlighterRule.opacity(0.5))
                         .frame(height: 0.5)
 
-                    repliesSection
+                    repliesSection(projection)
                 }
             }
             .scrollDismissesKeyboard(.interactively)
 
             CommentComposer(
                 parentEventId: nil,
-                placeholder: "Add to the conversation"
+                placeholder: projection.composerPlaceholder,
+                store: store
             )
         }
         .background(Color.highlighterPaper.ignoresSafeArea())
         .navigationTitle(discussion.title)
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: discussion.eventId) {
-            app.openComments(artifact: artifactRef)
-        }
-        .navigationDestination(item: $focusedNode) { node in
-            ThreadView(
-                focused: ThreadView.locate(eventId: node.record.eventId, in: commentTree) ?? node,
-                artifactHeader: nil,
-                artifactAuthorPubkey: discussion.pubkey
+        .task {
+            guard let commentScope else { return }
+            await store.start(
+                scope: commentScope,
+                core: app.safeCore
             )
         }
-        .navigationDestination(item: $profileDestination) { destination in
-            switch destination {
-            case .pubkey(let pk):
-                ProfileView(pubkey: pk)
+        .navigationDestination(item: $focusedNode) { node in
+            if let commentScope {
+                ThreadView(
+                    focused: focusedThreadNode(node),
+                    artifactHeader: nil,
+                    store: store,
+                    scope: commentScope,
+                    artifactAuthorPubkey: discussion.pubkey
+                )
             }
         }
     }
 
     // MARK: - OP header
 
+    @ViewBuilder
     private var opHeader: some View {
+        let author = authorDisplay
+
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 10) {
                 AuthorAvatar(
                     pubkey: discussion.pubkey,
-                    pictureURL: app.profile(pubkeyHex: discussion.pubkey)?.picture ?? "",
-                    displayInitial: displayInitial,
+                    pictureURL: author.pictureUrl,
+                    displayInitial: author.displayInitial,
                     size: 38
                 )
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(authorName)
+                    Text(author.displayName)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.highlighterInkStrong)
                     if let ts = discussion.createdAt, ts > 0 {
@@ -94,16 +105,18 @@ struct DiscussionDetailView: View {
             }
         }
         .task(id: discussion.pubkey) {
-            app.requestProfile(pubkeyHex: discussion.pubkey)
+            await app.requestProfile(pubkeyHex: discussion.pubkey)
         }
     }
 
     @ViewBuilder
     private func attachmentCard(_ a: DiscussionAttachment) -> some View {
-        let title = a.title.isEmpty ? a.url : a.title
-        if !title.isEmpty {
+        let projection = app.safeCore.projectDiscussionAttachment(
+            input: DiscussionAttachmentProjectionInput(attachment: a)
+        )
+        if let title = projection.label {
             HStack(spacing: 10) {
-                if !a.image.isEmpty, let url = URL(string: a.image) {
+                if let image = projection.imageUrl, let url = URL(string: image) {
                     AsyncImage(url: url) { phase in
                         if let img = phase.image {
                             img.resizable().scaledToFill()
@@ -129,8 +142,8 @@ struct DiscussionDetailView: View {
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(Color.highlighterInkStrong)
                         .lineLimit(2)
-                    if !a.author.isEmpty {
-                        Text(a.author)
+                    if let author = projection.author {
+                        Text(author)
                             .font(.caption)
                             .foregroundStyle(Color.highlighterInkMuted)
                             .lineLimit(1)
@@ -154,31 +167,31 @@ struct DiscussionDetailView: View {
     // MARK: - Replies section
 
     @ViewBuilder
-    private var repliesSection: some View {
-        if app.comments.isLoading && commentTree.isEmpty {
+    private func repliesSection(_ projection: CommentThreadViewProjection) -> some View {
+        if store.isLoading && store.tree.isEmpty {
             ProgressView()
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
-        } else if commentTree.isEmpty {
+        } else if projection.children.isEmpty {
             VStack(spacing: 8) {
                 Image(systemName: "bubble.left.and.bubble.right")
                     .font(.system(size: 28, weight: .light))
                     .foregroundStyle(Color.highlighterInkMuted)
-                Text("Start the conversation.")
+                Text(projection.emptyStateLabel)
                     .font(.subheadline)
                     .foregroundStyle(Color.highlighterInkMuted)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 48)
         } else {
-            ForEach(commentTree) { node in
+            ForEach(projection.children) { node in
                 VStack(spacing: 0) {
                     CommentRow(
                         node: node,
                         depth: 0,
-                        isAuthorReply: node.record.pubkey == discussion.pubkey,
+                        isAuthorReply: false,
                         onTap: { focusedNode = node },
-                        onViewProfile: { profileDestination = .pubkey($0) }
+                        store: store
                     )
                     inlineReplyPreview(for: node)
                     Divider()
@@ -190,22 +203,28 @@ struct DiscussionDetailView: View {
 
     @ViewBuilder
     private func inlineReplyPreview(for parent: CommentNode) -> some View {
-        if let mostRecent = parent.mostRecentReply {
+        let chrome = app.safeCore.projectCommentNodeChrome(
+            input: CommentNodeChromeProjectionInput(
+                node: parent,
+                artifactAuthorPubkey: discussion.pubkey
+            )
+        )
+        if let mostRecent = chrome.mostRecentReply {
             CommentRow(
                 node: mostRecent,
                 depth: 1,
-                isAuthorReply: mostRecent.record.pubkey == discussion.pubkey,
+                isAuthorReply: chrome.isMostRecentAuthorReply,
                 onTap: { focusedNode = mostRecent },
-                onViewProfile: { profileDestination = .pubkey($0) }
+                store: store
             )
             .padding(.leading, 18)
             .padding(.trailing, 18)
 
-            if parent.children.count > 1 {
+            if chrome.hasMoreReplies {
                 Button { focusedNode = parent } label: {
                     HStack(spacing: 6) {
                         Spacer().frame(width: 36 + 18 + 12)
-                        Text("View \(parent.children.count - 1) more \(parent.children.count - 1 == 1 ? "reply" : "replies")")
+                        Text(chrome.moreRepliesLabel)
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(Color.highlighterAccent)
                         Image(systemName: "chevron.right")
@@ -223,21 +242,32 @@ struct DiscussionDetailView: View {
 
     // MARK: - Helpers
 
-    private var authorName: String {
-        let profile = app.profile(pubkeyHex: discussion.pubkey)
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(discussion.pubkey.prefix(8))
+    private var rootThreadProjection: CommentThreadViewProjection {
+        app.safeCore.projectCommentThreadView(
+            input: CommentThreadViewProjectionInput(
+                tree: store.tree,
+                focused: nil
+            )
+        )
     }
 
-    private var displayInitial: String {
-        let profile = app.profile(pubkeyHex: discussion.pubkey)
-        let name = profile?.displayName ?? profile?.name ?? ""
-        return name.first.map { String($0).uppercased() } ?? String(discussion.pubkey.prefix(1).uppercased())
+    private func focusedThreadNode(_ node: CommentNode) -> CommentNode {
+        app.safeCore.projectCommentThreadView(
+            input: CommentThreadViewProjectionInput(
+                tree: store.tree,
+                focused: node
+            )
+        ).focused ?? node
     }
 
-    private var commentTree: [CommentNode] {
-        CommentTreeBuilder.build(snapshot: app.comments)
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: discussion.pubkey,
+                profile: app.profileSnapshots[discussion.pubkey],
+                fallback: .pubkey8
+            )
+        )
     }
 
     private func relativeTime(_ timestamp: UInt64) -> String {

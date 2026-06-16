@@ -68,12 +68,14 @@ struct FeedbackThreadsView: View {
 }
 
 private struct FeedbackThreadRow: View {
+    @Environment(HighlighterStore.self) private var app
+
     let thread: FeedbackThreadRecord
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
-                Text(thread.title ?? thread.preview)
+                Text(projection.rowTitle)
                     .font(.body.weight(.semibold))
                     .lineLimit(1)
                 Spacer()
@@ -81,18 +83,13 @@ private struct FeedbackThreadRow: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            if let summary = thread.summary, !summary.isEmpty {
-                Text(summary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            } else if thread.title != nil, !thread.preview.isEmpty {
-                Text(thread.preview)
+            if let secondaryText = projection.rowSecondaryText {
+                Text(secondaryText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
-            if let status = thread.statusLabel, !status.isEmpty {
+            if let status = projection.statusLabel {
                 Text(status.uppercased())
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 6)
@@ -102,6 +99,10 @@ private struct FeedbackThreadRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private var projection: FeedbackThreadPresentationProjection {
+        app.safeCore.projectFeedbackThreadPresentation(thread: thread)
     }
 
     private func relativeTime(_ ts: UInt64) -> String {

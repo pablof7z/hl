@@ -14,18 +14,6 @@ struct LoginView: View {
     @State private var isWorking: Bool = false
     @State private var errorMessage: String?
 
-    private var isBusy: Bool { isWorking || store.isAuthenticating }
-
-    private var displayedError: String? {
-        if let errorMessage {
-            return errorMessage
-        }
-        if let toast = store.nmpState.toast, toast.kind == .error {
-            return toast.message
-        }
-        return nil
-    }
-
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -40,8 +28,8 @@ struct LoginView: View {
 
                     manualEntry
 
-                    if let displayedError {
-                        Text(displayedError)
+                    if let errorMessage {
+                        Text(errorMessage)
                             .font(.footnote)
                             .foregroundStyle(.red)
                     }
@@ -50,18 +38,6 @@ struct LoginView: View {
             }
             .task {
                 detectedSigner = KnownSigner.detect()
-            }
-            .onAppear {
-                store.setExternalUrlHandler { urlString, completion in
-                    guard let url = URL(string: urlString) else {
-                        completion(false)
-                        return
-                    }
-                    openURL(url, completion: completion)
-                }
-            }
-            .onDisappear {
-                store.clearExternalUrlHandler()
             }
             .navigationTitle("")
         }
@@ -104,7 +80,7 @@ struct LoginView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.glass)
-            .disabled(isBusy)
+            .disabled(isWorking)
         }
     }
 
@@ -122,7 +98,7 @@ struct LoginView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.glass)
-        .disabled(isBusy)
+        .disabled(isWorking)
     }
 
     private var manualEntry: some View {
@@ -142,12 +118,12 @@ struct LoginView: View {
             Button {
                 Task { await submitManualInput() }
             } label: {
-                Text(isBusy ? "Signing in…" : "Sign in")
+                Text(isWorking ? "Signing in…" : "Sign in")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
             }
             .buttonStyle(.glassProminent)
-            .disabled(isBusy || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(isWorking || isManualInputEmpty)
 
             NavigationLink {
                 OnboardingCreateAccountView()
@@ -163,26 +139,74 @@ struct LoginView: View {
 
     // MARK: - Actions
 
+    private var isManualInputEmpty: Bool {
+        if case .empty = store.safeCore.classifyLoginInput(inputText) {
+            return true
+        }
+        return false
+    }
+
     private func submitManualInput() async {
-        let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalized = trimmed.hasPrefix("nostr:") ? String(trimmed.dropFirst(6)) : trimmed
-        guard !normalized.isEmpty else { return }
+        let action = store.safeCore.classifyLoginInput(inputText)
 
         isWorking = true
         errorMessage = nil
         defer { isWorking = false }
 
-        if normalized.hasPrefix("nsec1") {
-            store.signInNsec(normalized)
-        } else if normalized.hasPrefix("bunker://") || normalized.hasPrefix("nostrconnect://") {
-            store.pairBunker(normalized)
-        } else {
-            errorMessage = "Enter an nsec1… or bunker:// URI."
+        switch action {
+        case .empty:
+            return
+        case .nsec(let nsec):
+            let snapshot = await store.safeCore.loginNsec(nsec)
+            if snapshot.isAuthenticated, let user = snapshot.user {
+                let storage = AppSessionStore.shared.persistAuthInstructions(
+                    snapshot,
+                    core: store.safeCore
+                )
+                guard storage.succeeded else {
+                    errorMessage = storage.errorMessage
+                    return
+                }
+                await store.completeLogin(user: user)
+            } else {
+                errorMessage = snapshot.errorMessage
+            }
+        case .bunker(let uri):
+            let snapshot = await store.safeCore.pairBunker(uri)
+            if snapshot.isAuthenticated, let user = snapshot.user {
+                let storage = AppSessionStore.shared.persistAuthInstructions(
+                    snapshot,
+                    core: store.safeCore
+                )
+                guard storage.succeeded else {
+                    errorMessage = storage.errorMessage
+                    return
+                }
+                await store.completeLogin(user: user)
+            } else {
+                errorMessage = snapshot.errorMessage
+            }
+        case .invalid(let message):
+            errorMessage = message
         }
     }
 
     private func connectViaPrimalApp() async {
+        isWorking = true
         errorMessage = nil
-        store.startNostrConnect(callbackUrl: "highlighter://nip46")
+        defer { isWorking = false }
+
+        let snapshot = await store.safeCore.startDefaultNostrConnect(callback: "highlighter://nip46")
+        guard snapshot.started else {
+            errorMessage = snapshot.errorMessage
+            return
+        }
+        let uri = snapshot.uri
+
+        if let url = URL(string: uri) {
+            openURL(url)
+        }
+        // `EventBridge` receives `.signerConnected(user)` once the remote
+        // signer responds on the relay and `completeLogin` runs from there.
     }
 }

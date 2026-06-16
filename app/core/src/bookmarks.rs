@@ -13,6 +13,7 @@
 
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
+use std::collections::BTreeSet;
 
 use crate::errors::CoreError;
 use crate::nostr_runtime::NostrRuntime;
@@ -38,7 +39,196 @@ pub struct BookmarkList {
     pub content: String,
 }
 
+/// Native article bookmark state projection. Rust owns canonical address
+/// trimming, current membership, and the optimistic post-toggle set.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArticleBookmarkStateProjection {
+    pub canonical_address: String,
+    pub can_toggle: bool,
+    pub is_bookmarked: bool,
+    pub optimistic_addresses: Vec<String>,
+}
+
+/// Native article bookmark state input.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleBookmarkStateProjectionInput {
+    pub addresses: Vec<String>,
+    pub address: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleBookmarksSnapshot {
+    pub addresses: Vec<String>,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArticleBookmarksSnapshotApplyInput {
+    pub snapshot: ArticleBookmarksSnapshot,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArticleBookmarksSnapshotApplyProjection {
+    pub should_apply_addresses: bool,
+    pub addresses: Vec<String>,
+    pub should_refresh_after_failure: bool,
+}
+
+/// Native event bookmark state projection. Used for comment bookmarks and
+/// other event-id-addressed NIP-51 entries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventBookmarkStateProjection {
+    pub canonical_event_id_hex: String,
+    pub can_apply: bool,
+    pub is_bookmarked: bool,
+    pub optimistic_event_ids: Vec<String>,
+}
+
+/// Native event bookmark state input. `desired_member == None` toggles;
+/// `Some(true/false)` projects an authoritative member/non-member state.
+#[derive(Debug, Clone)]
+pub struct EventBookmarkStateProjectionInput {
+    pub event_ids: Vec<String>,
+    pub event_id_hex: String,
+    pub desired_member: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArticleBookmarkChromeProjectionInput {
+    pub is_bookmarked: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArticleBookmarkChromeProjection {
+    pub toolbar_system_image: String,
+    pub uses_accent_color: bool,
+    pub accessibility_label: String,
+    pub swipe_title: String,
+    pub menu_title: String,
+    pub action_system_image: String,
+}
+
 // -- Public API --------------------------------------------------------------
+
+pub fn article_bookmark_state_projection(
+    input: ArticleBookmarkStateProjectionInput,
+) -> ArticleBookmarkStateProjection {
+    let canonical_address = input.address.trim().to_string();
+    let mut addresses = input
+        .addresses
+        .into_iter()
+        .map(|address| address.trim().to_string())
+        .filter(|address| !address.is_empty())
+        .collect::<BTreeSet<_>>();
+    let can_toggle = !canonical_address.is_empty();
+    let is_bookmarked = can_toggle && addresses.contains(&canonical_address);
+    if can_toggle {
+        if is_bookmarked {
+            addresses.remove(&canonical_address);
+        } else {
+            addresses.insert(canonical_address.clone());
+        }
+    }
+    ArticleBookmarkStateProjection {
+        canonical_address,
+        can_toggle,
+        is_bookmarked,
+        optimistic_addresses: addresses.into_iter().collect(),
+    }
+}
+
+pub fn article_bookmarks_snapshot(
+    addresses: Vec<String>,
+    error: impl ToString,
+) -> ArticleBookmarksSnapshot {
+    ArticleBookmarksSnapshot {
+        addresses,
+        error: error.to_string(),
+    }
+}
+
+pub fn article_bookmarks_snapshot_apply_projection(
+    input: ArticleBookmarksSnapshotApplyInput,
+) -> ArticleBookmarksSnapshotApplyProjection {
+    let error = input.snapshot.error.trim();
+    let should_apply_addresses = error.is_empty();
+    ArticleBookmarksSnapshotApplyProjection {
+        should_apply_addresses,
+        addresses: if should_apply_addresses {
+            input.snapshot.addresses
+        } else {
+            Vec::new()
+        },
+        should_refresh_after_failure: !should_apply_addresses,
+    }
+}
+
+pub fn event_bookmark_state_projection(
+    input: EventBookmarkStateProjectionInput,
+) -> EventBookmarkStateProjection {
+    let mut event_ids = input
+        .event_ids
+        .into_iter()
+        .filter_map(|event_id| canonical_event_id_hex(&event_id))
+        .collect::<BTreeSet<_>>();
+    let Some(canonical_event_id_hex) = canonical_event_id_hex(&input.event_id_hex) else {
+        return EventBookmarkStateProjection {
+            canonical_event_id_hex: String::new(),
+            can_apply: false,
+            is_bookmarked: false,
+            optimistic_event_ids: event_ids.into_iter().collect(),
+        };
+    };
+    let is_bookmarked = event_ids.contains(&canonical_event_id_hex);
+    match input.desired_member {
+        Some(true) => {
+            event_ids.insert(canonical_event_id_hex.clone());
+        }
+        Some(false) => {
+            event_ids.remove(&canonical_event_id_hex);
+        }
+        None if is_bookmarked => {
+            event_ids.remove(&canonical_event_id_hex);
+        }
+        None => {
+            event_ids.insert(canonical_event_id_hex.clone());
+        }
+    }
+    EventBookmarkStateProjection {
+        canonical_event_id_hex,
+        can_apply: true,
+        is_bookmarked,
+        optimistic_event_ids: event_ids.into_iter().collect(),
+    }
+}
+
+pub fn article_bookmark_chrome_projection(
+    input: ArticleBookmarkChromeProjectionInput,
+) -> ArticleBookmarkChromeProjection {
+    if input.is_bookmarked {
+        ArticleBookmarkChromeProjection {
+            toolbar_system_image: "bookmark.fill".into(),
+            uses_accent_color: true,
+            accessibility_label: "Remove bookmark".into(),
+            swipe_title: "Remove".into(),
+            menu_title: "Remove bookmark".into(),
+            action_system_image: "bookmark.slash".into(),
+        }
+    } else {
+        ArticleBookmarkChromeProjection {
+            toolbar_system_image: "bookmark".into(),
+            uses_accent_color: false,
+            accessibility_label: "Bookmark article".into(),
+            swipe_title: "Bookmark".into(),
+            menu_title: "Bookmark".into(),
+            action_system_image: "bookmark".into(),
+        }
+    }
+}
+
+fn canonical_event_id_hex(value: &str) -> Option<String> {
+    EventId::from_hex(value.trim()).ok().map(|id| id.to_hex())
+}
 
 /// Read the newest cached kind:10003 for `user_hex` and return the set of
 /// addressable-event bookmarks it carries. Empty list when none cached.
@@ -83,20 +273,14 @@ pub fn is_bookmarked(ndb: &Ndb, user_hex: &str, address: &str) -> Result<bool, C
     Ok(list.addresses.iter().any(|a| a == address))
 }
 
-/// Fast predicate: is `event_hex` currently bookmarked for `user_hex`?
-pub fn is_event_bookmarked(ndb: &Ndb, user_hex: &str, event_hex: &str) -> Result<bool, CoreError> {
-    let list = query_bookmarks(ndb, user_hex)?;
-    Ok(list.event_ids.iter().any(|e| e == event_hex))
-}
-
 /// Toggle `address` in the user's kind:10003 bookmark list. Reads the newest
-/// cached list, flips membership, re-publishes. Returns the new membership
-/// state (`true` = now bookmarked, `false` = removed).
-pub async fn toggle_bookmark(
+/// cached list, flips membership, re-publishes, and returns the complete
+/// post-toggle article address set.
+pub async fn toggle_article_bookmark_addresses(
     runtime: &NostrRuntime,
     user_hex: &str,
     address: &str,
-) -> Result<bool, CoreError> {
+) -> Result<Vec<String>, CoreError> {
     let address = address.trim();
     if address.is_empty() {
         return Err(CoreError::InvalidInput(
@@ -105,19 +289,17 @@ pub async fn toggle_bookmark(
     }
 
     let mut list = query_bookmarks(runtime.ndb(), user_hex)?;
-    let now_bookmarked = match list.addresses.iter().position(|a| a == address) {
+    match list.addresses.iter().position(|a| a == address) {
         Some(idx) => {
             list.addresses.remove(idx);
-            false
         }
         None => {
             list.addresses.push(address.to_string());
-            true
         }
     };
 
     publish_bookmarks(runtime, &list).await?;
-    Ok(now_bookmarked)
+    Ok(list.addresses)
 }
 
 /// Toggle `event_hex` in the user's kind:10003 bookmark list (for comments
@@ -222,6 +404,7 @@ fn parse_bookmark_event(event: Event) -> BookmarkList {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_ndb::process_event_and_wait;
     use tempfile::TempDir;
 
     fn fresh_ndb() -> (Ndb, TempDir) {
@@ -232,8 +415,7 @@ mod tests {
     }
 
     fn process(ndb: &Ndb, event: &Event) {
-        let line = format!("[\"EVENT\",\"sub\",{}]", event.as_json());
-        ndb.process_event(&line).unwrap();
+        process_event_and_wait(ndb, event);
     }
 
     fn wait_for_bookmarks(
@@ -321,5 +503,162 @@ mod tests {
         assert!(is_bookmarked(&ndb, &pk, "30023:aa:essay").unwrap());
         assert!(!is_bookmarked(&ndb, &pk, "30023:aa:letter").unwrap());
         assert!(!is_bookmarked(&ndb, &pk, "30023:aa:").unwrap());
+    }
+
+    #[test]
+    fn article_bookmarks_snapshot_preserves_addresses_and_error() {
+        let snapshot = article_bookmarks_snapshot(
+            vec!["30023:aa:essay".into(), "30023:bb:letter".into()],
+            "cache unavailable",
+        );
+
+        assert_eq!(
+            snapshot.addresses,
+            vec!["30023:aa:essay", "30023:bb:letter"]
+        );
+        assert_eq!(snapshot.error, "cache unavailable");
+    }
+
+    #[test]
+    fn article_bookmarks_snapshot_apply_projection_applies_only_success() {
+        let ok = article_bookmarks_snapshot_apply_projection(ArticleBookmarksSnapshotApplyInput {
+            snapshot: article_bookmarks_snapshot(vec!["30023:aa:essay".into()], " "),
+        });
+        assert!(ok.should_apply_addresses);
+        assert_eq!(ok.addresses, vec!["30023:aa:essay"]);
+        assert!(!ok.should_refresh_after_failure);
+
+        let failed =
+            article_bookmarks_snapshot_apply_projection(ArticleBookmarksSnapshotApplyInput {
+                snapshot: article_bookmarks_snapshot(vec!["stale".into()], "relay error"),
+            });
+        assert!(!failed.should_apply_addresses);
+        assert!(failed.addresses.is_empty());
+        assert!(failed.should_refresh_after_failure);
+    }
+
+    #[test]
+    fn article_bookmark_state_projection_trims_dedupes_and_toggles() {
+        let added = article_bookmark_state_projection(ArticleBookmarkStateProjectionInput {
+            addresses: vec![
+                "30023:aa:essay".into(),
+                " 30023:aa:essay ".into(),
+                " ".into(),
+            ],
+            address: " 30023:bb:letter\n".into(),
+        });
+        let removed = article_bookmark_state_projection(ArticleBookmarkStateProjectionInput {
+            addresses: vec!["30023:aa:essay".into(), "30023:bb:letter".into()],
+            address: "30023:aa:essay".into(),
+        });
+        let blank = article_bookmark_state_projection(ArticleBookmarkStateProjectionInput {
+            addresses: vec!["30023:aa:essay".into()],
+            address: " \n ".into(),
+        });
+
+        assert_eq!(added.canonical_address, "30023:bb:letter");
+        assert!(added.can_toggle);
+        assert!(!added.is_bookmarked);
+        assert_eq!(
+            added.optimistic_addresses,
+            vec!["30023:aa:essay", "30023:bb:letter"]
+        );
+
+        assert!(removed.is_bookmarked);
+        assert_eq!(removed.optimistic_addresses, vec!["30023:bb:letter"]);
+
+        assert_eq!(blank.canonical_address, "");
+        assert!(!blank.can_toggle);
+        assert!(!blank.is_bookmarked);
+        assert_eq!(blank.optimistic_addresses, vec!["30023:aa:essay"]);
+    }
+
+    #[test]
+    fn article_bookmark_chrome_projection_matches_bookmark_state() {
+        let unbookmarked =
+            article_bookmark_chrome_projection(ArticleBookmarkChromeProjectionInput {
+                is_bookmarked: false,
+            });
+        assert_eq!(
+            unbookmarked,
+            ArticleBookmarkChromeProjection {
+                toolbar_system_image: "bookmark".into(),
+                uses_accent_color: false,
+                accessibility_label: "Bookmark article".into(),
+                swipe_title: "Bookmark".into(),
+                menu_title: "Bookmark".into(),
+                action_system_image: "bookmark".into(),
+            }
+        );
+
+        let bookmarked = article_bookmark_chrome_projection(ArticleBookmarkChromeProjectionInput {
+            is_bookmarked: true,
+        });
+        assert_eq!(
+            bookmarked,
+            ArticleBookmarkChromeProjection {
+                toolbar_system_image: "bookmark.fill".into(),
+                uses_accent_color: true,
+                accessibility_label: "Remove bookmark".into(),
+                swipe_title: "Remove".into(),
+                menu_title: "Remove bookmark".into(),
+                action_system_image: "bookmark.slash".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn event_bookmark_state_projection_toggles_and_applies_authoritative_state() {
+        let event_a = "a".repeat(64);
+        let event_b = "b".repeat(64);
+        let added = event_bookmark_state_projection(EventBookmarkStateProjectionInput {
+            event_ids: vec![format!(" {event_a} "), event_a.to_uppercase()],
+            event_id_hex: format!(" {event_b}\n"),
+            desired_member: None,
+        });
+        let removed = event_bookmark_state_projection(EventBookmarkStateProjectionInput {
+            event_ids: vec![event_a.clone(), event_b.clone()],
+            event_id_hex: event_a.clone(),
+            desired_member: None,
+        });
+        let forced_member = event_bookmark_state_projection(EventBookmarkStateProjectionInput {
+            event_ids: vec![event_a.clone()],
+            event_id_hex: event_b.clone(),
+            desired_member: Some(true),
+        });
+        let forced_non_member =
+            event_bookmark_state_projection(EventBookmarkStateProjectionInput {
+                event_ids: vec![event_a.clone(), event_b.clone()],
+                event_id_hex: event_b.clone(),
+                desired_member: Some(false),
+            });
+        let invalid = event_bookmark_state_projection(EventBookmarkStateProjectionInput {
+            event_ids: vec![event_a.clone()],
+            event_id_hex: "not an event".into(),
+            desired_member: None,
+        });
+
+        assert_eq!(added.canonical_event_id_hex, event_b);
+        assert!(added.can_apply);
+        assert!(!added.is_bookmarked);
+        assert_eq!(
+            added.optimistic_event_ids,
+            vec![event_a.clone(), event_b.clone()]
+        );
+
+        assert!(removed.is_bookmarked);
+        assert_eq!(removed.optimistic_event_ids, vec![event_b.clone()]);
+        assert_eq!(
+            forced_member.optimistic_event_ids,
+            vec![event_a.clone(), event_b.clone()]
+        );
+        assert_eq!(
+            forced_non_member.optimistic_event_ids,
+            vec![event_a.clone()]
+        );
+
+        assert_eq!(invalid.canonical_event_id_hex, "");
+        assert!(!invalid.can_apply);
+        assert_eq!(invalid.optimistic_event_ids, vec![event_a]);
     }
 }

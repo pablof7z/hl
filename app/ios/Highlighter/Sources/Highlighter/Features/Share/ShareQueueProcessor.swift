@@ -17,39 +17,49 @@ enum ShareQueueProcessor {
         let pending = ShareQueue.drain()
         if pending.isEmpty { return 0 }
 
-        var requeue: [PendingShare] = []
-        var successCount = 0
-        var lastSuccessCommunity: String?
+        var attempts: [ShareQueueAttempt] = []
 
         for share in pending {
-            let published = await app.publishQueuedUrlShare(
-                url: share.url,
-                groupId: share.groupId,
-                note: share.note.isEmpty ? nil : share.note
+            attempts.append(await app.safeCore.publishShareQueueItem(share.coreQueueItem))
+        }
+
+        let projection = app.safeCore.projectShareQueueDrain(
+            input: ShareQueueDrainProjectionInput(
+                attempts: attempts,
+                communities: app.joinedCommunities
             )
-            if published {
-                successCount += 1
-                if let community = app.joinedCommunities.first(where: { $0.id == share.groupId }) {
-                    lastSuccessCommunity = community.name
-                } else {
-                    lastSuccessCommunity = share.groupId
-                }
-            } else {
-                requeue.append(share)
-            }
+        )
+
+        if !projection.requeue.isEmpty {
+            ShareQueue.replace(projection.requeue.map(PendingShare.init(core:)))
         }
 
-        if !requeue.isEmpty {
-            ShareQueue.replace(requeue)
+        if let toast = projection.toast {
+            app.shareToast = toast
         }
 
-        if successCount > 0 {
-            let label = lastSuccessCommunity ?? "community"
-            app.shareToast = successCount == 1
-                ? "Shared to \(label)"
-                : "Shared \(successCount) items"
-        }
+        return Int(projection.successCount)
+    }
+}
 
-        return successCount
+private extension PendingShare {
+    var coreQueueItem: ShareQueueItem {
+        ShareQueueItem(
+            id: id.uuidString,
+            groupId: groupId,
+            url: url,
+            note: note,
+            createdAtUnixSeconds: createdAt.timeIntervalSince1970
+        )
+    }
+
+    init(core item: ShareQueueItem) {
+        self.init(
+            id: UUID(uuidString: item.id) ?? UUID(),
+            groupId: item.groupId,
+            url: item.url,
+            note: item.note,
+            createdAt: Date(timeIntervalSince1970: item.createdAtUnixSeconds)
+        )
     }
 }

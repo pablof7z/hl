@@ -1,7 +1,6 @@
 //! Features that sit on top of `relays.rs` but are optional / user-initiated:
-//! import-from-npub and cache stats. Kept out of `relays.rs` so the core
-//! persistence + reconciliation module stays lean. (NIP-11 lives entirely in
-//! NMP per ADR-0051 — see `HighlighterCore::probe_relay_nip11`.)
+//! NIP-11 probe, import-from-npub, cache stats. Kept out of `relays.rs` so
+//! the core persistence + reconciliation module stays lean.
 
 use std::path::Path;
 use std::time::Duration;
@@ -10,12 +9,101 @@ use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::errors::CoreError;
-use crate::models::CacheStats;
+use crate::models::{CacheStats, Nip11Document};
 use crate::nostr_runtime::NostrRuntime;
 use crate::relays::RelayConfig;
 
+const NIP11_PROBE_TIMEOUT: Duration = Duration::from_secs(6);
 const IMPORT_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
 const KIND_RELAY_LIST: u16 = 10002;
+
+/// Convert a `ws[s]://` URL to the `http[s]://` form used for NIP-11 GET.
+fn http_url_for_nip11(relay_url: &str) -> Option<String> {
+    let trimmed = relay_url.trim();
+    if let Some(rest) = trimmed.strip_prefix("wss://") {
+        return Some(format!("https://{rest}"));
+    }
+    if let Some(rest) = trimmed.strip_prefix("ws://") {
+        return Some(format!("http://{rest}"));
+    }
+    None
+}
+
+/// GET the relay's NIP-11 information document. Returns a parsed
+/// `Nip11Document` or `CoreError::Network` on any transport/JSON failure.
+pub async fn probe_nip11(relay_url: &str) -> Result<Nip11Document, CoreError> {
+    let http = http_url_for_nip11(relay_url)
+        .ok_or_else(|| CoreError::InvalidInput(format!("unsupported scheme: {relay_url}")))?;
+    let client = reqwest::Client::builder()
+        .timeout(NIP11_PROBE_TIMEOUT)
+        .build()
+        .map_err(|e| CoreError::Network(format!("build http client: {e}")))?;
+    let resp = client
+        .get(&http)
+        .header("Accept", "application/nostr+json")
+        .send()
+        .await
+        .map_err(|e| CoreError::Network(format!("nip11 GET: {e}")))?;
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(CoreError::Network(format!("nip11 HTTP {status}")));
+    }
+    let json: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| CoreError::Network(format!("nip11 JSON: {e}")))?;
+
+    let name = json
+        .get("name")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let description = json
+        .get("description")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let pubkey = json
+        .get("pubkey")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let contact = json
+        .get("contact")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let software = json
+        .get("software")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let version = json
+        .get("version")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let supported_nips: Vec<u32> = json
+        .get("supported_nips")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|n| n.as_u64())
+                .map(|n| n as u32)
+                .collect()
+        })
+        .unwrap_or_default();
+    let icon = json
+        .get("icon")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+
+    Ok(Nip11Document {
+        url: relay_url.trim().to_string(),
+        name,
+        description,
+        pubkey,
+        contact,
+        software,
+        version,
+        supported_nips,
+        icon,
+    })
+}
 
 /// Fetch another user's kind:10002 via the indexer pool and parse it into a
 /// list of `RelayConfig` rows (read/write only — rooms/indexer flags are
@@ -39,68 +127,54 @@ pub async fn import_from_npub(
     let filter = Filter::new()
         .kinds([Kind::Custom(KIND_RELAY_LIST)])
         .author(pubkey);
-    let pk_bytes: [u8; 32] = pubkey.to_bytes();
-    let ndb_filter = NdbFilter::new()
-        .kinds([KIND_RELAY_LIST as u64])
-        .authors([&pk_bytes])
-        .build();
-    runtime
-        .open_nmp_filter_once_and_wait(
-            "relay-import/nip65",
-            filter,
-            urls,
-            vec![ndb_filter],
-            IMPORT_FETCH_TIMEOUT,
-        )
-        .await?;
+    let events = runtime
+        .client()
+        .fetch_events_from(urls, filter, IMPORT_FETCH_TIMEOUT)
+        .await
+        .map_err(|e| CoreError::Relay(format!("fetch kind:10002 for import: {e}")))?;
 
-    relay_rows_from_cache(runtime.ndb(), pubkey)
+    let Some(event) = events.first() else {
+        return Err(CoreError::Other(
+            "No kind:10002 found for this user — they may not have published a relay list yet."
+                .into(),
+        ));
+    };
+    let rows = relay_rows_from_kind10002(event);
+    if rows.is_empty() {
+        return Err(CoreError::Other(
+            "This user's kind:10002 did not contain any relay URLs.".into(),
+        ));
+    }
+    Ok(rows)
 }
 
-fn relay_rows_from_cache(ndb: &Ndb, pubkey: PublicKey) -> Result<Vec<RelayConfig>, CoreError> {
-    let pk_bytes: [u8; 32] = pubkey.to_bytes();
-    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
-    let filter = NdbFilter::new()
-        .kinds([KIND_RELAY_LIST as u64])
-        .authors([&pk_bytes])
-        .build();
-    let mut events: Vec<Event> = ndb
-        .query(&txn, &[filter], 16)
-        .map_err(|e| CoreError::Cache(format!("query imported kind:10002: {e}")))?
-        .into_iter()
-        .filter_map(|result| result.note.json().ok())
-        .filter_map(|json| Event::from_json(&json).ok())
-        .collect();
-    events.sort_by_key(|event| std::cmp::Reverse(event.created_at));
-
-    let mut rows: Vec<RelayConfig> = Vec::new();
-    // Events is sorted newest first — first one wins per replaceable rules.
-    if let Some(event) = events.first() {
-        for tag in event.tags.iter() {
+fn relay_rows_from_kind10002(event: &Event) -> Vec<RelayConfig> {
+    event
+        .tags
+        .iter()
+        .filter_map(|tag| {
             let slice = tag.as_slice();
             if slice.first().map(String::as_str) != Some("r") {
-                continue;
+                return None;
             }
-            let Some(url) = slice.get(1) else { continue };
-            let url = url.trim().to_string();
+            let url = slice.get(1)?.trim().to_string();
             if url.is_empty() {
-                continue;
+                return None;
             }
             let (read, write) = match slice.get(2).map(String::as_str) {
                 Some("read") => (true, false),
                 Some("write") => (false, true),
                 _ => (true, true),
             };
-            rows.push(RelayConfig {
+            Some(RelayConfig {
                 url,
                 read,
                 write,
                 rooms: false,
                 indexer: false,
-            });
-        }
-    }
-    Ok(rows)
+            })
+        })
+        .collect()
 }
 
 /// Best-effort disk + event-count snapshot. `disk_bytes` sums file sizes in
@@ -144,4 +218,49 @@ fn dir_size(path: &Path) -> std::io::Result<u64> {
         }
     }
     Ok(total)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn http_url_for_nip11_maps_schemes() {
+        assert_eq!(
+            http_url_for_nip11("wss://relay.example"),
+            Some("https://relay.example".to_string())
+        );
+        assert_eq!(
+            http_url_for_nip11("ws://relay.example"),
+            Some("http://relay.example".to_string())
+        );
+        assert_eq!(http_url_for_nip11("https://relay.example"), None);
+    }
+
+    #[test]
+    fn relay_rows_from_kind10002_skips_empty_urls() {
+        let keys = Keys::generate();
+        let event = EventBuilder::new(Kind::Custom(KIND_RELAY_LIST), "")
+            .tags(vec![
+                Tag::parse(["r", "  "]).expect("empty relay tag"),
+                Tag::parse(["r", " wss://read.example ", "read"]).expect("read relay tag"),
+                Tag::parse(["r", "wss://write.example", "write"]).expect("write relay tag"),
+                Tag::parse(["r", "wss://both.example"]).expect("both relay tag"),
+            ])
+            .sign_with_keys(&keys)
+            .expect("sign relay list");
+
+        let rows = relay_rows_from_kind10002(&event);
+
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].url, "wss://read.example");
+        assert!(rows[0].read);
+        assert!(!rows[0].write);
+        assert_eq!(rows[1].url, "wss://write.example");
+        assert!(!rows[1].read);
+        assert!(rows[1].write);
+        assert_eq!(rows[2].url, "wss://both.example");
+        assert!(rows[2].read);
+        assert!(rows[2].write);
+    }
 }

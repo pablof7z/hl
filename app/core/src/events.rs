@@ -4,30 +4,64 @@
 //! `subscription_id`, so Swift can route the change to the view-scoped store
 //! that installed the subscription.
 
-use crate::models::CurrentUser;
-use crate::models::RelayStatus;
+use crate::models::{
+    ArtifactRecord, ChatMessageRecord, CommunitySummary, CurrentUser, DiscussionRecord,
+    HighlightRecord, HydratedHighlight, ProfileUpdateAction, RelayDiagnostic, RelayStatus,
+};
+use crate::nostr_entities::NostrEntityEvent;
 
+const KIND_METADATA: u32 = 0;
+const KIND_CONTACTS: u32 = 3;
+const KIND_HIGHLIGHT: u32 = 9802;
+const KIND_LONG_FORM: u32 = 30023;
+const KIND_GROUP_ADMINS: u32 = 39001;
+const KIND_GROUP_MEMBERS: u32 = 39002;
+
+pub fn profile_update_action(kind: u32) -> ProfileUpdateAction {
+    match kind {
+        KIND_METADATA => ProfileUpdateAction::RefreshProfile,
+        KIND_CONTACTS => ProfileUpdateAction::RefreshFollowState,
+        KIND_LONG_FORM => ProfileUpdateAction::RefreshArticles,
+        KIND_HIGHLIGHT => ProfileUpdateAction::RefreshHighlights,
+        KIND_GROUP_ADMINS | KIND_GROUP_MEMBERS => ProfileUpdateAction::RefreshCommunities,
+        _ => ProfileUpdateAction::Ignore,
+    }
+}
+
+// UniFFI serializes these deltas as bounded FFI records. Keeping the enum
+// payloads inline preserves the generated Swift shape and avoids moving Rust
+// event ownership into native shell code.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum DataChangeType {
     CommunityUpserted {
-        group_id: String,
+        community: CommunitySummary,
     },
     MembershipChanged {
         group_id: String,
     },
+    /// Rust-owned app toast. Native shell renders and dismisses it; Rust owns
+    /// when the message exists and what it says.
+    AppToastRequested {
+        message: String,
+    },
     ArtifactUpserted {
         group_id: String,
+        artifact: ArtifactRecord,
     },
     DiscussionUpserted {
         group_id: String,
+        discussion: DiscussionRecord,
     },
-    /// A NIP-29 kind:9 chat message arrived for `group_id`. The Swift
-    /// chat store appends it to its message list (ordered by `created_at`).
+    /// A NIP-29 kind:9 chat message arrived for `group_id`. Native chat
+    /// stores re-read Rust's bounded chat snapshot for the open room.
     ChatMessageUpserted {
         group_id: String,
+        message: ChatMessageRecord,
     },
     HighlightUpserted {
         group_id: String,
+        highlight: HydratedHighlight,
     },
     /// A kind:16 cross-community share of a highlight was received.
     HighlightShared {
@@ -35,18 +69,19 @@ pub enum DataChangeType {
         highlight_id: String,
         shared_by_pubkey: String,
     },
+    MyHighlightUpserted {
+        highlight: HighlightRecord,
+    },
     /// Something that affects the profile view for `pubkey` arrived. `kind`
-    /// is the event kind (0 metadata, 3 contacts, 30023 article, 9802
-    /// highlight, 39001/39002 membership) so the Swift store can re-query
-    /// just the affected slice.
+    /// is the event kind; Rust's `profile_update_action` defines the
+    /// reload slice so native shells don't duplicate protocol policy.
     UserProfileUpdated {
         pubkey: String,
         kind: u32,
     },
     /// Something that affects the article reader for `address`
-    /// (`30023:<pubkey>:<d>`) arrived. `kind` is `30023` when the article
-    /// body/metadata itself changed (replaceable supersession) or `9802`
-    /// when a new highlight was published against it.
+    /// (`30023:<pubkey>:<d>`) arrived. `kind` is retained for diagnostics;
+    /// native shells refresh Rust's reader snapshot instead of branching on it.
     ArticleUpdated {
         address: String,
         kind: u32,
@@ -65,15 +100,14 @@ pub enum DataChangeType {
     /// existing row, which is easier to handle with a re-query than an in-place
     /// patch).
     FeedbackThreadsUpdated,
-    /// A kind:1 message inside an open feedback thread arrived. The Swift
-    /// store inserts/upserts it into the chat view ordered by `created_at`.
-    FeedbackThreadEventUpserted {
-        event_id: String,
-    },
+    /// A kind:1 message inside an open feedback thread arrived. Native
+    /// stores re-read Rust's bounded feedback-thread snapshot for the open
+    /// thread.
+    FeedbackThreadUpdated,
     /// A NIP-50 relay search returned new kind:30023 events. The Swift store
-    /// re-queries its local article substring match on receipt; payload is the
-    /// query the subscription was opened with (so a stale pump can't update a
-    /// newer query's bucket).
+    /// re-reads Rust's article snapshot on receipt; payload is the query the
+    /// subscription was opened with (so a stale pump can't update a newer
+    /// query's bucket).
     SearchArticlesUpdated {
         query: String,
     },
@@ -83,14 +117,20 @@ pub enum DataChangeType {
     /// list from nostrdb.
     BookmarksUpdated,
     /// One of the current user's kind:30003 / kind:30004 sets changed.
-    /// View-scoped — Rust-owned bookmark snapshots re-query on receipt.
+    /// View-scoped — the BookmarkStore re-queries on receipt.
     BookmarkSetsUpdated,
     /// A kind:30004 curation set from a followed author arrived.
-    /// View-scoped — Rust-owned bookmark snapshots re-query the explore list.
+    /// View-scoped — the BookmarkStore re-queries the explore list.
     FollowingCurationSetsUpdated,
     /// A NIP-B0 kind:39701 web bookmark from the current user changed.
-    /// View-scoped — Rust-owned bookmark snapshots re-query on receipt.
+    /// View-scoped — the BookmarkStore re-queries on receipt.
     WebBookmarksUpdated,
+    /// A referenced NIP-19 entity resolved from nostrdb after its
+    /// view-scoped subscription warmed the cache. Swift applies the payload
+    /// directly to the card that installed the subscription.
+    NostrEntityResolved {
+        event: NostrEntityEvent,
+    },
     /// NIP-46 signer connected — fires after a remote signer completes the
     /// `nostrconnect://` or `bunker://` handshake.
     SignerConnected {
@@ -102,12 +142,17 @@ pub enum DataChangeType {
     BunkerSignRequest {
         request_id: String,
     },
-    /// A relay in the user's pool changed connection state. Swift re-reads
-    /// `get_relay_diagnostics` on receipt to refresh per-row status dots,
-    /// latency, and traffic counters.
+    /// A relay in the user's pool changed connection state. Swift projects the
+    /// updated diagnostics through `NetworkDiagnosticsSnapshot` to refresh
+    /// per-row status dots, latency, and traffic counters.
     RelayStatusChanged {
         url: String,
         state: RelayStatus,
+    },
+    /// Bounded app-scope relay diagnostics projection. Emitted by Rust when
+    /// the SDK pool or a relay status notification changes a diagnostics row.
+    RelayDiagnosticsUpdated {
+        diagnostics: Vec<RelayDiagnostic>,
     },
 }
 
@@ -123,4 +168,38 @@ pub struct Delta {
 #[uniffi::export(with_foreign)]
 pub trait EventCallback: Send + Sync {
     fn on_data_changed(&self, delta: Delta);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn profile_update_action_maps_profile_slices() {
+        assert_eq!(
+            profile_update_action(KIND_METADATA),
+            ProfileUpdateAction::RefreshProfile
+        );
+        assert_eq!(
+            profile_update_action(KIND_CONTACTS),
+            ProfileUpdateAction::RefreshFollowState
+        );
+        assert_eq!(
+            profile_update_action(KIND_LONG_FORM),
+            ProfileUpdateAction::RefreshArticles
+        );
+        assert_eq!(
+            profile_update_action(KIND_HIGHLIGHT),
+            ProfileUpdateAction::RefreshHighlights
+        );
+        assert_eq!(
+            profile_update_action(KIND_GROUP_ADMINS),
+            ProfileUpdateAction::RefreshCommunities
+        );
+        assert_eq!(
+            profile_update_action(KIND_GROUP_MEMBERS),
+            ProfileUpdateAction::RefreshCommunities
+        );
+        assert_eq!(profile_update_action(1), ProfileUpdateAction::Ignore);
+    }
 }

@@ -2,16 +2,214 @@
 //! `web/src/lib/ndk/{groups,artifacts,highlights}.ts` so Swift/Rust/TS agree on
 //! the shape of a community, artifact, and highlight.
 
-#[derive(Debug, Clone, uniffi::Record)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CurrentUser {
     pub pubkey: String,
     pub npub: String,
 }
 
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct GeneratedAccount {
     pub user: CurrentUser,
     pub nsec: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct OnboardingInterest {
+    pub id: String,
+    pub emoji: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct OnboardingInterestChip {
+    pub id: String,
+    pub emoji: String,
+    pub label: String,
+    pub is_selected: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct OnboardingInterestSelection {
+    pub minimum_required: u32,
+    pub selected_count: u32,
+    pub remaining: u32,
+    pub can_continue: bool,
+    pub follow_pubkeys: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct OnboardingInterestProjection {
+    pub interests: Vec<OnboardingInterestChip>,
+    pub selection: OnboardingInterestSelection,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct MutationSnapshot {
+    pub applied: bool,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum ProfileUpdateAction {
+    RefreshProfile,
+    RefreshFollowState,
+    RefreshArticles,
+    RefreshHighlights,
+    RefreshCommunities,
+    Ignore,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BookRoute {
+    pub catalog_id: String,
+    pub isbn: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SubscriptionStartSnapshot {
+    pub handle: u64,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ViewSubscriptionStartProjectionInput {
+    pub start: SubscriptionStartSnapshot,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ViewSubscriptionStartProjection {
+    pub should_register: bool,
+    pub handle: u64,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct AppSubscriptionStartProjectionInput {
+    pub start: SubscriptionStartSnapshot,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AppSubscriptionStartProjection {
+    pub should_keep_handle: bool,
+    pub handle: u64,
+    pub has_error: bool,
+    pub error_message: String,
+}
+
+pub fn view_subscription_start_projection(
+    input: ViewSubscriptionStartProjectionInput,
+) -> ViewSubscriptionStartProjection {
+    let should_register = input.start.error.trim().is_empty() && input.start.handle != 0;
+    ViewSubscriptionStartProjection {
+        should_register,
+        handle: if should_register {
+            input.start.handle
+        } else {
+            0
+        },
+    }
+}
+
+pub fn app_subscription_start_projection(
+    input: AppSubscriptionStartProjectionInput,
+) -> AppSubscriptionStartProjection {
+    let error_message = input.start.error.trim().to_string();
+    let has_error = !error_message.is_empty();
+    let should_keep_handle = !has_error && input.start.handle != 0;
+    AppSubscriptionStartProjection {
+        should_keep_handle,
+        handle: if should_keep_handle {
+            input.start.handle
+        } else {
+            0
+        },
+        has_error,
+        error_message,
+    }
+}
+
+#[cfg(test)]
+mod subscription_start_projection_tests {
+    use super::*;
+
+    #[test]
+    fn view_subscription_start_projection_requires_successful_nonzero_handle() {
+        let success = view_subscription_start_projection(ViewSubscriptionStartProjectionInput {
+            start: SubscriptionStartSnapshot {
+                handle: 42,
+                error: String::new(),
+            },
+        });
+        assert!(success.should_register);
+        assert_eq!(success.handle, 42);
+
+        let failed = view_subscription_start_projection(ViewSubscriptionStartProjectionInput {
+            start: SubscriptionStartSnapshot {
+                handle: 42,
+                error: "subscribe failed".into(),
+            },
+        });
+        assert!(!failed.should_register);
+        assert_eq!(failed.handle, 0);
+
+        let app_scope = view_subscription_start_projection(ViewSubscriptionStartProjectionInput {
+            start: SubscriptionStartSnapshot {
+                handle: 0,
+                error: String::new(),
+            },
+        });
+        assert!(!app_scope.should_register);
+        assert_eq!(app_scope.handle, 0);
+    }
+
+    #[test]
+    fn app_subscription_start_projection_keeps_handles_and_surfaces_errors() {
+        let success = app_subscription_start_projection(AppSubscriptionStartProjectionInput {
+            start: SubscriptionStartSnapshot {
+                handle: 17,
+                error: String::new(),
+            },
+        });
+        assert!(success.should_keep_handle);
+        assert_eq!(success.handle, 17);
+        assert!(!success.has_error);
+        assert_eq!(success.error_message, "");
+
+        let zero_handle = app_subscription_start_projection(AppSubscriptionStartProjectionInput {
+            start: SubscriptionStartSnapshot {
+                handle: 0,
+                error: String::new(),
+            },
+        });
+        assert!(!zero_handle.should_keep_handle);
+        assert_eq!(zero_handle.handle, 0);
+        assert!(!zero_handle.has_error);
+        assert_eq!(zero_handle.error_message, "");
+
+        let failed = app_subscription_start_projection(AppSubscriptionStartProjectionInput {
+            start: SubscriptionStartSnapshot {
+                handle: 17,
+                error: " subscribe failed ".into(),
+            },
+        });
+        assert!(!failed.should_keep_handle);
+        assert_eq!(failed.handle, 0);
+        assert!(failed.has_error);
+        assert_eq!(failed.error_message, "subscribe failed");
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum HighlightSourceKind {
+    Article,
+    Web,
+    Podcast,
+    Book,
+    Video,
+    Paper,
+    Unknown,
 }
 
 /// Mirrors `CommunitySummary` in `web/src/lib/ndk/groups.ts:23-35`.
@@ -33,7 +231,7 @@ pub struct CommunitySummary {
 }
 
 /// Mirrors `ArtifactPreview` in `web/src/lib/ndk/artifacts.ts:19-53`.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
 pub struct ArtifactPreview {
     pub id: String,
     pub url: String,
@@ -75,14 +273,14 @@ pub struct ArtifactPreview {
     pub chapters: Vec<Chapter>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
 pub struct Chapter {
     pub start_seconds: f64,
     pub title: String,
 }
 
 /// Mirrors `ArtifactRecord` in `web/src/lib/ndk/artifacts.ts`.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
 pub struct ArtifactRecord {
     pub preview: ArtifactPreview,
     pub group_id: String,
@@ -90,6 +288,41 @@ pub struct ArtifactRecord {
     pub pubkey: String,
     pub created_at: Option<u64>,
     pub note: String,
+}
+
+/// Native-shell destination for an artifact detail tap. Rust owns the
+/// NIP/source/reference interpretation; platform shells only render the
+/// matching native screen.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum ArtifactDetailTarget {
+    Podcast,
+    Article,
+    Book,
+    Web,
+    Unavailable,
+}
+
+/// Bounded artifact detail projection. Exactly one target-specific payload is
+/// populated according to `target`.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArtifactDetailRoute {
+    pub target: ArtifactDetailTarget,
+    pub article_address: String,
+    pub article_pubkey: String,
+    pub article_d_tag: String,
+    pub book_catalog_id: String,
+    pub url: String,
+}
+
+/// Last podcast playback position persisted by the Rust core. Native shells
+/// own AV playback handles, but durable playback state and the cold-launch
+/// episode projection live here so every platform resumes the same episode.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PodcastPositionRecord {
+    pub guid: String,
+    pub position_seconds: f64,
+    pub last_played_at_unix_seconds: u64,
+    pub artifact: ArtifactRecord,
 }
 
 /// Mirrors `RoomDiscussionRecord` in
@@ -187,6 +420,76 @@ pub struct CommentRecord {
     pub created_at: Option<u64>,
 }
 
+/// One node in a Rust-owned NIP-22 comment thread projection. The core owns
+/// parent resolution, orphan promotion, and chronological child ordering.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentThreadNode {
+    pub record: CommentRecord,
+    pub children: Vec<CommentThreadNode>,
+}
+
+/// Bounded view projection for a comment surface. Rust owns flat-record
+/// duplicate suppression plus the nested NIP-22 thread rebuild.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentThreadProjection {
+    pub records: Vec<CommentRecord>,
+    pub tree: Vec<CommentThreadNode>,
+}
+
+/// Rust-owned NIP-22 root scope projection. Native shells keep this record
+/// opaque and pass it back for comment reads/writes.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CommentScope {
+    pub root_tag_name: String,
+    pub root_tag_value: String,
+    pub root_kind: u16,
+}
+
+/// Reference query target for room artifact lanes. Rust owns the artifact id,
+/// highlight lookup key, and NIP-22 comment scope/key so native shells do not
+/// duplicate protocol reference precedence.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArtifactReferenceTarget {
+    pub artifact_id: String,
+    pub lowercase_tag: String,
+    pub value: String,
+    pub lookup_key: String,
+    pub comment_scope: Option<CommentScope>,
+    pub comment_key: String,
+}
+
+/// Reference query target for a live highlight delta. Used by native shells
+/// only to place an already-received highlight into a Rust-owned lookup bucket.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HighlightReferenceTarget {
+    pub lowercase_tag: String,
+    pub value: String,
+    pub lookup_key: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HighlightReferenceBucket {
+    pub lookup_key: String,
+    pub highlights: Vec<HighlightRecord>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CommentReferenceBucket {
+    pub comment_key: String,
+    pub comments: Vec<CommentRecord>,
+}
+
+/// A visible lane on the community home surface. Rust owns artifact/highlight
+/// matching, de-duplication, activity ordering, and dormant-lane filtering;
+/// native shells render this bounded screen projection.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RoomLane {
+    pub id: String,
+    pub artifact: ArtifactRecord,
+    pub highlights: Vec<HydratedHighlight>,
+    pub comments: Vec<CommentRecord>,
+}
+
 /// Highlight + its associated artifact (for feed rendering).
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct HydratedHighlight {
@@ -199,7 +502,7 @@ pub struct HydratedHighlight {
 }
 
 /// A pending highlight to publish — text + optional context/note.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone)]
 pub struct HighlightDraft {
     pub quote: String,
     pub context: String,
@@ -236,7 +539,7 @@ pub struct BlossomUpload {
 /// A pending NIP-68 picture (kind:20) to publish into a community.
 /// Used as the OCR-fallback path: when the user couldn't or didn't want to
 /// extract a highlight quote from the captured photo.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone)]
 pub struct PictureDraft {
     /// The Blossom upload to attach (must already have been uploaded).
     pub image: BlossomUpload,
@@ -251,7 +554,7 @@ pub struct PictureDraft {
 }
 
 /// Published kind:20 picture event record returned to the client.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone)]
 pub struct PictureRecord {
     pub event_id: String,
     pub pubkey: String,
@@ -305,7 +608,9 @@ pub struct ProfileMetadata {
     pub created_at: Option<u64>,
 }
 
-#[derive(Debug, Clone, Default, uniffi::Record)]
+/// Draft profile metadata written by the platform shell. Rust owns the
+/// trimming, clear-vs-set behavior, event merge, signing, and relay publish.
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct ProfileUpdateDraft {
     pub name: String,
     pub display_name: String,
@@ -322,6 +627,8 @@ pub struct ProfileUpdateDraft {
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct ArticleRecord {
     pub event_id: String,
+    /// Canonical NIP-33 article address (`30023:<pubkey>:<d>`).
+    pub address: String,
     pub pubkey: String,
     /// `d` tag — stable identifier. Combined with pubkey forms the addressable id.
     pub identifier: String,
@@ -334,6 +641,16 @@ pub struct ArticleRecord {
     /// `published_at` tag (seconds since epoch) if present; otherwise falls back to `created_at`.
     pub published_at: Option<u64>,
     pub created_at: Option<u64>,
+}
+
+/// Native reader destination for a NIP-23 article. Rust owns the address
+/// interpretation and canonical address construction; native shells map this
+/// projection into platform navigation payloads.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ArticleReaderRoute {
+    pub address: String,
+    pub pubkey: String,
+    pub d_tag: String,
 }
 
 /// One entry in the Following Reads feed — a NIP-23 article surfaced via
@@ -352,6 +669,17 @@ pub struct ReadingFeedItem {
     /// Most recent timestamp among the article and all interactions — drives
     /// feed sort order. Seconds since epoch.
     pub latest_activity_at: u64,
+}
+
+/// One row in the home feed. Rust owns highlight grouping, read suppression,
+/// stable identity, and merged chronological ordering; native shells render
+/// either the non-empty `highlights` module or the `read` article.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct HomeFeedItem {
+    pub stable_id: String,
+    pub sort_key: u64,
+    pub highlights: Vec<HydratedHighlight>,
+    pub read: Option<ReadingFeedItem>,
 }
 
 /// One thread in the in-app feedback surface — a kind:1 root note that
@@ -384,14 +712,26 @@ pub struct FeedbackEventRecord {
     pub content: String,
 }
 
-/// Options for initiating a `nostrconnect://` outgoing pairing.
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct NostrConnectOptions {
-    pub name: String,
-    pub url: String,
-    pub image: String,
+/// Rust-owned classification for pasted login material. Native shells render
+/// the result and execute storage/capability side effects; protocol shape and
+/// validation semantics stay here so iOS and Android cannot diverge.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum LoginInputAction {
+    Empty,
+    Nsec { nsec: String },
+    Bunker { uri: String },
+    Invalid { message: String },
+}
+
+/// Options for initiating a `nostrconnect://` outgoing pairing. Internal to
+/// Rust so native shells cannot choose app metadata or permission policy.
+#[derive(Debug, Clone)]
+pub(crate) struct NostrConnectOptions {
+    pub(crate) name: String,
+    pub(crate) url: String,
+    pub(crate) image: String,
     /// e.g. "sign_event:11,sign_event:9802,nip44_encrypt"
-    pub perms: String,
+    pub(crate) perms: String,
 }
 
 impl Default for NostrConnectOptions {
@@ -405,7 +745,11 @@ impl Default for NostrConnectOptions {
     }
 }
 
-/// Connection state of a single relay in NMP's relay diagnostics projection.
+/// Connection state of a single relay the app is talking to. Mirrors the
+/// nostr-sdk internal `RelayStatus` but trimmed to the values the UI cares
+/// about. `Initialized` / `Pending` / `Sleeping` are collapsed into
+/// `Connecting` — from the user's perspective all three mean "not yet on
+/// the wire but trying".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum RelayStatus {
     Connecting,
@@ -415,28 +759,33 @@ pub enum RelayStatus {
     Banned,
 }
 
-/// Live diagnostic snapshot for a single relay, decoded from NMP's typed
-/// `relay_diagnostics` projection. Swift reads via `get_relay_diagnostics`
-/// and listens for `RelayStatusChanged` deltas to know when to re-render.
-#[derive(Debug, Clone, uniffi::Record)]
+/// Live diagnostic snapshot for a single relay in the nostr-sdk connection
+/// pool. `NostrRuntime` refreshes the bounded map from the pool on demand
+/// and updates it from relay status notifications; Swift receives first
+/// paint through `NetworkSettingsSnapshot` and listens for diagnostics
+/// deltas to render changes.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RelayDiagnostic {
     pub url: String,
     pub state: RelayStatus,
-    /// Round-trip time in milliseconds when available from the runtime.
+    /// Round-trip time in milliseconds when the relay is connected. `None`
+    /// until the first ping completes.
     pub rtt_ms: Option<u32>,
-    /// Cumulative bytes sent on this connection when available.
+    /// Cumulative bytes sent on this connection since it was first opened
+    /// this session.
     pub bytes_sent: u64,
-    /// Cumulative bytes received on this connection when available.
+    /// Cumulative bytes received on this connection since it was first
+    /// opened this session.
     pub bytes_received: u64,
-    /// Unix seconds of the most recent successful connect when available.
+    /// Unix seconds of the most recent successful connect, `None` if never
+    /// connected in this session.
     pub connected_since_ts: Option<u64>,
 }
 
 /// Minimal projection of a relay's NIP-11 information document. Populated
-/// entirely by NMP (ADR-0051): fetched automatically when a relay connects
-/// and carried on the `relay_diagnostics` projection, or via NMP's on-demand
-/// probe for not-yet-added relays. All fields are optional because relay
-/// operators configure NIP-11 loosely — many skip most fields.
+/// by `probe_relay_nip11_snapshot` via a one-shot HTTPS GET to the relay's base URL
+/// with `Accept: application/nostr+json`. All fields are optional because
+/// relay operators configure NIP-11 loosely — many skip most fields.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Nip11Document {
     pub url: String,
@@ -455,7 +804,7 @@ pub struct Nip11Document {
 /// Local nostrdb cache statistics. Rough — `disk_bytes` is the sum of file
 /// sizes in the ndb directory; `event_count_estimate` is an upper bound
 /// returned by a single kinds-wildcard query.
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CacheStats {
     pub disk_bytes: u64,
     pub event_count_estimate: u64,
@@ -478,6 +827,14 @@ pub struct BookmarkSetRecord {
     /// `e`-tag references — event ids of kind:1 notes.
     pub note_ids: Vec<String>,
     pub created_at: Option<u64>,
+}
+
+/// Row projection for the bookmark toolbar's curation-set picker.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CurationMenuItem {
+    pub id: String,
+    pub title: String,
+    pub is_member: bool,
 }
 
 /// One NIP-B0 web bookmark (kind:39701). The `d` tag is the URL without

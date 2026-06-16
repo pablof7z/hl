@@ -1,4 +1,3 @@
-import os
 import SwiftUI
 @preconcurrency import WebKit
 
@@ -20,6 +19,8 @@ struct WebReaderView: View {
     @State private var showAsReader: Bool = true
     @State private var readerAvailable: Bool = false
     @State private var shareTarget: ShareToCommunityTarget?
+    @State private var sharePreparing = false
+    @State private var shareError: String?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -56,33 +57,70 @@ struct WebReaderView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    prepareShare()
+                    Task { await prepareShare() }
                 } label: {
-                    Image(systemName: "square.and.arrow.up")
+                    if sharePreparing {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "square.and.arrow.up")
+                    }
                 }
+                .disabled(sharePreparing)
                 .accessibilityLabel("Share to room")
             }
-        }
-        .task(id: target.url.absoluteString) {
-            app.requestWebMetadata(url: target.url.absoluteString)
         }
         .sheet(item: $shareTarget) { target in
             ShareToCommunitySheet(target: target)
                 .environment(app)
                 .presentationDetents([.medium, .large])
         }
-        .commentsAttachment(
-            artifact: .external(id: target.url.absoluteString, kind: 0)
-        )
+        .alert("Couldn't share", isPresented: Binding(
+            get: { shareError != nil },
+            set: { if !$0 { shareError = nil } }
+        )) {
+            Button("OK", role: .cancel) { shareError = nil }
+        } message: {
+            Text(shareError ?? "")
+        }
+        .modifier(WebCommentsScopeModifier(url: target.url))
     }
 
-    /// Opens the share sheet with a URL intent. Rust builds the canonical
-    /// preview and publishes from the NMP share composer after room selection.
-    private func prepareShare() {
-        shareTarget = ShareToCommunityTarget.url(
-            target.url,
-            metadata: app.webMetadata(url: target.url.absoluteString)
-        )
+    /// Build the web-reader share target through Rust and hand it to the
+    /// native share sheet.
+    private func prepareShare() async {
+        sharePreparing = true
+        defer { sharePreparing = false }
+        let snapshot = await app.safeCore.buildWebReaderShareTarget(url: target.url.absoluteString)
+        guard snapshot.ready, let projection = snapshot.target else {
+            await MainActor.run {
+                shareError = snapshot.errorMessage
+            }
+            return
+        }
+        await MainActor.run {
+            shareTarget = ShareToCommunityTarget(
+                payload: .artifactShare(preview: projection.preview),
+                displayTitle: projection.displayTitle,
+                displaySubtitle: projection.displaySubtitle,
+                imageURL: projection.imageUrl.flatMap { URL(string: $0) }
+            )
+        }
+    }
+}
+
+private struct WebCommentsScopeModifier: ViewModifier {
+    let url: URL
+
+    @Environment(HighlighterStore.self) private var app
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let snapshot = app.safeCore.getWebCommentScope(url: url.absoluteString)
+        if snapshot.attach, let scope = snapshot.scope {
+            content.commentsAttachment(scope: scope)
+        } else {
+            content
+        }
     }
 }
 
@@ -152,15 +190,9 @@ private struct WebView: UIViewRepresentable {
 
     private static func loadReadabilitySource() -> String? {
         guard let url = Bundle.main.url(forResource: "Readability", withExtension: "js") else {
-            Logger.highlighter(category: "WebReader").error("Readability.js resource missing from bundle")
             return nil
         }
-        do {
-            return try String(contentsOf: url, encoding: .utf8)
-        } catch {
-            Logger.highlighter(category: "WebReader").error("Failed to read bundled Readability.js: \(error.localizedDescription, privacy: .public)")
-            return nil
-        }
+        return try? String(contentsOf: url, encoding: .utf8)
     }
 
     @MainActor
@@ -179,13 +211,13 @@ private struct WebView: UIViewRepresentable {
             self.isLoadingBinding = isLoadingBinding
         }
 
-        nonisolated func webView(_: WKWebView, didStartProvisionalNavigation _: WKNavigation!) {
+        nonisolated func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             Task { @MainActor in
                 self.isLoadingBinding.wrappedValue = true
             }
         }
 
-        nonisolated func webView(_: WKWebView, didFinish _: WKNavigation!) {
+        nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             Task { @MainActor in
                 await self.applyMode()
                 self.injectHighlight()
@@ -194,13 +226,13 @@ private struct WebView: UIViewRepresentable {
             }
         }
 
-        nonisolated func webView(_: WKWebView, didFail _: WKNavigation!, withError _: Error) {
+        nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             Task { @MainActor in
                 self.isLoadingBinding.wrappedValue = false
             }
         }
 
-        nonisolated func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError _: Error) {
+        nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             Task { @MainActor in
                 self.isLoadingBinding.wrappedValue = false
             }
@@ -349,13 +381,7 @@ private struct WebView: UIViewRepresentable {
         /// Handles quotes that span multiple text nodes and elements. Works
         /// in both the original page and the reader-mode DOM.
         private static func buildHighlightScript(quote: String) -> String {
-            let encoded: Data?
-            do {
-                encoded = try JSONEncoder().encode(quote)
-            } catch {
-                Logger.highlighter(category: "WebReader").error("Failed to JSON-encode highlight quote for injection: \(error.localizedDescription, privacy: .public)")
-                encoded = nil
-            }
+            let encoded = try? JSONEncoder().encode(quote)
             let needleLiteral = encoded.flatMap { String(data: $0, encoding: .utf8) } ?? "\"\""
             return """
             (function() {
@@ -465,7 +491,11 @@ private struct WebView: UIViewRepresentable {
                   }
                 }
 
-                try { mark.scrollIntoView({behavior: 'smooth', block: 'center'}); } catch(_) {}
+                requestAnimationFrame(function() {
+                  requestAnimationFrame(function() {
+                    try { mark.scrollIntoView({behavior: 'smooth', block: 'center'}); } catch(_) {}
+                  });
+                });
               } catch (err) {}
             })();
             """

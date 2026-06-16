@@ -6,21 +6,12 @@ struct ClipThreadView: View {
 
     let clipEventId: String
 
-    private var comments: [CommentRecord]? {
-        guard app.comments.rootTagName == "e",
-              app.comments.rootTagValue == clipEventId
-        else { return nil }
-        return app.comments.records
-    }
+    @State private var replyText: String = ""
+    @State private var isSending: Bool = false
+    @State private var sendError: String? = nil
 
-    private var replyText: Binding<String> {
-        Binding(
-            get: { app.commentDraft(parentEventId: nil) },
-            set: { value in
-                app.setCommentDraft(parentEventId: nil, body: value)
-                app.clearCommentPublishError()
-            }
-        )
+    private var comments: [CommentRecord]? {
+        app.podcastPlayer.comments[clipEventId]
     }
 
     var body: some View {
@@ -55,11 +46,11 @@ struct ClipThreadView: View {
                 .padding(.horizontal, 16)
 
             HStack(spacing: 10) {
-                TextField("Reply...", text: replyText)
+                TextField("Reply...", text: $replyText)
                     .font(.subheadline)
                     .tint(Color.highlighterAccent)
 
-                if app.comments.isPublishing {
+                if isSending {
                     ProgressView()
                         .scaleEffect(0.8)
                 } else {
@@ -67,16 +58,16 @@ struct ClipThreadView: View {
                         send()
                     }
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(replyText.wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty
-                        ? Color.secondary
-                        : Color.highlighterAccent)
-                    .disabled(replyText.wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .foregroundStyle(composerProjection.canSubmit
+                        ? Color.highlighterAccent
+                        : Color.secondary)
+                    .disabled(!composerProjection.canSubmit)
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
 
-            if let error = app.comments.publishErrorMessage {
+            if let error = sendError {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.red)
@@ -84,16 +75,54 @@ struct ClipThreadView: View {
                     .padding(.bottom, 8)
             }
         }
-        .task(id: clipEventId) {
-            app.openComments(rootTagName: "e", rootTagValue: clipEventId, rootKind: 9802)
-        }
+    }
+
+    private var composerProjection: CommentComposerProjection {
+        app.safeCore.projectCommentComposer(
+            input: CommentComposerProjectionInput(
+                body: replyText,
+                isPublishing: isSending
+            )
+        )
     }
 
     private func send() {
-        let text = replyText.wrappedValue.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty, !app.comments.isPublishing else { return }
-        app.clearCommentPublishError()
-        app.publishComment(parentEventId: nil)
+        let projection = composerProjection
+        guard projection.canSubmit else { return }
+        isSending = true
+        sendError = nil
+        let id = clipEventId
+        Task {
+            let scopeSnapshot = app.safeCore.getHighlightCommentScope(eventIdHex: id)
+            guard scopeSnapshot.attach, let scope = scopeSnapshot.scope else {
+                sendError = scopeSnapshot.errorMessage
+                isSending = false
+                return
+            }
+            let outcome = await app.safeCore.publishCommentForScopeSnapshot(
+                scope: scope,
+                content: projection.submitBody,
+                limit: 200
+            )
+            let result = app.safeCore.projectCommentPublishResult(
+                input: CommentPublishResultInput(error: outcome.error)
+            )
+            guard result.didPublish else {
+                sendError = result.errorMessage
+                isSending = false
+                return
+            }
+            let applyProjection = app.safeCore.projectCommentInlineThreadSnapshotApply(
+                input: CommentInlineThreadSnapshotApplyInput(
+                    records: outcome.snapshot.records,
+                    error: outcome.snapshot.error
+                )
+            )
+            app.podcastPlayer.comments[id] = applyProjection.records
+            sendError = applyProjection.errorMessage
+            replyText = ""
+            isSending = false
+        }
     }
 }
 
@@ -102,17 +131,19 @@ private struct CommentRowView: View {
     let comment: CommentRecord
 
     var body: some View {
+        let author = authorDisplay
+
         HStack(alignment: .top, spacing: 10) {
             AuthorAvatar(
                 pubkey: comment.pubkey,
-                pictureURL: app.profile(pubkeyHex: comment.pubkey)?.picture ?? "",
-                displayInitial: initial,
+                pictureURL: author.pictureUrl,
+                displayInitial: author.displayInitial,
                 size: 26
             )
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(name)
+                    Text(author.displayName)
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
@@ -133,19 +164,18 @@ private struct CommentRowView: View {
             }
         }
         .task(id: comment.pubkey) {
-            app.requestProfile(pubkeyHex: comment.pubkey)
+            await app.requestProfile(pubkeyHex: comment.pubkey)
         }
     }
 
-    private var name: String {
-        let profile = app.profile(pubkeyHex: comment.pubkey)
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(comment.pubkey.prefix(10))
-    }
-
-    private var initial: String {
-        name.first.map { String($0).uppercased() } ?? ""
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: comment.pubkey,
+                profile: app.profileSnapshots[comment.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
     private var relativeTime: String? {

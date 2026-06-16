@@ -1,0 +1,38 @@
+{
+  "canonical_rooms": "wss://relay.highlighter.com",
+  "canonical_indexer": "wss://purplepag.es",
+  "negentropy_sync": ["wss://relay.damus.io"],
+  "nostr_connect": "wss://relay.primal.net",
+  "feedback": "wss://relay.tenex.chat",
+  "room_explorer_curator": "wss://relay.highlighter.com",
+  "seed_defaults": [
+    {
+      "relay": "canonical_rooms",
+      "read": true,
+      "write": true,
+      "rooms": true,
+      "indexer": false
+    },
+    {
+      "url": "wss://relay.damus.io",
+      "read": true,
+      "write": true,
+      "rooms": false,
+      "indexer": false
+    },
+    {
+      "relay": "canonical_indexer",
+      "read": false,
+      "write": false,
+      "rooms": false,
+      "indexer": true
+    },
+    {
+      "relay": "nostr_connect",
+      "read": false,
+      "write": false,
+      "rooms": false,
+      "indexer": true
+    }
+  ]
+}

@@ -1,22 +1,297 @@
-//! App session projection. NMP owns keys, NIP-46 transport, and active signer
-//! lifecycle; this module caches the active user and subscription handles for
-//! the UniFFI-facing Highlighter API.
+//! NIP-46 bunker + nsec session management. UX patterns follow Olas iOS
+//! (`Olas-iOS-60m1gj/OlasApp/Views/Auth/LoginView.swift`):
 //!
 //! - Swift does signer *detection* (`canOpenURL`) and UI for the Primal hero
 //!   button. Rust is never responsible for probing installed apps — that's an
 //!   iOS-only concern.
-//! - Swift calls `start_nostr_connect()` on this module to produce an outgoing
-//!   `nostrconnect://` URI and listen for the remote signer on the Primal
-//!   relay.
+//! - Swift calls `start_default_nostr_connect()` on this module to produce an
+//!   outgoing `nostrconnect://` URI and listen for the remote signer on the
+//!   Primal relay.
 //! - Swift calls `pair_bunker()` when the user pastes/scans a `bunker://` or
 //!   `nostrconnect://` URI produced by a remote signer.
 //! - Nsec persistence is Swift-side (iOS Keychain via `AppSessionStore`).
-//!   Rust passes the nsec into NMP and does not retain the key material here.
+//!   The Rust core only holds the active `Keys` in memory for the life of
+//!   the session.
+
+use std::sync::Arc;
 
 use nostr_sdk::prelude::*;
 
 use crate::errors::CoreError;
-use crate::models::CurrentUser;
+use crate::models::{CurrentUser, GeneratedAccount, LoginInputAction};
+use crate::nip46::BunkerSigner;
+
+const COMPACT_NPUB_THRESHOLD: usize = 20;
+const COMPACT_NPUB_PREFIX: usize = 10;
+const COMPACT_NPUB_SUFFIX: usize = 8;
+const MASKED_NSEC_THRESHOLD: usize = 10;
+const MASKED_NSEC_PREFIX: usize = 8;
+const MASKED_NSEC_SUFFIX: usize = 6;
+const MASKED_NSEC_MIDDLE: &str = "••••••••••••••••••••••••";
+
+pub fn classify_login_input(input: &str) -> LoginInputAction {
+    let trimmed = input.trim();
+    let normalized = trimmed.strip_prefix("nostr:").unwrap_or(trimmed);
+    if normalized.is_empty() {
+        return LoginInputAction::Empty;
+    }
+
+    if normalized.starts_with("nsec1") {
+        LoginInputAction::Nsec {
+            nsec: normalized.to_string(),
+        }
+    } else if normalized.starts_with("bunker://") || normalized.starts_with("nostrconnect://") {
+        LoginInputAction::Bunker {
+            uri: normalized.to_string(),
+        }
+    } else {
+        LoginInputAction::Invalid {
+            message: "Enter an nsec1… or bunker:// URI.".into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AuthSessionSnapshot {
+    pub user: Option<CurrentUser>,
+    pub is_authenticated: bool,
+    pub error_message: String,
+    pub persist_nsec: Option<String>,
+    pub persist_bunker_uri: Option<String>,
+}
+
+pub fn auth_session_snapshot(result: Result<CurrentUser, CoreError>) -> AuthSessionSnapshot {
+    auth_session_snapshot_with_persistence(result, None, None)
+}
+
+pub fn auth_session_snapshot_with_persistence(
+    result: Result<CurrentUser, CoreError>,
+    persist_nsec: Option<String>,
+    persist_bunker_uri: Option<String>,
+) -> AuthSessionSnapshot {
+    match result {
+        Ok(user) => AuthSessionSnapshot {
+            user: Some(user),
+            is_authenticated: true,
+            error_message: String::new(),
+            persist_nsec,
+            persist_bunker_uri,
+        },
+        Err(error) => AuthSessionSnapshot {
+            user: None,
+            is_authenticated: false,
+            error_message: error.to_string(),
+            persist_nsec: None,
+            persist_bunker_uri: None,
+        },
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AuthSessionRestoreSnapshot {
+    pub user: Option<CurrentUser>,
+    pub is_authenticated: bool,
+    pub error_message: String,
+    pub clear_nsec: bool,
+    pub clear_bunker_uri: bool,
+}
+
+pub fn auth_session_restore_snapshot(
+    result: Result<Option<CurrentUser>, CoreError>,
+    clear_nsec: bool,
+    clear_bunker_uri: bool,
+) -> AuthSessionRestoreSnapshot {
+    match result {
+        Ok(Some(user)) => AuthSessionRestoreSnapshot {
+            user: Some(user),
+            is_authenticated: true,
+            error_message: String::new(),
+            clear_nsec,
+            clear_bunker_uri,
+        },
+        Ok(None) => AuthSessionRestoreSnapshot {
+            user: None,
+            is_authenticated: false,
+            error_message: String::new(),
+            clear_nsec,
+            clear_bunker_uri,
+        },
+        Err(error) => AuthSessionRestoreSnapshot {
+            user: None,
+            is_authenticated: false,
+            error_message: error.to_string(),
+            clear_nsec,
+            clear_bunker_uri,
+        },
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AccountGenerationSnapshot {
+    pub account: Option<GeneratedAccount>,
+    pub succeeded: bool,
+    pub error_message: String,
+    pub persist_nsec: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SessionStorageWriteInput {
+    pub nsec_requested: bool,
+    pub nsec_succeeded: bool,
+    pub bunker_uri_requested: bool,
+    pub bunker_uri_succeeded: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SessionStorageWriteSnapshot {
+    pub succeeded: bool,
+    pub error_message: String,
+}
+
+pub fn account_generation_snapshot(
+    result: Result<GeneratedAccount, CoreError>,
+) -> AccountGenerationSnapshot {
+    match result {
+        Ok(account) => AccountGenerationSnapshot {
+            persist_nsec: Some(account.nsec.clone()),
+            account: Some(account),
+            succeeded: true,
+            error_message: String::new(),
+        },
+        Err(error) => AccountGenerationSnapshot {
+            account: None,
+            succeeded: false,
+            error_message: error.to_string(),
+            persist_nsec: None,
+        },
+    }
+}
+
+/// Secure-storage capability result projection. Native shells execute the
+/// Keychain/Keystore write and return raw success bits; Rust owns whether the
+/// auth flow may proceed and which error copy is shown.
+pub fn session_storage_write_snapshot(
+    input: SessionStorageWriteInput,
+) -> SessionStorageWriteSnapshot {
+    let nsec_failed = input.nsec_requested && !input.nsec_succeeded;
+    let bunker_failed = input.bunker_uri_requested && !input.bunker_uri_succeeded;
+    if nsec_failed || bunker_failed {
+        return SessionStorageWriteSnapshot {
+            succeeded: false,
+            error_message: "Couldn't save your session on this device.".into(),
+        };
+    }
+
+    SessionStorageWriteSnapshot {
+        succeeded: true,
+        error_message: String::new(),
+    }
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct PublicKeyDisplayProjectionInput {
+    pub npub: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct PublicKeyDisplayProjection {
+    pub compact_label: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SecretKeyDisplayProjectionInput {
+    pub nsec: String,
+    pub is_revealed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SecretKeyDisplayProjection {
+    pub display_value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SecretKeySettingsSnapshot {
+    pub has_secret_key: bool,
+    pub display_value: String,
+    pub copy_value: Option<String>,
+}
+
+/// Settings identity projection for the user's public NIP-19 key. Rust owns
+/// compact key labeling so native shells do not duplicate identity formatting.
+pub fn public_key_display_projection(
+    input: PublicKeyDisplayProjectionInput,
+) -> PublicKeyDisplayProjection {
+    PublicKeyDisplayProjection {
+        compact_label: compact_npub_label(&input.npub),
+    }
+}
+
+/// Secret-key display projection. Native shells may own ephemeral reveal
+/// toggles, but Rust owns how unrevealed identity material is masked.
+pub fn secret_key_display_projection(
+    input: SecretKeyDisplayProjectionInput,
+) -> SecretKeyDisplayProjection {
+    let display_value = if input.is_revealed {
+        input.nsec
+    } else {
+        masked_nsec_label(&input.nsec)
+    };
+    SecretKeyDisplayProjection { display_value }
+}
+
+/// Secret-key settings snapshot. Native shells can execute copy/reveal UI
+/// mechanics, but Rust owns whether the active session has local nsec
+/// material and how that key is displayed.
+pub fn secret_key_settings_snapshot(
+    nsec: Option<String>,
+    is_revealed: bool,
+) -> SecretKeySettingsSnapshot {
+    let Some(nsec) = nsec.filter(|value| !value.is_empty()) else {
+        return SecretKeySettingsSnapshot {
+            has_secret_key: false,
+            display_value: String::new(),
+            copy_value: None,
+        };
+    };
+    let display_value = secret_key_display_projection(SecretKeyDisplayProjectionInput {
+        nsec: nsec.clone(),
+        is_revealed,
+    })
+    .display_value;
+
+    SecretKeySettingsSnapshot {
+        has_secret_key: true,
+        display_value,
+        copy_value: Some(nsec),
+    }
+}
+
+fn compact_npub_label(npub: &str) -> String {
+    if npub.chars().count() <= COMPACT_NPUB_THRESHOLD {
+        return npub.to_string();
+    }
+
+    let prefix: String = npub.chars().take(COMPACT_NPUB_PREFIX).collect();
+    let suffix = trailing_chars(npub, COMPACT_NPUB_SUFFIX);
+    format!("{prefix}…{suffix}")
+}
+
+fn masked_nsec_label(nsec: &str) -> String {
+    let char_count = nsec.chars().count();
+    if char_count <= MASKED_NSEC_THRESHOLD {
+        return "•".repeat(char_count);
+    }
+
+    let prefix: String = nsec.chars().take(MASKED_NSEC_PREFIX).collect();
+    let suffix = trailing_chars(nsec, MASKED_NSEC_SUFFIX);
+    format!("{prefix}{MASKED_NSEC_MIDDLE}{suffix}")
+}
+
+fn trailing_chars(value: &str, count: usize) -> String {
+    let mut suffix: Vec<char> = value.chars().rev().take(count).collect();
+    suffix.reverse();
+    suffix.into_iter().collect()
+}
 
 #[derive(Default)]
 pub struct Session {
@@ -58,15 +333,17 @@ pub struct Session {
 }
 
 enum ActiveSigner {
-    Nsec {
-        user: CurrentUser,
-    },
+    Nsec(Keys),
+    /// NIP-46 remote signer. The `user` pubkey is cached because
+    /// `BunkerSigner::get_public_key` is async and `current_user()` must not
+    /// block. The `signer` handle is retained for its lifecycle: keeping the
+    /// Arc alive in Session prevents the relay subscription task from being
+    /// dropped out from under the `nostr_sdk::Client` while the app still
+    /// uses it (set_signer takes its own reference too, but Session owns the
+    /// canonical handle for logout).
     Bunker {
-        user: CurrentUser,
-    },
-    /// NIP-55 external signer (Amber). Pubkey-only — no key material in
-    /// the process; signing round-trips through the OS signer app.
-    External {
+        #[allow(dead_code)]
+        signer: Arc<BunkerSigner>,
         user: CurrentUser,
     },
 }
@@ -81,23 +358,13 @@ impl Session {
         let keys = Keys::parse(trimmed)
             .map_err(|e| CoreError::InvalidInput(format!("invalid nsec: {e}")))?;
         let user = current_user_from_pubkey(&keys.public_key())?;
-        self.signer = Some(ActiveSigner::Nsec { user: user.clone() });
+        self.signer = Some(ActiveSigner::Nsec(keys));
         Ok(user)
     }
 
-    /// Record an nsec signer that NMP has already activated.
-    pub fn set_nsec(&mut self, user: CurrentUser) {
-        self.signer = Some(ActiveSigner::Nsec { user });
-    }
-
-    /// Record a NIP-46 signer that NMP has already activated.
-    pub fn set_bunker(&mut self, user: CurrentUser) {
-        self.signer = Some(ActiveSigner::Bunker { user });
-    }
-
-    /// Record a NIP-55 external signer that NMP has already activated.
-    pub fn set_external(&mut self, user: CurrentUser) {
-        self.signer = Some(ActiveSigner::External { user });
+    /// Install a NIP-46 signer that's already completed its handshake.
+    pub fn set_bunker(&mut self, signer: Arc<BunkerSigner>, user: CurrentUser) {
+        self.signer = Some(ActiveSigner::Bunker { signer, user });
     }
 
     pub fn logout(&mut self) {
@@ -198,20 +465,32 @@ impl Session {
 
     pub fn current_user(&self) -> Option<CurrentUser> {
         match &self.signer {
-            Some(ActiveSigner::Nsec { user }) => Some(user.clone()),
+            Some(ActiveSigner::Nsec(keys)) => current_user_from_pubkey(&keys.public_key()).ok(),
             Some(ActiveSigner::Bunker { user, .. }) => Some(user.clone()),
-            Some(ActiveSigner::External { user }) => Some(user.clone()),
             None => None,
         }
+    }
+
+    /// Exposed so feature modules (publishing, subscriptions) can obtain an
+    /// NDK-ready signing interface without this module knowing about them.
+    pub fn keys(&self) -> Option<&Keys> {
+        match &self.signer {
+            Some(ActiveSigner::Nsec(keys)) => Some(keys),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn nsec_bech32(&self) -> Option<String> {
+        self.keys()
+            .and_then(|keys| keys.secret_key().to_bech32().ok())
     }
 
     /// Pubkey of the currently-active signer, regardless of type. Cheap — no
     /// relay roundtrip for NIP-46.
     pub fn pubkey(&self) -> Option<PublicKey> {
         match &self.signer {
-            Some(ActiveSigner::Nsec { user }) => PublicKey::from_hex(&user.pubkey).ok(),
+            Some(ActiveSigner::Nsec(keys)) => Some(keys.public_key()),
             Some(ActiveSigner::Bunker { user, .. }) => PublicKey::from_hex(&user.pubkey).ok(),
-            Some(ActiveSigner::External { user }) => PublicKey::from_hex(&user.pubkey).ok(),
             None => None,
         }
     }
@@ -225,4 +504,248 @@ pub(crate) fn current_user_from_pubkey(pk: &PublicKey) -> Result<CurrentUser, Co
         pubkey: pk.to_hex(),
         npub,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classify_login_input_strips_nostr_prefix_and_preserves_material() {
+        assert_eq!(
+            classify_login_input("  nostr:nsec1example  "),
+            LoginInputAction::Nsec {
+                nsec: "nsec1example".into()
+            }
+        );
+        assert_eq!(
+            classify_login_input("nostr:bunker://relay.example"),
+            LoginInputAction::Bunker {
+                uri: "bunker://relay.example".into()
+            }
+        );
+        assert_eq!(classify_login_input(" nostr: "), LoginInputAction::Empty);
+    }
+
+    #[test]
+    fn classify_login_input_rejects_unknown_material_with_login_message() {
+        assert_eq!(
+            classify_login_input("npub1example"),
+            LoginInputAction::Invalid {
+                message: "Enter an nsec1… or bunker:// URI.".into()
+            }
+        );
+    }
+
+    #[test]
+    fn auth_session_snapshot_projects_success_and_error_states() {
+        let user = CurrentUser {
+            pubkey: "abc123".into(),
+            npub: "npub1abc".into(),
+        };
+        let success = auth_session_snapshot(Ok(user.clone()));
+        assert_eq!(success.user, Some(user));
+        assert!(success.is_authenticated);
+        assert!(success.error_message.is_empty());
+        assert_eq!(success.persist_nsec, None);
+        assert_eq!(success.persist_bunker_uri, None);
+
+        let failure = auth_session_snapshot(Err(CoreError::InvalidInput("bad key".into())));
+        assert_eq!(failure.user, None);
+        assert!(!failure.is_authenticated);
+        assert_eq!(failure.error_message, "invalid input: bad key");
+        assert_eq!(failure.persist_nsec, None);
+        assert_eq!(failure.persist_bunker_uri, None);
+    }
+
+    #[test]
+    fn auth_session_snapshot_projects_persistence_only_on_success() {
+        let user = CurrentUser {
+            pubkey: "abc123".into(),
+            npub: "npub1abc".into(),
+        };
+        let success = auth_session_snapshot_with_persistence(
+            Ok(user),
+            Some("nsec1abc".into()),
+            Some("bunker://relay.example".into()),
+        );
+        assert_eq!(success.persist_nsec, Some("nsec1abc".into()));
+        assert_eq!(
+            success.persist_bunker_uri,
+            Some("bunker://relay.example".into())
+        );
+
+        let failure = auth_session_snapshot_with_persistence(
+            Err(CoreError::InvalidInput("bad key".into())),
+            Some("nsec1abc".into()),
+            Some("bunker://relay.example".into()),
+        );
+        assert_eq!(failure.persist_nsec, None);
+        assert_eq!(failure.persist_bunker_uri, None);
+    }
+
+    #[test]
+    fn auth_session_restore_snapshot_projects_cleanup_policy() {
+        let user = CurrentUser {
+            pubkey: "abc123".into(),
+            npub: "npub1abc".into(),
+        };
+        let success = auth_session_restore_snapshot(Ok(Some(user.clone())), true, false);
+        assert_eq!(success.user, Some(user));
+        assert!(success.is_authenticated);
+        assert!(success.error_message.is_empty());
+        assert!(success.clear_nsec);
+        assert!(!success.clear_bunker_uri);
+
+        let no_credentials = auth_session_restore_snapshot(Ok(None), false, false);
+        assert_eq!(no_credentials.user, None);
+        assert!(!no_credentials.is_authenticated);
+        assert!(no_credentials.error_message.is_empty());
+        assert!(!no_credentials.clear_nsec);
+        assert!(!no_credentials.clear_bunker_uri);
+
+        let failure = auth_session_restore_snapshot(
+            Err(CoreError::InvalidInput("bad key".into())),
+            true,
+            true,
+        );
+        assert_eq!(failure.user, None);
+        assert!(!failure.is_authenticated);
+        assert_eq!(failure.error_message, "invalid input: bad key");
+        assert!(failure.clear_nsec);
+        assert!(failure.clear_bunker_uri);
+    }
+
+    #[test]
+    fn account_generation_snapshot_projects_success_and_error_states() {
+        let account = GeneratedAccount {
+            user: CurrentUser {
+                pubkey: "abc123".into(),
+                npub: "npub1abc".into(),
+            },
+            nsec: "nsec1abc".into(),
+        };
+        let success = account_generation_snapshot(Ok(account.clone()));
+        assert_eq!(success.account, Some(account));
+        assert!(success.succeeded);
+        assert!(success.error_message.is_empty());
+        assert_eq!(success.persist_nsec, Some("nsec1abc".into()));
+
+        let failure = account_generation_snapshot(Err(CoreError::Other("entropy failed".into())));
+        assert_eq!(failure.account, None);
+        assert!(!failure.succeeded);
+        assert_eq!(failure.error_message, "entropy failed");
+        assert_eq!(failure.persist_nsec, None);
+    }
+
+    #[test]
+    fn session_storage_write_snapshot_projects_capability_result() {
+        let noop = session_storage_write_snapshot(SessionStorageWriteInput {
+            nsec_requested: false,
+            nsec_succeeded: false,
+            bunker_uri_requested: false,
+            bunker_uri_succeeded: false,
+        });
+        assert!(noop.succeeded);
+        assert!(noop.error_message.is_empty());
+
+        let success = session_storage_write_snapshot(SessionStorageWriteInput {
+            nsec_requested: true,
+            nsec_succeeded: true,
+            bunker_uri_requested: true,
+            bunker_uri_succeeded: true,
+        });
+        assert!(success.succeeded);
+        assert!(success.error_message.is_empty());
+
+        let failure = session_storage_write_snapshot(SessionStorageWriteInput {
+            nsec_requested: true,
+            nsec_succeeded: false,
+            bunker_uri_requested: false,
+            bunker_uri_succeeded: false,
+        });
+        assert!(!failure.succeeded);
+        assert_eq!(
+            failure.error_message,
+            "Couldn't save your session on this device."
+        );
+    }
+
+    #[test]
+    fn public_key_display_projection_compacts_long_npubs() {
+        let projection = public_key_display_projection(PublicKeyDisplayProjectionInput {
+            npub: "npub1abcdefghijklmnopqrstuvwxyz".into(),
+        });
+
+        assert_eq!(projection.compact_label, "npub1abcde…stuvwxyz");
+    }
+
+    #[test]
+    fn public_key_display_projection_leaves_short_npubs_unmodified() {
+        let projection = public_key_display_projection(PublicKeyDisplayProjectionInput {
+            npub: "npub1short".into(),
+        });
+
+        assert_eq!(projection.compact_label, "npub1short");
+    }
+
+    #[test]
+    fn secret_key_display_projection_masks_hidden_nsec() {
+        let projection = secret_key_display_projection(SecretKeyDisplayProjectionInput {
+            nsec: "nsec1abcdefghijklmnopqrstuvwxyz".into(),
+            is_revealed: false,
+        });
+
+        assert_eq!(
+            projection.display_value,
+            "nsec1abc••••••••••••••••••••••••uvwxyz"
+        );
+    }
+
+    #[test]
+    fn secret_key_display_projection_masks_short_nsec_by_length() {
+        let projection = secret_key_display_projection(SecretKeyDisplayProjectionInput {
+            nsec: "nsec1".into(),
+            is_revealed: false,
+        });
+
+        assert_eq!(projection.display_value, "•••••");
+    }
+
+    #[test]
+    fn secret_key_display_projection_reveals_raw_nsec() {
+        let projection = secret_key_display_projection(SecretKeyDisplayProjectionInput {
+            nsec: "nsec1abcdefghijklmnopqrstuvwxyz".into(),
+            is_revealed: true,
+        });
+
+        assert_eq!(projection.display_value, "nsec1abcdefghijklmnopqrstuvwxyz");
+    }
+
+    #[test]
+    fn secret_key_settings_snapshot_projects_active_local_key() {
+        let hidden =
+            secret_key_settings_snapshot(Some("nsec1abcdefghijklmnopqrstuvwxyz".into()), false);
+        assert!(hidden.has_secret_key);
+        assert_eq!(
+            hidden.display_value,
+            "nsec1abc••••••••••••••••••••••••uvwxyz"
+        );
+        assert_eq!(
+            hidden.copy_value,
+            Some("nsec1abcdefghijklmnopqrstuvwxyz".into())
+        );
+
+        let revealed =
+            secret_key_settings_snapshot(Some("nsec1abcdefghijklmnopqrstuvwxyz".into()), true);
+        assert_eq!(revealed.display_value, "nsec1abcdefghijklmnopqrstuvwxyz");
+    }
+
+    #[test]
+    fn secret_key_settings_snapshot_hides_missing_key() {
+        let snapshot = secret_key_settings_snapshot(None, true);
+        assert!(!snapshot.has_secret_key);
+        assert!(snapshot.display_value.is_empty());
+        assert_eq!(snapshot.copy_value, None);
+    }
 }

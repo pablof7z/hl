@@ -1,10 +1,20 @@
 import SwiftUI
 
 struct OnboardingInterestsView: View {
+    let account: GeneratedAccount
+
     @Environment(HighlighterStore.self) private var store
 
+    @State private var selectedIds: [String] = []
+    @State private var isWorking = false
+
+    private var projection: OnboardingInterestProjection {
+        store.safeCore.getOnboardingInterestProjection(selectedIds: selectedIds)
+    }
+
     var body: some View {
-        let onboarding = store.nmpState.onboarding
+        let currentProjection = projection
+        let selectionState = currentProjection.selection
 
         ZStack {
             Color.highlighterPaper.ignoresSafeArea()
@@ -26,7 +36,7 @@ struct OnboardingInterestsView: View {
                 .padding(.bottom, 24)
 
                 ScrollView {
-                    chipGrid(onboarding)
+                    chipGrid(projection: currentProjection)
                         .padding(.horizontal, 20)
                         .padding(.bottom, 120)
                 }
@@ -38,8 +48,8 @@ struct OnboardingInterestsView: View {
                 Spacer()
 
                 VStack(spacing: 8) {
-                    if onboarding.remainingSelectionCount > 0 {
-                        Text("Choose \(onboarding.remainingSelectionCount) more")
+                    if selectionState.remaining > 0 {
+                        Text("Choose \(selectionState.remaining) more")
                             .font(.caption)
                             .foregroundStyle(Color.highlighterInkMuted)
                             .transition(.opacity)
@@ -47,7 +57,7 @@ struct OnboardingInterestsView: View {
 
                     Button(action: finish) {
                         Group {
-                            if onboarding.isFinishing {
+                            if isWorking {
                                 ProgressView().tint(.white)
                             } else {
                                 Text("Start exploring")
@@ -58,9 +68,9 @@ struct OnboardingInterestsView: View {
                         .padding(.vertical, 14)
                     }
                     .buttonStyle(.glassProminent)
-                    .disabled(!onboarding.canFinish || onboarding.isFinishing)
+                    .disabled(!selectionState.canContinue || isWorking)
                     .padding(.horizontal, 32)
-                    .animation(.easeInOut(duration: 0.15), value: onboarding.remainingSelectionCount)
+                    .animation(.easeInOut(duration: 0.15), value: selectionState.selectedCount)
                 }
                 .padding(.bottom, 48)
                 .background(
@@ -74,21 +84,24 @@ struct OnboardingInterestsView: View {
             }
         }
         .navigationBarBackButtonHidden(true)
-        .animation(.easeInOut(duration: 0.1), value: onboarding.selectedInterestIds)
+        .animation(.easeInOut(duration: 0.1), value: selectedIds)
     }
 
-    private func chipGrid(_ onboarding: HighlighterOnboardingSnapshot) -> some View {
+    private func chipGrid(projection: OnboardingInterestProjection) -> some View {
         FlowLayout(spacing: 10) {
-            ForEach(onboarding.interests, id: \.id) { interest in
+            ForEach(projection.interests, id: \.id) { interest in
                 chip(interest)
             }
         }
     }
 
-    private func chip(_ interest: HighlighterOnboardingInterest) -> some View {
-        let active = interest.selected
+    private func chip(_ interest: OnboardingInterestChip) -> some View {
+        let active = interest.isSelected
         return Button {
-            store.toggleOnboardingInterest(id: interest.id)
+            selectedIds = store.safeCore.toggleOnboardingInterestSelection(
+                selectedIds: selectedIds,
+                interestId: interest.id
+            )
         } label: {
             HStack(spacing: 6) {
                 Text(interest.emoji)
@@ -106,12 +119,17 @@ struct OnboardingInterestsView: View {
     }
 
     private func finish() {
-        let onboarding = store.nmpState.onboarding
-        guard onboarding.canFinish, !onboarding.isFinishing else { return }
+        guard !isWorking else { return }
+        isWorking = true
+        let chosenIds = selectedIds
 
         Task {
-            await store.completeLogin()
-            store.completeOnboarding()
+            await store.completeLogin(user: account.user)
+            let outcome = await store.completeOnboardingInterests(selectedIds: chosenIds)
+            if !outcome.applied {
+                isWorking = false
+                return
+            }
         }
     }
 }

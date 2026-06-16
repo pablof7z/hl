@@ -1,29 +1,82 @@
-//! Blossom server list (BUD-03, kind:10063) read + publish, NIP-98 auth, and
-//! app-model adaptation for NMP-owned Blossom uploads.
+//! Blossom server list (BUD-03, kind:10063) read + publish, and BUD-01 PUT
+//! upload.
 //!
 //! The kind:10063 "User Server List" is a replaceable event; publishing a new
 //! one supersedes the old one on every relay. Tags follow BUD-03: each server
 //! is an `["server", "<url>"]` tag. Order is preserved — the first server in
 //! the list is the upload default; fallback proceeds in list order.
 //!
-//! Uploads are dispatched through `nmp.blossom.upload`: Highlighter writes the
-//! native-supplied bytes to a local staging file and NMP owns hashing, kind:24242
-//! auth, signing, HTTP PUT transport, and action-result reporting.
+//! Uploads use BUD-01 auth (`kind:24242`, action=upload, x=sha256,
+//! expiration=now+300) base64-encoded into an `Authorization: Nostr <b64>`
+//! header. The server returns a JSON blob descriptor with the canonical URL.
 
-use std::path::{Path, PathBuf};
-
+use base64::{engine::general_purpose::STANDARD, Engine};
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
-use uuid::Uuid;
+use sha2::{Digest, Sha256};
 
+use crate::clock::Clock;
 use crate::errors::CoreError;
 use crate::models::BlossomUpload;
 use crate::nostr_runtime::NostrRuntime;
 
 const KIND_BLOSSOM_SERVERS: u16 = 10063;
-const KIND_NIP98_HTTP_AUTH: u16 = 27235;
+/// BUD-01 authorization event kind for Blossom uploads/deletes/listings.
+const KIND_BLOSSOM_AUTH: u16 = 24242;
 pub const DEFAULT_SERVER: &str = "https://blossom.primal.net";
-const NMP_BLOSSOM_UPLOAD_NAMESPACE: &str = "nmp.blossom.upload";
+/// Auth events expire 5 minutes after signing. The server enforces this.
+const AUTH_EXPIRATION_SECS: u64 = 300;
+
+/// Native add-server sheet input. Rust owns URL normalization and duplicate
+/// checks against the visible ordered server list.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BlossomServerEntryProjectionInput {
+    pub url: String,
+    pub existing_servers: Vec<String>,
+}
+
+/// Native add-server sheet projection. Rust owns validity and add eligibility.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BlossomServerEntryProjection {
+    pub submit_url: String,
+    pub is_valid: bool,
+    pub is_duplicate: bool,
+    pub can_add: bool,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BlossomServerListProjectionInput {
+    pub servers: Vec<String>,
+    pub add_url: Option<String>,
+    pub remove_indexes: Vec<u64>,
+    pub move_indexes: Vec<u64>,
+    pub move_to_index: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BlossomServerListProjection {
+    pub servers: Vec<String>,
+    pub can_save: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BlossomServerSettingsSnapshot {
+    pub servers: Vec<String>,
+    pub error_message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct BlossomServerSettingsMutationSnapshot {
+    pub servers: Vec<String>,
+    pub event_id: String,
+    pub error_message: String,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BlossomUploadSnapshot {
+    pub upload: Option<BlossomUpload>,
+    pub error: String,
+}
 
 // -- Reads --
 
@@ -90,6 +143,168 @@ pub fn query_blossom_servers(ndb: &Ndb, user_hex: &str) -> Result<Vec<String>, C
     }
 }
 
+pub fn blossom_server_settings_snapshot(
+    result: Result<Vec<String>, CoreError>,
+) -> BlossomServerSettingsSnapshot {
+    match result {
+        Ok(servers) => {
+            let projection = blossom_server_list_projection(BlossomServerListProjectionInput {
+                servers,
+                add_url: None,
+                remove_indexes: Vec::new(),
+                move_indexes: Vec::new(),
+                move_to_index: None,
+            });
+            BlossomServerSettingsSnapshot {
+                servers: projection.servers,
+                error_message: String::new(),
+            }
+        }
+        Err(error) => BlossomServerSettingsSnapshot {
+            servers: Vec::new(),
+            error_message: error.to_string(),
+        },
+    }
+}
+
+/// Project the add-server sheet for Blossom media settings. Native shells
+/// render the returned flags and pass `submit_url` to the add action.
+pub fn blossom_server_entry_projection(
+    input: BlossomServerEntryProjectionInput,
+) -> BlossomServerEntryProjection {
+    let submit_url = input.url.trim().to_string();
+    let is_valid = submit_url.starts_with("https://") || submit_url.starts_with("http://");
+    let is_duplicate = input
+        .existing_servers
+        .iter()
+        .any(|server| server.trim() == submit_url);
+    BlossomServerEntryProjection {
+        can_add: is_valid && !is_duplicate,
+        submit_url,
+        is_valid,
+        is_duplicate,
+    }
+}
+
+/// Project edits to the ordered Blossom server list. Native shells own the
+/// platform list control; Rust owns URL normalization, duplicate filtering,
+/// delete-last protection, and save eligibility.
+pub fn blossom_server_list_projection(
+    input: BlossomServerListProjectionInput,
+) -> BlossomServerListProjection {
+    let mut servers = normalize_server_list(input.servers);
+
+    if let Some(url) = input.add_url {
+        let entry = blossom_server_entry_projection(BlossomServerEntryProjectionInput {
+            url,
+            existing_servers: servers.clone(),
+        });
+        if entry.can_add {
+            servers.push(entry.submit_url);
+        }
+    }
+
+    let mut remove_indexes: Vec<usize> = input
+        .remove_indexes
+        .into_iter()
+        .filter_map(|index| usize::try_from(index).ok())
+        .filter(|index| *index < servers.len())
+        .collect();
+    remove_indexes.sort_unstable();
+    remove_indexes.dedup();
+    if !remove_indexes.is_empty() && servers.len() > remove_indexes.len() {
+        for index in remove_indexes.into_iter().rev() {
+            if index < servers.len() {
+                servers.remove(index);
+            }
+        }
+    }
+
+    if let Some(to_index) = input.move_to_index {
+        move_servers(&mut servers, input.move_indexes, to_index);
+    }
+
+    BlossomServerListProjection {
+        can_save: !servers.is_empty(),
+        servers,
+    }
+}
+
+pub fn blossom_server_settings_mutation_snapshot(
+    requested_servers: Vec<String>,
+    result: Result<String, CoreError>,
+) -> BlossomServerSettingsMutationSnapshot {
+    let projection = blossom_server_list_projection(BlossomServerListProjectionInput {
+        servers: requested_servers,
+        add_url: None,
+        remove_indexes: Vec::new(),
+        move_indexes: Vec::new(),
+        move_to_index: None,
+    });
+    match result {
+        Ok(event_id) => BlossomServerSettingsMutationSnapshot {
+            servers: projection.servers,
+            event_id,
+            error_message: String::new(),
+        },
+        Err(error) => BlossomServerSettingsMutationSnapshot {
+            servers: projection.servers,
+            event_id: String::new(),
+            error_message: error.to_string(),
+        },
+    }
+}
+
+fn normalize_server_list(servers: Vec<String>) -> Vec<String> {
+    let mut out = Vec::new();
+    for server in servers {
+        let trimmed = server.trim();
+        if !trimmed.is_empty() && !out.iter().any(|existing| existing == trimmed) {
+            out.push(trimmed.to_string());
+        }
+    }
+    out
+}
+
+fn move_servers(servers: &mut Vec<String>, indexes: Vec<u64>, to_index: u64) {
+    if servers.len() < 2 {
+        return;
+    }
+
+    let mut indexes: Vec<usize> = indexes
+        .into_iter()
+        .filter_map(|index| usize::try_from(index).ok())
+        .filter(|index| *index < servers.len())
+        .collect();
+    indexes.sort_unstable();
+    indexes.dedup();
+    if indexes.is_empty() || indexes.len() >= servers.len() {
+        return;
+    }
+
+    let mut moved = Vec::with_capacity(indexes.len());
+    for index in indexes.iter().rev() {
+        moved.push(servers.remove(*index));
+    }
+    moved.reverse();
+
+    let raw_to_index = usize::try_from(to_index)
+        .ok()
+        .unwrap_or(usize::MAX)
+        .min(servers.len() + moved.len());
+    let indexes_before_target = indexes
+        .iter()
+        .filter(|index| **index < raw_to_index)
+        .count();
+    let insertion_index = raw_to_index
+        .saturating_sub(indexes_before_target)
+        .min(servers.len());
+
+    for (offset, server) in moved.into_iter().enumerate() {
+        servers.insert(insertion_index + offset, server);
+    }
+}
+
 // -- Writes --
 
 fn parse_tag(parts: &[&str]) -> Result<Tag, CoreError> {
@@ -126,7 +341,10 @@ pub async fn publish_blossom_servers(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign blossom servers: {e}")))?;
-    runtime.publish_signed_event("blossom-servers-publish", &event)?;
+    client
+        .send_event(&event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("publish blossom servers: {e}")))?;
     Ok(event.id.to_hex())
 }
 
@@ -146,42 +364,50 @@ pub async fn init_default_blossom_servers(
     Ok(())
 }
 
-// -- NIP-98 HTTP Auth --
+// -- BUD-01 upload --
 
-/// Build and sign a kind:27235 NIP-98 HTTP auth event for use as a Blossom
-/// upload `Authorization` header. Returns the raw JSON of the signed event;
-/// the caller base64-encodes it and prefixes `"Nostr "`.
-///
-/// `payload_hash`: hex-encoded SHA-256 of the request body (required by
-/// Optional SHA-256 payload hash for HTTP endpoints that require it.
-pub async fn sign_nip98_auth(
-    runtime: &NostrRuntime,
-    url: &str,
-    method: &str,
-    payload_hash: Option<&str>,
-) -> Result<String, CoreError> {
-    let mut tags = vec![parse_tag(&["u", url])?, parse_tag(&["method", method])?];
-    if let Some(hash) = payload_hash {
-        tags.push(parse_tag(&["payload", hash])?);
-    }
-
-    let builder = EventBuilder::new(Kind::Custom(KIND_NIP98_HTTP_AUTH), "").tags(tags);
-    let client = runtime.client();
-    let event = client
-        .sign_event_builder(builder)
-        .await
-        .map_err(|e| CoreError::Signer(format!("sign nip98 auth: {e}")))?;
-    Ok(event.as_json())
+/// Lowercase hex SHA-256 of `bytes`.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
 }
 
-// -- NMP Blossom upload --
+/// Build + sign a kind:24242 BUD-01 upload authorization event.
+async fn sign_bud01_upload_auth(
+    runtime: &NostrRuntime,
+    sha256_hex_value: &str,
+    note: &str,
+    clock: &dyn Clock,
+) -> Result<Event, CoreError> {
+    let tags = bud01_upload_auth_tags(sha256_hex_value, clock.now_unix_seconds())?;
+    let builder = EventBuilder::new(Kind::Custom(KIND_BLOSSOM_AUTH), note).tags(tags);
+    runtime
+        .client()
+        .sign_event_builder(builder)
+        .await
+        .map_err(|e| CoreError::Signer(format!("sign blossom upload auth: {e}")))
+}
 
-/// Stage `bytes`, dispatch `nmp.blossom.upload`, and adapt NMP's action result
-/// into the app's `BlossomUpload` descriptor.
+fn bud01_upload_auth_tags(
+    sha256_hex_value: &str,
+    now_unix_seconds: u64,
+) -> Result<Vec<Tag>, CoreError> {
+    let expiration = now_unix_seconds + AUTH_EXPIRATION_SECS;
+    Ok(vec![
+        parse_tag(&["t", "upload"])?,
+        parse_tag(&["x", sha256_hex_value])?,
+        parse_tag(&["expiration", &expiration.to_string()])?,
+    ])
+}
+
+/// PUT `bytes` to `<server>/upload` with a BUD-01 `Authorization: Nostr <b64>`
+/// header. Returns the parsed `BlossomUpload` descriptor.
 ///
 /// `width`, `height`, and `alt` are stamped onto the returned record but are
-/// NOT sent to the server. They remain app metadata used to build the NIP-92
-/// `imeta` tag on the publishing event.
+/// NOT sent to the server — they're metadata the caller uses to build a
+/// NIP-92 `imeta` tag on the publishing event. Pass `0` for unknown
+/// dimensions; iOS callers always know dim post-recompression.
 pub async fn upload_blob(
     runtime: &NostrRuntime,
     bytes: Vec<u8>,
@@ -189,6 +415,7 @@ pub async fn upload_blob(
     width: u32,
     height: u32,
     alt: String,
+    clock: &dyn Clock,
 ) -> Result<BlossomUpload, CoreError> {
     if bytes.is_empty() {
         return Err(CoreError::InvalidInput("upload bytes are empty".into()));
@@ -199,98 +426,45 @@ pub async fn upload_blob(
     }
 
     let size_bytes = bytes.len() as u64;
-    let signer_pubkey = runtime
-        .active_account_pubkey()
-        .ok_or(CoreError::NotAuthenticated)?;
-    let mut servers = query_blossom_servers(runtime.ndb(), &signer_pubkey)?;
-    if servers.is_empty() {
-        servers.push(DEFAULT_SERVER.to_string());
+    let sha = sha256_hex(&bytes);
+    let auth = sign_bud01_upload_auth(runtime, &sha, "Upload book photo", clock).await?;
+    let auth_b64 = STANDARD.encode(auth.as_json().as_bytes());
+    let endpoint = format!("{DEFAULT_SERVER}/upload");
+
+    let client = reqwest::Client::new();
+    let response = client
+        .put(&endpoint)
+        .header("Authorization", format!("Nostr {auth_b64}"))
+        .header("Content-Type", mime_clean)
+        .body(bytes)
+        .send()
+        .await
+        .map_err(|e| CoreError::Network(format!("blossom PUT: {e}")))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        return Err(CoreError::Network(format!(
+            "blossom upload failed: {status} {body}"
+        )));
     }
 
-    let staging_path = write_upload_staging_file(runtime.data_dir(), &bytes).await?;
-    let file_path = staging_path
-        .to_str()
-        .ok_or_else(|| CoreError::Cache("upload staging path is not valid UTF-8".into()))?
-        .to_string();
-    let action = nmp_blossom::UploadInput {
-        file_path,
-        content_type: Some(mime_clean.to_string()),
-        servers,
-        signer_pubkey: Some(signer_pubkey),
-    };
-
-    let action_result = runtime
-        .dispatch_nmp_action_for_result("blossom-upload", NMP_BLOSSOM_UPLOAD_NAMESPACE, &action)
-        .await;
-    if let Err(e) = tokio::fs::remove_file(&staging_path).await {
-        tracing::warn!(
-            path = %staging_path.display(),
-            error = %e,
-            "remove Blossom upload staging file"
-        );
-    }
-    let row = action_result?;
-    let result_json = row
-        .result
-        .as_deref()
-        .ok_or_else(|| CoreError::Network("NMP Blossom upload missing descriptor".into()))?;
-
-    upload_from_nmp_result(result_json, mime_clean, size_bytes, width, height, alt)
-}
-
-async fn write_upload_staging_file(data_dir: &Path, bytes: &[u8]) -> Result<PathBuf, CoreError> {
-    let dir = data_dir.join("nmp-upload-staging");
-    tokio::fs::create_dir_all(&dir)
+    // Server returns a Blob descriptor. We need at least `url`. The rest we
+    // already know locally (we just hashed/sized the bytes).
+    let descriptor: serde_json::Value = response
+        .json()
         .await
-        .map_err(|e| CoreError::Cache(format!("create upload staging dir: {e}")))?;
-    let path = dir.join(format!("blossom-{}.blob", Uuid::new_v4()));
-    tokio::fs::write(&path, bytes)
-        .await
-        .map_err(|e| CoreError::Cache(format!("write upload staging file: {e}")))?;
-    Ok(path)
-}
-
-fn upload_from_nmp_result(
-    result_json: &str,
-    fallback_mime: &str,
-    fallback_size_bytes: u64,
-    width: u32,
-    height: u32,
-    alt: String,
-) -> Result<BlossomUpload, CoreError> {
-    let descriptor: serde_json::Value = serde_json::from_str(result_json)
-        .map_err(|e| CoreError::Network(format!("NMP Blossom descriptor is not JSON: {e}")))?;
-    let selected = select_descriptor_value(&descriptor).ok_or_else(|| {
-        CoreError::Network("NMP Blossom descriptor missing successful URL".into())
-    })?;
-    let url = selected
+        .map_err(|e| CoreError::Network(format!("blossom response not JSON: {e}")))?;
+    let url = descriptor
         .get("url")
-        .and_then(serde_json::Value::as_str)
+        .and_then(|v| v.as_str())
         .map(str::to_string)
-        .ok_or_else(|| CoreError::Network("NMP Blossom descriptor missing `url`".into()))?;
-    let sha256_hex = descriptor
-        .get("sha256")
-        .or_else(|| selected.get("sha256"))
-        .and_then(serde_json::Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| CoreError::Network("NMP Blossom descriptor missing `sha256`".into()))?;
-    let size_bytes = descriptor
-        .get("size")
-        .or_else(|| selected.get("size"))
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(fallback_size_bytes);
-    let mime = descriptor
-        .get("type")
-        .or_else(|| selected.get("type"))
-        .and_then(serde_json::Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or(fallback_mime)
-        .to_string();
+        .ok_or_else(|| CoreError::Network("blossom response missing `url`".into()))?;
 
     Ok(BlossomUpload {
         url,
-        sha256_hex,
-        mime,
+        sha256_hex: sha,
+        mime: mime_clean.to_string(),
         size_bytes,
         width,
         height,
@@ -298,28 +472,17 @@ fn upload_from_nmp_result(
     })
 }
 
-fn select_descriptor_value(value: &serde_json::Value) -> Option<&serde_json::Value> {
-    if value
-        .get("url")
-        .and_then(serde_json::Value::as_str)
-        .is_some()
-    {
-        return Some(value);
+pub fn upload_snapshot(result: Result<BlossomUpload, CoreError>) -> BlossomUploadSnapshot {
+    match result {
+        Ok(upload) => BlossomUploadSnapshot {
+            upload: Some(upload),
+            error: String::new(),
+        },
+        Err(error) => BlossomUploadSnapshot {
+            upload: None,
+            error: error.to_string(),
+        },
     }
-    value
-        .get("servers")
-        .and_then(serde_json::Value::as_array)?
-        .iter()
-        .find(|server| {
-            server
-                .get("ok")
-                .and_then(serde_json::Value::as_bool)
-                .unwrap_or(false)
-                && server
-                    .get("url")
-                    .and_then(serde_json::Value::as_str)
-                    .is_some()
-        })
 }
 
 // -- Tests --
@@ -340,6 +503,32 @@ mod tests {
             .custom_created_at(Timestamp::from(ts))
             .sign_with_keys(keys)
             .expect("sign")
+    }
+
+    fn sample_upload() -> BlossomUpload {
+        BlossomUpload {
+            url: "https://blossom.example/blob".into(),
+            sha256_hex: "abc123".into(),
+            mime: "image/jpeg".into(),
+            size_bytes: 42,
+            width: 10,
+            height: 20,
+            alt: "cover".into(),
+        }
+    }
+
+    #[test]
+    fn upload_snapshot_projects_upload_or_error_state() {
+        let ok = upload_snapshot(Ok(sample_upload()));
+        assert_eq!(
+            ok.upload.as_ref().map(|upload| upload.url.as_str()),
+            Some("https://blossom.example/blob")
+        );
+        assert!(ok.error.is_empty());
+
+        let err = upload_snapshot(Err(CoreError::Network("offline".into())));
+        assert!(err.upload.is_none());
+        assert_eq!(err.error, "network error: offline");
     }
 
     #[test]
@@ -394,41 +583,207 @@ mod tests {
     }
 
     #[test]
-    fn nmp_flat_descriptor_maps_to_app_upload() {
-        let upload = upload_from_nmp_result(
-            r#"{"url":"https://b.example/blob.png","sha256":"abc123","size":42,"type":"image/png","uploaded":1}"#,
-            "application/octet-stream",
-            5,
-            320,
-            240,
-            "alt text".to_string(),
-        )
-        .expect("flat descriptor");
+    fn blossom_server_entry_projection_trims_validates_and_rejects_duplicates() {
+        let projection = blossom_server_entry_projection(BlossomServerEntryProjectionInput {
+            url: "  https://media.example.com  ".into(),
+            existing_servers: vec!["https://blossom.primal.net".into()],
+        });
+        let invalid = blossom_server_entry_projection(BlossomServerEntryProjectionInput {
+            url: "wss://relay.example.com".into(),
+            existing_servers: Vec::new(),
+        });
+        let duplicate = blossom_server_entry_projection(BlossomServerEntryProjectionInput {
+            url: " https://blossom.primal.net ".into(),
+            existing_servers: vec!["https://blossom.primal.net".into()],
+        });
 
-        assert_eq!(upload.url, "https://b.example/blob.png");
-        assert_eq!(upload.sha256_hex, "abc123");
-        assert_eq!(upload.mime, "image/png");
-        assert_eq!(upload.size_bytes, 42);
-        assert_eq!(upload.width, 320);
-        assert_eq!(upload.height, 240);
-        assert_eq!(upload.alt, "alt text");
+        assert_eq!(projection.submit_url, "https://media.example.com");
+        assert!(projection.is_valid);
+        assert!(!projection.is_duplicate);
+        assert!(projection.can_add);
+        assert!(!invalid.is_valid);
+        assert!(!invalid.can_add);
+        assert!(duplicate.is_duplicate);
+        assert!(!duplicate.can_add);
     }
 
     #[test]
-    fn nmp_aggregate_descriptor_uses_first_successful_server() {
-        let upload = upload_from_nmp_result(
-            r#"{"sha256":"def456","size":99,"type":"image/jpeg","uploaded":2,"servers":[{"server":"https://a.example","ok":false,"error":"nope"},{"server":"https://b.example","ok":true,"url":"https://b.example/blob.jpg"}]}"#,
-            "application/octet-stream",
-            5,
-            0,
-            0,
-            "".to_string(),
-        )
-        .expect("aggregate descriptor");
+    fn blossom_server_list_projection_adds_deletes_and_protects_last_server() {
+        let added = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: vec![" https://blossom.primal.net ".into()],
+            add_url: Some(" https://media.example.com ".into()),
+            remove_indexes: Vec::new(),
+            move_indexes: Vec::new(),
+            move_to_index: None,
+        });
+        assert_eq!(
+            added.servers,
+            vec!["https://blossom.primal.net", "https://media.example.com"]
+        );
+        assert!(added.can_save);
 
-        assert_eq!(upload.url, "https://b.example/blob.jpg");
-        assert_eq!(upload.sha256_hex, "def456");
-        assert_eq!(upload.mime, "image/jpeg");
-        assert_eq!(upload.size_bytes, 99);
+        let duplicate = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: added.servers.clone(),
+            add_url: Some("https://media.example.com".into()),
+            remove_indexes: Vec::new(),
+            move_indexes: Vec::new(),
+            move_to_index: None,
+        });
+        assert_eq!(duplicate.servers, added.servers);
+
+        let removed = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: duplicate.servers,
+            add_url: None,
+            remove_indexes: vec![0],
+            move_indexes: Vec::new(),
+            move_to_index: None,
+        });
+        assert_eq!(removed.servers, vec!["https://media.example.com"]);
+
+        let protected = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: removed.servers.clone(),
+            add_url: None,
+            remove_indexes: vec![0, 99],
+            move_indexes: Vec::new(),
+            move_to_index: None,
+        });
+        assert_eq!(protected.servers, removed.servers);
+        assert!(protected.can_save);
+
+        let malformed = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: vec![
+                "https://one.example.com".into(),
+                "https://two.example.com".into(),
+            ],
+            add_url: None,
+            remove_indexes: vec![0, 99],
+            move_indexes: Vec::new(),
+            move_to_index: None,
+        });
+        assert_eq!(malformed.servers, vec!["https://two.example.com"]);
+    }
+
+    #[test]
+    fn blossom_server_list_projection_reorders_like_platform_list() {
+        let moved_down = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: vec!["a".into(), "b".into(), "c".into(), "d".into()],
+            add_url: None,
+            remove_indexes: Vec::new(),
+            move_indexes: vec![1],
+            move_to_index: Some(3),
+        });
+        assert_eq!(moved_down.servers, vec!["a", "c", "b", "d"]);
+
+        let moved_to_end = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: vec!["a".into(), "b".into(), "c".into(), "d".into()],
+            add_url: None,
+            remove_indexes: Vec::new(),
+            move_indexes: vec![1],
+            move_to_index: Some(4),
+        });
+        assert_eq!(moved_to_end.servers, vec!["a", "c", "d", "b"]);
+
+        let moved_up = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: vec!["a".into(), "b".into(), "c".into(), "d".into()],
+            add_url: None,
+            remove_indexes: Vec::new(),
+            move_indexes: vec![2],
+            move_to_index: Some(0),
+        });
+        assert_eq!(moved_up.servers, vec!["c", "a", "b", "d"]);
+
+        let moved_multiple = blossom_server_list_projection(BlossomServerListProjectionInput {
+            servers: vec!["a".into(), "b".into(), "c".into(), "d".into(), "e".into()],
+            add_url: None,
+            remove_indexes: Vec::new(),
+            move_indexes: vec![1, 3],
+            move_to_index: Some(5),
+        });
+        assert_eq!(moved_multiple.servers, vec!["a", "c", "e", "b", "d"]);
+    }
+
+    #[test]
+    fn blossom_server_settings_snapshot_normalizes_and_surfaces_errors() {
+        let snapshot = blossom_server_settings_snapshot(Ok(vec![
+            " https://one.example.com ".into(),
+            "https://one.example.com".into(),
+            "https://two.example.com".into(),
+        ]));
+        assert_eq!(
+            snapshot.servers,
+            vec!["https://one.example.com", "https://two.example.com"]
+        );
+        assert!(snapshot.error_message.is_empty());
+
+        let failure = blossom_server_settings_snapshot(Err(CoreError::NotAuthenticated));
+        assert!(failure.servers.is_empty());
+        assert_eq!(failure.error_message, "not authenticated");
+    }
+
+    #[test]
+    fn blossom_server_settings_mutation_snapshot_preserves_requested_order_and_error_state() {
+        let success = blossom_server_settings_mutation_snapshot(
+            vec![
+                " https://one.example.com ".into(),
+                "https://two.example.com".into(),
+            ],
+            Ok("event123".into()),
+        );
+        assert_eq!(
+            success.servers,
+            vec!["https://one.example.com", "https://two.example.com"]
+        );
+        assert_eq!(success.event_id, "event123");
+        assert!(success.error_message.is_empty());
+
+        let failure = blossom_server_settings_mutation_snapshot(
+            vec!["https://one.example.com".into()],
+            Err(CoreError::Relay("offline".into())),
+        );
+        assert_eq!(failure.servers, vec!["https://one.example.com"]);
+        assert!(failure.event_id.is_empty());
+        assert_eq!(failure.error_message, "relay error: offline");
+    }
+
+    #[test]
+    fn sha256_hex_is_lowercase_64_chars() {
+        let h = sha256_hex(b"hello");
+        assert_eq!(h.len(), 64);
+        assert!(h
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+        // Known vector for "hello".
+        assert_eq!(
+            h,
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        );
+    }
+
+    #[test]
+    fn bud01_auth_event_has_required_tags() {
+        // Build the event via the same path the upload function uses, but
+        // sign locally so we can inspect the result without network IO.
+        let keys = Keys::generate();
+        let sha = sha256_hex(b"some bytes");
+        let tags = bud01_upload_auth_tags(&sha, 1_000).expect("auth tags");
+        let event = EventBuilder::new(Kind::Custom(KIND_BLOSSOM_AUTH), "Upload book photo")
+            .tags(tags)
+            .sign_with_keys(&keys)
+            .expect("sign");
+
+        assert_eq!(event.kind, Kind::Custom(24242));
+        let tag_pairs: Vec<(String, String)> = event
+            .tags
+            .iter()
+            .filter_map(|t| {
+                let s = t.as_slice();
+                Some((s.first()?.clone(), s.get(1)?.clone()))
+            })
+            .collect();
+        assert!(tag_pairs.contains(&("t".into(), "upload".into())));
+        assert!(tag_pairs.contains(&("x".into(), sha)));
+        assert!(tag_pairs
+            .iter()
+            .any(|(k, v)| k == "expiration" && v.parse::<u64>().is_ok()));
     }
 }

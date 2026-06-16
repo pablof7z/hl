@@ -3,9 +3,10 @@ import UIKit
 
 struct WhatsNewSheet: View {
 
-    let entries: [HighlighterWhatsNewEntry]
-    let onDismiss: () -> Void
+    let entries: [WhatsNewEntry]
+    let onSeen: (WhatsNewEntry) -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var didMarkSeen = false
 
     var body: some View {
         NavigationStack {
@@ -16,7 +17,9 @@ struct WhatsNewSheet: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .onDisappear {
-            onDismiss()
+            // Swipe-dismiss path. The button calls the same action before
+            // dismissing, so this is idempotent.
+            markSeenIfNeeded()
         }
     }
 
@@ -26,7 +29,7 @@ struct WhatsNewSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 subtitle
-                ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
+                ForEach(entries) { entry in
                     entrySection(entry)
                 }
                 gotItButton
@@ -45,9 +48,9 @@ struct WhatsNewSheet: View {
     }
 
     @ViewBuilder
-    private func entrySection(_ entry: HighlighterWhatsNewEntry) -> some View {
+    private func entrySection(_ entry: WhatsNewEntry) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(Self.dateline(for: entry.shippedAt))
+            Text(Self.dateline(for: entry.shippedAtUnixSeconds))
                 .font(.caption2.weight(.semibold))
                 .tracking(0.5)
                 .foregroundStyle(.secondary)
@@ -75,7 +78,7 @@ struct WhatsNewSheet: View {
         HStack {
             Spacer()
             Button("Got it") {
-                onDismiss()
+                markSeenIfNeeded()
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 dismiss()
             }
@@ -84,19 +87,17 @@ struct WhatsNewSheet: View {
         }
     }
 
-    private static let iso8601: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
-    }()
+    private func markSeenIfNeeded() {
+        guard !didMarkSeen, let newest = entries.first else { return }
+        didMarkSeen = true
+        onSeen(newest)
+    }
 
     // MARK: - Formatting
 
     /// "MAY 14 · 20:03" — uppercase short month, day no zero-pad, middle dot, 24h time.
-    private static func dateline(for shippedAt: String) -> String {
-        guard let date = iso8601.date(from: shippedAt) else {
-            return shippedAt
-        }
+    private static func dateline(for unixSeconds: UInt64) -> String {
+        let date = Date(timeIntervalSince1970: TimeInterval(unixSeconds))
         let cal = Calendar.current
         let comps = cal.dateComponents([.month, .day, .hour, .minute], from: date)
         let monthSymbols = cal.shortMonthSymbols
@@ -109,4 +110,8 @@ struct WhatsNewSheet: View {
         let minute = comps.minute ?? 0
         return String(format: "%@ %d \u{00B7} %02d:%02d", month, day, hour, minute)
     }
+}
+
+extension WhatsNewEntry: Identifiable {
+    public var id: UInt64 { shippedAtUnixSeconds }
 }

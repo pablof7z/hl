@@ -1,29 +1,33 @@
-//! Owns Highlighter's Rust runtime composition: NMP for protocol IO and
-//! identity, nostrdb for the app read model, and a nostr-sdk client used only
-//! as an event-builder/signing facade for existing feature modules.
+//! Owns the singleton `nostr_sdk::Client` + `nostrdb::Ndb` for the life of the
+//! app. Every feature module (groups, artifacts, highlights, recent_books)
+//! reads and writes through the references exposed here.
+//!
+//! Event persistence: we hand `nostr-ndb`'s `NdbDatabase` wrapper to
+//! `Client::builder().database(...)`, and nostr-sdk calls `save_event` on it
+//! for every event received via a subscription. `NdbDatabase::save_event`
+//! forwards to `ndb.process_event_with`, so we do NOT need a hand-rolled
+//! notification pump — the bridge is automatic.
 //!
 //! Async lifecycle: `HighlighterCore::new()` is a synchronous UniFFI
-//! constructor, so we own a dedicated tokio `Runtime` for NMP-backed async
-//! observers and signer installation.
+//! constructor, so we own a dedicated tokio `Runtime` for connecting to
+//! relays and installing signers. The Client itself is thread-safe and
+//! cloneable internally.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
-use futures::{future::BoxFuture, StreamExt};
-use nmp_core::planner::InterestLifecycle;
-use nmp_core::typed_projections::ActionResultRow;
+use nostr_ndb::NdbDatabase;
 use nostr_sdk::prelude::*;
-use nostrdb::{Config as NdbConfig, Filter as NdbFilter, Ndb};
+use nostrdb::{Config as NdbConfig, Ndb};
 use tokio::runtime::Runtime;
 use tokio::task::JoinHandle;
 
 use crate::errors::CoreError;
-use crate::events::EventCallback;
+use crate::events::{DataChangeType, Delta, EventCallback};
 use crate::groups::{KIND_GROUP_ADMINS, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA};
-use crate::models::RelayDiagnostic;
-use crate::nmp_runtime::{HighlighterNmpRuntime, NmpInterestHandle};
+use crate::models::{RelayDiagnostic, RelayStatus as AppRelayStatus};
 
 /// NIP-51 "simple groups" list (replaceable). A user publishes this to
 /// enumerate the NIP-29 groups they're a member of; each entry is a
@@ -35,52 +39,45 @@ use crate::relays::{
 };
 
 /// Shared pointer to the app's event-callback slot. `HighlighterCore` owns
-/// the slot; NMP's diagnostics observer uses it to dispatch
-/// `RelayStatusChanged` deltas without holding a direct reference back to
-/// the core.
+/// the slot; `NostrRuntime`'s relay diagnostics watchers borrow it (via this
+/// type alias) to dispatch app-scope deltas without holding a direct
+/// reference back to the core.
 pub type EventCallbackSlot = Arc<parking_lot::RwLock<Option<Arc<dyn EventCallback>>>>;
+type DiagnosticsCallbackSlot = Arc<parking_lot::RwLock<Option<EventCallbackSlot>>>;
+type DiagnosticsEventsEnabled = Arc<AtomicBool>;
+type RelayDiagnosticsMap = Arc<parking_lot::RwLock<HashMap<String, RelayDiagnostic>>>;
+type RelayDiagnosticsWatchers = Arc<parking_lot::RwLock<HashMap<String, JoinHandle<()>>>>;
 
-/// Local nostrdb map size. LMDB reserves address space, not disk, and the
-/// cache grows on demand as events arrive.
+/// LMDB map size for the iOS cache. 2 GiB gives plenty of headroom for a
+/// highlights/artifacts cache while staying well below iOS's per-app storage
+/// caps. Matches the order of magnitude TENEX uses (8 GiB on desktop).
 const NDB_MAPSIZE_BYTES: usize = 2 * 1024 * 1024 * 1024;
 
 pub struct NostrRuntime {
     client: Client,
     ndb: Arc<Ndb>,
-    nmp: Arc<HighlighterNmpRuntime>,
     /// Held as `Option` so Drop can `take()` it and call
     /// `shutdown_background()`. Without that, Tokio's default `Drop` blocks
-    /// the thread waiting for long-lived observer tasks to complete.
+    /// the thread waiting for every spawned task to complete — which hangs
+    /// forever on the relay-connect task, making test binaries (and app
+    /// teardowns) fail to exit.
     rt: Option<Runtime>,
-    /// Cached copy of the relay config that was last applied to NMP. Read by
-    /// the `*_urls()` accessors so per-role subscription routing can pick the
-    /// right subset without re-querying nostrdb.
+    /// Cached copy of the relay config that was last applied to the pool.
+    /// `Arc`-wrapped so background reconcile tasks can write to it without
+    /// holding a lifetime on the runtime. Read by the `*_urls()` accessors
+    /// so per-role subscription routing can pick the right subset without
+    /// re-querying nostrdb.
     current_relays: Arc<parking_lot::RwLock<Vec<RelayConfig>>>,
-    /// NMP logical interests opened under legacy subscription handles. This
-    /// keeps the existing Rust/native lifecycle API while NMP owns the wire
-    /// subscription registry and planner.
-    nmp_subscriptions: Arc<parking_lot::RwLock<HashMap<String, Vec<NmpInterestHandle>>>>,
-    /// Event-driven side tasks associated with NMP subscription ids. Used for
-    /// Rust-owned reactions to NMP-mirrored events, never for relay IO.
-    nmp_subscription_tasks: Arc<parking_lot::RwLock<HashMap<String, JoinHandle<()>>>>,
+    /// Live per-relay diagnostics, keyed by URL. Seeded from nostr-sdk's
+    /// relay pool whenever the pool is reconciled or the Network Settings
+    /// screen asks for a snapshot, then updated by SDK relay status events.
+    relay_diagnostics: RelayDiagnosticsMap,
+    diagnostics_watchers: RelayDiagnosticsWatchers,
+    diagnostics_callback_slot: DiagnosticsCallbackSlot,
+    diagnostics_events_enabled: DiagnosticsEventsEnabled,
     /// Path the LMDB-backed nostrdb was opened at. Used by features that
     /// need to size the on-disk cache.
     data_dir: PathBuf,
-}
-
-pub(crate) fn signed_event_from_action_result(
-    source: &str,
-    result_json: Option<&str>,
-) -> Result<Event, CoreError> {
-    let result_json = result_json
-        .ok_or_else(|| CoreError::Relay(format!("{source}: NMP publish missing signed event")))?;
-    let result: serde_json::Value = serde_json::from_str(result_json)
-        .map_err(|e| CoreError::Relay(format!("{source}: NMP publish result is not JSON: {e}")))?;
-    let event_json = result
-        .get("event")
-        .ok_or_else(|| CoreError::Relay(format!("{source}: NMP publish result missing `event`")))?;
-    Event::from_json(event_json.to_string())
-        .map_err(|e| CoreError::Relay(format!("{source}: NMP publish event decode: {e}")))
 }
 
 impl Drop for NostrRuntime {
@@ -92,9 +89,9 @@ impl Drop for NostrRuntime {
 }
 
 impl NostrRuntime {
-    /// Construct the runtime and seed NMP with the default relay roles.
-    /// Returns immediately once local state (Ndb + NMP + signer facade) is
-    /// initialized.
+    /// Construct the runtime and kick off a fire-and-forget relay connect.
+    /// Returns immediately once local state (Ndb + Client) is initialized;
+    /// network connection progresses asynchronously.
     pub fn new() -> Result<Self, CoreError> {
         let data_dir = default_data_dir()?;
         Self::with_data_dir(data_dir)
@@ -106,18 +103,19 @@ impl NostrRuntime {
         std::fs::create_dir_all(&data_dir)
             .map_err(|e| CoreError::Cache(format!("create data dir: {e}")))?;
 
+        let ndb_config = NdbConfig::new().set_mapsize(NDB_MAPSIZE_BYTES);
         let db_path_str = data_dir
             .to_str()
             .ok_or_else(|| CoreError::Cache("data dir is not valid UTF-8".into()))?;
-        let ndb_config = NdbConfig::new().set_mapsize(NDB_MAPSIZE_BYTES);
         let ndb = Ndb::new(db_path_str, &ndb_config)
             .map_err(|e| CoreError::Cache(format!("open nostrdb: {e}")))?;
         let ndb = Arc::new(ndb);
 
-        // Compatibility facade only: NMP owns relay IO and mirrors accepted
-        // events into nostrdb. Feature modules still use nostr-sdk's
-        // EventBuilder helpers through this client, with an NMP-backed signer.
-        let client = Client::builder().build();
+        // Hand the SAME Ndb handle to nostr-sdk so incoming relay events auto-
+        // persist. `Ndb` is internally Arc-backed so cloning the inner value
+        // is cheap and doesn't open a second LMDB env.
+        let ndb_database = NdbDatabase::from((*ndb).clone());
+        let client = Client::builder().database(ndb_database).build();
 
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -125,21 +123,15 @@ impl NostrRuntime {
             .build()
             .map_err(|e| CoreError::Other(format!("build tokio runtime: {e}")))?;
 
-        let initial_relays = seed_defaults();
-        let nmp = Arc::new(HighlighterNmpRuntime::new(
-            &data_dir,
-            ndb.clone(),
-            &initial_relays,
-        )?);
-
         let runtime = Self {
             client,
             ndb,
-            nmp,
             rt: Some(rt),
             current_relays: Arc::new(parking_lot::RwLock::new(Vec::new())),
-            nmp_subscriptions: Arc::new(parking_lot::RwLock::new(HashMap::new())),
-            nmp_subscription_tasks: Arc::new(parking_lot::RwLock::new(HashMap::new())),
+            relay_diagnostics: Arc::new(parking_lot::RwLock::new(HashMap::new())),
+            diagnostics_watchers: Arc::new(parking_lot::RwLock::new(HashMap::new())),
+            diagnostics_callback_slot: Arc::new(parking_lot::RwLock::new(None)),
+            diagnostics_events_enabled: Arc::new(AtomicBool::new(false)),
             data_dir,
         };
 
@@ -148,7 +140,7 @@ impl NostrRuntime {
         Ok(runtime)
     }
 
-    /// Access the nostr-sdk client used as an event-builder/signing facade.
+    /// Access the Client for publishing / subscriptions.
     pub fn client(&self) -> &Client {
         &self.client
     }
@@ -158,171 +150,10 @@ impl NostrRuntime {
         &self.ndb
     }
 
-    /// Insert a successfully-accepted local publish into nostrdb so the next
-    /// Rust projection refresh sees the same source of truth as relay events.
-    pub(crate) fn cache_accepted_event(
-        &self,
-        source: &str,
-        event: &Event,
-    ) -> Result<(), CoreError> {
-        let source = source.trim();
-        let source = if source.is_empty() {
-            "local-publish"
-        } else {
-            source
-        };
-        let line = format!("[\"EVENT\",\"{source}\",{}]", event.as_json());
-        self.ndb
-            .process_event(&line)
-            .map_err(|e| CoreError::Cache(format!("cache accepted event: {e}")))
-    }
-
     /// Tokio handle so feature modules can drive async work without standing
     /// up their own runtime.
     pub fn runtime_handle(&self) -> tokio::runtime::Handle {
         self.rt().handle().clone()
-    }
-
-    pub(crate) fn open_nmp_filter(
-        &self,
-        id: &SubscriptionId,
-        label: &str,
-        filter: Filter,
-        relay_pin: Option<String>,
-    ) -> Result<(), CoreError> {
-        self.open_nmp_filter_with_lifecycle(
-            id,
-            label,
-            filter,
-            relay_pin,
-            InterestLifecycle::Tailing,
-        )
-    }
-
-    fn open_nmp_filter_with_lifecycle(
-        &self,
-        id: &SubscriptionId,
-        label: &str,
-        filter: Filter,
-        relay_pin: Option<String>,
-        lifecycle: InterestLifecycle,
-    ) -> Result<(), CoreError> {
-        let owner = id.to_string();
-        let handle = self
-            .nmp
-            .open_filter_interest(label, &owner, filter, relay_pin, lifecycle)?;
-        self.nmp_subscriptions
-            .write()
-            .entry(owner)
-            .or_default()
-            .push(handle);
-        Ok(())
-    }
-
-    pub(crate) fn open_nmp_filter_on_relays(
-        &self,
-        id: &SubscriptionId,
-        label: &str,
-        filter: Filter,
-        relays: Vec<String>,
-    ) -> Result<(), CoreError> {
-        self.open_nmp_filter_on_relays_with_lifecycle(
-            id,
-            label,
-            filter,
-            relays,
-            InterestLifecycle::Tailing,
-        )
-    }
-
-    pub(crate) fn open_nmp_filter_once_on_relays(
-        &self,
-        id: &SubscriptionId,
-        label: &str,
-        filter: Filter,
-        relays: Vec<String>,
-    ) -> Result<(), CoreError> {
-        self.open_nmp_filter_on_relays_with_lifecycle(
-            id,
-            label,
-            filter,
-            relays,
-            InterestLifecycle::OneShot,
-        )
-    }
-
-    pub(crate) fn open_nmp_filter_once_and_wait<'a>(
-        &'a self,
-        label: &'a str,
-        filter: Filter,
-        relays: Vec<String>,
-        ndb_filters: Vec<NdbFilter>,
-        timeout: Duration,
-    ) -> BoxFuture<'a, Result<bool, CoreError>> {
-        let sub = self
-            .ndb
-            .subscribe(&ndb_filters)
-            .map_err(|e| CoreError::Cache(format!("{label}: ndb subscribe: {e}")));
-        Box::pin(async move {
-            let sub = sub?;
-            let id = SubscriptionId::generate();
-            self.open_nmp_filter_once_on_relays(&id, label, filter, relays)?;
-
-            let observed = {
-                let ndb = self.ndb.clone();
-                let mut stream = sub.stream(&ndb).notes_per_await(32);
-                matches!(
-                    tokio::time::timeout(timeout, stream.next()).await,
-                    Ok(Some(keys)) if !keys.is_empty()
-                )
-            };
-            self.drop_subscription(id);
-            Ok(observed)
-        })
-    }
-
-    fn open_nmp_filter_on_relays_with_lifecycle(
-        &self,
-        id: &SubscriptionId,
-        label: &str,
-        filter: Filter,
-        relays: Vec<String>,
-        lifecycle: InterestLifecycle,
-    ) -> Result<(), CoreError> {
-        let relays: Vec<String> = relays
-            .into_iter()
-            .map(|url| url.trim().to_string())
-            .filter(|url| !url.is_empty())
-            .collect();
-        if relays.is_empty() {
-            return self.open_nmp_filter_with_lifecycle(id, label, filter, None, lifecycle);
-        }
-
-        let owner = id.to_string();
-        let mut opened = Vec::with_capacity(relays.len());
-        for relay in relays {
-            match self.nmp.open_filter_interest(
-                label,
-                &owner,
-                filter.clone(),
-                Some(relay),
-                lifecycle.clone(),
-            ) {
-                Ok(handle) => opened.push(handle),
-                Err(e) => {
-                    for handle in opened {
-                        self.nmp.close_interest(handle);
-                    }
-                    return Err(e);
-                }
-            }
-        }
-        self.nmp_subscriptions
-            .write()
-            .entry(owner)
-            .or_default()
-            .extend(opened);
-        Ok(())
     }
 
     /// Internal accessor: always returns the Runtime while the struct is
@@ -339,120 +170,25 @@ impl NostrRuntime {
         &self.data_dir
     }
 
-    /// Resolved NMP store directory, sibling to the nostrdb cache. Exposed
-    /// for diagnostics/tests only; NMP owns the contents.
-    pub fn nmp_data_dir(&self) -> &std::path::Path {
-        self.nmp.storage_dir()
+    /// Install a signer on the Client. Called from `session` on successful
+    /// nsec login or bunker pairing.
+    pub fn set_signer<T>(&self, signer: T)
+    where
+        T: IntoNostrSigner,
+    {
+        self.rt().block_on(async {
+            self.client.set_signer(signer).await;
+        });
     }
 
-    /// Install the NMP-backed signer facade on the compatibility client.
-    pub fn install_nmp_signer(&self) {
-        self.rt().block_on(self.install_nmp_signer_async());
-    }
-
-    pub async fn install_nmp_signer_async(&self) {
-        let signer = self.nmp.nostr_signer();
+    /// Async signer install for UniFFI async entrypoints already running on
+    /// Tokio. The sync wrapper above cannot be called from those contexts
+    /// because `Runtime::block_on` would try to start a nested runtime.
+    pub async fn set_signer_async<T>(&self, signer: T)
+    where
+        T: IntoNostrSigner,
+    {
         self.client.set_signer(signer).await;
-    }
-
-    /// Apply the nsec identity WITHOUT the network-bound signer install. This is
-    /// the fast, synchronous half of `set_local_nsec_signer`: it parses the
-    /// secret, registers the local signer, and marks it active in NMP's identity
-    /// reducer (no relay I/O). Used by the sign-in dispatch path to establish the
-    /// active account synchronously on the actor thread, so a subsequent
-    /// superseding sign-in observes the correct prior identity. Idempotent:
-    /// NMP's `add_signer`/`identity.add` dedup by pubkey, so the later full
-    /// `set_local_nsec_signer` re-apply is a no-op.
-    pub fn apply_nsec_identity(&self, nsec: &str) -> Result<String, CoreError> {
-        self.nmp.sign_in_nsec(nsec)
-    }
-
-    /// Install a local signer through NMP, then bind the compatibility
-    /// event-builder client to NMP's signer port.
-    pub fn set_local_nsec_signer(&self, nsec: &str) -> Result<String, CoreError> {
-        let active_pubkey = self.nmp.sign_in_nsec(nsec)?;
-        self.install_nmp_signer();
-        Ok(active_pubkey)
-    }
-
-    pub fn start_nostrconnect_uri(
-        &self,
-        options: &crate::models::NostrConnectOptions,
-    ) -> Result<String, CoreError> {
-        self.nmp.nostrconnect_uri(options)
-    }
-
-    pub fn active_account_pubkey(&self) -> Option<String> {
-        self.nmp.active_pubkey()
-    }
-
-    pub(crate) async fn dispatch_nmp_action_for_result<T: serde::Serialize>(
-        &self,
-        source: &str,
-        namespace: &str,
-        action: &T,
-    ) -> Result<ActionResultRow, CoreError> {
-        self.nmp
-            .dispatch_action_for_result(source, namespace, action)
-            .await
-    }
-
-    pub async fn wait_for_signer_pair_after(
-        &self,
-        previous: Option<String>,
-    ) -> Result<String, CoreError> {
-        let pubkey = self.nmp.wait_for_signer_pair_after(previous).await?;
-        self.install_nmp_signer_async().await;
-        Ok(pubkey)
-    }
-
-    /// Register a pasted bunker URI with NMP and wait until the identity actor
-    /// exposes the resolved remote signer account.
-    pub async fn sign_in_bunker_uri(&self, uri: &str) -> Result<String, CoreError> {
-        let previous = self.nmp.active_pubkey();
-        self.nmp.sign_in_bunker_uri(uri)?;
-        self.wait_for_signer_pair_after(previous).await
-    }
-
-    /// Begin a NIP-55 sign-in (ADR-0048 Stage 2) and wait until the identity
-    /// actor exposes the paired account.
-    ///
-    /// The wait deliberately uses `previous = None` ("any active account"),
-    /// not the dispatch-time account: on a fresh interactive sign-in the app
-    /// is signed out (None == change-wait), and on a session restore NMP's
-    /// own external-signer restore hook may have re-activated the account
-    /// BEFORE this call — a change-wait would then dead-wait into a timeout
-    /// and wrongly clear the stored credential. hl has no account switching
-    /// (logout tears the session down first), so "any active account" is
-    /// exactly the paired one.
-    pub async fn sign_in_nip55(&self, signer_package: Option<&str>) -> Result<String, CoreError> {
-        // Kernel-side session restore (the external-signer Restore hook) may
-        // have already re-activated the NIP-55 account before this dispatch.
-        // Complete immediately instead of re-running the interactive
-        // get_public_key handshake — re-prompting the signer app on every
-        // cold start is both redundant and hostile UX.
-        if let Some(active) = self.nmp.active_pubkey() {
-            self.install_nmp_signer_async().await;
-            return Ok(active);
-        }
-        self.nmp.sign_in_nip55(signer_package);
-        self.wait_for_signer_pair_after(None).await
-    }
-
-    /// Deliver a raw `ExternalSignerResponse` JSON back to the NIP-55 driver (D7).
-    pub fn nmp_deliver_external_signer_response(&self, response_json: &str) {
-        self.nmp.deliver_external_signer_response(response_json);
-    }
-
-    /// Blocking timed drain of the next outbound `ExternalSignerRequest`
-    /// (D8 — parks in the channel `recv_timeout`, never a poll).
-    pub fn nmp_next_signer_request(&self) -> crate::nmp_runtime::SignerRequestDrain {
-        self.nmp.next_signer_request()
-    }
-
-    /// Remove the active account from the NMP identity reducer.
-    pub fn remove_nmp_account(&self, pubkey_hex: &str) {
-        self.nmp.remove_account(pubkey_hex);
     }
 
     /// Remove the active signer. Called from `session::logout`.
@@ -463,28 +199,32 @@ impl NostrRuntime {
     }
 
     /// Install a global, long-lived subscription for the current user's
-    /// NIP-29 group metadata + membership. NMP owns the wire subscription and
-    /// mirrors incoming events into nostrdb. Returns the subscription id so
-    /// `logout()` can drop it.
+    /// NIP-29 group metadata + membership. Incoming events are persisted
+    /// into nostrdb automatically via the `NdbDatabase` bridge wired into
+    /// the Client. Returns the subscription id so `logout()` can drop it.
+    ///
+    /// Fire-and-forget: failures are logged, never surfaced. If relays are
+    /// still connecting the subscribe will buffer until they come up.
     pub fn spawn_membership_subscription(&self, pubkey: PublicKey) -> SubscriptionId {
         let id = SubscriptionId::generate();
-        // Stage 1 of the two-stage NIP-29 join-set query (mirrors
-        // `web/src/routes/rooms/+page.svelte`): pull the user's
-        // kind:39001/39002 events. Metadata (kind:39000) lives under
-        // different indexing (`d` tag, no `p`), so it's pulled in
-        // stage 2 by `spawn_group_metadata_subscription` once the pump
-        // sees a membership event for each group.
-        let filter = Filter::new()
-            .kinds([
-                Kind::Custom(KIND_GROUP_ADMINS),
-                Kind::Custom(KIND_GROUP_MEMBERS),
-            ])
-            .pubkey(pubkey);
-        if let Err(e) =
-            self.open_nmp_filter_on_relays(&id, "rooms/membership", filter, self.rooms_urls())
-        {
-            tracing::warn!(error = %e, "failed to open NMP membership interest");
-        }
+        let client = self.client.clone();
+        let id_clone = id.clone();
+        let urls = self.rooms_urls();
+        self.rt().spawn(async move {
+            // Stage 1 of the two-stage NIP-29 join-set query (mirrors
+            // `web/src/routes/rooms/+page.svelte`): pull the user's
+            // kind:39001/39002 events. Metadata (kind:39000) lives under
+            // different indexing (`d` tag, no `p`), so it's pulled in
+            // stage 2 by `spawn_group_metadata_subscription` once the pump
+            // sees a membership event for each group.
+            let filter = Filter::new()
+                .kinds([
+                    Kind::Custom(KIND_GROUP_ADMINS),
+                    Kind::Custom(KIND_GROUP_MEMBERS),
+                ])
+                .pubkey(pubkey);
+            subscribe_routed(&client, id_clone, filter, urls, "rooms/membership").await;
+        });
         id
     }
 
@@ -493,10 +233,14 @@ impl NostrRuntime {
     /// profile view opens. Fire-and-forget; failures are logged.
     pub fn spawn_contacts_subscription(&self, pubkey: PublicKey) -> SubscriptionId {
         let id = SubscriptionId::generate();
-        let filter = Filter::new().kinds([Kind::Custom(3)]).author(pubkey);
-        if let Err(e) = self.open_nmp_filter(&id, "contacts", filter, None) {
-            tracing::warn!(error = %e, "failed to open NMP contacts interest");
-        }
+        let client = self.client.clone();
+        let id_clone = id.clone();
+        self.rt().spawn(async move {
+            let filter = Filter::new().kinds([Kind::Custom(3)]).author(pubkey);
+            if let Err(e) = client.subscribe_with_id(id_clone, filter, None).await {
+                tracing::warn!(error = %e, "failed to subscribe to contacts feed");
+            }
+        });
         id
     }
 
@@ -509,19 +253,16 @@ impl NostrRuntime {
         if d_tag.is_empty() {
             return;
         }
-        let id = SubscriptionId::generate();
-        let filter = Filter::new()
-            .kinds([Kind::Custom(30023)])
-            .author(author)
-            .custom_tag(SingleLetterTag::lowercase(Alphabet::D), d_tag);
-        if let Err(e) = self.open_nmp_filter_once_on_relays(
-            &id,
-            "indexer/article-backfill",
-            filter,
-            self.indexer_urls(),
-        ) {
-            tracing::warn!(error = %e, "failed to open NMP article backfill interest");
-        }
+        let client = self.client.clone();
+        let urls = self.indexer_urls();
+        self.rt().spawn(async move {
+            let id = SubscriptionId::generate();
+            let filter = Filter::new()
+                .kinds([Kind::Custom(30023)])
+                .author(author)
+                .custom_tag(SingleLetterTag::lowercase(Alphabet::D), d_tag);
+            subscribe_routed(&client, id, filter, urls, "indexer/article-backfill").await;
+        });
     }
 
     /// Stage 2 of the join-set query: fetch metadata for the supplied
@@ -531,18 +272,15 @@ impl NostrRuntime {
         if group_ids.is_empty() {
             return;
         }
-        let id = SubscriptionId::generate();
-        let filter = Filter::new()
-            .kinds([Kind::Custom(KIND_GROUP_METADATA)])
-            .identifiers(group_ids);
-        if let Err(e) = self.open_nmp_filter_once_on_relays(
-            &id,
-            "rooms/group-metadata",
-            filter,
-            self.rooms_urls(),
-        ) {
-            tracing::warn!(error = %e, "failed to open NMP group metadata interest");
-        }
+        let client = self.client.clone();
+        let urls = self.rooms_urls();
+        self.rt().spawn(async move {
+            let id = SubscriptionId::generate();
+            let filter = Filter::new()
+                .kinds([Kind::Custom(KIND_GROUP_METADATA)])
+                .identifiers(group_ids);
+            subscribe_routed(&client, id, filter, urls, "rooms/group-metadata").await;
+        });
     }
 
     /// Catalog subscription for the rooms explorer: pull every NIP-29 group
@@ -552,12 +290,13 @@ impl NostrRuntime {
     /// on logout.
     pub fn spawn_all_rooms_subscription(&self) -> SubscriptionId {
         let id = SubscriptionId::generate();
-        let filter = Filter::new().kinds([Kind::Custom(KIND_GROUP_METADATA)]);
-        if let Err(e) =
-            self.open_nmp_filter_on_relays(&id, "rooms/all-rooms", filter, self.rooms_urls())
-        {
-            tracing::warn!(error = %e, "failed to open NMP all-rooms interest");
-        }
+        let client = self.client.clone();
+        let id_clone = id.clone();
+        let urls = self.rooms_urls();
+        self.rt().spawn(async move {
+            let filter = Filter::new().kinds([Kind::Custom(KIND_GROUP_METADATA)]);
+            subscribe_routed(&client, id_clone, filter, urls, "rooms/all-rooms").await;
+        });
         id
     }
 
@@ -570,43 +309,102 @@ impl NostrRuntime {
     /// Strategy: install a long-lived subscription on the indexer pool for
     /// kind:10002 + kind:30078 authored by the user (so cross-device edits
     /// land in cache automatically), then run a one-shot fetch with a
-    /// short timeout, and finally re-apply the freshly-populated rows to NMP.
+    /// short timeout, and finally re-run `apply_relay_config` against the
+    /// freshly-populated cache. The re-apply diffs against the current
+    /// seed-default pool, removes the seeds that aren't the user's, adds
+    /// the user's actual outbox/inbox, and reconnects.
     ///
     /// Returns the long-lived subscription id so logout can drop it.
     pub fn spawn_user_relay_config_bootstrap(&self, user_pubkey: PublicKey) -> SubscriptionId {
         let id = SubscriptionId::generate();
-        let filter = Filter::new()
-            .kinds([Kind::Custom(10002), Kind::Custom(30078)])
-            .author(user_pubkey);
-        if let Err(e) =
-            self.open_nmp_filter_on_relays(&id, "indexer/user-relays", filter, self.indexer_urls())
-        {
-            tracing::warn!(error = %e, "failed to open NMP user relay config interest");
-        }
-
-        let pk_bytes: [u8; 32] = user_pubkey.to_bytes();
-        let ndb_filter = NdbFilter::new()
-            .kinds([10002u64, 30078u64])
-            .authors([&pk_bytes])
-            .build();
-        let sub = match self.ndb.subscribe(&[ndb_filter]) {
-            Ok(sub) => sub,
-            Err(e) => {
-                tracing::warn!(error = %e, "user relay config nostrdb observer");
-                return id;
-            }
-        };
-
+        let id_clone = id.clone();
+        let client = self.client.clone();
         let ndb = self.ndb.clone();
         let cache = self.current_relays.clone();
-        let nmp = self.nmp.clone();
+        let diagnostics = self.relay_diagnostics.clone();
+        let watchers = self.diagnostics_watchers.clone();
+        let callback_slot = self.diagnostics_callback_slot.clone();
+        let events_enabled = self.diagnostics_events_enabled.clone();
+        let runtime_handle = self.runtime_handle();
         let user_hex = user_pubkey.to_hex();
-        let task = self.rt().spawn(async move {
-            run_user_relay_config_observer(nmp, ndb, cache, sub, user_hex).await;
+        let urls = self.indexer_urls();
+        self.rt().spawn(async move {
+            // Long-lived sub: future kind:10002 / kind:30078 publications
+            // by the user (e.g. updating their NIP-65 from another client)
+            // land in cache automatically.
+            let live_filter = Filter::new()
+                .kinds([Kind::Custom(10002), Kind::Custom(30078)])
+                .author(user_pubkey);
+            subscribe_routed(
+                &client,
+                id_clone,
+                live_filter.clone(),
+                urls.clone(),
+                "indexer/user-nip65-live",
+            )
+            .await;
+
+            // One-shot fetch — give the indexer pool 5s to reply with the
+            // existing event so we can re-apply the config now, not "next
+            // time the user logs in". Routes to the same indexer URLs the
+            // sub uses; falls back to the default pool when none are set.
+            let fetched = if urls.is_empty() {
+                client
+                    .fetch_events(live_filter.clone(), std::time::Duration::from_secs(5))
+                    .await
+            } else {
+                client
+                    .fetch_events_from(urls.clone(), live_filter, std::time::Duration::from_secs(5))
+                    .await
+            };
+            match fetched {
+                Ok(events) => {
+                    tracing::info!(
+                        user = %user_hex,
+                        events = events.len(),
+                        "user NIP-65/30078 bootstrap fetched"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(user = %user_hex, error = %e, "user NIP-65 bootstrap fetch");
+                }
+            }
+
+            // Now re-apply: query_relays merges the freshly-cached
+            // kind:10002 + kind:30078 (or falls back to seed_defaults).
+            let rows = query_relays(&ndb, &user_hex).unwrap_or_else(|e| {
+                tracing::warn!(error = %e, "user NIP-65 bootstrap re-query");
+                seed_defaults()
+            });
+            apply_relay_config(&client, &rows).await;
+            pin_relay_for_read(&client, purple_pages_relay()).await;
+            pin_relay_for_read(&client, highlighter_relay()).await;
+            sync_relay_diagnostics_from_pool(
+                &client,
+                diagnostics.clone(),
+                watchers.clone(),
+                callback_slot.clone(),
+                events_enabled.clone(),
+                runtime_handle.clone(),
+            )
+            .await;
+            client.connect().await;
+            sync_relay_diagnostics_from_pool(
+                &client,
+                diagnostics,
+                watchers,
+                callback_slot,
+                events_enabled,
+                runtime_handle,
+            )
+            .await;
+            *cache.write() = rows.clone();
+            tracing::info!(
+                user = %user_hex,
+                relays = rows.len(),
+                "user NIP-65 bootstrap applied"
+            );
         });
-        self.nmp_subscription_tasks
-            .write()
-            .insert(id.to_string(), task);
         id
     }
 
@@ -619,26 +417,45 @@ impl NostrRuntime {
     /// strfry deployments).
     ///
     /// Fire-and-forget. Events received during reconciliation land in
-    /// nostrdb through NMP's raw event mirror. Sync runs in parallel against
-    /// each relay; the per-relay timeout is short so a non-NIP-77 relay in
-    /// the list can't block the others.
+    /// nostrdb via the `NdbDatabase` bridge wired into the Client, so
+    /// the outbox planner picks them up on its next compute. Sync runs
+    /// in parallel against each relay; the per-relay timeout is short
+    /// so a non-NIP-77 relay in the list can't block the others.
     /// No-op when `authors` is empty.
     pub fn spawn_negentropy_sync_for_follows(&self, authors: Vec<PublicKey>) {
         if authors.is_empty() {
             return;
         }
-        let id = SubscriptionId::generate();
-        let relays: Vec<String> = negentropy_sync_relays()
-            .iter()
-            .map(|relay| (*relay).to_string())
-            .collect();
-        let filter = Filter::new()
-            .kinds([Kind::Custom(0), Kind::Custom(3), Kind::Custom(10002)])
-            .authors(authors);
-        if let Err(e) =
-            self.open_nmp_filter_once_on_relays(&id, "sync/follows-social-trio", filter, relays)
-        {
-            tracing::warn!(error = %e, "failed to open NMP follows social-trio sync interest");
+        for relay in negentropy_sync_relays() {
+            let client = self.client.clone();
+            let count = authors.len();
+            let authors = authors.clone();
+            let relay = relay.clone();
+            self.rt().spawn(async move {
+                pin_relay_for_read(&client, &relay).await;
+
+                let filter = Filter::new()
+                    .kinds([Kind::Custom(0), Kind::Custom(3), Kind::Custom(10002)])
+                    .authors(authors);
+                let opts = SyncOptions::default().direction(SyncDirection::Down);
+
+                match client.sync_with([&relay], filter, &opts).await {
+                    Ok(output) => {
+                        let recon = &output.val;
+                        tracing::info!(
+                            relay = %relay,
+                            authors = count,
+                            local = recon.local.len(),
+                            remote = recon.remote.len(),
+                            received = recon.received.len(),
+                            "negentropy sync complete"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(relay = %relay, authors = count, error = %e, "negentropy sync failed");
+                    }
+                }
+            });
         }
     }
 
@@ -656,15 +473,13 @@ impl NostrRuntime {
             return None;
         }
         let id = SubscriptionId::generate();
-        let filter = Filter::new().kinds([Kind::Custom(10002)]).authors(follows);
-        if let Err(e) = self.open_nmp_filter_on_relays(
-            &id,
-            "indexer/follows-nip65",
-            filter,
-            self.indexer_urls(),
-        ) {
-            tracing::warn!(error = %e, "failed to open NMP follows relay-list interest");
-        }
+        let client = self.client.clone();
+        let id_clone = id.clone();
+        let urls = self.indexer_urls();
+        self.rt().spawn(async move {
+            let filter = Filter::new().kinds([Kind::Custom(10002)]).authors(follows);
+            subscribe_routed(&client, id_clone, filter, urls, "indexer/follows-nip65").await;
+        });
         Some(id)
     }
 
@@ -682,17 +497,15 @@ impl NostrRuntime {
             return None;
         }
         let id = SubscriptionId::generate();
-        let filter = Filter::new()
-            .kinds([Kind::Custom(KIND_SIMPLE_GROUPS_LIST)])
-            .authors(follows);
-        if let Err(e) = self.open_nmp_filter_on_relays(
-            &id,
-            "indexer/friends-10009",
-            filter,
-            self.indexer_urls(),
-        ) {
-            tracing::warn!(error = %e, "failed to open NMP friends group-list interest");
-        }
+        let client = self.client.clone();
+        let id_clone = id.clone();
+        let urls = self.indexer_urls();
+        self.rt().spawn(async move {
+            let filter = Filter::new()
+                .kinds([Kind::Custom(KIND_SIMPLE_GROUPS_LIST)])
+                .authors(follows);
+            subscribe_routed(&client, id_clone, filter, urls, "indexer/friends-10009").await;
+        });
         Some(id)
     }
 
@@ -710,80 +523,111 @@ impl NostrRuntime {
             return None;
         }
         let id = SubscriptionId::generate();
-        let filter = Filter::new()
-            .kinds([
-                Kind::Custom(KIND_GROUP_ADMINS),
-                Kind::Custom(KIND_GROUP_MEMBERS),
-            ])
-            .pubkeys(follows);
-        if let Err(e) = self.open_nmp_filter_on_relays(
-            &id,
-            "rooms/friends-memberships",
-            filter,
-            self.rooms_urls(),
-        ) {
-            tracing::warn!(error = %e, "failed to open NMP friends membership interest");
-        }
+        let client = self.client.clone();
+        let id_clone = id.clone();
+        let urls = self.rooms_urls();
+        self.rt().spawn(async move {
+            let filter = Filter::new()
+                .kinds([
+                    Kind::Custom(KIND_GROUP_ADMINS),
+                    Kind::Custom(KIND_GROUP_MEMBERS),
+                ])
+                .pubkeys(follows);
+            subscribe_routed(&client, id_clone, filter, urls, "rooms/friends-memberships").await;
+        });
         Some(id)
     }
 
     /// Curated-list subscription: pull the latest kind:10012 from the supplied
-    /// curator pubkey. The rooms referenced by the list are then backfilled
-    /// with a separate metadata subscription once the Swift side calls
-    /// `get_featured_rooms` and sees the list event in cache.
+    /// curator pubkey. The Rust room explorer snapshot path backfills the
+    /// referenced rooms with a separate metadata subscription once the list
+    /// event is visible in cache.
     pub fn spawn_curated_list_subscription(&self, curator: PublicKey) -> SubscriptionId {
         let id = SubscriptionId::generate();
-        let filter = Filter::new()
-            .kinds([Kind::Custom(crate::curation::KIND_CURATED_COMMUNITIES)])
-            .author(curator);
-        if let Err(e) =
-            self.open_nmp_filter_on_relays(&id, "indexer/curated-list", filter, self.indexer_urls())
-        {
-            tracing::warn!(error = %e, "failed to open NMP curated-list interest");
-        }
+        let client = self.client.clone();
+        let id_clone = id.clone();
+        let urls = self.indexer_urls();
+        self.rt().spawn(async move {
+            let filter = Filter::new()
+                .kinds([Kind::Custom(crate::curation::KIND_CURATED_COMMUNITIES)])
+                .author(curator);
+            subscribe_routed(&client, id_clone, filter, urls, "indexer/curated-list").await;
+        });
         id
     }
 
     /// Drop a subscription by id. Fire-and-forget.
     pub fn drop_subscription(&self, id: SubscriptionId) {
-        let key = id.to_string();
-        if let Some(task) = self.nmp_subscription_tasks.write().remove(&key) {
-            task.abort();
-        }
-        if let Some(handles) = self.nmp_subscriptions.write().remove(&key) {
-            for handle in handles {
-                self.nmp.close_interest(handle);
-            }
-        }
+        let client = self.client.clone();
+        self.rt().spawn(async move {
+            client.unsubscribe(&id).await;
+        });
     }
 
     fn spawn_connect(&self) {
-        // No user logged in yet at runtime construction, so seed NMP with the
-        // starting relay set. User-owned `RelayConfig` is applied after login.
+        // No user logged in yet at runtime construction, so reconcile to the
+        // starting seed set. `spawn_apply_relay_config` with the user's
+        // stored `RelayConfig` is called separately from the login path.
         self.spawn_apply_relay_config(seed_defaults());
     }
 
-    /// Reconcile NMP's relay registry with `rows` and cache the rows so the
-    /// per-role URL accessors can answer synchronously. Logs on failure.
+    /// Reconcile the client's relay pool with `rows`. Adds any URLs not yet
+    /// in the pool, removes URLs no longer desired, and updates per-relay
+    /// `RelayServiceFlags` in place for the ones that remain. Also caches
+    /// the rows on `self.current_relays` so the per-role URL accessors can
+    /// answer synchronously. Fire-and-forget; logs on failure.
     ///
     /// Per-role routing at the subscription layer reads from that cache:
     /// NIP-29 subs → `rooms_urls()`, outbox-model lookups → `indexer_urls()`.
     pub fn spawn_apply_relay_config(&self, rows: Vec<RelayConfig>) {
-        if let Err(e) = self.nmp.sync_relays(&rows) {
-            tracing::warn!(error = %e, "NMP relay config apply");
-        }
-        *self.current_relays.write() = rows;
+        let client = self.client.clone();
+        let cache = self.current_relays.clone();
+        let diagnostics = self.relay_diagnostics.clone();
+        let watchers = self.diagnostics_watchers.clone();
+        let callback_slot = self.diagnostics_callback_slot.clone();
+        let events_enabled = self.diagnostics_events_enabled.clone();
+        let runtime_handle = self.runtime_handle();
+        self.rt().spawn(async move {
+            apply_relay_config(&client, &rows).await;
+            pin_relay_for_read(&client, purple_pages_relay()).await;
+            pin_relay_for_read(&client, highlighter_relay()).await;
+            sync_relay_diagnostics_from_pool(
+                &client,
+                diagnostics.clone(),
+                watchers.clone(),
+                callback_slot.clone(),
+                events_enabled.clone(),
+                runtime_handle.clone(),
+            )
+            .await;
+            client.connect().await;
+            sync_relay_diagnostics_from_pool(
+                &client,
+                diagnostics,
+                watchers,
+                callback_slot,
+                events_enabled,
+                runtime_handle,
+            )
+            .await;
+            *cache.write() = rows;
+        });
     }
 
     /// Convenience: load the user's persisted `RelayConfig` from nostrdb and
-    /// reconcile NMP's relay registry. Called after login succeeds. Falls back to
+    /// reconcile the pool. Called after login succeeds. Falls back to
     /// `seed_defaults()` if no kind:10002 / kind:30078 is cached yet.
-    /// `purple_pages_relay()` remains part of the indexer accessor regardless
-    /// of the user's editable rows.
+    /// `purple_pages_relay()` is pinned afterwards regardless — it's the
+    /// canonical indexer and not a user-managed entry.
     pub fn spawn_apply_user_relay_config(&self, user_hex: String) {
+        let client = self.client.clone();
         let ndb = self.ndb.clone();
         let cache = self.current_relays.clone();
-        let nmp = self.nmp.clone();
+        let diagnostics = self.relay_diagnostics.clone();
+        let watchers = self.diagnostics_watchers.clone();
+        let callback_slot = self.diagnostics_callback_slot.clone();
+        let events_enabled = self.diagnostics_events_enabled.clone();
+        let runtime_handle = self.runtime_handle();
         self.rt().spawn(async move {
             let rows = match query_relays(&ndb, &user_hex) {
                 Ok(rows) => rows,
@@ -792,55 +636,34 @@ impl NostrRuntime {
                     seed_defaults()
                 }
             };
-            if let Err(e) = nmp.sync_relays(&rows) {
-                tracing::warn!(error = %e, "NMP user relay config apply");
-            }
+            apply_relay_config(&client, &rows).await;
+            pin_relay_for_read(&client, purple_pages_relay()).await;
+            pin_relay_for_read(&client, highlighter_relay()).await;
+            sync_relay_diagnostics_from_pool(
+                &client,
+                diagnostics.clone(),
+                watchers.clone(),
+                callback_slot.clone(),
+                events_enabled.clone(),
+                runtime_handle.clone(),
+            )
+            .await;
+            client.connect().await;
+            sync_relay_diagnostics_from_pool(
+                &client,
+                diagnostics,
+                watchers,
+                callback_slot,
+                events_enabled,
+                runtime_handle,
+            )
+            .await;
             *cache.write() = rows;
         });
     }
 
-    /// Publish a pre-signed Highlighter event through NMP's action seam and
-    /// reflect it into the local read cache for immediate Rust projections.
-    pub fn publish_signed_event(&self, source: &str, event: &Event) -> Result<(), CoreError> {
-        self.nmp.publish_signed_auto(source, event)?;
-        self.cache_accepted_event(source, event)
-    }
-
-    /// Same as [`Self::publish_signed_event`], but deliberately pins the
-    /// event to a relay set. Used for NIP-29 relay-owned group events and
-    /// fixed infrastructure mirrors where Auto would be wrong.
-    pub fn publish_signed_event_to_relays(
-        &self,
-        source: &str,
-        event: &Event,
-        relays: Vec<String>,
-    ) -> Result<(), CoreError> {
-        self.nmp.publish_signed_to_relays(source, event, relays)?;
-        self.cache_accepted_event(source, event)
-    }
-
-    /// Explicit mirror without another local cache write. Used for
-    /// infrastructure replicas after the canonical NMP publish has already
-    /// reflected the event into nostrdb.
-    pub fn mirror_signed_event_to_relays(
-        &self,
-        source: &str,
-        event: &Event,
-        relays: Vec<String>,
-    ) -> Result<(), CoreError> {
-        self.nmp.publish_signed_to_relays(source, event, relays)
-    }
-
-    pub fn mirror_social_trio_to_purple(
-        &self,
-        source: &str,
-        event: &Event,
-    ) -> Result<(), CoreError> {
-        self.mirror_signed_event_to_relays(source, event, vec![purple_pages_relay().to_string()])
-    }
-
     /// Snapshot of the most-recently-applied relay config. Empty until the
-    /// first relay-role reconcile completes.
+    /// first `apply_relay_config` completes.
     pub fn current_relays(&self) -> Vec<RelayConfig> {
         self.current_relays.read().clone()
     }
@@ -858,8 +681,9 @@ impl NostrRuntime {
             .filter(|r| r.rooms)
             .map(|r| r.url.clone())
             .collect();
-        if !urls.iter().any(|u| u == highlighter_relay()) {
-            urls.push(highlighter_relay().to_string());
+        let rooms_relay = highlighter_relay();
+        if !urls.iter().any(|u| u == rooms_relay) {
+            urls.push(rooms_relay.to_string());
         }
         urls
     }
@@ -870,9 +694,10 @@ impl NostrRuntime {
     /// it's app-internal infrastructure, not a user setting. Anything the
     /// user has flagged `indexer` in NIP-78 is added on top, deduped.
     pub fn indexer_urls(&self) -> Vec<String> {
-        let mut urls: Vec<String> = vec![purple_pages_relay().to_string()];
+        let indexer_relay = purple_pages_relay();
+        let mut urls: Vec<String> = vec![indexer_relay.to_string()];
         for row in self.current_relays.read().iter() {
-            if row.indexer && row.url != purple_pages_relay() {
+            if row.indexer && row.url != indexer_relay {
                 urls.push(row.url.clone());
             }
         }
@@ -899,79 +724,406 @@ impl NostrRuntime {
             .collect()
     }
 
-    /// Current per-relay diagnostics snapshot from NMP's typed
-    /// `relay_diagnostics` projection.
-    pub fn relay_diagnostics_snapshot(&self) -> Vec<RelayDiagnostic> {
-        self.nmp.relay_diagnostics_snapshot()
+    /// Register the app callback used for relay diagnostics deltas and seed
+    /// watchers for any relays already present in the SDK pool.
+    pub fn install_diagnostics_callback(&self, callback_slot: EventCallbackSlot) {
+        *self.diagnostics_callback_slot.write() = Some(callback_slot);
+        let client = self.client.clone();
+        let diagnostics = self.relay_diagnostics.clone();
+        let watchers = self.diagnostics_watchers.clone();
+        let callback_slot = self.diagnostics_callback_slot.clone();
+        let events_enabled = self.diagnostics_events_enabled.clone();
+        let runtime_handle = self.runtime_handle();
+        self.rt().spawn(async move {
+            sync_relay_diagnostics_from_pool(
+                &client,
+                diagnostics,
+                watchers,
+                callback_slot,
+                events_enabled,
+                runtime_handle,
+            )
+            .await;
+        });
     }
 
-    /// NIP-11 documents NMP fetched for pool relays (ADR-0051) — Highlighter
-    /// does no HTTP or parsing of its own.
-    pub fn relay_info_documents(&self) -> Vec<crate::models::Nip11Document> {
-        self.nmp.relay_info_documents()
+    /// Enable app-scope diagnostics deltas for the Network Settings view.
+    /// The bounded map/watchers may already be warm; this only authorizes
+    /// future relay diagnostics changes to cross the callback bus.
+    pub async fn enable_relay_diagnostics_events(&self) {
+        self.diagnostics_events_enabled
+            .store(true, Ordering::SeqCst);
+        self.sync_relay_diagnostics().await;
     }
 
-    /// Cached NIP-11 document for one relay URL, if NMP has fetched it.
-    pub fn relay_info(&self, url: &str) -> Option<crate::models::Nip11Document> {
-        self.nmp.relay_info(url)
+    /// Refresh the bounded relay diagnostics projection from the current SDK
+    /// pool and ensure each relay has a status watcher installed.
+    pub async fn sync_relay_diagnostics(&self) {
+        sync_relay_diagnostics_from_pool(
+            &self.client,
+            self.relay_diagnostics.clone(),
+            self.diagnostics_watchers.clone(),
+            self.diagnostics_callback_slot.clone(),
+            self.diagnostics_events_enabled.clone(),
+            self.runtime_handle(),
+        )
+        .await;
     }
 
-    pub fn reconnect_all(&self) {
-        self.nmp.foreground();
-        let rows = self.current_relays();
-        if let Err(e) = self.nmp.sync_relays(&rows) {
-            tracing::warn!(error = %e, "NMP reconnect relay sync");
-        }
-    }
-
-    pub fn disconnect_all(&self) {
-        self.nmp.background();
-    }
-
-    pub fn install_relay_diagnostics_observer(&self, callback_slot: EventCallbackSlot) {
-        self.nmp.set_relay_diagnostics_callback(callback_slot);
+    /// Current per-relay diagnostics snapshot, one row per URL in the
+    /// client's pool. Synchronized on demand before the rows cross FFI.
+    pub async fn relay_diagnostics_snapshot(&self) -> Vec<RelayDiagnostic> {
+        self.sync_relay_diagnostics().await;
+        let map = self.relay_diagnostics.read();
+        let mut rows: Vec<RelayDiagnostic> = map.values().cloned().collect();
+        rows.sort_by(|a, b| a.url.cmp(&b.url));
+        rows
     }
 }
 
-async fn run_user_relay_config_observer(
-    nmp: Arc<HighlighterNmpRuntime>,
-    ndb: Arc<Ndb>,
-    cache: Arc<parking_lot::RwLock<Vec<RelayConfig>>>,
-    sub: nostrdb::Subscription,
-    user_hex: String,
+async fn sync_relay_diagnostics_from_pool(
+    client: &Client,
+    diagnostics: RelayDiagnosticsMap,
+    watchers: RelayDiagnosticsWatchers,
+    callback_slot: DiagnosticsCallbackSlot,
+    events_enabled: DiagnosticsEventsEnabled,
+    runtime_handle: tokio::runtime::Handle,
 ) {
-    apply_user_relay_config_rows(&nmp, &ndb, &cache, &user_hex, "cached").await;
+    let relays = client.relays().await;
+    let mut next = HashMap::with_capacity(relays.len());
+    let mut relay_rows = Vec::with_capacity(relays.len());
+    let mut current_urls = HashSet::with_capacity(relays.len());
 
-    let mut stream = sub.stream(&ndb).notes_per_await(32);
-    while let Some(note_keys) = stream.next().await {
-        if note_keys.is_empty() {
+    for (url, relay) in relays.iter() {
+        let url = url.to_string();
+        current_urls.insert(url.clone());
+        next.insert(url.clone(), relay_diagnostic(url.clone(), relay));
+        relay_rows.push((url, relay.clone()));
+    }
+
+    publish_relay_diagnostics_snapshot(&diagnostics, next, &callback_slot, &events_enabled);
+
+    let mut active = watchers.write();
+    active.retain(|url, handle| {
+        let keep = current_urls.contains(url) && !handle.is_finished();
+        if !keep {
+            handle.abort();
+        }
+        keep
+    });
+
+    for (url, relay) in relay_rows {
+        if active.contains_key(&url) {
             continue;
         }
-        apply_user_relay_config_rows(&nmp, &ndb, &cache, &user_hex, "mirrored").await;
+        let diagnostics = diagnostics.clone();
+        let callback_slot = callback_slot.clone();
+        let events_enabled = events_enabled.clone();
+        let url_for_task = url.clone();
+        let handle = runtime_handle.spawn(async move {
+            watch_relay_diagnostics(
+                url_for_task,
+                relay,
+                diagnostics,
+                callback_slot,
+                events_enabled,
+            )
+            .await;
+        });
+        active.insert(url, handle);
     }
 }
 
-async fn apply_user_relay_config_rows(
-    nmp: &HighlighterNmpRuntime,
-    ndb: &Ndb,
-    cache: &parking_lot::RwLock<Vec<RelayConfig>>,
-    user_hex: &str,
-    source: &str,
+async fn watch_relay_diagnostics(
+    url: String,
+    relay: Relay,
+    diagnostics: RelayDiagnosticsMap,
+    callback_slot: DiagnosticsCallbackSlot,
+    events_enabled: DiagnosticsEventsEnabled,
 ) {
-    let rows = query_relays(ndb, user_hex).unwrap_or_else(|e| {
-        tracing::warn!(user = %user_hex, error = %e, "user relay config query");
-        seed_defaults()
-    });
-    if let Err(e) = nmp.sync_relays(&rows) {
-        tracing::warn!(user = %user_hex, error = %e, "NMP user relay config apply");
+    let mut notifications = relay.notifications();
+    while let Ok(notification) = notifications.recv().await {
+        match notification {
+            RelayNotification::RelayStatus { .. } => {
+                publish_relay_diagnostics_row(
+                    relay_diagnostic(url.clone(), &relay),
+                    &diagnostics,
+                    &callback_slot,
+                    &events_enabled,
+                );
+            }
+            RelayNotification::Shutdown => {
+                publish_relay_diagnostics_row(
+                    relay_diagnostic(url.clone(), &relay),
+                    &diagnostics,
+                    &callback_slot,
+                    &events_enabled,
+                );
+                break;
+            }
+            _ => {}
+        }
     }
-    *cache.write() = rows.clone();
-    tracing::info!(
-        user = %user_hex,
-        source,
-        relays = rows.len(),
-        "user relay config applied"
-    );
+}
+
+fn publish_relay_diagnostics_row(
+    row: RelayDiagnostic,
+    diagnostics: &RelayDiagnosticsMap,
+    callback_slot: &DiagnosticsCallbackSlot,
+    events_enabled: &DiagnosticsEventsEnabled,
+) {
+    let mut next = diagnostics.read().clone();
+    if !next.contains_key(&row.url) {
+        return;
+    }
+    next.insert(row.url.clone(), row);
+    publish_relay_diagnostics_snapshot(diagnostics, next, callback_slot, events_enabled);
+}
+
+fn publish_relay_diagnostics_snapshot(
+    diagnostics: &RelayDiagnosticsMap,
+    next: HashMap<String, RelayDiagnostic>,
+    callback_slot: &DiagnosticsCallbackSlot,
+    events_enabled: &DiagnosticsEventsEnabled,
+) {
+    let (changed_rows, changed_statuses) = {
+        let mut current = diagnostics.write();
+        if *current == next {
+            return;
+        }
+
+        let mut changed_statuses = Vec::new();
+        for (url, row) in next.iter() {
+            match current.get(url) {
+                Some(previous) if previous.state == row.state => {}
+                _ => changed_statuses.push((url.clone(), row.state)),
+            }
+        }
+
+        let mut changed_rows: Vec<RelayDiagnostic> = next.values().cloned().collect();
+        changed_rows.sort_by(|a, b| a.url.cmp(&b.url));
+        *current = next;
+        (changed_rows, changed_statuses)
+    };
+
+    if changed_rows.is_empty() && changed_statuses.is_empty() {
+        return;
+    }
+    if !events_enabled.load(Ordering::SeqCst) {
+        return;
+    }
+
+    let cb = callback_slot
+        .read()
+        .as_ref()
+        .and_then(|slot| slot.read().clone());
+    if let Some(cb) = cb {
+        if !changed_rows.is_empty() {
+            cb.on_data_changed(Delta {
+                subscription_id: 0,
+                change: DataChangeType::RelayDiagnosticsUpdated {
+                    diagnostics: changed_rows,
+                },
+            });
+        }
+        for (url, state) in changed_statuses {
+            cb.on_data_changed(Delta {
+                subscription_id: 0,
+                change: DataChangeType::RelayStatusChanged { url, state },
+            });
+        }
+    }
+}
+
+fn relay_diagnostic(url: String, relay: &Relay) -> RelayDiagnostic {
+    let stats = relay.stats();
+    let state = map_relay_status(relay.status());
+    let connected_since_ts = if matches!(state, AppRelayStatus::Connected) {
+        Some(stats.connected_at().as_secs())
+    } else {
+        None
+    };
+    RelayDiagnostic {
+        url,
+        state,
+        rtt_ms: stats.latency().map(|d| d.as_millis() as u32),
+        bytes_sent: stats.bytes_sent() as u64,
+        bytes_received: stats.bytes_received() as u64,
+        connected_since_ts,
+    }
+}
+
+/// Map the nostr-sdk internal relay status to the UI-facing shape. The
+/// intermediate states (`Initialized` / `Pending` / `Sleeping`) collapse
+/// into `Connecting` since they all mean "not yet on the wire but the
+/// pool intends to bring it up".
+fn map_relay_status(inner: nostr_sdk::RelayStatus) -> AppRelayStatus {
+    match inner {
+        nostr_sdk::RelayStatus::Initialized
+        | nostr_sdk::RelayStatus::Pending
+        | nostr_sdk::RelayStatus::Connecting
+        | nostr_sdk::RelayStatus::Sleeping => AppRelayStatus::Connecting,
+        nostr_sdk::RelayStatus::Connected => AppRelayStatus::Connected,
+        nostr_sdk::RelayStatus::Disconnected => AppRelayStatus::Disconnected,
+        nostr_sdk::RelayStatus::Terminated => AppRelayStatus::Terminated,
+        nostr_sdk::RelayStatus::Banned => AppRelayStatus::Banned,
+    }
+}
+
+/// Subscribe with a specific subscription id, targeting `urls` when non-empty
+/// and falling back to the global pool (all READ-flagged relays) when empty.
+/// Centralizes the "route by role, or default pool with a warning" pattern
+/// used by every per-role spawn on `NostrRuntime`.
+/// Mirror a "social trio" event (kind:0 metadata, kind:3 contacts,
+/// kind:10002 NIP-65 relay list) to `purple_pages_relay()` after the
+/// caller's normal `send_event` broadcast. Purple is the canonical
+/// mirror for these kinds — every other Nostr client expects to find
+/// them there — but we keep it READ-only in the pool so kind:9802 /
+/// kind:11 / kind:1111 / etc. don't pollute it via `send_event`'s
+/// WRITE-flag broadcast.
+///
+/// Failures are logged, not surfaced. The caller has already published
+/// to the user's actual write relays; the mirror is best-effort.
+pub async fn mirror_social_trio_to_purple(client: &Client, event: &Event) {
+    if let Err(e) = client.send_event_to([purple_pages_relay()], event).await {
+        tracing::warn!(
+            kind = event.kind.as_u16(),
+            error = %e,
+            "purple mirror failed"
+        );
+    }
+}
+
+/// Ensure `url` is in the client's relay pool with at least READ+PING
+/// flags, so an outbox-routed subscription can receive events from it.
+/// Idempotent: relays already in the pool are left alone — their existing
+/// flags survive. Only freshly-added relays get the bare READ+PING set,
+/// so a third-party outbox relay never accidentally becomes a publish
+/// target for the user's own events.
+pub async fn pin_relay_for_read(client: &Client, url: &str) {
+    let known = client.relays().await;
+    if known.iter().any(|(u, _)| u.to_string() == url) {
+        return;
+    }
+    if let Err(e) = client.add_relay(url).await {
+        tracing::warn!(relay = %url, error = %e, "outbox: add_relay");
+        return;
+    }
+    let refreshed = client.relays().await;
+    if let Some((_, relay)) = refreshed.iter().find(|(u, _)| u.to_string() == url) {
+        let flags = relay.flags();
+        flags.remove(RelayServiceFlags::READ | RelayServiceFlags::WRITE | RelayServiceFlags::PING);
+        flags.add(RelayServiceFlags::READ | RelayServiceFlags::PING);
+    }
+    if let Err(e) = client.connect_relay(url).await {
+        tracing::warn!(relay = %url, error = %e, "outbox: connect_relay");
+    }
+}
+
+async fn subscribe_routed(
+    client: &Client,
+    id: SubscriptionId,
+    filter: Filter,
+    urls: Vec<String>,
+    role_label: &str,
+) {
+    if urls.is_empty() {
+        tracing::warn!(
+            role = role_label,
+            "no relays configured for role; subscribing via default pool"
+        );
+        if let Err(e) = client.subscribe_with_id(id, filter, None).await {
+            tracing::warn!(role = role_label, error = %e, "subscribe failed");
+        }
+        return;
+    }
+    if let Err(e) = client.subscribe_with_id_to(urls, id, filter, None).await {
+        tracing::warn!(role = role_label, error = %e, "targeted subscribe failed");
+    }
+}
+
+/// Target `RelayServiceFlags` for a config row. `PING` is always on for
+/// keep-alive; `READ` is set whenever the row is declared to receive events
+/// for *any* reason (NIP-65 read, NIP-29 rooms, or indexer lookups) so
+/// sub-routing that ignores the Highlighter-specific flags keeps working
+/// until PR 3 introduces per-role subscription targeting. `WRITE` is only
+/// set for rows the user has declared as outbox.
+fn target_flags(row: &RelayConfig) -> RelayServiceFlags {
+    let mut flags = RelayServiceFlags::PING;
+    if row.read || row.rooms || row.indexer {
+        flags |= RelayServiceFlags::READ;
+    }
+    if row.write {
+        flags |= RelayServiceFlags::WRITE;
+    }
+    flags
+}
+
+/// Diff-and-apply the client's relay pool to match `rows`. Public for
+/// tests; feature callers use `NostrRuntime::spawn_apply_relay_config` /
+/// `spawn_apply_user_relay_config` which also kick off a connect.
+pub async fn apply_relay_config(client: &Client, rows: &[RelayConfig]) {
+    let desired: HashSet<String> = rows.iter().map(|r| r.url.trim().to_string()).collect();
+    let current = client.relays().await;
+
+    // Drop relays that are no longer desired. `force_remove_relay` ignores
+    // the GOSSIP flag — we don't enable gossip, so there's nothing to
+    // protect here, and this gives clean removal semantics.
+    let stale: Vec<RelayUrl> = current
+        .keys()
+        .filter(|u| !desired.contains(&u.to_string()))
+        .cloned()
+        .collect();
+    for url in stale {
+        if let Err(e) = client.force_remove_relay(url.clone()).await {
+            tracing::warn!(relay = %url, error = %e, "force_remove_relay");
+        }
+    }
+
+    let current = client.relays().await;
+
+    // Add-or-update the desired set.
+    for row in rows {
+        let url = row.url.trim();
+        if url.is_empty() {
+            continue;
+        }
+        let target = target_flags(row);
+
+        // Existing → update flags in place.
+        if let Some(relay) = current
+            .iter()
+            .find(|(u, _)| u.to_string() == url)
+            .map(|(_, r)| r)
+        {
+            let flags = relay.flags();
+            flags.remove(
+                RelayServiceFlags::READ | RelayServiceFlags::WRITE | RelayServiceFlags::PING,
+            );
+            flags.add(target);
+            continue;
+        }
+
+        // New → add then reset flags to the precise target. `add_relay` ORs
+        // the default `READ|WRITE|PING` into whatever's there, so we do a
+        // post-add flag reset to match config exactly.
+        if let Err(e) = client.add_relay(url).await {
+            tracing::warn!(relay = %url, error = %e, "add_relay");
+            continue;
+        }
+        let refreshed = client.relays().await;
+        if let Some(relay) = refreshed
+            .iter()
+            .find(|(u, _)| u.to_string() == url)
+            .map(|(_, r)| r)
+        {
+            let flags = relay.flags();
+            flags.remove(
+                RelayServiceFlags::READ | RelayServiceFlags::WRITE | RelayServiceFlags::PING,
+            );
+            flags.add(target);
+        }
+    }
 }
 
 /// Resolve the platform-appropriate nostrdb directory. On iOS we're inside a
@@ -998,14 +1150,15 @@ mod tests {
         let runtime = NostrRuntime::with_data_dir(path.clone()).expect("construct runtime");
         let elapsed = started.elapsed();
 
-        // Runtime construction must not wait on network work. 2s is a
-        // generous ceiling that still catches accidental blocking connects.
+        // Connecting to real relays can take seconds; construction must not
+        // wait for it. 2s is a generous ceiling that still catches accidental
+        // blocking connects.
         assert!(
             elapsed.as_secs() < 2,
-            "runtime construction took {elapsed:?} — should return immediately"
+            "runtime construction took {elapsed:?} — should return immediately, connect is spawned"
         );
 
-        // Local state is wired up: Ndb dir exists and accepts queries.
+        // Local state is wired up: Ndb dir exists, client has database set.
         assert_eq!(runtime.data_dir(), path.as_path());
         assert!(runtime.data_dir().exists());
 
@@ -1022,9 +1175,227 @@ mod tests {
         let runtime = NostrRuntime::with_data_dir(tmp.path().join("ndb")).expect("construct");
 
         let keys = Keys::generate();
-        let nsec = keys.secret_key().to_bech32().expect("nsec");
-        runtime.set_local_nsec_signer(&nsec).expect("sign in");
+        runtime.set_signer(keys);
         runtime.unset_signer();
+    }
+
+    fn flag_has(flags: RelayServiceFlags, required: RelayServiceFlags) -> bool {
+        AtomicRelayServiceFlags::new(flags).has_all(required)
+    }
+
+    #[test]
+    fn target_flags_read_only_row() {
+        let row = RelayConfig {
+            url: "wss://a.example".into(),
+            read: true,
+            write: false,
+            rooms: false,
+            indexer: false,
+        };
+        let flags = target_flags(&row);
+        assert!(flag_has(flags, RelayServiceFlags::READ));
+        assert!(flag_has(flags, RelayServiceFlags::PING));
+        assert!(!flag_has(flags, RelayServiceFlags::WRITE));
+    }
+
+    #[test]
+    fn target_flags_write_only_row() {
+        let row = RelayConfig {
+            url: "wss://a.example".into(),
+            read: false,
+            write: true,
+            rooms: false,
+            indexer: false,
+        };
+        let flags = target_flags(&row);
+        assert!(flag_has(flags, RelayServiceFlags::WRITE));
+        assert!(flag_has(flags, RelayServiceFlags::PING));
+        assert!(!flag_has(flags, RelayServiceFlags::READ));
+    }
+
+    #[test]
+    fn target_flags_rooms_only_row_gets_read() {
+        // nostr-sdk exposes read/write/ping transport flags, while Highlighter
+        // owns the rooms/indexer role split above that layer. A rooms relay
+        // still needs READ so NIP-29 subscriptions can receive events.
+        let row = RelayConfig {
+            url: "wss://a.example".into(),
+            read: false,
+            write: false,
+            rooms: true,
+            indexer: false,
+        };
+        let flags = target_flags(&row);
+        assert!(flag_has(flags, RelayServiceFlags::READ));
+        assert!(flag_has(flags, RelayServiceFlags::PING));
+        assert!(!flag_has(flags, RelayServiceFlags::WRITE));
+    }
+
+    #[test]
+    fn target_flags_indexer_only_row_gets_read() {
+        let row = RelayConfig {
+            url: "wss://a.example".into(),
+            read: false,
+            write: false,
+            rooms: false,
+            indexer: true,
+        };
+        let flags = target_flags(&row);
+        assert!(flag_has(flags, RelayServiceFlags::READ));
+        assert!(flag_has(flags, RelayServiceFlags::PING));
+        assert!(!flag_has(flags, RelayServiceFlags::WRITE));
+    }
+
+    #[test]
+    fn target_flags_row_with_no_roles_is_ping_only() {
+        let row = RelayConfig {
+            url: "wss://a.example".into(),
+            read: false,
+            write: false,
+            rooms: false,
+            indexer: false,
+        };
+        let flags = target_flags(&row);
+        assert!(flag_has(flags, RelayServiceFlags::PING));
+        assert!(!flag_has(flags, RelayServiceFlags::READ));
+        assert!(!flag_has(flags, RelayServiceFlags::WRITE));
+    }
+
+    #[test]
+    fn target_flags_full_row() {
+        let row = RelayConfig {
+            url: "wss://a.example".into(),
+            read: true,
+            write: true,
+            rooms: true,
+            indexer: true,
+        };
+        let flags = target_flags(&row);
+        assert!(flag_has(
+            flags,
+            RelayServiceFlags::READ | RelayServiceFlags::WRITE | RelayServiceFlags::PING
+        ));
+    }
+
+    /// Uses a bare `Client` to isolate `apply_relay_config` from the boot
+    /// reconcile that `NostrRuntime::with_data_dir` spawns. Otherwise the
+    /// seed-defaults reconcile races with the test's direct reconcile call.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn apply_relay_config_adds_removes_and_updates_flags() {
+        let client = Client::builder().build();
+
+        let initial = vec![
+            RelayConfig {
+                url: "wss://one.example".into(),
+                read: true,
+                write: true,
+                rooms: false,
+                indexer: false,
+            },
+            RelayConfig {
+                url: "wss://two.example".into(),
+                read: true,
+                write: false,
+                rooms: false,
+                indexer: false,
+            },
+        ];
+        apply_relay_config(&client, &initial).await;
+
+        let after = client.relays().await;
+        assert_eq!(
+            after.len(),
+            2,
+            "pool should have exactly the two configured relays"
+        );
+
+        let one = after
+            .iter()
+            .find(|(u, _)| u.to_string().contains("one.example"))
+            .map(|(_, r)| r)
+            .expect("one in pool");
+        assert!(one
+            .flags()
+            .has_all(RelayServiceFlags::READ | RelayServiceFlags::WRITE));
+
+        let two = after
+            .iter()
+            .find(|(u, _)| u.to_string().contains("two.example"))
+            .map(|(_, r)| r)
+            .expect("two in pool");
+        assert!(two.flags().has_read());
+        assert!(!two.flags().has_write());
+
+        let next = vec![RelayConfig {
+            url: "wss://two.example".into(),
+            read: false,
+            write: true,
+            rooms: false,
+            indexer: false,
+        }];
+        apply_relay_config(&client, &next).await;
+
+        let after2 = client.relays().await;
+        assert_eq!(after2.len(), 1, "one should have been removed");
+        let two2 = after2
+            .iter()
+            .find(|(u, _)| u.to_string().contains("two.example"))
+            .map(|(_, r)| r)
+            .expect("two in pool");
+        assert!(two2.flags().has_write());
+        assert!(!two2.flags().has_read());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn relay_diagnostics_sync_tracks_current_pool_without_polling() {
+        let client = Client::builder().build();
+        let diagnostics: RelayDiagnosticsMap = Arc::new(parking_lot::RwLock::new(HashMap::new()));
+        let watchers: RelayDiagnosticsWatchers = Arc::new(parking_lot::RwLock::new(HashMap::new()));
+        let callback_slot: DiagnosticsCallbackSlot = Arc::new(parking_lot::RwLock::new(None));
+        let events_enabled: DiagnosticsEventsEnabled = Arc::new(AtomicBool::new(false));
+
+        let initial = vec![
+            RelayConfig::read_write("wss://one.example"),
+            RelayConfig::read_write("wss://two.example"),
+        ];
+        apply_relay_config(&client, &initial).await;
+        sync_relay_diagnostics_from_pool(
+            &client,
+            diagnostics.clone(),
+            watchers.clone(),
+            callback_slot.clone(),
+            events_enabled.clone(),
+            tokio::runtime::Handle::current(),
+        )
+        .await;
+
+        let rows = diagnostics.read().clone();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(watchers.read().len(), 2);
+        assert!(rows
+            .values()
+            .all(|row| matches!(row.state, AppRelayStatus::Connecting)));
+
+        let next = vec![RelayConfig::read_write("wss://two.example")];
+        apply_relay_config(&client, &next).await;
+        sync_relay_diagnostics_from_pool(
+            &client,
+            diagnostics.clone(),
+            watchers.clone(),
+            callback_slot,
+            events_enabled,
+            tokio::runtime::Handle::current(),
+        )
+        .await;
+
+        let rows = diagnostics.read().clone();
+        assert_eq!(rows.len(), 1);
+        assert!(rows.contains_key("wss://two.example"));
+        assert_eq!(watchers.read().len(), 1);
+
+        for (_, handle) in watchers.write().drain() {
+            handle.abort();
+        }
     }
 
     fn runtime_with_config(rows: Vec<RelayConfig>) -> (NostrRuntime, tempfile::TempDir) {
@@ -1175,8 +1546,9 @@ mod tests {
         let tmp = tempdir().expect("tempdir");
         let runtime =
             NostrRuntime::with_data_dir(tmp.path().join("ndb")).expect("construct runtime");
-        // Accessors must not panic while the relay-role cache is empty or
-        // partially reconciled.
+        // Cache starts empty until `apply_relay_config` populates it. The
+        // background `spawn_connect` will eventually fill it; the accessor
+        // contract is "empty until reconcile completes".
         assert!(
             runtime.current_relays().is_empty() || !runtime.current_relays().is_empty(),
             "accessor must not panic even when cache is unpopulated"

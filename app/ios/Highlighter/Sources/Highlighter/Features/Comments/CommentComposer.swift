@@ -1,7 +1,9 @@
 import SwiftUI
 
-/// Pinned-bottom composer. Replies to the current thread's subject; drafts
-/// and publish state are owned by the Rust comments snapshot.
+/// Pinned-bottom composer. Replies to the current thread's subject —
+/// `parentEventId == nil` posts a top-level thread on the artifact;
+/// otherwise posts as a reply. Drafts are kept in `CommentsStore` keyed
+/// by parent so detent transitions don't lose typed text.
 struct CommentComposer: View {
     let parentEventId: String?
     /// Display label for the composer placeholder — caller passes context
@@ -9,23 +11,24 @@ struct CommentComposer: View {
     /// a pushed thread.
     let placeholder: String
 
-    @Environment(HighlighterStore.self) private var app
+    let store: CommentsStore
 
+    @Environment(HighlighterStore.self) private var app
     @FocusState private var focused: Bool
+    @State private var isPublishing: Bool = false
+    @State private var errorMessage: String?
+    @State private var errorResetTimer = OneShotUITimer()
 
     private var draft: Binding<String> {
         Binding(
-            get: { app.commentDraft(parentEventId: parentEventId) },
-            set: { value in
-                app.setCommentDraft(parentEventId: parentEventId, body: value)
-                app.clearCommentPublishError()
-            }
+            get: { store.draft(forParent: parentEventId) },
+            set: { store.setDraft($0, forParent: parentEventId) }
         )
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let errorMessage = app.comments.publishErrorMessage {
+            if let errorMessage {
                 Text(errorMessage)
                     .font(.caption)
                     .foregroundStyle(Color.highlighterAccent)
@@ -36,7 +39,7 @@ struct CommentComposer: View {
             HStack(alignment: .bottom, spacing: 10) {
                 TextField(placeholder, text: draft, axis: .vertical)
                     .focused($focused)
-                    .lineLimit(1 ... 6)
+                    .lineLimit(1...6)
                     .font(.body)
                     .foregroundStyle(Color.highlighterInkStrong)
                     .padding(.horizontal, 14)
@@ -68,8 +71,12 @@ struct CommentComposer: View {
         Button(action: submit) {
             ZStack {
                 Circle()
-                    .fill(canSubmit ? Color.highlighterAccent : Color.highlighterInkMuted.opacity(0.35))
-                if app.comments.isPublishing {
+                    .fill(
+                        composerProjection.canSubmit
+                            ? Color.highlighterAccent
+                            : Color.highlighterInkMuted.opacity(0.35)
+                    )
+                if isPublishing {
                     ProgressView()
                         .progressViewStyle(.circular)
                         .tint(.white)
@@ -82,19 +89,50 @@ struct CommentComposer: View {
             .frame(width: 36, height: 36)
         }
         .buttonStyle(.plain)
-        .disabled(!canSubmit || app.comments.isPublishing)
-        .animation(.easeInOut(duration: 0.18), value: canSubmit)
-        .accessibilityLabel("Send comment")
+        .disabled(!composerProjection.canSubmit)
+        .animation(.easeInOut(duration: 0.18), value: composerProjection.canSubmit)
     }
 
-    private var canSubmit: Bool {
-        !draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private var composerProjection: CommentComposerProjection {
+        app.safeCore.projectCommentComposer(
+            input: CommentComposerProjectionInput(
+                body: draft.wrappedValue,
+                isPublishing: isPublishing
+            )
+        )
     }
 
     private func submit() {
-        guard canSubmit, !app.comments.isPublishing else { return }
-        app.clearCommentPublishError()
-        app.publishComment(parentEventId: parentEventId)
-        focused = false
+        let projection = composerProjection
+        guard projection.canSubmit else { return }
+        isPublishing = true
+        errorMessage = nil
+        Task {
+            let outcome = await store.publish(
+                content: projection.submitBody,
+                parentEventId: parentEventId
+            )
+            guard let outcome else {
+                isPublishing = false
+                return
+            }
+            let result = app.safeCore.projectCommentPublishResult(
+                input: CommentPublishResultInput(error: outcome.error)
+            )
+            if result.didPublish {
+                isPublishing = false
+                focused = false
+            } else {
+                isPublishing = false
+                withAnimation(.easeOut(duration: 0.18)) {
+                    errorMessage = "Couldn't publish — \(result.errorMessage)"
+                }
+                errorResetTimer.schedule(after: 2.4) {
+                    withAnimation(.easeIn(duration: 0.18)) {
+                        errorMessage = nil
+                    }
+                }
+            }
+        }
     }
 }

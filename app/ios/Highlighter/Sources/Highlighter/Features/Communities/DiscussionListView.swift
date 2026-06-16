@@ -1,19 +1,19 @@
 import SwiftUI
 
-/// Discussions tab content for a room. Data comes from the Rust-owned
-/// `roomDetail` snapshot opened by `RoomHomeView`.
+/// Discussions tab content for a room. Uses its own `DiscussionStore`.
 struct DiscussionListView: View {
     let groupId: String
     @Binding var composerPresented: Bool
 
     @Environment(HighlighterStore.self) private var app
+    @State private var store = DiscussionStore()
 
     var body: some View {
         Group {
-            if isLoading && discussions.isEmpty {
+            if store.isLoading && store.discussions.isEmpty {
                 ProgressView().controlSize(.large)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if discussions.isEmpty {
+            } else if store.discussions.isEmpty {
                 ContentUnavailableView(
                     "No discussions yet",
                     systemImage: "bubble.left.and.bubble.right",
@@ -22,7 +22,7 @@ struct DiscussionListView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(discussions, id: \.eventId) { d in
+                        ForEach(store.discussions, id: \.eventId) { d in
                             NavigationLink(value: d) {
                                 DiscussionRow(discussion: d)
                             }
@@ -37,18 +37,15 @@ struct DiscussionListView: View {
                 .background(Color.highlighterPaper.ignoresSafeArea())
             }
         }
-        .sheet(isPresented: $composerPresented) {
-            DiscussionComposerView(groupId: groupId)
+        .task {
+            await store.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
         }
-    }
-
-    private var discussions: [DiscussionRecord] {
-        guard app.roomDetail.groupId == groupId else { return [] }
-        return app.roomDetail.discussions
-    }
-
-    private var isLoading: Bool {
-        app.roomDetail.groupId == groupId && app.roomDetail.isLoading
+        .onDisappear { store.stop() }
+        .sheet(isPresented: $composerPresented) {
+            DiscussionComposerView(groupId: groupId) {
+                Task { await store.reloadFromCache() }
+            }
+        }
     }
 }
 
@@ -58,11 +55,13 @@ private struct DiscussionRow: View {
     @Environment(HighlighterStore.self) private var app
 
     var body: some View {
+        let author = authorDisplay
+
         HStack(alignment: .top, spacing: 12) {
             AuthorAvatar(
                 pubkey: discussion.pubkey,
-                pictureURL: app.profile(pubkeyHex: discussion.pubkey)?.picture ?? "",
-                displayInitial: displayInitial,
+                pictureURL: author.pictureUrl,
+                displayInitial: author.displayInitial,
                 size: 36
             )
 
@@ -81,12 +80,12 @@ private struct DiscussionRow: View {
                         .multilineTextAlignment(.leading)
                 }
 
-                if let attachment = discussion.attachment, !attachment.title.isEmpty || !attachment.url.isEmpty {
+                if let attachment = discussion.attachment {
                     attachmentChip(attachment)
                 }
 
                 HStack(spacing: 4) {
-                    Text(authorName)
+                    Text(author.displayName)
                         .font(.caption.weight(.medium))
                         .foregroundStyle(Color.highlighterInkMuted)
                     if let ts = discussion.createdAt, ts > 0 {
@@ -105,21 +104,18 @@ private struct DiscussionRow: View {
         }
         .padding(.vertical, 14)
         .task(id: discussion.pubkey) {
-            app.requestProfile(pubkeyHex: discussion.pubkey)
+            await app.requestProfile(pubkeyHex: discussion.pubkey)
         }
     }
 
-    private var authorName: String {
-        let profile = app.profile(pubkeyHex: discussion.pubkey)
-        if let dn = profile?.displayName, !dn.isEmpty { return dn }
-        if let n = profile?.name, !n.isEmpty { return n }
-        return String(discussion.pubkey.prefix(8))
-    }
-
-    private var displayInitial: String {
-        let profile = app.profile(pubkeyHex: discussion.pubkey)
-        let name = profile?.displayName ?? profile?.name ?? ""
-        return name.first.map { String($0).uppercased() } ?? String(discussion.pubkey.prefix(1).uppercased())
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: discussion.pubkey,
+                profile: app.profileSnapshots[discussion.pubkey],
+                fallback: .pubkey8
+            )
+        )
     }
 
     private func relativeTime(_ timestamp: UInt64) -> String {
@@ -131,8 +127,10 @@ private struct DiscussionRow: View {
 
     @ViewBuilder
     private func attachmentChip(_ a: DiscussionAttachment) -> some View {
-        let label = a.title.isEmpty ? a.url : a.title
-        if !label.isEmpty {
+        let projection = app.safeCore.projectDiscussionAttachment(
+            input: DiscussionAttachmentProjectionInput(attachment: a)
+        )
+        if let label = projection.label {
             HStack(spacing: 5) {
                 Image(systemName: "link")
                     .font(.caption2.weight(.medium))

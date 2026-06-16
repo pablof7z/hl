@@ -1,35 +1,40 @@
 import SwiftUI
 
-/// Body-only composer for a new feedback thread. Title comes later from the
+/// Body-only composer for a new feedback thread. Title arrives from the
 /// agent's kind:513 metadata; until then the thread row falls back to the
 /// trimmed body content.
 struct FeedbackNewThreadView: View {
+    let store: FeedbackStore
+    /// Called after a successful send. Caller decides whether to also dismiss
+    /// the parent threads sheet (currently always `false` — we stay in the
+    /// list so the user sees their new thread arrive).
+    let onSent: (Bool) -> Void
+
     @Environment(HighlighterStore.self) private var app
     @Environment(\.dismiss) private var dismiss
 
-    @State private var seenPublishedRoot: String?
+    @State private var draft: String = ""
+    @State private var isPublishing = false
+    @State private var errorMessage: String?
 
-    private var canPublish: Bool {
-        !app.feedback.newThreadDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !app.feedback.isPublishingNewThread
-    }
-
-    private var draft: Binding<String> {
-        Binding(
-            get: { app.feedback.newThreadDraft },
-            set: { app.setFeedbackNewThreadDraft($0) }
+    private var composerProjection: FeedbackComposerProjection {
+        app.safeCore.projectFeedbackComposer(
+            input: FeedbackComposerProjectionInput(
+                body: draft,
+                isPublishing: isPublishing
+            )
         )
     }
 
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 0) {
-                TextEditor(text: draft)
+                TextEditor(text: $draft)
                     .font(.body)
                     .padding(.horizontal, 12)
                     .padding(.top, 8)
                     .overlay(alignment: .topLeading) {
-                        if app.feedback.newThreadDraft.isEmpty {
+                        if draft.isEmpty {
                             Text("What's on your mind?")
                                 .font(.body)
                                 .foregroundStyle(.tertiary)
@@ -38,7 +43,7 @@ struct FeedbackNewThreadView: View {
                                 .allowsHitTesting(false)
                         }
                     }
-                if let errorMessage = app.feedback.publishErrorMessage {
+                if let errorMessage {
                     Text(errorMessage)
                         .font(.caption)
                         .foregroundStyle(.red)
@@ -51,26 +56,39 @@ struct FeedbackNewThreadView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
-                        .disabled(app.feedback.isPublishingNewThread)
+                        .disabled(isPublishing)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(app.feedback.isPublishingNewThread ? "Sending…" : "Send") {
-                        app.publishFeedbackNewThread()
+                    Button(isPublishing ? "Sending…" : "Send") {
+                        Task { await publish() }
                     }
-                    .disabled(!canPublish)
+                    .disabled(!composerProjection.canSend)
                 }
             }
         }
-        .onAppear {
-            seenPublishedRoot = app.feedback.lastPublishedRootEventId
-            app.clearFeedbackPublishError()
+    }
+
+    private func publish() async {
+        let projection = composerProjection
+        guard projection.canSend else { return }
+
+        isPublishing = true
+        errorMessage = nil
+        defer { isPublishing = false }
+
+        let outcome = await app.safeCore.publishFeedbackRootNoteSnapshot(
+            coordinate: FeedbackProject.coordinate,
+            body: projection.submitBody
+        )
+        let result = app.safeCore.projectFeedbackPublishResult(
+            input: FeedbackPublishResultInput(error: outcome.error)
+        )
+        guard result.didPublish else {
+            errorMessage = result.errorMessage
+            return
         }
-        .onChange(of: app.feedback.lastPublishedRootEventId) { _, next in
-            guard let next, next != seenPublishedRoot else { return }
-            seenPublishedRoot = next
-            if !app.feedback.isPublishingNewThread {
-                dismiss()
-            }
-        }
+        store.apply(snapshot: outcome.snapshot)
+        dismiss()
+        onSent(false)
     }
 }

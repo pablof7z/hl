@@ -1,51 +1,63 @@
 import Foundation
-import os
 
-/// Keychain capability for session credentials. Rust owns authentication
-/// policy; Swift only loads, stores, and clears raw credentials.
+/// Keychain-backed session capability. Rust owns restore policy; iOS only
+/// supplies saved secrets and executes explicit cleanup instructions.
 @MainActor
 final class AppSessionStore {
     static let shared = AppSessionStore()
     private init() {}
 
-    func storedCredential() -> HighlighterSessionCredential? {
-        if let nsec = KeychainService.loadNsec() {
-            return .nsec(nsec: nsec)
+    /// Returns the logged-in user if a saved credential succeeds, nil otherwise.
+    func restoreSession(into core: SafeHighlighterCore) async -> CurrentUser? {
+        let snapshot = await core.restoreSessionSnapshot(
+            nsec: KeychainService.loadNsec(),
+            bunkerUri: KeychainService.loadBunkerURI()
+        )
+
+        if snapshot.clearNsec {
+            KeychainService.deleteNsec()
+        }
+        if snapshot.clearBunkerUri {
+            KeychainService.deleteBunkerURI()
         }
 
-        if let uri = KeychainService.loadBunkerURI() {
-            return .bunkerUri(uri: uri)
-        }
-
-        return nil
+        return snapshot.isAuthenticated ? snapshot.user : nil
     }
 
-    func persist(_ credential: HighlighterSessionCredential) {
-        switch credential {
-        case .nsec(let nsec):
-            do {
-                try KeychainService.saveNsec(nsec)
-            } catch {
-                Logger.highlighter.error("Failed to persist nsec credential to keychain: \(error.localizedDescription, privacy: .public)")
-            }
-            KeychainService.deleteBunkerURI()
-        case .bunkerUri(let uri):
-            do {
-                try KeychainService.saveBunkerURI(uri)
-            } catch {
-                Logger.highlighter.error("Failed to persist bunker URI credential to keychain: \(error.localizedDescription, privacy: .public)")
-            }
-            KeychainService.deleteNsec()
-        case .nip55SignerPackage:
-            // NIP-55 (Amber / external signer) is Android-only. iOS has no signer
-            // app to hand off to, so a NIP-55 package is never a usable iOS
-            // credential and is not written to the iOS keychain. Clear any other
-            // stored credential to keep a single source of truth, matching the
-            // mutual exclusion the other cases enforce.
-            Logger.highlighter.error("Ignoring NIP-55 signer-package credential on iOS: external signers are Android-only; not persisting to keychain.")
-            KeychainService.deleteNsec()
-            KeychainService.deleteBunkerURI()
+    func persistAuthInstructions(
+        _ snapshot: AuthSessionSnapshot,
+        core: SafeHighlighterCore
+    ) -> SessionStorageWriteSnapshot {
+        var nsecSucceeded = false
+        var bunkerSucceeded = false
+        if let nsec = snapshot.persistNsec {
+            nsecSucceeded = KeychainService.saveNsec(nsec)
         }
+        if let uri = snapshot.persistBunkerUri {
+            bunkerSucceeded = KeychainService.saveBunkerURI(uri)
+        }
+        return core.projectSessionStorageWrite(input: SessionStorageWriteInput(
+            nsecRequested: snapshot.persistNsec != nil,
+            nsecSucceeded: nsecSucceeded,
+            bunkerUriRequested: snapshot.persistBunkerUri != nil,
+            bunkerUriSucceeded: bunkerSucceeded
+        ))
+    }
+
+    func persistAccountInstructions(
+        _ snapshot: AccountGenerationSnapshot,
+        core: SafeHighlighterCore
+    ) -> SessionStorageWriteSnapshot {
+        var nsecSucceeded = false
+        if let nsec = snapshot.persistNsec {
+            nsecSucceeded = KeychainService.saveNsec(nsec)
+        }
+        return core.projectSessionStorageWrite(input: SessionStorageWriteInput(
+            nsecRequested: snapshot.persistNsec != nil,
+            nsecSucceeded: nsecSucceeded,
+            bunkerUriRequested: false,
+            bunkerUriSucceeded: false
+        ))
     }
 
     func clear() {

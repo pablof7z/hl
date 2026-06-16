@@ -19,6 +19,7 @@ struct ArticleBodyView: UIViewRepresentable {
     let footnoteBackAnchors: [Int: NSRange]
     let highlightsById: [String: HighlightRecord]
     let paperColor: UIColor
+    let safeCore: SafeHighlighterCore
 
     /// User selected text and tapped **Highlight** (without note). The view
     /// hands back the selected text + the surrounding paragraph as context.
@@ -143,9 +144,9 @@ struct ArticleBodyView: UIViewRepresentable {
                 image: UIImage(systemName: "highlighter")
             ) { [weak self] _ in
                 guard let self, let tv = self.textView else { return }
-                let (quote, context) = self.selectionText(tv)
-                guard !quote.isEmpty else { return }
-                self.parent.onPublishHighlight(quote, context)
+                let selection = self.selectionText(tv)
+                guard selection.hasQuote else { return }
+                self.parent.onPublishHighlight(selection.quote, selection.context)
                 tv.selectedRange = NSRange(location: 0, length: 0)
             }
 
@@ -154,9 +155,9 @@ struct ArticleBodyView: UIViewRepresentable {
                 image: UIImage(systemName: "square.and.pencil")
             ) { [weak self] _ in
                 guard let self, let tv = self.textView else { return }
-                let (quote, context) = self.selectionText(tv)
-                guard !quote.isEmpty else { return }
-                self.parent.onRequestNote(quote, context)
+                let selection = self.selectionText(tv)
+                guard selection.hasQuote else { return }
+                self.parent.onRequestNote(selection.quote, selection.context)
                 tv.selectedRange = NSRange(location: 0, length: 0)
             }
 
@@ -164,11 +165,13 @@ struct ArticleBodyView: UIViewRepresentable {
             return UIMenu(children: [customMenu] + suggestedActions)
         }
 
-        private func selectionText(_ tv: UITextView) -> (quote: String, context: String) {
+        private func selectionText(
+            _ tv: UITextView
+        ) -> (quote: String, context: String, hasQuote: Bool) {
             let range = tv.selectedRange
-            guard range.length > 0 else { return ("", "") }
-            guard let textRange = Range(range, in: tv.text) else { return ("", "") }
-            let quote = String(tv.text[textRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard range.length > 0 else { return ("", "", false) }
+            guard let textRange = Range(range, in: tv.text) else { return ("", "", false) }
+            let quote = String(tv.text[textRange])
 
             // Context: the paragraph the selection starts in. Find the
             // paragraph bounds by scanning for double-newlines on either side.
@@ -195,9 +198,13 @@ struct ArticleBodyView: UIViewRepresentable {
             }
             let paragraphRange = NSRange(location: start, length: max(0, end - start))
             let paragraph = full.substring(with: paragraphRange)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let context = paragraph == quote ? "" : paragraph
-            return (quote, context)
+            let projection = parent.safeCore.projectArticleReaderSelection(
+                input: ArticleReaderSelectionProjectionInput(
+                    quote: quote,
+                    context: paragraph
+                )
+            )
+            return (projection.quote, projection.context, projection.hasQuote)
         }
 
         // MARK: Tap hit-testing
@@ -266,10 +273,8 @@ struct ArticleBodyView: UIViewRepresentable {
     }
 }
 
-/// `UITextView` subclass that exposes enough API for the coordinator to ask
-/// the edit menu to present itself at a specific rect. Today this is just a
-/// forwarding stub; future refinements (pinch-to-zoom typography, etc.) can
-/// live here without touching the SwiftUI wrapper.
+/// `UITextView` subclass that keeps the coordinator hook used by the SwiftUI
+/// wrapper for custom tap and edit-menu routing.
 private final class ReaderTextView: UITextView {
     weak var coordinator: ArticleBodyView.Coordinator?
 }

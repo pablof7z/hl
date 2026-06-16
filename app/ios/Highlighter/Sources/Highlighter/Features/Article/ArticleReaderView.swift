@@ -2,25 +2,6 @@ import Kingfisher
 import SwiftUI
 import UIKit
 
-/// Canonical identity for the article reader. Rust owns the live reader
-/// snapshot; Swift only passes the address plus an optional first-paint seed.
-struct ArticleReaderTarget: Hashable, Sendable {
-    let pubkey: String
-    let dTag: String
-    let seed: ArticleRecord?
-
-    var address: String { "30023:\(pubkey):\(dTag)" }
-
-    static func == (lhs: ArticleReaderTarget, rhs: ArticleReaderTarget) -> Bool {
-        lhs.pubkey == rhs.pubkey && lhs.dTag == rhs.dTag
-    }
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(pubkey)
-        hasher.combine(dTag)
-    }
-}
-
 /// Full-screen NIP-23 long-form reader. Handles the gorgeous header (cover,
 /// serif title, author row, metadata), renders the body via `ArticleBodyView`,
 /// and orchestrates the text-selection → highlight flow.
@@ -28,12 +9,13 @@ struct ArticleReaderView: View {
     let target: ArticleReaderTarget
 
     @Environment(HighlighterStore.self) private var app
+    @State private var store: ArticleReaderStore?
     @State private var pendingHighlight: PendingHighlight?
-    @State private var pendingHighlightHasNote = false
     @State private var highlightDetail: HighlightRecord?
     @State private var toast: String?
     @State private var scrollAnchor: ScrollAnchor = .idle
     @State private var shareTarget: ShareToCommunityTarget?
+    @State private var toastResetTimer = OneShotUITimer()
 
     enum ScrollAnchor: Equatable {
         case idle
@@ -49,21 +31,26 @@ struct ArticleReaderView: View {
 
     var body: some View {
         Group {
-            content(snapshot: app.articleReader)
+            if let store {
+                content(store: store)
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.highlighterPaper)
+            }
         }
         .background(Color.highlighterPaper.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
-            if let article = activeArticle(from: app.articleReader) {
-                let address = "30023:\(article.pubkey):\(article.identifier)"
+            if let article = store?.article {
                 ToolbarItem(placement: .topBarTrailing) {
-                    BookmarkMenuButton(articleAddress: address)
+                    BookmarkMenuButton(articleAddress: article.address)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        shareTarget = .article(article)
+                        shareTarget = ShareToCommunityTarget.article(article, core: app.safeCore)
                     } label: {
                         Image(systemName: "square.and.arrow.up")
                     }
@@ -76,28 +63,21 @@ struct ArticleReaderView: View {
                 .presentationDetents([.medium, .large])
         }
         .task(id: target) {
-            app.openArticleReader(
-                pubkeyHex: target.pubkey,
-                dTag: target.dTag,
-                seed: target.seed
-            )
-            app.requestProfile(pubkeyHex: target.pubkey)
+            if store == nil {
+                let s = ArticleReaderStore(
+                    target: target,
+                    safeCore: app.safeCore,
+                    eventBridge: app.eventBridge
+                )
+                store = s
+                await s.start()
+            }
+        }
+        .task(id: target.pubkey) {
+            await app.requestProfile(pubkeyHex: target.pubkey)
         }
         .onDisappear {
-            app.closeArticleReader()
-        }
-        .onChange(of: app.articleReader.lastPublishedHighlightId) { _, eventId in
-            guard eventId != nil, isActive(snapshot: app.articleReader) else { return }
-            withAnimation(.easeOut(duration: 0.2)) {
-                toast = pendingHighlightHasNote ? "Highlighted with note" : "Highlighted"
-            }
-            pendingHighlightHasNote = false
-        }
-        .onChange(of: app.articleReader.errorMessage) { _, message in
-            guard let message, !message.isEmpty, isActive(snapshot: app.articleReader) else { return }
-            withAnimation(.easeOut(duration: 0.2)) {
-                toast = "Couldn't save — \(message)"
-            }
+            store?.stop()
         }
         .sheet(item: $pendingHighlight) { pending in
             NoteComposerSheet(
@@ -119,48 +99,32 @@ struct ArticleReaderView: View {
         }
         .safeAreaInset(edge: .bottom) {
             if let toast {
-                HStack(spacing: 10) {
-                    Text(toast)
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(.white)
-                    Button {
-                        withAnimation(.easeIn(duration: 0.2)) { self.toast = nil }
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.white.opacity(0.9))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Dismiss")
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color.highlighterAccent.opacity(0.95), in: Capsule())
-                .padding(.horizontal, 20)
-                .padding(.bottom, 12)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                Text(toast)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color.highlighterAccent.opacity(0.95), in: Capsule())
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 12)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .modifier(ArticleCommentsAttachmentModifier(article: activeArticle(from: app.articleReader), target: target))
+        .modifier(ArticleCommentsAttachmentModifier(article: store?.article, target: target))
     }
 
     // MARK: - Content
 
     @ViewBuilder
-    private func content(snapshot: HighlighterArticleReaderSnapshot) -> some View {
-        let active = isActive(snapshot: snapshot)
-        let article = active ? (snapshot.article ?? target.seed) : target.seed
-        let authorProfile = app.profile(pubkeyHex: target.pubkey) ?? (active ? snapshot.authorProfile : nil)
-        let highlights = active ? snapshot.highlights : []
-
-        if (active && snapshot.isLoading || !active) && article == nil {
+    private func content(store: ArticleReaderStore) -> some View {
+        if store.isLoadingInitial && store.article == nil {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let article {
+        } else if let article = store.article {
             ReaderScroll(
                 article: article,
-                authorProfile: authorProfile,
-                highlights: highlights,
+                authorProfile: app.profileSnapshots[target.pubkey] ?? store.authorProfile,
+                highlights: store.highlights,
                 scrollAnchor: scrollAnchor,
                 onPublishHighlight: { quote, context in
                     Task { await publish(quote: quote, context: context, note: "") }
@@ -188,20 +152,36 @@ struct ArticleReaderView: View {
     // MARK: - Actions
 
     private func publish(quote: String, context: String, note: String) async {
-        pendingHighlightHasNote = !note.isEmpty
-        app.publishArticleHighlight(quote: quote, context: context, note: note)
-        withAnimation(.easeOut(duration: 0.2)) {
-            toast = "Saving highlight..."
+        guard let store else { return }
+        let request = app.safeCore.projectArticleHighlightPublish(
+            input: ArticleHighlightPublishProjectionInput(note: note, error: "")
+        )
+        let outcome = await store.publishHighlight(
+            quote: quote,
+            note: request.submitNote,
+            context: context
+        )
+        let result = app.safeCore.projectArticleHighlightPublish(
+            input: ArticleHighlightPublishProjectionInput(
+                note: request.submitNote,
+                error: outcome.error
+            )
+        )
+        if result.isSuccess {
+            withAnimation(.easeOut(duration: 0.2)) {
+                toast = result.toastMessage
+            }
+            toastResetTimer.schedule(after: 1.8) {
+                withAnimation(.easeIn(duration: 0.2)) { toast = nil }
+            }
+        } else {
+            withAnimation(.easeOut(duration: 0.2)) {
+                toast = result.toastMessage
+            }
+            toastResetTimer.schedule(after: 2.8) {
+                withAnimation(.easeIn(duration: 0.2)) { toast = nil }
+            }
         }
-    }
-
-    private func isActive(snapshot: HighlighterArticleReaderSnapshot) -> Bool {
-        snapshot.pubkeyHex == target.pubkey && snapshot.dTag == target.dTag
-    }
-
-    private func activeArticle(from snapshot: HighlighterArticleReaderSnapshot) -> ArticleRecord? {
-        guard isActive(snapshot: snapshot) else { return target.seed }
-        return snapshot.article ?? target.seed
     }
 }
 
@@ -215,11 +195,19 @@ private struct ArticleCommentsAttachmentModifier: ViewModifier {
     let article: ArticleRecord?
     let target: ArticleReaderTarget
 
+    @Environment(HighlighterStore.self) private var app
+
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content.commentsAttachment(
-            artifact: .article(addr: target.address),
-            artifactAuthorPubkey: target.pubkey
-        )
+        let snapshot = app.safeCore.getArticleCommentScope(address: target.address)
+        if snapshot.attach, let scope = snapshot.scope {
+            content.commentsAttachment(
+                scope: scope,
+                artifactAuthorPubkey: target.pubkey
+            )
+        } else {
+            content
+        }
     }
 }
 
@@ -267,28 +255,36 @@ private struct ReaderScroll: View {
                 if let rendered {
                     bodySegments(rendered)
                 }
+
+                NavigationLink(
+                    destination: Group {
+                        if let pk = profileNavPubkey {
+                            ProfileView(pubkey: pk)
+                        }
+                    },
+                    isActive: $profileNavActive
+                ) { EmptyView() }
+                    .hidden()
             }
         }
         .ignoresSafeArea(edges: coverURL == nil ? [] : .top)
         .fullScreenCover(item: $imageToOpen) { item in
             ImageZoomView(url: item.url, onDismiss: { imageToOpen = nil })
         }
-        .navigationDestination(isPresented: $profileNavActive) {
-            if let pk = profileNavPubkey {
-                ProfileView(pubkey: pk)
-            }
-        }
-        .task(id: "\(article.eventId)-\(highlights.count)-\(app.nmpState.profileCount)") {
+        .task(id: "\(article.eventId)-\(highlights.count)-\(app.profileSnapshots.count)") {
+            let safeCore = app.safeCore
             let profileSnapshot = Dictionary(
-                uniqueKeysWithValues: app.nmpState.profiles.compactMap { entry -> (String, String)? in
-                    let pk = entry.pubkeyHex
-                    let meta = entry.metadata
-                    let name = meta.displayName.isEmpty ? meta.name : meta.displayName
-                    guard !name.isEmpty else { return nil }
-                    return (pk, name)
+                uniqueKeysWithValues: app.profileSnapshots.map { (pk, meta) -> (String, String) in
+                    let display = safeCore.projectProfileDisplay(
+                        input: ProfileDisplayProjectionInput(
+                            pubkey: pk,
+                            profile: meta,
+                            fallback: .pubkey8
+                        )
+                    )
+                    return (pk, display.displayName)
                 }
             )
-            let nmpApp = app.nmpApp
             rendered = await Task.detached(priority: .userInitiated) {
                 MarkdownRenderer.render(
                     content: article.content,
@@ -297,7 +293,20 @@ private struct ReaderScroll: View {
                     tint: UIColor(Color.highlighterAccent),
                     ink: UIColor(Color.highlighterInkStrong),
                     muted: UIColor(Color.highlighterInkMuted),
-                    nostrDecoder: { input in nmpApp.decodeNostrEntity(input: input) },
+                    nostrStandaloneEntity: { input in
+                        safeCore.standaloneNostrEntity(input)
+                    },
+                    nostrInlineTokens: { input in
+                        safeCore.tokenizeNostrMarkdownInline(input)
+                    },
+                    nostrInlineRender: { ref in
+                        safeCore.nostrEntityInlineRender(entity: ref)
+                    },
+                    highlightContent: { highlight in
+                        safeCore.projectHighlightDetailContent(
+                            input: HighlightDetailContentProjectionInput(highlight: highlight)
+                        )
+                    },
                     profileNames: profileSnapshot
                 )
             }.value
@@ -308,7 +317,7 @@ private struct ReaderScroll: View {
     private func bodySegments(_ output: MarkdownRenderer.Output) -> some View {
         ForEach(Array(output.segments.enumerated()), id: \.offset) { idx, segment in
             switch segment {
-            case let .text(attrStr):
+            case .text(let attrStr):
                 let isLast = idx == output.segments.count - 1
                 ArticleBodyView(
                     attributedText: isLast ? withFootnotes(attrStr, output) : attrStr,
@@ -316,6 +325,7 @@ private struct ReaderScroll: View {
                     footnoteBackAnchors: [:],
                     highlightsById: output.highlightsById,
                     paperColor: UIColor(Color.highlighterPaper),
+                    safeCore: app.safeCore,
                     onPublishHighlight: onPublishHighlight,
                     onRequestNote: onRequestNote,
                     onHighlightTap: onHighlightTap,
@@ -328,9 +338,9 @@ private struct ReaderScroll: View {
                     }
                 )
                 .frame(maxWidth: .infinity)
-            case let .image(url, alt):
+            case .image(let url, let alt):
                 InlineArticleImage(url: url, alt: alt)
-            case let .nostrEntity(ref):
+            case .nostrEntity(let ref):
                 NostrEntityCard(entity: ref)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 4)
@@ -345,7 +355,7 @@ private struct ReaderScroll: View {
             string: "\n———\n\n",
             attributes: [
                 .font: UIFont.systemFont(ofSize: 14, weight: .semibold),
-                .foregroundColor: UIColor(Color.highlighterInkMuted),
+                .foregroundColor: UIColor(Color.highlighterInkMuted)
             ]
         ))
         out.append(NSAttributedString(
@@ -353,7 +363,7 @@ private struct ReaderScroll: View {
             attributes: [
                 .font: UIFont.systemFont(ofSize: 12, weight: .bold),
                 .foregroundColor: UIColor(Color.highlighterInkMuted),
-                .kern: 0.6,
+                .kern: 0.6
             ]
         ))
         out.append(output.footnotes)
@@ -382,9 +392,6 @@ private struct InlineArticleImage: View {
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .contentShape(Rectangle())
             .onTapGesture { showFullScreen = true }
-            .accessibilityAddTraits(.isButton)
-            .accessibilityLabel("Article image")
-            .accessibilityHint("View full screen")
             .padding(.horizontal, 20)
             .padding(.vertical, 8)
             .fullScreenCover(isPresented: $showFullScreen) {
@@ -413,9 +420,6 @@ private struct HeroImage: View {
                 .frame(width: proxy.size.width, height: proxy.size.height)
                 .clipped()
                 .onTapGesture { showFullScreen = true }
-                .accessibilityAddTraits(.isButton)
-                .accessibilityLabel("Cover image")
-                .accessibilityHint("View full screen")
         }
         .frame(height: 320)
         .fullScreenCover(isPresented: $showFullScreen) {
@@ -430,9 +434,13 @@ private struct Header: View {
     let article: ArticleRecord
     let authorProfile: ProfileMetadata?
 
+    @Environment(HighlighterStore.self) private var app
+
     var body: some View {
+        let projection = headerProjection
+
         VStack(alignment: .leading, spacing: 14) {
-            Text(article.title.isEmpty ? "Untitled" : article.title)
+            Text(projection.title)
                 .font(.largeTitle.weight(.bold))
                 .foregroundStyle(Color.highlighterInkStrong)
                 .fixedSize(horizontal: false, vertical: true)
@@ -444,13 +452,13 @@ private struct Header: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            authorRow
+            authorRow(projection)
 
-            if !article.hashtags.isEmpty {
+            if !projection.hashtagLabels.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        ForEach(article.hashtags.prefix(12), id: \.self) { tag in
-                            Text("#\(tag)")
+                        ForEach(projection.hashtagLabels, id: \.self) { tag in
+                            Text(tag)
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(Color.highlighterAccent)
                                 .padding(.horizontal, 10)
@@ -471,26 +479,28 @@ private struct Header: View {
     }
 
     @ViewBuilder
-    private var authorRow: some View {
+    private func authorRow(_ projection: ArticleReaderHeaderProjection) -> some View {
+        let author = authorDisplay
+
         NavigationLink(value: ProfileDestination.pubkey(article.pubkey)) {
             HStack(spacing: 12) {
                 AuthorAvatar(
                     pubkey: article.pubkey,
-                    pictureURL: authorProfile?.picture ?? "",
-                    displayInitial: initial,
+                    pictureURL: author.pictureUrl,
+                    displayInitial: author.displayInitial,
                     size: 40,
                     ringWidth: 2
                 )
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(authorDisplayName)
+                    Text(author.displayName)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.highlighterInkStrong)
                     HStack(spacing: 6) {
-                        if let date = displayDate {
+                        if let date = displayDate(projection.displayUnixSeconds) {
                             Text(date)
                         }
-                        if let mins = readTimeMinutes {
+                        if let mins = projection.readTimeMinutes {
                             Text("·")
                             Text("\(mins) min read")
                         }
@@ -504,33 +514,29 @@ private struct Header: View {
         .buttonStyle(.plain)
     }
 
-    private var initial: String {
-        authorDisplayName.first.map { String($0).uppercased() } ?? "?"
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: article.pubkey,
+                profile: authorProfile,
+                fallback: .pubkey10
+            )
+        )
     }
 
-    private var authorDisplayName: String {
-        let dn = authorProfile?.displayName ?? ""
-        if !dn.isEmpty { return dn }
-        let n = authorProfile?.name ?? ""
-        if !n.isEmpty { return n }
-        return String(article.pubkey.prefix(10))
+    private var headerProjection: ArticleReaderHeaderProjection {
+        app.safeCore.projectArticleReaderHeader(
+            input: ArticleReaderHeaderProjectionInput(article: article)
+        )
     }
 
-    private var displayDate: String? {
-        let seconds = article.publishedAt ?? article.createdAt ?? 0
-        guard seconds > 0 else { return nil }
+    private func displayDate(_ seconds: UInt64?) -> String? {
+        guard let seconds else { return nil }
         let date = Date(timeIntervalSince1970: TimeInterval(seconds))
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter.string(from: date)
-    }
-
-    /// Rough read-time estimate: 240 wpm.
-    private var readTimeMinutes: Int? {
-        let words = article.content.split(whereSeparator: { $0.isWhitespace }).count
-        guard words > 60 else { return nil }
-        return max(1, words / 240)
     }
 }
 
@@ -555,7 +561,7 @@ private struct NoteComposerSheet: View {
                     .background(Color.highlighterAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
 
                 TextField("Add a note…", text: $note, axis: .vertical)
-                    .lineLimit(3 ... 8)
+                    .lineLimit(3...8)
                     .focused($focused)
                     .textFieldStyle(.roundedBorder)
 
@@ -570,7 +576,7 @@ private struct NoteComposerSheet: View {
                     Button("Cancel", action: onCancel)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") { onSave(note.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                    Button("Save") { onSave(note) }
                         .fontWeight(.semibold)
                 }
             }
@@ -613,21 +619,24 @@ private struct HighlightDetailSheet: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .task(id: highlight.pubkey) {
-            app.requestProfile(pubkeyHex: highlight.pubkey)
+            await app.requestProfile(pubkeyHex: highlight.pubkey)
         }
     }
 
+    @ViewBuilder
     private var authorRow: some View {
+        let author = authorDisplay
+
         HStack(spacing: 12) {
             AuthorAvatar(
                 pubkey: highlight.pubkey,
-                pictureURL: app.profile(pubkeyHex: highlight.pubkey)?.picture ?? "",
-                displayInitial: initial,
+                pictureURL: author.pictureUrl,
+                displayInitial: author.displayInitial,
                 size: 40,
                 ringWidth: 2
             )
             VStack(alignment: .leading, spacing: 2) {
-                Text(displayName)
+                Text(author.displayName)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                 Text("highlighted")
@@ -636,6 +645,16 @@ private struct HighlightDetailSheet: View {
             }
             Spacer(minLength: 0)
         }
+    }
+
+    private var authorDisplay: ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: highlight.pubkey,
+                profile: app.profileSnapshots[highlight.pubkey],
+                fallback: .pubkey10
+            )
+        )
     }
 
     private var quoteBlock: some View {
@@ -661,16 +680,4 @@ private struct HighlightDetailSheet: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var displayName: String {
-        let profile = app.profile(pubkeyHex: highlight.pubkey)
-        let dn = profile?.displayName ?? ""
-        if !dn.isEmpty { return dn }
-        let n = profile?.name ?? ""
-        if !n.isEmpty { return n }
-        return String(highlight.pubkey.prefix(10))
-    }
-
-    private var initial: String {
-        displayName.first.map { String($0).uppercased() } ?? "?"
-    }
 }

@@ -19,49 +19,32 @@ struct ClipComposerSheet: View {
 
     // MARK: - Computed
 
-    private var duration: Double { endSeconds - startSeconds }
-
-    private var matchingSegments: [TranscriptSegment] {
-        guard player.transcriptAvailability == .available else { return [] }
-        return player.transcriptSegments.filter { seg in
-            seg.start < endSeconds && seg.end > startSeconds
-        }
+    private var composerProjection: PodcastClipComposerProjection {
+        app.safeCore.getPodcastClipComposerProjection(
+            segments: player.transcriptSegments,
+            transcriptAvailable: player.transcriptAvailability == .available,
+            clipStartSeconds: startSeconds,
+            clipEndSeconds: endSeconds,
+            durationSeconds: player.duration,
+            selectedGroupId: selectedGroupId,
+            joinedCommunities: app.joinedCommunities
+        )
     }
 
     private var extractedFragment: String {
-        matchingSegments.map(\.text).joined(separator: " ")
-    }
-
-    private var inferredSpeaker: String {
-        matchingSegments.first(where: { !$0.speaker.isEmpty })?.speaker ?? ""
-    }
-
-    private var durationLabel: String {
-        let total = Int(duration)
-        let m = total / 60
-        let s = total % 60
-        if m > 0 { return "\(m)m \(s)s" }
-        return "\(s)s"
-    }
-
-    private var subtitleLabel: String {
-        let dl = durationLabel
-        return matchingSegments.isEmpty ? "\(dl) · time-only clip" : "\(dl) · with transcript"
+        composerProjection.excerpt
     }
 
     private var canPublish: Bool {
-        startSeconds >= 0
-            && endSeconds <= player.duration
-            && startSeconds + 5 <= endSeconds
-            && !isPublishing
+        composerProjection.canPublish && !isPublishing
     }
 
     private var communityName: String {
-        guard let id = selectedGroupId else { return "" }
-        if let community = app.joinedCommunities.first(where: { $0.id == id }) {
-            return community.name.isEmpty ? id : community.name
-        }
-        return id
+        composerProjection.communityDisplayName
+    }
+
+    private var hasCommunity: Bool {
+        composerProjection.hasCommunity
     }
 
     // MARK: - Body
@@ -105,9 +88,6 @@ struct ClipComposerSheet: View {
                 selectedGroupId = artifact.groupId
             }
         }
-        .onChange(of: app.capture) { _, snapshot in
-            applyPublishSnapshot(snapshot)
-        }
     }
 
     // MARK: - Header
@@ -124,9 +104,11 @@ struct ClipComposerSheet: View {
     }
 
     private var rangeRow: some View {
-        VStack(spacing: 6) {
+        let projection = composerProjection
+
+        return VStack(spacing: 6) {
             HStack(spacing: 0) {
-                timeEditor(seconds: $startSeconds, direction: .leading) { delta in
+                timeEditor(label: projection.clipStartLabel, direction: .leading) { delta in
                     let proposed = startSeconds + delta
                     startSeconds = max(0, min(endSeconds - 5, proposed))
                 }
@@ -139,13 +121,13 @@ struct ClipComposerSheet: View {
 
                 Spacer(minLength: 0)
 
-                timeEditor(seconds: $endSeconds, direction: .trailing) { delta in
+                timeEditor(label: projection.clipEndLabel, direction: .trailing) { delta in
                     let proposed = endSeconds + delta
                     endSeconds = max(startSeconds + 5, min(player.duration > 0 ? player.duration : proposed, proposed))
                 }
             }
 
-            Text(subtitleLabel)
+            Text(projection.subtitleLabel)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -155,7 +137,7 @@ struct ClipComposerSheet: View {
     private enum NudgeAlignment { case leading, trailing }
 
     private func timeEditor(
-        seconds: Binding<Double>,
+        label: String,
         direction: NudgeAlignment,
         onNudge: @escaping (Double) -> Void
     ) -> some View {
@@ -164,7 +146,7 @@ struct ClipComposerSheet: View {
                 nudgeButton(label: "-5s", delta: -5, onNudge: onNudge)
             }
 
-            Text(formatTimestamp(seconds.wrappedValue))
+            Text(label)
                 .font(.system(size: 24, weight: .semibold).monospacedDigit())
                 .foregroundStyle(.primary)
 
@@ -214,7 +196,7 @@ struct ClipComposerSheet: View {
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
 
-                Text("Time-only clip · \(durationLabel). Add a note for the room below.")
+                Text(composerProjection.timeOnlyMessage)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -254,9 +236,9 @@ struct ClipComposerSheet: View {
                     .font(.callout)
                     .foregroundStyle(.primary)
                 Spacer()
-                Text(communityName.isEmpty ? "Personal" : communityName)
+                Text(communityName)
                     .font(.callout)
-                    .foregroundStyle(communityName.isEmpty ? Color.secondary : Color.highlighterAccent)
+                    .foregroundStyle(hasCommunity ? Color.highlighterAccent : Color.secondary)
                     .lineLimit(1)
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.medium))
@@ -316,53 +298,35 @@ struct ClipComposerSheet: View {
         guard canPublish else { return }
         isPublishing = true
         publishError = nil
-        app.clearCaptureError()
-        app.clearCaptureResult()
 
-        let draft = HighlightDraft(
-            quote: extractedFragment,
-            context: note,
-            note: "",
-            clipStartSeconds: startSeconds,
-            clipEndSeconds: endSeconds,
-            clipSpeaker: inferredSpeaker,
-            clipTranscriptSegmentIds: matchingSegments.map(\.id),
-            image: nil
-        )
-
-        app.publishClipHighlight(
-            artifact: artifact,
-            targetGroupId: selectedGroupId,
-            draft: draft
-        )
-    }
-
-    private func applyPublishSnapshot(_ snapshot: HighlighterCaptureSnapshot) {
-        guard isPublishing || snapshot.isPublishing else { return }
-        if snapshot.isPublishing {
-            isPublishing = true
-            return
-        }
-        if snapshot.publishedEventId != nil {
-            isPublishing = false
-            app.clearCaptureResult()
-            dismiss()
-        } else if let message = snapshot.errorMessage {
-            isPublishing = false
-            publishError = message
-            app.clearCaptureError()
+        Task {
+            let outcome = await app.safeCore.publishPodcastComposerClip(
+                input: PodcastClipComposerPublishInput(
+                    artifact: artifact,
+                    segments: player.transcriptSegments,
+                    transcriptAvailable: player.transcriptAvailability == .available,
+                    context: note,
+                    clipStartSeconds: startSeconds,
+                    clipEndSeconds: endSeconds,
+                    targetGroupId: selectedGroupId
+                )
+            )
+            await MainActor.run {
+                isPublishing = false
+                let result = app.safeCore.projectPodcastClipPublishResult(
+                    input: PodcastClipPublishResultInput(snapshot: outcome)
+                )
+                if !result.didPublish {
+                    publishError = result.errorMessage
+                } else {
+                    if let toast = result.shareToast {
+                        app.shareToast = toast
+                    }
+                    if result.shouldDismiss {
+                        dismiss()
+                    }
+                }
+            }
         }
     }
-}
-
-// MARK: - Timestamp formatter
-
-private func formatTimestamp(_ seconds: Double) -> String {
-    guard seconds.isFinite, seconds >= 0 else { return "0:00" }
-    let total = Int(seconds)
-    let h = total / 3600
-    let m = (total % 3600) / 60
-    let s = total % 60
-    if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
-    return String(format: "%d:%02d", m, s)
 }

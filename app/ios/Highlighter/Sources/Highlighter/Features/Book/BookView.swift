@@ -5,20 +5,17 @@ struct BookView: View {
     let catalogId: String
 
     @Environment(HighlighterStore.self) private var app
+    @State private var loadedRoute: BookRoute?
+    @State private var highlights: [HighlightRecord] = []
     @State private var descriptionExpanded = false
 
-    private var isbn: String {
-        catalogId.hasPrefix("isbn:") ? String(catalogId.dropFirst("isbn:".count)) : catalogId
+    private var bookRoute: BookRoute? {
+        loadedRoute ?? app.core.getBookRoute(catalogId: catalogId)
     }
 
-    private var preview: ArtifactPreview? { app.isbnPreview(isbn: isbn) }
-
-    private var highlightTagValue: String {
-        catalogId.hasPrefix("isbn:") ? catalogId : "isbn:\(catalogId)"
-    }
-
-    private var highlights: [HighlightRecord] {
-        app.referenceHighlights(tagName: "i", tagValue: highlightTagValue) ?? []
+    private var preview: ArtifactPreview? {
+        guard let isbn = bookRoute?.isbn else { return nil }
+        return app.isbnPreviewCache[isbn]
     }
 
     var body: some View {
@@ -35,7 +32,7 @@ struct BookView: View {
         .background(Color.highlighterPaper.ignoresSafeArea())
         .navigationTitle(preview?.title ?? "")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: catalogId) { load() }
+        .task(id: catalogId) { await load() }
     }
 
     // MARK: - Hero
@@ -186,21 +183,24 @@ struct BookView: View {
     }
 
     private func passageRow(_ h: HighlightRecord) -> some View {
-        HStack(alignment: .top, spacing: 14) {
+        let content = app.safeCore.projectHighlightDetailContent(
+            input: HighlightDetailContentProjectionInput(highlight: h)
+        )
+        return HStack(alignment: .top, spacing: 14) {
             Rectangle()
                 .fill(Color.highlighterAccent)
                 .frame(width: 3)
                 .clipShape(RoundedRectangle(cornerRadius: 1.5))
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(h.quote.trimmingCharacters(in: .whitespacesAndNewlines))
+                Text(content.quoteText)
                     .font(.system(.body, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
 
-                if !h.note.isEmpty {
-                    Text(h.note)
+                if let note = content.noteText {
+                    Text(note)
                         .font(.footnote)
                         .foregroundStyle(Color.highlighterInkMuted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -219,16 +219,19 @@ struct BookView: View {
         }
     }
 
+    @ViewBuilder
     private func highlighterByline(_ h: HighlightRecord) -> some View {
+        let highlighter = highlighterDisplay(h.pubkey)
+
         HStack(spacing: 6) {
             AuthorAvatar(
                 pubkey: h.pubkey,
-                pictureURL: app.profile(pubkeyHex: h.pubkey)?.picture ?? "",
-                displayInitial: displayName(h.pubkey).prefix(1).description.uppercased(),
+                pictureURL: highlighter.pictureUrl,
+                displayInitial: highlighter.displayInitial,
                 size: 16,
                 ringWidth: 0
             )
-            Text(displayName(h.pubkey).uppercased())
+            Text(highlighter.displayName.uppercased())
                 .font(.caption2.weight(.bold))
                 .tracking(0.5)
                 .foregroundStyle(Color.highlighterInkMuted)
@@ -237,36 +240,47 @@ struct BookView: View {
                 Text(rel).font(.caption2).foregroundStyle(Color.highlighterInkMuted)
             }
         }
-        .task(id: h.pubkey) { app.requestProfile(pubkeyHex: h.pubkey) }
+        .task(id: h.pubkey) { await app.requestProfile(pubkeyHex: h.pubkey) }
     }
 
     // MARK: - Data loading
 
-    private func load() {
-        app.requestIsbnPreview(isbn: isbn)
-        app.requestReferenceHighlights(tagName: "i", tagValue: highlightTagValue, limit: 64)
+    private func load() async {
+        let snapshot = await app.safeCore.getBookDetailSnapshot(catalogId: catalogId, limit: 64)
+        let projection = app.safeCore.projectBookDetailSnapshotApply(
+            input: BookDetailSnapshotApplyInput(
+                route: snapshot.route,
+                highlights: snapshot.highlights,
+                error: snapshot.error
+            )
+        )
+        if let isbn = projection.isbnPreviewRequest {
+            await app.requestIsbnPreview(isbn: isbn)
+        }
+        await MainActor.run {
+            loadedRoute = projection.route
+            highlights = projection.highlights
+        }
     }
 
     // MARK: - Helpers
 
-    private func displayName(_ pubkey: String) -> String {
-        let p = app.profile(pubkeyHex: pubkey)
-        if let dn = p?.displayName, !dn.isEmpty { return dn }
-        if let n = p?.name, !n.isEmpty { return n }
-        return String(pubkey.prefix(8))
+    private func highlighterDisplay(_ pubkey: String) -> ProfileDisplayProjection {
+        app.safeCore.projectProfileDisplay(
+            input: ProfileDisplayProjectionInput(
+                pubkey: pubkey,
+                profile: app.profileSnapshots[pubkey],
+                fallback: .pubkey8
+            )
+        )
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
-        guard let s = seconds, s > 0 else { return nil }
-        let delta = Date().timeIntervalSince1970 - TimeInterval(s)
-        guard delta >= 0 else { return nil }
-        switch delta {
-        case ..<60: return "just now"
-        case ..<3600: return "\(Int(delta / 60))m"
-        case ..<86400: return "\(Int(delta / 3600))h"
-        case ..<604_800: return "\(Int(delta / 86400))d"
-        case ..<2_592_000: return "\(Int(delta / 604_800))w"
-        default: return "\(Int(delta / 2_592_000))mo"
-        }
+        app.safeCore.projectRelativeTimeLabel(
+            input: RelativeTimeLabelInput(
+                unixSeconds: seconds,
+                style: .compact
+            )
+        ).label
     }
 }

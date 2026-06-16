@@ -66,21 +66,20 @@ struct MiniPlayerView: View {
 
     @ViewBuilder
     private func expandedRow(artifact: ArtifactRecord) -> some View {
+        let projection = podcastNowPlaying(artifact)
+
         HStack(spacing: 12) {
             artwork(artifact: artifact, size: 40, cornerRadius: 6)
                 .matchedTransitionSource(id: "podcast-mini-art", in: heroNamespace)
 
             VStack(alignment: .leading, spacing: 2) {
-                let showTitle = artifact.preview.podcastShowTitle.isEmpty
-                    ? artifact.preview.author
-                    : artifact.preview.podcastShowTitle
-                if !showTitle.isEmpty {
-                    Text(showTitle)
+                if !projection.showTitle.isEmpty {
+                    Text(projection.showTitle)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                Text(artifact.preview.title.isEmpty ? "Untitled episode" : artifact.preview.title)
+                Text(projection.episodeTitle)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
             }
@@ -94,11 +93,13 @@ struct MiniPlayerView: View {
 
     @ViewBuilder
     private func inlineRow(artifact: ArtifactRecord) -> some View {
+        let projection = podcastNowPlaying(artifact)
+
         HStack(spacing: 8) {
             artwork(artifact: artifact, size: 24, cornerRadius: 4)
                 .matchedTransitionSource(id: "podcast-mini-art", in: heroNamespace)
 
-            Text(artifact.preview.title.isEmpty ? "Untitled episode" : artifact.preview.title)
+            Text(projection.episodeTitle)
                 .font(.footnote.weight(.semibold))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -106,6 +107,12 @@ struct MiniPlayerView: View {
             playPauseButton(size: 28)
         }
         .padding(.horizontal, 10)
+    }
+
+    private func podcastNowPlaying(_ artifact: ArtifactRecord) -> PodcastNowPlayingProjection {
+        app.safeCore.getPodcastNowPlayingProjection(
+            input: PodcastNowPlayingProjectionInput(artifact: artifact)
+        )
     }
 
     private func playPauseButton(size: CGFloat) -> some View {

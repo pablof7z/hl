@@ -26,11 +26,17 @@ private struct ArticleRowActionsModifier: ViewModifier {
     @State private var shareTarget: ShareToCommunityTarget?
 
     private var address: String {
-        "30023:\(article.pubkey):\(article.identifier)"
+        article.address
     }
 
     private var isBookmarked: Bool {
         app.isBookmarked(articleAddress: address)
+    }
+
+    private var bookmarkChrome: ArticleBookmarkChromeProjection {
+        app.safeCore.projectArticleBookmarkChrome(
+            input: ArticleBookmarkChromeProjectionInput(isBookmarked: isBookmarked)
+        )
     }
 
     func body(content: Content) -> some View {
@@ -40,15 +46,15 @@ private struct ArticleRowActionsModifier: ViewModifier {
                     Task { await app.toggleBookmark(articleAddress: address) }
                 } label: {
                     Label(
-                        isBookmarked ? "Remove" : "Bookmark",
-                        systemImage: isBookmarked ? "bookmark.slash" : "bookmark"
+                        bookmarkChrome.swipeTitle,
+                        systemImage: bookmarkChrome.actionSystemImage
                     )
                 }
                 .tint(Color.highlighterAccent)
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 Button {
-                    shareTarget = .article(article)
+                    shareTarget = ShareToCommunityTarget.article(article, core: app.safeCore)
                 } label: {
                     Label("Share", systemImage: "square.and.arrow.up")
                 }
@@ -59,12 +65,12 @@ private struct ArticleRowActionsModifier: ViewModifier {
                     Task { await app.toggleBookmark(articleAddress: address) }
                 } label: {
                     Label(
-                        isBookmarked ? "Remove bookmark" : "Bookmark",
-                        systemImage: isBookmarked ? "bookmark.slash" : "bookmark"
+                        bookmarkChrome.menuTitle,
+                        systemImage: bookmarkChrome.actionSystemImage
                     )
                 }
                 Button {
-                    shareTarget = .article(article)
+                    shareTarget = ShareToCommunityTarget.article(article, core: app.safeCore)
                 } label: {
                     Label("Share to community", systemImage: "square.and.arrow.up")
                 }

@@ -1,92 +1,40 @@
-//! Runtime check that nsec login round-trips through the exported NMP app
-//! surface. The internal core is deliberately not part of the public contract.
+//! Runtime check that nsec login round-trips consistently: generate a
+//! keypair, encode as nsec, hand it to login_nsec, and verify the returned
+//! pubkey matches what we started with.
 
 use highlighter_core::{
-    HighlighterAppAction, HighlighterAppConfig, HighlighterAppReconciler, HighlighterAppState,
-    HighlighterNmpApp, HighlighterSessionCredential, HighlighterToastKind,
+    AuthSessionRestoreSnapshot, AuthSessionSnapshot, CurrentUser, HighlighterCore,
 };
 use nostr_sdk::prelude::*;
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
-use std::time::Duration;
 use tempfile::TempDir;
 
-#[derive(Debug, Clone)]
-enum TestUpdate {
-    State(HighlighterAppState),
-    PersistSessionCredential,
-    ClearSessionCredentials,
-    OpenExternalUrl,
-}
-
-struct TestReconciler {
-    tx: Sender<TestUpdate>,
-}
-
-impl HighlighterAppReconciler for TestReconciler {
-    fn on_state(&self, state: HighlighterAppState) {
-        let _ = self.tx.send(TestUpdate::State(state));
-    }
-
-    fn on_persist_session_credential(&self, _credential: HighlighterSessionCredential) {
-        let _ = self.tx.send(TestUpdate::PersistSessionCredential);
-    }
-
-    fn on_clear_session_credentials(&self) {
-        let _ = self.tx.send(TestUpdate::ClearSessionCredentials);
-    }
-
-    fn on_open_external_url(&self, _url: String) {
-        let _ = self.tx.send(TestUpdate::OpenExternalUrl);
-    }
-}
-
-fn isolated_app() -> (Arc<HighlighterNmpApp>, Receiver<TestUpdate>, TempDir) {
+/// Build a HighlighterCore with an isolated nostrdb dir so the test suite
+/// doesn't write to the real application data directory.
+fn isolated_core() -> (Arc<HighlighterCore>, TempDir) {
     let tmp = tempfile::tempdir().expect("tempdir");
-    let app = HighlighterNmpApp::new(HighlighterAppConfig {
-        data_dir: Some(tmp.path().join("ndb").to_string_lossy().into_owned()),
-        visible_limit: 8,
-        emit_hz: 30,
-        relay_policy_json: None,
-    });
-    let (tx, rx) = channel();
-    app.listen_for_updates(Arc::new(TestReconciler { tx }));
-    let _ = next_state(&rx);
-    (app, rx, tmp)
+    let core = HighlighterCore::new_with_data_dir(tmp.path().join("ndb"));
+    (core, tmp)
 }
 
-fn next_state(rx: &Receiver<TestUpdate>) -> HighlighterAppState {
-    for _ in 0..16 {
-        match rx
-            .recv_timeout(Duration::from_secs(5))
-            .expect("app update within timeout")
-        {
-            TestUpdate::State(state) => return state,
-            TestUpdate::PersistSessionCredential
-            | TestUpdate::ClearSessionCredentials
-            | TestUpdate::OpenExternalUrl => {}
-        }
-    }
-    panic!("state update within timeout")
+fn expect_user(outcome: AuthSessionSnapshot) -> CurrentUser {
+    assert!(
+        outcome.is_authenticated,
+        "login_nsec: {}",
+        outcome.error_message
+    );
+    outcome.user.expect("login_nsec returned no user")
 }
 
-fn sign_in(
-    app: &HighlighterNmpApp,
-    rx: &Receiver<TestUpdate>,
-    nsec: String,
-) -> HighlighterAppState {
-    app.dispatch(HighlighterAppAction::SignInNsec {
-        nsec,
-        persist: false,
-        clear_stored_on_failure: false,
-    });
-    for _ in 0..16 {
-        let state = next_state(rx);
-        if state.chrome.current_user.is_some() || state.toast.is_some() {
-            return state;
-        }
-    }
-    panic!("terminal sign-in state")
+fn expect_restored_user(outcome: AuthSessionRestoreSnapshot) -> CurrentUser {
+    assert!(
+        outcome.is_authenticated,
+        "restore_session_snapshot: {}",
+        outcome.error_message
+    );
+    outcome
+        .user
+        .expect("restore_session_snapshot returned no user")
 }
 
 #[test]
@@ -94,12 +42,8 @@ fn nsec_login_roundtrips_generated_key() {
     let keys = Keys::generate();
     let nsec = keys.secret_key().to_bech32().expect("encode nsec");
 
-    let (app, rx, _tmp) = isolated_app();
-    let state = sign_in(&app, &rx, nsec);
-    let user = state
-        .chrome
-        .current_user
-        .expect("sign-in should publish a current user snapshot");
+    let (core, _tmp) = isolated_core();
+    let user = expect_user(core.login_nsec(nsec));
 
     assert_eq!(user.pubkey, keys.public_key().to_hex());
     assert_eq!(user.npub, keys.public_key().to_bech32().unwrap());
@@ -111,53 +55,38 @@ fn nsec_login_accepts_hex_secret_key() {
     let keys = Keys::generate();
     let hex = keys.secret_key().to_secret_hex();
 
-    let (app, rx, _tmp) = isolated_app();
-    let state = sign_in(&app, &rx, hex);
-    let user = state
-        .chrome
-        .current_user
-        .expect("hex secret key should sign in");
-
+    let (core, _tmp) = isolated_core();
+    let user = expect_user(core.login_nsec(hex));
     assert_eq!(user.pubkey, keys.public_key().to_hex());
 }
 
 #[test]
 fn nsec_login_rejects_garbage() {
-    for bad in ["not a real nsec", "", "nsec1garbage"] {
-        let (app, rx, _tmp) = isolated_app();
-        let state = sign_in(&app, &rx, bad.to_string());
-        assert!(state.chrome.current_user.is_none());
-        assert_eq!(
-            state.toast.as_ref().map(|toast| toast.kind),
-            Some(HighlighterToastKind::Error)
-        );
-    }
+    let (core, _tmp) = isolated_core();
+    assert!(!core
+        .login_nsec("not a real nsec".to_string())
+        .error_message
+        .is_empty());
+    assert!(!core.login_nsec(String::new()).error_message.is_empty());
+    assert!(!core
+        .login_nsec("nsec1garbage".to_string())
+        .error_message
+        .is_empty());
 }
 
 #[test]
 fn current_user_reflects_login_state() {
     let keys = Keys::generate();
     let nsec = keys.secret_key().to_bech32().unwrap();
-    let (app, rx, _tmp) = isolated_app();
+    let (core, _tmp) = isolated_core();
 
-    assert!(app.state().chrome.current_user.is_none());
-    let state = sign_in(&app, &rx, nsec);
-    let user = state.chrome.current_user.expect("current_user after login");
+    assert!(core.current_user().is_none());
+    let _ = expect_user(core.login_nsec(nsec));
+    let user = core.current_user().expect("current_user after login");
     assert_eq!(user.pubkey, keys.public_key().to_hex());
 
-    app.dispatch(HighlighterAppAction::Logout);
-    // Sign-in resolutions are async (OpRunner): late pre-logout emissions
-    // (e.g. the SignerConnected -> RefreshAppChrome chain) may still be
-    // queued, so poll until the logout snapshot lands rather than asserting
-    // on the first state after the dispatch.
-    let mut logged_out = false;
-    for _ in 0..16 {
-        if next_state(&rx).chrome.current_user.is_none() {
-            logged_out = true;
-            break;
-        }
-    }
-    assert!(logged_out, "logout snapshot must land");
+    core.logout();
+    assert!(core.current_user().is_none());
 }
 
 #[test]
@@ -166,11 +95,48 @@ fn nsec_login_trims_surrounding_whitespace() {
     let nsec = keys.secret_key().to_bech32().unwrap();
     let padded = format!("  {nsec}\n");
 
-    let (app, rx, _tmp) = isolated_app();
-    let state = sign_in(&app, &rx, padded);
-    let user = state
-        .chrome
-        .current_user
-        .expect("surrounding whitespace should be tolerated");
+    let (core, _tmp) = isolated_core();
+    let user = expect_user(core.login_nsec(padded));
     assert_eq!(user.pubkey, keys.public_key().to_hex());
+}
+
+#[tokio::test]
+async fn restore_session_with_no_credentials_is_idle() {
+    let (core, _tmp) = isolated_core();
+    let snapshot = core.restore_session_snapshot(None, None).await;
+
+    assert!(snapshot.user.is_none());
+    assert!(!snapshot.is_authenticated);
+    assert!(snapshot.error_message.is_empty());
+    assert!(!snapshot.clear_nsec);
+    assert!(!snapshot.clear_bunker_uri);
+}
+
+#[tokio::test]
+async fn restore_session_uses_valid_nsec_without_cleanup() {
+    let keys = Keys::generate();
+    let nsec = keys.secret_key().to_bech32().unwrap();
+
+    let (core, _tmp) = isolated_core();
+    let user = expect_restored_user(core.restore_session_snapshot(Some(nsec), None).await);
+
+    assert_eq!(user.pubkey, keys.public_key().to_hex());
+    assert_eq!(
+        core.current_user().expect("current user").pubkey,
+        user.pubkey
+    );
+}
+
+#[tokio::test]
+async fn restore_session_clears_invalid_nsec() {
+    let (core, _tmp) = isolated_core();
+    let snapshot = core
+        .restore_session_snapshot(Some("not a real nsec".into()), None)
+        .await;
+
+    assert!(snapshot.user.is_none());
+    assert!(!snapshot.is_authenticated);
+    assert!(!snapshot.error_message.is_empty());
+    assert!(snapshot.clear_nsec);
+    assert!(!snapshot.clear_bunker_uri);
 }
