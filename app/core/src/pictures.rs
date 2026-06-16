@@ -36,9 +36,15 @@ pub async fn publish_picture(
         .await
         .map_err(|e| CoreError::Signer(format!("sign picture: {e}")))?;
     if group_id.is_some() {
-        runtime.publish_signed_event_to_relays("picture-publish", &event, runtime.rooms_urls())?;
+        client
+            .send_event_to(runtime.rooms_urls(), &event)
+            .await
+            .map_err(|e| CoreError::Relay(format!("picture-publish: {e}")))?;
     } else {
-        runtime.publish_signed_event("picture-publish", &event)?;
+        client
+            .send_event(&event)
+            .await
+            .map_err(|e| CoreError::Relay(format!("picture-publish: {e}")))?;
     }
 
     Ok(PictureRecord {

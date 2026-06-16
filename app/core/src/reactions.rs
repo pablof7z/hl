@@ -232,7 +232,10 @@ async fn publish_reaction(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign reaction: {e}")))?;
-    runtime.publish_signed_event("reaction-publish", &event)?;
+    client
+        .send_event(&event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("reaction-publish: {e}")))?;
 
     Ok(ReactionRecord {
         event_id: event.id.to_hex(),
@@ -276,7 +279,10 @@ pub async fn unpublish_reaction(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign deletion: {e}")))?;
-    runtime.publish_signed_event("reaction-delete-publish", &event)?;
+    client
+        .send_event(&event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("reaction-delete-publish: {e}")))?;
 
     Ok(event.id.to_hex())
 }

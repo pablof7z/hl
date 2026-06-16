@@ -1031,7 +1031,10 @@ pub async fn publish_comment(
         .await
         .map_err(|e| CoreError::Signer(format!("sign comment: {e}")))?;
 
-    runtime.publish_signed_event("comment-publish", &event)?;
+    client
+        .send_event(&event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("comment-publish: {e}")))?;
 
     Ok(CommentRecord {
         event_id: event.id.to_hex(),

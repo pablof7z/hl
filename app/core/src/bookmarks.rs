@@ -367,7 +367,10 @@ async fn publish_bookmarks(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign bookmarks: {e}")))?;
-    runtime.publish_signed_event("bookmarks-publish", &event)?;
+    client
+        .send_event(&event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("bookmarks-publish: {e}")))?;
     Ok(event.id.to_hex())
 }
 

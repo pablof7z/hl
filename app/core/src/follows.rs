@@ -99,8 +99,11 @@ pub async fn publish_follow_toggle(
         .sign_event_builder(builder)
         .await
         .map_err(|e| CoreError::Signer(format!("sign contact list: {e}")))?;
-    runtime.publish_signed_event("contact-list-publish", &event)?;
-    runtime.mirror_social_trio_to_purple("contact-list-purple-mirror", &event)?;
+    client
+        .send_event(&event)
+        .await
+        .map_err(|e| CoreError::Relay(format!("contact-list-publish: {e}")))?;
+    crate::nostr_runtime::mirror_social_trio_to_purple(client, &event).await;
     Ok(Some(event.id.to_hex()))
 }
 
