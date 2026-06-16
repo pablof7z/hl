@@ -7,7 +7,6 @@
   import {
     artifactPath,
     buildNostrArticleArtifactPreview,
-    publicArticleShareUrlFromAddress,
     publishArtifact
   } from '$lib/ndk/artifacts';
   import { GROUP_RELAY_URLS } from '$lib/ndk/config';
@@ -25,10 +24,8 @@
   let selectedGroupId = $state('');
   let note = $state('');
   let publishing = $state(false);
-  let sharingLink = $state(false);
   let errorMessage = $state('');
   let statusMessage = $state('');
-  let linkShareStatus = $state('');
 
   const currentUser = $derived(ndk.$currentUser);
   const isReadOnly = $derived(Boolean(ndk.$sessions?.isReadOnly()));
@@ -67,7 +64,6 @@
       authorName
     })
   );
-  const articleShareUrl = $derived(publicArticleShareUrlFromAddress(event.tagId()) ?? '');
 
   const rooms = $derived.by(() => {
     if (!currentUser) return [];
@@ -86,48 +82,8 @@
     if (!open) {
       errorMessage = '';
       statusMessage = '';
-      linkShareStatus = '';
     }
   });
-
-  async function copyArticleShareUrl() {
-    if (!articleShareUrl) {
-      linkShareStatus = 'Could not build an article link.';
-      return;
-    }
-
-    await navigator.clipboard.writeText(articleShareUrl);
-    linkShareStatus = 'Link copied.';
-  }
-
-  async function handleShareLink() {
-    if (!articleShareUrl || sharingLink) return;
-
-    sharingLink = true;
-    linkShareStatus = '';
-
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: preview.title,
-          url: articleShareUrl
-        });
-        return;
-      }
-
-      await copyArticleShareUrl();
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return;
-
-      try {
-        await copyArticleShareUrl();
-      } catch {
-        linkShareStatus = 'Could not share or copy the link.';
-      }
-    } finally {
-      sharingLink = false;
-    }
-  }
 
   async function handleShare() {
     if (!currentUser) {
@@ -198,32 +154,6 @@
     </div>
 
     <div class="share-room-body">
-      <section class="link-share-panel" aria-label="Article link sharing">
-        <div class="link-share-copy">
-          <span>Article link</span>
-          <p>{articleShareUrl}</p>
-        </div>
-        <button
-          type="button"
-          class="link-share-button"
-          disabled={!articleShareUrl || sharingLink}
-          onclick={handleShareLink}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="18" cy="5" r="3" />
-            <circle cx="6" cy="12" r="3" />
-            <circle cx="18" cy="19" r="3" />
-            <path d="M8.6 10.5l6.8-4" />
-            <path d="M8.6 13.5l6.8 4" />
-          </svg>
-          {sharingLink ? 'Opening…' : 'Share Link'}
-        </button>
-      </section>
-
-      {#if linkShareStatus}
-        <p class="status">{linkShareStatus}</p>
-      {/if}
-
       {#if !currentUser}
         <p class="panel-message">Sign in to share this article into one of your rooms.</p>
       {:else if rooms.length === 0}
@@ -419,71 +349,6 @@
     gap: 0.9rem;
   }
 
-  .link-share-panel {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 0.8rem;
-    padding: 0.85rem;
-    border: 1px solid var(--color-base-300);
-    border-radius: 0.75rem;
-    background: var(--surface-soft);
-  }
-
-  .link-share-copy {
-    display: grid;
-    gap: 0.25rem;
-    min-width: 0;
-  }
-
-  .link-share-copy span {
-    color: var(--text-strong);
-    font-size: 0.82rem;
-    font-weight: 700;
-  }
-
-  .link-share-copy p {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.78rem;
-    line-height: 1.4;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .link-share-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.45rem;
-    min-height: 2.45rem;
-    padding: 0 0.85rem;
-    border: 1px solid var(--accent);
-    border-radius: 999px;
-    background: #ffffff;
-    color: var(--accent);
-    font-size: 0.85rem;
-    font-weight: 700;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  .link-share-button svg {
-    width: 1rem;
-    height: 1rem;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.8;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .link-share-button:disabled {
-    opacity: 0.55;
-    cursor: default;
-  }
-
   .preview-strip {
     display: flex;
     gap: 0.45rem;
@@ -531,14 +396,6 @@
     :global(.share-room-dialog) {
       width: min(32rem, calc(100vw - 1rem));
       padding: 1rem;
-    }
-
-    .link-share-panel {
-      grid-template-columns: 1fr;
-    }
-
-    .link-share-button {
-      width: 100%;
     }
   }
 </style>

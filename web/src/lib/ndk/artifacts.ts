@@ -788,12 +788,6 @@ export function buildFallbackNostrUrl(address: string): string {
   return `https://beta.highlighter.com/note/${naddr}`;
 }
 
-export function publicArticleShareUrlFromAddress(address: string): string | undefined {
-  const naddr = naddrFromAddress(address);
-  if (!naddr) return undefined;
-  return `https://highlighter.com/a/${naddr}`;
-}
-
 export function naddrFromAddress(address: string): string | undefined {
   const parsed = parseNostrAddress(address);
   if (!parsed) return undefined;
