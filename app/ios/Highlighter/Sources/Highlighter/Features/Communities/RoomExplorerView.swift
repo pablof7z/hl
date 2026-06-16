@@ -6,15 +6,13 @@ import SwiftUI
 /// toggles — "Your rooms" is just the first shelf among many.
 struct RoomExplorerView: View {
     @Environment(HighlighterStore.self) private var appStore
+    @State private var explorerStore: RoomExplorerStore?
     @State private var previewRoom: CommunitySummary?
     @State private var createSheetPresented = false
-
-    private var explorer: HighlighterRoomExplorerSnapshot {
-        appStore.roomExplorer
-    }
+    @State private var navigationPath = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             ScrollView {
                 LazyVStack(spacing: 0, pinnedViews: []) {
                     heroSection
@@ -66,8 +64,12 @@ struct RoomExplorerView: View {
                     RoomPreviewSheet(
                         room: room,
                         onJoin: {
-                            appStore.requestJoinRoom(groupId: room.id, roomName: room.name)
+                            Task { await explorerStore?.requestJoin(room: room) }
                             previewRoom = nil
+                        },
+                        onOpenRoom: {
+                            previewRoom = nil
+                            navigationPath.append(room.id)
                         }
                     )
                 }
@@ -80,10 +82,13 @@ struct RoomExplorerView: View {
             }
         }
         .task {
-            appStore.openRoomExplorer()
+            let store = explorerStore ?? RoomExplorerStore(appStore: appStore)
+            explorerStore = store
+            appStore.eventBridge?.registerExplorer(store)
+            await store.refresh()
         }
         .refreshable {
-            appStore.refreshRoomExplorer()
+            await explorerStore?.refresh()
         }
     }
 
@@ -91,12 +96,12 @@ struct RoomExplorerView: View {
 
     @ViewBuilder
     private var heroSection: some View {
-        if !explorer.featured.isEmpty {
-            ExplorerHeroView(rooms: explorer.featured) { room in
+        if let store = explorerStore, !store.featured.isEmpty {
+            ExplorerHeroView(rooms: store.featured) { room in
                 previewRoom = room
             }
             .padding(.top, 4)
-        } else if explorer.isLoading {
+        } else if explorerStore?.isFirstLoad ?? true {
             ExplorerHeroPlaceholder()
                 .padding(.top, 4)
         }
@@ -104,14 +109,7 @@ struct RoomExplorerView: View {
 
     @ViewBuilder
     private var errorBanner: some View {
-        if let message = explorer.errorMessage, !message.isEmpty {
-            Text(message)
-                .font(.footnote)
-                .foregroundStyle(Color.highlighterInkMuted)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 18)
-                .padding(.bottom, 18)
-        }
+        EmptyView()
     }
 
     @ViewBuilder
@@ -138,12 +136,12 @@ struct RoomExplorerView: View {
 
     @ViewBuilder
     private var friendsShelf: some View {
-        if !explorer.friendsShelf.isEmpty {
+        if let store = explorerStore, !store.friendsShelf.isEmpty {
             shelf(
                 title: "Friends are here",
                 rationale: "People you follow are members",
                 content: {
-                    ForEach(explorer.friendsShelf, id: \.summary.id) { rec in
+                    ForEach(store.friendsShelf, id: \.summary.id) { rec in
                         Button {
                             previewRoom = rec.summary
                         } label: {
@@ -158,7 +156,7 @@ struct RoomExplorerView: View {
 
     @ViewBuilder
     private var featuredShelf: some View {
-        if explorer.featured.count > 1 {
+        if let store = explorerStore, store.featured.count > 1 {
             // After the hero, show the rest of the featured list as a
             // regular-sized shelf so the curator's full picks remain
             // accessible below the hero.
@@ -166,7 +164,7 @@ struct RoomExplorerView: View {
                 title: "Featured",
                 rationale: "Curated by Highlighter",
                 content: {
-                    ForEach(Array(explorer.featured.dropFirst()), id: \.id) { room in
+                    ForEach(Array(store.featured.dropFirst()), id: \.id) { room in
                         Button {
                             previewRoom = room
                         } label: {
@@ -181,12 +179,12 @@ struct RoomExplorerView: View {
 
     @ViewBuilder
     private var authorsShelf: some View {
-        if !explorer.authorsShelf.isEmpty {
+        if let store = explorerStore, !store.authorsShelf.isEmpty {
             shelf(
                 title: "Writers you read",
                 rationale: "Authors you've highlighted post here",
                 content: {
-                    ForEach(explorer.authorsShelf, id: \.summary.id) { rec in
+                    ForEach(store.authorsShelf, id: \.summary.id) { rec in
                         Button {
                             previewRoom = rec.summary
                         } label: {
@@ -201,12 +199,12 @@ struct RoomExplorerView: View {
 
     @ViewBuilder
     private var newShelf: some View {
-        if !explorer.newNoteworthy.isEmpty {
+        if let store = explorerStore, !store.newNoteworthy.isEmpty {
             shelf(
                 title: "New & noteworthy",
                 rationale: "Recently added rooms",
                 content: {
-                    ForEach(explorer.newNoteworthy, id: \.id) { room in
+                    ForEach(store.newNoteworthy, id: \.id) { room in
                         Button {
                             previewRoom = room
                         } label: {
@@ -221,7 +219,9 @@ struct RoomExplorerView: View {
 
     private var browseAllFooter: some View {
         NavigationLink {
-            RoomBrowseAllView()
+            RoomBrowseAllView(onOpenRoom: { id in
+                navigationPath.append(id)
+            })
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
