@@ -17,23 +17,40 @@ hex = "0.4"
 nostr-sdk = { version = "0.44.1", features = ["nip49", "nip04", "nip44"] }
 nostr = { version = "0.44", default-features = false, features = ["std", "nip46"] }
 nostr-ndb = "0.44.0"
-nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", branch = "master" }
+nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", rev = "2619b9bc4cbd7d8d9198a3be0ae8f1f8f51040cb" }
+nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "fc0589fc88d61912779741fcce7d4e7176cf9a30", default-features = false }
+# NMP tracks the master branch via GIT deps (NOT local path deps) so hl is
+# decoupled from the local monorepo checkout. `cargo update` refreshes Cargo.lock
+# to the current master tip; a rebuild then picks up the latest NMP automatically.
+nmp-core = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-ffi = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master", features = ["signer-broker", "external-signer"] }
+nmp-defaults = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-signers = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-nip11 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-nip29 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-blossom = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-content = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-kinds = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 futures = "0.3"
 sha2 = "0.10"
 base64 = "0.22"
 parking_lot = "0.12"
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uniffi = { version = "0.29", features = ["cli", "tokio"] }
 dirs = "5"
 uuid = { version = "1", features = ["v4"] }
 url = "2"
 scraper = "0.20"
-regex = "1"
+zeroize = "1"
+
+[target.'cfg(target_os = "android")'.dependencies]
+tracing-android = "0.2"
 
 [patch.crates-io]
-nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", branch = "master" }
+nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", rev = "2619b9bc4cbd7d8d9198a3be0ae8f1f8f51040cb" }
 
 [[bin]]
 name = "uniffi-bindgen"
