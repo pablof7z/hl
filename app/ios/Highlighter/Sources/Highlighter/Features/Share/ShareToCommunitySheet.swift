@@ -105,23 +105,6 @@ struct ShareToCommunitySheet: View {
                         .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                 }
 
-                if let url = target.publicShareURL {
-                    Section("Link") {
-                        ShareLink(
-                            item: url,
-                            subject: Text(target.displayTitle),
-                            message: Text(target.displaySubtitle)
-                        ) {
-                            Label("Share article link", systemImage: "square.and.arrow.up")
-                        }
-
-                        Text(url.absoluteString)
-                            .font(.caption)
-                            .foregroundStyle(Color.highlighterInkMuted)
-                            .textSelection(.enabled)
-                    }
-                }
-
                 Section("Note (optional)") {
                     TextField("What caught your attention?", text: $note, axis: .vertical)
                         .lineLimit(2...6)
@@ -149,6 +132,20 @@ struct ShareToCommunitySheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                         .disabled(publishingId != nil)
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    if let url = target.publicShareURL {
+                        ShareLink(
+                            item: url,
+                            subject: Text(target.displayTitle),
+                            message: Text(target.displaySubtitle)
+                        ) {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        .accessibilityLabel("Share article link")
+                        .disabled(publishingId != nil)
+                    }
                 }
             }
             .alert("Couldn't share", isPresented: Binding(
