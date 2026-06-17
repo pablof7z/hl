@@ -1,0 +1,64 @@
+{
+  "object" : {
+    "artifacts" : [
+
+    ],
+    "dependencies" : [
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "kingfisher",
+          "kind" : "remoteSourceControl",
+          "location" : "https://github.com/onevcat/Kingfisher.git",
+          "name" : "Kingfisher"
+        },
+        "state" : {
+          "checkoutState" : {
+            "revision" : "c152c1915f60c51e4afa0752656993ee5b3c63db",
+            "version" : "8.8.1"
+          },
+          "name" : "sourceControlCheckout"
+        },
+        "subpath" : "Kingfisher"
+      },
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "swift-cmark",
+          "kind" : "remoteSourceControl",
+          "location" : "https://github.com/swiftlang/swift-cmark.git",
+          "name" : "swift-cmark"
+        },
+        "state" : {
+          "checkoutState" : {
+            "revision" : "5d9bdaa4228b381639fff09403e39a04926e2dbe",
+            "version" : "0.7.1"
+          },
+          "name" : "sourceControlCheckout"
+        },
+        "subpath" : "swift-cmark"
+      },
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "swift-markdown",
+          "kind" : "remoteSourceControl",
+          "location" : "https://github.com/swiftlang/swift-markdown.git",
+          "name" : "swift-markdown"
+        },
+        "state" : {
+          "checkoutState" : {
+            "revision" : "7d9a5ce307528578dfa777d505496bd5f544ad94",
+            "version" : "0.7.3"
+          },
+          "name" : "sourceControlCheckout"
+        },
+        "subpath" : "swift-markdown"
+      }
+    ],
+    "prebuilts" : [
+
+    ]
+  },
+  "version" : 7
+}
