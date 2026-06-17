@@ -6,6 +6,7 @@ struct FeedbackThreadsView: View {
     @Environment(HighlighterStore.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var composerPresented = false
+    @State private var listStore = FeedbackStore()
 
     var body: some View {
         NavigationStack {
@@ -26,26 +27,30 @@ struct FeedbackThreadsView: View {
                 }
         }
         .task {
-            app.openFeedback(coordinate: FeedbackProject.coordinate)
+            await listStore.start(
+                coordinate: FeedbackProject.coordinate,
+                core: app.safeCore,
+                bridge: app.eventBridge
+            )
         }
-        .onDisappear { app.closeFeedback() }
+        .onDisappear { listStore.stop() }
         .sheet(isPresented: $composerPresented) {
-            FeedbackNewThreadView()
+            FeedbackNewThreadView(store: listStore, onSent: { _ in })
         }
     }
 
     @ViewBuilder
     private var content: some View {
-        if app.feedback.isLoadingThreads && app.feedback.threads.isEmpty {
+        if listStore.isLoading && listStore.threads.isEmpty {
             ProgressView().controlSize(.large)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let error = app.feedback.threadsErrorMessage, app.feedback.threads.isEmpty {
+        } else if let error = listStore.loadError, listStore.threads.isEmpty {
             ContentUnavailableView(
                 "Couldn't load feedback",
                 systemImage: "exclamationmark.triangle",
                 description: Text(error)
             )
-        } else if app.feedback.threads.isEmpty {
+        } else if listStore.threads.isEmpty {
             ContentUnavailableView {
                 Label("No feedback yet", systemImage: "bubble.left.and.bubble.right")
             } description: {
@@ -55,9 +60,9 @@ struct FeedbackThreadsView: View {
                     .buttonStyle(.borderedProminent)
             }
         } else {
-            List(app.feedback.threads, id: \.rootEventId) { thread in
+            List(listStore.threads, id: \.rootEventId) { thread in
                 NavigationLink {
-                    FeedbackThreadDetailView(thread: thread)
+                    FeedbackThreadDetailView(thread: thread, listStore: listStore)
                 } label: {
                     FeedbackThreadRow(thread: thread)
                 }

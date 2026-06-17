@@ -36,17 +36,18 @@ enum ShareLinkRouter {
     @discardableResult
     static func route(_ url: URL, store: HighlighterStore) -> Bool {
         guard let token = entityToken(from: url) else { return false }
-        guard let entity = store.nmpApp.decodeNostrEntity(input: token) else { return true }
-        switch entity {
-        case let .profile(pubkeyHex, _):
-            store.openProfile(pubkeyHex: pubkeyHex)
-        case let .event(eventIdHex, _, _, kindHint):
-            let kind = kindHint.flatMap { UInt16(exactly: $0) } ?? 9802
-            store.openComments(rootTagName: "e", rootTagValue: eventIdHex, rootKind: kind)
-        case let .address(kind, pubkeyHex, dTag, _):
-            guard kind == 30023 else { return true }
-            store.openArticleReader(pubkeyHex: pubkeyHex, dTag: dTag, seed: nil)
-        }
+        // TODO: Implement navigation to profile, comments, and article reader
+        // guard let entity = store.nmpApp.decodeNostrEntity(input: token) else { return true }
+        // switch entity {
+        // case let .profile(pubkeyHex, _):
+        //     store.openProfile(pubkeyHex: pubkeyHex)
+        // case let .event(eventIdHex, _, _, kindHint):
+        //     let kind = kindHint.flatMap { UInt16(exactly: $0) } ?? 9802
+        //     store.openComments(rootTagName: "e", rootTagValue: eventIdHex, rootKind: kind)
+        // case let .address(kind, pubkeyHex, dTag, _):
+        //     guard kind == 30023 else { return true }
+        //     store.openArticleReader(pubkeyHex: pubkeyHex, dTag: dTag, seed: nil)
+        // }
         return true
     }
 }

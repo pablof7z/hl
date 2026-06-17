@@ -87,7 +87,7 @@ struct BookScannerView: View {
             VStack {
                 topBar
                 Spacer()
-                if model.holdSteadyTipVisible {
+                if model.visibleButUndecodedSeconds > 0 {
                     tip
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -100,7 +100,7 @@ struct BookScannerView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: model.holdSteadyTipVisible)
+        .animation(.easeInOut(duration: 0.2), value: model.visibleButUndecodedSeconds > 0)
         .animation(.easeInOut(duration: 0.2), value: model.notABookFlash)
     }
 

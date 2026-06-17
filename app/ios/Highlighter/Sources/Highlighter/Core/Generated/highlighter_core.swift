@@ -586,9 +586,9 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 public protocol EventCallback: AnyObject, Sendable {
-    
-    func onDataChanged(delta: Delta) 
-    
+
+    func onDataChanged(delta: Delta)
+
 }
 open class EventCallbackImpl: EventCallback, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -639,16 +639,16 @@ open class EventCallbackImpl: EventCallback, @unchecked Sendable {
         try! rustCall { uniffi_highlighter_core_fn_free_eventcallback(pointer, $0) }
     }
 
-    
 
-    
+
+
 open func onDataChanged(delta: Delta)  {try! rustCall() {
     uniffi_highlighter_core_fn_method_eventcallback_on_data_changed(self.uniffiClonePointer(),
         FfiConverterTypeDelta_lower(delta),$0
     )
 }
 }
-    
+
 
 }
 
@@ -678,7 +678,7 @@ fileprivate struct UniffiCallbackInterfaceEventCallback {
                 )
             }
 
-            
+
             let writeReturn = { () }
             uniffiTraitInterfaceCall(
                 callStatus: uniffiCallStatus,
@@ -759,69 +759,69 @@ public func FfiConverterTypeEventCallback_lower(_ value: EventCallback) -> Unsaf
 
 
 public protocol HighlighterCoreProtocol: AnyObject, Sendable {
-    
+
     /**
      * Apply a raw native network path update. Native reports only whether
      * the current path is Wi-Fi; Rust owns the Wi-Fi-only preference lookup
      * and relay connect/disconnect policy.
      */
     func applyNetworkPathStatus(isWifi: Bool) async  -> NetworkPathPolicySnapshot
-    
+
     /**
      * Publish the Rust-projected profile follow mutation and return the
      * post-action screen state. Rust owns rollback on error; the shell only
      * applies the returned snapshot.
      */
     func applyProfileFollowMutation(input: ProfileFollowMutationInput) async  -> ProfileFollowMutationSnapshot
-    
+
     func autoConnectedRelayConfig(url: String)  -> RelayConfig
-    
+
     /**
      * Build the edited ISBN book preview after scan/manual entry. Rust owns
      * ISBN normalization and the NIP-73 reference fields; native supplies
      * only the user's edited title/author and optional lookup metadata.
      */
     func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, title: String, author: String)  -> EditedBookPreviewProjection
-    
+
     func buildWebReaderShareTarget(url: String) async  -> ShareWebReaderTargetSnapshot
-    
+
     func checkNip05Availability(name: String) async  -> Nip05AvailabilitySnapshot
-    
+
     func classifyLoginInput(input: String)  -> LoginInputAction
-    
+
     func clearPodcastClipSelection()  -> PodcastClipSelection
-    
+
     func clearRecentSearchesSnapshot() async  -> SearchChromeSnapshot
-    
+
     func completeOnboardingInterests(selectedIds: [String]) async  -> MutationSnapshot
-    
+
     /**
      * Consume a pending join when a matching NIP-29 membership delta arrives.
      * Swift routes the delta; Rust owns whether it was pending and what toast
      * should be shown.
      */
-    func confirmPendingJoin(groupId: String) 
-    
+    func confirmPendingJoin(groupId: String)
+
     /**
      * Count comments for an artifact using Rust-owned reference keys.
      */
     func countArtifactComments(artifact: ArtifactRecord, commentsByReference: [CommentReferenceBucket])  -> UInt32
-    
+
     /**
      * Create a collection with `address` already included and return the
      * refreshed menu snapshot. Rust publishes one real curation-set event; no
      * native-side create-then-set choreography is needed.
      */
     func createCurationSetWithAddressSnapshot(title: String, address: String) async  -> CurationMenuSnapshot
-    
+
     func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess) async  -> CreateRoomPublishSnapshot
-    
+
     func cropOcrLines(lines: [OcrLine], pageRect: OcrRect)  -> [OcrLine]
-    
+
     func currentSecretKeySettingsSnapshot(isRevealed: Bool)  -> SecretKeySettingsSnapshot
-    
+
     func currentUser()  -> CurrentUser?
-    
+
     /**
      * Classify a NIP-19 entity (`npub1…`, `nprofile1…`, `note1…`,
      * `nevent1…`, `naddr1…`) into a renderable variant. Strips an
@@ -829,298 +829,298 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * to walk event content for inline mentions and event-ref cards.
      */
     func decodeNostrEntity(input: String)  -> NostrEntityRefSnapshot
-    
+
     func defaultAddRelayConfig()  -> RelayConfig
-    
+
     func defaultHighlightCropBox(highlightBoxes: [OcrRect], imageWidth: Double, imageHeight: Double, marginFraction: Double)  -> OcrRect?
-    
+
     func detectOcrActivePage(lines: [OcrLine])  -> OcrPageDetection?
-    
+
     /**
      * Close every WebSocket in the pool. Used by explicit user/app
      * reconnect flows; Wi-Fi-only path policy is owned by
      * `apply_network_path_status`.
      */
     func disconnectAll() async  -> NetworkSettingsMutationSnapshot
-    
+
     func downloadPodcastArtwork(url: String) async  -> Data?
-    
+
     func extendPodcastClipToSegment(selection: PodcastClipSelection, segment: TranscriptSegment)  -> PodcastClipSelection
-    
+
     func extractNostrEventRefs(content: String)  -> [NostrEntityRef]
-    
+
     /**
      * Resolve an ISBN against the bounded recent-book projection already
      * rendered by the native picker. Rust owns the canonical ISBN reference
      * matching; native shells only decide how to present the selected record.
      */
     func findExistingBookForIsbn(isbn: String, recents: [ArtifactRecord])  -> ArtifactRecord?
-    
+
     func finishRelayNip11Probe(inFlightUrls: [String], url: String)  -> [String]
-    
+
     func generateAccount()  -> AccountGenerationSnapshot
-    
+
     /**
      * Return the author pubkey from a valid NIP-23 article address
      * (`30023:<pubkey>:<d>`).
      */
     func getArticleAddressAuthor(address: String) async  -> String?
-    
+
     /**
      * Return the current article bookmark snapshot. Rust owns the nostrdb
      * query and error semantics; native shells render and cache the returned
      * address set.
      */
     func getArticleBookmarksSnapshot() async  -> ArticleBookmarksSnapshot
-    
+
     /**
      * Read a single NIP-23 article by its full NIP-33 address
      * (`30023:<pubkey>:<d>`) from nostrdb.
      */
     func getArticleByAddress(address: String) async  -> ArticleRecord?
-    
+
     /**
      * Project a NIP-23 article address into the NIP-22 root scope used by
      * comment reads/writes.
      */
     func getArticleCommentScope(address: String)  -> CommentScopeSnapshot
-    
+
     /**
      * Full article-reader read model. Rust owns article/profile/highlight
      * cache reads, the highlight limit, and partial-failure fallback.
      */
     func getArticleReaderSnapshot(pubkeyHex: String, dTag: String) async  -> ArticleReaderSnapshot
-    
+
     /**
      * Project an artifact preview into a NIP-22 root scope using the
      * preview's Rust-owned protocol reference fields.
      */
     func getArtifactCommentScope(preview: ArtifactPreview)  -> CommentScopeSnapshot
-    
+
     func getArtifactDetailProjection(artifact: ArtifactRecord)  -> ArtifactDetailProjection
-    
+
     func getArtifactDetailRoute(artifact: ArtifactRecord)  -> ArtifactDetailRoute
-    
+
     /**
      * Return the screen-shaped media settings snapshot. Rust owns error
      * semantics and server-list normalization; native shells render the list.
      */
     func getBlossomServerSettingsSnapshot() async  -> BlossomServerSettingsSnapshot
-    
+
     /**
      * Screen-shaped snapshot for the native book detail route. Rust owns
      * catalog-id canonicalization, ISBN route state, and passage lookup.
      */
     func getBookDetailSnapshot(catalogId: String, limit: UInt32) async  -> BookDetailSnapshot
-    
+
     /**
      * Screen-shaped snapshot for the capture book picker. Rust owns recent
      * book lookup, local artifact search, query normalization, and error
      * semantics; native shells render rows and transient loading affordances.
      */
     func getBookPickerSnapshot(query: String, recentLimit: UInt32, searchLimit: UInt32) async  -> BookPickerSnapshot
-    
+
     /**
      * Resolve a book catalog id into the canonical ISBN route used by native
      * book screens. Accepts raw ISBNs and `isbn:<digits>` values.
      */
     func getBookRoute(catalogId: String)  -> BookRoute?
-    
+
     /**
      * Full bookmark library read model for the current user. Rust owns
      * bookmark address resolution, set/web/explore section reads, and
      * per-section cache failure fallback.
      */
     func getBookmarkLibrarySnapshot() async  -> BookmarkLibrarySnapshot
-    
+
     /**
      * Screen-shaped read model for bookmark/curation set detail. Rust owns
      * title fallback, article row resolution, and empty-state policy.
      */
     func getBookmarkSetDetailSnapshot(record: BookmarkSetRecord) async  -> BookmarkSetDetailSnapshot
-    
+
     /**
      * Lightweight cache projection for whether a room has any chat activity.
      */
     func getChatPresenceSnapshot(groupId: String) async  -> ChatPresenceSnapshot
-    
+
     /**
      * Bounded room-chat read model. Rust owns page sizing, has-more policy,
      * row grouping, and reply-target projection; native shells render rows.
      */
     func getChatSnapshot(groupId: String, pageCount: UInt32) async  -> ChatSnapshot
-    
+
     /**
      * Full comments sheet snapshot for a Rust-owned NIP-22 scope. Rust owns
      * record query, tree build, reaction summary, and bookmark membership.
      */
     func getCommentThreadSnapshot(scope: CommentScope, limit: UInt32) async  -> CommentThreadSnapshot
-    
+
     /**
      * Screen-shaped snapshot for the bookmark menu's collection picker. Rust
      * owns current-user lookup, set ordering, title fallback, and membership.
      */
     func getCurationMenuSnapshot(address: String) async  -> CurationMenuSnapshot
-    
+
     /**
      * Project a kind:11 discussion event id into the NIP-22 root scope used
      * by comment reads/writes.
      */
     func getDiscussionCommentScope(eventIdHex: String)  -> CommentScopeSnapshot
-    
+
     /**
      * Bounded open-thread read model. Rust owns oldest-first ordering and
      * message-group header derivation; native shells render rows.
      */
     func getFeedbackThreadSnapshot(rootEventId: String) async  -> FeedbackThreadSnapshot
-    
+
     /**
      * Threads scoped to `coordinate` authored by the current user. Rust owns
      * error collapse and returns an empty snapshot when logged out.
      */
     func getFeedbackThreadsSnapshot(coordinate: String) async  -> FeedbackThreadsSnapshot
-    
+
     /**
      * Resolve a highlight's book reference from its external reference or
      * artifact address. Rust owns the precedence and canonical catalog id.
      */
     func getHighlightBookRoute(externalReference: String, artifactAddress: String)  -> BookRoute?
-    
+
     /**
      * Project a NIP-84 highlight event id into the NIP-22 root scope used by
      * comment reads/writes.
      */
     func getHighlightCommentScope(eventIdHex: String)  -> CommentScopeSnapshot
-    
+
     /**
      * Project the public highlight share URL. Rust owns the NIP-19 `nevent`
      * encoding, relay hint, and beta route format; native shells render the
      * returned URL only.
      */
     func getHighlightShareUrlSnapshot(eventIdHex: String, authorPubkeyHex: String)  -> HighlightShareUrlSnapshot
-    
+
     /**
      * Classify a highlight source for native icon/label rendering. Rust owns
      * the source/reference interpretation; native shells only render the enum.
      */
     func getHighlightSourceKind(previewSource: String, externalReference: String, artifactAddress: String, sourceUrl: String)  -> HighlightSourceKind
-    
+
     /**
      * Full highlights home feed snapshot. Rust owns the following-highlights
      * query, following-reads query, cross-feed dedupe, grouping, stable ids,
      * and merged ordering.
      */
     func getHomeFeedSnapshot(highlightLimit: UInt32, readLimit: UInt32) async  -> HomeFeedSnapshot
-    
+
     func getJoinedCommunities() async  -> JoinedCommunitiesSnapshot
-    
+
     /**
      * Size + event-count snapshot of the local nostrdb cache. Order-of-
      * magnitude figures used by the Network Settings "Local cache" card.
      */
     func getNetworkCacheStatsSnapshot() async  -> NetworkCacheStatsSnapshot
-    
+
     /**
      * Return the screen-shaped Network Settings snapshot: configured relays,
      * live diagnostics, derived header/auto-connected projection, Wi-Fi-only
      * preference, and error state.
      */
     func getNetworkSettingsSnapshot(previousRelays: [RelayConfig]) async  -> NetworkSettingsSnapshot
-    
+
     func getNetworkWifiOnlyPreferenceSnapshot()  -> NetworkWifiOnlyPreferenceSnapshot
-    
+
     func getOnboardingInterestProjection(selectedIds: [String])  -> OnboardingInterestProjection
-    
+
     func getOnboardingInterestSelection(selectedIds: [String])  -> OnboardingInterestSelection
-    
+
     func getOnboardingInterests()  -> [OnboardingInterest]
-    
+
     func getPodcastClipComposerProjection(input: PodcastClipComposerInput)  -> PodcastClipComposerProjection
-    
+
     func getPodcastListeningClipsSnapshot(artifact: ArtifactRecord?, limit: UInt32) async  -> PodcastListeningClipsSnapshot
-    
+
     func getPodcastListeningProjection(input: PodcastListeningProjectionInput)  -> PodcastListeningProjection
-    
+
     func getPodcastNowPlayingProjection(input: PodcastNowPlayingProjectionInput)  -> PodcastNowPlayingProjection
-    
+
     func getPodcastPlaybackRehydrationSnapshot(hasCurrentArtifact: Bool)  -> PodcastPlaybackRehydrationSnapshot
-    
+
     /**
      * Full profile-page read model. Rust owns tab queries, section limits,
      * current-viewer follow state, and per-section cache-error fallback.
      */
     func getProfilePageSnapshot(pubkeyHex: String) async  -> ProfilePageSnapshot
-    
+
     /**
      * Classify a subscription event kind into the exact profile slice that
      * native shells should refresh.
      */
     func getProfileUpdateAction(kind: UInt32)  -> ProfileUpdateAction
-    
+
     func getRelayHostedRoomsSnapshot(url: String) async  -> RelayHostedRoomsSnapshot
-    
+
     /**
      * Screen-shaped snapshot for the explorer's "Browse all" grid. Rust owns
      * the cache query, limit, query normalization, and matched fields.
      */
     func getRoomBrowseSnapshot(query: String, limit: UInt32) async  -> RoomBrowseSnapshot
-    
+
     func getRoomDiscussionSnapshot(groupId: String) async  -> RoomDiscussionSnapshot
-    
+
     /**
      * Snapshot for the room explorer shelves. Rust owns curator lookup,
      * per-shelf cache failure fallbacks, joined-room exclusion, and shelf
      * limits. Native shells render the returned shelves.
      */
     func getRoomExplorerSnapshot(joined: [CommunitySummary]) async  -> RoomExplorerSnapshot
-    
+
     /**
      * Full room-home read model for one community. Rust owns artifact and
      * highlight limits, reference-scoped highlight/comment reads, and lane
      * assembly.
      */
     func getRoomHomeSnapshot(groupId: String) async  -> RoomHomeSnapshot
-    
+
     func getRoomInviteAvatarProjection(input: RoomInviteAvatarProjectionInput)  -> RoomInviteAvatarProjection
-    
+
     func getRoomInviteSnapshot(input: RoomInviteSnapshotInput) async  -> RoomInviteSnapshot
-    
+
     /**
      * Mint one invite code and project the public room share link. Rust owns
      * the URL format and failure labels; native shells render/copy/share the
      * returned snapshot.
      */
     func getRoomShareLinkSnapshot(groupId: String) async  -> RoomShareLinkSnapshot
-    
+
     /**
      * Article-only refresh for relay search deltas. Used after NIP-50 events
      * ingest into nostrdb so the native shell can repaint the Articles bucket
      * without re-running unrelated sections.
      */
     func getSearchArticleResultsSnapshot(query: String) async  -> SearchArticleResultsSnapshot
-    
+
     /**
      * Search screen chrome snapshot: recent query history plus resolved
      * NIP-50 relays. Rust owns persistence, de-dupe, relay defaults, and
      * error semantics.
      */
     func getSearchChromeSnapshot() async  -> SearchChromeSnapshot
-    
+
     /**
      * Local search snapshot for the main search screen. Rust owns section
      * limits and per-section cache-error fallback; native shells render the
      * returned buckets.
      */
     func getSearchResultsSnapshot(query: String) async  -> SearchResultsSnapshot
-    
+
     func getUserProfile(pubkeyHex: String) async  -> ProfileMetadata?
-    
+
     /**
      * Project a web URL into the external NIP-22 root scope used by comment
      * reads/writes.
      */
     func getWebCommentScope(url: String)  -> CommentScopeSnapshot
-    
+
     /**
      * Fetch OpenGraph + favicon metadata for a web URL. Backed by a
      * JSON-on-disk cache (7-day positive TTL, 1-hour negative TTL) and
@@ -1129,7 +1129,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `CoreError::Network` on transport failure.
      */
     func getWebMetadata(url: String) async  -> WebMetadata?
-    
+
     /**
      * Fetch another user's kind:10002 via the indexer pool and return the
      * parsed `RelayConfig` rows. Useful for "adopt someone else's relay
@@ -1137,187 +1137,187 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * and upserts the selected subset through `upsert_relay`.
      */
     func importRelaysFromNpubSnapshot(npub: String) async  -> ImportRelaysFetchSnapshot
-    
+
     /**
      * Publish the default Blossom server list only if the user has no cached
      * kind:10063. Called once after login; no-op when the list already exists.
      */
     func initDefaultBlossomServers() async  -> MutationSnapshot
-    
+
     func isNip05UsernameValid(input: String)  -> Bool
-    
+
     func isOnboardingComplete()  -> Bool
-    
+
     func joinOcrQuote(words: [OcrWord])  -> String
-    
+
     func loadPodcastTranscript(url: String) async  -> PodcastTranscriptLoadSnapshot
-    
+
     func loginNsec(nsec: String)  -> AuthSessionSnapshot
-    
-    func logout() 
-    
+
+    func logout()
+
     func lookupIsbn(isbn: String) async  -> IsbnPreviewLookupSnapshot
-    
+
     func markPodcastClipIn(selection: PodcastClipSelection, currentTime: Double)  -> PodcastClipSelection
-    
+
     func markPodcastClipOut(selection: PodcastClipSelection, currentTime: Double)  -> PodcastClipSelection
-    
+
     func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async  -> MutationSnapshot
-    
+
     /**
      * Normalize user-entered or scanned ISBN input. Native shells use this
      * only to enable/route capture UI; Rust remains the source of truth for
      * ISBN validity and canonical ISBN-13 conversion.
      */
     func normalizeIsbnInput(raw: String)  -> String?
-    
+
     func normalizeNip05Username(input: String)  -> String
-    
+
     func nostrEntityFallbackLabel(entity: NostrEntityRef)  -> String
-    
+
     func nostrEntityIdentityKey(entity: NostrEntityRef)  -> String
-    
+
     func nostrEntityInlineRender(entity: NostrEntityRef)  -> NostrEntityInlineRender
-    
+
     func ocrAltText(markdown: String)  -> String
-    
+
     func pairBunker(uri: String) async  -> AuthSessionSnapshot
-    
+
     func planPodcastPlaybackSession(input: PodcastPlaybackSessionInput)  -> PodcastPlaybackSessionPlan
-    
+
     func planRelayNip11Probes(input: RelayNip11ProbePlanInput)  -> RelayNip11ProbePlan
-    
+
     func planWaveformPeaks(input: WaveformPeaksPlanInput)  -> WaveformPeaksPlan
-    
+
     func prepareWhatsNew() async  -> WhatsNewPresentationSnapshot
-    
+
     /**
      * Fetch the target relay's NIP-11 information document via an HTTPS
      * GET to the `ws[s]://` URL's HTTP equivalent with
      * `Accept: application/nostr+json`. Fails fast on timeout.
      */
     func probeRelayNip11Snapshot(url: String) async  -> RelayNip11ProbeSnapshot
-    
+
     func projectAddRelaySheet(input: AddRelaySheetProjectionInput)  -> AddRelaySheetProjection
-    
+
     func projectAppSubscriptionStart(input: AppSubscriptionStartProjectionInput)  -> AppSubscriptionStartProjection
-    
+
     /**
      * Project article bookmark affordance copy and SF Symbols.
      */
     func projectArticleBookmarkChrome(input: ArticleBookmarkChromeProjectionInput)  -> ArticleBookmarkChromeProjection
-    
+
     /**
      * Project native article bookmark state. Rust owns address trimming,
      * membership, and the optimistic post-toggle set.
      */
     func projectArticleBookmarkState(input: ArticleBookmarkStateProjectionInput)  -> ArticleBookmarkStateProjection
-    
+
     func projectArticleBookmarksSnapshotApply(input: ArticleBookmarksSnapshotApplyInput)  -> ArticleBookmarksSnapshotApplyProjection
-    
+
     /**
      * Project article-reader highlight publish state. Rust owns note
      * normalization and success/failure toast semantics.
      */
     func projectArticleHighlightPublish(input: ArticleHighlightPublishProjectionInput)  -> ArticleHighlightPublishProjection
-    
+
     func projectArticleProfileCard(input: ArticleProfileCardProjectionInput)  -> ArticleProfileCardProjection
-    
+
     func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput)  -> ArticleReaderHeaderProjection
-    
+
     func projectArticleReaderPublishResult(input: ArticleReaderPublishResultInput)  -> ArticleReaderPublishResultProjection
-    
+
     /**
      * Project selected article-reader text. Native shells own text-range
      * extraction; Rust owns quote/context normalization.
      */
     func projectArticleReaderSelection(input: ArticleReaderSelectionProjectionInput)  -> ArticleReaderSelectionProjection
-    
+
     func projectArticleReaderSnapshot(input: ArticleReaderSnapshotApplyInput)  -> ArticleReaderSnapshotProjection
-    
+
     /**
      * Project the add-Blossom-server sheet. Rust owns URL normalization,
      * scheme validity, and duplicate detection.
      */
     func projectBlossomServerEntry(input: BlossomServerEntryProjectionInput)  -> BlossomServerEntryProjection
-    
+
     /**
      * Project Blossom server list edits. Rust owns URL normalization,
      * duplicate filtering, delete protection, and save eligibility.
      */
     func projectBlossomServerList(input: BlossomServerListProjectionInput)  -> BlossomServerListProjection
-    
+
     func projectBookDetailSnapshotApply(input: BookDetailSnapshotApplyInput)  -> BookDetailSnapshotApplyProjection
-    
+
     func projectBookPickerQuery(input: BookPickerQueryProjectionInput)  -> BookPickerQueryProjection
-    
+
     func projectBookmarkLibrary(input: BookmarkLibraryProjectionInput)  -> BookmarkLibraryProjection
-    
+
     func projectBookmarkSetRow(input: BookmarkSetRowProjectionInput)  -> BookmarkSetRowProjection
-    
+
     func projectBookmarkedArticleRow(input: BookmarkedArticleRowProjectionInput)  -> BookmarkedArticleRowProjection
-    
+
     func projectCaptureBookDisplay(input: CaptureBookDisplayProjectionInput)  -> CaptureBookDisplayProjection
-    
+
     func projectCaptureCommunitySelection(input: CaptureCommunitySelectionProjectionInput)  -> CaptureCommunitySelectionProjection
-    
+
     func projectCapturePublish(input: CapturePublishProjectionInput)  -> CapturePublishProjection
-    
+
     func projectCapturePublishResult(input: CapturePublishResultProjectionInput)  -> CapturePublishResultProjection
-    
+
     func projectCaptureStash(input: CaptureStashProjectionInput)  -> CaptureStashProjection
-    
+
     func projectCaptureUpload(input: CaptureUploadProjectionInput)  -> CaptureUploadProjection
-    
+
     func projectChatActivityReload(input: ChatActivityReloadProjectionInput)  -> ChatActivityReloadProjection
-    
+
     /**
      * Chat composer projection. Rust owns draft normalization and send
      * eligibility; native shells render the composer affordance.
      */
     func projectChatComposer(input: ChatComposerProjectionInput)  -> ChatComposerProjection
-    
+
     func projectChatLoadMore(input: ChatLoadMoreProjectionInput)  -> ChatLoadMoreProjection
-    
+
     func projectChatPublishResult(input: ChatPublishResultInput)  -> ChatPublishResultProjection
-    
+
     /**
      * Project comment row reaction/bookmark chrome.
      */
     func projectCommentActionChrome(input: CommentActionChromeProjectionInput)  -> CommentActionChromeProjection
-    
+
     /**
      * Comment composer projection. Rust owns draft normalization and submit
      * eligibility; native shells render the composer affordance.
      */
     func projectCommentComposer(input: CommentComposerProjectionInput)  -> CommentComposerProjection
-    
+
     func projectCommentInlineThreadSnapshotApply(input: CommentInlineThreadSnapshotApplyInput)  -> CommentInlineThreadSnapshotApplyProjection
-    
+
     /**
      * Project per-comment reply chrome. Rust owns child counts, preview
      * choice, "more replies" copy, and author-reply matching.
      */
     func projectCommentNodeChrome(input: CommentNodeChromeProjectionInput)  -> CommentNodeChromeProjection
-    
+
     func projectCommentPublishResult(input: CommentPublishResultInput)  -> CommentPublishResultProjection
-    
+
     func projectCommentSnapshotApply(input: CommentSnapshotApplyInput)  -> CommentSnapshotApplyProjection
-    
+
     /**
      * Project a comment thread screen. Rust owns focused-node lookup,
      * visible child selection, and thread chrome labels.
      */
     func projectCommentThreadView(input: CommentThreadViewProjectionInput)  -> CommentThreadViewProjection
-    
+
     /**
      * Project the comments toolbar badge. Rust owns count formatting and
      * accessibility copy.
      */
     func projectCommentToolbar(input: CommentToolbarProjectionInput)  -> CommentToolbarProjection
-    
+
     func projectCommunityRow(input: CommunityRowProjectionInput)  -> CommunityRowProjection
-    
+
     /**
      * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
      * kind:9002 (edit-metadata) signed by the current user. Returns the
@@ -1325,362 +1325,362 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * follow-up events drive the iOS membership stream automatically.
      */
     func projectCreateRoom(input: CreateRoomProjectionInput)  -> CreateRoomProjection
-    
+
     func projectCreateRoomCoverUploadResult(input: CreateRoomCoverUploadResultInput)  -> CreateRoomCoverUploadResultProjection
-    
+
     func projectCreateRoomPublishResult(input: CreateRoomPublishResultInput)  -> CreateRoomPublishResultProjection
-    
+
     func projectCurationMenuSnapshotApply(input: CurationMenuSnapshotApplyInput)  -> CurationMenuSnapshotApplyProjection
-    
+
     /**
      * Project create-collection sheet state. Rust owns title normalization
      * and create eligibility; native shells render the returned state.
      */
     func projectCurationSetCreate(input: CurationSetCreateProjectionInput)  -> CurationSetCreateProjection
-    
+
     func projectDiscussionAttachment(input: DiscussionAttachmentProjectionInput)  -> DiscussionAttachmentProjection
-    
+
     /**
      * Discussion composer projection. Rust owns draft normalization and
      * publish eligibility; native shells render the composer affordance.
      */
     func projectDiscussionComposer(input: DiscussionComposerProjectionInput)  -> DiscussionComposerProjection
-    
+
     func projectDiscussionPublishResult(input: DiscussionPublishResultInput)  -> DiscussionPublishResultProjection
-    
+
     /**
      * Feedback composer projection shared by new-thread and reply surfaces.
      * Rust owns submit trimming and send eligibility so each platform shell
      * renders the same enabled/disabled state.
      */
     func projectFeedbackComposer(input: FeedbackComposerProjectionInput)  -> FeedbackComposerProjection
-    
+
     /**
      * Feedback message bubble presentation projection. Rust owns current-user
      * classification, header grouping, and profile fallback semantics; native
      * shells keep markdown and time rendering.
      */
     func projectFeedbackMessagePresentation(input: FeedbackMessagePresentationInput)  -> FeedbackMessagePresentationProjection
-    
+
     /**
      * Feedback publish result projection shared by root-thread and reply
      * surfaces. Rust owns success/error classification; native shells apply
      * the corresponding view transition.
      */
     func projectFeedbackPublishResult(input: FeedbackPublishResultInput)  -> FeedbackPublishResultProjection
-    
+
     /**
      * Feedback snapshot apply projection shared by list and thread stores.
      * Rust owns success/error classification; native shells decide whether
      * the current lifecycle should surface or ignore the projected error.
      */
     func projectFeedbackSnapshotApply(input: FeedbackSnapshotApplyInput)  -> FeedbackSnapshotApplyProjection
-    
+
     /**
      * Feedback thread row/detail presentation projection. Rust owns title,
      * preview, summary, and status fallback rules; native shells keep
      * localized relative-time formatting and rendering.
      */
     func projectFeedbackThreadPresentation(thread: FeedbackThreadRecord)  -> FeedbackThreadPresentationProjection
-    
+
     func projectHighlightDetailContent(input: HighlightDetailContentProjectionInput)  -> HighlightDetailContentProjection
-    
+
     func projectHighlightDetailResource(input: HighlightDetailResourceProjectionInput)  -> HighlightDetailResourceProjection
-    
+
     func projectHighlightFeedContent(input: HighlightFeedContentProjectionInput)  -> HighlightFeedContentProjection
-    
+
     func projectHighlightGroupCard(input: HighlightGroupCardProjectionInput)  -> HighlightGroupCardProjection
-    
+
     func projectHighlightResourceHeader(input: HighlightResourceHeaderProjectionInput)  -> HighlightResourceHeaderProjection
-    
+
     func projectHomeFeedSnapshotApply(input: HomeFeedSnapshotApplyInput)  -> HomeFeedSnapshotApplyProjection
-    
+
     func projectImportRelays(input: ImportRelaysProjectionInput)  -> ImportRelaysProjection
-    
+
     func projectImportRelaysFetchApply(input: ImportRelaysFetchApplyInput)  -> ImportRelaysFetchApplyProjection
-    
+
     /**
      * Project import-relays source input. Rust owns source trimming and fetch
      * eligibility; native shells render and execute the fetch action.
      */
     func projectImportRelaysSource(input: ImportRelaysSourceProjectionInput)  -> ImportRelaysSourceProjection
-    
+
     func projectIsbnManualPreview(input: IsbnManualPreviewProjectionInput)  -> IsbnManualPreviewProjection
-    
+
     func projectIsbnPreviewLookupApply(input: IsbnPreviewLookupApplyInput)  -> IsbnPreviewLookupApplyProjection
-    
+
     func projectIsbnPreviewRequest(input: IsbnPreviewRequestProjectionInput)  -> IsbnPreviewRequestProjection
-    
+
     func projectJoinedCommunitiesSnapshotApply(input: JoinedCommunitiesSnapshotApplyInput)  -> JoinedCommunitiesSnapshotApplyProjection
-    
+
     /**
      * Project a live diagnostics payload plus the derived Network Settings
      * header/auto-connected state for the current configured relay rows.
      */
     func projectNetworkDiagnosticsSnapshot(configuredRelays: [RelayConfig], diagnostics: [RelayDiagnostic])  -> NetworkDiagnosticsSnapshot
-    
+
     func projectNetworkDiagnosticsSnapshotApply(input: NetworkDiagnosticsSnapshotApplyInput)  -> NetworkDiagnosticsSnapshotApplyProjection
-    
+
     func projectNetworkSettingsMutationApply(input: NetworkSettingsMutationApplyInput)  -> NetworkSettingsMutationApplyProjection
-    
+
     func projectNetworkSettingsSnapshotApply(input: NetworkSettingsSnapshotApplyInput)  -> NetworkSettingsSnapshotApplyProjection
-    
+
     func projectNetworkWifiOnlyPreferenceApply(input: NetworkWifiOnlyPreferenceApplyInput)  -> NetworkWifiOnlyPreferenceApplyProjection
-    
+
     func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionInput)  -> NostrEntityArticleCardProjection
-    
+
     /**
      * Project onboarding account creation state. Rust owns display-name
      * trimming and continue eligibility.
      */
     func projectOnboardingCreateAccount(input: OnboardingCreateAccountProjectionInput)  -> OnboardingCreateAccountProjection
-    
+
     /**
      * Project username availability-check state. Rust owns canonical trim
      * and username validity for the onboarding flow.
      */
     func projectOnboardingUsernameCheck(username: String)  -> OnboardingUsernameCheckProjection
-    
+
     func projectPodcastClipPublishResult(input: PodcastClipPublishResultInput)  -> PodcastClipPublishResultProjection
-    
+
     func projectPodcastPlaybackSeek(input: PodcastPlaybackSeekInput)  -> PodcastPlaybackSeekProjection
-    
+
     func projectPodcastPlaybackSessionApply(input: PodcastPlaybackSessionApplyInput)  -> PodcastPlaybackSessionApplyProjection
-    
+
     func projectPodcastPlaybackTick(input: PodcastPlaybackTickInput)  -> PodcastPlaybackTickProjection
-    
+
     func projectPodcastTranscriptLoadApply(input: PodcastTranscriptLoadApplyInput)  -> PodcastTranscriptLoadApplyProjection
-    
+
     /**
      * Profile/avatar presentation projection. Rust owns profile-name
      * precedence, pubkey fallback, and avatar URL selection; native shells
      * render the resulting values without reimplementing business rules.
      */
     func projectProfileDisplay(input: ProfileDisplayProjectionInput)  -> ProfileDisplayProjection
-    
+
     /**
      * Profile/avatar presentation projection for bylines that include an
      * artifact-provided author label.
      */
     func projectProfileDisplayWithLabel(input: ProfileDisplayWithLabelProjectionInput)  -> ProfileDisplayProjection
-    
+
     /**
      * Profile follow-tap projection. Rust owns whether a tap may start,
      * the optimistic button state, and the exact mutation the shell executes.
      */
     func projectProfileFollowAction(relationship: ProfileRelationshipProjection, input: ProfileFollowActionInput)  -> ProfileFollowActionProjection
-    
+
     func projectProfileFollowMutationApply(input: ProfileFollowMutationApplyInput)  -> ProfileFollowMutationApplyProjection
-    
+
     /**
      * Compact profile handle projection for social proof surfaces. Rust owns
      * handle precedence and pubkey fallback length; native shells render it.
      */
     func projectProfileHandle(input: ProfileDisplayProjectionInput)  -> ProfileDisplayProjection
-    
+
     /**
      * Profile header identity projection. Rust owns display fallbacks and
      * NIP-05 label normalization; native shells render the returned fields.
      */
     func projectProfileIdentity(input: ProfileIdentityProjectionInput)  -> ProfileIdentityProjection
-    
+
     func projectProfileImageUploadResult(input: ProfileImageUploadResultInput)  -> ProfileImageUploadResultProjection
-    
+
     /**
      * Profile relationship projection. Rust owns own-profile detection and
      * follow-action visibility; native shells render and execute taps only.
      */
     func projectProfileRelationship(input: ProfileRelationshipProjectionInput)  -> ProfileRelationshipProjection
-    
+
     /**
      * Profile edit-form projection. Rust owns draft normalization and save
      * eligibility; native shells bind controls to the returned projection.
      */
     func projectProfileUpdate(input: ProfileUpdateProjectionInput)  -> ProfileUpdateProjection
-    
+
     func projectProfileUpdateResult(input: ProfileUpdateResultInput)  -> ProfileUpdateResultProjection
-    
+
     func projectPublicKeyDisplay(input: PublicKeyDisplayProjectionInput)  -> PublicKeyDisplayProjection
-    
+
     func projectReadingFeedCard(input: ReadingFeedCardProjectionInput)  -> ReadingFeedCardProjection
-    
+
     func projectRelativeTimeLabel(input: RelativeTimeLabelInput)  -> RelativeTimeLabelProjection
-    
+
     func projectRelayDetail(input: RelayDetailProjectionInput)  -> RelayDetailProjection
-    
+
     func projectRelayHostedRoomsApply(input: RelayHostedRoomsApplyInput)  -> RelayHostedRoomsApplyProjection
-    
+
     func projectRelayRemove(input: RelayRemoveProjectionInput)  -> RelayRemoveProjection
-    
+
     func projectRelayRow(input: RelayRowProjectionInput)  -> RelayRowProjection
-    
+
     func projectRoomAvatar(input: RoomAvatarProjectionInput)  -> RoomAvatarProjection
-    
+
     func projectRoomBrowseSnapshotApply(input: RoomBrowseSnapshotApplyInput)  -> RoomBrowseSnapshotApplyProjection
-    
+
     func projectRoomCoverCard(input: RoomCoverCardProjectionInput)  -> RoomCoverCardProjection
-    
+
     func projectRoomExplorerFeaturedStartResult(input: RoomExplorerFeaturedStartResultInput)  -> RoomExplorerFeaturedStartResultProjection
-    
+
     func projectRoomExplorerJoinRequestResult(input: RoomExplorerJoinRequestResultInput)  -> RoomExplorerJoinRequestResultProjection
-    
+
     func projectRoomInviteSelection(input: RoomInviteSelectionInput)  -> RoomInviteSelectionProjection
-    
+
     func projectRoomInviteSelectionChrome(input: RoomInviteSelectionChromeInput)  -> RoomInviteSelectionChromeProjection
-    
+
     func projectRoomLibraryArticleCard(input: RoomLibraryArticleCardProjectionInput)  -> RoomLibraryArticleCardProjection
-    
+
     func projectRoomLibraryBookCard(input: RoomLibraryBookCardProjectionInput)  -> RoomLibraryBookCardProjection
-    
+
     func projectRoomLibraryCardKind(input: RoomLibraryCardKindProjectionInput)  -> RoomLibraryCardKindProjection
-    
+
     func projectRoomLibraryGenericCard(input: RoomLibraryGenericCardProjectionInput)  -> RoomLibraryGenericCardProjection
-    
+
     func projectRoomLibraryPodcastCard(input: RoomLibraryPodcastCardProjectionInput)  -> RoomLibraryPodcastCardProjection
-    
+
     func projectRoomPreviewAction(input: RoomPreviewActionProjectionInput)  -> RoomPreviewActionProjection
-    
+
     func projectRoomPreviewArtifacts(input: RoomPreviewArtifactsProjectionInput)  -> RoomPreviewArtifactsProjection
-    
+
     func projectRoomPreviewHeader(input: RoomPreviewHeaderProjectionInput)  -> RoomPreviewHeaderProjection
-    
+
     func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionInput)  -> RoomRecommendationCardProjection
-    
+
     /**
      * Project a community search row. Rust owns display copy and optional
      * metadata labels; native shells render the row layout.
      */
     func projectSearchCommunityRow(input: SearchCommunityRowProjectionInput)  -> SearchCommunityRowProjection
-    
+
     /**
      * Project a search highlight row. Rust owns navigation route and
      * page-image URL eligibility.
      */
     func projectSearchHighlightRow(input: SearchHighlightRowProjectionInput)  -> SearchHighlightRowProjection
-    
+
     /**
      * Project native search field state. Rust owns query trimming and whether
      * a search should run.
      */
     func projectSearchQuery(input: SearchQueryProjectionInput)  -> SearchQueryProjection
-    
+
     func projectSearchRelayArticlesApply(input: SearchRelayArticlesApplyInput)  -> SearchRelayArticlesApplyProjection
-    
+
     func projectSearchRelayRefresh(input: SearchRelayRefreshInput)  -> SearchRelayRefreshProjection
-    
+
     func projectSearchRelayStartResult(input: SearchRelayStartResultInput)  -> SearchRelayStartResultProjection
-    
+
     func projectSearchRelayUpdate(input: SearchRelayUpdateInput)  -> SearchRelayUpdateProjection
-    
+
     func projectSearchResultsApply(input: SearchResultsApplyInput)  -> SearchResultsApplyProjection
-    
+
     func projectSearchSchedule(input: SearchScheduleInput)  -> SearchScheduleProjection
-    
+
     /**
      * Project suggested search chips. Rust owns room/fallback ordering,
      * trimming, dedupe, and cap policy.
      */
     func projectSearchSuggestions(input: SearchSuggestionsProjectionInput)  -> SearchSuggestionsProjection
-    
+
     /**
      * Project matched text spans for search result rendering. Rust owns query
      * trimming and case-insensitive matching; native shells apply styling.
      */
     func projectSearchTextMatches(input: SearchTextMatchesProjectionInput)  -> SearchTextMatchesProjection
-    
+
     func projectSecretKeyDisplay(input: SecretKeyDisplayProjectionInput)  -> SecretKeyDisplayProjection
-    
+
     func projectSessionStorageWrite(input: SessionStorageWriteInput)  -> SessionStorageWriteSnapshot
-    
+
     func projectShareArticleTarget(input: ShareArticleTargetProjectionInput)  -> ShareArtifactTargetProjection
-    
+
     func projectShareArtifactTarget(input: ShareArtifactTargetProjectionInput)  -> ShareArtifactTargetProjection
-    
+
     func projectShareHighlightArticleTarget(input: ShareHighlightArticleTargetProjectionInput)  -> ShareArtifactTargetProjection?
-    
+
     func projectShareHighlightTarget(input: ShareHighlightTargetProjectionInput)  -> ShareHighlightTargetProjection
-    
+
     func projectShareQueueDrain(input: ShareQueueDrainProjectionInput)  -> ShareQueueDrainProjection
-    
+
     func projectShareToCommunityPublishResult(input: ShareToCommunityPublishResultInput)  -> ShareToCommunityPublishResultProjection
-    
+
     func projectShareWebReaderTarget(input: ShareWebReaderTargetProjectionInput)  -> ShareArtifactTargetProjection
-    
+
     func projectViewSubscriptionStart(input: ViewSubscriptionStartProjectionInput)  -> ViewSubscriptionStartProjection
-    
+
     func projectWaveformCacheKey(input: WaveformCacheKeyProjectionInput)  -> WaveformCacheKeyProjection
-    
+
     func projectWebBookmarkRow(input: WebBookmarkRowProjectionInput)  -> WebBookmarkRowProjection
-    
+
     /**
      * Project native web metadata request state. Rust owns URL validity,
      * canonical fetch URL, and mirror cache keys.
      */
     func projectWebMetadataRequest(input: WebMetadataRequestProjectionInput)  -> WebMetadataRequestProjection
-    
+
     /**
      * Publish a solo NIP-84 highlight from an article reader selection and
      * return the refreshed reader snapshot. Rust owns article artifact
      * derivation, optimistic highlight insertion, and duplicate suppression.
      */
     func publishArticleReaderHighlightSnapshot(pubkeyHex: String, dTag: String, article: ArticleRecord?, quote: String, note: String, context: String) async  -> ArticleReaderHighlightPublishSnapshot
-    
+
     func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactPublishSnapshot
-    
+
     func publishCapture(input: CapturePublishInput) async  -> CapturePublishSnapshot
-    
+
     /**
      * Publish a NIP-29 kind:9 chat message and return the refreshed bounded
      * chat snapshot. Rust owns the optimistic merge of the signed record so
      * native shells never fabricate chat rows.
      */
     func publishChatMessageSnapshot(groupId: String, content: String, replyToEventId: String?, pageCount: UInt32) async  -> ChatPublishSnapshot
-    
+
     /**
      * Publish a NIP-22 comment and return the refreshed comments sheet
      * snapshot. Rust owns optimistic insertion and tree/interaction rebuild.
      */
     func publishCommentForScopeSnapshot(scope: CommentScope, parentEventId: String?, content: String, limit: UInt32) async  -> CommentPublishSnapshot
-    
+
     func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?) async  -> DiscussionPublishSnapshot
-    
+
     func publishDiscussionFromComposer(input: DiscussionComposerPublishInput) async  -> DiscussionPublishSnapshot
-    
+
     /**
      * Publish a feedback root note and return the refreshed bounded thread
      * snapshot. Rust resolves the optional project agent `p` tag and owns the
      * optimistic insertion of the signed root before relay echo.
      */
     func publishFeedbackRootNoteSnapshot(coordinate: String, body: String) async  -> FeedbackRootPublishSnapshot
-    
+
     /**
      * Publish a feedback reply into an existing root thread and return the
      * refreshed bounded thread snapshot. Rust owns the NIP-10 root marker and
      * optimistic merge of the signed reply.
      */
     func publishFeedbackThreadReplySnapshot(coordinate: String, parentEventId: String, body: String) async  -> FeedbackReplyPublishSnapshot
-    
+
     /**
      * Publish and share one podcast clip highlight. Rust owns clip draft
      * construction, NIP-29 repost publication, and single-record outcome
      * collapse for native player controls.
      */
     func publishPodcastClipHighlight(input: PodcastClipPublishInput) async  -> PodcastClipPublishSnapshot
-    
+
     /**
      * Publish a podcast clip from the composer sheet. Rust owns draft
      * construction and whether the clip is solo-published or also reposted
      * into a NIP-29 room.
      */
     func publishPodcastComposerClip(input: PodcastClipComposerPublishInput) async  -> PodcastClipPublishSnapshot
-    
+
     /**
      * Publish a queued iOS share-extension handoff. Rust owns URL preview
      * construction, note normalization, and success/failure classification;
      * Swift only moves items through native App Group storage.
      */
     func publishShareQueueItem(item: ShareQueueItem) async  -> ShareQueueAttempt
-    
+
     /**
      * Nudge the relay pool to attempt a reconnect on every disconnected
      * relay. `Client::connect` is idempotent — already-connected relays
@@ -1688,13 +1688,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * fresh WebSocket attempt.
      */
     func reconnectAll() async  -> NetworkSettingsMutationSnapshot
-    
+
     func reconstructOcrMarkdown(lines: [OcrLine])  -> String
-    
+
     func recordPodcastPlaybackPosition(input: PodcastPlaybackPositionInput)  -> MutationSnapshot
-    
+
     func recordRecentSearchSnapshot(query: String) async  -> SearchChromeSnapshot
-    
+
     /**
      * Handle the app returning to foreground. iOS may suspend WebSockets
      * while backgrounded; when Wi-Fi-only mode is off, force a fresh
@@ -1702,21 +1702,21 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * is the only authority allowed to reconnect.
      */
     func refreshRelayConnectionsForForeground() async  -> NetworkSettingsMutationSnapshot
-    
+
     func registerNip05(name: String, domain: String) async  -> Nip05RegistrationSnapshot
-    
+
     /**
      * Remove a relay by URL.
      */
     func removeRelay(url: String) async  -> NetworkSettingsMutationSnapshot
-    
+
     /**
      * Publish a NIP-29 kind:9021 join-request for `group_id`. Rust owns the
      * pending-join state and emits app toast deltas for request sent,
      * request failure, and later membership confirmation.
      */
     func requestJoinRoom(groupId: String, roomName: String) async  -> JoinRoomRequestSnapshot
-    
+
     /**
      * Best-effort cache lookup for a [`NostrEntityRef`]. Returns the
      * resolved event when nostrdb already has it, `None` otherwise.
@@ -1724,39 +1724,39 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * cold-cache reference warms up over the wire.
      */
     func resolveNostrEntity(entity: NostrEntityRef) async  -> NostrEntityResolutionSnapshot
-    
+
     func restoreSessionSnapshot(nsec: String?, bunkerUri: String?) async  -> AuthSessionRestoreSnapshot
-    
+
     func sanitizeHighlightCropBox(cropBox: OcrRect, fallback: OcrRect?)  -> OcrRect
-    
+
     func selectableOcrWords(lines: [OcrLine])  -> [OcrWord]
-    
+
     func sendRoomInvites(groupId: String, selected: [RoomInviteCandidate]) async  -> RoomInviteSendResultProjection
-    
+
     /**
      * Replace the user's Blossom server list with the normalized ordered
      * settings projection. Rust blocks invalid empty saves and returns the
      * mutation state instead of a raw event-id outcome.
      */
     func setBlossomServerSettings(servers: [String]) async  -> BlossomServerSettingsMutationSnapshot
-    
-    func setEventCallback(callback: EventCallback) 
-    
+
+    func setEventCallback(callback: EventCallback)
+
     func setOnboardingComplete(complete: Bool)  -> MutationSnapshot
-    
+
     func setPodcastClipEnd(selection: PodcastClipSelection, value: Double, durationSeconds: Double)  -> PodcastClipSelection
-    
+
     func setPodcastClipStart(selection: PodcastClipSelection, value: Double)  -> PodcastClipSelection
-    
+
     /**
      * Atomically update a single relay's role flags.
      */
     func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async  -> NetworkSettingsMutationSnapshot
-    
+
     func setWifiOnlyEnabled(enabled: Bool) async  -> NetworkWifiOnlyPreferenceSnapshot
-    
+
     func shareExtensionCommunitiesSnapshot(communities: [CommunitySummary])  -> Data
-    
+
     /**
      * Re-share an existing kind:9802 highlight into a NIP-29 room as a
      * kind:16 generic repost. Used to surface a friend's highlight (or
@@ -1767,11 +1767,11 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * to the Highlighter relay as the e-tag relay hint.
      */
     func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String) async  -> MutationSnapshot
-    
+
     func standaloneNostrEntity(content: String)  -> NostrEntityRef?
-    
+
     func startDefaultNostrConnect(callback: String) async  -> NostrConnectStartSnapshot
-    
+
     /**
      * Install (if not already installed) two relay subs that together
      * power the "Friends are here" explorer shelf:
@@ -1786,16 +1786,16 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Idempotent; both subs ride until logout.
      */
     func startFriendsRoomsDiscovery() async  -> MutationSnapshot
-    
+
     /**
      * Install (if not already installed) a long-lived relay sub for every
      * kind:39000 metadata event. Call once on explorer appear from iOS.
      * Idempotent; the sub rides until logout.
      */
-    func startRoomDiscovery() async 
-    
+    func startRoomDiscovery() async
+
     func startRoomExplorerFeaturedRooms() async  -> MutationSnapshot
-    
+
     /**
      * Article-reader view-scope subscription. Fires `ArticleUpdated` deltas
      * whenever the article's replaceable body supersedes OR a new kind:9802
@@ -1803,7 +1803,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * appearance; `unsubscribe(handle)` on disappearance.
      */
     func subscribeArticle(pubkeyHex: String, dTag: String) async  -> SubscriptionStartSnapshot
-    
+
     /**
      * Open a NIP-50 relay subscription for kind:30023 against the user's
      * search relays. Returns a handle; the pump fires
@@ -1812,26 +1812,26 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * snapshot to merge the new events into its Articles bucket.
      */
     func subscribeArticleSearch(query: String) async  -> SubscriptionStartSnapshot
-    
+
     /**
      * Open a live subscription for the current user's kind:30003/30004 sets.
      * Delivers `BookmarkSetsUpdated` (view-scoped) on each delta.
      */
     func subscribeBookmarkSets() async  -> SubscriptionStartSnapshot
-    
+
     /**
      * Open a live subscription on the current user's kind:10003 bookmark
      * events. Deltas land on the app-scope bus (`BookmarksUpdated`); the
      * Swift bookmarks store re-queries on each.
      */
     func subscribeBookmarks() async  -> SubscriptionStartSnapshot
-    
+
     /**
      * Per-thread feedback subscription. Fires `FeedbackThreadUpdated` deltas
      * for every kind:1 `e`-tagged to the root (regardless of author).
      */
     func subscribeFeedbackThread(rootEventId: String) async  -> SubscriptionStartSnapshot
-    
+
     /**
      * Feedback-threads subscription for the shake-to-share surface. Fires
      * `FeedbackThreadsUpdated` deltas whenever a kind:1 root authored by
@@ -1839,13 +1839,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * for the same project arrives. Swift re-queries on each.
      */
     func subscribeFeedbackThreads(coordinate: String) async  -> SubscriptionStartSnapshot
-    
+
     /**
      * Open a live subscription for kind:30004 sets from followed authors.
      * Delivers `FollowingCurationSetsUpdated` (view-scoped) on each delta.
      */
     func subscribeFollowingCurationSets() async  -> SubscriptionStartSnapshot
-    
+
     /**
      * Highlights home-feed view-scope subscription. Snapshots the user's
      * current follow list (plus self — nobody lists themselves in kind:3
@@ -1854,7 +1854,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * set or tagged into any joined room.
      */
     func subscribeFollowingHighlights() async  -> SubscriptionStartSnapshot
-    
+
     /**
      * Following Reads view-scope subscription. Snapshots the user's current
      * follow list, then listens for: (a) new articles authored by a follow,
@@ -1863,7 +1863,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Install on tab appearance; `unsubscribe(handle)` on disappearance.
      */
     func subscribeFollowingReads() async  -> SubscriptionStartSnapshot
-    
+
     /**
      * App-scope subscription for the joined-communities view. Returns a
      * handle; fires CommunityUpserted / MembershipChanged deltas tagged
@@ -1871,7 +1871,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * call is about setting up the nostrdb notification pump.
      */
     func subscribeJoinedCommunities() async  -> SubscriptionStartSnapshot
-    
+
     /**
      * Install a view-scoped subscription for the missing event behind an
      * entity. Routes to relay hints first (when the bech32 carried any) plus
@@ -1880,7 +1880,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `NostrEntityResolved` when the target lands.
      */
     func subscribeNostrEntity(entity: NostrEntityRef) async  -> SubscriptionStartSnapshot
-    
+
     /**
      * Handle the Swift side uses to match `RelayStatusChanged` deltas on the
      * event bus. Relay status changes are app-scoped and ride
@@ -1888,87 +1888,87 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * value is a stable contract, not a unique sub id.
      */
     func subscribeRelayStatus() async  -> SubscriptionStartSnapshot
-    
+
     /**
      * Per-room view-scope subscription. Returns a handle; fires
      * ArtifactUpserted / HighlightUpserted / HighlightShared for this
      * specific group.
      */
     func subscribeRoom(groupId: String) async  -> SubscriptionStartSnapshot
-    
+
     /**
      * Per-room Chat view-scope subscription. Returns a handle; fires
      * `ChatMessageUpserted` deltas for kind:9 messages tagged
      * `#h=<group_id>`.
      */
     func subscribeRoomChat(groupId: String) async  -> SubscriptionStartSnapshot
-    
+
     /**
      * Per-room Discussions view-scope subscription. Returns a handle; fires
      * `DiscussionUpserted` deltas for kind:11 threads in this group that
      * carry the `t=discussion` marker.
      */
     func subscribeRoomDiscussions(groupId: String) async  -> SubscriptionStartSnapshot
-    
+
     /**
      * Profile view-scope subscription. Fires `UserProfileUpdated` deltas
      * when any event relevant to `pubkey_hex`'s profile arrives. Install on
      * profile view appearance; `unsubscribe(handle)` on disappearance.
      */
     func subscribeUserProfile(pubkeyHex: String) async  -> SubscriptionStartSnapshot
-    
+
     /**
      * Vault view-scope subscription for the current user's own highlights.
      */
     func subscribeVault() async  -> SubscriptionStartSnapshot
-    
+
     /**
      * Open a live subscription for the current user's NIP-B0 kind:39701 events.
      * Delivers `WebBookmarksUpdated` (view-scoped) on each delta.
      */
     func subscribeWebBookmarks() async  -> SubscriptionStartSnapshot
-    
+
     func suggestNip05Username(displayName: String)  -> String
-    
+
     /**
      * Toggle `address` in the user's kind:10003 list and return the
      * post-toggle article bookmark snapshot. Rust owns the read-modify-write;
      * native shells do not inspect a bool mutation outcome.
      */
     func toggleArticleBookmarkSnapshot(address: String) async  -> ArticleBookmarksSnapshot
-    
+
     /**
      * Toggle the current user's bookmark on a visible NIP-22 comment and
      * return the updated interaction snapshot for the current screen records.
      */
     func toggleCommentBookmarkSnapshot(records: [CommentRecord], eventIdHex: String) async  -> CommentInteractionMutationSnapshot
-    
+
     /**
      * Toggle the current user's like on a visible NIP-22 comment and return
      * the updated interaction snapshot for the current screen records.
      */
     func toggleCommentLikeSnapshot(records: [CommentRecord], eventId: String, authorPubkeyHex: String) async  -> CommentInteractionMutationSnapshot
-    
+
     /**
      * Toggle a menu row and return the refreshed menu snapshot. Rust owns the
      * membership mutation and applies the returned state over the cached
      * snapshot so native shells do not sequence a follow-up read.
      */
     func toggleCurationMenuItemSnapshot(dTag: String, address: String) async  -> CurationMenuSnapshot
-    
+
     func toggleImportRelaySelection(fetched: [RelayConfig], selectedUrls: [String], url: String)  -> [String]
-    
+
     func toggleOnboardingInterestSelection(selectedIds: [String], interestId: String)  -> [String]
-    
+
     func tokenizeNostrContent(content: String)  -> [NostrContentRun]
-    
+
     func tokenizeNostrMarkdownInline(content: String)  -> [NostrContentRun]
-    
+
     /**
      * Drop a subscription by handle. Idempotent.
      */
-    func unsubscribe(handle: UInt64) 
-    
+    func unsubscribe(handle: UInt64)
+
     /**
      * Publish a new kind:0 metadata event for the current user. Preserves
      * any unknown JSON fields the user had set via other clients —
@@ -1978,7 +1978,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * waiting for the relay echo.
      */
     func updateProfile(draft: ProfileUpdateDraft) async  -> ProfileUpdateSnapshot
-    
+
     /**
      * Upload a photo to the default Blossom server (`blossom.primal.net`)
      * using BUD-01 auth. The caller (iOS) is responsible for stripping EXIF
@@ -1988,14 +1988,14 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * `alt` is the recognized OCR text, or empty if none.
      */
     func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, alt: String) async  -> BlossomUploadSnapshot
-    
+
     /**
      * Insert-or-update a single relay. Replaces the row with matching URL or
      * appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
      * the live relay pool so the change takes effect immediately.
      */
     func upsertRelay(cfg: RelayConfig) async  -> NetworkSettingsMutationSnapshot
-    
+
 }
 open class HighlighterCore: HighlighterCoreProtocol, @unchecked Sendable {
     fileprivate let pointer: UnsafeMutableRawPointer!
@@ -2053,9 +2053,9 @@ public convenience init() {
         try! rustCall { uniffi_highlighter_core_fn_free_highlightercore(pointer, $0) }
     }
 
-    
 
-    
+
+
     /**
      * Apply a raw native network path update. Native reports only whether
      * the current path is Wi-Fi; Rust owns the Wi-Fi-only preference lookup
@@ -2075,10 +2075,10 @@ open func applyNetworkPathStatus(isWifi: Bool)async  -> NetworkPathPolicySnapsho
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeNetworkPathPolicySnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Publish the Rust-projected profile follow mutation and return the
      * post-action screen state. Rust owns rollback on error; the shell only
@@ -2098,10 +2098,10 @@ open func applyProfileFollowMutation(input: ProfileFollowMutationInput)async  ->
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeProfileFollowMutationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func autoConnectedRelayConfig(url: String) -> RelayConfig  {
     return try!  FfiConverterTypeRelayConfig_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_auto_connected_relay_config(self.uniffiClonePointer(),
@@ -2109,7 +2109,7 @@ open func autoConnectedRelayConfig(url: String) -> RelayConfig  {
     )
 })
 }
-    
+
     /**
      * Build the edited ISBN book preview after scan/manual entry. Rust owns
      * ISBN normalization and the NIP-73 reference fields; native supplies
@@ -2125,7 +2125,7 @@ open func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, ti
     )
 })
 }
-    
+
 open func buildWebReaderShareTarget(url: String)async  -> ShareWebReaderTargetSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -2140,10 +2140,10 @@ open func buildWebReaderShareTarget(url: String)async  -> ShareWebReaderTargetSn
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeShareWebReaderTargetSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func checkNip05Availability(name: String)async  -> Nip05AvailabilitySnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -2158,10 +2158,10 @@ open func checkNip05Availability(name: String)async  -> Nip05AvailabilitySnapsho
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeNip05AvailabilitySnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func classifyLoginInput(input: String) -> LoginInputAction  {
     return try!  FfiConverterTypeLoginInputAction_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_classify_login_input(self.uniffiClonePointer(),
@@ -2169,21 +2169,21 @@ open func classifyLoginInput(input: String) -> LoginInputAction  {
     )
 })
 }
-    
+
 open func clearPodcastClipSelection() -> PodcastClipSelection  {
     return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_clear_podcast_clip_selection(self.uniffiClonePointer(),$0
     )
 })
 }
-    
+
 open func clearRecentSearchesSnapshot()async  -> SearchChromeSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_clear_recent_searches_snapshot(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2191,10 +2191,10 @@ open func clearRecentSearchesSnapshot()async  -> SearchChromeSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSearchChromeSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func completeOnboardingInterests(selectedIds: [String])async  -> MutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -2209,10 +2209,10 @@ open func completeOnboardingInterests(selectedIds: [String])async  -> MutationSn
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeMutationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Consume a pending join when a matching NIP-29 membership delta arrives.
      * Swift routes the delta; Rust owns whether it was pending and what toast
@@ -2224,7 +2224,7 @@ open func confirmPendingJoin(groupId: String)  {try! rustCall() {
     )
 }
 }
-    
+
     /**
      * Count comments for an artifact using Rust-owned reference keys.
      */
@@ -2236,7 +2236,7 @@ open func countArtifactComments(artifact: ArtifactRecord, commentsByReference: [
     )
 })
 }
-    
+
     /**
      * Create a collection with `address` already included and return the
      * refreshed menu snapshot. Rust publishes one real curation-set event; no
@@ -2256,10 +2256,10 @@ open func createCurationSetWithAddressSnapshot(title: String, address: String)as
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCurationMenuSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess)async  -> CreateRoomPublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -2274,10 +2274,10 @@ open func createRoom(name: String, about: String, picture: String, visibility: R
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCreateRoomPublishSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func cropOcrLines(lines: [OcrLine], pageRect: OcrRect) -> [OcrLine]  {
     return try!  FfiConverterSequenceTypeOcrLine.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_crop_ocr_lines(self.uniffiClonePointer(),
@@ -2286,7 +2286,7 @@ open func cropOcrLines(lines: [OcrLine], pageRect: OcrRect) -> [OcrLine]  {
     )
 })
 }
-    
+
 open func currentSecretKeySettingsSnapshot(isRevealed: Bool) -> SecretKeySettingsSnapshot  {
     return try!  FfiConverterTypeSecretKeySettingsSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_current_secret_key_settings_snapshot(self.uniffiClonePointer(),
@@ -2294,14 +2294,14 @@ open func currentSecretKeySettingsSnapshot(isRevealed: Bool) -> SecretKeySetting
     )
 })
 }
-    
+
 open func currentUser() -> CurrentUser?  {
     return try!  FfiConverterOptionTypeCurrentUser.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_current_user(self.uniffiClonePointer(),$0
     )
 })
 }
-    
+
     /**
      * Classify a NIP-19 entity (`npub1…`, `nprofile1…`, `note1…`,
      * `nevent1…`, `naddr1…`) into a renderable variant. Strips an
@@ -2315,14 +2315,14 @@ open func decodeNostrEntity(input: String) -> NostrEntityRefSnapshot  {
     )
 })
 }
-    
+
 open func defaultAddRelayConfig() -> RelayConfig  {
     return try!  FfiConverterTypeRelayConfig_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_default_add_relay_config(self.uniffiClonePointer(),$0
     )
 })
 }
-    
+
 open func defaultHighlightCropBox(highlightBoxes: [OcrRect], imageWidth: Double, imageHeight: Double, marginFraction: Double) -> OcrRect?  {
     return try!  FfiConverterOptionTypeOcrRect.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_default_highlight_crop_box(self.uniffiClonePointer(),
@@ -2333,7 +2333,7 @@ open func defaultHighlightCropBox(highlightBoxes: [OcrRect], imageWidth: Double,
     )
 })
 }
-    
+
 open func detectOcrActivePage(lines: [OcrLine]) -> OcrPageDetection?  {
     return try!  FfiConverterOptionTypeOcrPageDetection.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_detect_ocr_active_page(self.uniffiClonePointer(),
@@ -2341,7 +2341,7 @@ open func detectOcrActivePage(lines: [OcrLine]) -> OcrPageDetection?  {
     )
 })
 }
-    
+
     /**
      * Close every WebSocket in the pool. Used by explicit user/app
      * reconnect flows; Wi-Fi-only path policy is owned by
@@ -2353,7 +2353,7 @@ open func disconnectAll()async  -> NetworkSettingsMutationSnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_disconnect_all(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2361,10 +2361,10 @@ open func disconnectAll()async  -> NetworkSettingsMutationSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeNetworkSettingsMutationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func downloadPodcastArtwork(url: String)async  -> Data?  {
     return
         try!  await uniffiRustCallAsync(
@@ -2379,10 +2379,10 @@ open func downloadPodcastArtwork(url: String)async  -> Data?  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterOptionData.lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func extendPodcastClipToSegment(selection: PodcastClipSelection, segment: TranscriptSegment) -> PodcastClipSelection  {
     return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_extend_podcast_clip_to_segment(self.uniffiClonePointer(),
@@ -2391,7 +2391,7 @@ open func extendPodcastClipToSegment(selection: PodcastClipSelection, segment: T
     )
 })
 }
-    
+
 open func extractNostrEventRefs(content: String) -> [NostrEntityRef]  {
     return try!  FfiConverterSequenceTypeNostrEntityRef.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_extract_nostr_event_refs(self.uniffiClonePointer(),
@@ -2399,7 +2399,7 @@ open func extractNostrEventRefs(content: String) -> [NostrEntityRef]  {
     )
 })
 }
-    
+
     /**
      * Resolve an ISBN against the bounded recent-book projection already
      * rendered by the native picker. Rust owns the canonical ISBN reference
@@ -2413,7 +2413,7 @@ open func findExistingBookForIsbn(isbn: String, recents: [ArtifactRecord]) -> Ar
     )
 })
 }
-    
+
 open func finishRelayNip11Probe(inFlightUrls: [String], url: String) -> [String]  {
     return try!  FfiConverterSequenceString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_finish_relay_nip11_probe(self.uniffiClonePointer(),
@@ -2422,14 +2422,14 @@ open func finishRelayNip11Probe(inFlightUrls: [String], url: String) -> [String]
     )
 })
 }
-    
+
 open func generateAccount() -> AccountGenerationSnapshot  {
     return try!  FfiConverterTypeAccountGenerationSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_generate_account(self.uniffiClonePointer(),$0
     )
 })
 }
-    
+
     /**
      * Return the author pubkey from a valid NIP-23 article address
      * (`30023:<pubkey>:<d>`).
@@ -2448,10 +2448,10 @@ open func getArticleAddressAuthor(address: String)async  -> String?  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterOptionString.lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Return the current article bookmark snapshot. Rust owns the nostrdb
      * query and error semantics; native shells render and cache the returned
@@ -2463,7 +2463,7 @@ open func getArticleBookmarksSnapshot()async  -> ArticleBookmarksSnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_article_bookmarks_snapshot(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2471,10 +2471,10 @@ open func getArticleBookmarksSnapshot()async  -> ArticleBookmarksSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeArticleBookmarksSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Read a single NIP-23 article by its full NIP-33 address
      * (`30023:<pubkey>:<d>`) from nostrdb.
@@ -2493,10 +2493,10 @@ open func getArticleByAddress(address: String)async  -> ArticleRecord?  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterOptionTypeArticleRecord.lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Project a NIP-23 article address into the NIP-22 root scope used by
      * comment reads/writes.
@@ -2508,7 +2508,7 @@ open func getArticleCommentScope(address: String) -> CommentScopeSnapshot  {
     )
 })
 }
-    
+
     /**
      * Full article-reader read model. Rust owns article/profile/highlight
      * cache reads, the highlight limit, and partial-failure fallback.
@@ -2527,10 +2527,10 @@ open func getArticleReaderSnapshot(pubkeyHex: String, dTag: String)async  -> Art
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeArticleReaderSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Project an artifact preview into a NIP-22 root scope using the
      * preview's Rust-owned protocol reference fields.
@@ -2542,7 +2542,7 @@ open func getArtifactCommentScope(preview: ArtifactPreview) -> CommentScopeSnaps
     )
 })
 }
-    
+
 open func getArtifactDetailProjection(artifact: ArtifactRecord) -> ArtifactDetailProjection  {
     return try!  FfiConverterTypeArtifactDetailProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_artifact_detail_projection(self.uniffiClonePointer(),
@@ -2550,7 +2550,7 @@ open func getArtifactDetailProjection(artifact: ArtifactRecord) -> ArtifactDetai
     )
 })
 }
-    
+
 open func getArtifactDetailRoute(artifact: ArtifactRecord) -> ArtifactDetailRoute  {
     return try!  FfiConverterTypeArtifactDetailRoute_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_artifact_detail_route(self.uniffiClonePointer(),
@@ -2558,7 +2558,7 @@ open func getArtifactDetailRoute(artifact: ArtifactRecord) -> ArtifactDetailRout
     )
 })
 }
-    
+
     /**
      * Return the screen-shaped media settings snapshot. Rust owns error
      * semantics and server-list normalization; native shells render the list.
@@ -2569,7 +2569,7 @@ open func getBlossomServerSettingsSnapshot()async  -> BlossomServerSettingsSnaps
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_blossom_server_settings_snapshot(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2577,10 +2577,10 @@ open func getBlossomServerSettingsSnapshot()async  -> BlossomServerSettingsSnaps
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeBlossomServerSettingsSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Screen-shaped snapshot for the native book detail route. Rust owns
      * catalog-id canonicalization, ISBN route state, and passage lookup.
@@ -2599,10 +2599,10 @@ open func getBookDetailSnapshot(catalogId: String, limit: UInt32)async  -> BookD
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeBookDetailSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Screen-shaped snapshot for the capture book picker. Rust owns recent
      * book lookup, local artifact search, query normalization, and error
@@ -2622,10 +2622,10 @@ open func getBookPickerSnapshot(query: String, recentLimit: UInt32, searchLimit:
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeBookPickerSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Resolve a book catalog id into the canonical ISBN route used by native
      * book screens. Accepts raw ISBNs and `isbn:<digits>` values.
@@ -2637,7 +2637,7 @@ open func getBookRoute(catalogId: String) -> BookRoute?  {
     )
 })
 }
-    
+
     /**
      * Full bookmark library read model for the current user. Rust owns
      * bookmark address resolution, set/web/explore section reads, and
@@ -2649,7 +2649,7 @@ open func getBookmarkLibrarySnapshot()async  -> BookmarkLibrarySnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_bookmark_library_snapshot(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2657,10 +2657,10 @@ open func getBookmarkLibrarySnapshot()async  -> BookmarkLibrarySnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeBookmarkLibrarySnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Screen-shaped read model for bookmark/curation set detail. Rust owns
      * title fallback, article row resolution, and empty-state policy.
@@ -2679,10 +2679,10 @@ open func getBookmarkSetDetailSnapshot(record: BookmarkSetRecord)async  -> Bookm
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeBookmarkSetDetailSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Lightweight cache projection for whether a room has any chat activity.
      */
@@ -2700,10 +2700,10 @@ open func getChatPresenceSnapshot(groupId: String)async  -> ChatPresenceSnapshot
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeChatPresenceSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Bounded room-chat read model. Rust owns page sizing, has-more policy,
      * row grouping, and reply-target projection; native shells render rows.
@@ -2722,10 +2722,10 @@ open func getChatSnapshot(groupId: String, pageCount: UInt32)async  -> ChatSnaps
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeChatSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Full comments sheet snapshot for a Rust-owned NIP-22 scope. Rust owns
      * record query, tree build, reaction summary, and bookmark membership.
@@ -2744,10 +2744,10 @@ open func getCommentThreadSnapshot(scope: CommentScope, limit: UInt32)async  -> 
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCommentThreadSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Screen-shaped snapshot for the bookmark menu's collection picker. Rust
      * owns current-user lookup, set ordering, title fallback, and membership.
@@ -2766,10 +2766,10 @@ open func getCurationMenuSnapshot(address: String)async  -> CurationMenuSnapshot
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCurationMenuSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Project a kind:11 discussion event id into the NIP-22 root scope used
      * by comment reads/writes.
@@ -2781,7 +2781,7 @@ open func getDiscussionCommentScope(eventIdHex: String) -> CommentScopeSnapshot 
     )
 })
 }
-    
+
     /**
      * Bounded open-thread read model. Rust owns oldest-first ordering and
      * message-group header derivation; native shells render rows.
@@ -2800,10 +2800,10 @@ open func getFeedbackThreadSnapshot(rootEventId: String)async  -> FeedbackThread
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeFeedbackThreadSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Threads scoped to `coordinate` authored by the current user. Rust owns
      * error collapse and returns an empty snapshot when logged out.
@@ -2822,10 +2822,10 @@ open func getFeedbackThreadsSnapshot(coordinate: String)async  -> FeedbackThread
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeFeedbackThreadsSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Resolve a highlight's book reference from its external reference or
      * artifact address. Rust owns the precedence and canonical catalog id.
@@ -2838,7 +2838,7 @@ open func getHighlightBookRoute(externalReference: String, artifactAddress: Stri
     )
 })
 }
-    
+
     /**
      * Project a NIP-84 highlight event id into the NIP-22 root scope used by
      * comment reads/writes.
@@ -2850,7 +2850,7 @@ open func getHighlightCommentScope(eventIdHex: String) -> CommentScopeSnapshot  
     )
 })
 }
-    
+
     /**
      * Project the public highlight share URL. Rust owns the NIP-19 `nevent`
      * encoding, relay hint, and beta route format; native shells render the
@@ -2864,7 +2864,7 @@ open func getHighlightShareUrlSnapshot(eventIdHex: String, authorPubkeyHex: Stri
     )
 })
 }
-    
+
     /**
      * Classify a highlight source for native icon/label rendering. Rust owns
      * the source/reference interpretation; native shells only render the enum.
@@ -2879,7 +2879,7 @@ open func getHighlightSourceKind(previewSource: String, externalReference: Strin
     )
 })
 }
-    
+
     /**
      * Full highlights home feed snapshot. Rust owns the following-highlights
      * query, following-reads query, cross-feed dedupe, grouping, stable ids,
@@ -2899,17 +2899,17 @@ open func getHomeFeedSnapshot(highlightLimit: UInt32, readLimit: UInt32)async  -
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeHomeFeedSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func getJoinedCommunities()async  -> JoinedCommunitiesSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_joined_communities(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2917,10 +2917,10 @@ open func getJoinedCommunities()async  -> JoinedCommunitiesSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeJoinedCommunitiesSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Size + event-count snapshot of the local nostrdb cache. Order-of-
      * magnitude figures used by the Network Settings "Local cache" card.
@@ -2931,7 +2931,7 @@ open func getNetworkCacheStatsSnapshot()async  -> NetworkCacheStatsSnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_network_cache_stats_snapshot(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -2939,10 +2939,10 @@ open func getNetworkCacheStatsSnapshot()async  -> NetworkCacheStatsSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeNetworkCacheStatsSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Return the screen-shaped Network Settings snapshot: configured relays,
      * live diagnostics, derived header/auto-connected projection, Wi-Fi-only
@@ -2962,17 +2962,17 @@ open func getNetworkSettingsSnapshot(previousRelays: [RelayConfig])async  -> Net
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeNetworkSettingsSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func getNetworkWifiOnlyPreferenceSnapshot() -> NetworkWifiOnlyPreferenceSnapshot  {
     return try!  FfiConverterTypeNetworkWifiOnlyPreferenceSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_network_wifi_only_preference_snapshot(self.uniffiClonePointer(),$0
     )
 })
 }
-    
+
 open func getOnboardingInterestProjection(selectedIds: [String]) -> OnboardingInterestProjection  {
     return try!  FfiConverterTypeOnboardingInterestProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_onboarding_interest_projection(self.uniffiClonePointer(),
@@ -2980,7 +2980,7 @@ open func getOnboardingInterestProjection(selectedIds: [String]) -> OnboardingIn
     )
 })
 }
-    
+
 open func getOnboardingInterestSelection(selectedIds: [String]) -> OnboardingInterestSelection  {
     return try!  FfiConverterTypeOnboardingInterestSelection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_onboarding_interest_selection(self.uniffiClonePointer(),
@@ -2988,14 +2988,14 @@ open func getOnboardingInterestSelection(selectedIds: [String]) -> OnboardingInt
     )
 })
 }
-    
+
 open func getOnboardingInterests() -> [OnboardingInterest]  {
     return try!  FfiConverterSequenceTypeOnboardingInterest.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_onboarding_interests(self.uniffiClonePointer(),$0
     )
 })
 }
-    
+
 open func getPodcastClipComposerProjection(input: PodcastClipComposerInput) -> PodcastClipComposerProjection  {
     return try!  FfiConverterTypePodcastClipComposerProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_podcast_clip_composer_projection(self.uniffiClonePointer(),
@@ -3003,7 +3003,7 @@ open func getPodcastClipComposerProjection(input: PodcastClipComposerInput) -> P
     )
 })
 }
-    
+
 open func getPodcastListeningClipsSnapshot(artifact: ArtifactRecord?, limit: UInt32)async  -> PodcastListeningClipsSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -3018,10 +3018,10 @@ open func getPodcastListeningClipsSnapshot(artifact: ArtifactRecord?, limit: UIn
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypePodcastListeningClipsSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func getPodcastListeningProjection(input: PodcastListeningProjectionInput) -> PodcastListeningProjection  {
     return try!  FfiConverterTypePodcastListeningProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_podcast_listening_projection(self.uniffiClonePointer(),
@@ -3029,7 +3029,7 @@ open func getPodcastListeningProjection(input: PodcastListeningProjectionInput) 
     )
 })
 }
-    
+
 open func getPodcastNowPlayingProjection(input: PodcastNowPlayingProjectionInput) -> PodcastNowPlayingProjection  {
     return try!  FfiConverterTypePodcastNowPlayingProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_podcast_now_playing_projection(self.uniffiClonePointer(),
@@ -3037,7 +3037,7 @@ open func getPodcastNowPlayingProjection(input: PodcastNowPlayingProjectionInput
     )
 })
 }
-    
+
 open func getPodcastPlaybackRehydrationSnapshot(hasCurrentArtifact: Bool) -> PodcastPlaybackRehydrationSnapshot  {
     return try!  FfiConverterTypePodcastPlaybackRehydrationSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_podcast_playback_rehydration_snapshot(self.uniffiClonePointer(),
@@ -3045,7 +3045,7 @@ open func getPodcastPlaybackRehydrationSnapshot(hasCurrentArtifact: Bool) -> Pod
     )
 })
 }
-    
+
     /**
      * Full profile-page read model. Rust owns tab queries, section limits,
      * current-viewer follow state, and per-section cache-error fallback.
@@ -3064,10 +3064,10 @@ open func getProfilePageSnapshot(pubkeyHex: String)async  -> ProfilePageSnapshot
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeProfilePageSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Classify a subscription event kind into the exact profile slice that
      * native shells should refresh.
@@ -3079,7 +3079,7 @@ open func getProfileUpdateAction(kind: UInt32) -> ProfileUpdateAction  {
     )
 })
 }
-    
+
 open func getRelayHostedRoomsSnapshot(url: String)async  -> RelayHostedRoomsSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -3094,10 +3094,10 @@ open func getRelayHostedRoomsSnapshot(url: String)async  -> RelayHostedRoomsSnap
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRelayHostedRoomsSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Screen-shaped snapshot for the explorer's "Browse all" grid. Rust owns
      * the cache query, limit, query normalization, and matched fields.
@@ -3116,10 +3116,10 @@ open func getRoomBrowseSnapshot(query: String, limit: UInt32)async  -> RoomBrows
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRoomBrowseSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func getRoomDiscussionSnapshot(groupId: String)async  -> RoomDiscussionSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -3134,10 +3134,10 @@ open func getRoomDiscussionSnapshot(groupId: String)async  -> RoomDiscussionSnap
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRoomDiscussionSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Snapshot for the room explorer shelves. Rust owns curator lookup,
      * per-shelf cache failure fallbacks, joined-room exclusion, and shelf
@@ -3157,10 +3157,10 @@ open func getRoomExplorerSnapshot(joined: [CommunitySummary])async  -> RoomExplo
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRoomExplorerSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Full room-home read model for one community. Rust owns artifact and
      * highlight limits, reference-scoped highlight/comment reads, and lane
@@ -3180,10 +3180,10 @@ open func getRoomHomeSnapshot(groupId: String)async  -> RoomHomeSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRoomHomeSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func getRoomInviteAvatarProjection(input: RoomInviteAvatarProjectionInput) -> RoomInviteAvatarProjection  {
     return try!  FfiConverterTypeRoomInviteAvatarProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_room_invite_avatar_projection(self.uniffiClonePointer(),
@@ -3191,7 +3191,7 @@ open func getRoomInviteAvatarProjection(input: RoomInviteAvatarProjectionInput) 
     )
 })
 }
-    
+
 open func getRoomInviteSnapshot(input: RoomInviteSnapshotInput)async  -> RoomInviteSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -3206,10 +3206,10 @@ open func getRoomInviteSnapshot(input: RoomInviteSnapshotInput)async  -> RoomInv
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRoomInviteSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Mint one invite code and project the public room share link. Rust owns
      * the URL format and failure labels; native shells render/copy/share the
@@ -3229,10 +3229,10 @@ open func getRoomShareLinkSnapshot(groupId: String)async  -> RoomShareLinkSnapsh
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRoomShareLinkSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Article-only refresh for relay search deltas. Used after NIP-50 events
      * ingest into nostrdb so the native shell can repaint the Articles bucket
@@ -3252,10 +3252,10 @@ open func getSearchArticleResultsSnapshot(query: String)async  -> SearchArticleR
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSearchArticleResultsSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Search screen chrome snapshot: recent query history plus resolved
      * NIP-50 relays. Rust owns persistence, de-dupe, relay defaults, and
@@ -3267,7 +3267,7 @@ open func getSearchChromeSnapshot()async  -> SearchChromeSnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_get_search_chrome_snapshot(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -3275,10 +3275,10 @@ open func getSearchChromeSnapshot()async  -> SearchChromeSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSearchChromeSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Local search snapshot for the main search screen. Rust owns section
      * limits and per-section cache-error fallback; native shells render the
@@ -3298,10 +3298,10 @@ open func getSearchResultsSnapshot(query: String)async  -> SearchResultsSnapshot
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSearchResultsSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func getUserProfile(pubkeyHex: String)async  -> ProfileMetadata?  {
     return
         try!  await uniffiRustCallAsync(
@@ -3316,10 +3316,10 @@ open func getUserProfile(pubkeyHex: String)async  -> ProfileMetadata?  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterOptionTypeProfileMetadata.lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Project a web URL into the external NIP-22 root scope used by comment
      * reads/writes.
@@ -3331,7 +3331,7 @@ open func getWebCommentScope(url: String) -> CommentScopeSnapshot  {
     )
 })
 }
-    
+
     /**
      * Fetch OpenGraph + favicon metadata for a web URL. Backed by a
      * JSON-on-disk cache (7-day positive TTL, 1-hour negative TTL) and
@@ -3353,10 +3353,10 @@ open func getWebMetadata(url: String)async  -> WebMetadata?  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterOptionTypeWebMetadata.lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Fetch another user's kind:10002 via the indexer pool and return the
      * parsed `RelayConfig` rows. Useful for "adopt someone else's relay
@@ -3377,10 +3377,10 @@ open func importRelaysFromNpubSnapshot(npub: String)async  -> ImportRelaysFetchS
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeImportRelaysFetchSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Publish the default Blossom server list only if the user has no cached
      * kind:10063. Called once after login; no-op when the list already exists.
@@ -3391,7 +3391,7 @@ open func initDefaultBlossomServers()async  -> MutationSnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_init_default_blossom_servers(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -3399,10 +3399,10 @@ open func initDefaultBlossomServers()async  -> MutationSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeMutationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func isNip05UsernameValid(input: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_is_nip05_username_valid(self.uniffiClonePointer(),
@@ -3410,14 +3410,14 @@ open func isNip05UsernameValid(input: String) -> Bool  {
     )
 })
 }
-    
+
 open func isOnboardingComplete() -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_is_onboarding_complete(self.uniffiClonePointer(),$0
     )
 })
 }
-    
+
 open func joinOcrQuote(words: [OcrWord]) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_join_ocr_quote(self.uniffiClonePointer(),
@@ -3425,7 +3425,7 @@ open func joinOcrQuote(words: [OcrWord]) -> String  {
     )
 })
 }
-    
+
 open func loadPodcastTranscript(url: String)async  -> PodcastTranscriptLoadSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -3440,10 +3440,10 @@ open func loadPodcastTranscript(url: String)async  -> PodcastTranscriptLoadSnaps
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypePodcastTranscriptLoadSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func loginNsec(nsec: String) -> AuthSessionSnapshot  {
     return try!  FfiConverterTypeAuthSessionSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_login_nsec(self.uniffiClonePointer(),
@@ -3451,13 +3451,13 @@ open func loginNsec(nsec: String) -> AuthSessionSnapshot  {
     )
 })
 }
-    
+
 open func logout()  {try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_logout(self.uniffiClonePointer(),$0
     )
 }
 }
-    
+
 open func lookupIsbn(isbn: String)async  -> IsbnPreviewLookupSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -3472,10 +3472,10 @@ open func lookupIsbn(isbn: String)async  -> IsbnPreviewLookupSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeIsbnPreviewLookupSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func markPodcastClipIn(selection: PodcastClipSelection, currentTime: Double) -> PodcastClipSelection  {
     return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_mark_podcast_clip_in(self.uniffiClonePointer(),
@@ -3484,7 +3484,7 @@ open func markPodcastClipIn(selection: PodcastClipSelection, currentTime: Double
     )
 })
 }
-    
+
 open func markPodcastClipOut(selection: PodcastClipSelection, currentTime: Double) -> PodcastClipSelection  {
     return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_mark_podcast_clip_out(self.uniffiClonePointer(),
@@ -3493,7 +3493,7 @@ open func markPodcastClipOut(selection: PodcastClipSelection, currentTime: Doubl
     )
 })
 }
-    
+
 open func markWhatsNewSeen(shippedAtUnixSeconds: UInt64)async  -> MutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -3508,10 +3508,10 @@ open func markWhatsNewSeen(shippedAtUnixSeconds: UInt64)async  -> MutationSnapsh
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeMutationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Normalize user-entered or scanned ISBN input. Native shells use this
      * only to enable/route capture UI; Rust remains the source of truth for
@@ -3524,7 +3524,7 @@ open func normalizeIsbnInput(raw: String) -> String?  {
     )
 })
 }
-    
+
 open func normalizeNip05Username(input: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_normalize_nip05_username(self.uniffiClonePointer(),
@@ -3532,7 +3532,7 @@ open func normalizeNip05Username(input: String) -> String  {
     )
 })
 }
-    
+
 open func nostrEntityFallbackLabel(entity: NostrEntityRef) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_nostr_entity_fallback_label(self.uniffiClonePointer(),
@@ -3540,7 +3540,7 @@ open func nostrEntityFallbackLabel(entity: NostrEntityRef) -> String  {
     )
 })
 }
-    
+
 open func nostrEntityIdentityKey(entity: NostrEntityRef) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_nostr_entity_identity_key(self.uniffiClonePointer(),
@@ -3548,7 +3548,7 @@ open func nostrEntityIdentityKey(entity: NostrEntityRef) -> String  {
     )
 })
 }
-    
+
 open func nostrEntityInlineRender(entity: NostrEntityRef) -> NostrEntityInlineRender  {
     return try!  FfiConverterTypeNostrEntityInlineRender_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_nostr_entity_inline_render(self.uniffiClonePointer(),
@@ -3556,7 +3556,7 @@ open func nostrEntityInlineRender(entity: NostrEntityRef) -> NostrEntityInlineRe
     )
 })
 }
-    
+
 open func ocrAltText(markdown: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_ocr_alt_text(self.uniffiClonePointer(),
@@ -3564,7 +3564,7 @@ open func ocrAltText(markdown: String) -> String  {
     )
 })
 }
-    
+
 open func pairBunker(uri: String)async  -> AuthSessionSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -3579,10 +3579,10 @@ open func pairBunker(uri: String)async  -> AuthSessionSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeAuthSessionSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func planPodcastPlaybackSession(input: PodcastPlaybackSessionInput) -> PodcastPlaybackSessionPlan  {
     return try!  FfiConverterTypePodcastPlaybackSessionPlan_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_plan_podcast_playback_session(self.uniffiClonePointer(),
@@ -3590,7 +3590,7 @@ open func planPodcastPlaybackSession(input: PodcastPlaybackSessionInput) -> Podc
     )
 })
 }
-    
+
 open func planRelayNip11Probes(input: RelayNip11ProbePlanInput) -> RelayNip11ProbePlan  {
     return try!  FfiConverterTypeRelayNip11ProbePlan_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_plan_relay_nip11_probes(self.uniffiClonePointer(),
@@ -3598,7 +3598,7 @@ open func planRelayNip11Probes(input: RelayNip11ProbePlanInput) -> RelayNip11Pro
     )
 })
 }
-    
+
 open func planWaveformPeaks(input: WaveformPeaksPlanInput) -> WaveformPeaksPlan  {
     return try!  FfiConverterTypeWaveformPeaksPlan_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_plan_waveform_peaks(self.uniffiClonePointer(),
@@ -3606,14 +3606,14 @@ open func planWaveformPeaks(input: WaveformPeaksPlanInput) -> WaveformPeaksPlan 
     )
 })
 }
-    
+
 open func prepareWhatsNew()async  -> WhatsNewPresentationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_prepare_whats_new(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -3621,10 +3621,10 @@ open func prepareWhatsNew()async  -> WhatsNewPresentationSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeWhatsNewPresentationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Fetch the target relay's NIP-11 information document via an HTTPS
      * GET to the `ws[s]://` URL's HTTP equivalent with
@@ -3644,10 +3644,10 @@ open func probeRelayNip11Snapshot(url: String)async  -> RelayNip11ProbeSnapshot 
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRelayNip11ProbeSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func projectAddRelaySheet(input: AddRelaySheetProjectionInput) -> AddRelaySheetProjection  {
     return try!  FfiConverterTypeAddRelaySheetProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_add_relay_sheet(self.uniffiClonePointer(),
@@ -3655,7 +3655,7 @@ open func projectAddRelaySheet(input: AddRelaySheetProjectionInput) -> AddRelayS
     )
 })
 }
-    
+
 open func projectAppSubscriptionStart(input: AppSubscriptionStartProjectionInput) -> AppSubscriptionStartProjection  {
     return try!  FfiConverterTypeAppSubscriptionStartProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_app_subscription_start(self.uniffiClonePointer(),
@@ -3663,7 +3663,7 @@ open func projectAppSubscriptionStart(input: AppSubscriptionStartProjectionInput
     )
 })
 }
-    
+
     /**
      * Project article bookmark affordance copy and SF Symbols.
      */
@@ -3674,7 +3674,7 @@ open func projectArticleBookmarkChrome(input: ArticleBookmarkChromeProjectionInp
     )
 })
 }
-    
+
     /**
      * Project native article bookmark state. Rust owns address trimming,
      * membership, and the optimistic post-toggle set.
@@ -3686,7 +3686,7 @@ open func projectArticleBookmarkState(input: ArticleBookmarkStateProjectionInput
     )
 })
 }
-    
+
 open func projectArticleBookmarksSnapshotApply(input: ArticleBookmarksSnapshotApplyInput) -> ArticleBookmarksSnapshotApplyProjection  {
     return try!  FfiConverterTypeArticleBookmarksSnapshotApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_article_bookmarks_snapshot_apply(self.uniffiClonePointer(),
@@ -3694,7 +3694,7 @@ open func projectArticleBookmarksSnapshotApply(input: ArticleBookmarksSnapshotAp
     )
 })
 }
-    
+
     /**
      * Project article-reader highlight publish state. Rust owns note
      * normalization and success/failure toast semantics.
@@ -3706,7 +3706,7 @@ open func projectArticleHighlightPublish(input: ArticleHighlightPublishProjectio
     )
 })
 }
-    
+
 open func projectArticleProfileCard(input: ArticleProfileCardProjectionInput) -> ArticleProfileCardProjection  {
     return try!  FfiConverterTypeArticleProfileCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_article_profile_card(self.uniffiClonePointer(),
@@ -3714,7 +3714,7 @@ open func projectArticleProfileCard(input: ArticleProfileCardProjectionInput) ->
     )
 })
 }
-    
+
 open func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput) -> ArticleReaderHeaderProjection  {
     return try!  FfiConverterTypeArticleReaderHeaderProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_article_reader_header(self.uniffiClonePointer(),
@@ -3722,7 +3722,7 @@ open func projectArticleReaderHeader(input: ArticleReaderHeaderProjectionInput) 
     )
 })
 }
-    
+
 open func projectArticleReaderPublishResult(input: ArticleReaderPublishResultInput) -> ArticleReaderPublishResultProjection  {
     return try!  FfiConverterTypeArticleReaderPublishResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_article_reader_publish_result(self.uniffiClonePointer(),
@@ -3730,7 +3730,7 @@ open func projectArticleReaderPublishResult(input: ArticleReaderPublishResultInp
     )
 })
 }
-    
+
     /**
      * Project selected article-reader text. Native shells own text-range
      * extraction; Rust owns quote/context normalization.
@@ -3742,7 +3742,7 @@ open func projectArticleReaderSelection(input: ArticleReaderSelectionProjectionI
     )
 })
 }
-    
+
 open func projectArticleReaderSnapshot(input: ArticleReaderSnapshotApplyInput) -> ArticleReaderSnapshotProjection  {
     return try!  FfiConverterTypeArticleReaderSnapshotProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_article_reader_snapshot(self.uniffiClonePointer(),
@@ -3750,7 +3750,7 @@ open func projectArticleReaderSnapshot(input: ArticleReaderSnapshotApplyInput) -
     )
 })
 }
-    
+
     /**
      * Project the add-Blossom-server sheet. Rust owns URL normalization,
      * scheme validity, and duplicate detection.
@@ -3762,7 +3762,7 @@ open func projectBlossomServerEntry(input: BlossomServerEntryProjectionInput) ->
     )
 })
 }
-    
+
     /**
      * Project Blossom server list edits. Rust owns URL normalization,
      * duplicate filtering, delete protection, and save eligibility.
@@ -3774,7 +3774,7 @@ open func projectBlossomServerList(input: BlossomServerListProjectionInput) -> B
     )
 })
 }
-    
+
 open func projectBookDetailSnapshotApply(input: BookDetailSnapshotApplyInput) -> BookDetailSnapshotApplyProjection  {
     return try!  FfiConverterTypeBookDetailSnapshotApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_book_detail_snapshot_apply(self.uniffiClonePointer(),
@@ -3782,7 +3782,7 @@ open func projectBookDetailSnapshotApply(input: BookDetailSnapshotApplyInput) ->
     )
 })
 }
-    
+
 open func projectBookPickerQuery(input: BookPickerQueryProjectionInput) -> BookPickerQueryProjection  {
     return try!  FfiConverterTypeBookPickerQueryProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_book_picker_query(self.uniffiClonePointer(),
@@ -3790,7 +3790,7 @@ open func projectBookPickerQuery(input: BookPickerQueryProjectionInput) -> BookP
     )
 })
 }
-    
+
 open func projectBookmarkLibrary(input: BookmarkLibraryProjectionInput) -> BookmarkLibraryProjection  {
     return try!  FfiConverterTypeBookmarkLibraryProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_bookmark_library(self.uniffiClonePointer(),
@@ -3798,7 +3798,7 @@ open func projectBookmarkLibrary(input: BookmarkLibraryProjectionInput) -> Bookm
     )
 })
 }
-    
+
 open func projectBookmarkSetRow(input: BookmarkSetRowProjectionInput) -> BookmarkSetRowProjection  {
     return try!  FfiConverterTypeBookmarkSetRowProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_bookmark_set_row(self.uniffiClonePointer(),
@@ -3806,7 +3806,7 @@ open func projectBookmarkSetRow(input: BookmarkSetRowProjectionInput) -> Bookmar
     )
 })
 }
-    
+
 open func projectBookmarkedArticleRow(input: BookmarkedArticleRowProjectionInput) -> BookmarkedArticleRowProjection  {
     return try!  FfiConverterTypeBookmarkedArticleRowProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_bookmarked_article_row(self.uniffiClonePointer(),
@@ -3814,7 +3814,7 @@ open func projectBookmarkedArticleRow(input: BookmarkedArticleRowProjectionInput
     )
 })
 }
-    
+
 open func projectCaptureBookDisplay(input: CaptureBookDisplayProjectionInput) -> CaptureBookDisplayProjection  {
     return try!  FfiConverterTypeCaptureBookDisplayProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_capture_book_display(self.uniffiClonePointer(),
@@ -3822,7 +3822,7 @@ open func projectCaptureBookDisplay(input: CaptureBookDisplayProjectionInput) ->
     )
 })
 }
-    
+
 open func projectCaptureCommunitySelection(input: CaptureCommunitySelectionProjectionInput) -> CaptureCommunitySelectionProjection  {
     return try!  FfiConverterTypeCaptureCommunitySelectionProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_capture_community_selection(self.uniffiClonePointer(),
@@ -3830,7 +3830,7 @@ open func projectCaptureCommunitySelection(input: CaptureCommunitySelectionProje
     )
 })
 }
-    
+
 open func projectCapturePublish(input: CapturePublishProjectionInput) -> CapturePublishProjection  {
     return try!  FfiConverterTypeCapturePublishProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_capture_publish(self.uniffiClonePointer(),
@@ -3838,7 +3838,7 @@ open func projectCapturePublish(input: CapturePublishProjectionInput) -> Capture
     )
 })
 }
-    
+
 open func projectCapturePublishResult(input: CapturePublishResultProjectionInput) -> CapturePublishResultProjection  {
     return try!  FfiConverterTypeCapturePublishResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_capture_publish_result(self.uniffiClonePointer(),
@@ -3846,7 +3846,7 @@ open func projectCapturePublishResult(input: CapturePublishResultProjectionInput
     )
 })
 }
-    
+
 open func projectCaptureStash(input: CaptureStashProjectionInput) -> CaptureStashProjection  {
     return try!  FfiConverterTypeCaptureStashProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_capture_stash(self.uniffiClonePointer(),
@@ -3854,7 +3854,7 @@ open func projectCaptureStash(input: CaptureStashProjectionInput) -> CaptureStas
     )
 })
 }
-    
+
 open func projectCaptureUpload(input: CaptureUploadProjectionInput) -> CaptureUploadProjection  {
     return try!  FfiConverterTypeCaptureUploadProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_capture_upload(self.uniffiClonePointer(),
@@ -3862,7 +3862,7 @@ open func projectCaptureUpload(input: CaptureUploadProjectionInput) -> CaptureUp
     )
 })
 }
-    
+
 open func projectChatActivityReload(input: ChatActivityReloadProjectionInput) -> ChatActivityReloadProjection  {
     return try!  FfiConverterTypeChatActivityReloadProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_chat_activity_reload(self.uniffiClonePointer(),
@@ -3870,7 +3870,7 @@ open func projectChatActivityReload(input: ChatActivityReloadProjectionInput) ->
     )
 })
 }
-    
+
     /**
      * Chat composer projection. Rust owns draft normalization and send
      * eligibility; native shells render the composer affordance.
@@ -3882,7 +3882,7 @@ open func projectChatComposer(input: ChatComposerProjectionInput) -> ChatCompose
     )
 })
 }
-    
+
 open func projectChatLoadMore(input: ChatLoadMoreProjectionInput) -> ChatLoadMoreProjection  {
     return try!  FfiConverterTypeChatLoadMoreProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_chat_load_more(self.uniffiClonePointer(),
@@ -3890,7 +3890,7 @@ open func projectChatLoadMore(input: ChatLoadMoreProjectionInput) -> ChatLoadMor
     )
 })
 }
-    
+
 open func projectChatPublishResult(input: ChatPublishResultInput) -> ChatPublishResultProjection  {
     return try!  FfiConverterTypeChatPublishResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_chat_publish_result(self.uniffiClonePointer(),
@@ -3898,7 +3898,7 @@ open func projectChatPublishResult(input: ChatPublishResultInput) -> ChatPublish
     )
 })
 }
-    
+
     /**
      * Project comment row reaction/bookmark chrome.
      */
@@ -3909,7 +3909,7 @@ open func projectCommentActionChrome(input: CommentActionChromeProjectionInput) 
     )
 })
 }
-    
+
     /**
      * Comment composer projection. Rust owns draft normalization and submit
      * eligibility; native shells render the composer affordance.
@@ -3921,7 +3921,7 @@ open func projectCommentComposer(input: CommentComposerProjectionInput) -> Comme
     )
 })
 }
-    
+
 open func projectCommentInlineThreadSnapshotApply(input: CommentInlineThreadSnapshotApplyInput) -> CommentInlineThreadSnapshotApplyProjection  {
     return try!  FfiConverterTypeCommentInlineThreadSnapshotApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_comment_inline_thread_snapshot_apply(self.uniffiClonePointer(),
@@ -3929,7 +3929,7 @@ open func projectCommentInlineThreadSnapshotApply(input: CommentInlineThreadSnap
     )
 })
 }
-    
+
     /**
      * Project per-comment reply chrome. Rust owns child counts, preview
      * choice, "more replies" copy, and author-reply matching.
@@ -3941,7 +3941,7 @@ open func projectCommentNodeChrome(input: CommentNodeChromeProjectionInput) -> C
     )
 })
 }
-    
+
 open func projectCommentPublishResult(input: CommentPublishResultInput) -> CommentPublishResultProjection  {
     return try!  FfiConverterTypeCommentPublishResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_comment_publish_result(self.uniffiClonePointer(),
@@ -3949,7 +3949,7 @@ open func projectCommentPublishResult(input: CommentPublishResultInput) -> Comme
     )
 })
 }
-    
+
 open func projectCommentSnapshotApply(input: CommentSnapshotApplyInput) -> CommentSnapshotApplyProjection  {
     return try!  FfiConverterTypeCommentSnapshotApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_comment_snapshot_apply(self.uniffiClonePointer(),
@@ -3957,7 +3957,7 @@ open func projectCommentSnapshotApply(input: CommentSnapshotApplyInput) -> Comme
     )
 })
 }
-    
+
     /**
      * Project a comment thread screen. Rust owns focused-node lookup,
      * visible child selection, and thread chrome labels.
@@ -3969,7 +3969,7 @@ open func projectCommentThreadView(input: CommentThreadViewProjectionInput) -> C
     )
 })
 }
-    
+
     /**
      * Project the comments toolbar badge. Rust owns count formatting and
      * accessibility copy.
@@ -3981,7 +3981,7 @@ open func projectCommentToolbar(input: CommentToolbarProjectionInput) -> Comment
     )
 })
 }
-    
+
 open func projectCommunityRow(input: CommunityRowProjectionInput) -> CommunityRowProjection  {
     return try!  FfiConverterTypeCommunityRowProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_community_row(self.uniffiClonePointer(),
@@ -3989,7 +3989,7 @@ open func projectCommunityRow(input: CommunityRowProjectionInput) -> CommunityRo
     )
 })
 }
-    
+
     /**
      * Create a brand-new NIP-29 room. Publishes kind:9007 (create-group) and
      * kind:9002 (edit-metadata) signed by the current user. Returns the
@@ -4003,7 +4003,7 @@ open func projectCreateRoom(input: CreateRoomProjectionInput) -> CreateRoomProje
     )
 })
 }
-    
+
 open func projectCreateRoomCoverUploadResult(input: CreateRoomCoverUploadResultInput) -> CreateRoomCoverUploadResultProjection  {
     return try!  FfiConverterTypeCreateRoomCoverUploadResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_create_room_cover_upload_result(self.uniffiClonePointer(),
@@ -4011,7 +4011,7 @@ open func projectCreateRoomCoverUploadResult(input: CreateRoomCoverUploadResultI
     )
 })
 }
-    
+
 open func projectCreateRoomPublishResult(input: CreateRoomPublishResultInput) -> CreateRoomPublishResultProjection  {
     return try!  FfiConverterTypeCreateRoomPublishResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_create_room_publish_result(self.uniffiClonePointer(),
@@ -4019,7 +4019,7 @@ open func projectCreateRoomPublishResult(input: CreateRoomPublishResultInput) ->
     )
 })
 }
-    
+
 open func projectCurationMenuSnapshotApply(input: CurationMenuSnapshotApplyInput) -> CurationMenuSnapshotApplyProjection  {
     return try!  FfiConverterTypeCurationMenuSnapshotApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_curation_menu_snapshot_apply(self.uniffiClonePointer(),
@@ -4027,7 +4027,7 @@ open func projectCurationMenuSnapshotApply(input: CurationMenuSnapshotApplyInput
     )
 })
 }
-    
+
     /**
      * Project create-collection sheet state. Rust owns title normalization
      * and create eligibility; native shells render the returned state.
@@ -4039,7 +4039,7 @@ open func projectCurationSetCreate(input: CurationSetCreateProjectionInput) -> C
     )
 })
 }
-    
+
 open func projectDiscussionAttachment(input: DiscussionAttachmentProjectionInput) -> DiscussionAttachmentProjection  {
     return try!  FfiConverterTypeDiscussionAttachmentProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_discussion_attachment(self.uniffiClonePointer(),
@@ -4047,7 +4047,7 @@ open func projectDiscussionAttachment(input: DiscussionAttachmentProjectionInput
     )
 })
 }
-    
+
     /**
      * Discussion composer projection. Rust owns draft normalization and
      * publish eligibility; native shells render the composer affordance.
@@ -4059,7 +4059,7 @@ open func projectDiscussionComposer(input: DiscussionComposerProjectionInput) ->
     )
 })
 }
-    
+
 open func projectDiscussionPublishResult(input: DiscussionPublishResultInput) -> DiscussionPublishResultProjection  {
     return try!  FfiConverterTypeDiscussionPublishResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_discussion_publish_result(self.uniffiClonePointer(),
@@ -4067,7 +4067,7 @@ open func projectDiscussionPublishResult(input: DiscussionPublishResultInput) ->
     )
 })
 }
-    
+
     /**
      * Feedback composer projection shared by new-thread and reply surfaces.
      * Rust owns submit trimming and send eligibility so each platform shell
@@ -4080,7 +4080,7 @@ open func projectFeedbackComposer(input: FeedbackComposerProjectionInput) -> Fee
     )
 })
 }
-    
+
     /**
      * Feedback message bubble presentation projection. Rust owns current-user
      * classification, header grouping, and profile fallback semantics; native
@@ -4093,7 +4093,7 @@ open func projectFeedbackMessagePresentation(input: FeedbackMessagePresentationI
     )
 })
 }
-    
+
     /**
      * Feedback publish result projection shared by root-thread and reply
      * surfaces. Rust owns success/error classification; native shells apply
@@ -4106,7 +4106,7 @@ open func projectFeedbackPublishResult(input: FeedbackPublishResultInput) -> Fee
     )
 })
 }
-    
+
     /**
      * Feedback snapshot apply projection shared by list and thread stores.
      * Rust owns success/error classification; native shells decide whether
@@ -4119,7 +4119,7 @@ open func projectFeedbackSnapshotApply(input: FeedbackSnapshotApplyInput) -> Fee
     )
 })
 }
-    
+
     /**
      * Feedback thread row/detail presentation projection. Rust owns title,
      * preview, summary, and status fallback rules; native shells keep
@@ -4132,7 +4132,7 @@ open func projectFeedbackThreadPresentation(thread: FeedbackThreadRecord) -> Fee
     )
 })
 }
-    
+
 open func projectHighlightDetailContent(input: HighlightDetailContentProjectionInput) -> HighlightDetailContentProjection  {
     return try!  FfiConverterTypeHighlightDetailContentProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_highlight_detail_content(self.uniffiClonePointer(),
@@ -4140,7 +4140,7 @@ open func projectHighlightDetailContent(input: HighlightDetailContentProjectionI
     )
 })
 }
-    
+
 open func projectHighlightDetailResource(input: HighlightDetailResourceProjectionInput) -> HighlightDetailResourceProjection  {
     return try!  FfiConverterTypeHighlightDetailResourceProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_highlight_detail_resource(self.uniffiClonePointer(),
@@ -4148,7 +4148,7 @@ open func projectHighlightDetailResource(input: HighlightDetailResourceProjectio
     )
 })
 }
-    
+
 open func projectHighlightFeedContent(input: HighlightFeedContentProjectionInput) -> HighlightFeedContentProjection  {
     return try!  FfiConverterTypeHighlightFeedContentProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_highlight_feed_content(self.uniffiClonePointer(),
@@ -4156,7 +4156,7 @@ open func projectHighlightFeedContent(input: HighlightFeedContentProjectionInput
     )
 })
 }
-    
+
 open func projectHighlightGroupCard(input: HighlightGroupCardProjectionInput) -> HighlightGroupCardProjection  {
     return try!  FfiConverterTypeHighlightGroupCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_highlight_group_card(self.uniffiClonePointer(),
@@ -4164,7 +4164,7 @@ open func projectHighlightGroupCard(input: HighlightGroupCardProjectionInput) ->
     )
 })
 }
-    
+
 open func projectHighlightResourceHeader(input: HighlightResourceHeaderProjectionInput) -> HighlightResourceHeaderProjection  {
     return try!  FfiConverterTypeHighlightResourceHeaderProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_highlight_resource_header(self.uniffiClonePointer(),
@@ -4172,7 +4172,7 @@ open func projectHighlightResourceHeader(input: HighlightResourceHeaderProjectio
     )
 })
 }
-    
+
 open func projectHomeFeedSnapshotApply(input: HomeFeedSnapshotApplyInput) -> HomeFeedSnapshotApplyProjection  {
     return try!  FfiConverterTypeHomeFeedSnapshotApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_home_feed_snapshot_apply(self.uniffiClonePointer(),
@@ -4180,7 +4180,7 @@ open func projectHomeFeedSnapshotApply(input: HomeFeedSnapshotApplyInput) -> Hom
     )
 })
 }
-    
+
 open func projectImportRelays(input: ImportRelaysProjectionInput) -> ImportRelaysProjection  {
     return try!  FfiConverterTypeImportRelaysProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_import_relays(self.uniffiClonePointer(),
@@ -4188,7 +4188,7 @@ open func projectImportRelays(input: ImportRelaysProjectionInput) -> ImportRelay
     )
 })
 }
-    
+
 open func projectImportRelaysFetchApply(input: ImportRelaysFetchApplyInput) -> ImportRelaysFetchApplyProjection  {
     return try!  FfiConverterTypeImportRelaysFetchApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_import_relays_fetch_apply(self.uniffiClonePointer(),
@@ -4196,7 +4196,7 @@ open func projectImportRelaysFetchApply(input: ImportRelaysFetchApplyInput) -> I
     )
 })
 }
-    
+
     /**
      * Project import-relays source input. Rust owns source trimming and fetch
      * eligibility; native shells render and execute the fetch action.
@@ -4208,7 +4208,7 @@ open func projectImportRelaysSource(input: ImportRelaysSourceProjectionInput) ->
     )
 })
 }
-    
+
 open func projectIsbnManualPreview(input: IsbnManualPreviewProjectionInput) -> IsbnManualPreviewProjection  {
     return try!  FfiConverterTypeIsbnManualPreviewProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_isbn_manual_preview(self.uniffiClonePointer(),
@@ -4216,7 +4216,7 @@ open func projectIsbnManualPreview(input: IsbnManualPreviewProjectionInput) -> I
     )
 })
 }
-    
+
 open func projectIsbnPreviewLookupApply(input: IsbnPreviewLookupApplyInput) -> IsbnPreviewLookupApplyProjection  {
     return try!  FfiConverterTypeIsbnPreviewLookupApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_isbn_preview_lookup_apply(self.uniffiClonePointer(),
@@ -4224,7 +4224,7 @@ open func projectIsbnPreviewLookupApply(input: IsbnPreviewLookupApplyInput) -> I
     )
 })
 }
-    
+
 open func projectIsbnPreviewRequest(input: IsbnPreviewRequestProjectionInput) -> IsbnPreviewRequestProjection  {
     return try!  FfiConverterTypeIsbnPreviewRequestProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_isbn_preview_request(self.uniffiClonePointer(),
@@ -4232,7 +4232,7 @@ open func projectIsbnPreviewRequest(input: IsbnPreviewRequestProjectionInput) ->
     )
 })
 }
-    
+
 open func projectJoinedCommunitiesSnapshotApply(input: JoinedCommunitiesSnapshotApplyInput) -> JoinedCommunitiesSnapshotApplyProjection  {
     return try!  FfiConverterTypeJoinedCommunitiesSnapshotApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_joined_communities_snapshot_apply(self.uniffiClonePointer(),
@@ -4240,7 +4240,7 @@ open func projectJoinedCommunitiesSnapshotApply(input: JoinedCommunitiesSnapshot
     )
 })
 }
-    
+
     /**
      * Project a live diagnostics payload plus the derived Network Settings
      * header/auto-connected state for the current configured relay rows.
@@ -4253,7 +4253,7 @@ open func projectNetworkDiagnosticsSnapshot(configuredRelays: [RelayConfig], dia
     )
 })
 }
-    
+
 open func projectNetworkDiagnosticsSnapshotApply(input: NetworkDiagnosticsSnapshotApplyInput) -> NetworkDiagnosticsSnapshotApplyProjection  {
     return try!  FfiConverterTypeNetworkDiagnosticsSnapshotApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_network_diagnostics_snapshot_apply(self.uniffiClonePointer(),
@@ -4261,7 +4261,7 @@ open func projectNetworkDiagnosticsSnapshotApply(input: NetworkDiagnosticsSnapsh
     )
 })
 }
-    
+
 open func projectNetworkSettingsMutationApply(input: NetworkSettingsMutationApplyInput) -> NetworkSettingsMutationApplyProjection  {
     return try!  FfiConverterTypeNetworkSettingsMutationApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_network_settings_mutation_apply(self.uniffiClonePointer(),
@@ -4269,7 +4269,7 @@ open func projectNetworkSettingsMutationApply(input: NetworkSettingsMutationAppl
     )
 })
 }
-    
+
 open func projectNetworkSettingsSnapshotApply(input: NetworkSettingsSnapshotApplyInput) -> NetworkSettingsSnapshotApplyProjection  {
     return try!  FfiConverterTypeNetworkSettingsSnapshotApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_network_settings_snapshot_apply(self.uniffiClonePointer(),
@@ -4277,7 +4277,7 @@ open func projectNetworkSettingsSnapshotApply(input: NetworkSettingsSnapshotAppl
     )
 })
 }
-    
+
 open func projectNetworkWifiOnlyPreferenceApply(input: NetworkWifiOnlyPreferenceApplyInput) -> NetworkWifiOnlyPreferenceApplyProjection  {
     return try!  FfiConverterTypeNetworkWifiOnlyPreferenceApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_network_wifi_only_preference_apply(self.uniffiClonePointer(),
@@ -4285,7 +4285,7 @@ open func projectNetworkWifiOnlyPreferenceApply(input: NetworkWifiOnlyPreference
     )
 })
 }
-    
+
 open func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionInput) -> NostrEntityArticleCardProjection  {
     return try!  FfiConverterTypeNostrEntityArticleCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_nostr_entity_article_card(self.uniffiClonePointer(),
@@ -4293,7 +4293,7 @@ open func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionI
     )
 })
 }
-    
+
     /**
      * Project onboarding account creation state. Rust owns display-name
      * trimming and continue eligibility.
@@ -4305,7 +4305,7 @@ open func projectOnboardingCreateAccount(input: OnboardingCreateAccountProjectio
     )
 })
 }
-    
+
     /**
      * Project username availability-check state. Rust owns canonical trim
      * and username validity for the onboarding flow.
@@ -4317,7 +4317,7 @@ open func projectOnboardingUsernameCheck(username: String) -> OnboardingUsername
     )
 })
 }
-    
+
 open func projectPodcastClipPublishResult(input: PodcastClipPublishResultInput) -> PodcastClipPublishResultProjection  {
     return try!  FfiConverterTypePodcastClipPublishResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_podcast_clip_publish_result(self.uniffiClonePointer(),
@@ -4325,7 +4325,7 @@ open func projectPodcastClipPublishResult(input: PodcastClipPublishResultInput) 
     )
 })
 }
-    
+
 open func projectPodcastPlaybackSeek(input: PodcastPlaybackSeekInput) -> PodcastPlaybackSeekProjection  {
     return try!  FfiConverterTypePodcastPlaybackSeekProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_podcast_playback_seek(self.uniffiClonePointer(),
@@ -4333,7 +4333,7 @@ open func projectPodcastPlaybackSeek(input: PodcastPlaybackSeekInput) -> Podcast
     )
 })
 }
-    
+
 open func projectPodcastPlaybackSessionApply(input: PodcastPlaybackSessionApplyInput) -> PodcastPlaybackSessionApplyProjection  {
     return try!  FfiConverterTypePodcastPlaybackSessionApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_podcast_playback_session_apply(self.uniffiClonePointer(),
@@ -4341,7 +4341,7 @@ open func projectPodcastPlaybackSessionApply(input: PodcastPlaybackSessionApplyI
     )
 })
 }
-    
+
 open func projectPodcastPlaybackTick(input: PodcastPlaybackTickInput) -> PodcastPlaybackTickProjection  {
     return try!  FfiConverterTypePodcastPlaybackTickProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_podcast_playback_tick(self.uniffiClonePointer(),
@@ -4349,7 +4349,7 @@ open func projectPodcastPlaybackTick(input: PodcastPlaybackTickInput) -> Podcast
     )
 })
 }
-    
+
 open func projectPodcastTranscriptLoadApply(input: PodcastTranscriptLoadApplyInput) -> PodcastTranscriptLoadApplyProjection  {
     return try!  FfiConverterTypePodcastTranscriptLoadApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_podcast_transcript_load_apply(self.uniffiClonePointer(),
@@ -4357,7 +4357,7 @@ open func projectPodcastTranscriptLoadApply(input: PodcastTranscriptLoadApplyInp
     )
 })
 }
-    
+
     /**
      * Profile/avatar presentation projection. Rust owns profile-name
      * precedence, pubkey fallback, and avatar URL selection; native shells
@@ -4370,7 +4370,7 @@ open func projectProfileDisplay(input: ProfileDisplayProjectionInput) -> Profile
     )
 })
 }
-    
+
     /**
      * Profile/avatar presentation projection for bylines that include an
      * artifact-provided author label.
@@ -4382,7 +4382,7 @@ open func projectProfileDisplayWithLabel(input: ProfileDisplayWithLabelProjectio
     )
 })
 }
-    
+
     /**
      * Profile follow-tap projection. Rust owns whether a tap may start,
      * the optimistic button state, and the exact mutation the shell executes.
@@ -4395,7 +4395,7 @@ open func projectProfileFollowAction(relationship: ProfileRelationshipProjection
     )
 })
 }
-    
+
 open func projectProfileFollowMutationApply(input: ProfileFollowMutationApplyInput) -> ProfileFollowMutationApplyProjection  {
     return try!  FfiConverterTypeProfileFollowMutationApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_profile_follow_mutation_apply(self.uniffiClonePointer(),
@@ -4403,7 +4403,7 @@ open func projectProfileFollowMutationApply(input: ProfileFollowMutationApplyInp
     )
 })
 }
-    
+
     /**
      * Compact profile handle projection for social proof surfaces. Rust owns
      * handle precedence and pubkey fallback length; native shells render it.
@@ -4415,7 +4415,7 @@ open func projectProfileHandle(input: ProfileDisplayProjectionInput) -> ProfileD
     )
 })
 }
-    
+
     /**
      * Profile header identity projection. Rust owns display fallbacks and
      * NIP-05 label normalization; native shells render the returned fields.
@@ -4427,7 +4427,7 @@ open func projectProfileIdentity(input: ProfileIdentityProjectionInput) -> Profi
     )
 })
 }
-    
+
 open func projectProfileImageUploadResult(input: ProfileImageUploadResultInput) -> ProfileImageUploadResultProjection  {
     return try!  FfiConverterTypeProfileImageUploadResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_profile_image_upload_result(self.uniffiClonePointer(),
@@ -4435,7 +4435,7 @@ open func projectProfileImageUploadResult(input: ProfileImageUploadResultInput) 
     )
 })
 }
-    
+
     /**
      * Profile relationship projection. Rust owns own-profile detection and
      * follow-action visibility; native shells render and execute taps only.
@@ -4447,7 +4447,7 @@ open func projectProfileRelationship(input: ProfileRelationshipProjectionInput) 
     )
 })
 }
-    
+
     /**
      * Profile edit-form projection. Rust owns draft normalization and save
      * eligibility; native shells bind controls to the returned projection.
@@ -4459,7 +4459,7 @@ open func projectProfileUpdate(input: ProfileUpdateProjectionInput) -> ProfileUp
     )
 })
 }
-    
+
 open func projectProfileUpdateResult(input: ProfileUpdateResultInput) -> ProfileUpdateResultProjection  {
     return try!  FfiConverterTypeProfileUpdateResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_profile_update_result(self.uniffiClonePointer(),
@@ -4467,7 +4467,7 @@ open func projectProfileUpdateResult(input: ProfileUpdateResultInput) -> Profile
     )
 })
 }
-    
+
 open func projectPublicKeyDisplay(input: PublicKeyDisplayProjectionInput) -> PublicKeyDisplayProjection  {
     return try!  FfiConverterTypePublicKeyDisplayProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_public_key_display(self.uniffiClonePointer(),
@@ -4475,7 +4475,7 @@ open func projectPublicKeyDisplay(input: PublicKeyDisplayProjectionInput) -> Pub
     )
 })
 }
-    
+
 open func projectReadingFeedCard(input: ReadingFeedCardProjectionInput) -> ReadingFeedCardProjection  {
     return try!  FfiConverterTypeReadingFeedCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_reading_feed_card(self.uniffiClonePointer(),
@@ -4483,7 +4483,7 @@ open func projectReadingFeedCard(input: ReadingFeedCardProjectionInput) -> Readi
     )
 })
 }
-    
+
 open func projectRelativeTimeLabel(input: RelativeTimeLabelInput) -> RelativeTimeLabelProjection  {
     return try!  FfiConverterTypeRelativeTimeLabelProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_relative_time_label(self.uniffiClonePointer(),
@@ -4491,7 +4491,7 @@ open func projectRelativeTimeLabel(input: RelativeTimeLabelInput) -> RelativeTim
     )
 })
 }
-    
+
 open func projectRelayDetail(input: RelayDetailProjectionInput) -> RelayDetailProjection  {
     return try!  FfiConverterTypeRelayDetailProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_relay_detail(self.uniffiClonePointer(),
@@ -4499,7 +4499,7 @@ open func projectRelayDetail(input: RelayDetailProjectionInput) -> RelayDetailPr
     )
 })
 }
-    
+
 open func projectRelayHostedRoomsApply(input: RelayHostedRoomsApplyInput) -> RelayHostedRoomsApplyProjection  {
     return try!  FfiConverterTypeRelayHostedRoomsApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_relay_hosted_rooms_apply(self.uniffiClonePointer(),
@@ -4507,7 +4507,7 @@ open func projectRelayHostedRoomsApply(input: RelayHostedRoomsApplyInput) -> Rel
     )
 })
 }
-    
+
 open func projectRelayRemove(input: RelayRemoveProjectionInput) -> RelayRemoveProjection  {
     return try!  FfiConverterTypeRelayRemoveProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_relay_remove(self.uniffiClonePointer(),
@@ -4515,7 +4515,7 @@ open func projectRelayRemove(input: RelayRemoveProjectionInput) -> RelayRemovePr
     )
 })
 }
-    
+
 open func projectRelayRow(input: RelayRowProjectionInput) -> RelayRowProjection  {
     return try!  FfiConverterTypeRelayRowProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_relay_row(self.uniffiClonePointer(),
@@ -4523,7 +4523,7 @@ open func projectRelayRow(input: RelayRowProjectionInput) -> RelayRowProjection 
     )
 })
 }
-    
+
 open func projectRoomAvatar(input: RoomAvatarProjectionInput) -> RoomAvatarProjection  {
     return try!  FfiConverterTypeRoomAvatarProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_avatar(self.uniffiClonePointer(),
@@ -4531,7 +4531,7 @@ open func projectRoomAvatar(input: RoomAvatarProjectionInput) -> RoomAvatarProje
     )
 })
 }
-    
+
 open func projectRoomBrowseSnapshotApply(input: RoomBrowseSnapshotApplyInput) -> RoomBrowseSnapshotApplyProjection  {
     return try!  FfiConverterTypeRoomBrowseSnapshotApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_browse_snapshot_apply(self.uniffiClonePointer(),
@@ -4539,7 +4539,7 @@ open func projectRoomBrowseSnapshotApply(input: RoomBrowseSnapshotApplyInput) ->
     )
 })
 }
-    
+
 open func projectRoomCoverCard(input: RoomCoverCardProjectionInput) -> RoomCoverCardProjection  {
     return try!  FfiConverterTypeRoomCoverCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_cover_card(self.uniffiClonePointer(),
@@ -4547,7 +4547,7 @@ open func projectRoomCoverCard(input: RoomCoverCardProjectionInput) -> RoomCover
     )
 })
 }
-    
+
 open func projectRoomExplorerFeaturedStartResult(input: RoomExplorerFeaturedStartResultInput) -> RoomExplorerFeaturedStartResultProjection  {
     return try!  FfiConverterTypeRoomExplorerFeaturedStartResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_explorer_featured_start_result(self.uniffiClonePointer(),
@@ -4555,7 +4555,7 @@ open func projectRoomExplorerFeaturedStartResult(input: RoomExplorerFeaturedStar
     )
 })
 }
-    
+
 open func projectRoomExplorerJoinRequestResult(input: RoomExplorerJoinRequestResultInput) -> RoomExplorerJoinRequestResultProjection  {
     return try!  FfiConverterTypeRoomExplorerJoinRequestResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_explorer_join_request_result(self.uniffiClonePointer(),
@@ -4563,7 +4563,7 @@ open func projectRoomExplorerJoinRequestResult(input: RoomExplorerJoinRequestRes
     )
 })
 }
-    
+
 open func projectRoomInviteSelection(input: RoomInviteSelectionInput) -> RoomInviteSelectionProjection  {
     return try!  FfiConverterTypeRoomInviteSelectionProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_invite_selection(self.uniffiClonePointer(),
@@ -4571,7 +4571,7 @@ open func projectRoomInviteSelection(input: RoomInviteSelectionInput) -> RoomInv
     )
 })
 }
-    
+
 open func projectRoomInviteSelectionChrome(input: RoomInviteSelectionChromeInput) -> RoomInviteSelectionChromeProjection  {
     return try!  FfiConverterTypeRoomInviteSelectionChromeProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_invite_selection_chrome(self.uniffiClonePointer(),
@@ -4579,7 +4579,7 @@ open func projectRoomInviteSelectionChrome(input: RoomInviteSelectionChromeInput
     )
 })
 }
-    
+
 open func projectRoomLibraryArticleCard(input: RoomLibraryArticleCardProjectionInput) -> RoomLibraryArticleCardProjection  {
     return try!  FfiConverterTypeRoomLibraryArticleCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_library_article_card(self.uniffiClonePointer(),
@@ -4587,7 +4587,7 @@ open func projectRoomLibraryArticleCard(input: RoomLibraryArticleCardProjectionI
     )
 })
 }
-    
+
 open func projectRoomLibraryBookCard(input: RoomLibraryBookCardProjectionInput) -> RoomLibraryBookCardProjection  {
     return try!  FfiConverterTypeRoomLibraryBookCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_library_book_card(self.uniffiClonePointer(),
@@ -4595,7 +4595,7 @@ open func projectRoomLibraryBookCard(input: RoomLibraryBookCardProjectionInput) 
     )
 })
 }
-    
+
 open func projectRoomLibraryCardKind(input: RoomLibraryCardKindProjectionInput) -> RoomLibraryCardKindProjection  {
     return try!  FfiConverterTypeRoomLibraryCardKindProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_library_card_kind(self.uniffiClonePointer(),
@@ -4603,7 +4603,7 @@ open func projectRoomLibraryCardKind(input: RoomLibraryCardKindProjectionInput) 
     )
 })
 }
-    
+
 open func projectRoomLibraryGenericCard(input: RoomLibraryGenericCardProjectionInput) -> RoomLibraryGenericCardProjection  {
     return try!  FfiConverterTypeRoomLibraryGenericCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_library_generic_card(self.uniffiClonePointer(),
@@ -4611,7 +4611,7 @@ open func projectRoomLibraryGenericCard(input: RoomLibraryGenericCardProjectionI
     )
 })
 }
-    
+
 open func projectRoomLibraryPodcastCard(input: RoomLibraryPodcastCardProjectionInput) -> RoomLibraryPodcastCardProjection  {
     return try!  FfiConverterTypeRoomLibraryPodcastCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_library_podcast_card(self.uniffiClonePointer(),
@@ -4619,7 +4619,7 @@ open func projectRoomLibraryPodcastCard(input: RoomLibraryPodcastCardProjectionI
     )
 })
 }
-    
+
 open func projectRoomPreviewAction(input: RoomPreviewActionProjectionInput) -> RoomPreviewActionProjection  {
     return try!  FfiConverterTypeRoomPreviewActionProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_preview_action(self.uniffiClonePointer(),
@@ -4627,7 +4627,7 @@ open func projectRoomPreviewAction(input: RoomPreviewActionProjectionInput) -> R
     )
 })
 }
-    
+
 open func projectRoomPreviewArtifacts(input: RoomPreviewArtifactsProjectionInput) -> RoomPreviewArtifactsProjection  {
     return try!  FfiConverterTypeRoomPreviewArtifactsProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_preview_artifacts(self.uniffiClonePointer(),
@@ -4635,7 +4635,7 @@ open func projectRoomPreviewArtifacts(input: RoomPreviewArtifactsProjectionInput
     )
 })
 }
-    
+
 open func projectRoomPreviewHeader(input: RoomPreviewHeaderProjectionInput) -> RoomPreviewHeaderProjection  {
     return try!  FfiConverterTypeRoomPreviewHeaderProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_preview_header(self.uniffiClonePointer(),
@@ -4643,7 +4643,7 @@ open func projectRoomPreviewHeader(input: RoomPreviewHeaderProjectionInput) -> R
     )
 })
 }
-    
+
 open func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionInput) -> RoomRecommendationCardProjection  {
     return try!  FfiConverterTypeRoomRecommendationCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_recommendation_card(self.uniffiClonePointer(),
@@ -4651,7 +4651,7 @@ open func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionI
     )
 })
 }
-    
+
     /**
      * Project a community search row. Rust owns display copy and optional
      * metadata labels; native shells render the row layout.
@@ -4663,7 +4663,7 @@ open func projectSearchCommunityRow(input: SearchCommunityRowProjectionInput) ->
     )
 })
 }
-    
+
     /**
      * Project a search highlight row. Rust owns navigation route and
      * page-image URL eligibility.
@@ -4675,7 +4675,7 @@ open func projectSearchHighlightRow(input: SearchHighlightRowProjectionInput) ->
     )
 })
 }
-    
+
     /**
      * Project native search field state. Rust owns query trimming and whether
      * a search should run.
@@ -4687,7 +4687,7 @@ open func projectSearchQuery(input: SearchQueryProjectionInput) -> SearchQueryPr
     )
 })
 }
-    
+
 open func projectSearchRelayArticlesApply(input: SearchRelayArticlesApplyInput) -> SearchRelayArticlesApplyProjection  {
     return try!  FfiConverterTypeSearchRelayArticlesApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_search_relay_articles_apply(self.uniffiClonePointer(),
@@ -4695,7 +4695,7 @@ open func projectSearchRelayArticlesApply(input: SearchRelayArticlesApplyInput) 
     )
 })
 }
-    
+
 open func projectSearchRelayRefresh(input: SearchRelayRefreshInput) -> SearchRelayRefreshProjection  {
     return try!  FfiConverterTypeSearchRelayRefreshProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_search_relay_refresh(self.uniffiClonePointer(),
@@ -4703,7 +4703,7 @@ open func projectSearchRelayRefresh(input: SearchRelayRefreshInput) -> SearchRel
     )
 })
 }
-    
+
 open func projectSearchRelayStartResult(input: SearchRelayStartResultInput) -> SearchRelayStartResultProjection  {
     return try!  FfiConverterTypeSearchRelayStartResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_search_relay_start_result(self.uniffiClonePointer(),
@@ -4711,7 +4711,7 @@ open func projectSearchRelayStartResult(input: SearchRelayStartResultInput) -> S
     )
 })
 }
-    
+
 open func projectSearchRelayUpdate(input: SearchRelayUpdateInput) -> SearchRelayUpdateProjection  {
     return try!  FfiConverterTypeSearchRelayUpdateProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_search_relay_update(self.uniffiClonePointer(),
@@ -4719,7 +4719,7 @@ open func projectSearchRelayUpdate(input: SearchRelayUpdateInput) -> SearchRelay
     )
 })
 }
-    
+
 open func projectSearchResultsApply(input: SearchResultsApplyInput) -> SearchResultsApplyProjection  {
     return try!  FfiConverterTypeSearchResultsApplyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_search_results_apply(self.uniffiClonePointer(),
@@ -4727,7 +4727,7 @@ open func projectSearchResultsApply(input: SearchResultsApplyInput) -> SearchRes
     )
 })
 }
-    
+
 open func projectSearchSchedule(input: SearchScheduleInput) -> SearchScheduleProjection  {
     return try!  FfiConverterTypeSearchScheduleProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_search_schedule(self.uniffiClonePointer(),
@@ -4735,7 +4735,7 @@ open func projectSearchSchedule(input: SearchScheduleInput) -> SearchSchedulePro
     )
 })
 }
-    
+
     /**
      * Project suggested search chips. Rust owns room/fallback ordering,
      * trimming, dedupe, and cap policy.
@@ -4747,7 +4747,7 @@ open func projectSearchSuggestions(input: SearchSuggestionsProjectionInput) -> S
     )
 })
 }
-    
+
     /**
      * Project matched text spans for search result rendering. Rust owns query
      * trimming and case-insensitive matching; native shells apply styling.
@@ -4759,7 +4759,7 @@ open func projectSearchTextMatches(input: SearchTextMatchesProjectionInput) -> S
     )
 })
 }
-    
+
 open func projectSecretKeyDisplay(input: SecretKeyDisplayProjectionInput) -> SecretKeyDisplayProjection  {
     return try!  FfiConverterTypeSecretKeyDisplayProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_secret_key_display(self.uniffiClonePointer(),
@@ -4767,7 +4767,7 @@ open func projectSecretKeyDisplay(input: SecretKeyDisplayProjectionInput) -> Sec
     )
 })
 }
-    
+
 open func projectSessionStorageWrite(input: SessionStorageWriteInput) -> SessionStorageWriteSnapshot  {
     return try!  FfiConverterTypeSessionStorageWriteSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_session_storage_write(self.uniffiClonePointer(),
@@ -4775,7 +4775,7 @@ open func projectSessionStorageWrite(input: SessionStorageWriteInput) -> Session
     )
 })
 }
-    
+
 open func projectShareArticleTarget(input: ShareArticleTargetProjectionInput) -> ShareArtifactTargetProjection  {
     return try!  FfiConverterTypeShareArtifactTargetProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_share_article_target(self.uniffiClonePointer(),
@@ -4783,7 +4783,7 @@ open func projectShareArticleTarget(input: ShareArticleTargetProjectionInput) ->
     )
 })
 }
-    
+
 open func projectShareArtifactTarget(input: ShareArtifactTargetProjectionInput) -> ShareArtifactTargetProjection  {
     return try!  FfiConverterTypeShareArtifactTargetProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_share_artifact_target(self.uniffiClonePointer(),
@@ -4791,7 +4791,7 @@ open func projectShareArtifactTarget(input: ShareArtifactTargetProjectionInput) 
     )
 })
 }
-    
+
 open func projectShareHighlightArticleTarget(input: ShareHighlightArticleTargetProjectionInput) -> ShareArtifactTargetProjection?  {
     return try!  FfiConverterOptionTypeShareArtifactTargetProjection.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_share_highlight_article_target(self.uniffiClonePointer(),
@@ -4799,7 +4799,7 @@ open func projectShareHighlightArticleTarget(input: ShareHighlightArticleTargetP
     )
 })
 }
-    
+
 open func projectShareHighlightTarget(input: ShareHighlightTargetProjectionInput) -> ShareHighlightTargetProjection  {
     return try!  FfiConverterTypeShareHighlightTargetProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_share_highlight_target(self.uniffiClonePointer(),
@@ -4807,7 +4807,7 @@ open func projectShareHighlightTarget(input: ShareHighlightTargetProjectionInput
     )
 })
 }
-    
+
 open func projectShareQueueDrain(input: ShareQueueDrainProjectionInput) -> ShareQueueDrainProjection  {
     return try!  FfiConverterTypeShareQueueDrainProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_share_queue_drain(self.uniffiClonePointer(),
@@ -4815,7 +4815,7 @@ open func projectShareQueueDrain(input: ShareQueueDrainProjectionInput) -> Share
     )
 })
 }
-    
+
 open func projectShareToCommunityPublishResult(input: ShareToCommunityPublishResultInput) -> ShareToCommunityPublishResultProjection  {
     return try!  FfiConverterTypeShareToCommunityPublishResultProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_share_to_community_publish_result(self.uniffiClonePointer(),
@@ -4823,7 +4823,7 @@ open func projectShareToCommunityPublishResult(input: ShareToCommunityPublishRes
     )
 })
 }
-    
+
 open func projectShareWebReaderTarget(input: ShareWebReaderTargetProjectionInput) -> ShareArtifactTargetProjection  {
     return try!  FfiConverterTypeShareArtifactTargetProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_share_web_reader_target(self.uniffiClonePointer(),
@@ -4831,7 +4831,7 @@ open func projectShareWebReaderTarget(input: ShareWebReaderTargetProjectionInput
     )
 })
 }
-    
+
 open func projectViewSubscriptionStart(input: ViewSubscriptionStartProjectionInput) -> ViewSubscriptionStartProjection  {
     return try!  FfiConverterTypeViewSubscriptionStartProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_view_subscription_start(self.uniffiClonePointer(),
@@ -4839,7 +4839,7 @@ open func projectViewSubscriptionStart(input: ViewSubscriptionStartProjectionInp
     )
 })
 }
-    
+
 open func projectWaveformCacheKey(input: WaveformCacheKeyProjectionInput) -> WaveformCacheKeyProjection  {
     return try!  FfiConverterTypeWaveformCacheKeyProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_waveform_cache_key(self.uniffiClonePointer(),
@@ -4847,7 +4847,7 @@ open func projectWaveformCacheKey(input: WaveformCacheKeyProjectionInput) -> Wav
     )
 })
 }
-    
+
 open func projectWebBookmarkRow(input: WebBookmarkRowProjectionInput) -> WebBookmarkRowProjection  {
     return try!  FfiConverterTypeWebBookmarkRowProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_web_bookmark_row(self.uniffiClonePointer(),
@@ -4855,7 +4855,7 @@ open func projectWebBookmarkRow(input: WebBookmarkRowProjectionInput) -> WebBook
     )
 })
 }
-    
+
     /**
      * Project native web metadata request state. Rust owns URL validity,
      * canonical fetch URL, and mirror cache keys.
@@ -4867,7 +4867,7 @@ open func projectWebMetadataRequest(input: WebMetadataRequestProjectionInput) ->
     )
 })
 }
-    
+
     /**
      * Publish a solo NIP-84 highlight from an article reader selection and
      * return the refreshed reader snapshot. Rust owns article artifact
@@ -4887,10 +4887,10 @@ open func publishArticleReaderHighlightSnapshot(pubkeyHex: String, dTag: String,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeArticleReaderHighlightPublishSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?)async  -> ArtifactPublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -4905,10 +4905,10 @@ open func publishArtifact(preview: ArtifactPreview, groupId: String, note: Strin
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeArtifactPublishSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func publishCapture(input: CapturePublishInput)async  -> CapturePublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -4923,10 +4923,10 @@ open func publishCapture(input: CapturePublishInput)async  -> CapturePublishSnap
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCapturePublishSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Publish a NIP-29 kind:9 chat message and return the refreshed bounded
      * chat snapshot. Rust owns the optimistic merge of the signed record so
@@ -4946,10 +4946,10 @@ open func publishChatMessageSnapshot(groupId: String, content: String, replyToEv
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeChatPublishSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Publish a NIP-22 comment and return the refreshed comments sheet
      * snapshot. Rust owns optimistic insertion and tree/interaction rebuild.
@@ -4968,10 +4968,10 @@ open func publishCommentForScopeSnapshot(scope: CommentScope, parentEventId: Str
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCommentPublishSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func publishDiscussion(groupId: String, title: String, body: String, attachment: ArtifactPreview?)async  -> DiscussionPublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -4986,10 +4986,10 @@ open func publishDiscussion(groupId: String, title: String, body: String, attach
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeDiscussionPublishSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func publishDiscussionFromComposer(input: DiscussionComposerPublishInput)async  -> DiscussionPublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -5004,10 +5004,10 @@ open func publishDiscussionFromComposer(input: DiscussionComposerPublishInput)as
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeDiscussionPublishSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Publish a feedback root note and return the refreshed bounded thread
      * snapshot. Rust resolves the optional project agent `p` tag and owns the
@@ -5027,10 +5027,10 @@ open func publishFeedbackRootNoteSnapshot(coordinate: String, body: String)async
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeFeedbackRootPublishSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Publish a feedback reply into an existing root thread and return the
      * refreshed bounded thread snapshot. Rust owns the NIP-10 root marker and
@@ -5050,10 +5050,10 @@ open func publishFeedbackThreadReplySnapshot(coordinate: String, parentEventId: 
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeFeedbackReplyPublishSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Publish and share one podcast clip highlight. Rust owns clip draft
      * construction, NIP-29 repost publication, and single-record outcome
@@ -5073,10 +5073,10 @@ open func publishPodcastClipHighlight(input: PodcastClipPublishInput)async  -> P
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypePodcastClipPublishSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Publish a podcast clip from the composer sheet. Rust owns draft
      * construction and whether the clip is solo-published or also reposted
@@ -5096,10 +5096,10 @@ open func publishPodcastComposerClip(input: PodcastClipComposerPublishInput)asyn
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypePodcastClipPublishSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Publish a queued iOS share-extension handoff. Rust owns URL preview
      * construction, note normalization, and success/failure classification;
@@ -5119,10 +5119,10 @@ open func publishShareQueueItem(item: ShareQueueItem)async  -> ShareQueueAttempt
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeShareQueueAttempt_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Nudge the relay pool to attempt a reconnect on every disconnected
      * relay. `Client::connect` is idempotent — already-connected relays
@@ -5135,7 +5135,7 @@ open func reconnectAll()async  -> NetworkSettingsMutationSnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_reconnect_all(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -5143,10 +5143,10 @@ open func reconnectAll()async  -> NetworkSettingsMutationSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeNetworkSettingsMutationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func reconstructOcrMarkdown(lines: [OcrLine]) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_reconstruct_ocr_markdown(self.uniffiClonePointer(),
@@ -5154,7 +5154,7 @@ open func reconstructOcrMarkdown(lines: [OcrLine]) -> String  {
     )
 })
 }
-    
+
 open func recordPodcastPlaybackPosition(input: PodcastPlaybackPositionInput) -> MutationSnapshot  {
     return try!  FfiConverterTypeMutationSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_record_podcast_playback_position(self.uniffiClonePointer(),
@@ -5162,7 +5162,7 @@ open func recordPodcastPlaybackPosition(input: PodcastPlaybackPositionInput) -> 
     )
 })
 }
-    
+
 open func recordRecentSearchSnapshot(query: String)async  -> SearchChromeSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -5177,10 +5177,10 @@ open func recordRecentSearchSnapshot(query: String)async  -> SearchChromeSnapsho
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSearchChromeSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Handle the app returning to foreground. iOS may suspend WebSockets
      * while backgrounded; when Wi-Fi-only mode is off, force a fresh
@@ -5193,7 +5193,7 @@ open func refreshRelayConnectionsForForeground()async  -> NetworkSettingsMutatio
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_refresh_relay_connections_for_foreground(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -5201,10 +5201,10 @@ open func refreshRelayConnectionsForForeground()async  -> NetworkSettingsMutatio
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeNetworkSettingsMutationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func registerNip05(name: String, domain: String)async  -> Nip05RegistrationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -5219,10 +5219,10 @@ open func registerNip05(name: String, domain: String)async  -> Nip05Registration
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeNip05RegistrationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Remove a relay by URL.
      */
@@ -5240,10 +5240,10 @@ open func removeRelay(url: String)async  -> NetworkSettingsMutationSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeNetworkSettingsMutationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Publish a NIP-29 kind:9021 join-request for `group_id`. Rust owns the
      * pending-join state and emits app toast deltas for request sent,
@@ -5263,10 +5263,10 @@ open func requestJoinRoom(groupId: String, roomName: String)async  -> JoinRoomRe
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeJoinRoomRequestSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Best-effort cache lookup for a [`NostrEntityRef`]. Returns the
      * resolved event when nostrdb already has it, `None` otherwise.
@@ -5287,10 +5287,10 @@ open func resolveNostrEntity(entity: NostrEntityRef)async  -> NostrEntityResolut
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeNostrEntityResolutionSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func restoreSessionSnapshot(nsec: String?, bunkerUri: String?)async  -> AuthSessionRestoreSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -5305,10 +5305,10 @@ open func restoreSessionSnapshot(nsec: String?, bunkerUri: String?)async  -> Aut
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeAuthSessionRestoreSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func sanitizeHighlightCropBox(cropBox: OcrRect, fallback: OcrRect?) -> OcrRect  {
     return try!  FfiConverterTypeOcrRect_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_sanitize_highlight_crop_box(self.uniffiClonePointer(),
@@ -5317,7 +5317,7 @@ open func sanitizeHighlightCropBox(cropBox: OcrRect, fallback: OcrRect?) -> OcrR
     )
 })
 }
-    
+
 open func selectableOcrWords(lines: [OcrLine]) -> [OcrWord]  {
     return try!  FfiConverterSequenceTypeOcrWord.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_selectable_ocr_words(self.uniffiClonePointer(),
@@ -5325,7 +5325,7 @@ open func selectableOcrWords(lines: [OcrLine]) -> [OcrWord]  {
     )
 })
 }
-    
+
 open func sendRoomInvites(groupId: String, selected: [RoomInviteCandidate])async  -> RoomInviteSendResultProjection  {
     return
         try!  await uniffiRustCallAsync(
@@ -5340,10 +5340,10 @@ open func sendRoomInvites(groupId: String, selected: [RoomInviteCandidate])async
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRoomInviteSendResultProjection_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Replace the user's Blossom server list with the normalized ordered
      * settings projection. Rust blocks invalid empty saves and returns the
@@ -5363,17 +5363,17 @@ open func setBlossomServerSettings(servers: [String])async  -> BlossomServerSett
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeBlossomServerSettingsMutationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func setEventCallback(callback: EventCallback)  {try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_set_event_callback(self.uniffiClonePointer(),
         FfiConverterTypeEventCallback_lower(callback),$0
     )
 }
 }
-    
+
 open func setOnboardingComplete(complete: Bool) -> MutationSnapshot  {
     return try!  FfiConverterTypeMutationSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_set_onboarding_complete(self.uniffiClonePointer(),
@@ -5381,7 +5381,7 @@ open func setOnboardingComplete(complete: Bool) -> MutationSnapshot  {
     )
 })
 }
-    
+
 open func setPodcastClipEnd(selection: PodcastClipSelection, value: Double, durationSeconds: Double) -> PodcastClipSelection  {
     return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_set_podcast_clip_end(self.uniffiClonePointer(),
@@ -5391,7 +5391,7 @@ open func setPodcastClipEnd(selection: PodcastClipSelection, value: Double, dura
     )
 })
 }
-    
+
 open func setPodcastClipStart(selection: PodcastClipSelection, value: Double) -> PodcastClipSelection  {
     return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_set_podcast_clip_start(self.uniffiClonePointer(),
@@ -5400,7 +5400,7 @@ open func setPodcastClipStart(selection: PodcastClipSelection, value: Double) ->
     )
 })
 }
-    
+
     /**
      * Atomically update a single relay's role flags.
      */
@@ -5418,10 +5418,10 @@ open func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, index
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeNetworkSettingsMutationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func setWifiOnlyEnabled(enabled: Bool)async  -> NetworkWifiOnlyPreferenceSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -5436,10 +5436,10 @@ open func setWifiOnlyEnabled(enabled: Bool)async  -> NetworkWifiOnlyPreferenceSn
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeNetworkWifiOnlyPreferenceSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func shareExtensionCommunitiesSnapshot(communities: [CommunitySummary]) -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_share_extension_communities_snapshot(self.uniffiClonePointer(),
@@ -5447,7 +5447,7 @@ open func shareExtensionCommunitiesSnapshot(communities: [CommunitySummary]) -> 
     )
 })
 }
-    
+
     /**
      * Re-share an existing kind:9802 highlight into a NIP-29 room as a
      * kind:16 generic repost. Used to surface a friend's highlight (or
@@ -5471,10 +5471,10 @@ open func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: St
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeMutationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func standaloneNostrEntity(content: String) -> NostrEntityRef?  {
     return try!  FfiConverterOptionTypeNostrEntityRef.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_standalone_nostr_entity(self.uniffiClonePointer(),
@@ -5482,7 +5482,7 @@ open func standaloneNostrEntity(content: String) -> NostrEntityRef?  {
     )
 })
 }
-    
+
 open func startDefaultNostrConnect(callback: String)async  -> NostrConnectStartSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -5497,10 +5497,10 @@ open func startDefaultNostrConnect(callback: String)async  -> NostrConnectStartS
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeNostrConnectStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Install (if not already installed) two relay subs that together
      * power the "Friends are here" explorer shelf:
@@ -5520,7 +5520,7 @@ open func startFriendsRoomsDiscovery()async  -> MutationSnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_start_friends_rooms_discovery(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -5528,10 +5528,10 @@ open func startFriendsRoomsDiscovery()async  -> MutationSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeMutationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Install (if not already installed) a long-lived relay sub for every
      * kind:39000 metadata event. Call once on explorer appear from iOS.
@@ -5543,7 +5543,7 @@ open func startRoomDiscovery()async   {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_start_room_discovery(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_void,
@@ -5551,17 +5551,17 @@ open func startRoomDiscovery()async   {
             freeFunc: ffi_highlighter_core_rust_future_free_void,
             liftFunc: { $0 },
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func startRoomExplorerFeaturedRooms()async  -> MutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_start_room_explorer_featured_rooms(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -5569,10 +5569,10 @@ open func startRoomExplorerFeaturedRooms()async  -> MutationSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeMutationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Article-reader view-scope subscription. Fires `ArticleUpdated` deltas
      * whenever the article's replaceable body supersedes OR a new kind:9802
@@ -5593,10 +5593,10 @@ open func subscribeArticle(pubkeyHex: String, dTag: String)async  -> Subscriptio
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Open a NIP-50 relay subscription for kind:30023 against the user's
      * search relays. Returns a handle; the pump fires
@@ -5618,10 +5618,10 @@ open func subscribeArticleSearch(query: String)async  -> SubscriptionStartSnapsh
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Open a live subscription for the current user's kind:30003/30004 sets.
      * Delivers `BookmarkSetsUpdated` (view-scoped) on each delta.
@@ -5632,7 +5632,7 @@ open func subscribeBookmarkSets()async  -> SubscriptionStartSnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_bookmark_sets(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -5640,10 +5640,10 @@ open func subscribeBookmarkSets()async  -> SubscriptionStartSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Open a live subscription on the current user's kind:10003 bookmark
      * events. Deltas land on the app-scope bus (`BookmarksUpdated`); the
@@ -5655,7 +5655,7 @@ open func subscribeBookmarks()async  -> SubscriptionStartSnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_bookmarks(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -5663,10 +5663,10 @@ open func subscribeBookmarks()async  -> SubscriptionStartSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Per-thread feedback subscription. Fires `FeedbackThreadUpdated` deltas
      * for every kind:1 `e`-tagged to the root (regardless of author).
@@ -5685,10 +5685,10 @@ open func subscribeFeedbackThread(rootEventId: String)async  -> SubscriptionStar
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Feedback-threads subscription for the shake-to-share surface. Fires
      * `FeedbackThreadsUpdated` deltas whenever a kind:1 root authored by
@@ -5709,10 +5709,10 @@ open func subscribeFeedbackThreads(coordinate: String)async  -> SubscriptionStar
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Open a live subscription for kind:30004 sets from followed authors.
      * Delivers `FollowingCurationSetsUpdated` (view-scoped) on each delta.
@@ -5723,7 +5723,7 @@ open func subscribeFollowingCurationSets()async  -> SubscriptionStartSnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_following_curation_sets(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -5731,10 +5731,10 @@ open func subscribeFollowingCurationSets()async  -> SubscriptionStartSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Highlights home-feed view-scope subscription. Snapshots the user's
      * current follow list (plus self — nobody lists themselves in kind:3
@@ -5748,7 +5748,7 @@ open func subscribeFollowingHighlights()async  -> SubscriptionStartSnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_following_highlights(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -5756,10 +5756,10 @@ open func subscribeFollowingHighlights()async  -> SubscriptionStartSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Following Reads view-scope subscription. Snapshots the user's current
      * follow list, then listens for: (a) new articles authored by a follow,
@@ -5773,7 +5773,7 @@ open func subscribeFollowingReads()async  -> SubscriptionStartSnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_following_reads(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -5781,10 +5781,10 @@ open func subscribeFollowingReads()async  -> SubscriptionStartSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * App-scope subscription for the joined-communities view. Returns a
      * handle; fires CommunityUpserted / MembershipChanged deltas tagged
@@ -5797,7 +5797,7 @@ open func subscribeJoinedCommunities()async  -> SubscriptionStartSnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_joined_communities(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -5805,10 +5805,10 @@ open func subscribeJoinedCommunities()async  -> SubscriptionStartSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Install a view-scoped subscription for the missing event behind an
      * entity. Routes to relay hints first (when the bech32 carried any) plus
@@ -5830,10 +5830,10 @@ open func subscribeNostrEntity(entity: NostrEntityRef)async  -> SubscriptionStar
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Handle the Swift side uses to match `RelayStatusChanged` deltas on the
      * event bus. Relay status changes are app-scoped and ride
@@ -5846,7 +5846,7 @@ open func subscribeRelayStatus()async  -> SubscriptionStartSnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_relay_status(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -5854,10 +5854,10 @@ open func subscribeRelayStatus()async  -> SubscriptionStartSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Per-room view-scope subscription. Returns a handle; fires
      * ArtifactUpserted / HighlightUpserted / HighlightShared for this
@@ -5877,10 +5877,10 @@ open func subscribeRoom(groupId: String)async  -> SubscriptionStartSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Per-room Chat view-scope subscription. Returns a handle; fires
      * `ChatMessageUpserted` deltas for kind:9 messages tagged
@@ -5900,10 +5900,10 @@ open func subscribeRoomChat(groupId: String)async  -> SubscriptionStartSnapshot 
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Per-room Discussions view-scope subscription. Returns a handle; fires
      * `DiscussionUpserted` deltas for kind:11 threads in this group that
@@ -5923,10 +5923,10 @@ open func subscribeRoomDiscussions(groupId: String)async  -> SubscriptionStartSn
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Profile view-scope subscription. Fires `UserProfileUpdated` deltas
      * when any event relevant to `pubkey_hex`'s profile arrives. Install on
@@ -5946,10 +5946,10 @@ open func subscribeUserProfile(pubkeyHex: String)async  -> SubscriptionStartSnap
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Vault view-scope subscription for the current user's own highlights.
      */
@@ -5959,7 +5959,7 @@ open func subscribeVault()async  -> SubscriptionStartSnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_vault(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -5967,10 +5967,10 @@ open func subscribeVault()async  -> SubscriptionStartSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Open a live subscription for the current user's NIP-B0 kind:39701 events.
      * Delivers `WebBookmarksUpdated` (view-scoped) on each delta.
@@ -5981,7 +5981,7 @@ open func subscribeWebBookmarks()async  -> SubscriptionStartSnapshot  {
             rustFutureFunc: {
                 uniffi_highlighter_core_fn_method_highlightercore_subscribe_web_bookmarks(
                     self.uniffiClonePointer()
-                    
+
                 )
             },
             pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
@@ -5989,10 +5989,10 @@ open func subscribeWebBookmarks()async  -> SubscriptionStartSnapshot  {
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubscriptionStartSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func suggestNip05Username(displayName: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_suggest_nip05_username(self.uniffiClonePointer(),
@@ -6000,7 +6000,7 @@ open func suggestNip05Username(displayName: String) -> String  {
     )
 })
 }
-    
+
     /**
      * Toggle `address` in the user's kind:10003 list and return the
      * post-toggle article bookmark snapshot. Rust owns the read-modify-write;
@@ -6020,10 +6020,10 @@ open func toggleArticleBookmarkSnapshot(address: String)async  -> ArticleBookmar
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeArticleBookmarksSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Toggle the current user's bookmark on a visible NIP-22 comment and
      * return the updated interaction snapshot for the current screen records.
@@ -6042,10 +6042,10 @@ open func toggleCommentBookmarkSnapshot(records: [CommentRecord], eventIdHex: St
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCommentInteractionMutationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Toggle the current user's like on a visible NIP-22 comment and return
      * the updated interaction snapshot for the current screen records.
@@ -6064,10 +6064,10 @@ open func toggleCommentLikeSnapshot(records: [CommentRecord], eventId: String, a
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCommentInteractionMutationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Toggle a menu row and return the refreshed menu snapshot. Rust owns the
      * membership mutation and applies the returned state over the cached
@@ -6087,10 +6087,10 @@ open func toggleCurationMenuItemSnapshot(dTag: String, address: String)async  ->
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCurationMenuSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 open func toggleImportRelaySelection(fetched: [RelayConfig], selectedUrls: [String], url: String) -> [String]  {
     return try!  FfiConverterSequenceString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_toggle_import_relay_selection(self.uniffiClonePointer(),
@@ -6100,7 +6100,7 @@ open func toggleImportRelaySelection(fetched: [RelayConfig], selectedUrls: [Stri
     )
 })
 }
-    
+
 open func toggleOnboardingInterestSelection(selectedIds: [String], interestId: String) -> [String]  {
     return try!  FfiConverterSequenceString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_toggle_onboarding_interest_selection(self.uniffiClonePointer(),
@@ -6109,7 +6109,7 @@ open func toggleOnboardingInterestSelection(selectedIds: [String], interestId: S
     )
 })
 }
-    
+
 open func tokenizeNostrContent(content: String) -> [NostrContentRun]  {
     return try!  FfiConverterSequenceTypeNostrContentRun.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_tokenize_nostr_content(self.uniffiClonePointer(),
@@ -6117,7 +6117,7 @@ open func tokenizeNostrContent(content: String) -> [NostrContentRun]  {
     )
 })
 }
-    
+
 open func tokenizeNostrMarkdownInline(content: String) -> [NostrContentRun]  {
     return try!  FfiConverterSequenceTypeNostrContentRun.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_tokenize_nostr_markdown_inline(self.uniffiClonePointer(),
@@ -6125,7 +6125,7 @@ open func tokenizeNostrMarkdownInline(content: String) -> [NostrContentRun]  {
     )
 })
 }
-    
+
     /**
      * Drop a subscription by handle. Idempotent.
      */
@@ -6135,7 +6135,7 @@ open func unsubscribe(handle: UInt64)  {try! rustCall() {
     )
 }
 }
-    
+
     /**
      * Publish a new kind:0 metadata event for the current user. Preserves
      * any unknown JSON fields the user had set via other clients —
@@ -6158,10 +6158,10 @@ open func updateProfile(draft: ProfileUpdateDraft)async  -> ProfileUpdateSnapsho
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeProfileUpdateSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Upload a photo to the default Blossom server (`blossom.primal.net`)
      * using BUD-01 auth. The caller (iOS) is responsible for stripping EXIF
@@ -6184,10 +6184,10 @@ open func uploadPhoto(bytes: Data, mime: String, width: UInt32, height: UInt32, 
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeBlossomUploadSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
     /**
      * Insert-or-update a single relay. Replaces the row with matching URL or
      * appends a new one, re-publishes kind:10002 + kind:30078, and reconciles
@@ -6207,10 +6207,10 @@ open func upsertRelay(cfg: RelayConfig)async  -> NetworkSettingsMutationSnapshot
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeNetworkSettingsMutationSnapshot_lift,
             errorHandler: nil
-            
+
         )
 }
-    
+
 
 }
 
@@ -6322,9 +6322,9 @@ public struct FfiConverterTypeAccountGenerationSnapshot: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AccountGenerationSnapshot {
         return
             try AccountGenerationSnapshot(
-                account: FfiConverterOptionTypeGeneratedAccount.read(from: &buf), 
-                succeeded: FfiConverterBool.read(from: &buf), 
-                errorMessage: FfiConverterString.read(from: &buf), 
+                account: FfiConverterOptionTypeGeneratedAccount.read(from: &buf),
+                succeeded: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf),
                 persistNsec: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -6432,13 +6432,13 @@ public struct FfiConverterTypeAddRelaySheetProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddRelaySheetProjection {
         return
             try AddRelaySheetProjection(
-                normalizedUrl: FfiConverterString.read(from: &buf), 
-                clipboardUrl: FfiConverterOptionString.read(from: &buf), 
-                isValid: FfiConverterBool.read(from: &buf), 
-                isUnencrypted: FfiConverterBool.read(from: &buf), 
-                canAdd: FfiConverterBool.read(from: &buf), 
-                addConfig: FfiConverterTypeRelayConfig.read(from: &buf), 
-                probeStatus: FfiConverterTypeAddRelayProbeStatus.read(from: &buf), 
+                normalizedUrl: FfiConverterString.read(from: &buf),
+                clipboardUrl: FfiConverterOptionString.read(from: &buf),
+                isValid: FfiConverterBool.read(from: &buf),
+                isUnencrypted: FfiConverterBool.read(from: &buf),
+                canAdd: FfiConverterBool.read(from: &buf),
+                addConfig: FfiConverterTypeRelayConfig.read(from: &buf),
+                probeStatus: FfiConverterTypeAddRelayProbeStatus.read(from: &buf),
                 probeText: FfiConverterString.read(from: &buf)
         )
     }
@@ -6556,14 +6556,14 @@ public struct FfiConverterTypeAddRelaySheetProjectionInput: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddRelaySheetProjectionInput {
         return
             try AddRelaySheetProjectionInput(
-                urlText: FfiConverterString.read(from: &buf), 
-                clipboardText: FfiConverterOptionString.read(from: &buf), 
-                read: FfiConverterBool.read(from: &buf), 
-                write: FfiConverterBool.read(from: &buf), 
-                rooms: FfiConverterBool.read(from: &buf), 
-                indexer: FfiConverterBool.read(from: &buf), 
-                probeInFlight: FfiConverterBool.read(from: &buf), 
-                probeResult: FfiConverterOptionTypeNip11Document.read(from: &buf), 
+                urlText: FfiConverterString.read(from: &buf),
+                clipboardText: FfiConverterOptionString.read(from: &buf),
+                read: FfiConverterBool.read(from: &buf),
+                write: FfiConverterBool.read(from: &buf),
+                rooms: FfiConverterBool.read(from: &buf),
+                indexer: FfiConverterBool.read(from: &buf),
+                probeInFlight: FfiConverterBool.read(from: &buf),
+                probeResult: FfiConverterOptionTypeNip11Document.read(from: &buf),
                 probeFailed: FfiConverterBool.read(from: &buf)
         )
     }
@@ -6652,9 +6652,9 @@ public struct FfiConverterTypeAppSubscriptionStartProjection: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppSubscriptionStartProjection {
         return
             try AppSubscriptionStartProjection(
-                shouldKeepHandle: FfiConverterBool.read(from: &buf), 
-                handle: FfiConverterUInt64.read(from: &buf), 
-                hasError: FfiConverterBool.read(from: &buf), 
+                shouldKeepHandle: FfiConverterBool.read(from: &buf),
+                handle: FfiConverterUInt64.read(from: &buf),
+                hasError: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -6812,11 +6812,11 @@ public struct FfiConverterTypeArticleBookmarkChromeProjection: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleBookmarkChromeProjection {
         return
             try ArticleBookmarkChromeProjection(
-                toolbarSystemImage: FfiConverterString.read(from: &buf), 
-                usesAccentColor: FfiConverterBool.read(from: &buf), 
-                accessibilityLabel: FfiConverterString.read(from: &buf), 
-                swipeTitle: FfiConverterString.read(from: &buf), 
-                menuTitle: FfiConverterString.read(from: &buf), 
+                toolbarSystemImage: FfiConverterString.read(from: &buf),
+                usesAccentColor: FfiConverterBool.read(from: &buf),
+                accessibilityLabel: FfiConverterString.read(from: &buf),
+                swipeTitle: FfiConverterString.read(from: &buf),
+                menuTitle: FfiConverterString.read(from: &buf),
                 actionSystemImage: FfiConverterString.read(from: &buf)
         )
     }
@@ -6968,9 +6968,9 @@ public struct FfiConverterTypeArticleBookmarkStateProjection: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleBookmarkStateProjection {
         return
             try ArticleBookmarkStateProjection(
-                canonicalAddress: FfiConverterString.read(from: &buf), 
-                canToggle: FfiConverterBool.read(from: &buf), 
-                isBookmarked: FfiConverterBool.read(from: &buf), 
+                canonicalAddress: FfiConverterString.read(from: &buf),
+                canToggle: FfiConverterBool.read(from: &buf),
+                isBookmarked: FfiConverterBool.read(from: &buf),
                 optimisticAddresses: FfiConverterSequenceString.read(from: &buf)
         )
     }
@@ -7045,7 +7045,7 @@ public struct FfiConverterTypeArticleBookmarkStateProjectionInput: FfiConverterR
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleBookmarkStateProjectionInput {
         return
             try ArticleBookmarkStateProjectionInput(
-                addresses: FfiConverterSequenceString.read(from: &buf), 
+                addresses: FfiConverterSequenceString.read(from: &buf),
                 address: FfiConverterString.read(from: &buf)
         )
     }
@@ -7115,7 +7115,7 @@ public struct FfiConverterTypeArticleBookmarksSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleBookmarksSnapshot {
         return
             try ArticleBookmarksSnapshot(
-                addresses: FfiConverterSequenceString.read(from: &buf), 
+                addresses: FfiConverterSequenceString.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -7253,8 +7253,8 @@ public struct FfiConverterTypeArticleBookmarksSnapshotApplyProjection: FfiConver
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleBookmarksSnapshotApplyProjection {
         return
             try ArticleBookmarksSnapshotApplyProjection(
-                shouldApplyAddresses: FfiConverterBool.read(from: &buf), 
-                addresses: FfiConverterSequenceString.read(from: &buf), 
+                shouldApplyAddresses: FfiConverterBool.read(from: &buf),
+                addresses: FfiConverterSequenceString.read(from: &buf),
                 shouldRefreshAfterFailure: FfiConverterBool.read(from: &buf)
         )
     }
@@ -7335,8 +7335,8 @@ public struct FfiConverterTypeArticleHighlightPublishProjection: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleHighlightPublishProjection {
         return
             try ArticleHighlightPublishProjection(
-                submitNote: FfiConverterString.read(from: &buf), 
-                toastMessage: FfiConverterString.read(from: &buf), 
+                submitNote: FfiConverterString.read(from: &buf),
+                toastMessage: FfiConverterString.read(from: &buf),
                 isSuccess: FfiConverterBool.read(from: &buf)
         )
     }
@@ -7411,7 +7411,7 @@ public struct FfiConverterTypeArticleHighlightPublishProjectionInput: FfiConvert
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleHighlightPublishProjectionInput {
         return
             try ArticleHighlightPublishProjectionInput(
-                note: FfiConverterString.read(from: &buf), 
+                note: FfiConverterString.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -7493,9 +7493,9 @@ public struct FfiConverterTypeArticleProfileCardProjection: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleProfileCardProjection {
         return
             try ArticleProfileCardProjection(
-                title: FfiConverterString.read(from: &buf), 
-                titleIsFallback: FfiConverterBool.read(from: &buf), 
-                displayUnixSeconds: FfiConverterOptionUInt64.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf),
+                titleIsFallback: FfiConverterBool.read(from: &buf),
+                displayUnixSeconds: FfiConverterOptionUInt64.read(from: &buf),
                 hashtagSummary: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -7641,9 +7641,9 @@ public struct FfiConverterTypeArticleReaderHeaderProjection: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderHeaderProjection {
         return
             try ArticleReaderHeaderProjection(
-                title: FfiConverterString.read(from: &buf), 
-                hashtagLabels: FfiConverterSequenceString.read(from: &buf), 
-                displayUnixSeconds: FfiConverterOptionUInt64.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf),
+                hashtagLabels: FfiConverterSequenceString.read(from: &buf),
+                displayUnixSeconds: FfiConverterOptionUInt64.read(from: &buf),
                 readTimeMinutes: FfiConverterOptionUInt32.read(from: &buf)
         )
     }
@@ -7783,8 +7783,8 @@ public struct FfiConverterTypeArticleReaderHighlightPublishSnapshot: FfiConverte
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderHighlightPublishSnapshot {
         return
             try ArticleReaderHighlightPublishSnapshot(
-                snapshot: FfiConverterTypeArticleReaderSnapshot.read(from: &buf), 
-                publishedHighlightId: FfiConverterString.read(from: &buf), 
+                snapshot: FfiConverterTypeArticleReaderSnapshot.read(from: &buf),
+                publishedHighlightId: FfiConverterString.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -7855,7 +7855,7 @@ public struct FfiConverterTypeArticleReaderPublishResultInput: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderPublishResultInput {
         return
             try ArticleReaderPublishResultInput(
-                error: FfiConverterString.read(from: &buf), 
+                error: FfiConverterString.read(from: &buf),
                 publishedHighlightId: FfiConverterString.read(from: &buf)
         )
     }
@@ -7925,7 +7925,7 @@ public struct FfiConverterTypeArticleReaderPublishResultProjection: FfiConverter
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderPublishResultProjection {
         return
             try ArticleReaderPublishResultProjection(
-                shouldApplySnapshot: FfiConverterBool.read(from: &buf), 
+                shouldApplySnapshot: FfiConverterBool.read(from: &buf),
                 lastPublishedHighlightId: FfiConverterString.read(from: &buf)
         )
     }
@@ -8006,8 +8006,8 @@ public struct FfiConverterTypeArticleReaderRoute: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderRoute {
         return
             try ArticleReaderRoute(
-                address: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
+                address: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
                 dTag: FfiConverterString.read(from: &buf)
         )
     }
@@ -8084,8 +8084,8 @@ public struct FfiConverterTypeArticleReaderSelectionProjection: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderSelectionProjection {
         return
             try ArticleReaderSelectionProjection(
-                quote: FfiConverterString.read(from: &buf), 
-                context: FfiConverterString.read(from: &buf), 
+                quote: FfiConverterString.read(from: &buf),
+                context: FfiConverterString.read(from: &buf),
                 hasQuote: FfiConverterBool.read(from: &buf)
         )
     }
@@ -8156,7 +8156,7 @@ public struct FfiConverterTypeArticleReaderSelectionProjectionInput: FfiConverte
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderSelectionProjectionInput {
         return
             try ArticleReaderSelectionProjectionInput(
-                quote: FfiConverterString.read(from: &buf), 
+                quote: FfiConverterString.read(from: &buf),
                 context: FfiConverterString.read(from: &buf)
         )
     }
@@ -8232,8 +8232,8 @@ public struct FfiConverterTypeArticleReaderSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderSnapshot {
         return
             try ArticleReaderSnapshot(
-                article: FfiConverterOptionTypeArticleRecord.read(from: &buf), 
-                authorProfile: FfiConverterOptionTypeProfileMetadata.read(from: &buf), 
+                article: FfiConverterOptionTypeArticleRecord.read(from: &buf),
+                authorProfile: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
                 highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf)
         )
     }
@@ -8310,8 +8310,8 @@ public struct FfiConverterTypeArticleReaderSnapshotApplyInput: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderSnapshotApplyInput {
         return
             try ArticleReaderSnapshotApplyInput(
-                snapshot: FfiConverterTypeArticleReaderSnapshot.read(from: &buf), 
-                currentArticle: FfiConverterOptionTypeArticleRecord.read(from: &buf), 
+                snapshot: FfiConverterTypeArticleReaderSnapshot.read(from: &buf),
+                currentArticle: FfiConverterOptionTypeArticleRecord.read(from: &buf),
                 currentAuthorProfile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
         )
     }
@@ -8388,8 +8388,8 @@ public struct FfiConverterTypeArticleReaderSnapshotProjection: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleReaderSnapshotProjection {
         return
             try ArticleReaderSnapshotProjection(
-                article: FfiConverterOptionTypeArticleRecord.read(from: &buf), 
-                authorProfile: FfiConverterOptionTypeProfileMetadata.read(from: &buf), 
+                article: FfiConverterOptionTypeArticleRecord.read(from: &buf),
+                authorProfile: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
                 highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf)
         )
     }
@@ -8448,16 +8448,16 @@ public struct ArticleRecord {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(eventId: String, 
+    public init(eventId: String,
         /**
          * Canonical NIP-33 article address (`30023:<pubkey>:<d>`).
-         */address: String, pubkey: String, 
+         */address: String, pubkey: String,
         /**
          * `d` tag — stable identifier. Combined with pubkey forms the addressable id.
-         */identifier: String, title: String, summary: String, image: String, 
+         */identifier: String, title: String, summary: String, image: String,
         /**
          * Markdown body from the event content.
-         */content: String, hashtags: [String], 
+         */content: String, hashtags: [String],
         /**
          * `published_at` tag (seconds since epoch) if present; otherwise falls back to `created_at`.
          */publishedAt: UInt64?, createdAt: UInt64?) {
@@ -8542,16 +8542,16 @@ public struct FfiConverterTypeArticleRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleRecord {
         return
             try ArticleRecord(
-                eventId: FfiConverterString.read(from: &buf), 
-                address: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
-                identifier: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                summary: FfiConverterString.read(from: &buf), 
-                image: FfiConverterString.read(from: &buf), 
-                content: FfiConverterString.read(from: &buf), 
-                hashtags: FfiConverterSequenceString.read(from: &buf), 
-                publishedAt: FfiConverterOptionUInt64.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf),
+                address: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                identifier: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                summary: FfiConverterString.read(from: &buf),
+                image: FfiConverterString.read(from: &buf),
+                content: FfiConverterString.read(from: &buf),
+                hashtags: FfiConverterSequenceString.read(from: &buf),
+                publishedAt: FfiConverterOptionUInt64.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -8630,7 +8630,7 @@ public struct FfiConverterTypeArtifactDetailProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactDetailProjection {
         return
             try ArtifactDetailProjection(
-                route: FfiConverterTypeArtifactDetailRoute.read(from: &buf), 
+                route: FfiConverterTypeArtifactDetailRoute.read(from: &buf),
                 navigationTitle: FfiConverterString.read(from: &buf)
         )
     }
@@ -8728,11 +8728,11 @@ public struct FfiConverterTypeArtifactDetailRoute: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactDetailRoute {
         return
             try ArtifactDetailRoute(
-                target: FfiConverterTypeArtifactDetailTarget.read(from: &buf), 
-                articleAddress: FfiConverterString.read(from: &buf), 
-                articlePubkey: FfiConverterString.read(from: &buf), 
-                articleDTag: FfiConverterString.read(from: &buf), 
-                bookCatalogId: FfiConverterString.read(from: &buf), 
+                target: FfiConverterTypeArtifactDetailTarget.read(from: &buf),
+                articleAddress: FfiConverterString.read(from: &buf),
+                articlePubkey: FfiConverterString.read(from: &buf),
+                articleDTag: FfiConverterString.read(from: &buf),
+                bookCatalogId: FfiConverterString.read(from: &buf),
                 url: FfiConverterString.read(from: &buf)
         )
     }
@@ -8820,26 +8820,26 @@ public struct ArtifactPreview {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, url: String, title: String, author: String, image: String, description: String, 
+    public init(id: String, url: String, title: String, author: String, image: String, description: String,
         /**
          * "article" | "book" | "podcast" | "video" | "paper" | "web"
-         */source: String, domain: String, catalogId: String, catalogKind: String, 
+         */source: String, domain: String, catalogId: String, catalogKind: String,
         /**
          * NIP-73 feed GUID (from `<podcast:guid>` in the RSS feed). Identifies
          * the show. Emitted on shares as a secondary `i podcast:guid:<feed-guid>`
          * so discovery-by-feed still works alongside the episode identifier.
-         */podcastGuid: String, 
+         */podcastGuid: String,
         /**
          * NIP-73 episode GUID (from `<item><guid>` in the RSS feed). Identifies
          * a specific episode — the canonical NIP-73 target for podcast
          * highlights and NIP-22 comments: `i podcast:item:guid:<episode-guid>`.
-         */podcastItemGuid: String, podcastShowTitle: String, audioUrl: String, audioPreviewUrl: String, transcriptUrl: String, feedUrl: String, publishedAt: String, durationSeconds: Int64?, 
+         */podcastItemGuid: String, podcastShowTitle: String, audioUrl: String, audioPreviewUrl: String, transcriptUrl: String, feedUrl: String, publishedAt: String, durationSeconds: Int64?,
         /**
          * Primary reference tag: "a" | "e" | "i"
-         */referenceTagName: String, referenceTagValue: String, referenceKind: String, 
+         */referenceTagName: String, referenceTagValue: String, referenceKind: String,
         /**
          * Highlight reference tag: "a" | "e" | "r"
-         */highlightTagName: String, highlightTagValue: String, highlightReferenceKey: String, 
+         */highlightTagName: String, highlightTagValue: String, highlightReferenceKey: String,
         /**
          * NIP-73 podcast chapter list (from `chapter` tags on the kind:11
          * share). Each entry: `["chapter", "<seconds>", "<title>"]`. Empty when
@@ -9001,31 +9001,31 @@ public struct FfiConverterTypeArtifactPreview: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactPreview {
         return
             try ArtifactPreview(
-                id: FfiConverterString.read(from: &buf), 
-                url: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                author: FfiConverterString.read(from: &buf), 
-                image: FfiConverterString.read(from: &buf), 
-                description: FfiConverterString.read(from: &buf), 
-                source: FfiConverterString.read(from: &buf), 
-                domain: FfiConverterString.read(from: &buf), 
-                catalogId: FfiConverterString.read(from: &buf), 
-                catalogKind: FfiConverterString.read(from: &buf), 
-                podcastGuid: FfiConverterString.read(from: &buf), 
-                podcastItemGuid: FfiConverterString.read(from: &buf), 
-                podcastShowTitle: FfiConverterString.read(from: &buf), 
-                audioUrl: FfiConverterString.read(from: &buf), 
-                audioPreviewUrl: FfiConverterString.read(from: &buf), 
-                transcriptUrl: FfiConverterString.read(from: &buf), 
-                feedUrl: FfiConverterString.read(from: &buf), 
-                publishedAt: FfiConverterString.read(from: &buf), 
-                durationSeconds: FfiConverterOptionInt64.read(from: &buf), 
-                referenceTagName: FfiConverterString.read(from: &buf), 
-                referenceTagValue: FfiConverterString.read(from: &buf), 
-                referenceKind: FfiConverterString.read(from: &buf), 
-                highlightTagName: FfiConverterString.read(from: &buf), 
-                highlightTagValue: FfiConverterString.read(from: &buf), 
-                highlightReferenceKey: FfiConverterString.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf),
+                url: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                author: FfiConverterString.read(from: &buf),
+                image: FfiConverterString.read(from: &buf),
+                description: FfiConverterString.read(from: &buf),
+                source: FfiConverterString.read(from: &buf),
+                domain: FfiConverterString.read(from: &buf),
+                catalogId: FfiConverterString.read(from: &buf),
+                catalogKind: FfiConverterString.read(from: &buf),
+                podcastGuid: FfiConverterString.read(from: &buf),
+                podcastItemGuid: FfiConverterString.read(from: &buf),
+                podcastShowTitle: FfiConverterString.read(from: &buf),
+                audioUrl: FfiConverterString.read(from: &buf),
+                audioPreviewUrl: FfiConverterString.read(from: &buf),
+                transcriptUrl: FfiConverterString.read(from: &buf),
+                feedUrl: FfiConverterString.read(from: &buf),
+                publishedAt: FfiConverterString.read(from: &buf),
+                durationSeconds: FfiConverterOptionInt64.read(from: &buf),
+                referenceTagName: FfiConverterString.read(from: &buf),
+                referenceTagValue: FfiConverterString.read(from: &buf),
+                referenceKind: FfiConverterString.read(from: &buf),
+                highlightTagName: FfiConverterString.read(from: &buf),
+                highlightTagValue: FfiConverterString.read(from: &buf),
+                highlightReferenceKey: FfiConverterString.read(from: &buf),
                 chapters: FfiConverterSequenceTypeChapter.read(from: &buf)
         )
     }
@@ -9119,7 +9119,7 @@ public struct FfiConverterTypeArtifactPublishSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactPublishSnapshot {
         return
             try ArtifactPublishSnapshot(
-                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf), 
+                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -9216,11 +9216,11 @@ public struct FfiConverterTypeArtifactRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactRecord {
         return
             try ArtifactRecord(
-                preview: FfiConverterTypeArtifactPreview.read(from: &buf), 
-                groupId: FfiConverterString.read(from: &buf), 
-                shareEventId: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
-                createdAt: FfiConverterOptionUInt64.read(from: &buf), 
+                preview: FfiConverterTypeArtifactPreview.read(from: &buf),
+                groupId: FfiConverterString.read(from: &buf),
+                shareEventId: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterOptionUInt64.read(from: &buf),
                 note: FfiConverterString.read(from: &buf)
         )
     }
@@ -9323,11 +9323,11 @@ public struct FfiConverterTypeArtifactReferenceTarget: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactReferenceTarget {
         return
             try ArtifactReferenceTarget(
-                artifactId: FfiConverterString.read(from: &buf), 
-                lowercaseTag: FfiConverterString.read(from: &buf), 
-                value: FfiConverterString.read(from: &buf), 
-                lookupKey: FfiConverterString.read(from: &buf), 
-                commentScope: FfiConverterOptionTypeCommentScope.read(from: &buf), 
+                artifactId: FfiConverterString.read(from: &buf),
+                lowercaseTag: FfiConverterString.read(from: &buf),
+                value: FfiConverterString.read(from: &buf),
+                lookupKey: FfiConverterString.read(from: &buf),
+                commentScope: FfiConverterOptionTypeCommentScope.read(from: &buf),
                 commentKey: FfiConverterString.read(from: &buf)
         )
     }
@@ -9419,10 +9419,10 @@ public struct FfiConverterTypeAuthSessionRestoreSnapshot: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthSessionRestoreSnapshot {
         return
             try AuthSessionRestoreSnapshot(
-                user: FfiConverterOptionTypeCurrentUser.read(from: &buf), 
-                isAuthenticated: FfiConverterBool.read(from: &buf), 
-                errorMessage: FfiConverterString.read(from: &buf), 
-                clearNsec: FfiConverterBool.read(from: &buf), 
+                user: FfiConverterOptionTypeCurrentUser.read(from: &buf),
+                isAuthenticated: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf),
+                clearNsec: FfiConverterBool.read(from: &buf),
                 clearBunkerUri: FfiConverterBool.read(from: &buf)
         )
     }
@@ -9513,10 +9513,10 @@ public struct FfiConverterTypeAuthSessionSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthSessionSnapshot {
         return
             try AuthSessionSnapshot(
-                user: FfiConverterOptionTypeCurrentUser.read(from: &buf), 
-                isAuthenticated: FfiConverterBool.read(from: &buf), 
-                errorMessage: FfiConverterString.read(from: &buf), 
-                persistNsec: FfiConverterOptionString.read(from: &buf), 
+                user: FfiConverterOptionTypeCurrentUser.read(from: &buf),
+                isAuthenticated: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf),
+                persistNsec: FfiConverterOptionString.read(from: &buf),
                 persistBunkerUri: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -9604,9 +9604,9 @@ public struct FfiConverterTypeBlossomServerEntryProjection: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomServerEntryProjection {
         return
             try BlossomServerEntryProjection(
-                submitUrl: FfiConverterString.read(from: &buf), 
-                isValid: FfiConverterBool.read(from: &buf), 
-                isDuplicate: FfiConverterBool.read(from: &buf), 
+                submitUrl: FfiConverterString.read(from: &buf),
+                isValid: FfiConverterBool.read(from: &buf),
+                isDuplicate: FfiConverterBool.read(from: &buf),
                 canAdd: FfiConverterBool.read(from: &buf)
         )
     }
@@ -9682,7 +9682,7 @@ public struct FfiConverterTypeBlossomServerEntryProjectionInput: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomServerEntryProjectionInput {
         return
             try BlossomServerEntryProjectionInput(
-                url: FfiConverterString.read(from: &buf), 
+                url: FfiConverterString.read(from: &buf),
                 existingServers: FfiConverterSequenceString.read(from: &buf)
         )
     }
@@ -9752,7 +9752,7 @@ public struct FfiConverterTypeBlossomServerListProjection: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomServerListProjection {
         return
             try BlossomServerListProjection(
-                servers: FfiConverterSequenceString.read(from: &buf), 
+                servers: FfiConverterSequenceString.read(from: &buf),
                 canSave: FfiConverterBool.read(from: &buf)
         )
     }
@@ -9840,10 +9840,10 @@ public struct FfiConverterTypeBlossomServerListProjectionInput: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomServerListProjectionInput {
         return
             try BlossomServerListProjectionInput(
-                servers: FfiConverterSequenceString.read(from: &buf), 
-                addUrl: FfiConverterOptionString.read(from: &buf), 
-                removeIndexes: FfiConverterSequenceUInt64.read(from: &buf), 
-                moveIndexes: FfiConverterSequenceUInt64.read(from: &buf), 
+                servers: FfiConverterSequenceString.read(from: &buf),
+                addUrl: FfiConverterOptionString.read(from: &buf),
+                removeIndexes: FfiConverterSequenceUInt64.read(from: &buf),
+                moveIndexes: FfiConverterSequenceUInt64.read(from: &buf),
                 moveToIndex: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -9922,8 +9922,8 @@ public struct FfiConverterTypeBlossomServerSettingsMutationSnapshot: FfiConverte
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomServerSettingsMutationSnapshot {
         return
             try BlossomServerSettingsMutationSnapshot(
-                servers: FfiConverterSequenceString.read(from: &buf), 
-                eventId: FfiConverterString.read(from: &buf), 
+                servers: FfiConverterSequenceString.read(from: &buf),
+                eventId: FfiConverterString.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -9994,7 +9994,7 @@ public struct FfiConverterTypeBlossomServerSettingsSnapshot: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomServerSettingsSnapshot {
         return
             try BlossomServerSettingsSnapshot(
-                servers: FfiConverterSequenceString.read(from: &buf), 
+                servers: FfiConverterSequenceString.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -10050,13 +10050,13 @@ public struct BlossomUpload {
     public init(
         /**
          * Public URL the server returned (e.g. `https://blossom.primal.net/<sha>.jpg`).
-         */url: String, 
+         */url: String,
         /**
          * Lowercase hex SHA-256 of the uploaded bytes.
-         */sha256Hex: String, 
+         */sha256Hex: String,
         /**
          * MIME type the client uploaded as.
-         */mime: String, sizeBytes: UInt64, width: UInt32, height: UInt32, 
+         */mime: String, sizeBytes: UInt64, width: UInt32, height: UInt32,
         /**
          * Optional alt text — for OCR captures, the recognized text. Empty if none.
          */alt: String) {
@@ -10121,12 +10121,12 @@ public struct FfiConverterTypeBlossomUpload: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomUpload {
         return
             try BlossomUpload(
-                url: FfiConverterString.read(from: &buf), 
-                sha256Hex: FfiConverterString.read(from: &buf), 
-                mime: FfiConverterString.read(from: &buf), 
-                sizeBytes: FfiConverterUInt64.read(from: &buf), 
-                width: FfiConverterUInt32.read(from: &buf), 
-                height: FfiConverterUInt32.read(from: &buf), 
+                url: FfiConverterString.read(from: &buf),
+                sha256Hex: FfiConverterString.read(from: &buf),
+                mime: FfiConverterString.read(from: &buf),
+                sizeBytes: FfiConverterUInt64.read(from: &buf),
+                width: FfiConverterUInt32.read(from: &buf),
+                height: FfiConverterUInt32.read(from: &buf),
                 alt: FfiConverterString.read(from: &buf)
         )
     }
@@ -10201,7 +10201,7 @@ public struct FfiConverterTypeBlossomUploadSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlossomUploadSnapshot {
         return
             try BlossomUploadSnapshot(
-                upload: FfiConverterOptionTypeBlossomUpload.read(from: &buf), 
+                upload: FfiConverterOptionTypeBlossomUpload.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -10277,8 +10277,8 @@ public struct FfiConverterTypeBookDetailSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookDetailSnapshot {
         return
             try BookDetailSnapshot(
-                route: FfiConverterOptionTypeBookRoute.read(from: &buf), 
-                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf), 
+                route: FfiConverterOptionTypeBookRoute.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -10355,8 +10355,8 @@ public struct FfiConverterTypeBookDetailSnapshotApplyInput: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookDetailSnapshotApplyInput {
         return
             try BookDetailSnapshotApplyInput(
-                route: FfiConverterOptionTypeBookRoute.read(from: &buf), 
-                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf), 
+                route: FfiConverterOptionTypeBookRoute.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -10433,8 +10433,8 @@ public struct FfiConverterTypeBookDetailSnapshotApplyProjection: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookDetailSnapshotApplyProjection {
         return
             try BookDetailSnapshotApplyProjection(
-                route: FfiConverterOptionTypeBookRoute.read(from: &buf), 
-                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf), 
+                route: FfiConverterOptionTypeBookRoute.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
                 isbnPreviewRequest: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -10511,8 +10511,8 @@ public struct FfiConverterTypeBookPickerQueryProjection: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookPickerQueryProjection {
         return
             try BookPickerQueryProjection(
-                searchQuery: FfiConverterString.read(from: &buf), 
-                hasQuery: FfiConverterBool.read(from: &buf), 
+                searchQuery: FfiConverterString.read(from: &buf),
+                hasQuery: FfiConverterBool.read(from: &buf),
                 normalizedIsbn: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -10657,9 +10657,9 @@ public struct FfiConverterTypeBookPickerSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookPickerSnapshot {
         return
             try BookPickerSnapshot(
-                query: FfiConverterTypeBookPickerQueryProjection.read(from: &buf), 
-                recents: FfiConverterSequenceTypeArtifactRecord.read(from: &buf), 
-                searchResults: FfiConverterSequenceTypeArtifactRecord.read(from: &buf), 
+                query: FfiConverterTypeBookPickerQueryProjection.read(from: &buf),
+                recents: FfiConverterSequenceTypeArtifactRecord.read(from: &buf),
+                searchResults: FfiConverterSequenceTypeArtifactRecord.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -10731,7 +10731,7 @@ public struct FfiConverterTypeBookRoute: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookRoute {
         return
             try BookRoute(
-                catalogId: FfiConverterString.read(from: &buf), 
+                catalogId: FfiConverterString.read(from: &buf),
                 isbn: FfiConverterString.read(from: &buf)
         )
     }
@@ -10807,8 +10807,8 @@ public struct FfiConverterTypeBookmarkLibraryFilterChipProjection: FfiConverterR
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkLibraryFilterChipProjection {
         return
             try BookmarkLibraryFilterChipProjection(
-                filter: FfiConverterTypeBookmarkLibraryFilter.read(from: &buf), 
-                label: FfiConverterString.read(from: &buf), 
+                filter: FfiConverterTypeBookmarkLibraryFilter.read(from: &buf),
+                label: FfiConverterString.read(from: &buf),
                 iconSystemName: FfiConverterString.read(from: &buf)
         )
     }
@@ -10909,12 +10909,12 @@ public struct FfiConverterTypeBookmarkLibraryProjection: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkLibraryProjection {
         return
             try BookmarkLibraryProjection(
-                scopeOptions: FfiConverterSequenceTypeBookmarkLibraryScopeOptionProjection.read(from: &buf), 
-                filterChips: FfiConverterSequenceTypeBookmarkLibraryFilterChipProjection.read(from: &buf), 
-                selectedPane: FfiConverterTypeBookmarkLibraryPane.read(from: &buf), 
-                isEmpty: FfiConverterBool.read(from: &buf), 
-                emptyIconSystemName: FfiConverterString.read(from: &buf), 
-                emptyTitle: FfiConverterString.read(from: &buf), 
+                scopeOptions: FfiConverterSequenceTypeBookmarkLibraryScopeOptionProjection.read(from: &buf),
+                filterChips: FfiConverterSequenceTypeBookmarkLibraryFilterChipProjection.read(from: &buf),
+                selectedPane: FfiConverterTypeBookmarkLibraryPane.read(from: &buf),
+                isEmpty: FfiConverterBool.read(from: &buf),
+                emptyIconSystemName: FfiConverterString.read(from: &buf),
+                emptyTitle: FfiConverterString.read(from: &buf),
                 emptyMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -11013,11 +11013,11 @@ public struct FfiConverterTypeBookmarkLibraryProjectionInput: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkLibraryProjectionInput {
         return
             try BookmarkLibraryProjectionInput(
-                scope: FfiConverterTypeBookmarkLibraryScope.read(from: &buf), 
-                selectedFilter: FfiConverterTypeBookmarkLibraryFilter.read(from: &buf), 
-                articleCount: FfiConverterUInt64.read(from: &buf), 
-                collectionCount: FfiConverterUInt64.read(from: &buf), 
-                webBookmarkCount: FfiConverterUInt64.read(from: &buf), 
+                scope: FfiConverterTypeBookmarkLibraryScope.read(from: &buf),
+                selectedFilter: FfiConverterTypeBookmarkLibraryFilter.read(from: &buf),
+                articleCount: FfiConverterUInt64.read(from: &buf),
+                collectionCount: FfiConverterUInt64.read(from: &buf),
+                webBookmarkCount: FfiConverterUInt64.read(from: &buf),
                 exploreCount: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -11091,7 +11091,7 @@ public struct FfiConverterTypeBookmarkLibraryScopeOptionProjection: FfiConverter
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkLibraryScopeOptionProjection {
         return
             try BookmarkLibraryScopeOptionProjection(
-                scope: FfiConverterTypeBookmarkLibraryScope.read(from: &buf), 
+                scope: FfiConverterTypeBookmarkLibraryScope.read(from: &buf),
                 label: FfiConverterString.read(from: &buf)
         )
     }
@@ -11179,10 +11179,10 @@ public struct FfiConverterTypeBookmarkLibrarySnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkLibrarySnapshot {
         return
             try BookmarkLibrarySnapshot(
-                myArticles: FfiConverterSequenceTypeArticleRecord.read(from: &buf), 
-                myBookmarkSets: FfiConverterSequenceTypeBookmarkSetRecord.read(from: &buf), 
-                myCurationSets: FfiConverterSequenceTypeBookmarkSetRecord.read(from: &buf), 
-                myWebBookmarks: FfiConverterSequenceTypeWebBookmarkRecord.read(from: &buf), 
+                myArticles: FfiConverterSequenceTypeArticleRecord.read(from: &buf),
+                myBookmarkSets: FfiConverterSequenceTypeBookmarkSetRecord.read(from: &buf),
+                myCurationSets: FfiConverterSequenceTypeBookmarkSetRecord.read(from: &buf),
+                myWebBookmarks: FfiConverterSequenceTypeWebBookmarkRecord.read(from: &buf),
                 followingCurationSets: FfiConverterSequenceTypeBookmarkSetRecord.read(from: &buf)
         )
     }
@@ -11267,9 +11267,9 @@ public struct FfiConverterTypeBookmarkSetDetailSnapshot: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkSetDetailSnapshot {
         return
             try BookmarkSetDetailSnapshot(
-                displayTitle: FfiConverterString.read(from: &buf), 
-                articles: FfiConverterSequenceTypeArticleRecord.read(from: &buf), 
-                isEmpty: FfiConverterBool.read(from: &buf), 
+                displayTitle: FfiConverterString.read(from: &buf),
+                articles: FfiConverterSequenceTypeArticleRecord.read(from: &buf),
+                isEmpty: FfiConverterBool.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -11330,13 +11330,13 @@ public struct BookmarkSetRecord {
     public init(
         /**
          * `d` tag — stable identifier within the author's sets.
-         */id: String, pubkey: String, 
+         */id: String, pubkey: String,
         /**
          * 30003 for bookmark sets, 30004 for curation sets.
-         */kind: UInt32, title: String, description: String, image: String, 
+         */kind: UInt32, title: String, description: String, image: String,
         /**
          * `a`-tag references — NIP-33 addresses like `"30023:<pubkey>:<d>"`.
-         */articleAddresses: [String], 
+         */articleAddresses: [String],
         /**
          * `e`-tag references — event ids of kind:1 notes.
          */noteIds: [String], createdAt: UInt64?) {
@@ -11411,14 +11411,14 @@ public struct FfiConverterTypeBookmarkSetRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkSetRecord {
         return
             try BookmarkSetRecord(
-                id: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
-                kind: FfiConverterUInt32.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                description: FfiConverterString.read(from: &buf), 
-                image: FfiConverterString.read(from: &buf), 
-                articleAddresses: FfiConverterSequenceString.read(from: &buf), 
-                noteIds: FfiConverterSequenceString.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                kind: FfiConverterUInt32.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                description: FfiConverterString.read(from: &buf),
+                image: FfiConverterString.read(from: &buf),
+                articleAddresses: FfiConverterSequenceString.read(from: &buf),
+                noteIds: FfiConverterSequenceString.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -11507,9 +11507,9 @@ public struct FfiConverterTypeBookmarkSetRowProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkSetRowProjection {
         return
             try BookmarkSetRowProjection(
-                displayTitle: FfiConverterString.read(from: &buf), 
-                kindLabel: FfiConverterString.read(from: &buf), 
-                kindIconSystemName: FfiConverterString.read(from: &buf), 
+                displayTitle: FfiConverterString.read(from: &buf),
+                kindLabel: FfiConverterString.read(from: &buf),
+                kindIconSystemName: FfiConverterString.read(from: &buf),
                 itemCountLabel: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -11655,9 +11655,9 @@ public struct FfiConverterTypeBookmarkedArticleRowProjection: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkedArticleRowProjection {
         return
             try BookmarkedArticleRowProjection(
-                title: FfiConverterString.read(from: &buf), 
-                summary: FfiConverterOptionString.read(from: &buf), 
-                imageUrl: FfiConverterOptionString.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf),
+                summary: FfiConverterOptionString.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf),
                 displayUnixSeconds: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -11796,7 +11796,7 @@ public struct FfiConverterTypeCacheStats: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CacheStats {
         return
             try CacheStats(
-                diskBytes: FfiConverterUInt64.read(from: &buf), 
+                diskBytes: FfiConverterUInt64.read(from: &buf),
                 eventCountEstimate: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -11872,8 +11872,8 @@ public struct FfiConverterTypeCaptureBookDisplayProjection: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CaptureBookDisplayProjection {
         return
             try CaptureBookDisplayProjection(
-                displayTitle: FfiConverterString.read(from: &buf), 
-                author: FfiConverterOptionString.read(from: &buf), 
+                displayTitle: FfiConverterString.read(from: &buf),
+                author: FfiConverterOptionString.read(from: &buf),
                 imageUrl: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -12006,7 +12006,7 @@ public struct FfiConverterTypeCaptureCommunitySelectionProjection: FfiConverterR
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CaptureCommunitySelectionProjection {
         return
             try CaptureCommunitySelectionProjection(
-                displayName: FfiConverterString.read(from: &buf), 
+                displayName: FfiConverterString.read(from: &buf),
                 hasSelection: FfiConverterBool.read(from: &buf)
         )
     }
@@ -12076,7 +12076,7 @@ public struct FfiConverterTypeCaptureCommunitySelectionProjectionInput: FfiConve
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CaptureCommunitySelectionProjectionInput {
         return
             try CaptureCommunitySelectionProjectionInput(
-                selectedGroupId: FfiConverterOptionString.read(from: &buf), 
+                selectedGroupId: FfiConverterOptionString.read(from: &buf),
                 joinedCommunities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf)
         )
     }
@@ -12176,12 +12176,12 @@ public struct FfiConverterTypeCapturePublishInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CapturePublishInput {
         return
             try CapturePublishInput(
-                image: FfiConverterTypeBlossomUpload.read(from: &buf), 
-                quote: FfiConverterString.read(from: &buf), 
-                context: FfiConverterString.read(from: &buf), 
-                note: FfiConverterString.read(from: &buf), 
-                existingArtifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf), 
-                pendingPreview: FfiConverterOptionTypeArtifactPreview.read(from: &buf), 
+                image: FfiConverterTypeBlossomUpload.read(from: &buf),
+                quote: FfiConverterString.read(from: &buf),
+                context: FfiConverterString.read(from: &buf),
+                note: FfiConverterString.read(from: &buf),
+                existingArtifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf),
+                pendingPreview: FfiConverterOptionTypeArtifactPreview.read(from: &buf),
                 targetGroupId: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -12318,7 +12318,7 @@ public struct FfiConverterTypeCapturePublishProjectionInput: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CapturePublishProjectionInput {
         return
             try CapturePublishProjectionInput(
-                phase: FfiConverterTypeCapturePublishPhase.read(from: &buf), 
+                phase: FfiConverterTypeCapturePublishPhase.read(from: &buf),
                 hasUpload: FfiConverterBool.read(from: &buf)
         )
     }
@@ -12394,8 +12394,8 @@ public struct FfiConverterTypeCapturePublishResultProjection: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CapturePublishResultProjection {
         return
             try CapturePublishResultProjection(
-                phase: FfiConverterTypeCapturePublishPhase.read(from: &buf), 
-                eventId: FfiConverterString.read(from: &buf), 
+                phase: FfiConverterTypeCapturePublishPhase.read(from: &buf),
+                eventId: FfiConverterString.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -12466,7 +12466,7 @@ public struct FfiConverterTypeCapturePublishResultProjectionInput: FfiConverterR
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CapturePublishResultProjectionInput {
         return
             try CapturePublishResultProjectionInput(
-                eventId: FfiConverterString.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -12536,7 +12536,7 @@ public struct FfiConverterTypeCapturePublishSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CapturePublishSnapshot {
         return
             try CapturePublishSnapshot(
-                eventId: FfiConverterString.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -12612,8 +12612,8 @@ public struct FfiConverterTypeCaptureStashProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CaptureStashProjection {
         return
             try CaptureStashProjection(
-                quote: FfiConverterString.read(from: &buf), 
-                context: FfiConverterString.read(from: &buf), 
+                quote: FfiConverterString.read(from: &buf),
+                context: FfiConverterString.read(from: &buf),
                 shouldStash: FfiConverterBool.read(from: &buf)
         )
     }
@@ -12684,7 +12684,7 @@ public struct FfiConverterTypeCaptureStashProjectionInput: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CaptureStashProjectionInput {
         return
             try CaptureStashProjectionInput(
-                quote: FfiConverterString.read(from: &buf), 
+                quote: FfiConverterString.read(from: &buf),
                 context: FfiConverterString.read(from: &buf)
         )
     }
@@ -12760,8 +12760,8 @@ public struct FfiConverterTypeCaptureUploadProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CaptureUploadProjection {
         return
             try CaptureUploadProjection(
-                shouldApply: FfiConverterBool.read(from: &buf), 
-                upload: FfiConverterOptionTypeBlossomUpload.read(from: &buf), 
+                shouldApply: FfiConverterBool.read(from: &buf),
+                upload: FfiConverterOptionTypeBlossomUpload.read(from: &buf),
                 uploadError: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -12838,8 +12838,8 @@ public struct FfiConverterTypeCaptureUploadProjectionInput: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CaptureUploadProjectionInput {
         return
             try CaptureUploadProjectionInput(
-                snapshot: FfiConverterTypeBlossomUploadSnapshot.read(from: &buf), 
-                requestGeneration: FfiConverterUInt64.read(from: &buf), 
+                snapshot: FfiConverterTypeBlossomUploadSnapshot.read(from: &buf),
+                requestGeneration: FfiConverterUInt64.read(from: &buf),
                 currentGeneration: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -12910,7 +12910,7 @@ public struct FfiConverterTypeChapter: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Chapter {
         return
             try Chapter(
-                startSeconds: FfiConverterDouble.read(from: &buf), 
+                startSeconds: FfiConverterDouble.read(from: &buf),
                 title: FfiConverterString.read(from: &buf)
         )
     }
@@ -12986,8 +12986,8 @@ public struct FfiConverterTypeChatActivityReloadProjection: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatActivityReloadProjection {
         return
             try ChatActivityReloadProjection(
-                shouldMarkActivity: FfiConverterBool.read(from: &buf), 
-                activityDelta: FfiConverterUInt64.read(from: &buf), 
+                shouldMarkActivity: FfiConverterBool.read(from: &buf),
+                activityDelta: FfiConverterUInt64.read(from: &buf),
                 activityRevision: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -13064,8 +13064,8 @@ public struct FfiConverterTypeChatActivityReloadProjectionInput: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatActivityReloadProjectionInput {
         return
             try ChatActivityReloadProjectionInput(
-                activityEventId: FfiConverterString.read(from: &buf), 
-                visibleEventIds: FfiConverterSequenceString.read(from: &buf), 
+                activityEventId: FfiConverterString.read(from: &buf),
+                visibleEventIds: FfiConverterSequenceString.read(from: &buf),
                 currentActivityRevision: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -13136,7 +13136,7 @@ public struct FfiConverterTypeChatComposerProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatComposerProjection {
         return
             try ChatComposerProjection(
-                submitBody: FfiConverterString.read(from: &buf), 
+                submitBody: FfiConverterString.read(from: &buf),
                 canSend: FfiConverterBool.read(from: &buf)
         )
     }
@@ -13274,8 +13274,8 @@ public struct FfiConverterTypeChatLoadMoreProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatLoadMoreProjection {
         return
             try ChatLoadMoreProjection(
-                shouldLoad: FfiConverterBool.read(from: &buf), 
-                requestedPageCount: FfiConverterUInt32.read(from: &buf), 
+                shouldLoad: FfiConverterBool.read(from: &buf),
+                requestedPageCount: FfiConverterUInt32.read(from: &buf),
                 isLoadingMore: FfiConverterBool.read(from: &buf)
         )
     }
@@ -13352,8 +13352,8 @@ public struct FfiConverterTypeChatLoadMoreProjectionInput: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatLoadMoreProjectionInput {
         return
             try ChatLoadMoreProjectionInput(
-                isLoadingMore: FfiConverterBool.read(from: &buf), 
-                hasMore: FfiConverterBool.read(from: &buf), 
+                isLoadingMore: FfiConverterBool.read(from: &buf),
+                hasMore: FfiConverterBool.read(from: &buf),
                 currentPageCount: FfiConverterUInt32.read(from: &buf)
         )
     }
@@ -13402,10 +13402,10 @@ public struct ChatMessageRecord {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(eventId: String, groupId: String, authorPubkey: String, content: String, 
+    public init(eventId: String, groupId: String, authorPubkey: String, content: String,
         /**
          * Seconds since epoch — required (we drop messages without one upstream).
-         */createdAt: UInt64, 
+         */createdAt: UInt64,
         /**
          * When set, this message replies to the named event id (NIP-10 `["e",
          * <id>, "", "reply"]`). UI can render an inline reply chip.
@@ -13466,11 +13466,11 @@ public struct FfiConverterTypeChatMessageRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatMessageRecord {
         return
             try ChatMessageRecord(
-                eventId: FfiConverterString.read(from: &buf), 
-                groupId: FfiConverterString.read(from: &buf), 
-                authorPubkey: FfiConverterString.read(from: &buf), 
-                content: FfiConverterString.read(from: &buf), 
-                createdAt: FfiConverterUInt64.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf),
+                groupId: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                content: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
                 replyToEventId: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -13550,8 +13550,8 @@ public struct FfiConverterTypeChatMessageRowProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatMessageRowProjection {
         return
             try ChatMessageRowProjection(
-                message: FfiConverterTypeChatMessageRecord.read(from: &buf), 
-                showHeader: FfiConverterBool.read(from: &buf), 
+                message: FfiConverterTypeChatMessageRecord.read(from: &buf),
+                showHeader: FfiConverterBool.read(from: &buf),
                 replyToMessage: FfiConverterOptionTypeChatMessageRecord.read(from: &buf)
         )
     }
@@ -13746,7 +13746,7 @@ public struct FfiConverterTypeChatPublishResultProjection: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatPublishResultProjection {
         return
             try ChatPublishResultProjection(
-                didPublish: FfiConverterBool.read(from: &buf), 
+                didPublish: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -13816,7 +13816,7 @@ public struct FfiConverterTypeChatPublishSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatPublishSnapshot {
         return
             try ChatPublishSnapshot(
-                snapshot: FfiConverterTypeChatSnapshot.read(from: &buf), 
+                snapshot: FfiConverterTypeChatSnapshot.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -13898,9 +13898,9 @@ public struct FfiConverterTypeChatSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatSnapshot {
         return
             try ChatSnapshot(
-                rows: FfiConverterSequenceTypeChatMessageRowProjection.read(from: &buf), 
-                hasMore: FfiConverterBool.read(from: &buf), 
-                pageCount: FfiConverterUInt32.read(from: &buf), 
+                rows: FfiConverterSequenceTypeChatMessageRowProjection.read(from: &buf),
+                hasMore: FfiConverterBool.read(from: &buf),
+                pageCount: FfiConverterUInt32.read(from: &buf),
                 hasActivity: FfiConverterBool.read(from: &buf)
         )
     }
@@ -14014,14 +14014,14 @@ public struct FfiConverterTypeCommentActionChromeProjection: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentActionChromeProjection {
         return
             try CommentActionChromeProjection(
-                showsFooter: FfiConverterBool.read(from: &buf), 
-                footerSystemImage: FfiConverterString.read(from: &buf), 
-                footerIsAccented: FfiConverterBool.read(from: &buf), 
-                showsFooterCount: FfiConverterBool.read(from: &buf), 
-                footerCountLabel: FfiConverterString.read(from: &buf), 
-                likeTitle: FfiConverterString.read(from: &buf), 
-                likeSystemImage: FfiConverterString.read(from: &buf), 
-                bookmarkTitle: FfiConverterString.read(from: &buf), 
+                showsFooter: FfiConverterBool.read(from: &buf),
+                footerSystemImage: FfiConverterString.read(from: &buf),
+                footerIsAccented: FfiConverterBool.read(from: &buf),
+                showsFooterCount: FfiConverterBool.read(from: &buf),
+                footerCountLabel: FfiConverterString.read(from: &buf),
+                likeTitle: FfiConverterString.read(from: &buf),
+                likeSystemImage: FfiConverterString.read(from: &buf),
+                bookmarkTitle: FfiConverterString.read(from: &buf),
                 bookmarkSystemImage: FfiConverterString.read(from: &buf)
         )
     }
@@ -14104,8 +14104,8 @@ public struct FfiConverterTypeCommentActionChromeProjectionInput: FfiConverterRu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentActionChromeProjectionInput {
         return
             try CommentActionChromeProjectionInput(
-                isLiked: FfiConverterBool.read(from: &buf), 
-                isBookmarked: FfiConverterBool.read(from: &buf), 
+                isLiked: FfiConverterBool.read(from: &buf),
+                isBookmarked: FfiConverterBool.read(from: &buf),
                 likeCount: FfiConverterUInt32.read(from: &buf)
         )
     }
@@ -14176,7 +14176,7 @@ public struct FfiConverterTypeCommentComposerProjection: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentComposerProjection {
         return
             try CommentComposerProjection(
-                submitBody: FfiConverterString.read(from: &buf), 
+                submitBody: FfiConverterString.read(from: &buf),
                 canSubmit: FfiConverterBool.read(from: &buf)
         )
     }
@@ -14246,7 +14246,7 @@ public struct FfiConverterTypeCommentComposerProjectionInput: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentComposerProjectionInput {
         return
             try CommentComposerProjectionInput(
-                body: FfiConverterString.read(from: &buf), 
+                body: FfiConverterString.read(from: &buf),
                 isPublishing: FfiConverterBool.read(from: &buf)
         )
     }
@@ -14316,7 +14316,7 @@ public struct FfiConverterTypeCommentInlineThreadSnapshotApplyInput: FfiConverte
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentInlineThreadSnapshotApplyInput {
         return
             try CommentInlineThreadSnapshotApplyInput(
-                records: FfiConverterSequenceTypeCommentRecord.read(from: &buf), 
+                records: FfiConverterSequenceTypeCommentRecord.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -14386,7 +14386,7 @@ public struct FfiConverterTypeCommentInlineThreadSnapshotApplyProjection: FfiCon
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentInlineThreadSnapshotApplyProjection {
         return
             try CommentInlineThreadSnapshotApplyProjection(
-                records: FfiConverterSequenceTypeCommentRecord.read(from: &buf), 
+                records: FfiConverterSequenceTypeCommentRecord.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -14456,7 +14456,7 @@ public struct FfiConverterTypeCommentInteractionMutationSnapshot: FfiConverterRu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentInteractionMutationSnapshot {
         return
             try CommentInteractionMutationSnapshot(
-                interactions: FfiConverterTypeCommentInteractionSnapshot.read(from: &buf), 
+                interactions: FfiConverterTypeCommentInteractionSnapshot.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -14538,9 +14538,9 @@ public struct FfiConverterTypeCommentInteractionRow: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentInteractionRow {
         return
             try CommentInteractionRow(
-                eventId: FfiConverterString.read(from: &buf), 
-                likeCount: FfiConverterUInt32.read(from: &buf), 
-                isLiked: FfiConverterBool.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf),
+                likeCount: FfiConverterUInt32.read(from: &buf),
+                isLiked: FfiConverterBool.read(from: &buf),
                 isBookmarked: FfiConverterBool.read(from: &buf)
         )
     }
@@ -14618,8 +14618,8 @@ public struct FfiConverterTypeCommentInteractionSnapshot: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentInteractionSnapshot {
         return
             try CommentInteractionSnapshot(
-                rows: FfiConverterSequenceTypeCommentInteractionRow.read(from: &buf), 
-                likedEventIds: FfiConverterSequenceString.read(from: &buf), 
+                rows: FfiConverterSequenceTypeCommentInteractionRow.read(from: &buf),
+                likedEventIds: FfiConverterSequenceString.read(from: &buf),
                 bookmarkedEventIds: FfiConverterSequenceString.read(from: &buf)
         )
     }
@@ -14714,11 +14714,11 @@ public struct FfiConverterTypeCommentNodeChromeProjection: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentNodeChromeProjection {
         return
             try CommentNodeChromeProjection(
-                replyCount: FfiConverterUInt32.read(from: &buf), 
-                showsReplyChevron: FfiConverterBool.read(from: &buf), 
-                mostRecentReply: FfiConverterOptionTypeCommentThreadNode.read(from: &buf), 
-                hasMoreReplies: FfiConverterBool.read(from: &buf), 
-                moreRepliesLabel: FfiConverterString.read(from: &buf), 
+                replyCount: FfiConverterUInt32.read(from: &buf),
+                showsReplyChevron: FfiConverterBool.read(from: &buf),
+                mostRecentReply: FfiConverterOptionTypeCommentThreadNode.read(from: &buf),
+                hasMoreReplies: FfiConverterBool.read(from: &buf),
+                moreRepliesLabel: FfiConverterString.read(from: &buf),
                 isMostRecentAuthorReply: FfiConverterBool.read(from: &buf)
         )
     }
@@ -14792,7 +14792,7 @@ public struct FfiConverterTypeCommentNodeChromeProjectionInput: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentNodeChromeProjectionInput {
         return
             try CommentNodeChromeProjectionInput(
-                node: FfiConverterTypeCommentThreadNode.read(from: &buf), 
+                node: FfiConverterTypeCommentThreadNode.read(from: &buf),
                 artifactAuthorPubkey: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -14924,7 +14924,7 @@ public struct FfiConverterTypeCommentPublishResultProjection: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentPublishResultProjection {
         return
             try CommentPublishResultProjection(
-                didPublish: FfiConverterBool.read(from: &buf), 
+                didPublish: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -14994,7 +14994,7 @@ public struct FfiConverterTypeCommentPublishSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentPublishSnapshot {
         return
             try CommentPublishSnapshot(
-                snapshot: FfiConverterTypeCommentThreadSnapshot.read(from: &buf), 
+                snapshot: FfiConverterTypeCommentThreadSnapshot.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -15112,14 +15112,14 @@ public struct FfiConverterTypeCommentRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentRecord {
         return
             try CommentRecord(
-                eventId: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
-                body: FfiConverterString.read(from: &buf), 
-                rootTagName: FfiConverterString.read(from: &buf), 
-                rootTagValue: FfiConverterString.read(from: &buf), 
-                parentTagName: FfiConverterString.read(from: &buf), 
-                parentTagValue: FfiConverterString.read(from: &buf), 
-                rootKind: FfiConverterString.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                body: FfiConverterString.read(from: &buf),
+                rootTagName: FfiConverterString.read(from: &buf),
+                rootTagValue: FfiConverterString.read(from: &buf),
+                parentTagName: FfiConverterString.read(from: &buf),
+                parentTagValue: FfiConverterString.read(from: &buf),
+                rootKind: FfiConverterString.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -15196,7 +15196,7 @@ public struct FfiConverterTypeCommentReferenceBucket: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentReferenceBucket {
         return
             try CommentReferenceBucket(
-                commentKey: FfiConverterString.read(from: &buf), 
+                commentKey: FfiConverterString.read(from: &buf),
                 comments: FfiConverterSequenceTypeCommentRecord.read(from: &buf)
         )
     }
@@ -15276,8 +15276,8 @@ public struct FfiConverterTypeCommentScope: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentScope {
         return
             try CommentScope(
-                rootTagName: FfiConverterString.read(from: &buf), 
-                rootTagValue: FfiConverterString.read(from: &buf), 
+                rootTagName: FfiConverterString.read(from: &buf),
+                rootTagValue: FfiConverterString.read(from: &buf),
                 rootKind: FfiConverterUInt16.read(from: &buf)
         )
     }
@@ -15354,8 +15354,8 @@ public struct FfiConverterTypeCommentScopeSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentScopeSnapshot {
         return
             try CommentScopeSnapshot(
-                scope: FfiConverterOptionTypeCommentScope.read(from: &buf), 
-                attach: FfiConverterBool.read(from: &buf), 
+                scope: FfiConverterOptionTypeCommentScope.read(from: &buf),
+                attach: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -15488,7 +15488,7 @@ public struct FfiConverterTypeCommentSnapshotApplyProjection: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentSnapshotApplyProjection {
         return
             try CommentSnapshotApplyProjection(
-                shouldApplySnapshot: FfiConverterBool.read(from: &buf), 
+                shouldApplySnapshot: FfiConverterBool.read(from: &buf),
                 loadError: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -15562,7 +15562,7 @@ public struct FfiConverterTypeCommentThreadNode: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentThreadNode {
         return
             try CommentThreadNode(
-                record: FfiConverterTypeCommentRecord.read(from: &buf), 
+                record: FfiConverterTypeCommentRecord.read(from: &buf),
                 children: FfiConverterSequenceTypeCommentThreadNode.read(from: &buf)
         )
     }
@@ -15636,7 +15636,7 @@ public struct FfiConverterTypeCommentThreadProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentThreadProjection {
         return
             try CommentThreadProjection(
-                records: FfiConverterSequenceTypeCommentRecord.read(from: &buf), 
+                records: FfiConverterSequenceTypeCommentRecord.read(from: &buf),
                 tree: FfiConverterSequenceTypeCommentThreadNode.read(from: &buf)
         )
     }
@@ -15718,9 +15718,9 @@ public struct FfiConverterTypeCommentThreadSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentThreadSnapshot {
         return
             try CommentThreadSnapshot(
-                records: FfiConverterSequenceTypeCommentRecord.read(from: &buf), 
-                tree: FfiConverterSequenceTypeCommentThreadNode.read(from: &buf), 
-                interactions: FfiConverterTypeCommentInteractionSnapshot.read(from: &buf), 
+                records: FfiConverterSequenceTypeCommentRecord.read(from: &buf),
+                tree: FfiConverterSequenceTypeCommentThreadNode.read(from: &buf),
+                interactions: FfiConverterTypeCommentInteractionSnapshot.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -15816,11 +15816,11 @@ public struct FfiConverterTypeCommentThreadViewProjection: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentThreadViewProjection {
         return
             try CommentThreadViewProjection(
-                focused: FfiConverterOptionTypeCommentThreadNode.read(from: &buf), 
-                children: FfiConverterSequenceTypeCommentThreadNode.read(from: &buf), 
-                navTitle: FfiConverterString.read(from: &buf), 
-                emptyStateLabel: FfiConverterString.read(from: &buf), 
-                composerPlaceholder: FfiConverterString.read(from: &buf), 
+                focused: FfiConverterOptionTypeCommentThreadNode.read(from: &buf),
+                children: FfiConverterSequenceTypeCommentThreadNode.read(from: &buf),
+                navTitle: FfiConverterString.read(from: &buf),
+                emptyStateLabel: FfiConverterString.read(from: &buf),
+                composerPlaceholder: FfiConverterString.read(from: &buf),
                 replyCountLabel: FfiConverterString.read(from: &buf)
         )
     }
@@ -15894,7 +15894,7 @@ public struct FfiConverterTypeCommentThreadViewProjectionInput: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentThreadViewProjectionInput {
         return
             try CommentThreadViewProjectionInput(
-                tree: FfiConverterSequenceTypeCommentThreadNode.read(from: &buf), 
+                tree: FfiConverterSequenceTypeCommentThreadNode.read(from: &buf),
                 focused: FfiConverterOptionTypeCommentThreadNode.read(from: &buf)
         )
     }
@@ -15976,9 +15976,9 @@ public struct FfiConverterTypeCommentToolbarProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentToolbarProjection {
         return
             try CommentToolbarProjection(
-                count: FfiConverterUInt32.read(from: &buf), 
-                showsCount: FfiConverterBool.read(from: &buf), 
-                countLabel: FfiConverterString.read(from: &buf), 
+                count: FfiConverterUInt32.read(from: &buf),
+                showsCount: FfiConverterBool.read(from: &buf),
+                countLabel: FfiConverterString.read(from: &buf),
                 accessibilityLabel: FfiConverterString.read(from: &buf)
         )
     }
@@ -16118,8 +16118,8 @@ public struct FfiConverterTypeCommunityRowProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommunityRowProjection {
         return
             try CommunityRowProjection(
-                displayName: FfiConverterString.read(from: &buf), 
-                pictureUrl: FfiConverterOptionString.read(from: &buf), 
+                displayName: FfiConverterString.read(from: &buf),
+                pictureUrl: FfiConverterOptionString.read(from: &buf),
                 subtitle: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -16233,10 +16233,10 @@ public struct CommunitySummary {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(id: String, name: String, about: String, picture: String, 
+    public init(id: String, name: String, about: String, picture: String,
         /**
          * "open" or "closed"
-         */access: String, 
+         */access: String,
         /**
          * "public" or "private"
          */visibility: String, adminPubkeys: [String], memberCount: UInt64?, relayUrl: String, metadataEventId: String, createdAt: UInt64?) {
@@ -16321,16 +16321,16 @@ public struct FfiConverterTypeCommunitySummary: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommunitySummary {
         return
             try CommunitySummary(
-                id: FfiConverterString.read(from: &buf), 
-                name: FfiConverterString.read(from: &buf), 
-                about: FfiConverterString.read(from: &buf), 
-                picture: FfiConverterString.read(from: &buf), 
-                access: FfiConverterString.read(from: &buf), 
-                visibility: FfiConverterString.read(from: &buf), 
-                adminPubkeys: FfiConverterSequenceString.read(from: &buf), 
-                memberCount: FfiConverterOptionUInt64.read(from: &buf), 
-                relayUrl: FfiConverterString.read(from: &buf), 
-                metadataEventId: FfiConverterString.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
+                about: FfiConverterString.read(from: &buf),
+                picture: FfiConverterString.read(from: &buf),
+                access: FfiConverterString.read(from: &buf),
+                visibility: FfiConverterString.read(from: &buf),
+                adminPubkeys: FfiConverterSequenceString.read(from: &buf),
+                memberCount: FfiConverterOptionUInt64.read(from: &buf),
+                relayUrl: FfiConverterString.read(from: &buf),
+                metadataEventId: FfiConverterString.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -16471,7 +16471,7 @@ public struct FfiConverterTypeCreateRoomCoverUploadResultProjection: FfiConverte
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateRoomCoverUploadResultProjection {
         return
             try CreateRoomCoverUploadResultProjection(
-                upload: FfiConverterOptionTypeBlossomUpload.read(from: &buf), 
+                upload: FfiConverterOptionTypeBlossomUpload.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -16565,11 +16565,11 @@ public struct FfiConverterTypeCreateRoomProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateRoomProjection {
         return
             try CreateRoomProjection(
-                canCreate: FfiConverterBool.read(from: &buf), 
-                createName: FfiConverterString.read(from: &buf), 
-                createAbout: FfiConverterString.read(from: &buf), 
-                visibilityGlyph: FfiConverterString.read(from: &buf), 
-                visibilitySummary: FfiConverterString.read(from: &buf), 
+                canCreate: FfiConverterBool.read(from: &buf),
+                createName: FfiConverterString.read(from: &buf),
+                createAbout: FfiConverterString.read(from: &buf),
+                visibilityGlyph: FfiConverterString.read(from: &buf),
+                visibilitySummary: FfiConverterString.read(from: &buf),
                 visibilityOptions: FfiConverterSequenceTypeCreateRoomVisibilityOption.read(from: &buf)
         )
     }
@@ -16667,11 +16667,11 @@ public struct FfiConverterTypeCreateRoomProjectionInput: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateRoomProjectionInput {
         return
             try CreateRoomProjectionInput(
-                name: FfiConverterString.read(from: &buf), 
-                about: FfiConverterString.read(from: &buf), 
-                visibility: FfiConverterTypeRoomVisibility.read(from: &buf), 
-                access: FfiConverterTypeRoomAccess.read(from: &buf), 
-                isCreating: FfiConverterBool.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf),
+                about: FfiConverterString.read(from: &buf),
+                visibility: FfiConverterTypeRoomVisibility.read(from: &buf),
+                access: FfiConverterTypeRoomAccess.read(from: &buf),
+                isCreating: FfiConverterBool.read(from: &buf),
                 coverIsUploading: FfiConverterBool.read(from: &buf)
         )
     }
@@ -16745,7 +16745,7 @@ public struct FfiConverterTypeCreateRoomPublishResultInput: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateRoomPublishResultInput {
         return
             try CreateRoomPublishResultInput(
-                groupId: FfiConverterString.read(from: &buf), 
+                groupId: FfiConverterString.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -16827,9 +16827,9 @@ public struct FfiConverterTypeCreateRoomPublishResultProjection: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateRoomPublishResultProjection {
         return
             try CreateRoomPublishResultProjection(
-                didCreate: FfiConverterBool.read(from: &buf), 
-                groupId: FfiConverterString.read(from: &buf), 
-                shouldEmitSuccessFeedback: FfiConverterBool.read(from: &buf), 
+                didCreate: FfiConverterBool.read(from: &buf),
+                groupId: FfiConverterString.read(from: &buf),
+                shouldEmitSuccessFeedback: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -16901,7 +16901,7 @@ public struct FfiConverterTypeCreateRoomPublishSnapshot: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateRoomPublishSnapshot {
         return
             try CreateRoomPublishSnapshot(
-                groupId: FfiConverterString.read(from: &buf), 
+                groupId: FfiConverterString.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -17001,12 +17001,12 @@ public struct FfiConverterTypeCreateRoomVisibilityOption: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CreateRoomVisibilityOption {
         return
             try CreateRoomVisibilityOption(
-                id: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                summary: FfiConverterString.read(from: &buf), 
-                glyph: FfiConverterString.read(from: &buf), 
-                visibility: FfiConverterTypeRoomVisibility.read(from: &buf), 
-                access: FfiConverterTypeRoomAccess.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                summary: FfiConverterString.read(from: &buf),
+                glyph: FfiConverterString.read(from: &buf),
+                visibility: FfiConverterTypeRoomVisibility.read(from: &buf),
+                access: FfiConverterTypeRoomAccess.read(from: &buf),
                 isSelected: FfiConverterBool.read(from: &buf)
         )
     }
@@ -17090,8 +17090,8 @@ public struct FfiConverterTypeCurationMenuItem: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurationMenuItem {
         return
             try CurationMenuItem(
-                id: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
                 isMember: FfiConverterBool.read(from: &buf)
         )
     }
@@ -17162,7 +17162,7 @@ public struct FfiConverterTypeCurationMenuSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurationMenuSnapshot {
         return
             try CurationMenuSnapshot(
-                items: FfiConverterSequenceTypeCurationMenuItem.read(from: &buf), 
+                items: FfiConverterSequenceTypeCurationMenuItem.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -17238,8 +17238,8 @@ public struct FfiConverterTypeCurationMenuSnapshotApplyInput: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurationMenuSnapshotApplyInput {
         return
             try CurationMenuSnapshotApplyInput(
-                items: FfiConverterSequenceTypeCurationMenuItem.read(from: &buf), 
-                error: FfiConverterString.read(from: &buf), 
+                items: FfiConverterSequenceTypeCurationMenuItem.read(from: &buf),
+                error: FfiConverterString.read(from: &buf),
                 errorPrefix: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -17316,8 +17316,8 @@ public struct FfiConverterTypeCurationMenuSnapshotApplyProjection: FfiConverterR
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurationMenuSnapshotApplyProjection {
         return
             try CurationMenuSnapshotApplyProjection(
-                items: FfiConverterSequenceTypeCurationMenuItem.read(from: &buf), 
-                shouldApplyErrorMessage: FfiConverterBool.read(from: &buf), 
+                items: FfiConverterSequenceTypeCurationMenuItem.read(from: &buf),
+                shouldApplyErrorMessage: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -17391,7 +17391,7 @@ public struct FfiConverterTypeCurationSetCreateProjection: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurationSetCreateProjection {
         return
             try CurationSetCreateProjection(
-                submitTitle: FfiConverterString.read(from: &buf), 
+                submitTitle: FfiConverterString.read(from: &buf),
                 canCreate: FfiConverterBool.read(from: &buf)
         )
     }
@@ -17526,7 +17526,7 @@ public struct FfiConverterTypeCurrentUser: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurrentUser {
         return
             try CurrentUser(
-                pubkey: FfiConverterString.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf),
                 npub: FfiConverterString.read(from: &buf)
         )
     }
@@ -17601,7 +17601,7 @@ public struct FfiConverterTypeDelta: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Delta {
         return
             try Delta(
-                subscriptionId: FfiConverterUInt64.read(from: &buf), 
+                subscriptionId: FfiConverterUInt64.read(from: &buf),
                 change: FfiConverterTypeDataChangeType.read(from: &buf)
         )
     }
@@ -17718,13 +17718,13 @@ public struct FfiConverterTypeDiscussionAttachment: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionAttachment {
         return
             try DiscussionAttachment(
-                referenceTagName: FfiConverterString.read(from: &buf), 
-                referenceTagValue: FfiConverterString.read(from: &buf), 
-                referenceKind: FfiConverterString.read(from: &buf), 
-                url: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                author: FfiConverterString.read(from: &buf), 
-                image: FfiConverterString.read(from: &buf), 
+                referenceTagName: FfiConverterString.read(from: &buf),
+                referenceTagValue: FfiConverterString.read(from: &buf),
+                referenceKind: FfiConverterString.read(from: &buf),
+                url: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                author: FfiConverterString.read(from: &buf),
+                image: FfiConverterString.read(from: &buf),
                 summary: FfiConverterString.read(from: &buf)
         )
     }
@@ -17806,8 +17806,8 @@ public struct FfiConverterTypeDiscussionAttachmentProjection: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionAttachmentProjection {
         return
             try DiscussionAttachmentProjection(
-                label: FfiConverterOptionString.read(from: &buf), 
-                imageUrl: FfiConverterOptionString.read(from: &buf), 
+                label: FfiConverterOptionString.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf),
                 author: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -17952,9 +17952,9 @@ public struct FfiConverterTypeDiscussionComposerProjection: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionComposerProjection {
         return
             try DiscussionComposerProjection(
-                submitTitle: FfiConverterString.read(from: &buf), 
-                submitBody: FfiConverterString.read(from: &buf), 
-                submitAttachmentUrl: FfiConverterOptionString.read(from: &buf), 
+                submitTitle: FfiConverterString.read(from: &buf),
+                submitBody: FfiConverterString.read(from: &buf),
+                submitAttachmentUrl: FfiConverterOptionString.read(from: &buf),
                 canPublish: FfiConverterBool.read(from: &buf)
         )
     }
@@ -18038,9 +18038,9 @@ public struct FfiConverterTypeDiscussionComposerProjectionInput: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionComposerProjectionInput {
         return
             try DiscussionComposerProjectionInput(
-                title: FfiConverterString.read(from: &buf), 
-                body: FfiConverterString.read(from: &buf), 
-                attachmentUrl: FfiConverterString.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf),
+                body: FfiConverterString.read(from: &buf),
+                attachmentUrl: FfiConverterString.read(from: &buf),
                 isPublishing: FfiConverterBool.read(from: &buf)
         )
     }
@@ -18124,9 +18124,9 @@ public struct FfiConverterTypeDiscussionComposerPublishInput: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionComposerPublishInput {
         return
             try DiscussionComposerPublishInput(
-                groupId: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                body: FfiConverterString.read(from: &buf), 
+                groupId: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                body: FfiConverterString.read(from: &buf),
                 attachmentUrl: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -18198,7 +18198,7 @@ public struct FfiConverterTypeDiscussionPublishResultInput: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionPublishResultInput {
         return
             try DiscussionPublishResultInput(
-                error: FfiConverterString.read(from: &buf), 
+                error: FfiConverterString.read(from: &buf),
                 hasDiscussion: FfiConverterBool.read(from: &buf)
         )
     }
@@ -18268,7 +18268,7 @@ public struct FfiConverterTypeDiscussionPublishResultProjection: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionPublishResultProjection {
         return
             try DiscussionPublishResultProjection(
-                didPublish: FfiConverterBool.read(from: &buf), 
+                didPublish: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -18338,7 +18338,7 @@ public struct FfiConverterTypeDiscussionPublishSnapshot: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionPublishSnapshot {
         return
             try DiscussionPublishSnapshot(
-                discussion: FfiConverterOptionTypeDiscussionRecord.read(from: &buf), 
+                discussion: FfiConverterOptionTypeDiscussionRecord.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -18394,7 +18394,7 @@ public struct DiscussionRecord {
     public init(
         /**
          * Stable slug from the `d` tag (or event id if the author omitted one).
-         */id: String, eventId: String, groupId: String, pubkey: String, title: String, body: String, summary: String, createdAt: UInt64?, 
+         */id: String, eventId: String, groupId: String, pubkey: String, title: String, body: String, summary: String, createdAt: UInt64?,
         /**
          * Present iff the thread references an artifact via `a | e | i+k`, or
          * carries an `r` fallback URL. When set, consumers can render the
@@ -18471,14 +18471,14 @@ public struct FfiConverterTypeDiscussionRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionRecord {
         return
             try DiscussionRecord(
-                id: FfiConverterString.read(from: &buf), 
-                eventId: FfiConverterString.read(from: &buf), 
-                groupId: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                body: FfiConverterString.read(from: &buf), 
-                summary: FfiConverterString.read(from: &buf), 
-                createdAt: FfiConverterOptionUInt64.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf),
+                eventId: FfiConverterString.read(from: &buf),
+                groupId: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                body: FfiConverterString.read(from: &buf),
+                summary: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterOptionUInt64.read(from: &buf),
                 attachment: FfiConverterOptionTypeDiscussionAttachment.read(from: &buf)
         )
     }
@@ -18555,7 +18555,7 @@ public struct FfiConverterTypeEditedBookPreviewProjection: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EditedBookPreviewProjection {
         return
             try EditedBookPreviewProjection(
-                preview: FfiConverterOptionTypeArtifactPreview.read(from: &buf), 
+                preview: FfiConverterOptionTypeArtifactPreview.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -18625,7 +18625,7 @@ public struct FfiConverterTypeFeedbackComposerProjection: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackComposerProjection {
         return
             try FeedbackComposerProjection(
-                submitBody: FfiConverterString.read(from: &buf), 
+                submitBody: FfiConverterString.read(from: &buf),
                 canSend: FfiConverterBool.read(from: &buf)
         )
     }
@@ -18695,7 +18695,7 @@ public struct FfiConverterTypeFeedbackComposerProjectionInput: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackComposerProjectionInput {
         return
             try FeedbackComposerProjectionInput(
-                body: FfiConverterString.read(from: &buf), 
+                body: FfiConverterString.read(from: &buf),
                 isPublishing: FfiConverterBool.read(from: &buf)
         )
     }
@@ -18738,7 +18738,7 @@ public struct FeedbackEventRecord {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(eventId: String, 
+    public init(eventId: String,
         /**
          * Hex id of the thread's root note. Equals `event_id` for the root.
          */rootEventId: String, authorPubkey: String, createdAt: UInt64, content: String) {
@@ -18793,10 +18793,10 @@ public struct FfiConverterTypeFeedbackEventRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackEventRecord {
         return
             try FeedbackEventRecord(
-                eventId: FfiConverterString.read(from: &buf), 
-                rootEventId: FfiConverterString.read(from: &buf), 
-                authorPubkey: FfiConverterString.read(from: &buf), 
-                createdAt: FfiConverterUInt64.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf),
+                rootEventId: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
                 content: FfiConverterString.read(from: &buf)
         )
     }
@@ -18881,9 +18881,9 @@ public struct FfiConverterTypeFeedbackMessagePresentationInput: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackMessagePresentationInput {
         return
             try FeedbackMessagePresentationInput(
-                event: FfiConverterTypeFeedbackEventRecord.read(from: &buf), 
-                showHeader: FfiConverterBool.read(from: &buf), 
-                currentUserPubkey: FfiConverterOptionString.read(from: &buf), 
+                event: FfiConverterTypeFeedbackEventRecord.read(from: &buf),
+                showHeader: FfiConverterBool.read(from: &buf),
+                currentUserPubkey: FfiConverterOptionString.read(from: &buf),
                 profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
         )
     }
@@ -18973,10 +18973,10 @@ public struct FfiConverterTypeFeedbackMessagePresentationProjection: FfiConverte
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackMessagePresentationProjection {
         return
             try FeedbackMessagePresentationProjection(
-                isFromMe: FfiConverterBool.read(from: &buf), 
-                showHeader: FfiConverterBool.read(from: &buf), 
-                displayName: FfiConverterString.read(from: &buf), 
-                displayInitial: FfiConverterString.read(from: &buf), 
+                isFromMe: FfiConverterBool.read(from: &buf),
+                showHeader: FfiConverterBool.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                displayInitial: FfiConverterString.read(from: &buf),
                 pictureUrl: FfiConverterString.read(from: &buf)
         )
     }
@@ -19049,7 +19049,7 @@ public struct FfiConverterTypeFeedbackMessageRowProjection: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackMessageRowProjection {
         return
             try FeedbackMessageRowProjection(
-                event: FfiConverterTypeFeedbackEventRecord.read(from: &buf), 
+                event: FfiConverterTypeFeedbackEventRecord.read(from: &buf),
                 showHeader: FfiConverterBool.read(from: &buf)
         )
     }
@@ -19181,7 +19181,7 @@ public struct FfiConverterTypeFeedbackPublishResultProjection: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackPublishResultProjection {
         return
             try FeedbackPublishResultProjection(
-                didPublish: FfiConverterBool.read(from: &buf), 
+                didPublish: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -19251,7 +19251,7 @@ public struct FfiConverterTypeFeedbackReplyPublishSnapshot: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackReplyPublishSnapshot {
         return
             try FeedbackReplyPublishSnapshot(
-                snapshot: FfiConverterTypeFeedbackThreadSnapshot.read(from: &buf), 
+                snapshot: FfiConverterTypeFeedbackThreadSnapshot.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -19321,7 +19321,7 @@ public struct FfiConverterTypeFeedbackRootPublishSnapshot: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackRootPublishSnapshot {
         return
             try FeedbackRootPublishSnapshot(
-                snapshot: FfiConverterTypeFeedbackThreadsSnapshot.read(from: &buf), 
+                snapshot: FfiConverterTypeFeedbackThreadsSnapshot.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -19453,7 +19453,7 @@ public struct FfiConverterTypeFeedbackSnapshotApplyProjection: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackSnapshotApplyProjection {
         return
             try FeedbackSnapshotApplyProjection(
-                shouldApplySnapshot: FfiConverterBool.read(from: &buf), 
+                shouldApplySnapshot: FfiConverterBool.read(from: &buf),
                 loadError: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -19541,10 +19541,10 @@ public struct FfiConverterTypeFeedbackThreadPresentationProjection: FfiConverter
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackThreadPresentationProjection {
         return
             try FeedbackThreadPresentationProjection(
-                navigationTitle: FfiConverterString.read(from: &buf), 
-                rowTitle: FfiConverterString.read(from: &buf), 
-                rowSecondaryText: FfiConverterOptionString.read(from: &buf), 
-                detailSummary: FfiConverterOptionString.read(from: &buf), 
+                navigationTitle: FfiConverterString.read(from: &buf),
+                rowTitle: FfiConverterString.read(from: &buf),
+                rowSecondaryText: FfiConverterOptionString.read(from: &buf),
+                detailSummary: FfiConverterOptionString.read(from: &buf),
                 statusLabel: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -19596,7 +19596,7 @@ public struct FeedbackThreadRecord {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(rootEventId: String, authorPubkey: String, createdAt: UInt64, lastActivityAt: UInt64, title: String?, summary: String?, statusLabel: String?, 
+    public init(rootEventId: String, authorPubkey: String, createdAt: UInt64, lastActivityAt: UInt64, title: String?, summary: String?, statusLabel: String?,
         /**
          * First ~140 chars of the root note's content, whitespace-collapsed.
          * Rendered when no `title` is available.
@@ -19667,13 +19667,13 @@ public struct FfiConverterTypeFeedbackThreadRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackThreadRecord {
         return
             try FeedbackThreadRecord(
-                rootEventId: FfiConverterString.read(from: &buf), 
-                authorPubkey: FfiConverterString.read(from: &buf), 
-                createdAt: FfiConverterUInt64.read(from: &buf), 
-                lastActivityAt: FfiConverterUInt64.read(from: &buf), 
-                title: FfiConverterOptionString.read(from: &buf), 
-                summary: FfiConverterOptionString.read(from: &buf), 
-                statusLabel: FfiConverterOptionString.read(from: &buf), 
+                rootEventId: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
+                lastActivityAt: FfiConverterUInt64.read(from: &buf),
+                title: FfiConverterOptionString.read(from: &buf),
+                summary: FfiConverterOptionString.read(from: &buf),
+                statusLabel: FfiConverterOptionString.read(from: &buf),
                 preview: FfiConverterString.read(from: &buf)
         )
     }
@@ -19749,7 +19749,7 @@ public struct FfiConverterTypeFeedbackThreadSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackThreadSnapshot {
         return
             try FeedbackThreadSnapshot(
-                rows: FfiConverterSequenceTypeFeedbackMessageRowProjection.read(from: &buf), 
+                rows: FfiConverterSequenceTypeFeedbackMessageRowProjection.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -19819,7 +19819,7 @@ public struct FfiConverterTypeFeedbackThreadsSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackThreadsSnapshot {
         return
             try FeedbackThreadsSnapshot(
-                threads: FfiConverterSequenceTypeFeedbackThreadRecord.read(from: &buf), 
+                threads: FfiConverterSequenceTypeFeedbackThreadRecord.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -19889,7 +19889,7 @@ public struct FfiConverterTypeGeneratedAccount: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GeneratedAccount {
         return
             try GeneratedAccount(
-                user: FfiConverterTypeCurrentUser.read(from: &buf), 
+                user: FfiConverterTypeCurrentUser.read(from: &buf),
                 nsec: FfiConverterString.read(from: &buf)
         )
     }
@@ -19971,9 +19971,9 @@ public struct FfiConverterTypeHighlightDetailContentProjection: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightDetailContentProjection {
         return
             try HighlightDetailContentProjection(
-                quoteText: FfiConverterString.read(from: &buf), 
-                noteText: FfiConverterOptionString.read(from: &buf), 
-                pageImageUrl: FfiConverterOptionString.read(from: &buf), 
+                quoteText: FfiConverterString.read(from: &buf),
+                noteText: FfiConverterOptionString.read(from: &buf),
+                pageImageUrl: FfiConverterOptionString.read(from: &buf),
                 shareMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -20149,14 +20149,14 @@ public struct FfiConverterTypeHighlightDetailResourceProjection: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightDetailResourceProjection {
         return
             try HighlightDetailResourceProjection(
-                sourceKind: FfiConverterTypeHighlightSourceKind.read(from: &buf), 
-                kindLabel: FfiConverterString.read(from: &buf), 
-                iconSystemName: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                author: FfiConverterString.read(from: &buf), 
-                coverUrl: FfiConverterOptionString.read(from: &buf), 
-                articleRoute: FfiConverterOptionTypeArticleReaderRoute.read(from: &buf), 
-                bookCatalogId: FfiConverterOptionString.read(from: &buf), 
+                sourceKind: FfiConverterTypeHighlightSourceKind.read(from: &buf),
+                kindLabel: FfiConverterString.read(from: &buf),
+                iconSystemName: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                author: FfiConverterString.read(from: &buf),
+                coverUrl: FfiConverterOptionString.read(from: &buf),
+                articleRoute: FfiConverterOptionTypeArticleReaderRoute.read(from: &buf),
+                bookCatalogId: FfiConverterOptionString.read(from: &buf),
                 webUrl: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -20301,8 +20301,8 @@ public struct FfiConverterTypeHighlightFeedContentProjection: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightFeedContentProjection {
         return
             try HighlightFeedContentProjection(
-                quoteText: FfiConverterString.read(from: &buf), 
-                noteText: FfiConverterOptionString.read(from: &buf), 
+                quoteText: FfiConverterString.read(from: &buf),
+                noteText: FfiConverterOptionString.read(from: &buf),
                 pageImageUrl: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -20447,9 +20447,9 @@ public struct FfiConverterTypeHighlightGroupCardProjection: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightGroupCardProjection {
         return
             try HighlightGroupCardProjection(
-                showHighlightersStrip: FfiConverterBool.read(from: &buf), 
-                visibleHighlighters: FfiConverterSequenceTypeHighlightGroupHighlighterProjection.read(from: &buf), 
-                overflowCount: FfiConverterUInt32.read(from: &buf), 
+                showHighlightersStrip: FfiConverterBool.read(from: &buf),
+                visibleHighlighters: FfiConverterSequenceTypeHighlightGroupHighlighterProjection.read(from: &buf),
+                overflowCount: FfiConverterUInt32.read(from: &buf),
                 highlightersLabelSegments: FfiConverterSequenceTypeHighlightGroupLabelSegment.read(from: &buf)
         )
     }
@@ -20521,7 +20521,7 @@ public struct FfiConverterTypeHighlightGroupCardProjectionInput: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightGroupCardProjectionInput {
         return
             try HighlightGroupCardProjectionInput(
-                items: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf), 
+                items: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf),
                 highlighterProfiles: FfiConverterSequenceTypeHighlightGroupHighlighterProfile.read(from: &buf)
         )
     }
@@ -20591,7 +20591,7 @@ public struct FfiConverterTypeHighlightGroupHighlighterProfile: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightGroupHighlighterProfile {
         return
             try HighlightGroupHighlighterProfile(
-                pubkey: FfiConverterString.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf),
                 profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
         )
     }
@@ -20673,9 +20673,9 @@ public struct FfiConverterTypeHighlightGroupHighlighterProjection: FfiConverterR
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightGroupHighlighterProjection {
         return
             try HighlightGroupHighlighterProjection(
-                pubkey: FfiConverterString.read(from: &buf), 
-                displayName: FfiConverterString.read(from: &buf), 
-                displayInitial: FfiConverterString.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                displayInitial: FfiConverterString.read(from: &buf),
                 pictureUrl: FfiConverterString.read(from: &buf)
         )
     }
@@ -20747,7 +20747,7 @@ public struct FfiConverterTypeHighlightGroupLabelSegment: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightGroupLabelSegment {
         return
             try HighlightGroupLabelSegment(
-                text: FfiConverterString.read(from: &buf), 
+                text: FfiConverterString.read(from: &buf),
                 emphasized: FfiConverterBool.read(from: &buf)
         )
     }
@@ -20807,12 +20807,12 @@ public struct HighlightRecord {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(eventId: String, pubkey: String, quote: String, context: String, note: String, artifactAddress: String, eventReference: String, 
+    public init(eventId: String, pubkey: String, quote: String, context: String, note: String, artifactAddress: String, eventReference: String,
         /**
          * NIP-73 external content identifier from the `i` tag (e.g.
          * `podcast:item:guid:<episode-guid>`, `isbn:…`). Empty when the
          * highlight uses a different reference scheme.
-         */externalReference: String, sourceUrl: String, sourceReferenceKey: String, clipStartSeconds: Double?, clipEndSeconds: Double?, clipSpeaker: String, clipTranscriptSegmentIds: [String], 
+         */externalReference: String, sourceUrl: String, sourceReferenceKey: String, clipStartSeconds: Double?, clipEndSeconds: Double?, clipSpeaker: String, clipTranscriptSegmentIds: [String],
         /**
          * NIP-92 `imeta` image URL — the photo of the page the highlight was
          * captured from (e.g. a Blossom-hosted scan with the passage marked
@@ -20924,21 +20924,21 @@ public struct FfiConverterTypeHighlightRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightRecord {
         return
             try HighlightRecord(
-                eventId: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
-                quote: FfiConverterString.read(from: &buf), 
-                context: FfiConverterString.read(from: &buf), 
-                note: FfiConverterString.read(from: &buf), 
-                artifactAddress: FfiConverterString.read(from: &buf), 
-                eventReference: FfiConverterString.read(from: &buf), 
-                externalReference: FfiConverterString.read(from: &buf), 
-                sourceUrl: FfiConverterString.read(from: &buf), 
-                sourceReferenceKey: FfiConverterString.read(from: &buf), 
-                clipStartSeconds: FfiConverterOptionDouble.read(from: &buf), 
-                clipEndSeconds: FfiConverterOptionDouble.read(from: &buf), 
-                clipSpeaker: FfiConverterString.read(from: &buf), 
-                clipTranscriptSegmentIds: FfiConverterSequenceString.read(from: &buf), 
-                imageUrl: FfiConverterString.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                quote: FfiConverterString.read(from: &buf),
+                context: FfiConverterString.read(from: &buf),
+                note: FfiConverterString.read(from: &buf),
+                artifactAddress: FfiConverterString.read(from: &buf),
+                eventReference: FfiConverterString.read(from: &buf),
+                externalReference: FfiConverterString.read(from: &buf),
+                sourceUrl: FfiConverterString.read(from: &buf),
+                sourceReferenceKey: FfiConverterString.read(from: &buf),
+                clipStartSeconds: FfiConverterOptionDouble.read(from: &buf),
+                clipEndSeconds: FfiConverterOptionDouble.read(from: &buf),
+                clipSpeaker: FfiConverterString.read(from: &buf),
+                clipTranscriptSegmentIds: FfiConverterSequenceString.read(from: &buf),
+                imageUrl: FfiConverterString.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -21022,7 +21022,7 @@ public struct FfiConverterTypeHighlightReferenceBucket: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightReferenceBucket {
         return
             try HighlightReferenceBucket(
-                lookupKey: FfiConverterString.read(from: &buf), 
+                lookupKey: FfiConverterString.read(from: &buf),
                 highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf)
         )
     }
@@ -21102,8 +21102,8 @@ public struct FfiConverterTypeHighlightReferenceTarget: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightReferenceTarget {
         return
             try HighlightReferenceTarget(
-                lowercaseTag: FfiConverterString.read(from: &buf), 
-                value: FfiConverterString.read(from: &buf), 
+                lowercaseTag: FfiConverterString.read(from: &buf),
+                value: FfiConverterString.read(from: &buf),
                 lookupKey: FfiConverterString.read(from: &buf)
         )
     }
@@ -21174,7 +21174,7 @@ public struct FfiConverterTypeHighlightResourceAuthorProfile: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightResourceAuthorProfile {
         return
             try HighlightResourceAuthorProfile(
-                pubkey: FfiConverterString.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf),
                 profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
         )
     }
@@ -21292,15 +21292,15 @@ public struct FfiConverterTypeHighlightResourceHeaderProjection: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightResourceHeaderProjection {
         return
             try HighlightResourceHeaderProjection(
-                sourceKind: FfiConverterTypeHighlightSourceKind.read(from: &buf), 
-                iconSystemName: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                authorOrDomain: FfiConverterString.read(from: &buf), 
-                timeLabel: FfiConverterOptionString.read(from: &buf), 
-                coverUrl: FfiConverterOptionString.read(from: &buf), 
-                bookIsbn: FfiConverterOptionString.read(from: &buf), 
-                articleAddress: FfiConverterOptionString.read(from: &buf), 
-                articleAuthorPubkey: FfiConverterString.read(from: &buf), 
+                sourceKind: FfiConverterTypeHighlightSourceKind.read(from: &buf),
+                iconSystemName: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                authorOrDomain: FfiConverterString.read(from: &buf),
+                timeLabel: FfiConverterOptionString.read(from: &buf),
+                coverUrl: FfiConverterOptionString.read(from: &buf),
+                bookIsbn: FfiConverterOptionString.read(from: &buf),
+                articleAddress: FfiConverterOptionString.read(from: &buf),
+                articleAuthorPubkey: FfiConverterString.read(from: &buf),
                 webMetadataUrl: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -21402,11 +21402,11 @@ public struct FfiConverterTypeHighlightResourceHeaderProjectionInput: FfiConvert
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightResourceHeaderProjectionInput {
         return
             try HighlightResourceHeaderProjectionInput(
-                lead: FfiConverterTypeHydratedHighlight.read(from: &buf), 
-                sourceArticle: FfiConverterOptionTypeArticleRecord.read(from: &buf), 
-                sourceArticleAuthorPubkey: FfiConverterString.read(from: &buf), 
-                articleAuthorProfiles: FfiConverterSequenceTypeHighlightResourceAuthorProfile.read(from: &buf), 
-                bookPreview: FfiConverterOptionTypeArtifactPreview.read(from: &buf), 
+                lead: FfiConverterTypeHydratedHighlight.read(from: &buf),
+                sourceArticle: FfiConverterOptionTypeArticleRecord.read(from: &buf),
+                sourceArticleAuthorPubkey: FfiConverterString.read(from: &buf),
+                articleAuthorProfiles: FfiConverterSequenceTypeHighlightResourceAuthorProfile.read(from: &buf),
+                bookPreview: FfiConverterOptionTypeArtifactPreview.read(from: &buf),
                 webMetadata: FfiConverterOptionTypeWebMetadata.read(from: &buf)
         )
     }
@@ -21486,8 +21486,8 @@ public struct FfiConverterTypeHighlightShareUrlSnapshot: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightShareUrlSnapshot {
         return
             try HighlightShareUrlSnapshot(
-                shareUrl: FfiConverterOptionString.read(from: &buf), 
-                ready: FfiConverterBool.read(from: &buf), 
+                shareUrl: FfiConverterOptionString.read(from: &buf),
+                ready: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -21575,9 +21575,9 @@ public struct FfiConverterTypeHomeFeedItem: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HomeFeedItem {
         return
             try HomeFeedItem(
-                stableId: FfiConverterString.read(from: &buf), 
-                sortKey: FfiConverterUInt64.read(from: &buf), 
-                highlights: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf), 
+                stableId: FfiConverterString.read(from: &buf),
+                sortKey: FfiConverterUInt64.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf),
                 read: FfiConverterOptionTypeReadingFeedItem.read(from: &buf)
         )
     }
@@ -21649,7 +21649,7 @@ public struct FfiConverterTypeHomeFeedSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HomeFeedSnapshot {
         return
             try HomeFeedSnapshot(
-                items: FfiConverterSequenceTypeHomeFeedItem.read(from: &buf), 
+                items: FfiConverterSequenceTypeHomeFeedItem.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -21817,10 +21817,10 @@ public struct HydratedHighlight {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(highlight: HighlightRecord, artifact: ArtifactRecord?, 
+    public init(highlight: HighlightRecord, artifact: ArtifactRecord?,
         /**
          * If this highlight arrived via a kind:16 repost, this is the id of the repost event.
-         */sharedByEventId: String?, 
+         */sharedByEventId: String?,
         /**
          * The author of the repost (may differ from highlight author).
          */sharedByPubkey: String?) {
@@ -21870,9 +21870,9 @@ public struct FfiConverterTypeHydratedHighlight: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HydratedHighlight {
         return
             try HydratedHighlight(
-                highlight: FfiConverterTypeHighlightRecord.read(from: &buf), 
-                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf), 
-                sharedByEventId: FfiConverterOptionString.read(from: &buf), 
+                highlight: FfiConverterTypeHighlightRecord.read(from: &buf),
+                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf),
+                sharedByEventId: FfiConverterOptionString.read(from: &buf),
                 sharedByPubkey: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -21956,9 +21956,9 @@ public struct FfiConverterTypeImportRelayRow: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRelayRow {
         return
             try ImportRelayRow(
-                config: FfiConverterTypeRelayConfig.read(from: &buf), 
-                displayUrl: FfiConverterString.read(from: &buf), 
-                roleLabel: FfiConverterString.read(from: &buf), 
+                config: FfiConverterTypeRelayConfig.read(from: &buf),
+                displayUrl: FfiConverterString.read(from: &buf),
+                roleLabel: FfiConverterString.read(from: &buf),
                 isSelected: FfiConverterBool.read(from: &buf)
         )
     }
@@ -22098,8 +22098,8 @@ public struct FfiConverterTypeImportRelaysFetchApplyProjection: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRelaysFetchApplyProjection {
         return
             try ImportRelaysFetchApplyProjection(
-                fetched: FfiConverterSequenceTypeRelayConfig.read(from: &buf), 
-                selectedUrls: FfiConverterSequenceString.read(from: &buf), 
+                fetched: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
+                selectedUrls: FfiConverterSequenceString.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -22176,8 +22176,8 @@ public struct FfiConverterTypeImportRelaysFetchSnapshot: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRelaysFetchSnapshot {
         return
             try ImportRelaysFetchSnapshot(
-                fetched: FfiConverterSequenceTypeRelayConfig.read(from: &buf), 
-                selectedUrls: FfiConverterSequenceString.read(from: &buf), 
+                fetched: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
+                selectedUrls: FfiConverterSequenceString.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -22266,10 +22266,10 @@ public struct FfiConverterTypeImportRelaysProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRelaysProjection {
         return
             try ImportRelaysProjection(
-                rows: FfiConverterSequenceTypeImportRelayRow.read(from: &buf), 
-                selectedCount: FfiConverterUInt64.read(from: &buf), 
-                foundTitle: FfiConverterString.read(from: &buf), 
-                canApply: FfiConverterBool.read(from: &buf), 
+                rows: FfiConverterSequenceTypeImportRelayRow.read(from: &buf),
+                selectedCount: FfiConverterUInt64.read(from: &buf),
+                foundTitle: FfiConverterString.read(from: &buf),
+                canApply: FfiConverterBool.read(from: &buf),
                 selectedConfigs: FfiConverterSequenceTypeRelayConfig.read(from: &buf)
         )
     }
@@ -22342,7 +22342,7 @@ public struct FfiConverterTypeImportRelaysProjectionInput: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRelaysProjectionInput {
         return
             try ImportRelaysProjectionInput(
-                fetched: FfiConverterSequenceTypeRelayConfig.read(from: &buf), 
+                fetched: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
                 selectedUrls: FfiConverterSequenceString.read(from: &buf)
         )
     }
@@ -22416,7 +22416,7 @@ public struct FfiConverterTypeImportRelaysSourceProjection: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRelaysSourceProjection {
         return
             try ImportRelaysSourceProjection(
-                submitNpub: FfiConverterString.read(from: &buf), 
+                submitNpub: FfiConverterString.read(from: &buf),
                 canFetch: FfiConverterBool.read(from: &buf)
         )
     }
@@ -22489,7 +22489,7 @@ public struct FfiConverterTypeImportRelaysSourceProjectionInput: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ImportRelaysSourceProjectionInput {
         return
             try ImportRelaysSourceProjectionInput(
-                npub: FfiConverterString.read(from: &buf), 
+                npub: FfiConverterString.read(from: &buf),
                 isFetching: FfiConverterBool.read(from: &buf)
         )
     }
@@ -22565,8 +22565,8 @@ public struct FfiConverterTypeIsbnManualPreviewProjection: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IsbnManualPreviewProjection {
         return
             try IsbnManualPreviewProjection(
-                title: FfiConverterString.read(from: &buf), 
-                author: FfiConverterString.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf),
+                author: FfiConverterString.read(from: &buf),
                 canUse: FfiConverterBool.read(from: &buf)
         )
     }
@@ -22637,7 +22637,7 @@ public struct FfiConverterTypeIsbnManualPreviewProjectionInput: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IsbnManualPreviewProjectionInput {
         return
             try IsbnManualPreviewProjectionInput(
-                title: FfiConverterString.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf),
                 author: FfiConverterString.read(from: &buf)
         )
     }
@@ -22707,7 +22707,7 @@ public struct FfiConverterTypeIsbnPreviewLookupApplyInput: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IsbnPreviewLookupApplyInput {
         return
             try IsbnPreviewLookupApplyInput(
-                preview: FfiConverterOptionTypeArtifactPreview.read(from: &buf), 
+                preview: FfiConverterOptionTypeArtifactPreview.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -22777,7 +22777,7 @@ public struct FfiConverterTypeIsbnPreviewLookupApplyProjection: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IsbnPreviewLookupApplyProjection {
         return
             try IsbnPreviewLookupApplyProjection(
-                preview: FfiConverterOptionTypeArtifactPreview.read(from: &buf), 
+                preview: FfiConverterOptionTypeArtifactPreview.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -22847,7 +22847,7 @@ public struct FfiConverterTypeIsbnPreviewLookupSnapshot: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IsbnPreviewLookupSnapshot {
         return
             try IsbnPreviewLookupSnapshot(
-                preview: FfiConverterOptionTypeArtifactPreview.read(from: &buf), 
+                preview: FfiConverterOptionTypeArtifactPreview.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -22917,7 +22917,7 @@ public struct FfiConverterTypeIsbnPreviewRequestProjection: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> IsbnPreviewRequestProjection {
         return
             try IsbnPreviewRequestProjection(
-                normalizedIsbn: FfiConverterString.read(from: &buf), 
+                normalizedIsbn: FfiConverterString.read(from: &buf),
                 canRequest: FfiConverterBool.read(from: &buf)
         )
     }
@@ -23055,8 +23055,8 @@ public struct FfiConverterTypeJoinRoomRequestSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> JoinRoomRequestSnapshot {
         return
             try JoinRoomRequestSnapshot(
-                groupId: FfiConverterString.read(from: &buf), 
-                eventId: FfiConverterString.read(from: &buf), 
+                groupId: FfiConverterString.read(from: &buf),
+                eventId: FfiConverterString.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -23127,7 +23127,7 @@ public struct FfiConverterTypeJoinedCommunitiesSnapshot: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> JoinedCommunitiesSnapshot {
         return
             try JoinedCommunitiesSnapshot(
-                communities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf), 
+                communities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -23259,7 +23259,7 @@ public struct FfiConverterTypeJoinedCommunitiesSnapshotApplyProjection: FfiConve
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> JoinedCommunitiesSnapshotApplyProjection {
         return
             try JoinedCommunitiesSnapshotApplyProjection(
-                shouldApplyCommunities: FfiConverterBool.read(from: &buf), 
+                shouldApplyCommunities: FfiConverterBool.read(from: &buf),
                 communities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf)
         )
     }
@@ -23329,7 +23329,7 @@ public struct FfiConverterTypeMutationSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MutationSnapshot {
         return
             try MutationSnapshot(
-                applied: FfiConverterBool.read(from: &buf), 
+                applied: FfiConverterBool.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -23399,7 +23399,7 @@ public struct FfiConverterTypeNetworkCacheStatsSnapshot: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkCacheStatsSnapshot {
         return
             try NetworkCacheStatsSnapshot(
-                stats: FfiConverterOptionTypeCacheStats.read(from: &buf), 
+                stats: FfiConverterOptionTypeCacheStats.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -23475,8 +23475,8 @@ public struct FfiConverterTypeNetworkDiagnosticsSnapshot: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkDiagnosticsSnapshot {
         return
             try NetworkDiagnosticsSnapshot(
-                diagnostics: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf), 
-                projection: FfiConverterTypeRelaySettingsProjection.read(from: &buf), 
+                diagnostics: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf),
+                projection: FfiConverterTypeRelaySettingsProjection.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -23615,8 +23615,8 @@ public struct FfiConverterTypeNetworkDiagnosticsSnapshotApplyProjection: FfiConv
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkDiagnosticsSnapshotApplyProjection {
         return
             try NetworkDiagnosticsSnapshotApplyProjection(
-                diagnostics: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf), 
-                settingsProjection: FfiConverterTypeRelaySettingsProjection.read(from: &buf), 
+                diagnostics: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf),
+                settingsProjection: FfiConverterTypeRelaySettingsProjection.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -23705,10 +23705,10 @@ public struct FfiConverterTypeNetworkPathPolicySnapshot: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkPathPolicySnapshot {
         return
             try NetworkPathPolicySnapshot(
-                wifiOnlyEnabled: FfiConverterBool.read(from: &buf), 
-                pathMonitorEnabled: FfiConverterBool.read(from: &buf), 
-                isWifi: FfiConverterBool.read(from: &buf), 
-                relayAction: FfiConverterTypeNetworkRelayConnectionPolicyAction.read(from: &buf), 
+                wifiOnlyEnabled: FfiConverterBool.read(from: &buf),
+                pathMonitorEnabled: FfiConverterBool.read(from: &buf),
+                isWifi: FfiConverterBool.read(from: &buf),
+                relayAction: FfiConverterTypeNetworkRelayConnectionPolicyAction.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -23843,7 +23843,7 @@ public struct FfiConverterTypeNetworkSettingsMutationApplyProjection: FfiConvert
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkSettingsMutationApplyProjection {
         return
             try NetworkSettingsMutationApplyProjection(
-                shouldReload: FfiConverterBool.read(from: &buf), 
+                shouldReload: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -23919,8 +23919,8 @@ public struct FfiConverterTypeNetworkSettingsMutationSnapshot: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkSettingsMutationSnapshot {
         return
             try NetworkSettingsMutationSnapshot(
-                applied: FfiConverterBool.read(from: &buf), 
-                shouldReload: FfiConverterBool.read(from: &buf), 
+                applied: FfiConverterBool.read(from: &buf),
+                shouldReload: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -24009,10 +24009,10 @@ public struct FfiConverterTypeNetworkSettingsSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkSettingsSnapshot {
         return
             try NetworkSettingsSnapshot(
-                relays: FfiConverterSequenceTypeRelayConfig.read(from: &buf), 
-                diagnostics: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf), 
-                projection: FfiConverterTypeRelaySettingsProjection.read(from: &buf), 
-                wifiOnlyEnabled: FfiConverterBool.read(from: &buf), 
+                relays: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
+                diagnostics: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf),
+                projection: FfiConverterTypeRelaySettingsProjection.read(from: &buf),
+                wifiOnlyEnabled: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -24171,11 +24171,11 @@ public struct FfiConverterTypeNetworkSettingsSnapshotApplyProjection: FfiConvert
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkSettingsSnapshotApplyProjection {
         return
             try NetworkSettingsSnapshotApplyProjection(
-                relays: FfiConverterSequenceTypeRelayConfig.read(from: &buf), 
-                diagnostics: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf), 
-                settingsProjection: FfiConverterTypeRelaySettingsProjection.read(from: &buf), 
-                wifiOnlyEnabled: FfiConverterBool.read(from: &buf), 
-                pathMonitorEnabled: FfiConverterBool.read(from: &buf), 
+                relays: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
+                diagnostics: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf),
+                settingsProjection: FfiConverterTypeRelaySettingsProjection.read(from: &buf),
+                wifiOnlyEnabled: FfiConverterBool.read(from: &buf),
+                pathMonitorEnabled: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -24317,8 +24317,8 @@ public struct FfiConverterTypeNetworkWifiOnlyPreferenceApplyProjection: FfiConve
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkWifiOnlyPreferenceApplyProjection {
         return
             try NetworkWifiOnlyPreferenceApplyProjection(
-                wifiOnlyEnabled: FfiConverterBool.read(from: &buf), 
-                pathMonitorEnabled: FfiConverterBool.read(from: &buf), 
+                wifiOnlyEnabled: FfiConverterBool.read(from: &buf),
+                pathMonitorEnabled: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -24401,9 +24401,9 @@ public struct FfiConverterTypeNetworkWifiOnlyPreferenceSnapshot: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkWifiOnlyPreferenceSnapshot {
         return
             try NetworkWifiOnlyPreferenceSnapshot(
-                applied: FfiConverterBool.read(from: &buf), 
-                wifiOnlyEnabled: FfiConverterBool.read(from: &buf), 
-                pathMonitorEnabled: FfiConverterBool.read(from: &buf), 
+                applied: FfiConverterBool.read(from: &buf),
+                wifiOnlyEnabled: FfiConverterBool.read(from: &buf),
+                pathMonitorEnabled: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -24487,9 +24487,9 @@ public struct FfiConverterTypeNip05Availability: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip05Availability {
         return
             try Nip05Availability(
-                valid: FfiConverterBool.read(from: &buf), 
-                available: FfiConverterBool.read(from: &buf), 
-                identifier: FfiConverterString.read(from: &buf), 
+                valid: FfiConverterBool.read(from: &buf),
+                available: FfiConverterBool.read(from: &buf),
+                identifier: FfiConverterString.read(from: &buf),
                 domain: FfiConverterString.read(from: &buf)
         )
     }
@@ -24573,9 +24573,9 @@ public struct FfiConverterTypeNip05AvailabilitySnapshot: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip05AvailabilitySnapshot {
         return
             try Nip05AvailabilitySnapshot(
-                state: FfiConverterTypeNip05AvailabilityState.read(from: &buf), 
-                identifier: FfiConverterString.read(from: &buf), 
-                domain: FfiConverterString.read(from: &buf), 
+                state: FfiConverterTypeNip05AvailabilityState.read(from: &buf),
+                identifier: FfiConverterString.read(from: &buf),
+                domain: FfiConverterString.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -24653,8 +24653,8 @@ public struct FfiConverterTypeNip05RegistrationSnapshot: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip05RegistrationSnapshot {
         return
             try Nip05RegistrationSnapshot(
-                identifier: FfiConverterOptionString.read(from: &buf), 
-                succeeded: FfiConverterBool.read(from: &buf), 
+                identifier: FfiConverterOptionString.read(from: &buf),
+                succeeded: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -24705,7 +24705,7 @@ public struct Nip11Document {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(url: String, name: String?, description: String?, pubkey: String?, contact: String?, software: String?, version: String?, supportedNips: [UInt32], 
+    public init(url: String, name: String?, description: String?, pubkey: String?, contact: String?, software: String?, version: String?, supportedNips: [UInt32],
         /**
          * URL of the relay's icon / avatar (NIP-11 `icon`). Typically an
          * https:// URL the Swift side can hand to Kingfisher.
@@ -24781,14 +24781,14 @@ public struct FfiConverterTypeNip11Document: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip11Document {
         return
             try Nip11Document(
-                url: FfiConverterString.read(from: &buf), 
-                name: FfiConverterOptionString.read(from: &buf), 
-                description: FfiConverterOptionString.read(from: &buf), 
-                pubkey: FfiConverterOptionString.read(from: &buf), 
-                contact: FfiConverterOptionString.read(from: &buf), 
-                software: FfiConverterOptionString.read(from: &buf), 
-                version: FfiConverterOptionString.read(from: &buf), 
-                supportedNips: FfiConverterSequenceUInt32.read(from: &buf), 
+                url: FfiConverterString.read(from: &buf),
+                name: FfiConverterOptionString.read(from: &buf),
+                description: FfiConverterOptionString.read(from: &buf),
+                pubkey: FfiConverterOptionString.read(from: &buf),
+                contact: FfiConverterOptionString.read(from: &buf),
+                software: FfiConverterOptionString.read(from: &buf),
+                version: FfiConverterOptionString.read(from: &buf),
+                supportedNips: FfiConverterSequenceUInt32.read(from: &buf),
                 icon: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -24871,8 +24871,8 @@ public struct FfiConverterTypeNostrConnectStartSnapshot: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrConnectStartSnapshot {
         return
             try NostrConnectStartSnapshot(
-                uri: FfiConverterString.read(from: &buf), 
-                started: FfiConverterBool.read(from: &buf), 
+                uri: FfiConverterString.read(from: &buf),
+                started: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -24955,9 +24955,9 @@ public struct FfiConverterTypeNostrEntityArticleCardProjection: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityArticleCardProjection {
         return
             try NostrEntityArticleCardProjection(
-                displayTitle: FfiConverterString.read(from: &buf), 
-                imageUrl: FfiConverterOptionString.read(from: &buf), 
-                summary: FfiConverterOptionString.read(from: &buf), 
+                displayTitle: FfiConverterString.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf),
+                summary: FfiConverterOptionString.read(from: &buf),
                 readerRoute: FfiConverterOptionTypeArticleReaderRoute.read(from: &buf)
         )
     }
@@ -25068,7 +25068,7 @@ public struct NostrEntityEvent {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(eventIdHex: String, kind: UInt32, renderKind: NostrEntityRenderKind, pubkeyHex: String, content: String, createdAt: UInt64, 
+    public init(eventIdHex: String, kind: UInt32, renderKind: NostrEntityRenderKind, pubkeyHex: String, content: String, createdAt: UInt64,
         /**
          * Serialised `[["k", "v"], …]` so Swift can extract `title` /
          * `image` etc. for an article card without needing a second FFI
@@ -25135,12 +25135,12 @@ public struct FfiConverterTypeNostrEntityEvent: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityEvent {
         return
             try NostrEntityEvent(
-                eventIdHex: FfiConverterString.read(from: &buf), 
-                kind: FfiConverterUInt32.read(from: &buf), 
-                renderKind: FfiConverterTypeNostrEntityRenderKind.read(from: &buf), 
-                pubkeyHex: FfiConverterString.read(from: &buf), 
-                content: FfiConverterString.read(from: &buf), 
-                createdAt: FfiConverterUInt64.read(from: &buf), 
+                eventIdHex: FfiConverterString.read(from: &buf),
+                kind: FfiConverterUInt32.read(from: &buf),
+                renderKind: FfiConverterTypeNostrEntityRenderKind.read(from: &buf),
+                pubkeyHex: FfiConverterString.read(from: &buf),
+                content: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
                 tagsJson: FfiConverterString.read(from: &buf)
         )
     }
@@ -25221,8 +25221,8 @@ public struct FfiConverterTypeNostrEntityRefSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityRefSnapshot {
         return
             try NostrEntityRefSnapshot(
-                entity: FfiConverterOptionTypeNostrEntityRef.read(from: &buf), 
-                decoded: FfiConverterBool.read(from: &buf), 
+                entity: FfiConverterOptionTypeNostrEntityRef.read(from: &buf),
+                decoded: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -25299,8 +25299,8 @@ public struct FfiConverterTypeNostrEntityResolutionSnapshot: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityResolutionSnapshot {
         return
             try NostrEntityResolutionSnapshot(
-                event: FfiConverterOptionTypeNostrEntityEvent.read(from: &buf), 
-                resolved: FfiConverterBool.read(from: &buf), 
+                event: FfiConverterOptionTypeNostrEntityEvent.read(from: &buf),
+                resolved: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -25383,9 +25383,9 @@ public struct FfiConverterTypeOcrLine: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OcrLine {
         return
             try OcrLine(
-                text: FfiConverterString.read(from: &buf), 
-                bbox: FfiConverterTypeOcrRect.read(from: &buf), 
-                confidence: FfiConverterFloat.read(from: &buf), 
+                text: FfiConverterString.read(from: &buf),
+                bbox: FfiConverterTypeOcrRect.read(from: &buf),
+                confidence: FfiConverterFloat.read(from: &buf),
                 words: FfiConverterSequenceTypeOcrWord.read(from: &buf)
         )
     }
@@ -25457,7 +25457,7 @@ public struct FfiConverterTypeOcrPageDetection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OcrPageDetection {
         return
             try OcrPageDetection(
-                pageRect: FfiConverterTypeOcrRect.read(from: &buf), 
+                pageRect: FfiConverterTypeOcrRect.read(from: &buf),
                 chosenSide: FfiConverterTypeOcrPageSide.read(from: &buf)
         )
     }
@@ -25539,9 +25539,9 @@ public struct FfiConverterTypeOcrRect: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OcrRect {
         return
             try OcrRect(
-                x: FfiConverterDouble.read(from: &buf), 
-                y: FfiConverterDouble.read(from: &buf), 
-                w: FfiConverterDouble.read(from: &buf), 
+                x: FfiConverterDouble.read(from: &buf),
+                y: FfiConverterDouble.read(from: &buf),
+                w: FfiConverterDouble.read(from: &buf),
                 h: FfiConverterDouble.read(from: &buf)
         )
     }
@@ -25619,8 +25619,8 @@ public struct FfiConverterTypeOcrWord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OcrWord {
         return
             try OcrWord(
-                text: FfiConverterString.read(from: &buf), 
-                bbox: FfiConverterTypeOcrRect.read(from: &buf), 
+                text: FfiConverterString.read(from: &buf),
+                bbox: FfiConverterTypeOcrRect.read(from: &buf),
                 confidence: FfiConverterFloat.read(from: &buf)
         )
     }
@@ -25697,8 +25697,8 @@ public struct FfiConverterTypeOnboardingCreateAccountProjection: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingCreateAccountProjection {
         return
             try OnboardingCreateAccountProjection(
-                displayName: FfiConverterString.read(from: &buf), 
-                username: FfiConverterString.read(from: &buf), 
+                displayName: FfiConverterString.read(from: &buf),
+                username: FfiConverterString.read(from: &buf),
                 canContinue: FfiConverterBool.read(from: &buf)
         )
     }
@@ -25781,9 +25781,9 @@ public struct FfiConverterTypeOnboardingCreateAccountProjectionInput: FfiConvert
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingCreateAccountProjectionInput {
         return
             try OnboardingCreateAccountProjectionInput(
-                displayName: FfiConverterString.read(from: &buf), 
-                username: FfiConverterString.read(from: &buf), 
-                usernameAvailable: FfiConverterBool.read(from: &buf), 
+                displayName: FfiConverterString.read(from: &buf),
+                username: FfiConverterString.read(from: &buf),
+                usernameAvailable: FfiConverterBool.read(from: &buf),
                 isWorking: FfiConverterBool.read(from: &buf)
         )
     }
@@ -25861,8 +25861,8 @@ public struct FfiConverterTypeOnboardingInterest: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingInterest {
         return
             try OnboardingInterest(
-                id: FfiConverterString.read(from: &buf), 
-                emoji: FfiConverterString.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf),
+                emoji: FfiConverterString.read(from: &buf),
                 label: FfiConverterString.read(from: &buf)
         )
     }
@@ -25945,9 +25945,9 @@ public struct FfiConverterTypeOnboardingInterestChip: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingInterestChip {
         return
             try OnboardingInterestChip(
-                id: FfiConverterString.read(from: &buf), 
-                emoji: FfiConverterString.read(from: &buf), 
-                label: FfiConverterString.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf),
+                emoji: FfiConverterString.read(from: &buf),
+                label: FfiConverterString.read(from: &buf),
                 isSelected: FfiConverterBool.read(from: &buf)
         )
     }
@@ -26019,7 +26019,7 @@ public struct FfiConverterTypeOnboardingInterestProjection: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingInterestProjection {
         return
             try OnboardingInterestProjection(
-                interests: FfiConverterSequenceTypeOnboardingInterestChip.read(from: &buf), 
+                interests: FfiConverterSequenceTypeOnboardingInterestChip.read(from: &buf),
                 selection: FfiConverterTypeOnboardingInterestSelection.read(from: &buf)
         )
     }
@@ -26107,10 +26107,10 @@ public struct FfiConverterTypeOnboardingInterestSelection: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingInterestSelection {
         return
             try OnboardingInterestSelection(
-                minimumRequired: FfiConverterUInt32.read(from: &buf), 
-                selectedCount: FfiConverterUInt32.read(from: &buf), 
-                remaining: FfiConverterUInt32.read(from: &buf), 
-                canContinue: FfiConverterBool.read(from: &buf), 
+                minimumRequired: FfiConverterUInt32.read(from: &buf),
+                selectedCount: FfiConverterUInt32.read(from: &buf),
+                remaining: FfiConverterUInt32.read(from: &buf),
+                canContinue: FfiConverterBool.read(from: &buf),
                 followPubkeys: FfiConverterSequenceString.read(from: &buf)
         )
     }
@@ -26189,8 +26189,8 @@ public struct FfiConverterTypeOnboardingUsernameCheckProjection: FfiConverterRus
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingUsernameCheckProjection {
         return
             try OnboardingUsernameCheckProjection(
-                username: FfiConverterString.read(from: &buf), 
-                hasUsername: FfiConverterBool.read(from: &buf), 
+                username: FfiConverterString.read(from: &buf),
+                hasUsername: FfiConverterBool.read(from: &buf),
                 valid: FfiConverterBool.read(from: &buf)
         )
     }
@@ -26291,12 +26291,12 @@ public struct FfiConverterTypePodcastClipComposerInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastClipComposerInput {
         return
             try PodcastClipComposerInput(
-                segments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf), 
-                transcriptAvailable: FfiConverterBool.read(from: &buf), 
-                clipStartSeconds: FfiConverterDouble.read(from: &buf), 
-                clipEndSeconds: FfiConverterDouble.read(from: &buf), 
-                durationSeconds: FfiConverterDouble.read(from: &buf), 
-                selectedGroupId: FfiConverterOptionString.read(from: &buf), 
+                segments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf),
+                transcriptAvailable: FfiConverterBool.read(from: &buf),
+                clipStartSeconds: FfiConverterDouble.read(from: &buf),
+                clipEndSeconds: FfiConverterDouble.read(from: &buf),
+                durationSeconds: FfiConverterDouble.read(from: &buf),
+                selectedGroupId: FfiConverterOptionString.read(from: &buf),
                 joinedCommunities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf)
         )
     }
@@ -26449,20 +26449,20 @@ public struct FfiConverterTypePodcastClipComposerProjection: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastClipComposerProjection {
         return
             try PodcastClipComposerProjection(
-                matchingSegments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf), 
-                excerpt: FfiConverterString.read(from: &buf), 
-                speaker: FfiConverterString.read(from: &buf), 
-                durationSeconds: FfiConverterDouble.read(from: &buf), 
-                clipStartLabel: FfiConverterString.read(from: &buf), 
-                clipEndLabel: FfiConverterString.read(from: &buf), 
-                durationLabel: FfiConverterString.read(from: &buf), 
-                subtitleLabel: FfiConverterString.read(from: &buf), 
-                timeOnlyMessage: FfiConverterString.read(from: &buf), 
-                hasTranscript: FfiConverterBool.read(from: &buf), 
-                canPublish: FfiConverterBool.read(from: &buf), 
-                communityName: FfiConverterString.read(from: &buf), 
-                communityDisplayName: FfiConverterString.read(from: &buf), 
-                hasCommunity: FfiConverterBool.read(from: &buf), 
+                matchingSegments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf),
+                excerpt: FfiConverterString.read(from: &buf),
+                speaker: FfiConverterString.read(from: &buf),
+                durationSeconds: FfiConverterDouble.read(from: &buf),
+                clipStartLabel: FfiConverterString.read(from: &buf),
+                clipEndLabel: FfiConverterString.read(from: &buf),
+                durationLabel: FfiConverterString.read(from: &buf),
+                subtitleLabel: FfiConverterString.read(from: &buf),
+                timeOnlyMessage: FfiConverterString.read(from: &buf),
+                hasTranscript: FfiConverterBool.read(from: &buf),
+                canPublish: FfiConverterBool.read(from: &buf),
+                communityName: FfiConverterString.read(from: &buf),
+                communityDisplayName: FfiConverterString.read(from: &buf),
+                hasCommunity: FfiConverterBool.read(from: &buf),
                 selectedSegmentIds: FfiConverterSequenceString.read(from: &buf)
         )
     }
@@ -26575,12 +26575,12 @@ public struct FfiConverterTypePodcastClipComposerPublishInput: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastClipComposerPublishInput {
         return
             try PodcastClipComposerPublishInput(
-                artifact: FfiConverterTypeArtifactRecord.read(from: &buf), 
-                segments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf), 
-                transcriptAvailable: FfiConverterBool.read(from: &buf), 
-                context: FfiConverterString.read(from: &buf), 
-                clipStartSeconds: FfiConverterDouble.read(from: &buf), 
-                clipEndSeconds: FfiConverterDouble.read(from: &buf), 
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
+                segments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf),
+                transcriptAvailable: FfiConverterBool.read(from: &buf),
+                context: FfiConverterString.read(from: &buf),
+                clipStartSeconds: FfiConverterDouble.read(from: &buf),
+                clipEndSeconds: FfiConverterDouble.read(from: &buf),
                 targetGroupId: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -26691,13 +26691,13 @@ public struct FfiConverterTypePodcastClipPublishInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastClipPublishInput {
         return
             try PodcastClipPublishInput(
-                artifact: FfiConverterTypeArtifactRecord.read(from: &buf), 
-                targetGroupId: FfiConverterString.read(from: &buf), 
-                note: FfiConverterString.read(from: &buf), 
-                segments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf), 
-                selectedSegmentIds: FfiConverterSequenceString.read(from: &buf), 
-                clipStartSeconds: FfiConverterOptionDouble.read(from: &buf), 
-                clipEndSeconds: FfiConverterOptionDouble.read(from: &buf), 
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
+                targetGroupId: FfiConverterString.read(from: &buf),
+                note: FfiConverterString.read(from: &buf),
+                segments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf),
+                selectedSegmentIds: FfiConverterSequenceString.read(from: &buf),
+                clipStartSeconds: FfiConverterOptionDouble.read(from: &buf),
+                clipEndSeconds: FfiConverterOptionDouble.read(from: &buf),
                 clipSpeaker: FfiConverterString.read(from: &buf)
         )
     }
@@ -26847,9 +26847,9 @@ public struct FfiConverterTypePodcastClipPublishResultProjection: FfiConverterRu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastClipPublishResultProjection {
         return
             try PodcastClipPublishResultProjection(
-                didPublish: FfiConverterBool.read(from: &buf), 
-                errorMessage: FfiConverterOptionString.read(from: &buf), 
-                shareToast: FfiConverterOptionString.read(from: &buf), 
+                didPublish: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf),
+                shareToast: FfiConverterOptionString.read(from: &buf),
                 shouldDismiss: FfiConverterBool.read(from: &buf)
         )
     }
@@ -26921,7 +26921,7 @@ public struct FfiConverterTypePodcastClipPublishSnapshot: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastClipPublishSnapshot {
         return
             try PodcastClipPublishSnapshot(
-                highlight: FfiConverterOptionTypeHighlightRecord.read(from: &buf), 
+                highlight: FfiConverterOptionTypeHighlightRecord.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -27003,9 +27003,9 @@ public struct FfiConverterTypePodcastClipSelection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastClipSelection {
         return
             try PodcastClipSelection(
-                clipStartSeconds: FfiConverterOptionDouble.read(from: &buf), 
-                clipEndSeconds: FfiConverterOptionDouble.read(from: &buf), 
-                speaker: FfiConverterString.read(from: &buf), 
+                clipStartSeconds: FfiConverterOptionDouble.read(from: &buf),
+                clipEndSeconds: FfiConverterOptionDouble.read(from: &buf),
+                speaker: FfiConverterString.read(from: &buf),
                 selectedSegmentIds: FfiConverterSequenceString.read(from: &buf)
         )
     }
@@ -27077,7 +27077,7 @@ public struct FfiConverterTypePodcastListeningClipsSnapshot: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastListeningClipsSnapshot {
         return
             try PodcastListeningClipsSnapshot(
-                clips: FfiConverterSequenceTypeHighlightRecord.read(from: &buf), 
+                clips: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -27189,14 +27189,14 @@ public struct FfiConverterTypePodcastListeningProjection: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastListeningProjection {
         return
             try PodcastListeningProjection(
-                showTitle: FfiConverterString.read(from: &buf), 
-                episodeTitle: FfiConverterString.read(from: &buf), 
-                imageUrl: FfiConverterString.read(from: &buf), 
-                episodeMeta: FfiConverterString.read(from: &buf), 
-                hasChapters: FfiConverterBool.read(from: &buf), 
-                clipCount: FfiConverterUInt64.read(from: &buf), 
-                rows: FfiConverterSequenceTypePodcastTimelineRow.read(from: &buf), 
-                activeRowId: FfiConverterOptionString.read(from: &buf), 
+                showTitle: FfiConverterString.read(from: &buf),
+                episodeTitle: FfiConverterString.read(from: &buf),
+                imageUrl: FfiConverterString.read(from: &buf),
+                episodeMeta: FfiConverterString.read(from: &buf),
+                hasChapters: FfiConverterBool.read(from: &buf),
+                clipCount: FfiConverterUInt64.read(from: &buf),
+                rows: FfiConverterSequenceTypePodcastTimelineRow.read(from: &buf),
+                activeRowId: FfiConverterOptionString.read(from: &buf),
                 currentSpeakerOrTimestamp: FfiConverterString.read(from: &buf)
         )
     }
@@ -27321,15 +27321,15 @@ public struct FfiConverterTypePodcastListeningProjectionInput: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastListeningProjectionInput {
         return
             try PodcastListeningProjectionInput(
-                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf), 
-                clips: FfiConverterSequenceTypeHighlightRecord.read(from: &buf), 
-                transcriptSegments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf), 
-                transcriptAvailable: FfiConverterBool.read(from: &buf), 
-                showTranscript: FfiConverterBool.read(from: &buf), 
-                showChapters: FfiConverterBool.read(from: &buf), 
-                showClips: FfiConverterBool.read(from: &buf), 
-                playerDurationSeconds: FfiConverterDouble.read(from: &buf), 
-                currentTimeSeconds: FfiConverterDouble.read(from: &buf), 
+                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf),
+                clips: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
+                transcriptSegments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf),
+                transcriptAvailable: FfiConverterBool.read(from: &buf),
+                showTranscript: FfiConverterBool.read(from: &buf),
+                showChapters: FfiConverterBool.read(from: &buf),
+                showClips: FfiConverterBool.read(from: &buf),
+                playerDurationSeconds: FfiConverterDouble.read(from: &buf),
+                currentTimeSeconds: FfiConverterDouble.read(from: &buf),
                 waveformTickWindowSeconds: FfiConverterDouble.read(from: &buf)
         )
     }
@@ -27413,8 +27413,8 @@ public struct FfiConverterTypePodcastNowPlayingProjection: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastNowPlayingProjection {
         return
             try PodcastNowPlayingProjection(
-                showTitle: FfiConverterString.read(from: &buf), 
-                episodeTitle: FfiConverterString.read(from: &buf), 
+                showTitle: FfiConverterString.read(from: &buf),
+                episodeTitle: FfiConverterString.read(from: &buf),
                 imageUrl: FfiConverterString.read(from: &buf)
         )
     }
@@ -27547,7 +27547,7 @@ public struct FfiConverterTypePodcastPlaybackPositionInput: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPlaybackPositionInput {
         return
             try PodcastPlaybackPositionInput(
-                artifact: FfiConverterTypeArtifactRecord.read(from: &buf), 
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
                 positionSeconds: FfiConverterDouble.read(from: &buf)
         )
     }
@@ -27635,10 +27635,10 @@ public struct FfiConverterTypePodcastPlaybackRehydrationSnapshot: FfiConverterRu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPlaybackRehydrationSnapshot {
         return
             try PodcastPlaybackRehydrationSnapshot(
-                shouldApply: FfiConverterBool.read(from: &buf), 
-                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf), 
-                currentTimeSeconds: FfiConverterDouble.read(from: &buf), 
-                durationSeconds: FfiConverterDouble.read(from: &buf), 
+                shouldApply: FfiConverterBool.read(from: &buf),
+                artifact: FfiConverterOptionTypeArtifactRecord.read(from: &buf),
+                currentTimeSeconds: FfiConverterDouble.read(from: &buf),
+                durationSeconds: FfiConverterDouble.read(from: &buf),
                 isPlaying: FfiConverterBool.read(from: &buf)
         )
     }
@@ -27711,7 +27711,7 @@ public struct FfiConverterTypePodcastPlaybackSeekInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPlaybackSeekInput {
         return
             try PodcastPlaybackSeekInput(
-                targetSeconds: FfiConverterDouble.read(from: &buf), 
+                targetSeconds: FfiConverterDouble.read(from: &buf),
                 durationSeconds: FfiConverterDouble.read(from: &buf)
         )
     }
@@ -27941,13 +27941,13 @@ public struct FfiConverterTypePodcastPlaybackSessionApplyProjection: FfiConverte
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPlaybackSessionApplyProjection {
         return
             try PodcastPlaybackSessionApplyProjection(
-                canLoad: FfiConverterBool.read(from: &buf), 
-                audioUrl: FfiConverterString.read(from: &buf), 
-                shouldReuseLoadedPlayer: FfiConverterBool.read(from: &buf), 
-                shouldAutoplay: FfiConverterBool.read(from: &buf), 
-                resumePositionSeconds: FfiConverterOptionDouble.read(from: &buf), 
-                transcriptUrl: FfiConverterString.read(from: &buf), 
-                previewDurationSeconds: FfiConverterDouble.read(from: &buf), 
+                canLoad: FfiConverterBool.read(from: &buf),
+                audioUrl: FfiConverterString.read(from: &buf),
+                shouldReuseLoadedPlayer: FfiConverterBool.read(from: &buf),
+                shouldAutoplay: FfiConverterBool.read(from: &buf),
+                resumePositionSeconds: FfiConverterOptionDouble.read(from: &buf),
+                transcriptUrl: FfiConverterString.read(from: &buf),
+                previewDurationSeconds: FfiConverterDouble.read(from: &buf),
                 warningMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -28029,8 +28029,8 @@ public struct FfiConverterTypePodcastPlaybackSessionInput: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPlaybackSessionInput {
         return
             try PodcastPlaybackSessionInput(
-                artifact: FfiConverterTypeArtifactRecord.read(from: &buf), 
-                loadedShareEventId: FfiConverterOptionString.read(from: &buf), 
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
+                loadedShareEventId: FfiConverterOptionString.read(from: &buf),
                 hasLoadedPlayer: FfiConverterBool.read(from: &buf)
         )
     }
@@ -28131,12 +28131,12 @@ public struct FfiConverterTypePodcastPlaybackSessionPlan: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPlaybackSessionPlan {
         return
             try PodcastPlaybackSessionPlan(
-                audioUrl: FfiConverterString.read(from: &buf), 
-                shouldReuseLoadedPlayer: FfiConverterBool.read(from: &buf), 
-                shouldAutoplay: FfiConverterBool.read(from: &buf), 
-                resumePositionSeconds: FfiConverterOptionDouble.read(from: &buf), 
-                transcriptUrl: FfiConverterString.read(from: &buf), 
-                previewDurationSeconds: FfiConverterDouble.read(from: &buf), 
+                audioUrl: FfiConverterString.read(from: &buf),
+                shouldReuseLoadedPlayer: FfiConverterBool.read(from: &buf),
+                shouldAutoplay: FfiConverterBool.read(from: &buf),
+                resumePositionSeconds: FfiConverterOptionDouble.read(from: &buf),
+                transcriptUrl: FfiConverterString.read(from: &buf),
+                previewDurationSeconds: FfiConverterDouble.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -28217,8 +28217,8 @@ public struct FfiConverterTypePodcastPlaybackTickInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPlaybackTickInput {
         return
             try PodcastPlaybackTickInput(
-                previousTimeSeconds: FfiConverterDouble.read(from: &buf), 
-                currentTimeSeconds: FfiConverterDouble.read(from: &buf), 
+                previousTimeSeconds: FfiConverterDouble.read(from: &buf),
+                currentTimeSeconds: FfiConverterDouble.read(from: &buf),
                 isPlaying: FfiConverterBool.read(from: &buf)
         )
     }
@@ -28295,8 +28295,8 @@ public struct FfiConverterTypePodcastPlaybackTickProjection: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastPlaybackTickProjection {
         return
             try PodcastPlaybackTickProjection(
-                currentTimeSeconds: FfiConverterDouble.read(from: &buf), 
-                shouldUpdateNowPlaying: FfiConverterBool.read(from: &buf), 
+                currentTimeSeconds: FfiConverterDouble.read(from: &buf),
+                shouldUpdateNowPlaying: FfiConverterBool.read(from: &buf),
                 shouldPersistPosition: FfiConverterBool.read(from: &buf)
         )
     }
@@ -28415,15 +28415,15 @@ public struct FfiConverterTypePodcastTimelineRow: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastTimelineRow {
         return
             try PodcastTimelineRow(
-                id: FfiConverterString.read(from: &buf), 
-                t: FfiConverterDouble.read(from: &buf), 
-                timestampLabel: FfiConverterString.read(from: &buf), 
-                kind: FfiConverterTypePodcastTimelineRowKind.read(from: &buf), 
-                state: FfiConverterTypePodcastTimelineRowState.read(from: &buf), 
-                chapterTitle: FfiConverterString.read(from: &buf), 
-                clip: FfiConverterOptionTypeHighlightRecord.read(from: &buf), 
-                clipRangeLabel: FfiConverterString.read(from: &buf), 
-                transcriptSegment: FfiConverterOptionTypeTranscriptSegment.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf),
+                t: FfiConverterDouble.read(from: &buf),
+                timestampLabel: FfiConverterString.read(from: &buf),
+                kind: FfiConverterTypePodcastTimelineRowKind.read(from: &buf),
+                state: FfiConverterTypePodcastTimelineRowState.read(from: &buf),
+                chapterTitle: FfiConverterString.read(from: &buf),
+                clip: FfiConverterOptionTypeHighlightRecord.read(from: &buf),
+                clipRangeLabel: FfiConverterString.read(from: &buf),
+                transcriptSegment: FfiConverterOptionTypeTranscriptSegment.read(from: &buf),
                 waveformWindowSeconds: FfiConverterDouble.read(from: &buf)
         )
     }
@@ -28575,9 +28575,9 @@ public struct FfiConverterTypePodcastTranscriptLoadApplyProjection: FfiConverter
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastTranscriptLoadApplyProjection {
         return
             try PodcastTranscriptLoadApplyProjection(
-                segments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf), 
-                availability: FfiConverterTypePodcastTranscriptAvailability.read(from: &buf), 
-                shouldLogError: FfiConverterBool.read(from: &buf), 
+                segments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf),
+                availability: FfiConverterTypePodcastTranscriptAvailability.read(from: &buf),
+                shouldLogError: FfiConverterBool.read(from: &buf),
                 logMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -28655,8 +28655,8 @@ public struct FfiConverterTypePodcastTranscriptLoadSnapshot: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastTranscriptLoadSnapshot {
         return
             try PodcastTranscriptLoadSnapshot(
-                segments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf), 
-                availability: FfiConverterTypePodcastTranscriptAvailability.read(from: &buf), 
+                segments: FfiConverterSequenceTypeTranscriptSegment.read(from: &buf),
+                availability: FfiConverterTypePodcastTranscriptAvailability.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -28733,8 +28733,8 @@ public struct FfiConverterTypeProfileDisplayProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileDisplayProjection {
         return
             try ProfileDisplayProjection(
-                displayName: FfiConverterString.read(from: &buf), 
-                displayInitial: FfiConverterString.read(from: &buf), 
+                displayName: FfiConverterString.read(from: &buf),
+                displayInitial: FfiConverterString.read(from: &buf),
                 pictureUrl: FfiConverterString.read(from: &buf)
         )
     }
@@ -28811,8 +28811,8 @@ public struct FfiConverterTypeProfileDisplayProjectionInput: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileDisplayProjectionInput {
         return
             try ProfileDisplayProjectionInput(
-                pubkey: FfiConverterString.read(from: &buf), 
-                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf),
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
                 fallback: FfiConverterTypeProfileDisplayFallback.read(from: &buf)
         )
     }
@@ -28901,10 +28901,10 @@ public struct FfiConverterTypeProfileDisplayWithLabelProjectionInput: FfiConvert
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileDisplayWithLabelProjectionInput {
         return
             try ProfileDisplayWithLabelProjectionInput(
-                pubkey: FfiConverterString.read(from: &buf), 
-                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf), 
-                labelFallback: FfiConverterString.read(from: &buf), 
-                pubkeyFallback: FfiConverterTypeProfileDisplayFallback.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf),
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
+                labelFallback: FfiConverterString.read(from: &buf),
+                pubkeyFallback: FfiConverterTypeProfileDisplayFallback.read(from: &buf),
                 emptyFallback: FfiConverterString.read(from: &buf)
         )
     }
@@ -28977,7 +28977,7 @@ public struct FfiConverterTypeProfileFollowActionInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileFollowActionInput {
         return
             try ProfileFollowActionInput(
-                isFollowing: FfiConverterBool.read(from: &buf), 
+                isFollowing: FfiConverterBool.read(from: &buf),
                 isMutating: FfiConverterBool.read(from: &buf)
         )
     }
@@ -29053,8 +29053,8 @@ public struct FfiConverterTypeProfileFollowActionProjection: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileFollowActionProjection {
         return
             try ProfileFollowActionProjection(
-                canStart: FfiConverterBool.read(from: &buf), 
-                optimisticIsFollowing: FfiConverterBool.read(from: &buf), 
+                canStart: FfiConverterBool.read(from: &buf),
+                optimisticIsFollowing: FfiConverterBool.read(from: &buf),
                 mutation: FfiConverterOptionTypeProfileFollowMutationInput.read(from: &buf)
         )
     }
@@ -29187,7 +29187,7 @@ public struct FfiConverterTypeProfileFollowMutationApplyProjection: FfiConverter
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileFollowMutationApplyProjection {
         return
             try ProfileFollowMutationApplyProjection(
-                isFollowing: FfiConverterBool.read(from: &buf), 
+                isFollowing: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -29263,8 +29263,8 @@ public struct FfiConverterTypeProfileFollowMutationInput: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileFollowMutationInput {
         return
             try ProfileFollowMutationInput(
-                targetPubkey: FfiConverterString.read(from: &buf), 
-                requestedFollowState: FfiConverterBool.read(from: &buf), 
+                targetPubkey: FfiConverterString.read(from: &buf),
+                requestedFollowState: FfiConverterBool.read(from: &buf),
                 previousFollowState: FfiConverterBool.read(from: &buf)
         )
     }
@@ -29335,7 +29335,7 @@ public struct FfiConverterTypeProfileFollowMutationSnapshot: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileFollowMutationSnapshot {
         return
             try ProfileFollowMutationSnapshot(
-                isFollowing: FfiConverterBool.read(from: &buf), 
+                isFollowing: FfiConverterBool.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -29423,10 +29423,10 @@ public struct FfiConverterTypeProfileIdentityProjection: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileIdentityProjection {
         return
             try ProfileIdentityProjection(
-                displayName: FfiConverterString.read(from: &buf), 
-                displayInitial: FfiConverterString.read(from: &buf), 
-                pictureUrl: FfiConverterString.read(from: &buf), 
-                bio: FfiConverterString.read(from: &buf), 
+                displayName: FfiConverterString.read(from: &buf),
+                displayInitial: FfiConverterString.read(from: &buf),
+                pictureUrl: FfiConverterString.read(from: &buf),
+                bio: FfiConverterString.read(from: &buf),
                 verifiedNip05: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -29505,8 +29505,8 @@ public struct FfiConverterTypeProfileIdentityProjectionInput: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileIdentityProjectionInput {
         return
             try ProfileIdentityProjectionInput(
-                pubkey: FfiConverterString.read(from: &buf), 
-                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf),
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
                 fallback: FfiConverterTypeProfileDisplayFallback.read(from: &buf)
         )
     }
@@ -29639,7 +29639,7 @@ public struct FfiConverterTypeProfileImageUploadResultProjection: FfiConverterRu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileImageUploadResultProjection {
         return
             try ProfileImageUploadResultProjection(
-                imageUrl: FfiConverterOptionString.read(from: &buf), 
+                imageUrl: FfiConverterOptionString.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -29688,7 +29688,7 @@ public struct ProfileMetadata {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(pubkey: String, name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String, 
+    public init(pubkey: String, name: String, displayName: String, about: String, picture: String, banner: String, nip05: String, website: String, lud16: String,
         /**
          * created_at of the kind:0 event this came from (seconds since epoch).
          */createdAt: UInt64?) {
@@ -29768,15 +29768,15 @@ public struct FfiConverterTypeProfileMetadata: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileMetadata {
         return
             try ProfileMetadata(
-                pubkey: FfiConverterString.read(from: &buf), 
-                name: FfiConverterString.read(from: &buf), 
-                displayName: FfiConverterString.read(from: &buf), 
-                about: FfiConverterString.read(from: &buf), 
-                picture: FfiConverterString.read(from: &buf), 
-                banner: FfiConverterString.read(from: &buf), 
-                nip05: FfiConverterString.read(from: &buf), 
-                website: FfiConverterString.read(from: &buf), 
-                lud16: FfiConverterString.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                about: FfiConverterString.read(from: &buf),
+                picture: FfiConverterString.read(from: &buf),
+                banner: FfiConverterString.read(from: &buf),
+                nip05: FfiConverterString.read(from: &buf),
+                website: FfiConverterString.read(from: &buf),
+                lud16: FfiConverterString.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -29872,10 +29872,10 @@ public struct FfiConverterTypeProfilePageSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfilePageSnapshot {
         return
             try ProfilePageSnapshot(
-                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf), 
-                articles: FfiConverterSequenceTypeArticleRecord.read(from: &buf), 
-                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf), 
-                communities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf), 
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
+                articles: FfiConverterSequenceTypeArticleRecord.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
+                communities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
                 isFollowing: FfiConverterBool.read(from: &buf)
         )
     }
@@ -29960,9 +29960,9 @@ public struct FfiConverterTypeProfileRelationshipProjection: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileRelationshipProjection {
         return
             try ProfileRelationshipProjection(
-                targetPubkey: FfiConverterString.read(from: &buf), 
-                isOwnProfile: FfiConverterBool.read(from: &buf), 
-                canShowFollowAction: FfiConverterBool.read(from: &buf), 
+                targetPubkey: FfiConverterString.read(from: &buf),
+                isOwnProfile: FfiConverterBool.read(from: &buf),
+                canShowFollowAction: FfiConverterBool.read(from: &buf),
                 shouldRefreshFollowState: FfiConverterBool.read(from: &buf)
         )
     }
@@ -30034,7 +30034,7 @@ public struct FfiConverterTypeProfileRelationshipProjectionInput: FfiConverterRu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileRelationshipProjectionInput {
         return
             try ProfileRelationshipProjectionInput(
-                profilePubkey: FfiConverterString.read(from: &buf), 
+                profilePubkey: FfiConverterString.read(from: &buf),
                 viewerPubkey: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -30144,13 +30144,13 @@ public struct FfiConverterTypeProfileUpdateDraft: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileUpdateDraft {
         return
             try ProfileUpdateDraft(
-                name: FfiConverterString.read(from: &buf), 
-                displayName: FfiConverterString.read(from: &buf), 
-                about: FfiConverterString.read(from: &buf), 
-                picture: FfiConverterString.read(from: &buf), 
-                banner: FfiConverterString.read(from: &buf), 
-                nip05: FfiConverterString.read(from: &buf), 
-                website: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                about: FfiConverterString.read(from: &buf),
+                picture: FfiConverterString.read(from: &buf),
+                banner: FfiConverterString.read(from: &buf),
+                nip05: FfiConverterString.read(from: &buf),
+                website: FfiConverterString.read(from: &buf),
                 lud16: FfiConverterString.read(from: &buf)
         )
     }
@@ -30232,8 +30232,8 @@ public struct FfiConverterTypeProfileUpdateProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileUpdateProjection {
         return
             try ProfileUpdateProjection(
-                draft: FfiConverterTypeProfileUpdateDraft.read(from: &buf), 
-                isDirty: FfiConverterBool.read(from: &buf), 
+                draft: FfiConverterTypeProfileUpdateDraft.read(from: &buf),
+                isDirty: FfiConverterBool.read(from: &buf),
                 canSave: FfiConverterBool.read(from: &buf)
         )
     }
@@ -30364,17 +30364,17 @@ public struct FfiConverterTypeProfileUpdateProjectionInput: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileUpdateProjectionInput {
         return
             try ProfileUpdateProjectionInput(
-                initial: FfiConverterOptionTypeProfileMetadata.read(from: &buf), 
-                name: FfiConverterString.read(from: &buf), 
-                displayName: FfiConverterString.read(from: &buf), 
-                about: FfiConverterString.read(from: &buf), 
-                picture: FfiConverterString.read(from: &buf), 
-                banner: FfiConverterString.read(from: &buf), 
-                nip05: FfiConverterString.read(from: &buf), 
-                website: FfiConverterString.read(from: &buf), 
-                lud16: FfiConverterString.read(from: &buf), 
-                saving: FfiConverterBool.read(from: &buf), 
-                pictureUploading: FfiConverterBool.read(from: &buf), 
+                initial: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                about: FfiConverterString.read(from: &buf),
+                picture: FfiConverterString.read(from: &buf),
+                banner: FfiConverterString.read(from: &buf),
+                nip05: FfiConverterString.read(from: &buf),
+                website: FfiConverterString.read(from: &buf),
+                lud16: FfiConverterString.read(from: &buf),
+                saving: FfiConverterBool.read(from: &buf),
+                pictureUploading: FfiConverterBool.read(from: &buf),
                 bannerUploading: FfiConverterBool.read(from: &buf)
         )
     }
@@ -30528,9 +30528,9 @@ public struct FfiConverterTypeProfileUpdateResultProjection: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileUpdateResultProjection {
         return
             try ProfileUpdateResultProjection(
-                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf), 
-                shouldEmitSuccessFeedback: FfiConverterBool.read(from: &buf), 
-                shouldDismiss: FfiConverterBool.read(from: &buf), 
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
+                shouldEmitSuccessFeedback: FfiConverterBool.read(from: &buf),
+                shouldDismiss: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -30602,7 +30602,7 @@ public struct FfiConverterTypeProfileUpdateSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileUpdateSnapshot {
         return
             try ProfileUpdateSnapshot(
-                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf), 
+                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -30838,14 +30838,14 @@ public struct FfiConverterTypeReadingFeedCardProjection: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReadingFeedCardProjection {
         return
             try ReadingFeedCardProjection(
-                displayTitle: FfiConverterString.read(from: &buf), 
-                titleIsFallback: FfiConverterBool.read(from: &buf), 
-                imageUrl: FfiConverterOptionString.read(from: &buf), 
-                metaText: FfiConverterOptionString.read(from: &buf), 
-                showSocialSignal: FfiConverterBool.read(from: &buf), 
-                visibleInteractorPubkeys: FfiConverterSequenceString.read(from: &buf), 
-                primaryInteractorPubkey: FfiConverterOptionString.read(from: &buf), 
-                socialText: FfiConverterString.read(from: &buf), 
+                displayTitle: FfiConverterString.read(from: &buf),
+                titleIsFallback: FfiConverterBool.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf),
+                metaText: FfiConverterOptionString.read(from: &buf),
+                showSocialSignal: FfiConverterBool.read(from: &buf),
+                visibleInteractorPubkeys: FfiConverterSequenceString.read(from: &buf),
+                primaryInteractorPubkey: FfiConverterOptionString.read(from: &buf),
+                socialText: FfiConverterString.read(from: &buf),
                 relativeUnixSeconds: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -30922,7 +30922,7 @@ public struct FfiConverterTypeReadingFeedCardProjectionInput: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReadingFeedCardProjectionInput {
         return
             try ReadingFeedCardProjectionInput(
-                item: FfiConverterTypeReadingFeedItem.read(from: &buf), 
+                item: FfiConverterTypeReadingFeedItem.read(from: &buf),
                 interactorProfiles: FfiConverterSequenceTypeReadingFeedInteractorProfile.read(from: &buf)
         )
     }
@@ -30992,7 +30992,7 @@ public struct FfiConverterTypeReadingFeedInteractorProfile: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReadingFeedInteractorProfile {
         return
             try ReadingFeedInteractorProfile(
-                pubkey: FfiConverterString.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf),
                 profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
         )
     }
@@ -31045,14 +31045,14 @@ public struct ReadingFeedItem {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(article: ArticleRecord, 
+    public init(article: ArticleRecord,
         /**
          * The article's author is someone the user follows.
-         */authorFollowed: Bool, 
+         */authorFollowed: Bool,
         /**
          * Hex pubkeys of follows who interacted with the article. Deduped.
          * Empty when the only surfacing signal is `author_followed`.
-         */interactorPubkeys: [String], 
+         */interactorPubkeys: [String],
         /**
          * Most recent timestamp among the article and all interactions — drives
          * feed sort order. Seconds since epoch.
@@ -31103,9 +31103,9 @@ public struct FfiConverterTypeReadingFeedItem: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReadingFeedItem {
         return
             try ReadingFeedItem(
-                article: FfiConverterTypeArticleRecord.read(from: &buf), 
-                authorFollowed: FfiConverterBool.read(from: &buf), 
-                interactorPubkeys: FfiConverterSequenceString.read(from: &buf), 
+                article: FfiConverterTypeArticleRecord.read(from: &buf),
+                authorFollowed: FfiConverterBool.read(from: &buf),
+                interactorPubkeys: FfiConverterSequenceString.read(from: &buf),
                 latestActivityAt: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -31177,7 +31177,7 @@ public struct FfiConverterTypeRelativeTimeLabelInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelativeTimeLabelInput {
         return
             try RelativeTimeLabelInput(
-                unixSeconds: FfiConverterOptionUInt64.read(from: &buf), 
+                unixSeconds: FfiConverterOptionUInt64.read(from: &buf),
                 style: FfiConverterTypeRelativeTimeLabelStyle.read(from: &buf)
         )
     }
@@ -31315,8 +31315,8 @@ public struct FfiConverterTypeRelayAvatarProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayAvatarProjection {
         return
             try RelayAvatarProjection(
-                iconUrl: FfiConverterOptionString.read(from: &buf), 
-                initial: FfiConverterString.read(from: &buf), 
+                iconUrl: FfiConverterOptionString.read(from: &buf),
+                initial: FfiConverterString.read(from: &buf),
                 hue: FfiConverterDouble.read(from: &buf)
         )
     }
@@ -31408,10 +31408,10 @@ public struct FfiConverterTypeRelayConfig: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayConfig {
         return
             try RelayConfig(
-                url: FfiConverterString.read(from: &buf), 
-                read: FfiConverterBool.read(from: &buf), 
-                write: FfiConverterBool.read(from: &buf), 
-                rooms: FfiConverterBool.read(from: &buf), 
+                url: FfiConverterString.read(from: &buf),
+                read: FfiConverterBool.read(from: &buf),
+                write: FfiConverterBool.read(from: &buf),
+                rooms: FfiConverterBool.read(from: &buf),
                 indexer: FfiConverterBool.read(from: &buf)
         )
     }
@@ -31514,12 +31514,12 @@ public struct FfiConverterTypeRelayDetailProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayDetailProjection {
         return
             try RelayDetailProjection(
-                avatar: FfiConverterTypeRelayAvatarProjection.read(from: &buf), 
-                name: FfiConverterOptionString.read(from: &buf), 
-                description: FfiConverterOptionString.read(from: &buf), 
-                stateLabel: FfiConverterString.read(from: &buf), 
-                statusTone: FfiConverterTypeRelayStatusTone.read(from: &buf), 
-                rttLabel: FfiConverterOptionString.read(from: &buf), 
+                avatar: FfiConverterTypeRelayAvatarProjection.read(from: &buf),
+                name: FfiConverterOptionString.read(from: &buf),
+                description: FfiConverterOptionString.read(from: &buf),
+                stateLabel: FfiConverterString.read(from: &buf),
+                statusTone: FfiConverterTypeRelayStatusTone.read(from: &buf),
+                rttLabel: FfiConverterOptionString.read(from: &buf),
                 remove: FfiConverterTypeRelayRemoveProjection.read(from: &buf)
         )
     }
@@ -31606,9 +31606,9 @@ public struct FfiConverterTypeRelayDetailProjectionInput: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayDetailProjectionInput {
         return
             try RelayDetailProjectionInput(
-                url: FfiConverterString.read(from: &buf), 
-                diagnostic: FfiConverterOptionTypeRelayDiagnostic.read(from: &buf), 
-                nip11: FfiConverterOptionTypeNip11Document.read(from: &buf), 
+                url: FfiConverterString.read(from: &buf),
+                diagnostic: FfiConverterOptionTypeRelayDiagnostic.read(from: &buf),
+                nip11: FfiConverterOptionTypeNip11Document.read(from: &buf),
                 orphanedRoomNames: FfiConverterSequenceString.read(from: &buf)
         )
     }
@@ -31670,19 +31670,19 @@ public struct RelayDiagnostic {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(url: String, state: RelayStatus, 
+    public init(url: String, state: RelayStatus,
         /**
          * Round-trip time in milliseconds when the relay is connected. `None`
          * until the first ping completes.
-         */rttMs: UInt32?, 
+         */rttMs: UInt32?,
         /**
          * Cumulative bytes sent on this connection since it was first opened
          * this session.
-         */bytesSent: UInt64, 
+         */bytesSent: UInt64,
         /**
          * Cumulative bytes received on this connection since it was first
          * opened this session.
-         */bytesReceived: UInt64, 
+         */bytesReceived: UInt64,
         /**
          * Unix seconds of the most recent successful connect, `None` if never
          * connected in this session.
@@ -31743,11 +31743,11 @@ public struct FfiConverterTypeRelayDiagnostic: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayDiagnostic {
         return
             try RelayDiagnostic(
-                url: FfiConverterString.read(from: &buf), 
-                state: FfiConverterTypeRelayStatus.read(from: &buf), 
-                rttMs: FfiConverterOptionUInt32.read(from: &buf), 
-                bytesSent: FfiConverterUInt64.read(from: &buf), 
-                bytesReceived: FfiConverterUInt64.read(from: &buf), 
+                url: FfiConverterString.read(from: &buf),
+                state: FfiConverterTypeRelayStatus.read(from: &buf),
+                rttMs: FfiConverterOptionUInt32.read(from: &buf),
+                bytesSent: FfiConverterUInt64.read(from: &buf),
+                bytesReceived: FfiConverterUInt64.read(from: &buf),
                 connectedSinceTs: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -31945,7 +31945,7 @@ public struct FfiConverterTypeRelayHostedRoomsSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayHostedRoomsSnapshot {
         return
             try RelayHostedRoomsSnapshot(
-                roomNames: FfiConverterSequenceString.read(from: &buf), 
+                roomNames: FfiConverterSequenceString.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -32015,7 +32015,7 @@ public struct FfiConverterTypeRelayNip11ProbePlan: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayNip11ProbePlan {
         return
             try RelayNip11ProbePlan(
-                urlsToProbe: FfiConverterSequenceString.read(from: &buf), 
+                urlsToProbe: FfiConverterSequenceString.read(from: &buf),
                 inFlightUrls: FfiConverterSequenceString.read(from: &buf)
         )
     }
@@ -32091,8 +32091,8 @@ public struct FfiConverterTypeRelayNip11ProbePlanInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayNip11ProbePlanInput {
         return
             try RelayNip11ProbePlanInput(
-                relays: FfiConverterSequenceTypeRelayConfig.read(from: &buf), 
-                cachedUrls: FfiConverterSequenceString.read(from: &buf), 
+                relays: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
+                cachedUrls: FfiConverterSequenceString.read(from: &buf),
                 inFlightUrls: FfiConverterSequenceString.read(from: &buf)
         )
     }
@@ -32169,8 +32169,8 @@ public struct FfiConverterTypeRelayNip11ProbeSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayNip11ProbeSnapshot {
         return
             try RelayNip11ProbeSnapshot(
-                document: FfiConverterOptionTypeNip11Document.read(from: &buf), 
-                probeFailed: FfiConverterBool.read(from: &buf), 
+                document: FfiConverterOptionTypeNip11Document.read(from: &buf),
+                probeFailed: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -32247,8 +32247,8 @@ public struct FfiConverterTypeRelayRemoveProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayRemoveProjection {
         return
             try RelayRemoveProjection(
-                title: FfiConverterString.read(from: &buf), 
-                message: FfiConverterString.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf),
+                message: FfiConverterString.read(from: &buf),
                 orphanSummary: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -32325,8 +32325,8 @@ public struct FfiConverterTypeRelayRemoveProjectionInput: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayRemoveProjectionInput {
         return
             try RelayRemoveProjectionInput(
-                url: FfiConverterString.read(from: &buf), 
-                orphanedRoomNames: FfiConverterSequenceString.read(from: &buf), 
+                url: FfiConverterString.read(from: &buf),
+                orphanedRoomNames: FfiConverterSequenceString.read(from: &buf),
                 emptyMessageUsesUrl: FfiConverterBool.read(from: &buf)
         )
     }
@@ -32439,14 +32439,14 @@ public struct FfiConverterTypeRelayRowProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayRowProjection {
         return
             try RelayRowProjection(
-                avatar: FfiConverterTypeRelayAvatarProjection.read(from: &buf), 
-                primaryLabel: FfiConverterString.read(from: &buf), 
-                displayUrl: FfiConverterString.read(from: &buf), 
-                statusTone: FfiConverterTypeRelayStatusTone.read(from: &buf), 
-                rttLabel: FfiConverterOptionString.read(from: &buf), 
-                read: FfiConverterBool.read(from: &buf), 
-                write: FfiConverterBool.read(from: &buf), 
-                rooms: FfiConverterBool.read(from: &buf), 
+                avatar: FfiConverterTypeRelayAvatarProjection.read(from: &buf),
+                primaryLabel: FfiConverterString.read(from: &buf),
+                displayUrl: FfiConverterString.read(from: &buf),
+                statusTone: FfiConverterTypeRelayStatusTone.read(from: &buf),
+                rttLabel: FfiConverterOptionString.read(from: &buf),
+                read: FfiConverterBool.read(from: &buf),
+                write: FfiConverterBool.read(from: &buf),
+                rooms: FfiConverterBool.read(from: &buf),
                 indexer: FfiConverterBool.read(from: &buf)
         )
     }
@@ -32529,8 +32529,8 @@ public struct FfiConverterTypeRelayRowProjectionInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayRowProjectionInput {
         return
             try RelayRowProjectionInput(
-                config: FfiConverterTypeRelayConfig.read(from: &buf), 
-                diagnostic: FfiConverterOptionTypeRelayDiagnostic.read(from: &buf), 
+                config: FfiConverterTypeRelayConfig.read(from: &buf),
+                diagnostic: FfiConverterOptionTypeRelayDiagnostic.read(from: &buf),
                 nip11: FfiConverterOptionTypeNip11Document.read(from: &buf)
         )
     }
@@ -32643,14 +32643,14 @@ public struct FfiConverterTypeRelaySettingsProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelaySettingsProjection {
         return
             try RelaySettingsProjection(
-                autoConnectedUrls: FfiConverterSequenceString.read(from: &buf), 
-                autoConnectedConfigs: FfiConverterSequenceTypeRelayConfig.read(from: &buf), 
-                autoConnectedDiagnostics: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf), 
-                totalVisibleRelays: FfiConverterUInt64.read(from: &buf), 
-                connectedCount: FfiConverterUInt64.read(from: &buf), 
-                aggregateStateLabel: FfiConverterString.read(from: &buf), 
-                hasOutbox: FfiConverterBool.read(from: &buf), 
-                allConnectedForHeader: FfiConverterBool.read(from: &buf), 
+                autoConnectedUrls: FfiConverterSequenceString.read(from: &buf),
+                autoConnectedConfigs: FfiConverterSequenceTypeRelayConfig.read(from: &buf),
+                autoConnectedDiagnostics: FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf),
+                totalVisibleRelays: FfiConverterUInt64.read(from: &buf),
+                connectedCount: FfiConverterUInt64.read(from: &buf),
+                aggregateStateLabel: FfiConverterString.read(from: &buf),
+                hasOutbox: FfiConverterBool.read(from: &buf),
+                allConnectedForHeader: FfiConverterBool.read(from: &buf),
                 anyConnectedForHeader: FfiConverterBool.read(from: &buf)
         )
     }
@@ -32727,7 +32727,7 @@ public struct FfiConverterTypeRoomAvatarProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomAvatarProjection {
         return
             try RoomAvatarProjection(
-                pictureUrl: FfiConverterString.read(from: &buf), 
+                pictureUrl: FfiConverterString.read(from: &buf),
                 displayInitial: FfiConverterString.read(from: &buf)
         )
     }
@@ -32803,8 +32803,8 @@ public struct FfiConverterTypeRoomAvatarProjectionInput: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomAvatarProjectionInput {
         return
             try RoomAvatarProjectionInput(
-                name: FfiConverterString.read(from: &buf), 
-                pictureUrl: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf),
+                pictureUrl: FfiConverterString.read(from: &buf),
                 uppercaseInitial: FfiConverterBool.read(from: &buf)
         )
     }
@@ -32875,7 +32875,7 @@ public struct FfiConverterTypeRoomBrowseSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomBrowseSnapshot {
         return
             try RoomBrowseSnapshot(
-                rooms: FfiConverterSequenceTypeCommunitySummary.read(from: &buf), 
+                rooms: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -32945,7 +32945,7 @@ public struct FfiConverterTypeRoomBrowseSnapshotApplyInput: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomBrowseSnapshotApplyInput {
         return
             try RoomBrowseSnapshotApplyInput(
-                rooms: FfiConverterSequenceTypeCommunitySummary.read(from: &buf), 
+                rooms: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -33331,8 +33331,8 @@ public struct FfiConverterTypeRoomExplorerFeaturedStartResultProjection: FfiConv
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomExplorerFeaturedStartResultProjection {
         return
             try RoomExplorerFeaturedStartResultProjection(
-                shouldMarkStarted: FfiConverterBool.read(from: &buf), 
-                shouldLog: FfiConverterBool.read(from: &buf), 
+                shouldMarkStarted: FfiConverterBool.read(from: &buf),
+                shouldLog: FfiConverterBool.read(from: &buf),
                 logMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -33403,7 +33403,7 @@ public struct FfiConverterTypeRoomExplorerJoinRequestResultInput: FfiConverterRu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomExplorerJoinRequestResultInput {
         return
             try RoomExplorerJoinRequestResultInput(
-                groupId: FfiConverterString.read(from: &buf), 
+                groupId: FfiConverterString.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -33473,7 +33473,7 @@ public struct FfiConverterTypeRoomExplorerJoinRequestResultProjection: FfiConver
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomExplorerJoinRequestResultProjection {
         return
             try RoomExplorerJoinRequestResultProjection(
-                shouldLog: FfiConverterBool.read(from: &buf), 
+                shouldLog: FfiConverterBool.read(from: &buf),
                 logMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -33555,9 +33555,9 @@ public struct FfiConverterTypeRoomExplorerSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomExplorerSnapshot {
         return
             try RoomExplorerSnapshot(
-                featured: FfiConverterSequenceTypeCommunitySummary.read(from: &buf), 
-                newNoteworthy: FfiConverterSequenceTypeCommunitySummary.read(from: &buf), 
-                friendsShelf: FfiConverterSequenceTypeRoomRecommendation.read(from: &buf), 
+                featured: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
+                newNoteworthy: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
+                friendsShelf: FfiConverterSequenceTypeRoomRecommendation.read(from: &buf),
                 authorsShelf: FfiConverterSequenceTypeRoomRecommendation.read(from: &buf)
         )
     }
@@ -33647,10 +33647,10 @@ public struct FfiConverterTypeRoomHomeSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomHomeSnapshot {
         return
             try RoomHomeSnapshot(
-                artifacts: FfiConverterSequenceTypeArtifactRecord.read(from: &buf), 
-                highlights: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf), 
-                highlightsByReference: FfiConverterSequenceTypeHighlightReferenceBucket.read(from: &buf), 
-                commentsByReference: FfiConverterSequenceTypeCommentReferenceBucket.read(from: &buf), 
+                artifacts: FfiConverterSequenceTypeArtifactRecord.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf),
+                highlightsByReference: FfiConverterSequenceTypeHighlightReferenceBucket.read(from: &buf),
+                commentsByReference: FfiConverterSequenceTypeCommentReferenceBucket.read(from: &buf),
                 lanes: FfiConverterSequenceTypeRoomLane.read(from: &buf)
         )
     }
@@ -33723,7 +33723,7 @@ public struct FfiConverterTypeRoomInviteAvatarProjection: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteAvatarProjection {
         return
             try RoomInviteAvatarProjection(
-                pictureUrl: FfiConverterString.read(from: &buf), 
+                pictureUrl: FfiConverterString.read(from: &buf),
                 displayInitial: FfiConverterString.read(from: &buf)
         )
     }
@@ -33793,7 +33793,7 @@ public struct FfiConverterTypeRoomInviteAvatarProjectionInput: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteAvatarProjectionInput {
         return
             try RoomInviteAvatarProjectionInput(
-                pubkeyHex: FfiConverterString.read(from: &buf), 
+                pubkeyHex: FfiConverterString.read(from: &buf),
                 profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
         )
     }
@@ -33863,7 +33863,7 @@ public struct FfiConverterTypeRoomInviteCandidate: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteCandidate {
         return
             try RoomInviteCandidate(
-                pubkeyHex: FfiConverterString.read(from: &buf), 
+                pubkeyHex: FfiConverterString.read(from: &buf),
                 source: FfiConverterTypeRoomInviteCandidateSource.read(from: &buf)
         )
     }
@@ -33939,8 +33939,8 @@ public struct FfiConverterTypeRoomInviteChip: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteChip {
         return
             try RoomInviteChip(
-                pubkeyHex: FfiConverterString.read(from: &buf), 
-                source: FfiConverterTypeRoomInviteCandidateSource.read(from: &buf), 
+                pubkeyHex: FfiConverterString.read(from: &buf),
+                source: FfiConverterTypeRoomInviteCandidateSource.read(from: &buf),
                 displayName: FfiConverterString.read(from: &buf)
         )
     }
@@ -34023,9 +34023,9 @@ public struct FfiConverterTypeRoomInviteProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteProjection {
         return
             try RoomInviteProjection(
-                selectedChips: FfiConverterSequenceTypeRoomInviteChip.read(from: &buf), 
-                visibleFollows: FfiConverterSequenceTypeRoomInviteSuggestion.read(from: &buf), 
-                resolvedCandidate: FfiConverterOptionTypeRoomInviteResolvedCandidate.read(from: &buf), 
+                selectedChips: FfiConverterSequenceTypeRoomInviteChip.read(from: &buf),
+                visibleFollows: FfiConverterSequenceTypeRoomInviteSuggestion.read(from: &buf),
+                resolvedCandidate: FfiConverterOptionTypeRoomInviteResolvedCandidate.read(from: &buf),
                 showEmptyFollowMessage: FfiConverterBool.read(from: &buf)
         )
     }
@@ -34121,11 +34121,11 @@ public struct FfiConverterTypeRoomInviteResolvedCandidate: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteResolvedCandidate {
         return
             try RoomInviteResolvedCandidate(
-                pubkeyHex: FfiConverterString.read(from: &buf), 
-                format: FfiConverterTypeRoomInviteInputFormat.read(from: &buf), 
-                label: FfiConverterString.read(from: &buf), 
-                source: FfiConverterTypeRoomInviteCandidateSource.read(from: &buf), 
-                displayName: FfiConverterString.read(from: &buf), 
+                pubkeyHex: FfiConverterString.read(from: &buf),
+                format: FfiConverterTypeRoomInviteInputFormat.read(from: &buf),
+                label: FfiConverterString.read(from: &buf),
+                source: FfiConverterTypeRoomInviteCandidateSource.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
                 isSelected: FfiConverterBool.read(from: &buf)
         )
     }
@@ -34335,9 +34335,9 @@ public struct FfiConverterTypeRoomInviteSelectionInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteSelectionInput {
         return
             try RoomInviteSelectionInput(
-                selected: FfiConverterSequenceTypeRoomInviteCandidate.read(from: &buf), 
-                candidate: FfiConverterTypeRoomInviteCandidate.read(from: &buf), 
-                currentUserPubkey: FfiConverterString.read(from: &buf), 
+                selected: FfiConverterSequenceTypeRoomInviteCandidate.read(from: &buf),
+                candidate: FfiConverterTypeRoomInviteCandidate.read(from: &buf),
+                currentUserPubkey: FfiConverterString.read(from: &buf),
                 action: FfiConverterTypeRoomInviteSelectionAction.read(from: &buf)
         )
     }
@@ -34415,8 +34415,8 @@ public struct FfiConverterTypeRoomInviteSelectionProjection: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteSelectionProjection {
         return
             try RoomInviteSelectionProjection(
-                selected: FfiConverterSequenceTypeRoomInviteCandidate.read(from: &buf), 
-                errorMessage: FfiConverterOptionString.read(from: &buf), 
+                selected: FfiConverterSequenceTypeRoomInviteCandidate.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf),
                 selectionChanged: FfiConverterBool.read(from: &buf)
         )
     }
@@ -34511,11 +34511,11 @@ public struct FfiConverterTypeRoomInviteSendResultProjection: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteSendResultProjection {
         return
             try RoomInviteSendResultProjection(
-                allSucceeded: FfiConverterBool.read(from: &buf), 
-                allFailed: FfiConverterBool.read(from: &buf), 
-                addedCount: FfiConverterUInt64.read(from: &buf), 
-                successToast: FfiConverterString.read(from: &buf), 
-                errorMessage: FfiConverterString.read(from: &buf), 
+                allSucceeded: FfiConverterBool.read(from: &buf),
+                allFailed: FfiConverterBool.read(from: &buf),
+                addedCount: FfiConverterUInt64.read(from: &buf),
+                successToast: FfiConverterString.read(from: &buf),
+                errorMessage: FfiConverterString.read(from: &buf),
                 remainingSelected: FfiConverterSequenceTypeRoomInviteCandidate.read(from: &buf)
         )
     }
@@ -34595,8 +34595,8 @@ public struct FfiConverterTypeRoomInviteSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteSnapshot {
         return
             try RoomInviteSnapshot(
-                projection: FfiConverterTypeRoomInviteProjection.read(from: &buf), 
-                profilePubkeysToRequest: FfiConverterSequenceString.read(from: &buf), 
+                projection: FfiConverterTypeRoomInviteProjection.read(from: &buf),
+                profilePubkeysToRequest: FfiConverterSequenceString.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -34679,9 +34679,9 @@ public struct FfiConverterTypeRoomInviteSnapshotInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteSnapshotInput {
         return
             try RoomInviteSnapshotInput(
-                query: FfiConverterString.read(from: &buf), 
-                profiles: FfiConverterSequenceTypeProfileMetadata.read(from: &buf), 
-                selected: FfiConverterSequenceTypeRoomInviteCandidate.read(from: &buf), 
+                query: FfiConverterString.read(from: &buf),
+                profiles: FfiConverterSequenceTypeProfileMetadata.read(from: &buf),
+                selected: FfiConverterSequenceTypeRoomInviteCandidate.read(from: &buf),
                 limit: FfiConverterUInt32.read(from: &buf)
         )
     }
@@ -34771,10 +34771,10 @@ public struct FfiConverterTypeRoomInviteSuggestion: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteSuggestion {
         return
             try RoomInviteSuggestion(
-                pubkeyHex: FfiConverterString.read(from: &buf), 
-                source: FfiConverterTypeRoomInviteCandidateSource.read(from: &buf), 
-                secondaryLabel: FfiConverterString.read(from: &buf), 
-                displayName: FfiConverterString.read(from: &buf), 
+                pubkeyHex: FfiConverterString.read(from: &buf),
+                source: FfiConverterTypeRoomInviteCandidateSource.read(from: &buf),
+                secondaryLabel: FfiConverterString.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
                 isSelected: FfiConverterBool.read(from: &buf)
         )
     }
@@ -34864,9 +34864,9 @@ public struct FfiConverterTypeRoomLane: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLane {
         return
             try RoomLane(
-                id: FfiConverterString.read(from: &buf), 
-                artifact: FfiConverterTypeArtifactRecord.read(from: &buf), 
-                highlights: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf),
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf),
                 comments: FfiConverterSequenceTypeCommentRecord.read(from: &buf)
         )
     }
@@ -34974,13 +34974,13 @@ public struct FfiConverterTypeRoomLibraryArticleCardProjection: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryArticleCardProjection {
         return
             try RoomLibraryArticleCardProjection(
-                displayTitle: FfiConverterString.read(from: &buf), 
-                titleIsFallback: FfiConverterBool.read(from: &buf), 
-                imageUrl: FfiConverterOptionString.read(from: &buf), 
-                articleAuthorPubkey: FfiConverterOptionString.read(from: &buf), 
-                avatarPubkey: FfiConverterString.read(from: &buf), 
-                authorProfilePubkey: FfiConverterString.read(from: &buf), 
-                relativeUnixSeconds: FfiConverterOptionUInt64.read(from: &buf), 
+                displayTitle: FfiConverterString.read(from: &buf),
+                titleIsFallback: FfiConverterBool.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf),
+                articleAuthorPubkey: FfiConverterOptionString.read(from: &buf),
+                avatarPubkey: FfiConverterString.read(from: &buf),
+                authorProfilePubkey: FfiConverterString.read(from: &buf),
+                relativeUnixSeconds: FfiConverterOptionUInt64.read(from: &buf),
                 metaText: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -35056,7 +35056,7 @@ public struct FfiConverterTypeRoomLibraryArticleCardProjectionInput: FfiConverte
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryArticleCardProjectionInput {
         return
             try RoomLibraryArticleCardProjectionInput(
-                artifact: FfiConverterTypeArtifactRecord.read(from: &buf), 
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
                 commentCount: FfiConverterUInt32.read(from: &buf)
         )
     }
@@ -35162,13 +35162,13 @@ public struct FfiConverterTypeRoomLibraryBookCardProjection: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryBookCardProjection {
         return
             try RoomLibraryBookCardProjection(
-                title: FfiConverterString.read(from: &buf), 
-                titleIsFallback: FfiConverterBool.read(from: &buf), 
-                authorLabel: FfiConverterOptionString.read(from: &buf), 
-                summary: FfiConverterOptionString.read(from: &buf), 
-                imageUrl: FfiConverterOptionString.read(from: &buf), 
-                sharerPubkey: FfiConverterString.read(from: &buf), 
-                relativeUnixSeconds: FfiConverterOptionUInt64.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf),
+                titleIsFallback: FfiConverterBool.read(from: &buf),
+                authorLabel: FfiConverterOptionString.read(from: &buf),
+                summary: FfiConverterOptionString.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf),
+                sharerPubkey: FfiConverterString.read(from: &buf),
+                relativeUnixSeconds: FfiConverterOptionUInt64.read(from: &buf),
                 commentBadgeLabel: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -35244,7 +35244,7 @@ public struct FfiConverterTypeRoomLibraryBookCardProjectionInput: FfiConverterRu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryBookCardProjectionInput {
         return
             try RoomLibraryBookCardProjectionInput(
-                artifact: FfiConverterTypeArtifactRecord.read(from: &buf), 
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
                 commentCount: FfiConverterUInt32.read(from: &buf)
         )
     }
@@ -35598,13 +35598,13 @@ public struct FfiConverterTypeRoomLibraryPodcastCardProjection: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryPodcastCardProjection {
         return
             try RoomLibraryPodcastCardProjection(
-                title: FfiConverterString.read(from: &buf), 
-                titleIsFallback: FfiConverterBool.read(from: &buf), 
-                showLabel: FfiConverterOptionString.read(from: &buf), 
-                durationLabel: FfiConverterOptionString.read(from: &buf), 
-                imageUrl: FfiConverterOptionString.read(from: &buf), 
-                sharerPubkey: FfiConverterString.read(from: &buf), 
-                relativeUnixSeconds: FfiConverterOptionUInt64.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf),
+                titleIsFallback: FfiConverterBool.read(from: &buf),
+                showLabel: FfiConverterOptionString.read(from: &buf),
+                durationLabel: FfiConverterOptionString.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf),
+                sharerPubkey: FfiConverterString.read(from: &buf),
+                relativeUnixSeconds: FfiConverterOptionUInt64.read(from: &buf),
                 commentBadgeLabel: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -35680,7 +35680,7 @@ public struct FfiConverterTypeRoomLibraryPodcastCardProjectionInput: FfiConverte
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryPodcastCardProjectionInput {
         return
             try RoomLibraryPodcastCardProjectionInput(
-                artifact: FfiConverterTypeArtifactRecord.read(from: &buf), 
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
                 commentCount: FfiConverterUInt32.read(from: &buf)
         )
     }
@@ -35756,8 +35756,8 @@ public struct FfiConverterTypeRoomPreviewActionProjection: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewActionProjection {
         return
             try RoomPreviewActionProjection(
-                alreadyJoined: FfiConverterBool.read(from: &buf), 
-                primaryLabel: FfiConverterString.read(from: &buf), 
+                alreadyJoined: FfiConverterBool.read(from: &buf),
+                primaryLabel: FfiConverterString.read(from: &buf),
                 secondaryAction: FfiConverterTypeRoomPreviewSecondaryAction.read(from: &buf)
         )
     }
@@ -35840,9 +35840,9 @@ public struct FfiConverterTypeRoomPreviewActionProjectionInput: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewActionProjectionInput {
         return
             try RoomPreviewActionProjectionInput(
-                roomAccess: FfiConverterString.read(from: &buf), 
-                roomId: FfiConverterString.read(from: &buf), 
-                joinedRoomIds: FfiConverterSequenceString.read(from: &buf), 
+                roomAccess: FfiConverterString.read(from: &buf),
+                roomId: FfiConverterString.read(from: &buf),
+                joinedRoomIds: FfiConverterSequenceString.read(from: &buf),
                 isExpanded: FfiConverterBool.read(from: &buf)
         )
     }
@@ -35926,9 +35926,9 @@ public struct FfiConverterTypeRoomPreviewArtifactRowProjection: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewArtifactRowProjection {
         return
             try RoomPreviewArtifactRowProjection(
-                artifact: FfiConverterTypeArtifactRecord.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                subtitle: FfiConverterOptionString.read(from: &buf), 
+                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                subtitle: FfiConverterOptionString.read(from: &buf),
                 showsDivider: FfiConverterBool.read(from: &buf)
         )
     }
@@ -36136,9 +36136,9 @@ public struct FfiConverterTypeRoomPreviewHeaderProjection: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewHeaderProjection {
         return
             try RoomPreviewHeaderProjection(
-                accessLabel: FfiConverterString.read(from: &buf), 
-                accessIconSystemName: FfiConverterString.read(from: &buf), 
-                accessIsOpen: FfiConverterBool.read(from: &buf), 
+                accessLabel: FfiConverterString.read(from: &buf),
+                accessIconSystemName: FfiConverterString.read(from: &buf),
+                accessIsOpen: FfiConverterBool.read(from: &buf),
                 memberCountLabel: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -36245,7 +36245,7 @@ public struct RoomRecommendation {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(summary: CommunitySummary, 
+    public init(summary: CommunitySummary,
         /**
          * Hex pubkeys that triggered the recommendation — follows who are in
          * the room, or authors who post to it. Capped at 5 by the recommender.
@@ -36291,8 +36291,8 @@ public struct FfiConverterTypeRoomRecommendation: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendation {
         return
             try RoomRecommendation(
-                summary: FfiConverterTypeCommunitySummary.read(from: &buf), 
-                reasonPubkeys: FfiConverterSequenceString.read(from: &buf), 
+                summary: FfiConverterTypeCommunitySummary.read(from: &buf),
+                reasonPubkeys: FfiConverterSequenceString.read(from: &buf),
                 reasonKind: FfiConverterTypeRoomRecommendationReason.read(from: &buf)
         )
     }
@@ -36369,8 +36369,8 @@ public struct FfiConverterTypeRoomRecommendationAvatarProjection: FfiConverterRu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendationAvatarProjection {
         return
             try RoomRecommendationAvatarProjection(
-                pubkey: FfiConverterString.read(from: &buf), 
-                pictureUrl: FfiConverterString.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf),
+                pictureUrl: FfiConverterString.read(from: &buf),
                 displayInitial: FfiConverterString.read(from: &buf)
         )
     }
@@ -36453,9 +36453,9 @@ public struct FfiConverterTypeRoomRecommendationCardProjection: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendationCardProjection {
         return
             try RoomRecommendationCardProjection(
-                byline: FfiConverterString.read(from: &buf), 
-                visibleAvatars: FfiConverterSequenceTypeRoomRecommendationAvatarProjection.read(from: &buf), 
-                preloadPubkeys: FfiConverterSequenceString.read(from: &buf), 
+                byline: FfiConverterString.read(from: &buf),
+                visibleAvatars: FfiConverterSequenceTypeRoomRecommendationAvatarProjection.read(from: &buf),
+                preloadPubkeys: FfiConverterSequenceString.read(from: &buf),
                 overflowLabel: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -36527,7 +36527,7 @@ public struct FfiConverterTypeRoomRecommendationCardProjectionInput: FfiConverte
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendationCardProjectionInput {
         return
             try RoomRecommendationCardProjectionInput(
-                recommendation: FfiConverterTypeRoomRecommendation.read(from: &buf), 
+                recommendation: FfiConverterTypeRoomRecommendation.read(from: &buf),
                 reasonProfiles: FfiConverterSequenceTypeRoomRecommendationReasonProfile.read(from: &buf)
         )
     }
@@ -36597,7 +36597,7 @@ public struct FfiConverterTypeRoomRecommendationReasonProfile: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendationReasonProfile {
         return
             try RoomRecommendationReasonProfile(
-                pubkey: FfiConverterString.read(from: &buf), 
+                pubkey: FfiConverterString.read(from: &buf),
                 profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
         )
     }
@@ -36673,8 +36673,8 @@ public struct FfiConverterTypeRoomShareLinkSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomShareLinkSnapshot {
         return
             try RoomShareLinkSnapshot(
-                shareUrl: FfiConverterOptionString.read(from: &buf), 
-                linkLabel: FfiConverterString.read(from: &buf), 
+                shareUrl: FfiConverterOptionString.read(from: &buf),
+                linkLabel: FfiConverterString.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -36813,8 +36813,8 @@ public struct FfiConverterTypeSearchChromeSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchChromeSnapshot {
         return
             try SearchChromeSnapshot(
-                recentQueries: FfiConverterSequenceString.read(from: &buf), 
-                searchRelays: FfiConverterSequenceString.read(from: &buf), 
+                recentQueries: FfiConverterSequenceString.read(from: &buf),
+                searchRelays: FfiConverterSequenceString.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -36903,10 +36903,10 @@ public struct FfiConverterTypeSearchCommunityRowProjection: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchCommunityRowProjection {
         return
             try SearchCommunityRowProjection(
-                displayName: FfiConverterString.read(from: &buf), 
-                about: FfiConverterOptionString.read(from: &buf), 
-                visibilityLabel: FfiConverterString.read(from: &buf), 
-                accessLabel: FfiConverterString.read(from: &buf), 
+                displayName: FfiConverterString.read(from: &buf),
+                about: FfiConverterOptionString.read(from: &buf),
+                visibilityLabel: FfiConverterString.read(from: &buf),
+                accessLabel: FfiConverterString.read(from: &buf),
                 memberCountLabel: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -37041,7 +37041,7 @@ public struct FfiConverterTypeSearchHighlightRowProjection: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchHighlightRowProjection {
         return
             try SearchHighlightRowProjection(
-                articleRoute: FfiConverterOptionTypeArticleReaderRoute.read(from: &buf), 
+                articleRoute: FfiConverterOptionTypeArticleReaderRoute.read(from: &buf),
                 pageImageUrl: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -37173,7 +37173,7 @@ public struct FfiConverterTypeSearchQueryProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchQueryProjection {
         return
             try SearchQueryProjection(
-                searchQuery: FfiConverterString.read(from: &buf), 
+                searchQuery: FfiConverterString.read(from: &buf),
                 hasQuery: FfiConverterBool.read(from: &buf)
         )
     }
@@ -37317,9 +37317,9 @@ public struct FfiConverterTypeSearchRelayArticlesApplyInput: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchRelayArticlesApplyInput {
         return
             try SearchRelayArticlesApplyInput(
-                requestToken: FfiConverterUInt64.read(from: &buf), 
-                currentToken: FfiConverterUInt64.read(from: &buf), 
-                requestQuery: FfiConverterString.read(from: &buf), 
+                requestToken: FfiConverterUInt64.read(from: &buf),
+                currentToken: FfiConverterUInt64.read(from: &buf),
+                requestQuery: FfiConverterString.read(from: &buf),
                 appliedQuery: FfiConverterString.read(from: &buf)
         )
     }
@@ -37453,7 +37453,7 @@ public struct FfiConverterTypeSearchRelayRefreshInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchRelayRefreshInput {
         return
             try SearchRelayRefreshInput(
-                requestedQuery: FfiConverterString.read(from: &buf), 
+                requestedQuery: FfiConverterString.read(from: &buf),
                 activeRelayQuery: FfiConverterString.read(from: &buf)
         )
     }
@@ -37535,9 +37535,9 @@ public struct FfiConverterTypeSearchRelayRefreshProjection: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchRelayRefreshProjection {
         return
             try SearchRelayRefreshProjection(
-                shouldRefresh: FfiConverterBool.read(from: &buf), 
-                subscribeQuery: FfiConverterString.read(from: &buf), 
-                activeRelayQuery: FfiConverterString.read(from: &buf), 
+                shouldRefresh: FfiConverterBool.read(from: &buf),
+                subscribeQuery: FfiConverterString.read(from: &buf),
+                activeRelayQuery: FfiConverterString.read(from: &buf),
                 isRelayLoading: FfiConverterBool.read(from: &buf)
         )
     }
@@ -37615,8 +37615,8 @@ public struct FfiConverterTypeSearchRelayStartResultInput: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchRelayStartResultInput {
         return
             try SearchRelayStartResultInput(
-                requestedQuery: FfiConverterString.read(from: &buf), 
-                appliedQuery: FfiConverterString.read(from: &buf), 
+                requestedQuery: FfiConverterString.read(from: &buf),
+                appliedQuery: FfiConverterString.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -37699,9 +37699,9 @@ public struct FfiConverterTypeSearchRelayStartResultProjection: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchRelayStartResultProjection {
         return
             try SearchRelayStartResultProjection(
-                shouldRegisterHandle: FfiConverterBool.read(from: &buf), 
-                shouldUnsubscribeHandle: FfiConverterBool.read(from: &buf), 
-                activeRelayQuery: FfiConverterString.read(from: &buf), 
+                shouldRegisterHandle: FfiConverterBool.read(from: &buf),
+                shouldUnsubscribeHandle: FfiConverterBool.read(from: &buf),
+                activeRelayQuery: FfiConverterString.read(from: &buf),
                 isRelayLoading: FfiConverterBool.read(from: &buf)
         )
     }
@@ -37779,8 +37779,8 @@ public struct FfiConverterTypeSearchRelayUpdateInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchRelayUpdateInput {
         return
             try SearchRelayUpdateInput(
-                incomingQuery: FfiConverterString.read(from: &buf), 
-                appliedQuery: FfiConverterString.read(from: &buf), 
+                incomingQuery: FfiConverterString.read(from: &buf),
+                appliedQuery: FfiConverterString.read(from: &buf),
                 currentToken: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -37863,9 +37863,9 @@ public struct FfiConverterTypeSearchRelayUpdateProjection: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchRelayUpdateProjection {
         return
             try SearchRelayUpdateProjection(
-                shouldRefreshArticles: FfiConverterBool.read(from: &buf), 
-                articleQuery: FfiConverterString.read(from: &buf), 
-                requestToken: FfiConverterUInt64.read(from: &buf), 
+                shouldRefreshArticles: FfiConverterBool.read(from: &buf),
+                articleQuery: FfiConverterString.read(from: &buf),
+                requestToken: FfiConverterUInt64.read(from: &buf),
                 isRelayLoading: FfiConverterBool.read(from: &buf)
         )
     }
@@ -37937,7 +37937,7 @@ public struct FfiConverterTypeSearchResultsApplyInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchResultsApplyInput {
         return
             try SearchResultsApplyInput(
-                requestToken: FfiConverterUInt64.read(from: &buf), 
+                requestToken: FfiConverterUInt64.read(from: &buf),
                 currentToken: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -38007,7 +38007,7 @@ public struct FfiConverterTypeSearchResultsApplyProjection: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchResultsApplyProjection {
         return
             try SearchResultsApplyProjection(
-                shouldApply: FfiConverterBool.read(from: &buf), 
+                shouldApply: FfiConverterBool.read(from: &buf),
                 isLocalLoading: FfiConverterBool.read(from: &buf)
         )
     }
@@ -38089,9 +38089,9 @@ public struct FfiConverterTypeSearchResultsSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchResultsSnapshot {
         return
             try SearchResultsSnapshot(
-                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf), 
-                articles: FfiConverterSequenceTypeArticleRecord.read(from: &buf), 
-                communities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf), 
+                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
+                articles: FfiConverterSequenceTypeArticleRecord.read(from: &buf),
+                communities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
                 profiles: FfiConverterSequenceTypeProfileMetadata.read(from: &buf)
         )
     }
@@ -38163,7 +38163,7 @@ public struct FfiConverterTypeSearchScheduleInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchScheduleInput {
         return
             try SearchScheduleInput(
-                query: FfiConverterString.read(from: &buf), 
+                query: FfiConverterString.read(from: &buf),
                 currentToken: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -38257,11 +38257,11 @@ public struct FfiConverterTypeSearchScheduleProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchScheduleProjection {
         return
             try SearchScheduleProjection(
-                searchQuery: FfiConverterString.read(from: &buf), 
-                hasQuery: FfiConverterBool.read(from: &buf), 
-                searchToken: FfiConverterUInt64.read(from: &buf), 
-                shouldRunSearch: FfiConverterBool.read(from: &buf), 
-                shouldClearResults: FfiConverterBool.read(from: &buf), 
+                searchQuery: FfiConverterString.read(from: &buf),
+                hasQuery: FfiConverterBool.read(from: &buf),
+                searchToken: FfiConverterUInt64.read(from: &buf),
+                shouldRunSearch: FfiConverterBool.read(from: &buf),
+                shouldClearResults: FfiConverterBool.read(from: &buf),
                 isLocalLoading: FfiConverterBool.read(from: &buf)
         )
     }
@@ -38459,7 +38459,7 @@ public struct FfiConverterTypeSearchTextMatchSpan: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchTextMatchSpan {
         return
             try SearchTextMatchSpan(
-                start: FfiConverterUInt32.read(from: &buf), 
+                start: FfiConverterUInt32.read(from: &buf),
                 end: FfiConverterUInt32.read(from: &buf)
         )
     }
@@ -38591,7 +38591,7 @@ public struct FfiConverterTypeSearchTextMatchesProjectionInput: FfiConverterRust
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchTextMatchesProjectionInput {
         return
             try SearchTextMatchesProjectionInput(
-                text: FfiConverterString.read(from: &buf), 
+                text: FfiConverterString.read(from: &buf),
                 query: FfiConverterString.read(from: &buf)
         )
     }
@@ -38723,7 +38723,7 @@ public struct FfiConverterTypeSecretKeyDisplayProjectionInput: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SecretKeyDisplayProjectionInput {
         return
             try SecretKeyDisplayProjectionInput(
-                nsec: FfiConverterString.read(from: &buf), 
+                nsec: FfiConverterString.read(from: &buf),
                 isRevealed: FfiConverterBool.read(from: &buf)
         )
     }
@@ -38799,8 +38799,8 @@ public struct FfiConverterTypeSecretKeySettingsSnapshot: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SecretKeySettingsSnapshot {
         return
             try SecretKeySettingsSnapshot(
-                hasSecretKey: FfiConverterBool.read(from: &buf), 
-                displayValue: FfiConverterString.read(from: &buf), 
+                hasSecretKey: FfiConverterBool.read(from: &buf),
+                displayValue: FfiConverterString.read(from: &buf),
                 copyValue: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -38883,9 +38883,9 @@ public struct FfiConverterTypeSessionStorageWriteInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SessionStorageWriteInput {
         return
             try SessionStorageWriteInput(
-                nsecRequested: FfiConverterBool.read(from: &buf), 
-                nsecSucceeded: FfiConverterBool.read(from: &buf), 
-                bunkerUriRequested: FfiConverterBool.read(from: &buf), 
+                nsecRequested: FfiConverterBool.read(from: &buf),
+                nsecSucceeded: FfiConverterBool.read(from: &buf),
+                bunkerUriRequested: FfiConverterBool.read(from: &buf),
                 bunkerUriSucceeded: FfiConverterBool.read(from: &buf)
         )
     }
@@ -38957,7 +38957,7 @@ public struct FfiConverterTypeSessionStorageWriteSnapshot: FfiConverterRustBuffe
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SessionStorageWriteSnapshot {
         return
             try SessionStorageWriteSnapshot(
-                succeeded: FfiConverterBool.read(from: &buf), 
+                succeeded: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -39101,9 +39101,9 @@ public struct FfiConverterTypeShareArtifactTargetProjection: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareArtifactTargetProjection {
         return
             try ShareArtifactTargetProjection(
-                preview: FfiConverterTypeArtifactPreview.read(from: &buf), 
-                displayTitle: FfiConverterString.read(from: &buf), 
-                displaySubtitle: FfiConverterString.read(from: &buf), 
+                preview: FfiConverterTypeArtifactPreview.read(from: &buf),
+                displayTitle: FfiConverterString.read(from: &buf),
+                displaySubtitle: FfiConverterString.read(from: &buf),
                 imageUrl: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -39323,11 +39323,11 @@ public struct FfiConverterTypeShareHighlightTargetProjection: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareHighlightTargetProjection {
         return
             try ShareHighlightTargetProjection(
-                eventId: FfiConverterString.read(from: &buf), 
-                authorPubkeyHex: FfiConverterString.read(from: &buf), 
-                relayHint: FfiConverterString.read(from: &buf), 
-                displayTitle: FfiConverterString.read(from: &buf), 
-                displaySubtitle: FfiConverterString.read(from: &buf), 
+                eventId: FfiConverterString.read(from: &buf),
+                authorPubkeyHex: FfiConverterString.read(from: &buf),
+                relayHint: FfiConverterString.read(from: &buf),
+                displayTitle: FfiConverterString.read(from: &buf),
+                displaySubtitle: FfiConverterString.read(from: &buf),
                 imageUrl: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -39401,7 +39401,7 @@ public struct FfiConverterTypeShareHighlightTargetProjectionInput: FfiConverterR
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareHighlightTargetProjectionInput {
         return
             try ShareHighlightTargetProjectionInput(
-                highlight: FfiConverterTypeHighlightRecord.read(from: &buf), 
+                highlight: FfiConverterTypeHighlightRecord.read(from: &buf),
                 relayHint: FfiConverterString.read(from: &buf)
         )
     }
@@ -39471,7 +39471,7 @@ public struct FfiConverterTypeShareQueueAttempt: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareQueueAttempt {
         return
             try ShareQueueAttempt(
-                item: FfiConverterTypeShareQueueItem.read(from: &buf), 
+                item: FfiConverterTypeShareQueueItem.read(from: &buf),
                 succeeded: FfiConverterBool.read(from: &buf)
         )
     }
@@ -39547,8 +39547,8 @@ public struct FfiConverterTypeShareQueueDrainProjection: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareQueueDrainProjection {
         return
             try ShareQueueDrainProjection(
-                requeue: FfiConverterSequenceTypeShareQueueItem.read(from: &buf), 
-                successCount: FfiConverterUInt64.read(from: &buf), 
+                requeue: FfiConverterSequenceTypeShareQueueItem.read(from: &buf),
+                successCount: FfiConverterUInt64.read(from: &buf),
                 toast: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -39619,7 +39619,7 @@ public struct FfiConverterTypeShareQueueDrainProjectionInput: FfiConverterRustBu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareQueueDrainProjectionInput {
         return
             try ShareQueueDrainProjectionInput(
-                attempts: FfiConverterSequenceTypeShareQueueAttempt.read(from: &buf), 
+                attempts: FfiConverterSequenceTypeShareQueueAttempt.read(from: &buf),
                 communities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf)
         )
     }
@@ -39707,10 +39707,10 @@ public struct FfiConverterTypeShareQueueItem: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareQueueItem {
         return
             try ShareQueueItem(
-                id: FfiConverterString.read(from: &buf), 
-                groupId: FfiConverterString.read(from: &buf), 
-                url: FfiConverterString.read(from: &buf), 
-                note: FfiConverterString.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf),
+                groupId: FfiConverterString.read(from: &buf),
+                url: FfiConverterString.read(from: &buf),
+                note: FfiConverterString.read(from: &buf),
                 createdAtUnixSeconds: FfiConverterDouble.read(from: &buf)
         )
     }
@@ -39845,7 +39845,7 @@ public struct FfiConverterTypeShareToCommunityPublishResultProjection: FfiConver
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareToCommunityPublishResultProjection {
         return
             try ShareToCommunityPublishResultProjection(
-                didPublish: FfiConverterBool.read(from: &buf), 
+                didPublish: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -39915,7 +39915,7 @@ public struct FfiConverterTypeShareWebReaderTargetProjectionInput: FfiConverterR
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareWebReaderTargetProjectionInput {
         return
             try ShareWebReaderTargetProjectionInput(
-                preview: FfiConverterTypeArtifactPreview.read(from: &buf), 
+                preview: FfiConverterTypeArtifactPreview.read(from: &buf),
                 fallbackUrl: FfiConverterString.read(from: &buf)
         )
     }
@@ -39991,8 +39991,8 @@ public struct FfiConverterTypeShareWebReaderTargetSnapshot: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareWebReaderTargetSnapshot {
         return
             try ShareWebReaderTargetSnapshot(
-                target: FfiConverterOptionTypeShareArtifactTargetProjection.read(from: &buf), 
-                ready: FfiConverterBool.read(from: &buf), 
+                target: FfiConverterOptionTypeShareArtifactTargetProjection.read(from: &buf),
+                ready: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -40063,7 +40063,7 @@ public struct FfiConverterTypeSubscriptionStartSnapshot: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SubscriptionStartSnapshot {
         return
             try SubscriptionStartSnapshot(
-                handle: FfiConverterUInt64.read(from: &buf), 
+                handle: FfiConverterUInt64.read(from: &buf),
                 error: FfiConverterString.read(from: &buf)
         )
     }
@@ -40151,10 +40151,10 @@ public struct FfiConverterTypeTranscriptSegment: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TranscriptSegment {
         return
             try TranscriptSegment(
-                id: FfiConverterString.read(from: &buf), 
-                start: FfiConverterDouble.read(from: &buf), 
-                end: FfiConverterDouble.read(from: &buf), 
-                speaker: FfiConverterString.read(from: &buf), 
+                id: FfiConverterString.read(from: &buf),
+                start: FfiConverterDouble.read(from: &buf),
+                end: FfiConverterDouble.read(from: &buf),
+                speaker: FfiConverterString.read(from: &buf),
                 text: FfiConverterString.read(from: &buf)
         )
     }
@@ -40227,7 +40227,7 @@ public struct FfiConverterTypeViewSubscriptionStartProjection: FfiConverterRustB
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ViewSubscriptionStartProjection {
         return
             try ViewSubscriptionStartProjection(
-                shouldRegister: FfiConverterBool.read(from: &buf), 
+                shouldRegister: FfiConverterBool.read(from: &buf),
                 handle: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -40359,7 +40359,7 @@ public struct FfiConverterTypeWaveformCacheKeyProjection: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WaveformCacheKeyProjection {
         return
             try WaveformCacheKeyProjection(
-                cacheKey: FfiConverterString.read(from: &buf), 
+                cacheKey: FfiConverterString.read(from: &buf),
                 isUsable: FfiConverterBool.read(from: &buf)
         )
     }
@@ -40515,11 +40515,11 @@ public struct FfiConverterTypeWaveformPeaksPlan: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WaveformPeaksPlan {
         return
             try WaveformPeaksPlan(
-                cacheKey: FfiConverterString.read(from: &buf), 
-                shouldUseCachedPeaks: FfiConverterBool.read(from: &buf), 
-                shouldCheckWifiStatus: FfiConverterBool.read(from: &buf), 
-                shouldExtractPeaks: FfiConverterBool.read(from: &buf), 
-                bucketCount: FfiConverterUInt32.read(from: &buf), 
+                cacheKey: FfiConverterString.read(from: &buf),
+                shouldUseCachedPeaks: FfiConverterBool.read(from: &buf),
+                shouldCheckWifiStatus: FfiConverterBool.read(from: &buf),
+                shouldExtractPeaks: FfiConverterBool.read(from: &buf),
+                bucketCount: FfiConverterUInt32.read(from: &buf),
                 skipReason: FfiConverterOptionString.read(from: &buf)
         )
     }
@@ -40605,9 +40605,9 @@ public struct FfiConverterTypeWaveformPeaksPlanInput: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WaveformPeaksPlanInput {
         return
             try WaveformPeaksPlanInput(
-                audioUrl: FfiConverterString.read(from: &buf), 
-                durationSeconds: FfiConverterDouble.read(from: &buf), 
-                cachedPeaksAvailable: FfiConverterBool.read(from: &buf), 
+                audioUrl: FfiConverterString.read(from: &buf),
+                durationSeconds: FfiConverterDouble.read(from: &buf),
+                cachedPeaksAvailable: FfiConverterBool.read(from: &buf),
                 wifiStatus: FfiConverterTypeWaveformWifiStatus.read(from: &buf)
         )
     }
@@ -40663,10 +40663,10 @@ public struct WebBookmarkRecord {
     public init(
         /**
          * Full URL — `"https://"` prepended to the `d` tag.
-         */url: String, pubkey: String, title: String, 
+         */url: String, pubkey: String, title: String,
         /**
          * Detailed description from the event's `content` field.
-         */description: String, 
+         */description: String,
         /**
          * `t` tags (topics / hashtags).
          */topics: [String], publishedAt: UInt64?, createdAt: UInt64?) {
@@ -40731,12 +40731,12 @@ public struct FfiConverterTypeWebBookmarkRecord: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WebBookmarkRecord {
         return
             try WebBookmarkRecord(
-                url: FfiConverterString.read(from: &buf), 
-                pubkey: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                description: FfiConverterString.read(from: &buf), 
-                topics: FfiConverterSequenceString.read(from: &buf), 
-                publishedAt: FfiConverterOptionUInt64.read(from: &buf), 
+                url: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                description: FfiConverterString.read(from: &buf),
+                topics: FfiConverterSequenceString.read(from: &buf),
+                publishedAt: FfiConverterOptionUInt64.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -40823,9 +40823,9 @@ public struct FfiConverterTypeWebBookmarkRowProjection: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WebBookmarkRowProjection {
         return
             try WebBookmarkRowProjection(
-                displayTitle: FfiConverterString.read(from: &buf), 
-                host: FfiConverterOptionString.read(from: &buf), 
-                description: FfiConverterOptionString.read(from: &buf), 
+                displayTitle: FfiConverterString.read(from: &buf),
+                host: FfiConverterOptionString.read(from: &buf),
+                description: FfiConverterOptionString.read(from: &buf),
                 displayUnixSeconds: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -40999,13 +40999,13 @@ public struct FfiConverterTypeWebMetadata: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WebMetadata {
         return
             try WebMetadata(
-                url: FfiConverterString.read(from: &buf), 
-                title: FfiConverterString.read(from: &buf), 
-                description: FfiConverterString.read(from: &buf), 
-                image: FfiConverterString.read(from: &buf), 
-                siteName: FfiConverterString.read(from: &buf), 
-                author: FfiConverterString.read(from: &buf), 
-                favicon: FfiConverterString.read(from: &buf), 
+                url: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                description: FfiConverterString.read(from: &buf),
+                image: FfiConverterString.read(from: &buf),
+                siteName: FfiConverterString.read(from: &buf),
+                author: FfiConverterString.read(from: &buf),
+                favicon: FfiConverterString.read(from: &buf),
                 fetchedAt: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -41091,8 +41091,8 @@ public struct FfiConverterTypeWebMetadataRequestProjection: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WebMetadataRequestProjection {
         return
             try WebMetadataRequestProjection(
-                canonicalUrl: FfiConverterString.read(from: &buf), 
-                canRequest: FfiConverterBool.read(from: &buf), 
+                canonicalUrl: FfiConverterString.read(from: &buf),
+                canRequest: FfiConverterBool.read(from: &buf),
                 cacheKeys: FfiConverterSequenceString.read(from: &buf)
         )
     }
@@ -41234,8 +41234,8 @@ public struct FfiConverterTypeWhatsNewEntry: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WhatsNewEntry {
         return
             try WhatsNewEntry(
-                shippedAtIso: FfiConverterString.read(from: &buf), 
-                shippedAtUnixSeconds: FfiConverterUInt64.read(from: &buf), 
+                shippedAtIso: FfiConverterString.read(from: &buf),
+                shippedAtUnixSeconds: FfiConverterUInt64.read(from: &buf),
                 lines: FfiConverterSequenceString.read(from: &buf)
         )
     }
@@ -41312,8 +41312,8 @@ public struct FfiConverterTypeWhatsNewPresentationSnapshot: FfiConverterRustBuff
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WhatsNewPresentationSnapshot {
         return
             try WhatsNewPresentationSnapshot(
-                entries: FfiConverterSequenceTypeWhatsNewEntry.read(from: &buf), 
-                shouldPresent: FfiConverterBool.read(from: &buf), 
+                entries: FfiConverterSequenceTypeWhatsNewEntry.read(from: &buf),
+                shouldPresent: FfiConverterBool.read(from: &buf),
                 errorMessage: FfiConverterString.read(from: &buf)
         )
     }
@@ -41344,7 +41344,7 @@ public func FfiConverterTypeWhatsNewPresentationSnapshot_lower(_ value: WhatsNew
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum AddRelayProbeStatus {
-    
+
     case idle
     case checking
     case reachable
@@ -41365,38 +41365,38 @@ public struct FfiConverterTypeAddRelayProbeStatus: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AddRelayProbeStatus {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .idle
-        
+
         case 2: return .checking
-        
+
         case 3: return .reachable
-        
+
         case 4: return .unreachable
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: AddRelayProbeStatus, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .idle:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .checking:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .reachable:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .unreachable:
             writeInt(&buf, Int32(4))
-        
+
         }
     }
 }
@@ -41433,7 +41433,7 @@ extension AddRelayProbeStatus: Equatable, Hashable {}
  */
 
 public enum ArtifactDetailTarget {
-    
+
     case podcast
     case article
     case book
@@ -41455,44 +41455,44 @@ public struct FfiConverterTypeArtifactDetailTarget: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactDetailTarget {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .podcast
-        
+
         case 2: return .article
-        
+
         case 3: return .book
-        
+
         case 4: return .web
-        
+
         case 5: return .unavailable
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: ArtifactDetailTarget, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .podcast:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .article:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .book:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .web:
             writeInt(&buf, Int32(4))
-        
-        
+
+
         case .unavailable:
             writeInt(&buf, Int32(5))
-        
+
         }
     }
 }
@@ -41524,7 +41524,7 @@ extension ArtifactDetailTarget: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum BookmarkLibraryFilter {
-    
+
     case articles
     case collections
     case web
@@ -41544,32 +41544,32 @@ public struct FfiConverterTypeBookmarkLibraryFilter: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkLibraryFilter {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .articles
-        
+
         case 2: return .collections
-        
+
         case 3: return .web
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: BookmarkLibraryFilter, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .articles:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .collections:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .web:
             writeInt(&buf, Int32(3))
-        
+
         }
     }
 }
@@ -41601,7 +41601,7 @@ extension BookmarkLibraryFilter: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum BookmarkLibraryPane {
-    
+
     case articles
     case collections
     case web
@@ -41622,38 +41622,38 @@ public struct FfiConverterTypeBookmarkLibraryPane: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkLibraryPane {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .articles
-        
+
         case 2: return .collections
-        
+
         case 3: return .web
-        
+
         case 4: return .explore
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: BookmarkLibraryPane, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .articles:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .collections:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .web:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .explore:
             writeInt(&buf, Int32(4))
-        
+
         }
     }
 }
@@ -41685,7 +41685,7 @@ extension BookmarkLibraryPane: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum BookmarkLibraryScope {
-    
+
     case mine
     case explore
 }
@@ -41704,26 +41704,26 @@ public struct FfiConverterTypeBookmarkLibraryScope: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkLibraryScope {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .mine
-        
+
         case 2: return .explore
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: BookmarkLibraryScope, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .mine:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .explore:
             writeInt(&buf, Int32(2))
-        
+
         }
     }
 }
@@ -41755,7 +41755,7 @@ extension BookmarkLibraryScope: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum CapturePublishPhase {
-    
+
     case idle
     case processing
     case reviewing
@@ -41778,50 +41778,50 @@ public struct FfiConverterTypeCapturePublishPhase: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CapturePublishPhase {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .idle
-        
+
         case 2: return .processing
-        
+
         case 3: return .reviewing
-        
+
         case 4: return .publishing
-        
+
         case 5: return .done
-        
+
         case 6: return .error
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: CapturePublishPhase, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .idle:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .processing:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .reviewing:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .publishing:
             writeInt(&buf, Int32(4))
-        
-        
+
+
         case .done:
             writeInt(&buf, Int32(5))
-        
-        
+
+
         case .error:
             writeInt(&buf, Int32(6))
-        
+
         }
     }
 }
@@ -41852,26 +41852,26 @@ extension CapturePublishPhase: Equatable, Hashable {}
 
 public enum CoreError: Swift.Error {
 
-    
-    
+
+
     case NotInitialized(message: String)
-    
+
     case NotAuthenticated(message: String)
-    
+
     case InvalidInput(message: String)
-    
+
     case Network(message: String)
-    
+
     case Signer(message: String)
-    
+
     case Relay(message: String)
-    
+
     case Cache(message: String)
-    
+
     case NotFound(message: String)
-    
+
     case Other(message: String)
-    
+
 }
 
 
@@ -41885,45 +41885,45 @@ public struct FfiConverterTypeCoreError: FfiConverterRustBuffer {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
-        
 
-        
+
+
         case 1: return .NotInitialized(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 2: return .NotAuthenticated(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 3: return .InvalidInput(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 4: return .Network(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 5: return .Signer(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 6: return .Relay(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 7: return .Cache(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 8: return .NotFound(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 9: return .Other(
             message: try FfiConverterString.read(from: &buf)
         )
-        
+
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -41932,9 +41932,9 @@ public struct FfiConverterTypeCoreError: FfiConverterRustBuffer {
     public static func write(_ value: CoreError, into buf: inout [UInt8]) {
         switch value {
 
-        
 
-        
+
+
         case .NotInitialized(_ /* message is ignored*/):
             writeInt(&buf, Int32(1))
         case .NotAuthenticated(_ /* message is ignored*/):
@@ -41954,7 +41954,7 @@ public struct FfiConverterTypeCoreError: FfiConverterRustBuffer {
         case .Other(_ /* message is ignored*/):
             writeInt(&buf, Int32(9))
 
-        
+
         }
     }
 }
@@ -41993,7 +41993,7 @@ extension CoreError: Foundation.LocalizedError {
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum DataChangeType {
-    
+
     case communityUpserted(community: CommunitySummary
     )
     case membershipChanged(groupId: String
@@ -42142,207 +42142,207 @@ public struct FfiConverterTypeDataChangeType: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DataChangeType {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .communityUpserted(community: try FfiConverterTypeCommunitySummary.read(from: &buf)
         )
-        
+
         case 2: return .membershipChanged(groupId: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 3: return .appToastRequested(message: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 4: return .artifactUpserted(groupId: try FfiConverterString.read(from: &buf), artifact: try FfiConverterTypeArtifactRecord.read(from: &buf)
         )
-        
+
         case 5: return .discussionUpserted(groupId: try FfiConverterString.read(from: &buf), discussion: try FfiConverterTypeDiscussionRecord.read(from: &buf)
         )
-        
+
         case 6: return .chatMessageUpserted(groupId: try FfiConverterString.read(from: &buf), message: try FfiConverterTypeChatMessageRecord.read(from: &buf)
         )
-        
+
         case 7: return .highlightUpserted(groupId: try FfiConverterString.read(from: &buf), highlight: try FfiConverterTypeHydratedHighlight.read(from: &buf)
         )
-        
+
         case 8: return .highlightShared(groupId: try FfiConverterString.read(from: &buf), highlightId: try FfiConverterString.read(from: &buf), sharedByPubkey: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 9: return .myHighlightUpserted(highlight: try FfiConverterTypeHighlightRecord.read(from: &buf)
         )
-        
+
         case 10: return .userProfileUpdated(pubkey: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
         )
-        
+
         case 11: return .articleUpdated(address: try FfiConverterString.read(from: &buf), kind: try FfiConverterUInt32.read(from: &buf)
         )
-        
+
         case 12: return .followingReadsUpdated
-        
+
         case 13: return .followingHighlightsUpdated
-        
+
         case 14: return .feedbackThreadsUpdated
-        
+
         case 15: return .feedbackThreadUpdated
-        
+
         case 16: return .searchArticlesUpdated(query: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 17: return .bookmarksUpdated
-        
+
         case 18: return .bookmarkSetsUpdated
-        
+
         case 19: return .followingCurationSetsUpdated
-        
+
         case 20: return .webBookmarksUpdated
-        
+
         case 21: return .nostrEntityResolved(event: try FfiConverterTypeNostrEntityEvent.read(from: &buf)
         )
-        
+
         case 22: return .signerConnected(user: try FfiConverterTypeCurrentUser.read(from: &buf)
         )
-        
+
         case 23: return .bunkerSignRequest(requestId: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 24: return .relayStatusChanged(url: try FfiConverterString.read(from: &buf), state: try FfiConverterTypeRelayStatus.read(from: &buf)
         )
-        
+
         case 25: return .relayDiagnosticsUpdated(diagnostics: try FfiConverterSequenceTypeRelayDiagnostic.read(from: &buf)
         )
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: DataChangeType, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case let .communityUpserted(community):
             writeInt(&buf, Int32(1))
             FfiConverterTypeCommunitySummary.write(community, into: &buf)
-            
-        
+
+
         case let .membershipChanged(groupId):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(groupId, into: &buf)
-            
-        
+
+
         case let .appToastRequested(message):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(message, into: &buf)
-            
-        
+
+
         case let .artifactUpserted(groupId,artifact):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterTypeArtifactRecord.write(artifact, into: &buf)
-            
-        
+
+
         case let .discussionUpserted(groupId,discussion):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterTypeDiscussionRecord.write(discussion, into: &buf)
-            
-        
+
+
         case let .chatMessageUpserted(groupId,message):
             writeInt(&buf, Int32(6))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterTypeChatMessageRecord.write(message, into: &buf)
-            
-        
+
+
         case let .highlightUpserted(groupId,highlight):
             writeInt(&buf, Int32(7))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterTypeHydratedHighlight.write(highlight, into: &buf)
-            
-        
+
+
         case let .highlightShared(groupId,highlightId,sharedByPubkey):
             writeInt(&buf, Int32(8))
             FfiConverterString.write(groupId, into: &buf)
             FfiConverterString.write(highlightId, into: &buf)
             FfiConverterString.write(sharedByPubkey, into: &buf)
-            
-        
+
+
         case let .myHighlightUpserted(highlight):
             writeInt(&buf, Int32(9))
             FfiConverterTypeHighlightRecord.write(highlight, into: &buf)
-            
-        
+
+
         case let .userProfileUpdated(pubkey,kind):
             writeInt(&buf, Int32(10))
             FfiConverterString.write(pubkey, into: &buf)
             FfiConverterUInt32.write(kind, into: &buf)
-            
-        
+
+
         case let .articleUpdated(address,kind):
             writeInt(&buf, Int32(11))
             FfiConverterString.write(address, into: &buf)
             FfiConverterUInt32.write(kind, into: &buf)
-            
-        
+
+
         case .followingReadsUpdated:
             writeInt(&buf, Int32(12))
-        
-        
+
+
         case .followingHighlightsUpdated:
             writeInt(&buf, Int32(13))
-        
-        
+
+
         case .feedbackThreadsUpdated:
             writeInt(&buf, Int32(14))
-        
-        
+
+
         case .feedbackThreadUpdated:
             writeInt(&buf, Int32(15))
-        
-        
+
+
         case let .searchArticlesUpdated(query):
             writeInt(&buf, Int32(16))
             FfiConverterString.write(query, into: &buf)
-            
-        
+
+
         case .bookmarksUpdated:
             writeInt(&buf, Int32(17))
-        
-        
+
+
         case .bookmarkSetsUpdated:
             writeInt(&buf, Int32(18))
-        
-        
+
+
         case .followingCurationSetsUpdated:
             writeInt(&buf, Int32(19))
-        
-        
+
+
         case .webBookmarksUpdated:
             writeInt(&buf, Int32(20))
-        
-        
+
+
         case let .nostrEntityResolved(event):
             writeInt(&buf, Int32(21))
             FfiConverterTypeNostrEntityEvent.write(event, into: &buf)
-            
-        
+
+
         case let .signerConnected(user):
             writeInt(&buf, Int32(22))
             FfiConverterTypeCurrentUser.write(user, into: &buf)
-            
-        
+
+
         case let .bunkerSignRequest(requestId):
             writeInt(&buf, Int32(23))
             FfiConverterString.write(requestId, into: &buf)
-            
-        
+
+
         case let .relayStatusChanged(url,state):
             writeInt(&buf, Int32(24))
             FfiConverterString.write(url, into: &buf)
             FfiConverterTypeRelayStatus.write(state, into: &buf)
-            
-        
+
+
         case let .relayDiagnosticsUpdated(diagnostics):
             writeInt(&buf, Int32(25))
             FfiConverterSequenceTypeRelayDiagnostic.write(diagnostics, into: &buf)
-            
+
         }
     }
 }
@@ -42374,7 +42374,7 @@ extension DataChangeType: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum HighlightSourceKind {
-    
+
     case article
     case web
     case podcast
@@ -42398,56 +42398,56 @@ public struct FfiConverterTypeHighlightSourceKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightSourceKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .article
-        
+
         case 2: return .web
-        
+
         case 3: return .podcast
-        
+
         case 4: return .book
-        
+
         case 5: return .video
-        
+
         case 6: return .paper
-        
+
         case 7: return .unknown
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: HighlightSourceKind, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .article:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .web:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .podcast:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .book:
             writeInt(&buf, Int32(4))
-        
-        
+
+
         case .video:
             writeInt(&buf, Int32(5))
-        
-        
+
+
         case .paper:
             writeInt(&buf, Int32(6))
-        
-        
+
+
         case .unknown:
             writeInt(&buf, Int32(7))
-        
+
         }
     }
 }
@@ -42484,7 +42484,7 @@ extension HighlightSourceKind: Equatable, Hashable {}
  */
 
 public enum LoginInputAction {
-    
+
     case empty
     case nsec(nsec: String
     )
@@ -42508,44 +42508,44 @@ public struct FfiConverterTypeLoginInputAction: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LoginInputAction {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .empty
-        
+
         case 2: return .nsec(nsec: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 3: return .bunker(uri: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 4: return .invalid(message: try FfiConverterString.read(from: &buf)
         )
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: LoginInputAction, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .empty:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case let .nsec(nsec):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(nsec, into: &buf)
-            
-        
+
+
         case let .bunker(uri):
             writeInt(&buf, Int32(3))
             FfiConverterString.write(uri, into: &buf)
-            
-        
+
+
         case let .invalid(message):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(message, into: &buf)
-            
+
         }
     }
 }
@@ -42577,7 +42577,7 @@ extension LoginInputAction: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum NetworkRelayConnectionPolicyAction {
-    
+
     case none
     case reconnectAll
     case disconnectAll
@@ -42597,32 +42597,32 @@ public struct FfiConverterTypeNetworkRelayConnectionPolicyAction: FfiConverterRu
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkRelayConnectionPolicyAction {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .none
-        
+
         case 2: return .reconnectAll
-        
+
         case 3: return .disconnectAll
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: NetworkRelayConnectionPolicyAction, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .none:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .reconnectAll:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .disconnectAll:
             writeInt(&buf, Int32(3))
-        
+
         }
     }
 }
@@ -42654,7 +42654,7 @@ extension NetworkRelayConnectionPolicyAction: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum Nip05AvailabilityState {
-    
+
     case idle
     case invalid
     case available
@@ -42675,38 +42675,38 @@ public struct FfiConverterTypeNip05AvailabilityState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip05AvailabilityState {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .idle
-        
+
         case 2: return .invalid
-        
+
         case 3: return .available
-        
+
         case 4: return .taken
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: Nip05AvailabilityState, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .idle:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .invalid:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .available:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .taken:
             writeInt(&buf, Int32(4))
-        
+
         }
     }
 }
@@ -42738,7 +42738,7 @@ extension Nip05AvailabilityState: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum NostrContentRun {
-    
+
     case text(value: String
     )
     case entity(entity: NostrEntityRef
@@ -42759,30 +42759,30 @@ public struct FfiConverterTypeNostrContentRun: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrContentRun {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .text(value: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 2: return .entity(entity: try FfiConverterTypeNostrEntityRef.read(from: &buf)
         )
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: NostrContentRun, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case let .text(value):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(value, into: &buf)
-            
-        
+
+
         case let .entity(entity):
             writeInt(&buf, Int32(2))
             FfiConverterTypeNostrEntityRef.write(entity, into: &buf)
-            
+
         }
     }
 }
@@ -42814,7 +42814,7 @@ extension NostrContentRun: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum NostrEntityInlineRender {
-    
+
     case profile(pubkeyHex: String, fallbackLabel: String
     )
     case reference(chipLabel: String
@@ -42835,31 +42835,31 @@ public struct FfiConverterTypeNostrEntityInlineRender: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityInlineRender {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .profile(pubkeyHex: try FfiConverterString.read(from: &buf), fallbackLabel: try FfiConverterString.read(from: &buf)
         )
-        
+
         case 2: return .reference(chipLabel: try FfiConverterString.read(from: &buf)
         )
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: NostrEntityInlineRender, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case let .profile(pubkeyHex,fallbackLabel):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(pubkeyHex, into: &buf)
             FfiConverterString.write(fallbackLabel, into: &buf)
-            
-        
+
+
         case let .reference(chipLabel):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(chipLabel, into: &buf)
-            
+
         }
     }
 }
@@ -42894,7 +42894,7 @@ extension NostrEntityInlineRender: Equatable, Hashable {}
  */
 
 public enum NostrEntityRef {
-    
+
     /**
      * `npub1…` / `nprofile1…` — reference to a user's profile.
      */
@@ -42903,10 +42903,10 @@ public enum NostrEntityRef {
     /**
      * `note1…` / `nevent1…` — reference to a specific event by id.
      */
-    case event(eventIdHex: String, relays: [String], 
+    case event(eventIdHex: String, relays: [String],
         /**
          * `nevent` can carry a hinted author pubkey. `None` for `note1…`.
-         */authorHintHex: String?, 
+         */authorHintHex: String?,
         /**
          * `nevent` can carry a hinted kind so the UI can pick a
          * renderer skeleton (article card vs. note card vs. highlight
@@ -42935,45 +42935,45 @@ public struct FfiConverterTypeNostrEntityRef: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityRef {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .profile(pubkeyHex: try FfiConverterString.read(from: &buf), relays: try FfiConverterSequenceString.read(from: &buf)
         )
-        
+
         case 2: return .event(eventIdHex: try FfiConverterString.read(from: &buf), relays: try FfiConverterSequenceString.read(from: &buf), authorHintHex: try FfiConverterOptionString.read(from: &buf), kindHint: try FfiConverterOptionUInt32.read(from: &buf)
         )
-        
+
         case 3: return .address(kind: try FfiConverterUInt32.read(from: &buf), pubkeyHex: try FfiConverterString.read(from: &buf), dTag: try FfiConverterString.read(from: &buf), relays: try FfiConverterSequenceString.read(from: &buf)
         )
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: NostrEntityRef, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case let .profile(pubkeyHex,relays):
             writeInt(&buf, Int32(1))
             FfiConverterString.write(pubkeyHex, into: &buf)
             FfiConverterSequenceString.write(relays, into: &buf)
-            
-        
+
+
         case let .event(eventIdHex,relays,authorHintHex,kindHint):
             writeInt(&buf, Int32(2))
             FfiConverterString.write(eventIdHex, into: &buf)
             FfiConverterSequenceString.write(relays, into: &buf)
             FfiConverterOptionString.write(authorHintHex, into: &buf)
             FfiConverterOptionUInt32.write(kindHint, into: &buf)
-            
-        
+
+
         case let .address(kind,pubkeyHex,dTag,relays):
             writeInt(&buf, Int32(3))
             FfiConverterUInt32.write(kind, into: &buf)
             FfiConverterString.write(pubkeyHex, into: &buf)
             FfiConverterString.write(dTag, into: &buf)
             FfiConverterSequenceString.write(relays, into: &buf)
-            
+
         }
     }
 }
@@ -43010,7 +43010,7 @@ extension NostrEntityRef: Equatable, Hashable {}
  */
 
 public enum NostrEntityRenderKind {
-    
+
     case article
     case note
     case highlight
@@ -43032,44 +43032,44 @@ public struct FfiConverterTypeNostrEntityRenderKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NostrEntityRenderKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .article
-        
+
         case 2: return .note
-        
+
         case 3: return .highlight
-        
+
         case 4: return .profile
-        
+
         case 5: return .generic
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: NostrEntityRenderKind, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .article:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .note:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .highlight:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .profile:
             writeInt(&buf, Int32(4))
-        
-        
+
+
         case .generic:
             writeInt(&buf, Int32(5))
-        
+
         }
     }
 }
@@ -43101,7 +43101,7 @@ extension NostrEntityRenderKind: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum OcrPageSide {
-    
+
     case left
     case right
 }
@@ -43120,26 +43120,26 @@ public struct FfiConverterTypeOcrPageSide: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OcrPageSide {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .left
-        
+
         case 2: return .right
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: OcrPageSide, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .left:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .right:
             writeInt(&buf, Int32(2))
-        
+
         }
     }
 }
@@ -43171,7 +43171,7 @@ extension OcrPageSide: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum PodcastTimelineRowKind {
-    
+
     case chapter
     case clip
     case transcript
@@ -43192,38 +43192,38 @@ public struct FfiConverterTypePodcastTimelineRowKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastTimelineRowKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .chapter
-        
+
         case 2: return .clip
-        
+
         case 3: return .transcript
-        
+
         case 4: return .waveformTick
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: PodcastTimelineRowKind, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .chapter:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .clip:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .transcript:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .waveformTick:
             writeInt(&buf, Int32(4))
-        
+
         }
     }
 }
@@ -43255,7 +43255,7 @@ extension PodcastTimelineRowKind: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum PodcastTimelineRowState {
-    
+
     case played
     case active
     case future
@@ -43275,32 +43275,32 @@ public struct FfiConverterTypePodcastTimelineRowState: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastTimelineRowState {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .played
-        
+
         case 2: return .active
-        
+
         case 3: return .future
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: PodcastTimelineRowState, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .played:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .active:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .future:
             writeInt(&buf, Int32(3))
-        
+
         }
     }
 }
@@ -43332,7 +43332,7 @@ extension PodcastTimelineRowState: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum PodcastTranscriptAvailability {
-    
+
     case loading
     case available
     case unavailable
@@ -43352,32 +43352,32 @@ public struct FfiConverterTypePodcastTranscriptAvailability: FfiConverterRustBuf
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastTranscriptAvailability {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .loading
-        
+
         case 2: return .available
-        
+
         case 3: return .unavailable
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: PodcastTranscriptAvailability, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .loading:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .available:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .unavailable:
             writeInt(&buf, Int32(3))
-        
+
         }
     }
 }
@@ -43409,7 +43409,7 @@ extension PodcastTranscriptAvailability: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum ProfileDisplayFallback {
-    
+
     case pubkey8
     case pubkey10
     case pubkey12
@@ -43431,44 +43431,44 @@ public struct FfiConverterTypeProfileDisplayFallback: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileDisplayFallback {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .pubkey8
-        
+
         case 2: return .pubkey10
-        
+
         case 3: return .pubkey12
-        
+
         case 4: return .accountLabel
-        
+
         case 5: return .pubkey6
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: ProfileDisplayFallback, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .pubkey8:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .pubkey10:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .pubkey12:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .accountLabel:
             writeInt(&buf, Int32(4))
-        
-        
+
+
         case .pubkey6:
             writeInt(&buf, Int32(5))
-        
+
         }
     }
 }
@@ -43500,7 +43500,7 @@ extension ProfileDisplayFallback: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum ProfileUpdateAction {
-    
+
     case refreshProfile
     case refreshFollowState
     case refreshArticles
@@ -43523,50 +43523,50 @@ public struct FfiConverterTypeProfileUpdateAction: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileUpdateAction {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .refreshProfile
-        
+
         case 2: return .refreshFollowState
-        
+
         case 3: return .refreshArticles
-        
+
         case 4: return .refreshHighlights
-        
+
         case 5: return .refreshCommunities
-        
+
         case 6: return .ignore
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: ProfileUpdateAction, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .refreshProfile:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .refreshFollowState:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .refreshArticles:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .refreshHighlights:
             writeInt(&buf, Int32(4))
-        
-        
+
+
         case .refreshCommunities:
             writeInt(&buf, Int32(5))
-        
-        
+
+
         case .ignore:
             writeInt(&buf, Int32(6))
-        
+
         }
     }
 }
@@ -43598,7 +43598,7 @@ extension ProfileUpdateAction: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum RelativeTimeLabelStyle {
-    
+
     case compact
     case ago
     case bookmarkCompact
@@ -43618,32 +43618,32 @@ public struct FfiConverterTypeRelativeTimeLabelStyle: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelativeTimeLabelStyle {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .compact
-        
+
         case 2: return .ago
-        
+
         case 3: return .bookmarkCompact
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: RelativeTimeLabelStyle, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .compact:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .ago:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .bookmarkCompact:
             writeInt(&buf, Int32(3))
-        
+
         }
     }
 }
@@ -43682,7 +43682,7 @@ extension RelativeTimeLabelStyle: Equatable, Hashable {}
  */
 
 public enum RelayStatus {
-    
+
     case connecting
     case connected
     case disconnected
@@ -43704,44 +43704,44 @@ public struct FfiConverterTypeRelayStatus: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayStatus {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .connecting
-        
+
         case 2: return .connected
-        
+
         case 3: return .disconnected
-        
+
         case 4: return .terminated
-        
+
         case 5: return .banned
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: RelayStatus, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .connecting:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .connected:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .disconnected:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .terminated:
             writeInt(&buf, Int32(4))
-        
-        
+
+
         case .banned:
             writeInt(&buf, Int32(5))
-        
+
         }
     }
 }
@@ -43773,7 +43773,7 @@ extension RelayStatus: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum RelayStatusTone {
-    
+
     case connected
     case connecting
     case error
@@ -43794,38 +43794,38 @@ public struct FfiConverterTypeRelayStatusTone: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayStatusTone {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .connected
-        
+
         case 2: return .connecting
-        
+
         case 3: return .error
-        
+
         case 4: return .unknown
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: RelayStatusTone, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .connected:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .connecting:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .error:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .unknown:
             writeInt(&buf, Int32(4))
-        
+
         }
     }
 }
@@ -43862,7 +43862,7 @@ extension RelayStatusTone: Equatable, Hashable {}
  */
 
 public enum RoomAccess {
-    
+
     case `open`
     case closed
 }
@@ -43881,26 +43881,26 @@ public struct FfiConverterTypeRoomAccess: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomAccess {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .`open`
-        
+
         case 2: return .closed
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: RoomAccess, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .`open`:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .closed:
             writeInt(&buf, Int32(2))
-        
+
         }
     }
 }
@@ -43932,7 +43932,7 @@ extension RoomAccess: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum RoomInviteCandidateSource {
-    
+
     case follow
     case paste
 }
@@ -43951,26 +43951,26 @@ public struct FfiConverterTypeRoomInviteCandidateSource: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteCandidateSource {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .follow
-        
+
         case 2: return .paste
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: RoomInviteCandidateSource, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .follow:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .paste:
             writeInt(&buf, Int32(2))
-        
+
         }
     }
 }
@@ -44002,7 +44002,7 @@ extension RoomInviteCandidateSource: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum RoomInviteInputFormat {
-    
+
     case npub
     case nprofile
     case hex
@@ -44022,32 +44022,32 @@ public struct FfiConverterTypeRoomInviteInputFormat: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteInputFormat {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .npub
-        
+
         case 2: return .nprofile
-        
+
         case 3: return .hex
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: RoomInviteInputFormat, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .npub:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .nprofile:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .hex:
             writeInt(&buf, Int32(3))
-        
+
         }
     }
 }
@@ -44079,7 +44079,7 @@ extension RoomInviteInputFormat: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum RoomInviteSelectionAction {
-    
+
     case add
     case toggle
     case remove
@@ -44099,32 +44099,32 @@ public struct FfiConverterTypeRoomInviteSelectionAction: FfiConverterRustBuffer 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomInviteSelectionAction {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .add
-        
+
         case 2: return .toggle
-        
+
         case 3: return .remove
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: RoomInviteSelectionAction, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .add:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .toggle:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .remove:
             writeInt(&buf, Int32(3))
-        
+
         }
     }
 }
@@ -44156,7 +44156,7 @@ extension RoomInviteSelectionAction: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum RoomLibraryCardKind {
-    
+
     case article
     case book
     case podcast
@@ -44177,38 +44177,38 @@ public struct FfiConverterTypeRoomLibraryCardKind: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryCardKind {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .article
-        
+
         case 2: return .book
-        
+
         case 3: return .podcast
-        
+
         case 4: return .generic
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: RoomLibraryCardKind, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .article:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .book:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .podcast:
             writeInt(&buf, Int32(3))
-        
-        
+
+
         case .generic:
             writeInt(&buf, Int32(4))
-        
+
         }
     }
 }
@@ -44240,7 +44240,7 @@ extension RoomLibraryCardKind: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum RoomPreviewSecondaryAction {
-    
+
     case none
     case peekInside
     case openFullRoom
@@ -44260,32 +44260,32 @@ public struct FfiConverterTypeRoomPreviewSecondaryAction: FfiConverterRustBuffer
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewSecondaryAction {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .none
-        
+
         case 2: return .peekInside
-        
+
         case 3: return .openFullRoom
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: RoomPreviewSecondaryAction, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .none:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .peekInside:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .openFullRoom:
             writeInt(&buf, Int32(3))
-        
+
         }
     }
 }
@@ -44321,7 +44321,7 @@ extension RoomPreviewSecondaryAction: Equatable, Hashable {}
  */
 
 public enum RoomRecommendationReason {
-    
+
     /**
      * People the user follows (kind:3) are members of this room.
      */
@@ -44346,26 +44346,26 @@ public struct FfiConverterTypeRoomRecommendationReason: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendationReason {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .friends
-        
+
         case 2: return .authors
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: RoomRecommendationReason, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .friends:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .authors:
             writeInt(&buf, Int32(2))
-        
+
         }
     }
 }
@@ -44402,7 +44402,7 @@ extension RoomRecommendationReason: Equatable, Hashable {}
  */
 
 public enum RoomVisibility {
-    
+
     case `public`
     case `private`
 }
@@ -44421,26 +44421,26 @@ public struct FfiConverterTypeRoomVisibility: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomVisibility {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .`public`
-        
+
         case 2: return .`private`
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: RoomVisibility, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .`public`:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .`private`:
             writeInt(&buf, Int32(2))
-        
+
         }
     }
 }
@@ -44472,7 +44472,7 @@ extension RoomVisibility: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum WaveformWifiStatus {
-    
+
     case unknown
     case available
     case unavailable
@@ -44492,32 +44492,32 @@ public struct FfiConverterTypeWaveformWifiStatus: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WaveformWifiStatus {
         let variant: Int32 = try readInt(&buf)
         switch variant {
-        
+
         case 1: return .unknown
-        
+
         case 2: return .available
-        
+
         case 3: return .unavailable
-        
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
     public static func write(_ value: WaveformWifiStatus, into buf: inout [UInt8]) {
         switch value {
-        
-        
+
+
         case .unknown:
             writeInt(&buf, Int32(1))
-        
-        
+
+
         case .available:
             writeInt(&buf, Int32(2))
-        
-        
+
+
         case .unavailable:
             writeInt(&buf, Int32(3))
-        
+
         }
     }
 }

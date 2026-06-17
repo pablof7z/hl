@@ -6,6 +6,8 @@ import SwiftUI
 struct RoomBrowseAllView: View {
     @Environment(HighlighterStore.self) private var appStore
 
+    var onOpenRoom: ((String) -> Void)?
+
     @State private var rooms: [CommunitySummary] = []
     @State private var search: String = ""
     @State private var previewRoom: CommunitySummary?
@@ -54,6 +56,10 @@ struct RoomBrowseAllView: View {
                             _ = await appStore.safeCore.requestJoinRoom(groupId: room.id, roomName: room.name)
                         }
                         previewRoom = nil
+                    },
+                    onOpenRoom: {
+                        previewRoom = nil
+                        onOpenRoom?(room.id)
                     }
                 )
             }
