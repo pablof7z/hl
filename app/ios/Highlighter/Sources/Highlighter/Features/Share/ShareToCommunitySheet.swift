@@ -16,6 +16,7 @@ struct ShareToCommunityTarget: Identifiable {
     let displayTitle: String
     let displaySubtitle: String
     let imageURL: URL?
+    let publicShareURL: URL?
 
     enum Payload {
         /// Share the source artifact/article via kind:11.
@@ -32,7 +33,8 @@ struct ShareToCommunityTarget: Identifiable {
             payload: .artifactShare(preview: projection.preview),
             displayTitle: projection.displayTitle,
             displaySubtitle: projection.displaySubtitle,
-            imageURL: projection.imageUrl.flatMap { URL(string: $0) }
+            imageURL: projection.imageUrl.flatMap { URL(string: $0) },
+            publicShareURL: articleShareURL(for: article, core: core)
         )
     }
 
@@ -44,7 +46,8 @@ struct ShareToCommunityTarget: Identifiable {
             payload: .artifactShare(preview: projection.preview),
             displayTitle: projection.displayTitle,
             displaySubtitle: projection.displaySubtitle,
-            imageURL: projection.imageUrl.flatMap { URL(string: $0) }
+            imageURL: projection.imageUrl.flatMap { URL(string: $0) },
+            publicShareURL: nil
         )
     }
 
@@ -70,8 +73,15 @@ struct ShareToCommunityTarget: Identifiable {
             ),
             displayTitle: projection.displayTitle,
             displaySubtitle: projection.displaySubtitle,
-            imageURL: projection.imageUrl.flatMap { URL(string: $0) }
+            imageURL: projection.imageUrl.flatMap { URL(string: $0) },
+            publicShareURL: nil
         )
+    }
+
+    private static func articleShareURL(for article: ArticleRecord, core: SafeHighlighterCore) -> URL? {
+        let snapshot = core.articleShareUrl(address: article.address)
+        guard snapshot.error.isEmpty else { return nil }
+        return URL(string: snapshot.url)
     }
 }
 
@@ -93,6 +103,23 @@ struct ShareToCommunitySheet: View {
                 Section {
                     headerCard
                         .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                }
+
+                if let url = target.publicShareURL {
+                    Section("Link") {
+                        ShareLink(
+                            item: url,
+                            subject: Text(target.displayTitle),
+                            message: Text(target.displaySubtitle)
+                        ) {
+                            Label("Share article link", systemImage: "square.and.arrow.up")
+                        }
+
+                        Text(url.absoluteString)
+                            .font(.caption)
+                            .foregroundStyle(Color.highlighterInkMuted)
+                            .textSelection(.enabled)
+                    }
                 }
 
                 Section("Note (optional)") {

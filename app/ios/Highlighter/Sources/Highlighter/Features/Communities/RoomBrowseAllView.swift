@@ -6,6 +6,11 @@ import SwiftUI
 struct RoomBrowseAllView: View {
     @Environment(HighlighterStore.self) private var appStore
 
+    /// Called when the user taps "Open room" (or the already-joined primary
+    /// button) inside the preview sheet. The parent NavigationStack owner
+    /// should push the room's id onto its path.
+    var onOpenRoom: ((String) -> Void)? = nil
+
     @State private var rooms: [CommunitySummary] = []
     @State private var search: String = ""
     @State private var previewRoom: CommunitySummary?
@@ -54,6 +59,12 @@ struct RoomBrowseAllView: View {
                             _ = await appStore.safeCore.requestJoinRoom(groupId: room.id, roomName: room.name)
                         }
                         previewRoom = nil
+                    },
+                    onOpenRoom: onOpenRoom.map { open in
+                        {
+                            previewRoom = nil
+                            open(room.id)
+                        }
                     }
                 )
             }

@@ -103,3 +103,4 @@ Shared protocol logic (Nostr client, NIP-29, signing, sync) across all native pl
 
 ### Why NIP-29 groups (not DMs or channels)?
 Groups are relay-native, portable, have built-in membership/role/moderation semantics, and support the four access×visibility combinations Highlighter needs. See `docs/technical-architecture.md` §3.
+- If using XcodeBuildMCP, use the installed XcodeBuildMCP skill before calling XcodeBuildMCP tools.

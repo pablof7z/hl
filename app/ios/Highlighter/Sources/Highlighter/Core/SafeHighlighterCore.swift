@@ -1004,14 +1004,6 @@ actor SafeHighlighterCore {
         core.projectOnboardingUsernameCheck(username: username)
     }
 
-    func checkNip05Availability(name: String) async -> Nip05AvailabilitySnapshot {
-        await core.checkNip05Availability(name: name)
-    }
-
-    func registerNip05(name: String, domain: String) async -> Nip05RegistrationSnapshot {
-        await core.registerNip05(name: name, domain: domain)
-    }
-
     func getArticleReaderSnapshot(pubkeyHex: String, dTag: String) async -> ArticleReaderSnapshot {
         await core.getArticleReaderSnapshot(pubkeyHex: pubkeyHex, dTag: dTag)
     }
@@ -1052,6 +1044,10 @@ actor SafeHighlighterCore {
         input: ShareArticleTargetProjectionInput
     ) -> ShareArtifactTargetProjection {
         core.projectShareArticleTarget(input: input)
+    }
+
+    nonisolated func articleShareUrl(address: String) -> ArticleShareUrlSnapshot {
+        core.articleShareUrl(address: address)
     }
 
     nonisolated func projectShareArtifactTarget(

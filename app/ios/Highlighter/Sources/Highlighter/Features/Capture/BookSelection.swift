@@ -19,14 +19,3 @@ enum BookSelection: Equatable {
         }
     }
 }
-
-extension BookSelection {
-    var nmpArtifact: HighlighterCaptureArtifact {
-        switch self {
-        case .existing(let record):
-            return .existing(record: record)
-        case .pending(let preview):
-            return .pending(preview: preview)
-        }
-    }
-}

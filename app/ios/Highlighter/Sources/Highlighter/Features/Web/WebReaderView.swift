@@ -102,7 +102,8 @@ struct WebReaderView: View {
                 payload: .artifactShare(preview: projection.preview),
                 displayTitle: projection.displayTitle,
                 displaySubtitle: projection.displaySubtitle,
-                imageURL: projection.imageUrl.flatMap { URL(string: $0) }
+                imageURL: projection.imageUrl.flatMap { URL(string: $0) },
+                publicShareURL: nil
             )
         }
     }

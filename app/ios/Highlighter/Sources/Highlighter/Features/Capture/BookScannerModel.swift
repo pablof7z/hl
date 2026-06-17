@@ -34,6 +34,10 @@ final class BookScannerModel: NSObject {
     private var holdSteadyTipArmed = false
     private var resultHandler: ((String) -> Void)?
 
+    var holdSteadyTipVisible: Bool {
+        visibleButUndecodedSeconds >= 3
+    }
+
     /// Returns once the camera session is started (or permission is resolved
     /// as denied). `onPayload` fires on the main actor with the raw EAN-13
     /// string for every detection — the caller validates and decides whether

@@ -53,6 +53,7 @@ use crate::room_explorer_config;
 use crate::room_library;
 use crate::room_state;
 use crate::session::{current_user_from_pubkey, Session};
+use crate::share_links;
 use crate::share_targets;
 use crate::subscriptions::{SubscriptionKind, SubscriptionRegistry};
 use crate::web_metadata::{self, WebMetadata, WebMetadataStore};
@@ -1429,23 +1430,6 @@ impl HighlighterCore {
         nip05::onboarding_username_check_projection(&username)
     }
 
-    pub async fn check_nip05_availability(&self, name: String) -> nip05::Nip05AvailabilitySnapshot {
-        nip05::availability_snapshot(nip05::check_availability(&name).await)
-    }
-
-    pub async fn register_nip05(
-        &self,
-        name: String,
-        domain: String,
-    ) -> nip05::Nip05RegistrationSnapshot {
-        let result: Result<String, CoreError> = async {
-            let _ = self.require_user_pubkey()?;
-            nip05::register_username(&self.runtime, &name, &domain).await
-        }
-        .await;
-        nip05::registration_snapshot(result)
-    }
-
     /// Full article-reader read model. Rust owns article/profile/highlight
     /// cache reads, the highlight limit, and partial-failure fallback.
     pub async fn get_article_reader_snapshot(
@@ -1507,6 +1491,10 @@ impl HighlighterCore {
         input: share_targets::ShareArticleTargetProjectionInput,
     ) -> share_targets::ShareArtifactTargetProjection {
         share_targets::article_target_projection(input)
+    }
+
+    pub fn article_share_url(&self, address: String) -> share_links::ArticleShareUrlSnapshot {
+        share_links::article_share_url_snapshot(address)
     }
 
     pub fn project_share_artifact_target(

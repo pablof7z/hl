@@ -82,16 +82,6 @@ struct CapturePageView: View {
         }
         .onAppear { setupLines() }
         .onAppear { triggerSpringIfReady() }
-        .onAppear {
-            store.applyCaptureSnapshot(appStore.capture)
-            store.prefillRecentBookFromSnapshot(appStore.bookPicker)
-        }
-        .onChange(of: appStore.capture) { _, snapshot in
-            store.applyCaptureSnapshot(snapshot)
-        }
-        .onChange(of: appStore.bookPicker) { _, snapshot in
-            store.prefillRecentBookFromSnapshot(snapshot)
-        }
         .onChange(of: store.ocrLines) { _, lines in rebuildSelectionTargets(from: lines) }
         .onChange(of: store.thumbnail) { old, new in
             guard new != nil else { return }
