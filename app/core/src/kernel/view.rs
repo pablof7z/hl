@@ -27,6 +27,10 @@ pub enum ViewId {
     // ── Phase 3B additions (append-only) ─────────────────────────────────────
     /// Joined-groups / communities list for the active account.
     Communities,
+
+    // ── Phase 3E additions (append-only) ─────────────────────────────────────
+    /// Room explorer / discovery screen.
+    RoomExplorer,
 }
 
 /// Which projection to compute for a registered view.
@@ -43,6 +47,10 @@ pub enum ViewRoute {
 
     // ── Phase 3B additions (append-only) ─────────────────────────────────────
     Communities,
+
+    // ── Phase 3E additions (append-only) ─────────────────────────────────────
+    /// Room explorer / discovery screen.
+    RoomExplorer,
 }
 
 /// Tracks open views and their last-emitted snapshots.

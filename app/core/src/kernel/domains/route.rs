@@ -117,6 +117,12 @@ pub(crate) fn project_snapshot(
         // before this function is called. This arm is unreachable in practice
         // but required for exhaustive match coverage.
         ViewId::Communities => None,
+
+        // ── Phase 3E additions (append-only) ─────────────────────────────────
+        // ViewId::RoomExplorer is handled upstream in actor::project_snapshot
+        // before this function is called. This arm is unreachable in practice
+        // but required for exhaustive match coverage.
+        ViewId::RoomExplorer => None,
     }
 }
 

@@ -155,6 +155,14 @@ pub enum AppAction {
     /// Unfollow a pubkey — removes it from the active account's kind:3 follow
     /// set and republishes. Symmetric with `Follow`; fire-and-forget (D6).
     Unfollow { pubkey: String },
+
+    // ── Phase 3E additions (append-only) ─────────────────────────────────────
+    /// Start room discovery on a relay — dispatches `"nmp.nip29.discover"` action
+    /// (pushes the relay_discovery_interest) and wires the DiscoveredGroupsProjection.
+    /// `relay_url` is the WebSocket relay URL to discover rooms on (opaque string;
+    /// kernel never constructs relay URLs — D3). Fire-and-forget: the discovered
+    /// groups catalog arrives via the `DiscoveredGroupsUpdated` projection event.
+    StartRoomDiscovery { relay_url: String },
 }
 
 /// NIP-65 / kind:10002 role for a configured relay.
@@ -268,4 +276,13 @@ pub enum KernelEvent {
     /// the `is_following` query and the `Profile` view snapshot (Phase 3D) can
     /// consult the set without re-parsing the projection.
     FollowListUpdated(Vec<String>),
+
+    // ── Phase 3E additions (append-only) ─────────────────────────────────────
+    /// The `"nmp.nip29.discovered_groups"` typed sidecar was decoded.
+    ///
+    /// Produced by `projections::dispatch_typed_frame` when the schema_id
+    /// `"nmp.nip29.discovered_groups"` sidecar arrives. Stored in
+    /// `AppState.discovered_groups` by
+    /// `discovery::reduce_event_discovered_groups_updated`.
+    DiscoveredGroupsUpdated(Vec<crate::kernel::snapshot::DiscoveredRow>),
 }

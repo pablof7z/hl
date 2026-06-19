@@ -112,8 +112,13 @@ pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> 
             // "claimed_profiles" => { ... }
 
             // ── Phase 3E arm: "nmp.nip29.discovered_groups" ──────────────────
-            // Added by slice 3E.
-            // "nmp.nip29.discovered_groups" => { ... }
+            // Decode the `"nmp.nip29.discovered_groups"` FlatBuffers payload via
+            // `nmp_nip29::decode_discovered_groups_snapshot` and maps rows into
+            // `DiscoveredRow` (raw fields only). Stored in
+            // `AppState::discovered_groups`.
+            super::discovery::DISCOVERED_GROUPS_SCHEMA_ID => {
+                super::discovery::apply_discovered_groups(state, &proj.payload);
+            }
 
             // ── Default: unknown schema_id — silent no-op (D6) ────────────────
             // Projections registered by nmp-defaults that hl has not opted into
