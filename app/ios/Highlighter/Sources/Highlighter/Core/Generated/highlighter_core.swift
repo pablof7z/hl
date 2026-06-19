@@ -16849,6 +16849,269 @@ public func FfiConverterTypeCommentToolbarProjectionInput_lower(_ value: Comment
 }
 
 
+/**
+ * Snapshot for `ViewId::Communities` — the joined-groups list.
+ */
+public struct CommunitiesSnapshot {
+    /**
+     * Joined groups for the active account. Bounded by the projection
+     * (at most as many entries as the account has joined); never grows
+     * with the event store (Non-Negotiable #7).
+     */
+    public var groups: [CommunityRow]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Joined groups for the active account. Bounded by the projection
+         * (at most as many entries as the account has joined); never grows
+         * with the event store (Non-Negotiable #7).
+         */groups: [CommunityRow]) {
+        self.groups = groups
+    }
+}
+
+#if compiler(>=6)
+extension CommunitiesSnapshot: Sendable {}
+#endif
+
+
+extension CommunitiesSnapshot: Equatable, Hashable {
+    public static func ==(lhs: CommunitiesSnapshot, rhs: CommunitiesSnapshot) -> Bool {
+        if lhs.groups != rhs.groups {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groups)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommunitiesSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommunitiesSnapshot {
+        return
+            try CommunitiesSnapshot(
+                groups: FfiConverterSequenceTypeCommunityRow.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommunitiesSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeCommunityRow.write(value.groups, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommunitiesSnapshot_lift(_ buf: RustBuffer) throws -> CommunitiesSnapshot {
+    return try FfiConverterTypeCommunitiesSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommunitiesSnapshot_lower(_ value: CommunitiesSnapshot) -> RustBuffer {
+    return FfiConverterTypeCommunitiesSnapshot.lower(value)
+}
+
+
+/**
+ * One joined group as seen by the active account.
+ *
+ * Raw protocol data only (D3 / ADR-0032): Swift formats all display strings
+ * (`"{n} members"`, `"Open"/"Closed"`, avatar initials, etc.).
+ * Fields mirror `nmp_nip29::projection::DiscoveredGroup` plus membership booleans
+ * which arrive via `JoinedGroupsSnapshot` (nmp-nip29 PR #1587/#1588).
+ */
+public struct CommunityRow {
+    /**
+     * NIP-29 local group id (the `["d", _]` tag value).
+     */
+    public var groupId: String
+    /**
+     * Host relay URL. Together with `group_id` forms the stable `GroupId`.
+     */
+    public var hostRelayUrl: String
+    /**
+     * `["name", _]` tag value from kind:39000, if present.
+     */
+    public var name: String?
+    /**
+     * `["picture", _]` tag value from kind:39000, if present.
+     */
+    public var picture: String?
+    /**
+     * `["about", _]` tag value from kind:39000, if present.
+     */
+    public var about: String?
+    /**
+     * Cardinality of `["p", _]` tags on the latest kind:39002 (member list).
+     */
+    public var memberCount: UInt32
+    /**
+     * `true` iff the latest kind:39000 lacks a `["private"]` tag.
+     */
+    public var `public`: Bool
+    /**
+     * `true` iff the latest kind:39000 lacks a `["closed"]` tag.
+     */
+    public var `open`: Bool
+    /**
+     * `true` iff the active account holds admin rights for this group.
+     */
+    public var isAdmin: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * NIP-29 local group id (the `["d", _]` tag value).
+         */groupId: String,
+        /**
+         * Host relay URL. Together with `group_id` forms the stable `GroupId`.
+         */hostRelayUrl: String,
+        /**
+         * `["name", _]` tag value from kind:39000, if present.
+         */name: String?,
+        /**
+         * `["picture", _]` tag value from kind:39000, if present.
+         */picture: String?,
+        /**
+         * `["about", _]` tag value from kind:39000, if present.
+         */about: String?,
+        /**
+         * Cardinality of `["p", _]` tags on the latest kind:39002 (member list).
+         */memberCount: UInt32,
+        /**
+         * `true` iff the latest kind:39000 lacks a `["private"]` tag.
+         */`public`: Bool,
+        /**
+         * `true` iff the latest kind:39000 lacks a `["closed"]` tag.
+         */`open`: Bool,
+        /**
+         * `true` iff the active account holds admin rights for this group.
+         */isAdmin: Bool) {
+        self.groupId = groupId
+        self.hostRelayUrl = hostRelayUrl
+        self.name = name
+        self.picture = picture
+        self.about = about
+        self.memberCount = memberCount
+        self.`public` = `public`
+        self.`open` = `open`
+        self.isAdmin = isAdmin
+    }
+}
+
+#if compiler(>=6)
+extension CommunityRow: Sendable {}
+#endif
+
+
+extension CommunityRow: Equatable, Hashable {
+    public static func ==(lhs: CommunityRow, rhs: CommunityRow) -> Bool {
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.hostRelayUrl != rhs.hostRelayUrl {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.picture != rhs.picture {
+            return false
+        }
+        if lhs.about != rhs.about {
+            return false
+        }
+        if lhs.memberCount != rhs.memberCount {
+            return false
+        }
+        if lhs.`public` != rhs.`public` {
+            return false
+        }
+        if lhs.`open` != rhs.`open` {
+            return false
+        }
+        if lhs.isAdmin != rhs.isAdmin {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groupId)
+        hasher.combine(hostRelayUrl)
+        hasher.combine(name)
+        hasher.combine(picture)
+        hasher.combine(about)
+        hasher.combine(memberCount)
+        hasher.combine(`public`)
+        hasher.combine(`open`)
+        hasher.combine(isAdmin)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommunityRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommunityRow {
+        return
+            try CommunityRow(
+                groupId: FfiConverterString.read(from: &buf),
+                hostRelayUrl: FfiConverterString.read(from: &buf),
+                name: FfiConverterOptionString.read(from: &buf),
+                picture: FfiConverterOptionString.read(from: &buf),
+                about: FfiConverterOptionString.read(from: &buf),
+                memberCount: FfiConverterUInt32.read(from: &buf),
+                public: FfiConverterBool.read(from: &buf),
+                open: FfiConverterBool.read(from: &buf),
+                isAdmin: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommunityRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterString.write(value.hostRelayUrl, into: &buf)
+        FfiConverterOptionString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.picture, into: &buf)
+        FfiConverterOptionString.write(value.about, into: &buf)
+        FfiConverterUInt32.write(value.memberCount, into: &buf)
+        FfiConverterBool.write(value.`public`, into: &buf)
+        FfiConverterBool.write(value.`open`, into: &buf)
+        FfiConverterBool.write(value.isAdmin, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommunityRow_lift(_ buf: RustBuffer) throws -> CommunityRow {
+    return try FfiConverterTypeCommunityRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommunityRow_lower(_ value: CommunityRow) -> RustBuffer {
+    return FfiConverterTypeCommunityRow.lower(value)
+}
+
+
 public struct CommunityRowProjection {
     public var displayName: String
     public var pictureUrl: String?
@@ -18405,6 +18668,129 @@ public func FfiConverterTypeDelta_lift(_ buf: RustBuffer) throws -> Delta {
 #endif
 public func FfiConverterTypeDelta_lower(_ value: Delta) -> RustBuffer {
     return FfiConverterTypeDelta.lower(value)
+}
+
+
+/**
+ * One discovered group row — raw protocol data only (D3 / ADR-0032).
+ * Swift shell formats display strings (name fallback, member label, etc.).
+ * Fields mirror `nmp_nip29::projection::DiscoveredGroup`.
+ */
+public struct DiscoveredRow {
+    public var groupId: String
+    public var hostRelayUrl: String
+    public var name: String?
+    public var picture: String?
+    public var about: String?
+    public var memberCount: UInt32
+    public var `public`: Bool
+    public var `open`: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(groupId: String, hostRelayUrl: String, name: String?, picture: String?, about: String?, memberCount: UInt32, `public`: Bool, `open`: Bool) {
+        self.groupId = groupId
+        self.hostRelayUrl = hostRelayUrl
+        self.name = name
+        self.picture = picture
+        self.about = about
+        self.memberCount = memberCount
+        self.`public` = `public`
+        self.`open` = `open`
+    }
+}
+
+#if compiler(>=6)
+extension DiscoveredRow: Sendable {}
+#endif
+
+
+extension DiscoveredRow: Equatable, Hashable {
+    public static func ==(lhs: DiscoveredRow, rhs: DiscoveredRow) -> Bool {
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.hostRelayUrl != rhs.hostRelayUrl {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.picture != rhs.picture {
+            return false
+        }
+        if lhs.about != rhs.about {
+            return false
+        }
+        if lhs.memberCount != rhs.memberCount {
+            return false
+        }
+        if lhs.`public` != rhs.`public` {
+            return false
+        }
+        if lhs.`open` != rhs.`open` {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groupId)
+        hasher.combine(hostRelayUrl)
+        hasher.combine(name)
+        hasher.combine(picture)
+        hasher.combine(about)
+        hasher.combine(memberCount)
+        hasher.combine(`public`)
+        hasher.combine(`open`)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiscoveredRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscoveredRow {
+        return
+            try DiscoveredRow(
+                groupId: FfiConverterString.read(from: &buf),
+                hostRelayUrl: FfiConverterString.read(from: &buf),
+                name: FfiConverterOptionString.read(from: &buf),
+                picture: FfiConverterOptionString.read(from: &buf),
+                about: FfiConverterOptionString.read(from: &buf),
+                memberCount: FfiConverterUInt32.read(from: &buf),
+                public: FfiConverterBool.read(from: &buf),
+                open: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DiscoveredRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterString.write(value.hostRelayUrl, into: &buf)
+        FfiConverterOptionString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.picture, into: &buf)
+        FfiConverterOptionString.write(value.about, into: &buf)
+        FfiConverterUInt32.write(value.memberCount, into: &buf)
+        FfiConverterBool.write(value.`public`, into: &buf)
+        FfiConverterBool.write(value.`open`, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscoveredRow_lift(_ buf: RustBuffer) throws -> DiscoveredRow {
+    return try FfiConverterTypeDiscoveredRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscoveredRow_lower(_ value: DiscoveredRow) -> RustBuffer {
+    return FfiConverterTypeDiscoveredRow.lower(value)
 }
 
 
@@ -24063,6 +24449,440 @@ public func FfiConverterTypeJoinedCommunitiesSnapshotApplyProjection_lift(_ buf:
 #endif
 public func FfiConverterTypeJoinedCommunitiesSnapshotApplyProjection_lower(_ value: JoinedCommunitiesSnapshotApplyProjection) -> RustBuffer {
     return FfiConverterTypeJoinedCommunitiesSnapshotApplyProjection.lower(value)
+}
+
+
+/**
+ * Snapshot for the `ViewId::NetworkSettings` projection.
+ *
+ * Read-side only: raw relay list with URL, role tone, and connection state.
+ * Swift shell formats the display strings. Bounded: one entry per configured relay.
+ *
+ * Named `KernelNetworkSettingsSnapshot` to avoid collision with the legacy
+ * `NetworkSettingsSnapshot` in `relays.rs` (bespoke live lane — Phase 2E coexists
+ * with the live lane until the 2F iOS cutover, Non-Negotiable #6).
+ */
+public struct KernelNetworkSettingsSnapshot {
+    /**
+     * Raw relay diagnostic rows; same data as `RelayDiagnosticsViewSnapshot` but
+     * surfaced under the network-settings ViewId.
+     */
+    public var relays: [RelayDiagRow]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Raw relay diagnostic rows; same data as `RelayDiagnosticsViewSnapshot` but
+         * surfaced under the network-settings ViewId.
+         */relays: [RelayDiagRow]) {
+        self.relays = relays
+    }
+}
+
+#if compiler(>=6)
+extension KernelNetworkSettingsSnapshot: Sendable {}
+#endif
+
+
+extension KernelNetworkSettingsSnapshot: Equatable, Hashable {
+    public static func ==(lhs: KernelNetworkSettingsSnapshot, rhs: KernelNetworkSettingsSnapshot) -> Bool {
+        if lhs.relays != rhs.relays {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(relays)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelNetworkSettingsSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelNetworkSettingsSnapshot {
+        return
+            try KernelNetworkSettingsSnapshot(
+                relays: FfiConverterSequenceTypeRelayDiagRow.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelNetworkSettingsSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeRelayDiagRow.write(value.relays, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelNetworkSettingsSnapshot_lift(_ buf: RustBuffer) throws -> KernelNetworkSettingsSnapshot {
+    return try FfiConverterTypeKernelNetworkSettingsSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelNetworkSettingsSnapshot_lower(_ value: KernelNetworkSettingsSnapshot) -> RustBuffer {
+    return FfiConverterTypeKernelNetworkSettingsSnapshot.lower(value)
+}
+
+
+/**
+ * Snapshot for `ViewId::RoomExplorer` — the discovery screen.
+ *
+ * Named `KernelRoomExplorerSnapshot` to avoid collision with the legacy
+ * `RoomExplorerSnapshot` in `room_explorer.rs` (bespoke live lane — Phase 3E
+ * coexists with the live lane until the iOS cutover, Non-Negotiable #6).
+ *
+ * Bounded by projection: `featured` is empty until curator logic is wired
+ * (Phase 3F); `new_noteworthy` is capped at 256; shelves are empty until
+ * Phase 4 feeds.
+ */
+public struct KernelRoomExplorerSnapshot {
+    /**
+     * Featured rooms (curator-selected). Empty in Phase 3 — wired in Phase 3F.
+     */
+    public var featured: [DiscoveredRow]
+    /**
+     * Discovered rooms (public+open, excluding joined), newest-first, cap 256.
+     */
+    public var newNoteworthy: [DiscoveredRow]
+    /**
+     * Rooms with ≥2 follows inside. Empty in Phase 3 (requires Phase 4 member events).
+     */
+    public var friendsShelf: [RecommendationRow]
+    /**
+     * Rooms from authors you read. Empty in Phase 3 (requires Phase 4 feed data).
+     */
+    public var authorsShelf: [RecommendationRow]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Featured rooms (curator-selected). Empty in Phase 3 — wired in Phase 3F.
+         */featured: [DiscoveredRow],
+        /**
+         * Discovered rooms (public+open, excluding joined), newest-first, cap 256.
+         */newNoteworthy: [DiscoveredRow],
+        /**
+         * Rooms with ≥2 follows inside. Empty in Phase 3 (requires Phase 4 member events).
+         */friendsShelf: [RecommendationRow],
+        /**
+         * Rooms from authors you read. Empty in Phase 3 (requires Phase 4 feed data).
+         */authorsShelf: [RecommendationRow]) {
+        self.featured = featured
+        self.newNoteworthy = newNoteworthy
+        self.friendsShelf = friendsShelf
+        self.authorsShelf = authorsShelf
+    }
+}
+
+#if compiler(>=6)
+extension KernelRoomExplorerSnapshot: Sendable {}
+#endif
+
+
+extension KernelRoomExplorerSnapshot: Equatable, Hashable {
+    public static func ==(lhs: KernelRoomExplorerSnapshot, rhs: KernelRoomExplorerSnapshot) -> Bool {
+        if lhs.featured != rhs.featured {
+            return false
+        }
+        if lhs.newNoteworthy != rhs.newNoteworthy {
+            return false
+        }
+        if lhs.friendsShelf != rhs.friendsShelf {
+            return false
+        }
+        if lhs.authorsShelf != rhs.authorsShelf {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(featured)
+        hasher.combine(newNoteworthy)
+        hasher.combine(friendsShelf)
+        hasher.combine(authorsShelf)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelRoomExplorerSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelRoomExplorerSnapshot {
+        return
+            try KernelRoomExplorerSnapshot(
+                featured: FfiConverterSequenceTypeDiscoveredRow.read(from: &buf),
+                newNoteworthy: FfiConverterSequenceTypeDiscoveredRow.read(from: &buf),
+                friendsShelf: FfiConverterSequenceTypeRecommendationRow.read(from: &buf),
+                authorsShelf: FfiConverterSequenceTypeRecommendationRow.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelRoomExplorerSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeDiscoveredRow.write(value.featured, into: &buf)
+        FfiConverterSequenceTypeDiscoveredRow.write(value.newNoteworthy, into: &buf)
+        FfiConverterSequenceTypeRecommendationRow.write(value.friendsShelf, into: &buf)
+        FfiConverterSequenceTypeRecommendationRow.write(value.authorsShelf, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelRoomExplorerSnapshot_lift(_ buf: RustBuffer) throws -> KernelRoomExplorerSnapshot {
+    return try FfiConverterTypeKernelRoomExplorerSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelRoomExplorerSnapshot_lower(_ value: KernelRoomExplorerSnapshot) -> RustBuffer {
+    return FfiConverterTypeKernelRoomExplorerSnapshot.lower(value)
+}
+
+
+/**
+ * Snapshot for `ViewId::RoomHome{group_id}` — the per-room home shell.
+ *
+ * Ships the room header (metadata) + membership state + an empty lanes
+ * structure. Lane bodies (kind:11/kind:9 content feeds) are deferred to Phase 4.
+ *
+ * Raw-data doctrine (D3 / ADR-0032): Swift formats ALL display strings from
+ * these raw fields. Kernel emits no formatted strings (`"{n} members"`, etc.).
+ *
+ * `lanes` is empty in Phase 3F. The `GroupEventsProjection` is already wired
+ * (via `Effect::WireGroupEvents` on view open) so Phase 4 can decode feed
+ * bodies from the already-flowing events without re-opening a subscription.
+ *
+ * `invite_link_base` is supplied from `AppState::room_policy.invite_link_base`
+ * (D3: injected at construction, never hardcoded). Swift composes the full
+ * invite URL by appending the invite code to this base.
+ */
+public struct KernelRoomHomeSnapshot {
+    /**
+     * NIP-29 local group id (the `["d", _]` tag value).
+     */
+    public var groupId: String
+    /**
+     * Host relay URL. Together with `group_id` forms the stable `GroupId`.
+     */
+    public var hostRelayUrl: String
+    /**
+     * `["name", _]` tag value from kind:39000, if present.
+     */
+    public var name: String?
+    /**
+     * `["picture", _]` tag value from kind:39000, if present.
+     */
+    public var picture: String?
+    /**
+     * `["about", _]` tag value from kind:39000, if present.
+     */
+    public var about: String?
+    /**
+     * Cardinality of `["p", _]` tags on the latest kind:39002 (member list).
+     */
+    public var memberCount: UInt32
+    /**
+     * `true` iff the latest kind:39000 lacks a `["private"]` tag.
+     */
+    public var `public`: Bool
+    /**
+     * `true` iff the latest kind:39000 lacks a `["closed"]` tag.
+     */
+    public var `open`: Bool
+    /**
+     * `true` iff the active account holds admin rights for this group.
+     */
+    public var isAdmin: Bool
+    /**
+     * Lane identifiers for this room (e.g. `"general"`, `"notes"`).
+     * Empty in Phase 3F — lane bodies deferred to Phase 4.
+     * Bounded by the number of lanes configured for the room (non-negotiable #7).
+     */
+    public var laneIds: [String]
+    /**
+     * Base URL for invite links (e.g. `"https://highlighter.com/r"`).
+     * Swift composes the full invite URL: `"{invite_link_base}/{code}"`.
+     * Sourced from `AppState::room_policy.invite_link_base` (D3 — never hardcoded).
+     */
+    public var inviteLinkBase: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * NIP-29 local group id (the `["d", _]` tag value).
+         */groupId: String,
+        /**
+         * Host relay URL. Together with `group_id` forms the stable `GroupId`.
+         */hostRelayUrl: String,
+        /**
+         * `["name", _]` tag value from kind:39000, if present.
+         */name: String?,
+        /**
+         * `["picture", _]` tag value from kind:39000, if present.
+         */picture: String?,
+        /**
+         * `["about", _]` tag value from kind:39000, if present.
+         */about: String?,
+        /**
+         * Cardinality of `["p", _]` tags on the latest kind:39002 (member list).
+         */memberCount: UInt32,
+        /**
+         * `true` iff the latest kind:39000 lacks a `["private"]` tag.
+         */`public`: Bool,
+        /**
+         * `true` iff the latest kind:39000 lacks a `["closed"]` tag.
+         */`open`: Bool,
+        /**
+         * `true` iff the active account holds admin rights for this group.
+         */isAdmin: Bool,
+        /**
+         * Lane identifiers for this room (e.g. `"general"`, `"notes"`).
+         * Empty in Phase 3F — lane bodies deferred to Phase 4.
+         * Bounded by the number of lanes configured for the room (non-negotiable #7).
+         */laneIds: [String],
+        /**
+         * Base URL for invite links (e.g. `"https://highlighter.com/r"`).
+         * Swift composes the full invite URL: `"{invite_link_base}/{code}"`.
+         * Sourced from `AppState::room_policy.invite_link_base` (D3 — never hardcoded).
+         */inviteLinkBase: String) {
+        self.groupId = groupId
+        self.hostRelayUrl = hostRelayUrl
+        self.name = name
+        self.picture = picture
+        self.about = about
+        self.memberCount = memberCount
+        self.`public` = `public`
+        self.`open` = `open`
+        self.isAdmin = isAdmin
+        self.laneIds = laneIds
+        self.inviteLinkBase = inviteLinkBase
+    }
+}
+
+#if compiler(>=6)
+extension KernelRoomHomeSnapshot: Sendable {}
+#endif
+
+
+extension KernelRoomHomeSnapshot: Equatable, Hashable {
+    public static func ==(lhs: KernelRoomHomeSnapshot, rhs: KernelRoomHomeSnapshot) -> Bool {
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.hostRelayUrl != rhs.hostRelayUrl {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.picture != rhs.picture {
+            return false
+        }
+        if lhs.about != rhs.about {
+            return false
+        }
+        if lhs.memberCount != rhs.memberCount {
+            return false
+        }
+        if lhs.`public` != rhs.`public` {
+            return false
+        }
+        if lhs.`open` != rhs.`open` {
+            return false
+        }
+        if lhs.isAdmin != rhs.isAdmin {
+            return false
+        }
+        if lhs.laneIds != rhs.laneIds {
+            return false
+        }
+        if lhs.inviteLinkBase != rhs.inviteLinkBase {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groupId)
+        hasher.combine(hostRelayUrl)
+        hasher.combine(name)
+        hasher.combine(picture)
+        hasher.combine(about)
+        hasher.combine(memberCount)
+        hasher.combine(`public`)
+        hasher.combine(`open`)
+        hasher.combine(isAdmin)
+        hasher.combine(laneIds)
+        hasher.combine(inviteLinkBase)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelRoomHomeSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelRoomHomeSnapshot {
+        return
+            try KernelRoomHomeSnapshot(
+                groupId: FfiConverterString.read(from: &buf),
+                hostRelayUrl: FfiConverterString.read(from: &buf),
+                name: FfiConverterOptionString.read(from: &buf),
+                picture: FfiConverterOptionString.read(from: &buf),
+                about: FfiConverterOptionString.read(from: &buf),
+                memberCount: FfiConverterUInt32.read(from: &buf),
+                public: FfiConverterBool.read(from: &buf),
+                open: FfiConverterBool.read(from: &buf),
+                isAdmin: FfiConverterBool.read(from: &buf),
+                laneIds: FfiConverterSequenceString.read(from: &buf),
+                inviteLinkBase: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelRoomHomeSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterString.write(value.hostRelayUrl, into: &buf)
+        FfiConverterOptionString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.picture, into: &buf)
+        FfiConverterOptionString.write(value.about, into: &buf)
+        FfiConverterUInt32.write(value.memberCount, into: &buf)
+        FfiConverterBool.write(value.`public`, into: &buf)
+        FfiConverterBool.write(value.`open`, into: &buf)
+        FfiConverterBool.write(value.isAdmin, into: &buf)
+        FfiConverterSequenceString.write(value.laneIds, into: &buf)
+        FfiConverterString.write(value.inviteLinkBase, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelRoomHomeSnapshot_lift(_ buf: RustBuffer) throws -> KernelRoomHomeSnapshot {
+    return try FfiConverterTypeKernelRoomHomeSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelRoomHomeSnapshot_lower(_ value: KernelRoomHomeSnapshot) -> RustBuffer {
+    return FfiConverterTypeKernelRoomHomeSnapshot.lower(value)
 }
 
 
@@ -30842,6 +31662,270 @@ public func FfiConverterTypeProfileRelationshipProjectionInput_lower(_ value: Pr
 
 
 /**
+ * Snapshot for `ViewId::Profile{pubkey}` — the profile detail view.
+ *
+ * Raw `ProfileCardModel` fields + relationship + communities (Phase 3D scope).
+ * Articles and highlights deferred to Phase 4.
+ *
+ * Raw-data doctrine (D3 / ADR-0032): Swift formats ALL display strings from
+ * these raw fields. Kernel emits no bech32 (`npub`), no NIP-05 label strip
+ * (`"_@example.com"→"example.com"`), no handle fallback, no `"abc123…d789"`
+ * short-pubkey abbreviation — those are Swift-side presentation decisions.
+ *
+ * `is_following` is derived from `AppState::is_following(pubkey)` (3C), which
+ * reads the active account's `follows` projection.
+ */
+public struct ProfileSnapshot {
+    /**
+     * Raw 64-char hex pubkey of the viewed profile.
+     */
+    public var pubkey: String
+    /**
+     * `ProfileCardModel::display_name` — `Some` if the kind:0 has a
+     * non-empty `"display_name"` field. Swift formats fallback order.
+     */
+    public var displayName: String?
+    /**
+     * `ProfileCardModel::name` — `Some` if the kind:0 has a non-empty
+     * `"name"` (username) field.
+     */
+    public var name: String?
+    /**
+     * `ProfileCardModel::raw_display_name` — `Some` if the kind:0 has a
+     * non-empty `"display_name"` without the camelCase normalisation.
+     */
+    public var rawDisplayName: String?
+    /**
+     * `ProfileCardModel::picture_url` — `Some` if the kind:0 has a
+     * non-empty `"picture"` URL.
+     */
+    public var pictureUrl: String?
+    /**
+     * `ProfileCardModel::banner` — `Some` if the kind:0 has a non-empty
+     * `"banner"` URL.
+     */
+    public var banner: String?
+    /**
+     * `ProfileCardModel::website` — `Some` if the kind:0 has a non-empty
+     * `"website"` field.
+     */
+    public var website: String?
+    /**
+     * `ProfileCardModel::nip05` — raw NIP-05 identifier string (e.g.
+     * `"_@example.com"` or `"alice@example.com"`). Swift strips the leading
+     * `"_@"` prefix for display (`"example.com"`). Empty string if absent.
+     */
+    public var nip05: String
+    /**
+     * `ProfileCardModel::about` — raw bio / about text. Empty string if absent.
+     */
+    public var about: String
+    /**
+     * `ProfileCardModel::lud16` — Lightning address, if present.
+     */
+    public var lud16: String?
+    /**
+     * `true` if the active account follows this pubkey (derived from the
+     * `FollowListSnapshot` via `AppState::is_following`). Updated on every
+     * `FollowListUpdated` event — the Profile view reflects follow state
+     * changes without requiring a re-claim.
+     */
+    public var isFollowing: Bool
+    /**
+     * Communities (joined groups) that are known to the active account.
+     * Phase 3D: surfaces the active account's joined-groups list as context.
+     * Phase 4 will add per-pubkey group-membership interests.
+     * Bounded by the `JoinedGroupsSnapshot` (never grows with the event store).
+     */
+    public var communities: [CommunityRow]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Raw 64-char hex pubkey of the viewed profile.
+         */pubkey: String,
+        /**
+         * `ProfileCardModel::display_name` — `Some` if the kind:0 has a
+         * non-empty `"display_name"` field. Swift formats fallback order.
+         */displayName: String?,
+        /**
+         * `ProfileCardModel::name` — `Some` if the kind:0 has a non-empty
+         * `"name"` (username) field.
+         */name: String?,
+        /**
+         * `ProfileCardModel::raw_display_name` — `Some` if the kind:0 has a
+         * non-empty `"display_name"` without the camelCase normalisation.
+         */rawDisplayName: String?,
+        /**
+         * `ProfileCardModel::picture_url` — `Some` if the kind:0 has a
+         * non-empty `"picture"` URL.
+         */pictureUrl: String?,
+        /**
+         * `ProfileCardModel::banner` — `Some` if the kind:0 has a non-empty
+         * `"banner"` URL.
+         */banner: String?,
+        /**
+         * `ProfileCardModel::website` — `Some` if the kind:0 has a non-empty
+         * `"website"` field.
+         */website: String?,
+        /**
+         * `ProfileCardModel::nip05` — raw NIP-05 identifier string (e.g.
+         * `"_@example.com"` or `"alice@example.com"`). Swift strips the leading
+         * `"_@"` prefix for display (`"example.com"`). Empty string if absent.
+         */nip05: String,
+        /**
+         * `ProfileCardModel::about` — raw bio / about text. Empty string if absent.
+         */about: String,
+        /**
+         * `ProfileCardModel::lud16` — Lightning address, if present.
+         */lud16: String?,
+        /**
+         * `true` if the active account follows this pubkey (derived from the
+         * `FollowListSnapshot` via `AppState::is_following`). Updated on every
+         * `FollowListUpdated` event — the Profile view reflects follow state
+         * changes without requiring a re-claim.
+         */isFollowing: Bool,
+        /**
+         * Communities (joined groups) that are known to the active account.
+         * Phase 3D: surfaces the active account's joined-groups list as context.
+         * Phase 4 will add per-pubkey group-membership interests.
+         * Bounded by the `JoinedGroupsSnapshot` (never grows with the event store).
+         */communities: [CommunityRow]) {
+        self.pubkey = pubkey
+        self.displayName = displayName
+        self.name = name
+        self.rawDisplayName = rawDisplayName
+        self.pictureUrl = pictureUrl
+        self.banner = banner
+        self.website = website
+        self.nip05 = nip05
+        self.about = about
+        self.lud16 = lud16
+        self.isFollowing = isFollowing
+        self.communities = communities
+    }
+}
+
+#if compiler(>=6)
+extension ProfileSnapshot: Sendable {}
+#endif
+
+
+extension ProfileSnapshot: Equatable, Hashable {
+    public static func ==(lhs: ProfileSnapshot, rhs: ProfileSnapshot) -> Bool {
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.rawDisplayName != rhs.rawDisplayName {
+            return false
+        }
+        if lhs.pictureUrl != rhs.pictureUrl {
+            return false
+        }
+        if lhs.banner != rhs.banner {
+            return false
+        }
+        if lhs.website != rhs.website {
+            return false
+        }
+        if lhs.nip05 != rhs.nip05 {
+            return false
+        }
+        if lhs.about != rhs.about {
+            return false
+        }
+        if lhs.lud16 != rhs.lud16 {
+            return false
+        }
+        if lhs.isFollowing != rhs.isFollowing {
+            return false
+        }
+        if lhs.communities != rhs.communities {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkey)
+        hasher.combine(displayName)
+        hasher.combine(name)
+        hasher.combine(rawDisplayName)
+        hasher.combine(pictureUrl)
+        hasher.combine(banner)
+        hasher.combine(website)
+        hasher.combine(nip05)
+        hasher.combine(about)
+        hasher.combine(lud16)
+        hasher.combine(isFollowing)
+        hasher.combine(communities)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileSnapshot {
+        return
+            try ProfileSnapshot(
+                pubkey: FfiConverterString.read(from: &buf),
+                displayName: FfiConverterOptionString.read(from: &buf),
+                name: FfiConverterOptionString.read(from: &buf),
+                rawDisplayName: FfiConverterOptionString.read(from: &buf),
+                pictureUrl: FfiConverterOptionString.read(from: &buf),
+                banner: FfiConverterOptionString.read(from: &buf),
+                website: FfiConverterOptionString.read(from: &buf),
+                nip05: FfiConverterString.read(from: &buf),
+                about: FfiConverterString.read(from: &buf),
+                lud16: FfiConverterOptionString.read(from: &buf),
+                isFollowing: FfiConverterBool.read(from: &buf),
+                communities: FfiConverterSequenceTypeCommunityRow.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterOptionString.write(value.displayName, into: &buf)
+        FfiConverterOptionString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.rawDisplayName, into: &buf)
+        FfiConverterOptionString.write(value.pictureUrl, into: &buf)
+        FfiConverterOptionString.write(value.banner, into: &buf)
+        FfiConverterOptionString.write(value.website, into: &buf)
+        FfiConverterString.write(value.nip05, into: &buf)
+        FfiConverterString.write(value.about, into: &buf)
+        FfiConverterOptionString.write(value.lud16, into: &buf)
+        FfiConverterBool.write(value.isFollowing, into: &buf)
+        FfiConverterSequenceTypeCommunityRow.write(value.communities, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileSnapshot_lift(_ buf: RustBuffer) throws -> ProfileSnapshot {
+    return try FfiConverterTypeProfileSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileSnapshot_lower(_ value: ProfileSnapshot) -> RustBuffer {
+    return FfiConverterTypeProfileSnapshot.lower(value)
+}
+
+
+/**
  * Draft profile metadata written by the platform shell. Rust owns the
  * trimming, clear-vs-set behavior, event merge, signing, and relay publish.
  */
@@ -31914,6 +32998,134 @@ public func FfiConverterTypeReadingFeedItem_lower(_ value: ReadingFeedItem) -> R
 }
 
 
+/**
+ * A recommendation row for the friends/authors shelves.
+ *
+ * Raw data only — Swift builds `"@{handle} + N you follow"` from `reason_pubkeys`.
+ * `total_reason_count` may exceed `reason_pubkeys.len()` if the vec is capped.
+ */
+public struct RecommendationRow {
+    public var groupId: String
+    public var hostRelayUrl: String
+    public var name: String?
+    public var picture: String?
+    public var about: String?
+    /**
+     * Pubkeys of the follows who are in this group (capped for snapshot size).
+     */
+    public var reasonPubkeys: [String]
+    /**
+     * Total follows count in this group before capping `reason_pubkeys`.
+     */
+    public var totalReasonCount: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(groupId: String, hostRelayUrl: String, name: String?, picture: String?, about: String?,
+        /**
+         * Pubkeys of the follows who are in this group (capped for snapshot size).
+         */reasonPubkeys: [String],
+        /**
+         * Total follows count in this group before capping `reason_pubkeys`.
+         */totalReasonCount: UInt32) {
+        self.groupId = groupId
+        self.hostRelayUrl = hostRelayUrl
+        self.name = name
+        self.picture = picture
+        self.about = about
+        self.reasonPubkeys = reasonPubkeys
+        self.totalReasonCount = totalReasonCount
+    }
+}
+
+#if compiler(>=6)
+extension RecommendationRow: Sendable {}
+#endif
+
+
+extension RecommendationRow: Equatable, Hashable {
+    public static func ==(lhs: RecommendationRow, rhs: RecommendationRow) -> Bool {
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.hostRelayUrl != rhs.hostRelayUrl {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.picture != rhs.picture {
+            return false
+        }
+        if lhs.about != rhs.about {
+            return false
+        }
+        if lhs.reasonPubkeys != rhs.reasonPubkeys {
+            return false
+        }
+        if lhs.totalReasonCount != rhs.totalReasonCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groupId)
+        hasher.combine(hostRelayUrl)
+        hasher.combine(name)
+        hasher.combine(picture)
+        hasher.combine(about)
+        hasher.combine(reasonPubkeys)
+        hasher.combine(totalReasonCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRecommendationRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RecommendationRow {
+        return
+            try RecommendationRow(
+                groupId: FfiConverterString.read(from: &buf),
+                hostRelayUrl: FfiConverterString.read(from: &buf),
+                name: FfiConverterOptionString.read(from: &buf),
+                picture: FfiConverterOptionString.read(from: &buf),
+                about: FfiConverterOptionString.read(from: &buf),
+                reasonPubkeys: FfiConverterSequenceString.read(from: &buf),
+                totalReasonCount: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RecommendationRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterString.write(value.hostRelayUrl, into: &buf)
+        FfiConverterOptionString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.picture, into: &buf)
+        FfiConverterOptionString.write(value.about, into: &buf)
+        FfiConverterSequenceString.write(value.reasonPubkeys, into: &buf)
+        FfiConverterUInt32.write(value.totalReasonCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRecommendationRow_lift(_ buf: RustBuffer) throws -> RecommendationRow {
+    return try FfiConverterTypeRecommendationRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRecommendationRow_lower(_ value: RecommendationRow) -> RustBuffer {
+    return FfiConverterTypeRecommendationRow.lower(value)
+}
+
+
 public struct RelativeTimeLabelInput {
     public var unixSeconds: UInt64?
     public var style: RelativeTimeLabelStyle
@@ -32418,6 +33630,179 @@ public func FfiConverterTypeRelayDetailProjectionInput_lower(_ value: RelayDetai
 
 
 /**
+ * Raw diagnostic fields for one relay. All formatting (labels, "X ago", human
+ * byte counts) is deferred to the Swift shell (D1). Bounded: one entry per
+ * configured relay URL (D5).
+ */
+public struct RelayDiagRow {
+    /**
+     * Canonical relay URL (stable list identity).
+     */
+    public var relayUrl: String
+    /**
+     * Total EVENT frames received from this relay in the current session.
+     */
+    public var totalEventsRx: UInt64
+    /**
+     * Reconnect attempts since process start.
+     */
+    public var reconnectCount: UInt32
+    /**
+     * Unix epoch milliseconds of the last successful connect; 0 when the relay
+     * has never connected. Swift shell formats as "Xs ago" at render time.
+     */
+    public var lastConnectedMs: UInt64
+    /**
+     * Parsed connection state derived from nmp's `connection_tone` field.
+     */
+    public var connectionState: RelayConnectionState
+    /**
+     * Total wire subscriptions known for this relay.
+     */
+    public var totalSubCount: UInt32
+    /**
+     * Wire subscriptions currently active.
+     */
+    public var activeSubCount: UInt32
+    /**
+     * Wire subscriptions that have received EOSE.
+     */
+    public var eosedSubCount: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Canonical relay URL (stable list identity).
+         */relayUrl: String,
+        /**
+         * Total EVENT frames received from this relay in the current session.
+         */totalEventsRx: UInt64,
+        /**
+         * Reconnect attempts since process start.
+         */reconnectCount: UInt32,
+        /**
+         * Unix epoch milliseconds of the last successful connect; 0 when the relay
+         * has never connected. Swift shell formats as "Xs ago" at render time.
+         */lastConnectedMs: UInt64,
+        /**
+         * Parsed connection state derived from nmp's `connection_tone` field.
+         */connectionState: RelayConnectionState,
+        /**
+         * Total wire subscriptions known for this relay.
+         */totalSubCount: UInt32,
+        /**
+         * Wire subscriptions currently active.
+         */activeSubCount: UInt32,
+        /**
+         * Wire subscriptions that have received EOSE.
+         */eosedSubCount: UInt32) {
+        self.relayUrl = relayUrl
+        self.totalEventsRx = totalEventsRx
+        self.reconnectCount = reconnectCount
+        self.lastConnectedMs = lastConnectedMs
+        self.connectionState = connectionState
+        self.totalSubCount = totalSubCount
+        self.activeSubCount = activeSubCount
+        self.eosedSubCount = eosedSubCount
+    }
+}
+
+#if compiler(>=6)
+extension RelayDiagRow: Sendable {}
+#endif
+
+
+extension RelayDiagRow: Equatable, Hashable {
+    public static func ==(lhs: RelayDiagRow, rhs: RelayDiagRow) -> Bool {
+        if lhs.relayUrl != rhs.relayUrl {
+            return false
+        }
+        if lhs.totalEventsRx != rhs.totalEventsRx {
+            return false
+        }
+        if lhs.reconnectCount != rhs.reconnectCount {
+            return false
+        }
+        if lhs.lastConnectedMs != rhs.lastConnectedMs {
+            return false
+        }
+        if lhs.connectionState != rhs.connectionState {
+            return false
+        }
+        if lhs.totalSubCount != rhs.totalSubCount {
+            return false
+        }
+        if lhs.activeSubCount != rhs.activeSubCount {
+            return false
+        }
+        if lhs.eosedSubCount != rhs.eosedSubCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(relayUrl)
+        hasher.combine(totalEventsRx)
+        hasher.combine(reconnectCount)
+        hasher.combine(lastConnectedMs)
+        hasher.combine(connectionState)
+        hasher.combine(totalSubCount)
+        hasher.combine(activeSubCount)
+        hasher.combine(eosedSubCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayDiagRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayDiagRow {
+        return
+            try RelayDiagRow(
+                relayUrl: FfiConverterString.read(from: &buf),
+                totalEventsRx: FfiConverterUInt64.read(from: &buf),
+                reconnectCount: FfiConverterUInt32.read(from: &buf),
+                lastConnectedMs: FfiConverterUInt64.read(from: &buf),
+                connectionState: FfiConverterTypeRelayConnectionState.read(from: &buf),
+                totalSubCount: FfiConverterUInt32.read(from: &buf),
+                activeSubCount: FfiConverterUInt32.read(from: &buf),
+                eosedSubCount: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayDiagRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.relayUrl, into: &buf)
+        FfiConverterUInt64.write(value.totalEventsRx, into: &buf)
+        FfiConverterUInt32.write(value.reconnectCount, into: &buf)
+        FfiConverterUInt64.write(value.lastConnectedMs, into: &buf)
+        FfiConverterTypeRelayConnectionState.write(value.connectionState, into: &buf)
+        FfiConverterUInt32.write(value.totalSubCount, into: &buf)
+        FfiConverterUInt32.write(value.activeSubCount, into: &buf)
+        FfiConverterUInt32.write(value.eosedSubCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayDiagRow_lift(_ buf: RustBuffer) throws -> RelayDiagRow {
+    return try FfiConverterTypeRelayDiagRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayDiagRow_lower(_ value: RelayDiagRow) -> RustBuffer {
+    return FfiConverterTypeRelayDiagRow.lower(value)
+}
+
+
+/**
  * Live diagnostic snapshot for a single relay in the nostr-sdk connection
  * pool. `NostrRuntime` refreshes the bounded map from the pool on demand
  * and updates it from relay status notifications; Swift receives first
@@ -32555,6 +33940,80 @@ public func FfiConverterTypeRelayDiagnostic_lift(_ buf: RustBuffer) throws -> Re
 #endif
 public func FfiConverterTypeRelayDiagnostic_lower(_ value: RelayDiagnostic) -> RustBuffer {
     return FfiConverterTypeRelayDiagnostic.lower(value)
+}
+
+
+/**
+ * Snapshot for the `ViewId::RelayDiagnostics` projection.
+ *
+ * Raw counters and connection state per relay. Swift shell formats labels
+ * and "X ago" timestamp strings. Bounded: one row per configured relay URL.
+ */
+public struct RelayDiagnosticsViewSnapshot {
+    /**
+     * One row per relay the NMP kernel knows about (bounded by relay count).
+     */
+    public var relays: [RelayDiagRow]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * One row per relay the NMP kernel knows about (bounded by relay count).
+         */relays: [RelayDiagRow]) {
+        self.relays = relays
+    }
+}
+
+#if compiler(>=6)
+extension RelayDiagnosticsViewSnapshot: Sendable {}
+#endif
+
+
+extension RelayDiagnosticsViewSnapshot: Equatable, Hashable {
+    public static func ==(lhs: RelayDiagnosticsViewSnapshot, rhs: RelayDiagnosticsViewSnapshot) -> Bool {
+        if lhs.relays != rhs.relays {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(relays)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayDiagnosticsViewSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayDiagnosticsViewSnapshot {
+        return
+            try RelayDiagnosticsViewSnapshot(
+                relays: FfiConverterSequenceTypeRelayDiagRow.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayDiagnosticsViewSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeRelayDiagRow.write(value.relays, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayDiagnosticsViewSnapshot_lift(_ buf: RustBuffer) throws -> RelayDiagnosticsViewSnapshot {
+    return try FfiConverterTypeRelayDiagnosticsViewSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayDiagnosticsViewSnapshot_lower(_ value: RelayDiagnosticsViewSnapshot) -> RustBuffer {
+    return FfiConverterTypeRelayDiagnosticsViewSnapshot.lower(value)
 }
 
 
@@ -42483,6 +43942,192 @@ public enum AppAction {
      * observer as `KernelEvent::IdentityChanged(Some(pubkey))`.
      */
     case signInNip55
+    /**
+     * Create a fresh Nostr account with the supplied display name.
+     *
+     * Relays and initial follows are Rust POLICY injected from `AppConfig` —
+     * they are NOT caller arguments (D3: no hardcoded relay literals in
+     * kernel logic). Bootstrap publish semantics follow ADR-0059: kind:0 and
+     * kind:10002 are published; kind:3 is skipped when `initial_follows` is
+     * empty (per ADR-0059 §5).
+     *
+     * The reducer transitions to `SessionState::SigningIn{CreateAccount}` and
+     * emits `Effect::CreateAccount`. Success arrives via the existing
+     * `IdentityChanged(Some(pubkey))` observer → `SessionState::Present`.
+     * The 2A clock timeout (SIGN_IN_TIMEOUT_SECS) covers the SigningIn period.
+     */
+    case createAccount(profileName: String
+    )
+    /**
+     * Add a relay to the active account's NIP-65 relay list.
+     *
+     * `url` is the WebSocket relay URL (opaque string — kernel never
+     * constructs URLs; D3). `role` is the NIP-65 / kind:10002 role for the
+     * relay; the kernel normalises it via `RelayRole::normalize` before
+     * forwarding to nmp. Fire-and-forget: emits `Effect::AddRelay`.
+     */
+    case addRelay(url: String, role: RelayRole
+    )
+    /**
+     * Remove a relay from the active account's NIP-65 relay list.
+     *
+     * Fire-and-forget: emits `Effect::RemoveRelay`. No-op if the relay is
+     * not present (nmp is idempotent here; D6).
+     */
+    case removeRelay(url: String
+    )
+    /**
+     * Change the role of an already-configured relay.
+     *
+     * Semantically equivalent to `RemoveRelay` + `AddRelay` in nmp's relay
+     * edit model (T66a). Fire-and-forget: emits `Effect::SetRelayRole`.
+     */
+    case setRelayRole(url: String, role: RelayRole
+    )
+    /**
+     * Persist the rooms relay list (relays that host NIP-29 rooms) as a
+     * kind:30078 app-data event with d-tag `"com.highlighter.relays"`.
+     *
+     * `relay_urls` is the ordered list of room relay WebSocket URLs to store.
+     * The kernel builds the JSON payload and publishes via
+     * `ActorCommand::PublishRawEvent`. No wss-scheme literals are hardcoded here;
+     * the hl-owned d-tag string `"com.highlighter.relays"` is the only
+     * constant (it is product-controlled, not a relay URL).
+     * Fire-and-forget: emits `Effect::PublishRoomsRelayList`.
+     */
+    case setRoomsRelayList(relayUrls: [String]
+    )
+    /**
+     * Follow a pubkey — appends it to the active account's kind:3 follow set
+     * and republishes. Fire-and-forget (D6, Non-Negotiable #3): the updated
+     * follow list arrives back via the `FollowListUpdated` projection frame.
+     *
+     * `pubkey` is a raw 64-char lowercase hex pubkey. Hex-shape validation
+     * lives in the nmp-nip02 action module; semantic errors surface as NMP
+     * toasts rather than crossing the dispatch boundary.
+     */
+    case follow(pubkey: String
+    )
+    /**
+     * Unfollow a pubkey — removes it from the active account's kind:3 follow
+     * set and republishes. Symmetric with `Follow`; fire-and-forget (D6).
+     */
+    case unfollow(pubkey: String
+    )
+    /**
+     * Start room discovery on a relay — dispatches `"nmp.nip29.discover"` action
+     * (pushes the relay_discovery_interest) and wires the DiscoveredGroupsProjection.
+     * `relay_url` is the WebSocket relay URL to discover rooms on (opaque string;
+     * kernel never constructs relay URLs — D3). Fire-and-forget: the discovered
+     * groups catalog arrives via the `DiscoveredGroupsUpdated` projection event.
+     */
+    case startRoomDiscovery(relayUrl: String
+    )
+    /**
+     * Open a profile view for `pubkey` — triggers `nmp_app_claim_profile` via
+     * `Effect::ClaimProfile`. The profile card arrives back as
+     * `KernelEvent::ProfileCardUpdated` via the `"claimed_profiles"` typed
+     * sidecar on the NMP update callback.
+     *
+     * `pubkey` is a raw 64-char lowercase hex pubkey. The kernel uses a stable
+     * consumer-id (`"hl.profile.<pubkey>"`) so the refcount is scoped to this
+     * view instance. Fire-and-forget (D6, Non-Negotiable #3).
+     */
+    case claimProfile(pubkey: String
+    )
+    /**
+     * Close a profile view — triggers `nmp_app_release_profile`. Decrements the
+     * per-consumer refcount; when it reaches zero NMP cancels the kind:0
+     * subscription. Fire-and-forget (D6).
+     */
+    case releaseProfile(pubkey: String
+    )
+    /**
+     * Join a NIP-29 group by publishing a kind:9021 join-request via
+     * `"nmp.nip29.join"`. The relay's response arrives as a joined-groups
+     * projection update (`KernelEvent::JoinedGroupsUpdated`). Fire-and-forget.
+     *
+     * `group_id` is the NIP-29 local group id; `host_relay_url` is the relay
+     * URL (opaque string — kernel never constructs URLs, D3). `invite_code`
+     * is required for closed groups, optional for open groups.
+     *
+     * NOTE: LeaveRoom (kind:9022) is NOT implemented — there is no
+     * `nmp.nip29.leave` action on pinned nmp b4404159. See nmp issue #1598.
+     */
+    case joinRoom(
+        /**
+         * NIP-29 local group id.
+         */groupId: String,
+        /**
+         * Host relay WebSocket URL (opaque — D3).
+         */hostRelayUrl: String,
+        /**
+         * Optional preauth invite code for closed groups.
+         */inviteCode: String?
+    )
+    /**
+     * Create a new public NIP-29 group by publishing kind:9007 + kind:9002
+     * via `"nmp.nip29.create_public_group"`. Fire-and-forget.
+     *
+     * `group_id` is the desired local group id (`[a-z0-9-_]+`). `name` is
+     * the human-readable display name (required). `about` is optional.
+     */
+    case createRoom(
+        /**
+         * NIP-29 local group id (must match `[a-z0-9-_]+`).
+         */groupId: String,
+        /**
+         * Host relay WebSocket URL (opaque — D3).
+         */hostRelayUrl: String,
+        /**
+         * Human-readable room name (required, non-empty).
+         */name: String,
+        /**
+         * Optional description.
+         */about: String?
+    )
+    /**
+     * Add a member to a NIP-29 group by publishing kind:9000 via
+     * `"nmp.nip29.put_user"`. Requires admin rights on the target relay.
+     * Fire-and-forget.
+     *
+     * `pubkey` is a raw 64-char lowercase hex pubkey. `role` is an optional
+     * role string (e.g. `"admin"`) or `None` for a plain member.
+     */
+    case addRoomMember(
+        /**
+         * NIP-29 local group id.
+         */groupId: String,
+        /**
+         * Host relay WebSocket URL (opaque — D3).
+         */hostRelayUrl: String,
+        /**
+         * Raw 64-char lowercase hex pubkey of the user to add.
+         */pubkey: String,
+        /**
+         * Optional role (e.g. `"admin"`). `None` = plain member.
+         */role: String?
+    )
+    /**
+     * Mint one or more invite codes for a NIP-29 group by publishing kind:9009
+     * via `"nmp.nip29.create_invite"`. Requires admin rights. Fire-and-forget.
+     *
+     * `codes` must be non-empty; nmp fans out into multiple kind:9009 events
+     * if more than 10 codes are supplied (MAX_CODES_PER_INVITE_EVENT).
+     * The invite_link_base URL is NOT a kernel concern — Swift composes the
+     * full invite URL from `AppState::room_policy.invite_link_base` + code (D3).
+     */
+    case createRoomInvites(
+        /**
+         * NIP-29 local group id.
+         */groupId: String,
+        /**
+         * Host relay WebSocket URL (opaque — D3).
+         */hostRelayUrl: String,
+        /**
+         * Invite codes (≥1 required; max 128 chars each; printable ASCII only).
+         */codes: [String]
+    )
 }
 
 
@@ -42525,6 +44170,48 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         case 10: return .startNostrConnect
 
         case 11: return .signInNip55
+
+        case 12: return .createAccount(profileName: try FfiConverterString.read(from: &buf)
+        )
+
+        case 13: return .addRelay(url: try FfiConverterString.read(from: &buf), role: try FfiConverterTypeRelayRole.read(from: &buf)
+        )
+
+        case 14: return .removeRelay(url: try FfiConverterString.read(from: &buf)
+        )
+
+        case 15: return .setRelayRole(url: try FfiConverterString.read(from: &buf), role: try FfiConverterTypeRelayRole.read(from: &buf)
+        )
+
+        case 16: return .setRoomsRelayList(relayUrls: try FfiConverterSequenceString.read(from: &buf)
+        )
+
+        case 17: return .follow(pubkey: try FfiConverterString.read(from: &buf)
+        )
+
+        case 18: return .unfollow(pubkey: try FfiConverterString.read(from: &buf)
+        )
+
+        case 19: return .startRoomDiscovery(relayUrl: try FfiConverterString.read(from: &buf)
+        )
+
+        case 20: return .claimProfile(pubkey: try FfiConverterString.read(from: &buf)
+        )
+
+        case 21: return .releaseProfile(pubkey: try FfiConverterString.read(from: &buf)
+        )
+
+        case 22: return .joinRoom(groupId: try FfiConverterString.read(from: &buf), hostRelayUrl: try FfiConverterString.read(from: &buf), inviteCode: try FfiConverterOptionString.read(from: &buf)
+        )
+
+        case 23: return .createRoom(groupId: try FfiConverterString.read(from: &buf), hostRelayUrl: try FfiConverterString.read(from: &buf), name: try FfiConverterString.read(from: &buf), about: try FfiConverterOptionString.read(from: &buf)
+        )
+
+        case 24: return .addRoomMember(groupId: try FfiConverterString.read(from: &buf), hostRelayUrl: try FfiConverterString.read(from: &buf), pubkey: try FfiConverterString.read(from: &buf), role: try FfiConverterOptionString.read(from: &buf)
+        )
+
+        case 25: return .createRoomInvites(groupId: try FfiConverterString.read(from: &buf), hostRelayUrl: try FfiConverterString.read(from: &buf), codes: try FfiConverterSequenceString.read(from: &buf)
+        )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -42580,6 +44267,88 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
 
         case .signInNip55:
             writeInt(&buf, Int32(11))
+
+
+        case let .createAccount(profileName):
+            writeInt(&buf, Int32(12))
+            FfiConverterString.write(profileName, into: &buf)
+
+
+        case let .addRelay(url,role):
+            writeInt(&buf, Int32(13))
+            FfiConverterString.write(url, into: &buf)
+            FfiConverterTypeRelayRole.write(role, into: &buf)
+
+
+        case let .removeRelay(url):
+            writeInt(&buf, Int32(14))
+            FfiConverterString.write(url, into: &buf)
+
+
+        case let .setRelayRole(url,role):
+            writeInt(&buf, Int32(15))
+            FfiConverterString.write(url, into: &buf)
+            FfiConverterTypeRelayRole.write(role, into: &buf)
+
+
+        case let .setRoomsRelayList(relayUrls):
+            writeInt(&buf, Int32(16))
+            FfiConverterSequenceString.write(relayUrls, into: &buf)
+
+
+        case let .follow(pubkey):
+            writeInt(&buf, Int32(17))
+            FfiConverterString.write(pubkey, into: &buf)
+
+
+        case let .unfollow(pubkey):
+            writeInt(&buf, Int32(18))
+            FfiConverterString.write(pubkey, into: &buf)
+
+
+        case let .startRoomDiscovery(relayUrl):
+            writeInt(&buf, Int32(19))
+            FfiConverterString.write(relayUrl, into: &buf)
+
+
+        case let .claimProfile(pubkey):
+            writeInt(&buf, Int32(20))
+            FfiConverterString.write(pubkey, into: &buf)
+
+
+        case let .releaseProfile(pubkey):
+            writeInt(&buf, Int32(21))
+            FfiConverterString.write(pubkey, into: &buf)
+
+
+        case let .joinRoom(groupId,hostRelayUrl,inviteCode):
+            writeInt(&buf, Int32(22))
+            FfiConverterString.write(groupId, into: &buf)
+            FfiConverterString.write(hostRelayUrl, into: &buf)
+            FfiConverterOptionString.write(inviteCode, into: &buf)
+
+
+        case let .createRoom(groupId,hostRelayUrl,name,about):
+            writeInt(&buf, Int32(23))
+            FfiConverterString.write(groupId, into: &buf)
+            FfiConverterString.write(hostRelayUrl, into: &buf)
+            FfiConverterString.write(name, into: &buf)
+            FfiConverterOptionString.write(about, into: &buf)
+
+
+        case let .addRoomMember(groupId,hostRelayUrl,pubkey,role):
+            writeInt(&buf, Int32(24))
+            FfiConverterString.write(groupId, into: &buf)
+            FfiConverterString.write(hostRelayUrl, into: &buf)
+            FfiConverterString.write(pubkey, into: &buf)
+            FfiConverterOptionString.write(role, into: &buf)
+
+
+        case let .createRoomInvites(groupId,hostRelayUrl,codes):
+            writeInt(&buf, Int32(25))
+            FfiConverterString.write(groupId, into: &buf)
+            FfiConverterString.write(hostRelayUrl, into: &buf)
+            FfiConverterSequenceString.write(codes, into: &buf)
 
         }
     }
@@ -45180,6 +46949,244 @@ extension RelativeTimeLabelStyle: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * Connection state of a relay as seen by the NMP kernel. Derived from
+ * nmp's `connection_tone` field; represented as an enum so the Swift
+ * shell can branch on a stable machine tag rather than parsing a string.
+ *
+ * The mapping is conservative: unknown tones → `Unknown`.
+ */
+
+public enum RelayConnectionState {
+
+    /**
+     * `"ok"` tone — relay is connected and healthy.
+     */
+    case connected
+    /**
+     * `"warn"` tone — relay is reconnecting or degraded.
+     */
+    case reconnecting
+    /**
+     * `"error"` tone — relay is in an error state.
+     */
+    case error
+    /**
+     * `"muted"` or any other tone — state unknown / not yet connected.
+     */
+    case unknown
+}
+
+
+#if compiler(>=6)
+extension RelayConnectionState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayConnectionState: FfiConverterRustBuffer {
+    typealias SwiftType = RelayConnectionState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayConnectionState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .connected
+
+        case 2: return .reconnecting
+
+        case 3: return .error
+
+        case 4: return .unknown
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RelayConnectionState, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .connected:
+            writeInt(&buf, Int32(1))
+
+
+        case .reconnecting:
+            writeInt(&buf, Int32(2))
+
+
+        case .error:
+            writeInt(&buf, Int32(3))
+
+
+        case .unknown:
+            writeInt(&buf, Int32(4))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayConnectionState_lift(_ buf: RustBuffer) throws -> RelayConnectionState {
+    return try FfiConverterTypeRelayConnectionState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayConnectionState_lower(_ value: RelayConnectionState) -> RustBuffer {
+    return FfiConverterTypeRelayConnectionState.lower(value)
+}
+
+
+extension RelayConnectionState: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * NIP-65 / kind:10002 role for a configured relay.
+ *
+ * Maps to the composite token strings that `nmp-core` accepts in
+ * `ActorCommand::AddRelay { role }`. `normalize()` produces the canonical
+ * wire string; `Nip65Role::parse` in nmp validates / rejects unknown tokens.
+ *
+ * Append-only: new variants at the bottom keep rebases mechanical.
+ */
+
+public enum RelayRole {
+
+    /**
+     * Read-only relay (kind:10002 `"read"`).
+     */
+    case read
+    /**
+     * Write-only relay (kind:10002 `"write"`).
+     */
+    case write
+    /**
+     * Read + write relay (kind:10002 `"both"`).
+     */
+    case both
+    /**
+     * Indexer relay (kind:10002 `"indexer"`).
+     */
+    case indexer
+    /**
+     * Read + indexer composite (kind:10002 `"read,indexer"`).
+     */
+    case readIndexer
+    /**
+     * Write + indexer composite (kind:10002 `"write,indexer"`).
+     */
+    case writeIndexer
+    /**
+     * Read + write + indexer composite (kind:10002 `"both,indexer"`).
+     */
+    case bothIndexer
+}
+
+
+#if compiler(>=6)
+extension RelayRole: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayRole: FfiConverterRustBuffer {
+    typealias SwiftType = RelayRole
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayRole {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .read
+
+        case 2: return .write
+
+        case 3: return .both
+
+        case 4: return .indexer
+
+        case 5: return .readIndexer
+
+        case 6: return .writeIndexer
+
+        case 7: return .bothIndexer
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RelayRole, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .read:
+            writeInt(&buf, Int32(1))
+
+
+        case .write:
+            writeInt(&buf, Int32(2))
+
+
+        case .both:
+            writeInt(&buf, Int32(3))
+
+
+        case .indexer:
+            writeInt(&buf, Int32(4))
+
+
+        case .readIndexer:
+            writeInt(&buf, Int32(5))
+
+
+        case .writeIndexer:
+            writeInt(&buf, Int32(6))
+
+
+        case .bothIndexer:
+            writeInt(&buf, Int32(7))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayRole_lift(_ buf: RustBuffer) throws -> RelayRole {
+    return try FfiConverterTypeRelayRole.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayRole_lower(_ value: RelayRole) -> RustBuffer {
+    return FfiConverterTypeRelayRole.lower(value)
+}
+
+
+extension RelayRole: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * Connection state of a single relay the app is talking to. Mirrors the
  * nostr-sdk internal `RelayStatus` but trimmed to the values the UI cares
  * about. `Initialized` / `Pending` / `Sleeping` are collapsed into
@@ -46177,6 +48184,47 @@ public enum ViewId {
      * The main tab shell (visible only when session is present).
      */
     case rootShell
+    /**
+     * Network settings overview screen (relay list + role configuration).
+     */
+    case networkSettings
+    /**
+     * Relay-diagnostics detail screen (connection stats, counters, sub list).
+     */
+    case relayDiagnostics
+    /**
+     * Joined-groups / communities list for the active account.
+     */
+    case communities
+    /**
+     * Room explorer / discovery screen.
+     */
+    case roomExplorer
+    /**
+     * Profile detail view for a specific pubkey.
+     *
+     * `pubkey` is a raw 64-char lowercase hex pubkey. The view is opened by
+     * `AppAction::ClaimProfile{pubkey}` (which also sends `Effect::ClaimProfile`
+     * to register the NMP interest) and closed by `AppAction::ReleaseProfile`.
+     */
+    case profile(
+        /**
+         * Raw 64-char hex pubkey of the profile being viewed.
+         */pubkey: String
+    )
+    /**
+     * Per-room home shell view for a specific NIP-29 group.
+     *
+     * `group_id` is the NIP-29 local group id (the `["d", _]` tag value).
+     * Opened by the native UI when the user taps on a room; the actor wires
+     * the `GroupEventsProjection` via `Effect::WireGroupEvents` on view open
+     * and releases the buffer via `Effect::ReleaseGroupEvents` on close.
+     */
+    case roomHome(
+        /**
+         * NIP-29 local group id.
+         */groupId: String
+    )
 }
 
 
@@ -46198,6 +48246,20 @@ public struct FfiConverterTypeViewId: FfiConverterRustBuffer {
 
         case 2: return .rootShell
 
+        case 3: return .networkSettings
+
+        case 4: return .relayDiagnostics
+
+        case 5: return .communities
+
+        case 6: return .roomExplorer
+
+        case 7: return .profile(pubkey: try FfiConverterString.read(from: &buf)
+        )
+
+        case 8: return .roomHome(groupId: try FfiConverterString.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -46212,6 +48274,32 @@ public struct FfiConverterTypeViewId: FfiConverterRustBuffer {
 
         case .rootShell:
             writeInt(&buf, Int32(2))
+
+
+        case .networkSettings:
+            writeInt(&buf, Int32(3))
+
+
+        case .relayDiagnostics:
+            writeInt(&buf, Int32(4))
+
+
+        case .communities:
+            writeInt(&buf, Int32(5))
+
+
+        case .roomExplorer:
+            writeInt(&buf, Int32(6))
+
+
+        case let .profile(pubkey):
+            writeInt(&buf, Int32(7))
+            FfiConverterString.write(pubkey, into: &buf)
+
+
+        case let .roomHome(groupId):
+            writeInt(&buf, Int32(8))
+            FfiConverterString.write(groupId, into: &buf)
 
         }
     }
@@ -46250,6 +48338,37 @@ public enum ViewRoute {
 
     case appRoot
     case rootShell
+    /**
+     * Network settings projection — relay list with raw role/status data.
+     */
+    case networkSettings
+    /**
+     * Relay-diagnostics projection — raw counters and connection state per relay.
+     */
+    case relayDiagnostics
+    case communities
+    /**
+     * Room explorer / discovery screen.
+     */
+    case roomExplorer
+    /**
+     * Profile detail projection — `ProfileSnapshot` (identity + relationship +
+     * communities). Articles/highlights deferred to Phase 4.
+     */
+    case profile(
+        /**
+         * Raw 64-char hex pubkey of the profile to project.
+         */pubkey: String
+    )
+    /**
+     * Room-home projection — `RoomHomeSnapshot` (header + metadata + membership
+     * + empty lanes). Lane bodies deferred to Phase 4.
+     */
+    case roomHome(
+        /**
+         * NIP-29 local group id.
+         */groupId: String
+    )
 }
 
 
@@ -46271,6 +48390,20 @@ public struct FfiConverterTypeViewRoute: FfiConverterRustBuffer {
 
         case 2: return .rootShell
 
+        case 3: return .networkSettings
+
+        case 4: return .relayDiagnostics
+
+        case 5: return .communities
+
+        case 6: return .roomExplorer
+
+        case 7: return .profile(pubkey: try FfiConverterString.read(from: &buf)
+        )
+
+        case 8: return .roomHome(groupId: try FfiConverterString.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -46285,6 +48418,32 @@ public struct FfiConverterTypeViewRoute: FfiConverterRustBuffer {
 
         case .rootShell:
             writeInt(&buf, Int32(2))
+
+
+        case .networkSettings:
+            writeInt(&buf, Int32(3))
+
+
+        case .relayDiagnostics:
+            writeInt(&buf, Int32(4))
+
+
+        case .communities:
+            writeInt(&buf, Int32(5))
+
+
+        case .roomExplorer:
+            writeInt(&buf, Int32(6))
+
+
+        case let .profile(pubkey):
+            writeInt(&buf, Int32(7))
+            FfiConverterString.write(pubkey, into: &buf)
+
+
+        case let .roomHome(groupId):
+            writeInt(&buf, Int32(8))
+            FfiConverterString.write(groupId, into: &buf)
 
         }
     }
@@ -46329,6 +48488,42 @@ public enum ViewSnapshot {
     )
     case rootShell(RootShellSnapshot
     )
+    /**
+     * Network settings overview — relay list with raw fields (D1).
+     */
+    case networkSettings(KernelNetworkSettingsSnapshot
+    )
+    /**
+     * Relay-diagnostics detail — per-relay raw counters and state (D1).
+     */
+    case relayDiagnostics(RelayDiagnosticsViewSnapshot
+    )
+    /**
+     * Joined-groups / communities list for the active account.
+     */
+    case communities(CommunitiesSnapshot
+    )
+    /**
+     * Room explorer / discovery screen.
+     */
+    case roomExplorer(KernelRoomExplorerSnapshot
+    )
+    /**
+     * Single-profile view — identity + relationship + communities.
+     * Articles/highlights deferred to Phase 4.
+     */
+    case profile(ProfileSnapshot
+    )
+    /**
+     * Per-room home shell — header + metadata + membership + empty lanes.
+     * Lane bodies (kind:11/9 content feeds) deferred to Phase 4.
+     *
+     * Named `KernelRoomHomeSnapshot` to avoid collision with the legacy
+     * `RoomHomeSnapshot` in `room_home.rs` (bespoke live lane — Phase 3F
+     * coexists with the live lane until the iOS cutover, Non-Negotiable #6).
+     */
+    case roomHome(KernelRoomHomeSnapshot
+    )
 }
 
 
@@ -46352,6 +48547,24 @@ public struct FfiConverterTypeViewSnapshot: FfiConverterRustBuffer {
         case 2: return .rootShell(try FfiConverterTypeRootShellSnapshot.read(from: &buf)
         )
 
+        case 3: return .networkSettings(try FfiConverterTypeKernelNetworkSettingsSnapshot.read(from: &buf)
+        )
+
+        case 4: return .relayDiagnostics(try FfiConverterTypeRelayDiagnosticsViewSnapshot.read(from: &buf)
+        )
+
+        case 5: return .communities(try FfiConverterTypeCommunitiesSnapshot.read(from: &buf)
+        )
+
+        case 6: return .roomExplorer(try FfiConverterTypeKernelRoomExplorerSnapshot.read(from: &buf)
+        )
+
+        case 7: return .profile(try FfiConverterTypeProfileSnapshot.read(from: &buf)
+        )
+
+        case 8: return .roomHome(try FfiConverterTypeKernelRoomHomeSnapshot.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -46368,6 +48581,36 @@ public struct FfiConverterTypeViewSnapshot: FfiConverterRustBuffer {
         case let .rootShell(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeRootShellSnapshot.write(v1, into: &buf)
+
+
+        case let .networkSettings(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeKernelNetworkSettingsSnapshot.write(v1, into: &buf)
+
+
+        case let .relayDiagnostics(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeRelayDiagnosticsViewSnapshot.write(v1, into: &buf)
+
+
+        case let .communities(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeCommunitiesSnapshot.write(v1, into: &buf)
+
+
+        case let .roomExplorer(v1):
+            writeInt(&buf, Int32(6))
+            FfiConverterTypeKernelRoomExplorerSnapshot.write(v1, into: &buf)
+
+
+        case let .profile(v1):
+            writeInt(&buf, Int32(7))
+            FfiConverterTypeProfileSnapshot.write(v1, into: &buf)
+
+
+        case let .roomHome(v1):
+            writeInt(&buf, Int32(8))
+            FfiConverterTypeKernelRoomHomeSnapshot.write(v1, into: &buf)
 
         }
     }
@@ -47690,6 +49933,31 @@ fileprivate struct FfiConverterSequenceTypeCommentThreadNode: FfiConverterRustBu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeCommunityRow: FfiConverterRustBuffer {
+    typealias SwiftType = [CommunityRow]
+
+    public static func write(_ value: [CommunityRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCommunityRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CommunityRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CommunityRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCommunityRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeCommunitySummary: FfiConverterRustBuffer {
     typealias SwiftType = [CommunitySummary]
 
@@ -47757,6 +50025,31 @@ fileprivate struct FfiConverterSequenceTypeCurationMenuItem: FfiConverterRustBuf
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeCurationMenuItem.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeDiscoveredRow: FfiConverterRustBuffer {
+    typealias SwiftType = [DiscoveredRow]
+
+    public static func write(_ value: [DiscoveredRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeDiscoveredRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [DiscoveredRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [DiscoveredRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeDiscoveredRow.read(from: &buf))
         }
         return seq
     }
@@ -48265,6 +50558,31 @@ fileprivate struct FfiConverterSequenceTypeReadingFeedInteractorProfile: FfiConv
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeRecommendationRow: FfiConverterRustBuffer {
+    typealias SwiftType = [RecommendationRow]
+
+    public static func write(_ value: [RecommendationRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRecommendationRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RecommendationRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RecommendationRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRecommendationRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeRelayConfig: FfiConverterRustBuffer {
     typealias SwiftType = [RelayConfig]
 
@@ -48282,6 +50600,31 @@ fileprivate struct FfiConverterSequenceTypeRelayConfig: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeRelayConfig.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRelayDiagRow: FfiConverterRustBuffer {
+    typealias SwiftType = [RelayDiagRow]
+
+    public static func write(_ value: [RelayDiagRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRelayDiagRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RelayDiagRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RelayDiagRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRelayDiagRow.read(from: &buf))
         }
         return seq
     }

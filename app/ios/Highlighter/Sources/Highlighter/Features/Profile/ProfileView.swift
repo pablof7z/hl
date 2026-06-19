@@ -7,6 +7,7 @@ import SwiftUI
 /// `ProfileDestination`.
 struct ProfileView: View {
     @Environment(HighlighterStore.self) private var appStore
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var store: ProfileStore?
     @State private var editPresented = false
 
@@ -25,17 +26,27 @@ struct ProfileView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task(id: pubkey) {
             if store == nil {
+                // Phase 3G: pass kernel so ProfileStore can open/close the
+                // kernel view and dispatch Follow/Unfollow actions.
                 store = ProfileStore(
                     pubkey: pubkey,
                     viewerPubkey: appStore.currentUser?.pubkey,
                     safeCore: appStore.safeCore,
-                    eventBridge: appStore.eventBridge
+                    eventBridge: appStore.eventBridge,
+                    kernel: kernel
                 )
                 await store?.start()
             }
         }
         .onDisappear {
             store?.stop()
+        }
+        // Phase 3G: forward kernel snapshot updates into the store so the
+        // view re-renders when the NMP update callback delivers a fresh
+        // ProfileCardModel. The `onChange` fires on main actor after the
+        // observer's Task hop resolves.
+        .onChange(of: kernel.profileSnapshots[pubkey]) { _, _ in
+            store?.applyKernelSnapshot()
         }
     }
 

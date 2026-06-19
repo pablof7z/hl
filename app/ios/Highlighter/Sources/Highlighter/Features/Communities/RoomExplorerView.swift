@@ -4,12 +4,47 @@ import SwiftUI
 /// style: featured hero at the top, followed by editorial and social
 /// shelves, then a Browse-all entry point at the bottom. No segmented
 /// toggles — "Your rooms" is just the first shelf among many.
+///
+/// Phase 3G cutover: reads joined-groups and discovery data from the
+/// `HighlighterAppKernel` typed snapshots (`CommunitiesSnapshot` and
+/// `KernelRoomExplorerSnapshot`) rather than from the live lane's
+/// `HighlighterStore`/`RoomExplorerStore`. The kernel view is opened on
+/// `.task` and closed on `.onDisappear`; the actor's lifecycle hook
+/// auto-starts room discovery (via `RoomPolicy.discoveryRelay`) when the
+/// view opens — no explicit relay URL needed from Swift.
 struct RoomExplorerView: View {
     @Environment(HighlighterStore.self) private var appStore
-    @State private var explorerStore: RoomExplorerStore?
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var previewRoom: CommunitySummary?
     @State private var createSheetPresented = false
     @State private var navigationPath = NavigationPath()
+
+    // MARK: - Derived shelf data from kernel snapshots
+
+    private var joinedRooms: [CommunitySummary] {
+        kernel.communities?.groups.map { $0.asCommunitySummary() } ?? []
+    }
+
+    private var featured: [CommunitySummary] {
+        kernel.roomExplorer?.featured.map { $0.asCommunitySummary() } ?? []
+    }
+
+    private var newNoteworthy: [CommunitySummary] {
+        kernel.roomExplorer?.newNoteworthy.map { $0.asCommunitySummary() } ?? []
+    }
+
+    private var friendsShelf: [RoomRecommendation] {
+        kernel.roomExplorer?.friendsShelf.map { $0.asRoomRecommendation(reason: .friends) } ?? []
+    }
+
+    private var authorsShelf: [RoomRecommendation] {
+        kernel.roomExplorer?.authorsShelf.map { $0.asRoomRecommendation(reason: .authors) } ?? []
+    }
+
+    /// True while no discovery data has arrived yet (show shimmer placeholder).
+    private var isFirstLoad: Bool {
+        kernel.roomExplorer == nil
+    }
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -20,9 +55,9 @@ struct RoomExplorerView: View {
 
                     errorBanner
                     yourRoomsShelf
-                    friendsShelf
+                    friendsShelfSection
                     featuredShelf
-                    authorsShelf
+                    authorsShelfSection
                     newShelf
 
                     browseAllFooter
@@ -64,7 +99,15 @@ struct RoomExplorerView: View {
                     RoomPreviewSheet(
                         room: room,
                         onJoin: {
-                            Task { await explorerStore?.requestJoin(room: room) }
+                            // Dispatch JoinRoom kernel action — fire-and-forget (D6).
+                            if let discoveredRow = kernel.roomExplorer?.newNoteworthy.first(where: { $0.groupId == room.id })
+                                ?? kernel.roomExplorer?.featured.first(where: { $0.groupId == room.id }) {
+                                kernel.app.dispatch(action: .joinRoom(
+                                    groupId: discoveredRow.groupId,
+                                    hostRelayUrl: discoveredRow.hostRelayUrl,
+                                    inviteCode: nil
+                                ))
+                            }
                             previewRoom = nil
                         },
                         onOpenRoom: {
@@ -82,13 +125,19 @@ struct RoomExplorerView: View {
             }
         }
         .task {
-            let store = explorerStore ?? RoomExplorerStore(appStore: appStore)
-            explorerStore = store
-            appStore.eventBridge?.registerExplorer(store)
-            await store.refresh()
+            // Open the RoomExplorer kernel view. The actor's lifecycle hook
+            // fires StartRoomDiscovery automatically using RoomPolicy.discoveryRelay
+            // (set from relay_policy.json at boot). Discovery results arrive back
+            // as KernelEvent::DiscoveredGroupsUpdated → kernel.roomExplorer.
+            kernel.openRoomExplorer()
+        }
+        .onDisappear {
+            kernel.closeRoomExplorer()
         }
         .refreshable {
-            await explorerStore?.refresh()
+            // Re-dispatch discovery to the kernel (pull-to-refresh).
+            // kernel.roomExplorer stays populated during the refresh — no UI flash.
+            kernel.refreshRoomExplorer()
         }
     }
 
@@ -96,12 +145,12 @@ struct RoomExplorerView: View {
 
     @ViewBuilder
     private var heroSection: some View {
-        if let store = explorerStore, !store.featured.isEmpty {
-            ExplorerHeroView(rooms: store.featured) { room in
+        if !featured.isEmpty {
+            ExplorerHeroView(rooms: featured) { room in
                 previewRoom = room
             }
             .padding(.top, 4)
-        } else if explorerStore?.isFirstLoad ?? true {
+        } else if isFirstLoad {
             ExplorerHeroPlaceholder()
                 .padding(.top, 4)
         }
@@ -114,13 +163,13 @@ struct RoomExplorerView: View {
 
     @ViewBuilder
     private var yourRoomsShelf: some View {
-        if !appStore.joinedCommunities.isEmpty {
+        if !joinedRooms.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 shelfTitle("Your rooms", rationale: nil)
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: 14) {
-                        ForEach(appStore.joinedCommunities, id: \.id) { room in
+                        ForEach(joinedRooms, id: \.id) { room in
                             NavigationLink(value: room.id) {
                                 RoomCoverCard(room: room, width: 140)
                             }
@@ -135,13 +184,13 @@ struct RoomExplorerView: View {
     }
 
     @ViewBuilder
-    private var friendsShelf: some View {
-        if let store = explorerStore, !store.friendsShelf.isEmpty {
+    private var friendsShelfSection: some View {
+        if !friendsShelf.isEmpty {
             shelf(
                 title: "Friends are here",
                 rationale: "People you follow are members",
                 content: {
-                    ForEach(store.friendsShelf, id: \.summary.id) { rec in
+                    ForEach(friendsShelf, id: \.summary.id) { rec in
                         Button {
                             previewRoom = rec.summary
                         } label: {
@@ -156,7 +205,7 @@ struct RoomExplorerView: View {
 
     @ViewBuilder
     private var featuredShelf: some View {
-        if let store = explorerStore, store.featured.count > 1 {
+        if featured.count > 1 {
             // After the hero, show the rest of the featured list as a
             // regular-sized shelf so the curator's full picks remain
             // accessible below the hero.
@@ -164,7 +213,7 @@ struct RoomExplorerView: View {
                 title: "Featured",
                 rationale: "Curated by Highlighter",
                 content: {
-                    ForEach(Array(store.featured.dropFirst()), id: \.id) { room in
+                    ForEach(Array(featured.dropFirst()), id: \.id) { room in
                         Button {
                             previewRoom = room
                         } label: {
@@ -178,13 +227,13 @@ struct RoomExplorerView: View {
     }
 
     @ViewBuilder
-    private var authorsShelf: some View {
-        if let store = explorerStore, !store.authorsShelf.isEmpty {
+    private var authorsShelfSection: some View {
+        if !authorsShelf.isEmpty {
             shelf(
                 title: "Writers you read",
                 rationale: "Authors you've highlighted post here",
                 content: {
-                    ForEach(store.authorsShelf, id: \.summary.id) { rec in
+                    ForEach(authorsShelf, id: \.summary.id) { rec in
                         Button {
                             previewRoom = rec.summary
                         } label: {
@@ -199,12 +248,12 @@ struct RoomExplorerView: View {
 
     @ViewBuilder
     private var newShelf: some View {
-        if let store = explorerStore, !store.newNoteworthy.isEmpty {
+        if !newNoteworthy.isEmpty {
             shelf(
                 title: "New & noteworthy",
                 rationale: "Recently added rooms",
                 content: {
-                    ForEach(store.newNoteworthy, id: \.id) { room in
+                    ForEach(newNoteworthy, id: \.id) { room in
                         Button {
                             previewRoom = room
                         } label: {

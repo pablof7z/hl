@@ -93,6 +93,35 @@ pub(crate) fn apply_discovered_groups(state: &mut AppState, payload: &[u8]) {
     }
 }
 
+// ─── View-open lifecycle ─────────────────────────────────────────────────────
+
+/// Called by the actor's `Cmd::OpenView` handler (same pattern as
+/// `profiles::lifecycle_effects_for_view_open` and
+/// `room_home::lifecycle_effects_for_view_open`).
+///
+/// When `id == ViewId::RoomExplorer` and `room_policy.discovery_relay` is
+/// non-empty, emits the two effects that wire and start discovery (identical
+/// to `AppAction::StartRoomDiscovery`). This means Swift only has to call
+/// `openView(RoomExplorer)` — no explicit action dispatch needed (Phase 3G).
+///
+/// Returns empty `Vec` for any other view.
+pub(crate) fn lifecycle_effects_for_view_open(
+    id: &crate::kernel::view::ViewId,
+    state: &AppState,
+) -> Vec<Effect> {
+    if !matches!(id, crate::kernel::view::ViewId::RoomExplorer) {
+        return Vec::new();
+    }
+    let relay_url = &state.room_policy.discovery_relay;
+    if relay_url.is_empty() {
+        tracing::trace!(
+            "discovery::lifecycle_effects_for_view_open: discovery_relay is empty — no auto-start"
+        );
+        return Vec::new();
+    }
+    reduce_action_start_room_discovery(relay_url.clone())
+}
+
 // ─── Action reducer ──────────────────────────────────────────────────────────
 
 /// Handle `AppAction::StartRoomDiscovery { relay_url }`.
