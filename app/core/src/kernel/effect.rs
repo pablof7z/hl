@@ -103,6 +103,20 @@ pub enum Effect {
         content: String,
     },
 
+    // ── Phase 3B additions (append-only) ─────────────────────────────────────
+    /// Call `nmp_nip29::register::wire_joined_groups(nmp_ref, pubkey, "")`.
+    ///
+    /// Registers (or re-registers) the `JoinedGroupsProjection` event observer
+    /// and typed snapshot closure under `"nmp.nip29.joined_groups"`. Must be
+    /// emitted at boot (via `start_nmp_app`) and on every
+    /// `IdentityChanged(Some(pubkey))` so the projection follows account switches.
+    /// Fire-and-forget: the snapshot update arrives via the NMP update callback
+    /// as `KernelEvent::NmpSnapshotFrame` on the next projection tick.
+    WireJoinedGroups {
+        /// Hex pubkey of the account whose joined groups to project.
+        pubkey: String,
+    },
+
     // ── Phase 3C additions (append-only) ─────────────────────────────────────
     /// Call `nmp_app_dispatch_action` with `"nmp.follow"` or `"nmp.unfollow"`
     /// namespace and `{"pubkey":"<hex>"}` JSON. Fire-and-forget (D6, Non-

@@ -1,18 +1,87 @@
 //! Communities domain — joined-groups projection for the Communities view.
 //!
 //! Owned state: `AppState.communities` (a `Vec<CommunityRow>`).
-//! Wired via: `KernelEvent::JoinedGroupsUpdated` → `reduce_event_joined_groups_updated`
-//!            → `project_communities_snapshot` for `ViewId::Communities`.
 //!
-//! ## NMP wiring note
-//! `wire_joined_groups` (nmp-nip29 PR #1587/#1588, not yet on origin/master) must
-//! be called once at boot and re-called on `IdentityChanged(Some)`.  The dispatch
-//! arm for schema_id `"nmp.nip29.joined_groups"` in `projections.rs` is in place;
-//! it will fire once that NMP PR lands and hl pins to it.
+//! ## Data flow
+//!
+//! 1. `register_joined_groups_projection(nmp_ref, pubkey)` registers the
+//!    `JoinedGroupsProjection` event observer + typed snapshot closure via
+//!    `nmp_nip29::register::wire_joined_groups`. Called at boot and re-called
+//!    on `IdentityChanged(Some)` via `Effect::WireJoinedGroups`.
+//! 2. Each NMP update-callback tick delivers `KernelEvent::NmpSnapshotFrame`.
+//! 3. `projections::dispatch_typed_frame` matches `"nmp.nip29.joined_groups"`
+//!    and calls `apply_joined_groups(state, &proj.payload)` here.
+//! 4. `apply_joined_groups` decodes via `nmp_nip29::decode_joined_groups_snapshot`
+//!    and maps `JoinedGroup` → `CommunityRow` (raw fields, no formatted strings).
+//! 5. `reduce_event_joined_groups_updated` stores the rows in `AppState.communities`.
+//! 6. `project_communities_snapshot` projects them into `ViewSnapshot::Communities`.
+
+use nmp_ffi::NmpApp;
+use nmp_nip29::decode_joined_groups_snapshot;
+use nmp_nip29::register::wire_joined_groups;
 
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::{CommunitiesSnapshot, CommunityRow, ViewSnapshot};
+
+// ─── Projection registration ─────────────────────────────────────────────────
+
+/// Wire the `JoinedGroupsProjection` event observer + typed snapshot projection
+/// against `nmp_ref` for `active_pubkey`.
+///
+/// Delegates directly to `nmp_nip29::register::wire_joined_groups`, which:
+///   - Registers a `JoinedGroupsProjection` as a `KernelEventObserver` (ingest).
+///   - Registers a typed FlatBuffers sidecar under `"nmp.nip29.joined_groups"`.
+///
+/// Must be called:
+///   1. Once at boot (after `nmp_app_start`) via `start_nmp_app`.
+///   2. On `IdentityChanged(Some(pubkey))` via `Effect::WireJoinedGroups`.
+///
+/// An empty `active_pubkey` is a silent no-op (`wire_joined_groups` guards it).
+/// `host_relay_url` is passed as empty here — the projection accepts events from
+/// any relay provenance, so hl does not pin to a specific host at registration.
+/// (The interest helper `joined_groups_for_host` can be used to push a relay-pinned
+/// interest separately; hl relies on the standing kind:39001/39002 subscriptions
+/// from the active-account interest set for now.)
+pub(crate) fn register_joined_groups_projection(nmp_ref: &NmpApp, active_pubkey: String) {
+    wire_joined_groups(nmp_ref, active_pubkey, String::new());
+}
+
+// ─── Frame decode (called from projections::dispatch_typed_frame) ─────────────
+
+/// Decode a `"nmp.nip29.joined_groups"` FlatBuffers payload and store the
+/// resulting `Vec<CommunityRow>` in `AppState.communities`.
+///
+/// Called from `projections::dispatch_typed_frame` on the actor thread.
+/// Non-blocking (FlatBuffers decode only — no I/O). D6: any decode error leaves
+/// `AppState.communities` unchanged (silent no-op).
+pub(crate) fn apply_joined_groups(state: &mut AppState, payload: &[u8]) {
+    match decode_joined_groups_snapshot(payload) {
+        Ok(snapshot) => {
+            state.communities = snapshot
+                .groups
+                .into_iter()
+                .map(|g| CommunityRow {
+                    group_id: g.group_id,
+                    host_relay_url: g.host_relay_url,
+                    name: g.name,
+                    picture: g.picture,
+                    about: g.about,
+                    member_count: g.member_count,
+                    public: g.public,
+                    open: g.open,
+                    is_admin: g.is_admin,
+                })
+                .collect();
+        }
+        Err(e) => {
+            tracing::trace!(
+                error = %e,
+                "communities::apply_joined_groups: decode error — AppState.communities unchanged (D6)"
+            );
+        }
+    }
+}
 
 // ─── Reducer (event) ─────────────────────────────────────────────────────────
 

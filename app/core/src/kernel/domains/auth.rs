@@ -128,16 +128,18 @@ pub(crate) fn reduce_event_identity_changed(
                 },
                 _ => SignerKind::LocalNsec,
             };
-            // Phase 3B: clear prior account's communities — the new account's
-            // joined-groups projection will arrive via the NMP update callback
-            // once wire_joined_groups is called (nmp-nip29 PR #1587/#1588).
+            // Phase 3B: clear prior account's communities before re-wiring.
+            // Effect::WireJoinedGroups re-registers the JoinedGroupsProjection
+            // for the new pubkey; the fresh snapshot arrives on the next tick.
             state.communities = vec![];
             // Clear the pending NostrConnect URI — the handshake is done.
             state.nostrconnect_uri = None;
             state.session = SessionState::Present {
-                pubkey: pk,
+                pubkey: pk.clone(),
                 signer_kind,
             };
+            // Phase 3B: re-register joined-groups projection for the new account.
+            return vec![Effect::WireJoinedGroups { pubkey: pk }];
         }
         _ => {
             // None or empty pubkey → no active account.

@@ -409,6 +409,18 @@ pub(crate) async fn run_effect(
             relays::run_effect_publish_rooms_relay_list(content, nmp);
         }
 
+        // ── Phase 3B additions (append-only) ─────────────────────────────────
+        Effect::WireJoinedGroups { pubkey } => {
+            // Re-register the JoinedGroupsProjection for the new account pubkey.
+            // Called at boot and on every IdentityChanged(Some) so the projection
+            // follows account switches. Fire-and-forget: snapshot arrives on the
+            // next NMP update-callback tick.
+            if let Some(handle) = nmp {
+                let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+                communities::register_joined_groups_projection(nmp_ref, pubkey);
+            }
+        }
+
         // ── Phase 3C additions ────────────────────────────────────────────────
         Effect::DispatchFollowAction { follow, pubkey } => {
             follows::run_effect_dispatch_follow_action(follow, pubkey, nmp);
@@ -561,15 +573,20 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
     // explicitly here makes the init order deterministic.
     nmp_external_signer_init(raw_ptr.as_ptr());
 
-    // Phase 3B: wire_joined_groups is provided by nmp-nip29 PR #1587/#1588
-    // (JoinedGroupsSnapshot + schema_id "nmp.nip29.joined_groups"). Once that PR
-    // is pinned, replace this comment with:
-    //   if let Some(pk) = nmp_ref.active_account_handle().map(|h| h.pubkey()) {
-    //       nmp_nip29::register::wire_joined_groups(nmp_ref, pk, discovery_relay_url);
-    //   }
-    // Until then the typed sidecar never arrives and the dispatch arm in
-    // projections.rs is a structural no-op (bridge_registered_once_at_boot still
-    // ensures the update-callback fires for other projections).
+    // Phase 3B: register JoinedGroupsProjection at boot.
+    // If an account is already active (e.g. persisted from a prior session),
+    // wire it immediately. On subsequent IdentityChanged(Some) the reducer
+    // emits Effect::WireJoinedGroups which re-calls this function.
+    // An empty pubkey is a silent no-op inside wire_joined_groups (D6).
+    {
+        let boot_pubkey: String = nmp_ref
+            .active_account_handle()
+            .lock()
+            .ok()
+            .and_then(|g| g.clone())
+            .unwrap_or_default();
+        communities::register_joined_groups_projection(nmp_ref, boot_pubkey);
+    }
 
     // Wire identity-change observer → KernelEvent::IdentityChanged.
     // Pattern from nmp_runtime.rs:758-778.
