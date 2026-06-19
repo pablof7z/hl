@@ -123,6 +123,11 @@ pub(crate) fn project_snapshot(
         // before this function is called. This arm is unreachable in practice
         // but required for exhaustive match coverage.
         ViewId::RoomExplorer => None,
+
+        // ── Phase 3D additions (append-only) ─────────────────────────────────
+        // ViewId::Profile is handled upstream in actor::project_snapshot.
+        // This arm is unreachable in practice but required for exhaustive match.
+        ViewId::Profile { .. } => None,
     }
 }
 

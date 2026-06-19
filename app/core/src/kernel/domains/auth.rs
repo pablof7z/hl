@@ -102,6 +102,10 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     // Arc, but AppState::follows must also be wiped so is_following never
     // returns true for the previous account's contacts.
     state.follows = Vec::new();
+    // ── Phase 3D: clear profile state on logout ──────────────────────────────
+    // own_profile and claimed_profiles belong to the departing account and
+    // must not survive into the next session.
+    super::profiles::clear_on_identity_lost(state);
     // RemoveActiveAccount fires nmp.remove_account; ClearSession
     // emits a CapabilityRequest to native for its keychain.
     vec![Effect::RemoveActiveAccount, Effect::ClearSession]
@@ -151,6 +155,9 @@ pub(crate) fn reduce_event_identity_changed(
             // NMP fires IdentityChanged(None) on logout / account removal. Wipe
             // AppState::follows so stale contacts don't outlive the session.
             state.follows = Vec::new();
+            // ── Phase 3D: clear profile state on account removal ──────────────
+            // own_profile and claimed_profiles belong to the departing account.
+            super::profiles::clear_on_identity_lost(state);
         }
     }
     vec![]

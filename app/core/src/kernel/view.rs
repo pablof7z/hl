@@ -31,6 +31,17 @@ pub enum ViewId {
     // ── Phase 3E additions (append-only) ─────────────────────────────────────
     /// Room explorer / discovery screen.
     RoomExplorer,
+
+    // ── Phase 3D additions (append-only) ─────────────────────────────────────
+    /// Profile detail view for a specific pubkey.
+    ///
+    /// `pubkey` is a raw 64-char lowercase hex pubkey. The view is opened by
+    /// `AppAction::ClaimProfile{pubkey}` (which also sends `Effect::ClaimProfile`
+    /// to register the NMP interest) and closed by `AppAction::ReleaseProfile`.
+    Profile {
+        /// Raw 64-char hex pubkey of the profile being viewed.
+        pubkey: String,
+    },
 }
 
 /// Which projection to compute for a registered view.
@@ -51,6 +62,14 @@ pub enum ViewRoute {
     // ── Phase 3E additions (append-only) ─────────────────────────────────────
     /// Room explorer / discovery screen.
     RoomExplorer,
+
+    // ── Phase 3D additions (append-only) ─────────────────────────────────────
+    /// Profile detail projection — `ProfileSnapshot` (identity + relationship +
+    /// communities). Articles/highlights deferred to Phase 4.
+    Profile {
+        /// Raw 64-char hex pubkey of the profile to project.
+        pubkey: String,
+    },
 }
 
 /// Tracks open views and their last-emitted snapshots.

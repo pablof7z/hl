@@ -163,6 +163,22 @@ pub enum AppAction {
     /// kernel never constructs relay URLs — D3). Fire-and-forget: the discovered
     /// groups catalog arrives via the `DiscoveredGroupsUpdated` projection event.
     StartRoomDiscovery { relay_url: String },
+
+    // ── Phase 3D additions (append-only) ─────────────────────────────────────
+    /// Open a profile view for `pubkey` — triggers `nmp_app_claim_profile` via
+    /// `Effect::ClaimProfile`. The profile card arrives back as
+    /// `KernelEvent::ProfileCardUpdated` via the `"claimed_profiles"` typed
+    /// sidecar on the NMP update callback.
+    ///
+    /// `pubkey` is a raw 64-char lowercase hex pubkey. The kernel uses a stable
+    /// consumer-id (`"hl.profile.<pubkey>"`) so the refcount is scoped to this
+    /// view instance. Fire-and-forget (D6, Non-Negotiable #3).
+    ClaimProfile { pubkey: String },
+
+    /// Close a profile view — triggers `nmp_app_release_profile`. Decrements the
+    /// per-consumer refcount; when it reaches zero NMP cancels the kind:0
+    /// subscription. Fire-and-forget (D6).
+    ReleaseProfile { pubkey: String },
 }
 
 /// NIP-65 / kind:10002 role for a configured relay.
@@ -285,4 +301,24 @@ pub enum KernelEvent {
     /// `AppState.discovered_groups` by
     /// `discovery::reduce_event_discovered_groups_updated`.
     DiscoveredGroupsUpdated(Vec<crate::kernel::snapshot::DiscoveredRow>),
+
+    // ── Phase 3D additions (append-only) ─────────────────────────────────────
+    /// A profile card from the `"claimed_profiles"` typed sidecar was decoded.
+    ///
+    /// Produced by `projections::dispatch_typed_frame` when the
+    /// `"claimed_profiles"` schema_id sidecar arrives. Carries one updated
+    /// `ProfileCardModel` for the given `pubkey`. The reducer stores it in
+    /// `AppState::claimed_profiles` so the `ViewId::Profile{pubkey}` snapshot
+    /// can read it directly (non-blocking HashMap lookup).
+    ///
+    /// Also produced when the `"profile"` (own-account) sidecar arrives for
+    /// the active account's pubkey, in case the Profile view is open for the
+    /// own account. In that case `pubkey` matches the active account.
+    ProfileCardUpdated {
+        /// Raw 64-char hex pubkey.
+        pubkey: String,
+        /// Decoded `ProfileCardModel` — raw fields, no presentation formatting.
+        /// Boxed to keep `KernelEvent` size balanced (ProfileCardModel is large).
+        card: Box<nmp_core::typed_projections::ProfileCardModel>,
+    },
 }

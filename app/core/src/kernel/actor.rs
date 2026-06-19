@@ -37,7 +37,7 @@ use nmp_defaults::{NmpAppBuilder, RunConfig};
 
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
 use crate::kernel::domains::{
-    auth, communities, discovery, follows, projections, relays, route, session,
+    auth, communities, discovery, follows, profiles, projections, relays, route, session,
 };
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
@@ -259,6 +259,11 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         AppAction::StartRoomDiscovery { relay_url } => {
             discovery::reduce_action_start_room_discovery(relay_url)
         }
+
+        // ── Phase 3D additions ────────────────────────────────────────────────
+        AppAction::ClaimProfile { pubkey } => profiles::reduce_action_claim_profile(pubkey),
+
+        AppAction::ReleaseProfile { pubkey } => profiles::reduce_action_release_profile(pubkey),
     }
 }
 
@@ -328,6 +333,18 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
         KernelEvent::DiscoveredGroupsUpdated(rows) => {
             discovery::reduce_event_discovered_groups_updated(state, rows)
         }
+
+        // ── Phase 3D additions (append-only) ─────────────────────────────────
+        KernelEvent::ProfileCardUpdated { pubkey, card } => {
+            // Store the decoded ProfileCardModel in claimed_profiles keyed by
+            // the raw hex pubkey. The "profile" (own account) sidecar also
+            // goes through this path for ViewId::Profile views where the viewed
+            // pubkey matches the active account — own_profile is the read-side
+            // fallback, claimed_profiles is the authoritative path for views.
+            // `card` is `Box<ProfileCardModel>`; deref-move to owned model.
+            state.claimed_profiles.insert(pubkey, *card);
+            vec![]
+        }
     }
 }
 
@@ -341,8 +358,13 @@ pub(crate) fn project_snapshot(
 ) -> Option<ViewSnapshot> {
     match id {
         ViewId::Communities => communities::project_communities_snapshot(state),
+
         // ── Phase 3E additions ────────────────────────────────────────────────
         ViewId::RoomExplorer => discovery::project_room_explorer_snapshot(state),
+
+        // ── Phase 3D additions (append-only) ─────────────────────────────────
+        ViewId::Profile { pubkey } => profiles::project_profile_snapshot(state, pubkey),
+
         _ => route::project_snapshot(state, id, clock_now),
     }
 }
@@ -451,6 +473,23 @@ pub(crate) async fn run_effect(
                 discovery::run_effect_wire_group_discovery(relay_url, nmp_ref);
             }
         }
+
+        // ── Phase 3D additions ────────────────────────────────────────────────
+        Effect::ClaimProfile { pubkey } => {
+            // Call nmp_app_claim_profile with liveness=Live so a Tailing kind:0
+            // subscription stays open while the view is on screen. The updated
+            // card arrives back through the "claimed_profiles" typed sidecar as
+            // KernelEvent::ProfileCardUpdated. No-op in test mode (nmp=None).
+            profiles::run_effect_claim_profile(pubkey, nmp);
+        }
+
+        Effect::ReleaseProfile { pubkey } => {
+            // Call nmp_app_release_profile to decrement the per-consumer refcount.
+            // When the count reaches zero NMP cancels the Tailing kind:0
+            // subscription and removes the card from claimed_profiles. No-op in
+            // test mode (nmp=None).
+            profiles::run_effect_release_profile(pubkey, nmp);
+        }
     }
 
     let _ = session_epoch; // carried for future epoch-keyed effect cancellation
@@ -486,11 +525,19 @@ pub(crate) async fn actor_task(
         let is_shutdown = matches!(cmd, Cmd::Shutdown);
 
         // Handle view registry mutations before reducing (they need the registry).
+        // Phase 3D: also gather lifecycle effects for profile claim/release — these
+        // are side-effects of view open/close, not of AppAction dispatch, so they
+        // live here rather than in the pure reducer.
+        let mut lifecycle_effects: Vec<Effect> = Vec::new();
         match &cmd {
             Cmd::OpenView(id, route) => {
                 registry.open(id.clone(), route.clone());
+                // ── Phase 3D: claim a profile subscription when its view opens ──
+                lifecycle_effects.extend(profiles::lifecycle_effects_for_view_open(id));
             }
             Cmd::CloseView(id) => {
+                // ── Phase 3D: release the profile subscription before removing from registry ──
+                lifecycle_effects.extend(profiles::lifecycle_effects_for_view_close(id));
                 registry.close(id);
             }
             Cmd::Resume => {
@@ -507,8 +554,8 @@ pub(crate) async fn actor_task(
         // Reduce (pure, sync).
         let effects = reduce(&mut state, cmd, now);
 
-        // Run effects (async).
-        for effect in effects {
+        // Run lifecycle effects first (profile claim/release), then reducer effects.
+        for effect in lifecycle_effects.into_iter().chain(effects) {
             run_effect(
                 effect,
                 state.session_epoch,

@@ -157,4 +157,30 @@ pub enum Effect {
         /// The discovery relay URL (opaque string; kernel never constructs URLs, D3).
         relay_url: String,
     },
+
+    // ── Phase 3D additions (append-only) ─────────────────────────────────────
+    /// Call `nmp_app_claim_profile(raw_ptr, pubkey, "hl.profile.<pubkey>",
+    /// force:0, liveness:Live)`.
+    ///
+    /// Sent when the UI opens a `ViewId::Profile{pubkey}` view (triggered by
+    /// `AppAction::ClaimProfile`). `Live` liveness (`c_int = 1`) keeps a
+    /// `Tailing` kind:0 subscription open so profile edits arrive reactively
+    /// while the view is on screen. The updated card arrives back through the
+    /// `"claimed_profiles"` typed sidecar as `KernelEvent::ProfileCardUpdated`.
+    /// Fire-and-forget (D6, Non-Negotiable #3): nmp handles the claim async.
+    ClaimProfile {
+        /// Raw 64-char lowercase hex pubkey to claim.
+        pubkey: String,
+    },
+
+    /// Call `nmp_app_release_profile(raw_ptr, pubkey, "hl.profile.<pubkey>")`.
+    ///
+    /// Sent when the UI closes a `ViewId::Profile{pubkey}` view (triggered by
+    /// `AppAction::ReleaseProfile`). Decrements the per-consumer refcount;
+    /// when zero, NMP cancels the Tailing kind:0 subscription and removes the
+    /// card from `claimed_profiles`. Fire-and-forget (D6).
+    ReleaseProfile {
+        /// Raw 64-char lowercase hex pubkey to release.
+        pubkey: String,
+    },
 }

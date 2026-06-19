@@ -27,10 +27,12 @@
 //! level). Malformed payloads are a silent no-op. Neither case corrupts
 //! `AppState` — the previous value is left unchanged.
 
-use nmp_core::typed_projections::RELAY_DIAGNOSTICS_SCHEMA_ID;
+use nmp_core::typed_projections::{
+    CLAIMED_PROFILES_SCHEMA_ID, PROFILE_SCHEMA_ID, RELAY_DIAGNOSTICS_SCHEMA_ID,
+};
 
 use crate::kernel::app::AppState;
-use crate::kernel::domains::relay_diagnostics;
+use crate::kernel::domains::{profiles, relay_diagnostics};
 use crate::kernel::effect::Effect;
 
 /// Decode one NMP snapshot frame, route each typed-projection sidecar by
@@ -103,13 +105,21 @@ pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> 
                 super::follows::apply_follow_list(state, &proj.payload);
             }
 
-            // ── Phase 3D arm: "profile" ───────────────────────────────────────
-            // Active account's own profile card. Added by slice 3D.
-            // "profile" => { ... }
+            // ── Phase 3D arm: "profile" ─────────────────────────────────────
+            // Active account's own profile card (built-in Tier-2 projection).
+            // Decoded into AppState::own_profile. No ClaimProfile needed — the
+            // kernel emits this sidecar automatically for the active account.
+            PROFILE_SCHEMA_ID => {
+                profiles::apply_own_profile(state, &proj.payload);
+            }
 
             // ── Phase 3D arm: "claimed_profiles" ─────────────────────────────
-            // Profiles for visited pubkeys. Added by slice 3D.
-            // "claimed_profiles" => { ... }
+            // Map of pubkey → ProfileCardModel for all currently claimed profiles
+            // (visited via AppAction::ClaimProfile / Effect::ClaimProfile).
+            // Decoded into AppState::claimed_profiles (HashMap).
+            CLAIMED_PROFILES_SCHEMA_ID => {
+                profiles::apply_claimed_profiles(state, &proj.payload);
+            }
 
             // ── Phase 3E arm: "nmp.nip29.discovered_groups" ──────────────────
             // Decode the `"nmp.nip29.discovered_groups"` FlatBuffers payload via
