@@ -67,4 +67,47 @@ pub struct RootShellSnapshot {
 pub enum ViewSnapshot {
     AppRoot(AppRootSnapshot),
     RootShell(RootShellSnapshot),
+
+    // ── Phase 3B additions (append-only) ─────────────────────────────────────
+    /// Joined-groups / communities list for the active account.
+    Communities(CommunitiesSnapshot),
+}
+
+// ── Phase 3B additions (append-only) ─────────────────────────────────────────
+
+/// One joined group as seen by the active account.
+///
+/// Raw protocol data only (D3 / ADR-0032): Swift formats all display strings
+/// (`"{n} members"`, `"Open"/"Closed"`, avatar initials, etc.).
+/// Fields mirror `nmp_nip29::projection::DiscoveredGroup` plus membership booleans
+/// which arrive via `JoinedGroupsSnapshot` (nmp-nip29 PR #1587/#1588).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct CommunityRow {
+    /// NIP-29 local group id (the `["d", _]` tag value).
+    pub group_id: String,
+    /// Host relay URL. Together with `group_id` forms the stable `GroupId`.
+    pub host_relay_url: String,
+    /// `["name", _]` tag value from kind:39000, if present.
+    pub name: Option<String>,
+    /// `["picture", _]` tag value from kind:39000, if present.
+    pub picture: Option<String>,
+    /// `["about", _]` tag value from kind:39000, if present.
+    pub about: Option<String>,
+    /// Cardinality of `["p", _]` tags on the latest kind:39002 (member list).
+    pub member_count: u32,
+    /// `true` iff the latest kind:39000 lacks a `["private"]` tag.
+    pub public: bool,
+    /// `true` iff the latest kind:39000 lacks a `["closed"]` tag.
+    pub open: bool,
+    /// `true` iff the active account holds admin rights for this group.
+    pub is_admin: bool,
+}
+
+/// Snapshot for `ViewId::Communities` — the joined-groups list.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct CommunitiesSnapshot {
+    /// Joined groups for the active account. Bounded by the projection
+    /// (at most as many entries as the account has joined); never grows
+    /// with the event store (Non-Negotiable #7).
+    pub groups: Vec<CommunityRow>,
 }

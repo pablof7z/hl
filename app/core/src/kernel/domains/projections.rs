@@ -73,9 +73,15 @@ pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> 
     for proj in &projections {
         // Extension seam: future slices append arms before the `_` default.
         match proj.schema_id.as_str() {
-            // ── Phase 3B arm: "nmp.nip29.joined_groups" ──────────────────────
-            // Added by slice 3B.
-            // "nmp.nip29.joined_groups" => { ... }
+            // ── Phase 3B: joined-groups projection ───────────────────────────
+            // Decodes the `"nmp.nip29.joined_groups"` FlatBuffers payload via
+            // `nmp_nip29::decode_joined_groups_snapshot` and maps `JoinedGroup`
+            // rows into `CommunityRow` (raw fields only — no formatted labels).
+            // `wire_joined_groups` is called at boot and on `IdentityChanged(Some)`
+            // via `Effect::WireJoinedGroups` so the projection fires on every tick.
+            "nmp.nip29.joined_groups" => {
+                super::communities::apply_joined_groups(state, &proj.payload);
+            }
 
             // ── Phase 3C arm: "nmp.nip02.follow_list" ────────────────────────
             // Decode the FlatBuffers follow-list payload and store raw hex

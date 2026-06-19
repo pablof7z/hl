@@ -88,6 +88,11 @@ pub(crate) fn project_snapshot(
         ViewId::RootShell => Some(ViewSnapshot::RootShell(project_root_shell(
             state, clock_now,
         ))),
+        // ── Phase 3B additions (append-only) ─────────────────────────────────
+        // ViewId::Communities is handled upstream in actor::project_snapshot
+        // before this function is called. This arm is unreachable in practice
+        // but required for exhaustive match coverage.
+        ViewId::Communities => None,
     }
 }
 

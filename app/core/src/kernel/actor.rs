@@ -36,7 +36,7 @@ use crate::onboarding::OnboardingStore;
 use nmp_defaults::{NmpAppBuilder, RunConfig};
 
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
-use crate::kernel::domains::{auth, follows, projections, relays, route, session};
+use crate::kernel::domains::{auth, communities, follows, projections, relays, route, session};
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
 
@@ -303,6 +303,11 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             projections::dispatch_typed_frame(state, &bytes)
         }
 
+        // ── Phase 3B additions (append-only) ─────────────────────────────────
+        KernelEvent::JoinedGroupsUpdated(groups) => {
+            communities::reduce_event_joined_groups_updated(state, groups)
+        }
+
         // ── Phase 3C additions (append-only) ─────────────────────────────────
         KernelEvent::FollowListUpdated(pubkeys) => {
             // Store raw hex pubkeys decoded from the "nmp.nip02.follow_list"
@@ -322,7 +327,10 @@ pub(crate) fn project_snapshot(
     id: &ViewId,
     clock_now: u64,
 ) -> Option<ViewSnapshot> {
-    route::project_snapshot(state, id, clock_now)
+    match id {
+        ViewId::Communities => communities::project_communities_snapshot(state),
+        _ => route::project_snapshot(state, id, clock_now),
+    }
 }
 
 // ─── Effect runner ───────────────────────────────────────────────────────────
@@ -399,6 +407,18 @@ pub(crate) async fn run_effect(
         }
         Effect::PublishRoomsRelayList { content } => {
             relays::run_effect_publish_rooms_relay_list(content, nmp);
+        }
+
+        // ── Phase 3B additions (append-only) ─────────────────────────────────
+        Effect::WireJoinedGroups { pubkey } => {
+            // Re-register the JoinedGroupsProjection for the new account pubkey.
+            // Called at boot and on every IdentityChanged(Some) so the projection
+            // follows account switches. Fire-and-forget: snapshot arrives on the
+            // next NMP update-callback tick.
+            if let Some(handle) = nmp {
+                let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+                communities::register_joined_groups_projection(nmp_ref, pubkey);
+            }
         }
 
         // ── Phase 3C additions ────────────────────────────────────────────────
@@ -552,6 +572,21 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
     // SignInNip55). nmp_app_signin_nip55 lazy-inits too, but calling
     // explicitly here makes the init order deterministic.
     nmp_external_signer_init(raw_ptr.as_ptr());
+
+    // Phase 3B: register JoinedGroupsProjection at boot.
+    // If an account is already active (e.g. persisted from a prior session),
+    // wire it immediately. On subsequent IdentityChanged(Some) the reducer
+    // emits Effect::WireJoinedGroups which re-calls this function.
+    // An empty pubkey is a silent no-op inside wire_joined_groups (D6).
+    {
+        let boot_pubkey: String = nmp_ref
+            .active_account_handle()
+            .lock()
+            .ok()
+            .and_then(|g| g.clone())
+            .unwrap_or_default();
+        communities::register_joined_groups_projection(nmp_ref, boot_pubkey);
+    }
 
     // Wire identity-change observer → KernelEvent::IdentityChanged.
     // Pattern from nmp_runtime.rs:758-778.
