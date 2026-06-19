@@ -252,6 +252,15 @@ pub enum KernelEvent {
     /// produces the appropriate `*Updated` events.
     NmpSnapshotFrame(Vec<u8>),
 
+    // ── Phase 3B additions (append-only) ─────────────────────────────────────
+    /// The `"nmp.nip29.joined_groups"` typed sidecar was decoded.
+    ///
+    /// Produced by `projections::dispatch_typed_frame` when the schema_id
+    /// `"nmp.nip29.joined_groups"` sidecar arrives (requires nmp-nip29 PR
+    /// #1587/#1588 to be pinned). Stored in `AppState.communities` by
+    /// `communities::reduce_event_joined_groups_updated`.
+    JoinedGroupsUpdated(Vec<crate::kernel::snapshot::CommunityRow>),
+
     // ── Phase 3C additions (append-only) ─────────────────────────────────────
     /// The `"nmp.nip02.follow_list"` typed sidecar was decoded from an NMP
     /// snapshot frame. Carries the raw hex pubkeys from the active account's

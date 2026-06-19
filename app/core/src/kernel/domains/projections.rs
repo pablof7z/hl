@@ -73,9 +73,20 @@ pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> 
     for proj in &projections {
         // Extension seam: future slices append arms before the `_` default.
         match proj.schema_id.as_str() {
-            // ── Phase 3B arm: "nmp.nip29.joined_groups" ──────────────────────
-            // Added by slice 3B.
-            // "nmp.nip29.joined_groups" => { ... }
+            // ── Phase 3B: joined-groups projection ───────────────────────────
+            // Requires nmp-nip29 PR #1587/#1588 (JoinedGroupsSnapshot +
+            // decode_joined_groups_snapshot) to be pinned. Until then the schema_id
+            // "nmp.nip29.joined_groups" never arrives in live frames; this arm is
+            // structurally in place and will activate automatically once hl pins
+            // the updated nmp-nip29. Decode uses the raw Vec<CommunityRow> shape.
+            "nmp.nip29.joined_groups" => {
+                // TODO(3B): replace with nmp_nip29::decode_joined_groups_snapshot once PR #1587/#1588 lands.
+                // For now: silently skip (the arm is in place; no decode fn exists yet).
+                tracing::trace!(
+                    schema_id = "nmp.nip29.joined_groups",
+                    "dispatch_typed_frame: joined_groups arm in place; NMP PR #1587/#1588 not yet pinned — skipped"
+                );
+            }
 
             // ── Phase 3C arm: "nmp.nip02.follow_list" ────────────────────────
             // Decode the FlatBuffers follow-list payload and store raw hex

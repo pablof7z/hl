@@ -36,7 +36,7 @@ use crate::onboarding::OnboardingStore;
 use nmp_defaults::{NmpAppBuilder, RunConfig};
 
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
-use crate::kernel::domains::{auth, follows, projections, relays, route, session};
+use crate::kernel::domains::{auth, communities, follows, projections, relays, route, session};
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
 
@@ -303,6 +303,11 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             projections::dispatch_typed_frame(state, &bytes)
         }
 
+        // ── Phase 3B additions (append-only) ─────────────────────────────────
+        KernelEvent::JoinedGroupsUpdated(groups) => {
+            communities::reduce_event_joined_groups_updated(state, groups)
+        }
+
         // ── Phase 3C additions (append-only) ─────────────────────────────────
         KernelEvent::FollowListUpdated(pubkeys) => {
             // Store raw hex pubkeys decoded from the "nmp.nip02.follow_list"
@@ -322,7 +327,10 @@ pub(crate) fn project_snapshot(
     id: &ViewId,
     clock_now: u64,
 ) -> Option<ViewSnapshot> {
-    route::project_snapshot(state, id, clock_now)
+    match id {
+        ViewId::Communities => communities::project_communities_snapshot(state),
+        _ => route::project_snapshot(state, id, clock_now),
+    }
 }
 
 // ─── Effect runner ───────────────────────────────────────────────────────────
@@ -552,6 +560,16 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
     // SignInNip55). nmp_app_signin_nip55 lazy-inits too, but calling
     // explicitly here makes the init order deterministic.
     nmp_external_signer_init(raw_ptr.as_ptr());
+
+    // Phase 3B: wire_joined_groups is provided by nmp-nip29 PR #1587/#1588
+    // (JoinedGroupsSnapshot + schema_id "nmp.nip29.joined_groups"). Once that PR
+    // is pinned, replace this comment with:
+    //   if let Some(pk) = nmp_ref.active_account_handle().map(|h| h.pubkey()) {
+    //       nmp_nip29::register::wire_joined_groups(nmp_ref, pk, discovery_relay_url);
+    //   }
+    // Until then the typed sidecar never arrives and the dispatch arm in
+    // projections.rs is a structural no-op (bridge_registered_once_at_boot still
+    // ensures the update-callback fires for other projections).
 
     // Wire identity-change observer → KernelEvent::IdentityChanged.
     // Pattern from nmp_runtime.rs:758-778.

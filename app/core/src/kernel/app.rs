@@ -101,6 +101,13 @@ pub struct AppState {
     /// the iOS QR-code sheet can render it without polling.
     pub nostrconnect_uri: Option<String>,
 
+    // ── Phase 3B additions ────────────────────────────────────────────────────
+    /// Current joined groups for the active account, decoded from the
+    /// `"nmp.nip29.joined_groups"` typed sidecar. Cleared on `IdentityChanged(None)`
+    /// and replaced on `IdentityChanged(Some)` when the new account's
+    /// projection arrives. Bounded by the number of groups joined.
+    pub communities: Vec<crate::kernel::snapshot::CommunityRow>,
+
     // ── Phase 3C additions ────────────────────────────────────────────────────
     /// Raw hex pubkeys in the active account's NIP-02 follow set (kind:3).
     ///
@@ -124,6 +131,7 @@ impl Default for AppState {
             chrome: ChromeState::default(),
             session_epoch: 0,
             nostrconnect_uri: None,
+            communities: Vec::new(),
             follows: Vec::new(),
         }
     }

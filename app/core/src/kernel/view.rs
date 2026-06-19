@@ -17,6 +17,10 @@ pub enum ViewId {
     AppRoot,
     /// The main tab shell (visible only when session is present).
     RootShell,
+
+    // ── Phase 3B additions (append-only) ─────────────────────────────────────
+    /// Joined-groups / communities list for the active account.
+    Communities,
 }
 
 /// Which projection to compute for a registered view.
@@ -24,6 +28,9 @@ pub enum ViewId {
 pub enum ViewRoute {
     AppRoot,
     RootShell,
+
+    // ── Phase 3B additions (append-only) ─────────────────────────────────────
+    Communities,
 }
 
 /// Tracks open views and their last-emitted snapshots.
