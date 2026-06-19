@@ -200,6 +200,7 @@ impl RelayRole {
             RelayRole::BothIndexer => "both,indexer",
         }
     }
+}
 
 /// Internal kernel event — produced by async effects and native capability
 /// results, fed back into the actor's command channel. Never crosses FFI.
