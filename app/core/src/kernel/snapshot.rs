@@ -1,0 +1,63 @@
+//! View-snapshot types — Phase 1.
+//!
+//! Every variant is a fixed-size, screen-shaped projection of `AppState`
+//! for one registered view. Sizes are bounded by construction: structs have
+//! fixed fields, no lists that grow with the event store (Non-Negotiable #7).
+//!
+//! Snapshots are the ONLY data that crosses FFI in the nmp-lane; native
+//! renders them without performing any business logic (D4 / D5).
+
+/// Which screen the root shell should display.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum RouteKind {
+    /// User has not completed onboarding; show the onboarding flow.
+    Onboarding,
+    /// Onboarding complete but no active session; show the login screen.
+    Login,
+    /// Session present; show the main tab shell.
+    RootShell,
+}
+
+/// Snapshot for the `ViewId::AppRoot` projection.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct AppRootSnapshot {
+    /// Which top-level screen to render.
+    pub route_kind: RouteKind,
+    /// Whether a session secret is currently in memory.
+    pub session_present: bool,
+    /// Whether the user has completed onboarding.
+    pub onboarding_complete: bool,
+}
+
+/// A transient toast message visible in the root shell.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ToastSnapshot {
+    pub message: String,
+    /// UNIX second at which the kernel will auto-dismiss this toast
+    /// (clock-driven, D8/D9 — no Swift `Timer` involved).
+    pub dismiss_at_unix: u64,
+}
+
+/// Snapshot for the `ViewId::RootShell` projection.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct RootShellSnapshot {
+    /// Index of the currently selected tab (matches `RootTab` raw values).
+    pub selected_tab: u8,
+    /// Total number of tabs — fixed in Phase 1.
+    pub tab_count: u8,
+    /// Active toast, if any. Cleared by the kernel when `clock >= dismiss_at_unix`.
+    pub toast: Option<ToastSnapshot>,
+    /// ID of the sheet currently covering the root shell, if any.
+    pub sheet_id: Option<String>,
+}
+
+/// Tagged union of all view snapshots — one variant per `ViewRoute`.
+///
+/// Bounded by open views: the kernel only emits a snapshot for a view that
+/// has been registered via `open_view`. Closed views produce nothing
+/// (Non-Negotiable #7).
+#[derive(Debug, Clone, PartialEq, uniffi::Enum)]
+pub enum ViewSnapshot {
+    AppRoot(AppRootSnapshot),
+    RootShell(RootShellSnapshot),
+}
