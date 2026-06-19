@@ -8,9 +8,11 @@
 use crate::onboarding::OnboardingStore;
 
 use crate::kernel::app::{AppState, SessionState};
+use crate::kernel::domains::relay_diagnostics::project_relay_diagnostics;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::{
-    AppRootSnapshot, RootShellSnapshot, RouteKind, ToastSnapshot, ViewSnapshot,
+    AppRootSnapshot, KernelNetworkSettingsSnapshot, RelayDiagnosticsViewSnapshot,
+    RootShellSnapshot, RouteKind, ToastSnapshot, ViewSnapshot,
 };
 use crate::kernel::view::ViewId;
 
@@ -88,6 +90,28 @@ pub(crate) fn project_snapshot(
         ViewId::RootShell => Some(ViewSnapshot::RootShell(project_root_shell(
             state, clock_now,
         ))),
+
+        // ── Phase 2E additions ────────────────────────────────────────────────
+        // Both network-settings and relay-diagnostics views are fed from the same
+        // relay_diagnostics sidecar state. The view is only emitted when the view
+        // is open AND at least one frame has been received (D5 / Non-Negotiable #7).
+        ViewId::NetworkSettings => {
+            let snap = project_relay_diagnostics(state)?;
+            Some(ViewSnapshot::NetworkSettings(
+                KernelNetworkSettingsSnapshot {
+                    relays: snap.relays,
+                },
+            ))
+        }
+        ViewId::RelayDiagnostics => {
+            let snap = project_relay_diagnostics(state)?;
+            Some(ViewSnapshot::RelayDiagnostics(
+                RelayDiagnosticsViewSnapshot {
+                    relays: snap.relays,
+                },
+            ))
+        }
+
         // ── Phase 3B additions (append-only) ─────────────────────────────────
         // ViewId::Communities is handled upstream in actor::project_snapshot
         // before this function is called. This arm is unreachable in practice

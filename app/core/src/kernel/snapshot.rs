@@ -1,4 +1,4 @@
-//! View-snapshot types — Phase 1.
+//! View-snapshot types — Phase 1 + Phase 2E.
 //!
 //! Every variant is a fixed-size, screen-shaped projection of `AppState`
 //! for one registered view. Sizes are bounded by construction: structs have
@@ -6,6 +6,8 @@
 //!
 //! Snapshots are the ONLY data that crosses FFI in the nmp-lane; native
 //! renders them without performing any business logic (D4 / D5).
+
+use crate::kernel::domains::relay_diagnostics::RelayDiagRow;
 
 /// Which screen the root shell should display.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -58,6 +60,31 @@ pub struct RootShellSnapshot {
     pub sheet_id: Option<String>,
 }
 
+/// Snapshot for the `ViewId::NetworkSettings` projection.
+///
+/// Read-side only: raw relay list with URL, role tone, and connection state.
+/// Swift shell formats the display strings. Bounded: one entry per configured relay.
+///
+/// Named `KernelNetworkSettingsSnapshot` to avoid collision with the legacy
+/// `NetworkSettingsSnapshot` in `relays.rs` (bespoke live lane — Phase 2E coexists
+/// with the live lane until the 2F iOS cutover, Non-Negotiable #6).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelNetworkSettingsSnapshot {
+    /// Raw relay diagnostic rows; same data as `RelayDiagnosticsViewSnapshot` but
+    /// surfaced under the network-settings ViewId.
+    pub relays: Vec<RelayDiagRow>,
+}
+
+/// Snapshot for the `ViewId::RelayDiagnostics` projection.
+///
+/// Raw counters and connection state per relay. Swift shell formats labels
+/// and "X ago" timestamp strings. Bounded: one row per configured relay URL.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct RelayDiagnosticsViewSnapshot {
+    /// One row per relay the NMP kernel knows about (bounded by relay count).
+    pub relays: Vec<RelayDiagRow>,
+}
+
 /// Tagged union of all view snapshots — one variant per `ViewRoute`.
 ///
 /// Bounded by open views: the kernel only emits a snapshot for a view that
@@ -67,6 +94,12 @@ pub struct RootShellSnapshot {
 pub enum ViewSnapshot {
     AppRoot(AppRootSnapshot),
     RootShell(RootShellSnapshot),
+
+    // ── Phase 2E additions ────────────────────────────────────────────────────
+    /// Network settings overview — relay list with raw fields (D1).
+    NetworkSettings(KernelNetworkSettingsSnapshot),
+    /// Relay-diagnostics detail — per-relay raw counters and state (D1).
+    RelayDiagnostics(RelayDiagnosticsViewSnapshot),
 
     // ── Phase 3B additions (append-only) ─────────────────────────────────────
     /// Joined-groups / communities list for the active account.
