@@ -141,6 +141,20 @@ pub enum AppAction {
     /// constant (it is product-controlled, not a relay URL).
     /// Fire-and-forget: emits `Effect::PublishRoomsRelayList`.
     SetRoomsRelayList { relay_urls: Vec<String> },
+
+    // ── Phase 3C additions (append-only) ─────────────────────────────────────
+    /// Follow a pubkey — appends it to the active account's kind:3 follow set
+    /// and republishes. Fire-and-forget (D6, Non-Negotiable #3): the updated
+    /// follow list arrives back via the `FollowListUpdated` projection frame.
+    ///
+    /// `pubkey` is a raw 64-char lowercase hex pubkey. Hex-shape validation
+    /// lives in the nmp-nip02 action module; semantic errors surface as NMP
+    /// toasts rather than crossing the dispatch boundary.
+    Follow { pubkey: String },
+
+    /// Unfollow a pubkey — removes it from the active account's kind:3 follow
+    /// set and republishes. Symmetric with `Follow`; fire-and-forget (D6).
+    Unfollow { pubkey: String },
 }
 
 /// NIP-65 / kind:10002 role for a configured relay.
@@ -237,4 +251,12 @@ pub enum KernelEvent {
     /// `projections::dispatch_typed_frame` which decodes the sidecar and
     /// produces the appropriate `*Updated` events.
     NmpSnapshotFrame(Vec<u8>),
+
+    // ── Phase 3C additions (append-only) ─────────────────────────────────────
+    /// The `"nmp.nip02.follow_list"` typed sidecar was decoded from an NMP
+    /// snapshot frame. Carries the raw hex pubkeys from the active account's
+    /// kind:3 follow set. The reducer stores them in `AppState::follows` so
+    /// the `is_following` query and the `Profile` view snapshot (Phase 3D) can
+    /// consult the set without re-parsing the projection.
+    FollowListUpdated(Vec<String>),
 }

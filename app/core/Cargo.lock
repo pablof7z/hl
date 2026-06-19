@@ -1083,6 +1083,7 @@ dependencies = [
  "nmp-feedback",
  "nmp-ffi",
  "nmp-kinds",
+ "nmp-nip02",
  "nmp-nip11",
  "nmp-nip29",
  "nmp-nip78",

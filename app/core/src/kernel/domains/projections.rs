@@ -54,7 +54,7 @@ use crate::kernel::effect::Effect;
 ///
 /// Decode errors are silent no-ops. Unknown `schema_id` values are logged at
 /// trace level and skipped. Neither case corrupts `AppState`.
-pub(crate) fn dispatch_typed_frame(_state: &mut AppState, frame_bytes: &[u8]) -> Vec<Effect> {
+pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> Vec<Effect> {
     // Decode the full typed-projection sidecar from the frame.
     // A frame that fails to decode (wrong file identifier, truncated, etc.)
     // is silently dropped — D6. We also catch FlatBuffers panics (e.g. on
@@ -72,22 +72,17 @@ pub(crate) fn dispatch_typed_frame(_state: &mut AppState, frame_bytes: &[u8]) ->
 
     for proj in &projections {
         // Extension seam: future slices append arms before the `_` default.
-        // Clippy flags this as single-binding while only the default arm exists;
-        // the allow is intentional — the match exists for its structure, not the
-        // current runtime paths.
-        #[allow(clippy::match_single_binding)]
         match proj.schema_id.as_str() {
             // ── Phase 3B arm: "nmp.nip29.joined_groups" ──────────────────────
             // Added by slice 3B.
             // "nmp.nip29.joined_groups" => { ... }
 
-            // ── Phase 3E arm: "nmp.nip29.discovered_groups" ──────────────────
-            // Added by slice 3E.
-            // "nmp.nip29.discovered_groups" => { ... }
-
             // ── Phase 3C arm: "nmp.nip02.follow_list" ────────────────────────
-            // Added by slice 3C.
-            // "nmp.nip02.follow_list" => { ... }
+            // Decode the FlatBuffers follow-list payload and store raw hex
+            // pubkeys in AppState::follows. D6: decode errors are silent no-ops.
+            super::follows::SCHEMA_ID => {
+                super::follows::apply_follow_list(state, &proj.payload);
+            }
 
             // ── Phase 3D arm: "profile" ───────────────────────────────────────
             // Active account's own profile card. Added by slice 3D.
@@ -96,6 +91,10 @@ pub(crate) fn dispatch_typed_frame(_state: &mut AppState, frame_bytes: &[u8]) ->
             // ── Phase 3D arm: "claimed_profiles" ─────────────────────────────
             // Profiles for visited pubkeys. Added by slice 3D.
             // "claimed_profiles" => { ... }
+
+            // ── Phase 3E arm: "nmp.nip29.discovered_groups" ──────────────────
+            // Added by slice 3E.
+            // "nmp.nip29.discovered_groups" => { ... }
 
             // ── Default: unknown schema_id — silent no-op (D6) ────────────────
             // Projections registered by nmp-defaults that hl has not opted into
