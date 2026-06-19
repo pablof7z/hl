@@ -130,6 +130,16 @@ pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> 
                 super::discovery::apply_discovered_groups(state, &proj.payload);
             }
 
+            // ── Phase 3F arm: "nmp.nip29.group_events" ───────────────────────
+            // Decode the `"nmp.nip29.group_events"` FlatBuffers payload via
+            // `nmp_nip29::decode_group_events_snapshot` and store raw event rows
+            // in `AppState::room_home_events` keyed by `group_id`. Capped at
+            // 256 rows per group (ROOM_HOME_EVENTS_CAP). Lane bodies deferred to
+            // Phase 4. D6: decode errors are silent no-ops.
+            super::room_home::GROUP_EVENTS_SCHEMA_ID => {
+                super::room_home::apply_group_events_frame(state, &proj.payload);
+            }
+
             // ── Default: unknown schema_id — silent no-op (D6) ────────────────
             // Projections registered by nmp-defaults that hl has not opted into
             // (e.g. action_stages, bunker_handshake) arrive here. This is the

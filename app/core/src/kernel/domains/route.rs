@@ -128,6 +128,11 @@ pub(crate) fn project_snapshot(
         // ViewId::Profile is handled upstream in actor::project_snapshot.
         // This arm is unreachable in practice but required for exhaustive match.
         ViewId::Profile { .. } => None,
+
+        // ── Phase 3F additions (append-only) ─────────────────────────────────
+        // ViewId::RoomHome is handled upstream in actor::project_snapshot.
+        // This arm is unreachable in practice but required for exhaustive match.
+        ViewId::RoomHome { .. } => None,
     }
 }
 

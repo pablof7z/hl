@@ -179,6 +179,75 @@ pub enum AppAction {
     /// per-consumer refcount; when it reaches zero NMP cancels the kind:0
     /// subscription. Fire-and-forget (D6).
     ReleaseProfile { pubkey: String },
+
+    // ── Phase 3F additions (append-only) ─────────────────────────────────────
+    /// Join a NIP-29 group by publishing a kind:9021 join-request via
+    /// `"nmp.nip29.join"`. The relay's response arrives as a joined-groups
+    /// projection update (`KernelEvent::JoinedGroupsUpdated`). Fire-and-forget.
+    ///
+    /// `group_id` is the NIP-29 local group id; `host_relay_url` is the relay
+    /// URL (opaque string — kernel never constructs URLs, D3). `invite_code`
+    /// is required for closed groups, optional for open groups.
+    ///
+    /// NOTE: LeaveRoom (kind:9022) is NOT implemented — there is no
+    /// `nmp.nip29.leave` action on pinned nmp b4404159. See nmp issue #1598.
+    JoinRoom {
+        /// NIP-29 local group id.
+        group_id: String,
+        /// Host relay WebSocket URL (opaque — D3).
+        host_relay_url: String,
+        /// Optional preauth invite code for closed groups.
+        invite_code: Option<String>,
+    },
+
+    /// Create a new public NIP-29 group by publishing kind:9007 + kind:9002
+    /// via `"nmp.nip29.create_public_group"`. Fire-and-forget.
+    ///
+    /// `group_id` is the desired local group id (`[a-z0-9-_]+`). `name` is
+    /// the human-readable display name (required). `about` is optional.
+    CreateRoom {
+        /// NIP-29 local group id (must match `[a-z0-9-_]+`).
+        group_id: String,
+        /// Host relay WebSocket URL (opaque — D3).
+        host_relay_url: String,
+        /// Human-readable room name (required, non-empty).
+        name: String,
+        /// Optional description.
+        about: Option<String>,
+    },
+
+    /// Add a member to a NIP-29 group by publishing kind:9000 via
+    /// `"nmp.nip29.put_user"`. Requires admin rights on the target relay.
+    /// Fire-and-forget.
+    ///
+    /// `pubkey` is a raw 64-char lowercase hex pubkey. `role` is an optional
+    /// role string (e.g. `"admin"`) or `None` for a plain member.
+    AddRoomMember {
+        /// NIP-29 local group id.
+        group_id: String,
+        /// Host relay WebSocket URL (opaque — D3).
+        host_relay_url: String,
+        /// Raw 64-char lowercase hex pubkey of the user to add.
+        pubkey: String,
+        /// Optional role (e.g. `"admin"`). `None` = plain member.
+        role: Option<String>,
+    },
+
+    /// Mint one or more invite codes for a NIP-29 group by publishing kind:9009
+    /// via `"nmp.nip29.create_invite"`. Requires admin rights. Fire-and-forget.
+    ///
+    /// `codes` must be non-empty; nmp fans out into multiple kind:9009 events
+    /// if more than 10 codes are supplied (MAX_CODES_PER_INVITE_EVENT).
+    /// The invite_link_base URL is NOT a kernel concern — Swift composes the
+    /// full invite URL from `AppState::room_policy.invite_link_base` + code (D3).
+    CreateRoomInvites {
+        /// NIP-29 local group id.
+        group_id: String,
+        /// Host relay WebSocket URL (opaque — D3).
+        host_relay_url: String,
+        /// Invite codes (≥1 required; max 128 chars each; printable ASCII only).
+        codes: Vec<String>,
+    },
 }
 
 /// NIP-65 / kind:10002 role for a configured relay.

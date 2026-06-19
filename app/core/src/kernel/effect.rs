@@ -183,4 +183,35 @@ pub enum Effect {
         /// Raw 64-char lowercase hex pubkey to release.
         pubkey: String,
     },
+
+    // ── Phase 3F additions (append-only) ─────────────────────────────────────
+    /// Call `nmp_nip29::register::wire_group_events(nmp_ref, GroupId{..})` to
+    /// register the `GroupEventsProjection` observer + typed FlatBuffers sidecar
+    /// under `"nmp.nip29.group_events"` for the given group.
+    ///
+    /// Sent when `Cmd::OpenView(ViewId::RoomHome{group_id})` arrives in the
+    /// actor loop (via `room_home::lifecycle_effects_for_view_open`). The
+    /// host_relay_url is resolved from `AppState::communities` at effect-run
+    /// time (the effect runner is a no-op if the group is not yet in
+    /// `communities`).
+    ///
+    /// Fire-and-forget (D6): events arrive via the NMP update callback as
+    /// `KernelEvent::NmpSnapshotFrame` frames decoded by
+    /// `projections::dispatch_typed_frame`.
+    WireGroupEvents {
+        /// NIP-29 local group id to wire the projection for.
+        group_id: String,
+    },
+
+    /// Discard the hl-side event buffer for `group_id` from
+    /// `AppState::room_home_events`.
+    ///
+    /// Sent when `Cmd::CloseView(ViewId::RoomHome{group_id})` arrives. The
+    /// underlying `GroupEventsProjection` in nmp keeps running (singleton
+    /// per-group observer); only the hl-side buffer is cleared to bound memory.
+    /// Fire-and-forget (D6).
+    ReleaseGroupEvents {
+        /// NIP-29 local group id whose event buffer to discard.
+        group_id: String,
+    },
 }
