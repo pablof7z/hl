@@ -149,6 +149,19 @@ pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> 
                 super::bookmarks::apply_bookmarks(state, &proj.payload);
             }
 
+            // ── Phase 4A arm: "nmp.nip23.articles" ───────────────────────────
+            // Decode the `"nmp.nip23.articles"` FlatBuffers payload via
+            // `nmp_content::wire::longform_fb::decode_longform_articles` and
+            // store raw `ArticleRow` records in `AppState::articles` keyed by
+            // addressable coordinate `kind:author_hex:d_tag`. The longform
+            // projection is registered at boot by nmp-defaults (longform: true
+            // is the default in NmpDefaults). D6: decode errors are silent no-ops.
+            // D1: raw fields only — no "Untitled" fallback, no "min read" label,
+            // no hashtag formatting in the stored rows.
+            super::articles::ARTICLES_SCHEMA_ID => {
+                super::articles::apply_articles(state, &proj.payload);
+            }
+
             // ── Default: unknown schema_id — silent no-op (D6) ────────────────
             // Projections registered by nmp-defaults that hl has not opted into
             // (e.g. action_stages, bunker_handshake) arrive here. This is the

@@ -298,6 +298,21 @@ pub enum AppAction {
         /// The bookmark item to remove (raw protocol data — D1).
         item: crate::kernel::snapshot::BookmarkRow,
     },
+
+    // ── Phase 4A additions (append-only) ─────────────────────────────────────
+    /// Open an article reader view for the given NIP-23 address.
+    ///
+    /// `address` is the addressable coordinate `kind:author_hex:d_tag` that
+    /// uniquely identifies the parameterized-replaceable kind:30023 event.
+    /// Fire-and-forget: the kernel registers `ViewId::ArticleReader{address}`
+    /// and emits a snapshot once the article is present in `AppState::articles`
+    /// (populated by the nmp.nip23.articles typed projection). No NMP action is
+    /// dispatched — the longform projection populates the state automatically.
+    OpenArticle { address: String },
+
+    /// Close an article reader view — deregisters `ViewId::ArticleReader{address}`.
+    /// Fire-and-forget. No NMP release is needed (longform projection is session-scoped).
+    CloseArticle { address: String },
 }
 
 /// NIP-65 / kind:10002 role for a configured relay.
@@ -452,4 +467,14 @@ pub enum KernelEvent {
     ///
     /// No labels or formatted strings — Swift formats all bookmark UI (D1).
     BookmarksUpdated(Vec<crate::kernel::snapshot::BookmarkRow>),
+
+    // ── Phase 4A additions (append-only) ─────────────────────────────────────
+    /// The `"nmp.nip23.articles"` typed sidecar was decoded.
+    ///
+    /// Produced by `projections::dispatch_typed_frame` when the schema_id
+    /// `"nmp.nip23.articles"` sidecar arrives. Carries all decoded article rows
+    /// (raw fields — D1: no formatted strings). The reducer replaces
+    /// `AppState::articles` with the new set. Also injectable directly from
+    /// tests via `Cmd::Event` (no live NmpApp needed).
+    ArticlesUpdated(Vec<crate::kernel::snapshot::ArticleRow>),
 }

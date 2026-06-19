@@ -59,6 +59,20 @@ pub enum ViewId {
     /// Bookmark library view — the active account's NIP-51 kind:10003 list.
     /// Kind:10003 article-bookmark toggle only (sets/web/curation stay bespoke).
     Bookmarks,
+
+    // ── Phase 4A additions (append-only) ─────────────────────────────────────
+    /// NIP-23 article reader view for a specific kind:30023 article.
+    ///
+    /// `address` is the addressable coordinate `kind:author_hex:d_tag` that
+    /// identifies the article. Opened by `AppAction::OpenArticle{address}`;
+    /// closed by `AppAction::CloseArticle{address}`. The snapshot is computed
+    /// directly from `AppState::articles` — no NMP claim is needed because the
+    /// longform typed projection already carries full `ArticleProjection`
+    /// documents (including `content_tree`) for every article seen this session.
+    ArticleReader {
+        /// Addressable coordinate: `kind:author_hex:d_tag`.
+        address: String,
+    },
 }
 
 /// Which projection to compute for a registered view.
@@ -100,6 +114,15 @@ pub enum ViewRoute {
     /// Bookmarks projection — `BookmarksSnapshot` (raw kind:10003 rows).
     /// Kind:10003 article-bookmark toggle only.
     Bookmarks,
+
+    // ── Phase 4A additions (append-only) ─────────────────────────────────────
+    /// NIP-23 article reader projection — `ArticleReaderSnapshot` (raw fields
+    /// from `ArticleProjection` including `content_tree_bytes`). D1: no
+    /// formatted strings ("Untitled", "min read", etc.) — Swift owns those.
+    ArticleReader {
+        /// Addressable coordinate: `kind:author_hex:d_tag`.
+        address: String,
+    },
 }
 
 /// Tracks open views and their last-emitted snapshots.

@@ -138,6 +138,11 @@ pub(crate) fn project_snapshot(
         // ViewId::Bookmarks is handled upstream in actor::project_snapshot.
         // This arm is unreachable in practice but required for exhaustive match.
         ViewId::Bookmarks => None,
+
+        // ── Phase 4A additions (append-only) ─────────────────────────────────
+        // ViewId::ArticleReader is handled upstream in actor::project_snapshot.
+        // This arm is unreachable in practice but required for exhaustive match.
+        ViewId::ArticleReader { .. } => None,
     }
 }
 

@@ -37,8 +37,8 @@ use nmp_defaults::{NmpAppBuilder, RunConfig};
 
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
 use crate::kernel::domains::{
-    auth, bookmarks, communities, discovery, follows, profiles, projections, relays, room_home,
-    route, session,
+    articles, auth, bookmarks, communities, discovery, follows, profiles, projections, relays,
+    room_home, route, session,
 };
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
@@ -315,6 +315,15 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         AppAction::RemoveBookmark { item } => {
             bookmarks::reduce_action_remove_bookmark_for_state(state, item)
         }
+
+        // ── Phase 4A additions ────────────────────────────────────────────────
+        // OpenArticle / CloseArticle are fire-and-forget signals from native to
+        // coordinate article reader lifecycle. No NMP action is needed — the
+        // longform projection auto-populates AppState::articles. Native calls
+        // open_view / close_view separately to manage the ViewRegistry; these
+        // AppAction arms exist for Rust-side lifecycle coordination (reserved
+        // for future per-address fetch in later slices). No effects emitted.
+        AppAction::OpenArticle { .. } | AppAction::CloseArticle { .. } => vec![],
     }
 }
 
@@ -405,6 +414,18 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             state.bookmarks = rows;
             vec![]
         }
+
+        // ── Phase 4A additions (append-only) ─────────────────────────────────
+        KernelEvent::ArticlesUpdated(rows) => {
+            // Replace AppState::articles with the incoming row set.
+            // The ArticlesUpdated event is produced by
+            // `projections::dispatch_typed_frame` when the "nmp.nip23.articles"
+            // sidecar arrives, but it is also injectable directly from tests
+            // via Cmd::Event (no live NmpApp needed — reducer path is identical).
+            // D1: rows carry raw protocol data only (no formatted strings).
+            state.articles = rows.into_iter().map(|r| (r.address.clone(), r)).collect();
+            vec![]
+        }
     }
 }
 
@@ -434,6 +455,11 @@ pub(crate) fn project_snapshot(
                 rows: state.bookmarks.clone(),
             },
         )),
+
+        // ── Phase 4A additions (append-only) ─────────────────────────────────
+        ViewId::ArticleReader { address } => {
+            articles::project_article_reader_snapshot(state, address)
+        }
 
         _ => route::project_snapshot(state, id, clock_now),
     }
@@ -642,12 +668,17 @@ pub(crate) async fn actor_task(
                 lifecycle_effects.extend(room_home::lifecycle_effects_for_view_open(id));
                 // ── Phase 3G: auto-start room discovery when RoomExplorer opens ──
                 lifecycle_effects.extend(discovery::lifecycle_effects_for_view_open(id, &state));
+                // ── Phase 4A: article reader lifecycle (no-op — longform projection
+                //    auto-populates AppState::articles; no NMP claim needed) ──────
+                lifecycle_effects.extend(articles::lifecycle_effects_for_view_open(id));
             }
             Cmd::CloseView(id) => {
                 // ── Phase 3D: release the profile subscription before removing from registry ──
                 lifecycle_effects.extend(profiles::lifecycle_effects_for_view_close(id));
                 // ── Phase 3F: release group-events buffer when room-home view closes ──
                 lifecycle_effects.extend(room_home::lifecycle_effects_for_view_close(id));
+                // ── Phase 4A: article reader close lifecycle (no-op in 4A) ─────
+                lifecycle_effects.extend(articles::lifecycle_effects_for_view_close(id));
                 registry.close(id);
             }
             Cmd::Resume => {

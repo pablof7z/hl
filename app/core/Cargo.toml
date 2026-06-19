@@ -67,3 +67,8 @@ tempfile = "3"
 # crate level rather than touching every pre-existing call site.
 [lints.clippy]
 unnecessary_sort_by = "allow"
+# Phase 3G: `actor_task` seeds AppState with `Default::default()` then
+# immediately overwrites `room_policy` from the injected `KernelPolicy`.
+# Restructuring would change actor_task's signature; allow the pre-existing
+# pattern crate-wide rather than touching every field initialisation site.
+field_reassign_with_default = "allow"

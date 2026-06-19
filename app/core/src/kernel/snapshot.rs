@@ -133,6 +133,12 @@ pub enum ViewSnapshot {
     /// Raw protocol rows only — no labels or formatted strings (D1).
     /// Swift formats bookmark chrome (toolbar icons, swipe titles, etc.).
     Bookmarks(BookmarksSnapshot),
+
+    // ── Phase 4A additions (append-only) ─────────────────────────────────────
+    /// NIP-23 article reader — full `ArticleProjection` raw fields including
+    /// `content_tree_bytes` for the article body. D1: no formatted strings
+    /// ("Untitled", "min read", hashtag labels) — those are Swift-side concerns.
+    ArticleReader(KernelArticleReaderSnapshot),
 }
 
 // ── Phase 3B additions (append-only) ─────────────────────────────────────────
@@ -382,4 +388,82 @@ pub struct BookmarksSnapshot {
     /// Bookmark items from the active account's kind:10003 list.
     /// Raw `BookmarkRow` values — no labels or presentation formatting (D1).
     pub rows: Vec<BookmarkRow>,
+}
+
+// ── Phase 4A additions (append-only) ─────────────────────────────────────────
+
+/// Raw NIP-23 article record stored in `AppState::articles`.
+///
+/// One entry per decoded `ArticleProjection` from the `"nmp.nip23.articles"`
+/// typed sidecar. Raw protocol data only — D1: no `"Untitled"` fallback for
+/// absent titles, no `"{minutes} min read"` formatted string, no `"#{tag}"`
+/// hashtag labels. Swift / D1 owns all presentation strings.
+///
+/// `content_tree_bytes` is the re-encoded `ContentTreeWire` opaque bytes for
+/// the article body (using `nmp_content::wire::encode_content_tree`). Empty for
+/// feed-list-only rows where the full document has not arrived yet.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArticleRow {
+    /// Addressable coordinate `kind:author_hex:d_tag`.
+    pub address: String,
+    /// 64-character hex event id of the winning kind:30023 event.
+    pub id: String,
+    /// 64-character hex author pubkey.
+    pub author_pubkey: String,
+    /// Optional display name from a kind:0 profile (enriched by the projection).
+    pub author_display_name: Option<String>,
+    /// Optional author picture URL from a kind:0 profile.
+    pub author_picture_url: Option<String>,
+    /// `title` tag value, or `None` when absent (D1: no "Untitled" fallback).
+    pub title: Option<String>,
+    /// `summary` tag value, or `None` when absent.
+    pub summary: Option<String>,
+    /// `image` (hero) tag value as URL, or `None` when absent.
+    pub hero_image_url: Option<String>,
+    /// Addressable `d` tag value.
+    pub d_tag: String,
+    /// Event creation time as Unix seconds.
+    pub created_at: u64,
+    /// Opaque `ContentTreeWire` bytes for the article body, or empty when
+    /// only the feed-list trimmed summary (no body) has arrived.
+    pub content_tree_bytes: Vec<u8>,
+}
+
+/// Snapshot for `ViewId::ArticleReader{address}` — the article reader view.
+///
+/// Carries the full article document fields from the `ArticleProjection`
+/// (via `AppState::articles`). Raw-data doctrine (D1 / ADR-0032): Swift
+/// formats ALL display strings from these raw fields. No `"Untitled"` title
+/// fallback, no `"{n} min read"` label, no `"#{tag}"` hashtag formatting.
+///
+/// `content_tree_bytes` is the opaque serialised `ContentTreeWire` for the
+/// article body. Empty until the full article document arrives (the feed-list
+/// trimmed summary has no body). Swift / platform layer decodes these bytes
+/// using the `nmp-content` wire codec.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelArticleReaderSnapshot {
+    /// Addressable coordinate `kind:author_hex:d_tag`.
+    pub address: String,
+    /// 64-character hex event id.
+    pub id: String,
+    /// 64-character hex author pubkey. Swift formats bech32 `npub`.
+    pub author_pubkey: String,
+    /// Optional display name from the author's kind:0 (enriched by projection).
+    pub author_display_name: Option<String>,
+    /// Optional author picture URL from kind:0.
+    pub author_picture_url: Option<String>,
+    /// `title` tag, or `None` when absent. D1: no "Untitled" fallback.
+    pub title: Option<String>,
+    /// `summary` tag, or `None` when absent.
+    pub summary: Option<String>,
+    /// `image` (hero) tag URL, or `None` when absent.
+    pub hero_image_url: Option<String>,
+    /// Addressable `d` tag value.
+    pub d_tag: String,
+    /// Event creation time as Unix seconds. Swift formats the display date.
+    pub created_at: u64,
+    /// Opaque `ContentTreeWire` bytes for the article body.
+    /// Empty until the full document arrives. Swift / platform decodes via
+    /// `nmp_content::wire::decode_content_tree`.
+    pub content_tree_bytes: Vec<u8>,
 }
