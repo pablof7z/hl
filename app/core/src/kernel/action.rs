@@ -248,6 +248,36 @@ pub enum AppAction {
         /// Invite codes (≥1 required; max 128 chars each; printable ASCII only).
         codes: Vec<String>,
     },
+
+    // ── Phase 4E additions (append-only) ─────────────────────────────────────
+    /// Share an existing event into a NIP-29 group.
+    ///
+    /// When `repost` is `false`, dispatches `"nmp.nip29.share_event_in_group"`
+    /// which publishes a kind:11 artifact event tagged with `#h` for the group.
+    /// When `repost` is `true`, dispatches `"nmp.nip29.repost_in_group"` which
+    /// publishes a kind:16 repost event tagged with `#h`.
+    ///
+    /// Verified action namespaces on pinned nmp b4404159
+    /// (`crates/nmp-nip29/src/action/group_event.rs:101,124`):
+    /// - `ShareEventInGroupInput { group: GroupId, target: GroupEventTarget { event_id, author_pubkey? }, content, additional_tags }`
+    /// - `RepostInGroupInput { group: GroupId, target: GroupEventTarget { event_id, author_pubkey? }, content, additional_tags }`
+    ///
+    /// Kernel is the sole writer for these events on ported screens — no
+    /// double-publish with the bespoke lane. Fire-and-forget (D6).
+    /// D3: `group_id` + `host_relay_url` are opaque strings from the caller.
+    ShareToRoom {
+        /// NIP-29 local group id (the `h` tag value).
+        group_id: String,
+        /// Host relay WebSocket URL for this group (opaque — D3).
+        host_relay_url: String,
+        /// The Nostr event id of the event being shared.
+        target_event_id: String,
+        /// Optional hex pubkey of the event's author (populates the `p` tag).
+        target_author_pubkey: Option<String>,
+        /// When `true` → kind:16 repost (`"nmp.nip29.repost_in_group"`).
+        /// When `false` → kind:11 share (`"nmp.nip29.share_event_in_group"`).
+        repost: bool,
+    },
 }
 
 /// NIP-65 / kind:10002 role for a configured relay.

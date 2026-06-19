@@ -214,4 +214,24 @@ pub enum Effect {
         /// NIP-29 local group id whose event buffer to discard.
         group_id: String,
     },
+
+    // ── Phase 4E additions (append-only) ─────────────────────────────────────
+    /// Call `nmp_app_dispatch_action` with either
+    /// `"nmp.nip29.share_event_in_group"` (kind:11) or
+    /// `"nmp.nip29.repost_in_group"` (kind:16) depending on `repost`.
+    ///
+    /// Payload is a `ShareEventInGroupInput` or `RepostInGroupInput` (identical
+    /// shape, verified on pinned nmp b4404159):
+    /// `{ group: { host_relay_url, local_id }, target: { event_id, author_pubkey? }, content: "", additional_tags: [] }`
+    ///
+    /// Built with `serde_json::json!` (never `format!`) to guarantee valid JSON
+    /// even if any field contains quotes or backslashes (D-rule: serde, not format).
+    /// Fire-and-forget (D6): returned correlation_id JSON is freed and discarded.
+    /// D3: no relay URL literals in kernel — all URLs are opaque from the caller.
+    DispatchShareToRoom {
+        /// `"nmp.nip29.share_event_in_group"` or `"nmp.nip29.repost_in_group"`.
+        namespace: String,
+        /// JSON-serialized action payload (serde_json, not format!).
+        json: String,
+    },
 }
