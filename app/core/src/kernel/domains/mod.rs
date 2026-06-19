@@ -18,3 +18,6 @@ pub(crate) mod relays;
 pub(crate) mod room_home;
 pub(crate) mod route;
 pub(crate) mod session;
+
+// ── Phase 4A additions (append-only) ─────────────────────────────────────────
+pub(crate) mod articles;

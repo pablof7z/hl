@@ -111,6 +111,10 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     // Arc, but AppState::bookmarks must also be wiped so stale bookmarks from
     // the previous account don't survive into the next session.
     state.bookmarks = Vec::new();
+    // ── Phase 4A: clear articles on logout ───────────────────────────────────
+    // AppState::articles holds kind:30023 data for the departing account's
+    // subscriptions. Wipe so stale articles don't surface for the next account.
+    state.articles.clear();
     // RemoveActiveAccount fires nmp.remove_account; ClearSession
     // emits a CapabilityRequest to native for its keychain.
     vec![Effect::RemoveActiveAccount, Effect::ClearSession]
@@ -167,6 +171,8 @@ pub(crate) fn reduce_event_identity_changed(
             // Wipe AppState::bookmarks so stale bookmarks don't outlive the
             // removed account.
             state.bookmarks = Vec::new();
+            // ── Phase 4A: clear articles on account removal ───────────────────
+            state.articles.clear();
         }
     }
     vec![]

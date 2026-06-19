@@ -4,7 +4,7 @@
 //! The state is split into sub-models by concern; all live as fields on
 //! `AppState` so the reducer can read and write the full picture atomically.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
 use crate::kernel::action::{SignInMethod, SignerKind};
@@ -188,6 +188,24 @@ pub struct AppState {
     /// Bounded by the kind:10003 list length (the latest replaceable event;
     /// never grows with the unbounded event store — Non-Negotiable #7).
     pub bookmarks: Vec<crate::kernel::snapshot::BookmarkRow>,
+
+    // ── Phase 4A additions ────────────────────────────────────────────────────
+    /// Raw NIP-23 article records, decoded from the `"nmp.nip23.articles"`
+    /// typed sidecar. Keyed by addressable coordinate `kind:author_hex:d_tag`.
+    ///
+    /// Populated on every `KernelEvent::ArticlesUpdated` (i.e. every NMP
+    /// snapshot tick that carries the longform projection). The map is the
+    /// complete live snapshot — the sidecar carries all articles the kernel
+    /// has seen this session (parameterized-replaceable supersession already
+    /// resolved by nmp-content's `LongformProjection`).
+    ///
+    /// Cleared on `Logout` / `IdentityChanged(None)` so stale data from the
+    /// previous session never leaks to the next account. Bounded by the number
+    /// of kind:30023 events the kernel has seen — never grows beyond what the
+    /// session subscriptions pull in (Non-Negotiable #7).
+    ///
+    /// D1: `ArticleRow` is raw protocol data only — no formatted strings.
+    pub articles: BTreeMap<String, crate::kernel::snapshot::ArticleRow>,
 }
 
 impl Default for AppState {
@@ -210,6 +228,8 @@ impl Default for AppState {
             room_home_events: HashMap::new(),
             // ── Phase 4C additions ────────────────────────────────────────────
             bookmarks: Vec::new(),
+            // ── Phase 4A additions ────────────────────────────────────────────
+            articles: BTreeMap::new(),
         }
     }
 }
