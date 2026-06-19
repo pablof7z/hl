@@ -51,7 +51,7 @@ final class HighlighterAppKernel {
             dataDir = NSTemporaryDirectory()
         }
 
-        let kernelApp = HighlighterApp.new(config: AppConfig(dataDir: dataDir))
+        let kernelApp = HighlighterApp(config: AppConfig(dataDir: dataDir))
         self.app = kernelApp
 
         // Register the observer BEFORE opening views so no initial snapshot
