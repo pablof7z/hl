@@ -558,10 +558,12 @@ pub(crate) async fn actor_task(
     nmp: Option<NmpHandle>,
     policy: Arc<KernelPolicy>,
 ) {
-    let mut state = AppState::default();
     // Phase 3G: propagate room policy from bootstrap into AppState so the
     // discovery lifecycle hook can read it without needing to import the policy Arc.
-    state.room_policy = policy.room.clone();
+    let mut state = AppState {
+        room_policy: policy.room.clone(),
+        ..AppState::default()
+    };
     let mut registry = ViewRegistry::default();
     let mut last_emit_at: u64 = 0;
     let mut suspended = false;
