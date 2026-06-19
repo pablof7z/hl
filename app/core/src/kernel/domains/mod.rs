@@ -7,6 +7,7 @@
 //! shared monolith match statements.
 
 pub(crate) mod auth;
+pub(crate) mod bookmarks;
 pub(crate) mod communities;
 pub(crate) mod discovery;
 pub(crate) mod follows;

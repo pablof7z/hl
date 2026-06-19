@@ -1086,6 +1086,7 @@ dependencies = [
  "nmp-nip02",
  "nmp-nip11",
  "nmp-nip29",
+ "nmp-nip51",
  "nmp-nip78",
  "nmp-signers",
  "nostr",

@@ -234,4 +234,25 @@ pub enum Effect {
         /// JSON-serialized action payload (serde_json, not format!).
         json: String,
     },
+    // ── Phase 4C additions (append-only) ─────────────────────────────────────
+    /// Call `nmp_app_dispatch_action` with a NIP-51 bookmark namespace and the
+    /// `BookmarkUpdateInput { account_pubkey, item }` JSON payload.
+    ///
+    /// Namespaces: `"nmp.nip51.add_bookmark"` or `"nmp.nip51.remove_bookmark"`
+    /// (`AddBookmarkAction::NAMESPACE` and `RemoveBookmarkAction::NAMESPACE` in
+    /// `nmp-nip51/src/bookmarks.rs:203,246`).
+    ///
+    /// Fire-and-forget (D6, Non-Negotiable #3): the returned correlation_id JSON
+    /// is freed and discarded. The updated kind:10003 list arrives back through
+    /// the `BookmarksUpdated` projection event via the NMP update callback.
+    ///
+    /// The kernel is the SOLE writer for kind:10003 on ported screens — no
+    /// live-lane double-publish.
+    DispatchBookmarkAction {
+        /// NIP-51 bookmark action namespace.
+        /// One of `"nmp.nip51.add_bookmark"` or `"nmp.nip51.remove_bookmark"`.
+        namespace: String,
+        /// Serialised `BookmarkUpdateInput { account_pubkey, item }` JSON.
+        json: String,
+    },
 }

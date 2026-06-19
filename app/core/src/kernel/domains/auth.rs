@@ -106,6 +106,11 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     // own_profile and claimed_profiles belong to the departing account and
     // must not survive into the next session.
     super::profiles::clear_on_identity_lost(state);
+    // ── Phase 4C: clear bookmark list on logout ───────────────────────────────
+    // The BookmarkListProjection active-account slot auto-resets via the shared
+    // Arc, but AppState::bookmarks must also be wiped so stale bookmarks from
+    // the previous account don't survive into the next session.
+    state.bookmarks = Vec::new();
     // RemoveActiveAccount fires nmp.remove_account; ClearSession
     // emits a CapabilityRequest to native for its keychain.
     vec![Effect::RemoveActiveAccount, Effect::ClearSession]
@@ -158,6 +163,10 @@ pub(crate) fn reduce_event_identity_changed(
             // ── Phase 3D: clear profile state on account removal ──────────────
             // own_profile and claimed_profiles belong to the departing account.
             super::profiles::clear_on_identity_lost(state);
+            // ── Phase 4C: clear bookmark list on account removal ──────────────
+            // Wipe AppState::bookmarks so stale bookmarks don't outlive the
+            // removed account.
+            state.bookmarks = Vec::new();
         }
     }
     vec![]
