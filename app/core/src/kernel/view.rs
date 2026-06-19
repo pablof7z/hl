@@ -54,6 +54,11 @@ pub enum ViewId {
         /// NIP-29 local group id.
         group_id: String,
     },
+
+    // ── Phase 4C additions (append-only) ─────────────────────────────────────
+    /// Bookmark library view — the active account's NIP-51 kind:10003 list.
+    /// Kind:10003 article-bookmark toggle only (sets/web/curation stay bespoke).
+    Bookmarks,
 }
 
 /// Which projection to compute for a registered view.
@@ -90,6 +95,11 @@ pub enum ViewRoute {
         /// NIP-29 local group id.
         group_id: String,
     },
+
+    // ── Phase 4C additions (append-only) ─────────────────────────────────────
+    /// Bookmarks projection — `BookmarksSnapshot` (raw kind:10003 rows).
+    /// Kind:10003 article-bookmark toggle only.
+    Bookmarks,
 }
 
 /// Tracks open views and their last-emitted snapshots.

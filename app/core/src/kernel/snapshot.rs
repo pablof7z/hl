@@ -127,6 +127,12 @@ pub enum ViewSnapshot {
     /// `RoomHomeSnapshot` in `room_home.rs` (bespoke live lane — Phase 3F
     /// coexists with the live lane until the iOS cutover, Non-Negotiable #6).
     RoomHome(KernelRoomHomeSnapshot),
+
+    // ── Phase 4C additions (append-only) ─────────────────────────────────────
+    /// Active account's NIP-51 kind:10003 bookmark list.
+    /// Raw protocol rows only — no labels or formatted strings (D1).
+    /// Swift formats bookmark chrome (toolbar icons, swipe titles, etc.).
+    Bookmarks(BookmarksSnapshot),
 }
 
 // ── Phase 3B additions (append-only) ─────────────────────────────────────────
@@ -324,4 +330,56 @@ pub struct KernelRoomHomeSnapshot {
     /// Swift composes the full invite URL: `"{invite_link_base}/{code}"`.
     /// Sourced from `AppState::room_policy.invite_link_base` (D3 — never hardcoded).
     pub invite_link_base: String,
+}
+
+// ── Phase 4C additions (append-only) ─────────────────────────────────────────
+
+/// One bookmark item from the active account's NIP-51 kind:10003 list.
+///
+/// Raw protocol data only (D1): no presentation strings, no formatted labels,
+/// no toolbar chrome. Swift formats all user-visible bookmark UI.
+///
+/// Mirrors `nmp_nip51::BookmarkItem` but as a `uniffi::Enum` for FFI.
+/// Variants match the NIP-51 tag types: `e` (event), `a` (address),
+/// `r` (URL), `t` (hashtag).
+#[derive(Debug, Clone, PartialEq, uniffi::Enum)]
+pub enum BookmarkRow {
+    /// `["e", <event-id>, <optional-relay>]` — a bookmarked Nostr event.
+    Event {
+        /// Raw 64-char lowercase hex event id.
+        event_id: String,
+        /// Optional relay hint (opaque URL string; D3 — never constructed).
+        relay: Option<String>,
+    },
+    /// `["a", <kind:pubkey:d>, <optional-relay>]` — a bookmarked replaceable event.
+    Address {
+        /// NIP-19 address coordinate: `"<kind>:<pubkey>:<d-tag>"`.
+        coordinate: String,
+        /// Optional relay hint.
+        relay: Option<String>,
+    },
+    /// `["r", <url>]` — a bookmarked web URL.
+    Url {
+        /// Raw HTTP/HTTPS URL string.
+        url: String,
+    },
+    /// `["t", <hashtag>]` — a bookmarked hashtag.
+    Hashtag {
+        /// Normalised lowercase hashtag string (without `#` prefix).
+        hashtag: String,
+    },
+}
+
+/// Snapshot for `ViewId::Bookmarks` — the active account's NIP-51 kind:10003
+/// bookmark list.
+///
+/// Raw protocol data only (D1): Swift formats all display strings, toolbar
+/// icons, swipe actions, empty-state copy, and accessibility labels.
+/// Bounded by the bookmark list length (non-negotiable #7: never grows with
+/// the unbounded event store — only the latest kind:10003 is projected).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct BookmarksSnapshot {
+    /// Bookmark items from the active account's kind:10003 list.
+    /// Raw `BookmarkRow` values — no labels or presentation formatting (D1).
+    pub rows: Vec<BookmarkRow>,
 }

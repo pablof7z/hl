@@ -140,6 +140,15 @@ pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> 
                 super::room_home::apply_group_events_frame(state, &proj.payload);
             }
 
+            // ── Phase 4C arm: "hl.bookmarks" ─────────────────────────────────
+            // Decode the hl-owned serde-JSON bookmark snapshot (registered by
+            // `bookmarks::register_bookmark_list_projection`) and store raw
+            // BookmarkRow items in AppState::bookmarks. D6: decode errors are
+            // silent no-ops. Append-only: new arms go BELOW this one.
+            super::bookmarks::BOOKMARK_SCHEMA_ID => {
+                super::bookmarks::apply_bookmarks(state, &proj.payload);
+            }
+
             // ── Default: unknown schema_id — silent no-op (D6) ────────────────
             // Projections registered by nmp-defaults that hl has not opted into
             // (e.g. action_stages, bunker_handshake) arrive here. This is the

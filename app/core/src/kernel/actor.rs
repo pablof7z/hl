@@ -37,7 +37,8 @@ use nmp_defaults::{NmpAppBuilder, RunConfig};
 
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
 use crate::kernel::domains::{
-    auth, communities, discovery, follows, profiles, projections, relays, room_home, route, session,
+    auth, bookmarks, communities, discovery, follows, profiles, projections, relays, room_home,
+    route, session,
 };
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
@@ -306,6 +307,14 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
             target_author_pubkey,
             repost,
         ),
+        // ── Phase 4C additions (append-only) ─────────────────────────────────
+        AppAction::AddBookmark { item } => {
+            bookmarks::reduce_action_add_bookmark_for_state(state, item)
+        }
+
+        AppAction::RemoveBookmark { item } => {
+            bookmarks::reduce_action_remove_bookmark_for_state(state, item)
+        }
     }
 }
 
@@ -387,6 +396,15 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             state.claimed_profiles.insert(pubkey, *card);
             vec![]
         }
+
+        // ── Phase 4C additions (append-only) ─────────────────────────────────
+        KernelEvent::BookmarksUpdated(rows) => {
+            // Store raw BookmarkRow items decoded from the "hl.bookmarks"
+            // typed sidecar. No labels — raw fields only (D1). Also injectable
+            // directly from tests via Cmd::Event (no live NmpApp needed).
+            state.bookmarks = rows;
+            vec![]
+        }
     }
 }
 
@@ -409,6 +427,13 @@ pub(crate) fn project_snapshot(
 
         // ── Phase 3F additions (append-only) ─────────────────────────────────
         ViewId::RoomHome { group_id } => room_home::project_room_home_snapshot(state, group_id),
+
+        // ── Phase 4C additions (append-only) ─────────────────────────────────
+        ViewId::Bookmarks => Some(crate::kernel::snapshot::ViewSnapshot::Bookmarks(
+            crate::kernel::snapshot::BookmarksSnapshot {
+                rows: state.bookmarks.clone(),
+            },
+        )),
 
         _ => route::project_snapshot(state, id, clock_now),
     }
@@ -555,6 +580,14 @@ pub(crate) async fn run_effect(
         // ── Phase 4E additions (append-only) ─────────────────────────────────
         Effect::DispatchShareToRoom { namespace, json } => {
             room_home::run_effect_dispatch_share_to_room(namespace, json, nmp);
+        }
+        // ── Phase 4C additions (append-only) ─────────────────────────────────
+        Effect::DispatchBookmarkAction { namespace, json } => {
+            // Call nmp_app_dispatch_action with the NIP-51 bookmark namespace
+            // and BookmarkUpdateInput JSON. Fire-and-forget (D6): the updated
+            // kind:10003 list arrives back through the BookmarksUpdated
+            // projection event.
+            bookmarks::run_effect_dispatch_bookmark_action(namespace, json, nmp);
         }
     }
 
@@ -776,6 +809,17 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
     // active account. A fresh Arc::new(Mutex::new(None)) would leave it
     // permanently pointed at None and follows would never populate AppState.
     follows::register_follow_list_projection(nmp_ref, nmp_ref.active_account_handle());
+
+    // Phase 4C: wire the hl BookmarkListProjection typed snapshot so NIP-51
+    // kind:10003 events from the active account surface in `AppState::bookmarks`.
+    // Note: nmp-defaults::register_bookmark_runtime (called via register_defaults
+    // above) already wires a separate BookmarkListProjection as a kind:10003
+    // observer AND registers the add/remove bookmark action modules. This call
+    // creates a SECOND projection (also pointing at the live active-account slot)
+    // exclusively for the hl typed-snapshot path ("hl.bookmarks" key). Double-
+    // observation is harmless — both projections read the same events. The write
+    // actions are NOT re-registered here (nmp-defaults already wired them).
+    bookmarks::register_bookmark_list_projection(nmp_ref, nmp_ref.active_account_handle());
 
     // Phase 3A: register the update callback so NMP snapshot frames are
     // forwarded into the actor as KernelEvent::NmpSnapshotFrame. The

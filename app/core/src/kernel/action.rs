@@ -278,6 +278,26 @@ pub enum AppAction {
         /// When `false` → kind:11 share (`"nmp.nip29.share_event_in_group"`).
         repost: bool,
     },
+    // ── Phase 4C additions (append-only) ─────────────────────────────────────
+    /// Add a bookmark item to the active account's NIP-51 kind:10003 list by
+    /// dispatching `"nmp.nip51.add_bookmark"` with a `BookmarkUpdateInput`
+    /// JSON payload. Fire-and-forget (D6, Non-Negotiable #3): the updated
+    /// kind:10003 list arrives back via the `BookmarksUpdated` projection event.
+    ///
+    /// Kernel is the SOLE writer for kind:10003 on ported screens — no live-lane
+    /// double-publish. No optimistic update: raw state reflects on-chain list.
+    AddBookmark {
+        /// The bookmark item to add (raw protocol data — D1).
+        item: crate::kernel::snapshot::BookmarkRow,
+    },
+
+    /// Remove a bookmark item from the active account's NIP-51 kind:10003 list
+    /// by dispatching `"nmp.nip51.remove_bookmark"`. Symmetric with `AddBookmark`.
+    /// Fire-and-forget (D6, Non-Negotiable #3).
+    RemoveBookmark {
+        /// The bookmark item to remove (raw protocol data — D1).
+        item: crate::kernel::snapshot::BookmarkRow,
+    },
 }
 
 /// NIP-65 / kind:10002 role for a configured relay.
@@ -420,4 +440,16 @@ pub enum KernelEvent {
         /// Boxed to keep `KernelEvent` size balanced (ProfileCardModel is large).
         card: Box<nmp_core::typed_projections::ProfileCardModel>,
     },
+
+    // ── Phase 4C additions (append-only) ─────────────────────────────────────
+    /// The `"hl.bookmarks"` typed sidecar was decoded from an NMP snapshot frame.
+    ///
+    /// Produced by `projections::dispatch_typed_frame` when the hl-owned
+    /// `"hl.bookmarks"` JSON-serde sidecar arrives (registered by
+    /// `bookmarks::register_bookmark_list_projection`). Carries raw
+    /// `BookmarkRow` items from the active account's kind:10003 list.
+    /// The reducer stores them in `AppState::bookmarks`.
+    ///
+    /// No labels or formatted strings — Swift formats all bookmark UI (D1).
+    BookmarksUpdated(Vec<crate::kernel::snapshot::BookmarkRow>),
 }

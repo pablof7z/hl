@@ -133,6 +133,11 @@ pub(crate) fn project_snapshot(
         // ViewId::RoomHome is handled upstream in actor::project_snapshot.
         // This arm is unreachable in practice but required for exhaustive match.
         ViewId::RoomHome { .. } => None,
+
+        // ── Phase 4C additions (append-only) ─────────────────────────────────
+        // ViewId::Bookmarks is handled upstream in actor::project_snapshot.
+        // This arm is unreachable in practice but required for exhaustive match.
+        ViewId::Bookmarks => None,
     }
 }
 

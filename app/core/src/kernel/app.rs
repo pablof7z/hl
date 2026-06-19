@@ -173,6 +173,21 @@ pub struct AppState {
     /// Phase 3F — the events are buffered so Phase 4 can decode feed content
     /// without re-opening a subscription (Non-Negotiable #7).
     pub room_home_events: HashMap<String, Vec<nmp_nip29::GroupEventRow>>,
+
+    // ── Phase 4C additions ────────────────────────────────────────────────────
+    /// Active account's NIP-51 kind:10003 bookmark list, decoded from the
+    /// `"hl.bookmarks"` typed sidecar (hl-owned JSON projection).
+    ///
+    /// Updated by `KernelEvent::BookmarksUpdated` — produced when the hl-owned
+    /// `BookmarkListProjection` emits a snapshot frame. Empty until the first
+    /// kind:10003 event arrives for the active account. No presentation strings
+    /// — raw `BookmarkRow` values only (D1). Cleared on `IdentityChanged(None)`
+    /// and `Logout` to prevent stale bookmarks from the previous account leaking
+    /// into the next session.
+    ///
+    /// Bounded by the kind:10003 list length (the latest replaceable event;
+    /// never grows with the unbounded event store — Non-Negotiable #7).
+    pub bookmarks: Vec<crate::kernel::snapshot::BookmarkRow>,
 }
 
 impl Default for AppState {
@@ -193,6 +208,8 @@ impl Default for AppState {
             claimed_profiles: HashMap::new(),
             // ── Phase 3F additions ────────────────────────────────────────────
             room_home_events: HashMap::new(),
+            // ── Phase 4C additions ────────────────────────────────────────────
+            bookmarks: Vec::new(),
         }
     }
 }
