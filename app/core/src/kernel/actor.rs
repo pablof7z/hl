@@ -682,13 +682,15 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
     let mut builder = NmpAppBuilder::new();
     nmp_defaults::register_defaults(&mut builder);
 
-    // Boot sequence (adapted to the git-cached nmp-defaults API):
-    //   Unstarted → StorageSet → ProjectionsDeclared → *mut NmpApp
-    // No explicit relay decision needed in this version; omitting
-    // with_relays() uses the nmp-defaults built-in relay set.
+    // Boot sequence per nmp-defaults typestate (#1493 relay gate added):
+    //   Unstarted → StorageSet → ProjectionsDeclared → RelaysDeclared → *mut NmpApp
+    // hl manages its relay set entirely through the bespoke live lane
+    // (nostr_runtime.rs / relays.rs / nmp_app_add_relay at runtime), so nmp's
+    // kernel starts with no built-in relays and the app adds them dynamically.
     let raw = builder
         .storage_path(storage_path.to_string_lossy().into_owned())
         .consume_all_builtin_projections()
+        .without_initial_relays()
         .start(RunConfig::default());
 
     let handle = NonNull::new(raw).map(NmpHandle)?;
