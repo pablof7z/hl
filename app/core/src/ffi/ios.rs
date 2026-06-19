@@ -201,6 +201,7 @@ fn build_kernel_policy() -> KernelPolicy {
             seed_relays,
             initial_follows: Vec::new(), // ADR-0059 §5: empty → no kind:3
         },
+        relay: Default::default(), // Phase 2D: seed_relay_urls populated at runtime
     }
 }
 
