@@ -18,6 +18,12 @@ pub enum ViewId {
     /// The main tab shell (visible only when session is present).
     RootShell,
 
+    // ── Phase 2E additions ────────────────────────────────────────────────────
+    /// Network settings overview screen (relay list + role configuration).
+    NetworkSettings,
+    /// Relay-diagnostics detail screen (connection stats, counters, sub list).
+    RelayDiagnostics,
+
     // ── Phase 3B additions (append-only) ─────────────────────────────────────
     /// Joined-groups / communities list for the active account.
     Communities,
@@ -28,6 +34,12 @@ pub enum ViewId {
 pub enum ViewRoute {
     AppRoot,
     RootShell,
+
+    // ── Phase 2E additions ────────────────────────────────────────────────────
+    /// Network settings projection — relay list with raw role/status data.
+    NetworkSettings,
+    /// Relay-diagnostics projection — raw counters and connection state per relay.
+    RelayDiagnostics,
 
     // ── Phase 3B additions (append-only) ─────────────────────────────────────
     Communities,

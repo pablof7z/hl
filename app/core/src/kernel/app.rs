@@ -7,6 +7,7 @@
 use std::path::PathBuf;
 
 use crate::kernel::action::{SignInMethod, SignerKind};
+use crate::kernel::domains::relay_diagnostics::RelayDiagnosticsState;
 
 /// Session state machine.
 ///
@@ -101,6 +102,12 @@ pub struct AppState {
     /// the iOS QR-code sheet can render it without polling.
     pub nostrconnect_uri: Option<String>,
 
+    // ── Phase 2E additions ────────────────────────────────────────────────────
+    /// Relay-diagnostics sidecar state. Populated from the `"relay_diagnostics"`
+    /// typed-projection frame on every NMP snapshot tick. `None` until the first
+    /// valid frame arrives. Bounded: one `RelayDiagRow` per configured relay URL.
+    pub relay_diagnostics: RelayDiagnosticsState,
+
     // ── Phase 3B additions ────────────────────────────────────────────────────
     /// Current joined groups for the active account, decoded from the
     /// `"nmp.nip29.joined_groups"` typed sidecar. Cleared on `IdentityChanged(None)`
@@ -131,6 +138,7 @@ impl Default for AppState {
             chrome: ChromeState::default(),
             session_epoch: 0,
             nostrconnect_uri: None,
+            relay_diagnostics: RelayDiagnosticsState::default(),
             communities: Vec::new(),
             follows: Vec::new(),
         }

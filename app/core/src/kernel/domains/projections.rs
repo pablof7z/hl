@@ -27,7 +27,10 @@
 //! level). Malformed payloads are a silent no-op. Neither case corrupts
 //! `AppState` — the previous value is left unchanged.
 
+use nmp_core::typed_projections::RELAY_DIAGNOSTICS_SCHEMA_ID;
+
 use crate::kernel::app::AppState;
+use crate::kernel::domains::relay_diagnostics;
 use crate::kernel::effect::Effect;
 
 /// Decode one NMP snapshot frame, route each typed-projection sidecar by
@@ -73,6 +76,16 @@ pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> 
     for proj in &projections {
         // Extension seam: future slices append arms before the `_` default.
         match proj.schema_id.as_str() {
+            // ── Phase 2E arm: "relay_diagnostics" ────────────────────────────
+            // Decode the relay-diagnostics typed sidecar and store raw fields
+            // in AppState::relay_diagnostics. nmp's pre-formatted *_label /
+            // *_display strings are intentionally not projected (D1 raw-data
+            // doctrine). Append-only: rebase doctrine requires new arms to be
+            // added BELOW this one, never interleaved.
+            RELAY_DIAGNOSTICS_SCHEMA_ID => {
+                relay_diagnostics::apply(state, &proj.payload);
+            }
+
             // ── Phase 3B: joined-groups projection ───────────────────────────
             // Decodes the `"nmp.nip29.joined_groups"` FlatBuffers payload via
             // `nmp_nip29::decode_joined_groups_snapshot` and maps `JoinedGroup`
