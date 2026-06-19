@@ -18,7 +18,7 @@ use tokio::sync::mpsc;
 use crate::capabilities::CapabilityResult;
 use crate::kernel::action::AppAction;
 use crate::kernel::actor::{actor_task, start_nmp_app, Cmd, HighlighterObserver, SharedState};
-use crate::kernel::app::AppConfig;
+use crate::kernel::app::{AppConfig, CreateAccountPolicy, KernelPolicy, SeedRelay};
 use crate::kernel::clock::SystemClock;
 use crate::kernel::snapshot::ViewSnapshot;
 use crate::kernel::view::{ViewId, ViewRoute};
@@ -67,6 +67,10 @@ impl HighlighterApp {
         // Boot the NmpApp (Pattern 1 from nmp_runtime.rs:725-860).
         let nmp = start_nmp_app(&config.data_dir, tx.clone());
 
+        // Build the relay/follow policy from relay_policy.json seed defaults.
+        // D3: relay URLs live in relay_policy.json, not in kernel logic.
+        let policy = Arc::new(build_kernel_policy());
+
         let shared_clone = shared.clone();
         let tx_clone = tx.clone();
         runtime.spawn(actor_task(
@@ -76,6 +80,7 @@ impl HighlighterApp {
             clock,
             onboarding_store,
             nmp,
+            policy,
         ));
 
         Arc::new(Self {
@@ -151,6 +156,51 @@ impl HighlighterApp {
     /// on wall-clock time (D8 / D9).
     pub fn tick(&self) {
         let _ = self.tx.send(Cmd::Tick);
+    }
+}
+
+// ─── Policy bootstrap ────────────────────────────────────────────────────────
+
+/// Build the `KernelPolicy` injected into `actor_task` at boot.
+///
+/// Relay URLs come from `relay_policy.json` seed defaults via the public
+/// `relays::seed_defaults()` accessor — never from hardcoded literals here
+/// (D3: relay policy is data, not kernel logic).
+///
+/// For `CreateAccount`, the NIP-65 / kind:10002 role follows the
+/// `read`/`write` flags in each seed entry:
+///   - read && write → "both"
+///   - read only     → "read"
+///   - write only    → "write"
+///   - neither       → skip (pure app-data relay; no NIP-65 entry needed)
+///
+/// `initial_follows` is empty — ADR-0059 §5: no kind:3 published for a
+/// fresh account until the user explicitly chooses follows.
+fn build_kernel_policy() -> KernelPolicy {
+    let seed = crate::relays::seed_defaults();
+    let seed_relays: Vec<SeedRelay> = seed
+        .into_iter()
+        .filter_map(|r| {
+            let role = match (r.read, r.write) {
+                (true, true) => "both",
+                (true, false) => "read",
+                (false, true) => "write",
+                // Pure rooms/indexer relays have no NIP-65 role; omit from
+                // create-account relay list to avoid empty-role entries.
+                (false, false) => return None,
+            };
+            Some(SeedRelay {
+                url: r.url,
+                role: role.to_string(),
+            })
+        })
+        .collect();
+
+    KernelPolicy {
+        create_account: CreateAccountPolicy {
+            seed_relays,
+            initial_follows: Vec::new(), // ADR-0059 §5: empty → no kind:3
+        },
     }
 }
 

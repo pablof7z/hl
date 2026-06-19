@@ -97,6 +97,21 @@ pub enum AppAction {
     /// `Effect::StartNip55SignIn`. Success arrives via the identity-change
     /// observer as `KernelEvent::IdentityChanged(Some(pubkey))`.
     SignInNip55,
+
+    // ── Phase 2C additions (append-only) ─────────────────────────────────────
+    /// Create a fresh Nostr account with the supplied display name.
+    ///
+    /// Relays and initial follows are Rust POLICY injected from `AppConfig` —
+    /// they are NOT caller arguments (D3: no hardcoded relay literals in
+    /// kernel logic). Bootstrap publish semantics follow ADR-0059: kind:0 and
+    /// kind:10002 are published; kind:3 is skipped when `initial_follows` is
+    /// empty (per ADR-0059 §5).
+    ///
+    /// The reducer transitions to `SessionState::SigningIn{CreateAccount}` and
+    /// emits `Effect::CreateAccount`. Success arrives via the existing
+    /// `IdentityChanged(Some(pubkey))` observer → `SessionState::Present`.
+    /// The 2A clock timeout (SIGN_IN_TIMEOUT_SECS) covers the SigningIn period.
+    CreateAccount { profile_name: String },
 }
 
 /// Internal kernel event — produced by async effects and native capability
