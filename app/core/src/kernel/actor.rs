@@ -15,32 +15,27 @@
 //! D8:   No sleeps or poll loops; time advances through the injected Clock.
 //! D9:   Wall-clock reads confined to `SystemClock`; tests inject `ManualClock`.
 
-use std::ffi::CString;
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex};
 
 use parking_lot::RwLock;
 use tokio::sync::mpsc;
 
-use nmp_defaults::{NmpAppBuilder, RunConfig};
-use nmp_ffi::{
-    nmp_app_free, nmp_app_nostrconnect_uri, nmp_app_signin_nip55, nmp_external_signer_init,
-    nmp_signer_broker_init, NmpApp,
-};
-use zeroize::Zeroizing;
+use nmp_ffi::{nmp_app_free, nmp_external_signer_init, nmp_signer_broker_init, NmpApp};
 
-use crate::capabilities::{CapabilityRequest, CapabilityResult, KeychainOp};
-use crate::kernel::action::{AppAction, KernelEvent, SignInMethod, SignerKind};
-use crate::kernel::app::{
-    AppState, KernelPolicy, SessionState, SESSION_RESTORE_TIMEOUT_SECS, SIGN_IN_TIMEOUT_SECS,
-};
+use crate::capabilities::CapabilityResult;
+use crate::kernel::action::{AppAction, KernelEvent};
+use crate::kernel::app::{AppState, KernelPolicy};
 use crate::kernel::clock::Clock;
 use crate::kernel::effect::Effect;
-use crate::kernel::snapshot::{
-    AppRootSnapshot, RootShellSnapshot, RouteKind, ToastSnapshot, ViewSnapshot,
-};
+use crate::kernel::snapshot::ViewSnapshot;
 use crate::kernel::view::{ViewId, ViewRegistry, ViewRoute};
 use crate::onboarding::OnboardingStore;
+
+use nmp_defaults::{NmpAppBuilder, RunConfig};
+
+// Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
+use crate::kernel::domains::{auth, route, session};
 
 // ─── NmpApp handle ──────────────────────────────────────────────────────────
 
@@ -48,7 +43,7 @@ use crate::onboarding::OnboardingStore;
 ///
 /// `NmpApp` is actor-backed and thread-safe for host API calls (see
 /// nmp-ffi SAFETY docs). The raw pointer is freed exactly once in `Drop`.
-pub(crate) struct NmpHandle(NonNull<NmpApp>);
+pub(crate) struct NmpHandle(pub(crate) NonNull<NmpApp>);
 
 // SAFETY: NmpApp is designed for cross-thread host calls (nmp-ffi docs).
 unsafe impl Send for NmpHandle {}
@@ -84,7 +79,7 @@ pub trait HighlighterObserver: Send + Sync + 'static {
     /// A view's snapshot changed.
     fn on_snapshot(&self, view_id: ViewId, snapshot: ViewSnapshot);
     /// The kernel is requesting a native capability execution.
-    fn on_capability_request(&self, request: CapabilityRequest);
+    fn on_capability_request(&self, request: crate::capabilities::CapabilityRequest);
 }
 
 // ─── Shared state (actor ↔ FFI layer) ───────────────────────────────────────
@@ -142,195 +137,64 @@ pub(crate) fn reduce(state: &mut AppState, cmd: Cmd, now: u64) -> Vec<Effect> {
 fn clock_checks(state: &mut AppState, now: u64) -> Vec<Effect> {
     let effects: Vec<Effect> = Vec::new();
 
-    // Toast auto-dismiss.
-    if let Some(toast) = &state.chrome.toast {
-        if now >= toast.dismiss_at_unix {
-            state.chrome.toast = None;
-        }
-    }
-
-    // Session restore timeout: if we've been Restoring for too long with no
-    // capability result, transition to Absent so the UI can show retry.
-    if let SessionState::Restoring { started_at } = &state.session {
-        if now.saturating_sub(*started_at) >= SESSION_RESTORE_TIMEOUT_SECS {
-            state.session = SessionState::Absent;
-        }
-    }
-
-    // Sign-in timeout: NMP handles parse errors internally (set_last_error_toast)
-    // without firing the identity-change observer — so an invalid nsec leaves us
-    // in SigningIn indefinitely without this clock-driven fallback (D8).
-    if let SessionState::SigningIn { started_at, method } = &state.session {
-        if now.saturating_sub(*started_at) >= SIGN_IN_TIMEOUT_SECS {
-            state.session = SessionState::SignInFailed {
-                method: method.clone(),
-                error: "sign-in timed out — no identity change observed".into(),
-            };
-        }
-    }
+    route::clock_check_toast_dismiss(state, now);
+    session::clock_check_restore_timeout(state, now);
+    auth::clock_check_sign_in_timeout(state, now);
 
     effects
 }
 
+/// Thin dispatcher: routes each `AppAction` variant to its owning domain handler.
+/// Future slices add a new domain module + one match arm pointing to it.
 fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effect> {
     match action {
         AppAction::RestoreSession | AppAction::RetryRestore => {
-            state.session = SessionState::Restoring { started_at: now };
-            // Fire both onboarding load and session restore in parallel.
-            vec![Effect::LoadOnboardingFlag, Effect::RestoreSessionSecret]
+            session::reduce_action_restore_session(state, now)
         }
 
-        AppAction::Logout => {
-            state.session = SessionState::Absent;
-            state.session_epoch += 1;
-            // Clear any pending NostrConnect URI on logout.
-            state.nostrconnect_uri = None;
-            // RemoveActiveAccount fires nmp.remove_account; ClearSession
-            // emits a CapabilityRequest to native for its keychain.
-            vec![Effect::RemoveActiveAccount, Effect::ClearSession]
-        }
+        AppAction::Logout => auth::reduce_action_logout(state),
 
-        AppAction::CompleteOnboarding => {
-            state.onboarding.complete = true;
-            // OnboardingStore::set_complete is called as part of the
-            // LoadOnboardingFlag effect's write path; here we update in-memory
-            // state. The durable write is a side effect handled by the actor
-            // after the reduce pass when it detects the flag changed.
-            vec![]
-        }
+        AppAction::CompleteOnboarding => route::reduce_action_complete_onboarding(state),
 
-        AppAction::SelectRootTab { tab } => {
-            state.route.root_tab = tab as u8;
-            vec![]
-        }
+        AppAction::SelectRootTab { tab } => route::reduce_action_select_root_tab(state, tab as u8),
 
-        AppAction::PresentSheet { sheet_id } => {
-            state.route.sheet_id = Some(sheet_id);
-            vec![]
-        }
+        AppAction::PresentSheet { sheet_id } => route::reduce_action_present_sheet(state, sheet_id),
 
-        AppAction::DismissSheet => {
-            state.route.sheet_id = None;
-            vec![]
-        }
+        AppAction::DismissSheet => route::reduce_action_dismiss_sheet(state),
 
         // ── Phase 2A additions ────────────────────────────────────────────────
-        AppAction::SignInNsec { nsec } => {
-            state.session = SessionState::SigningIn {
-                method: SignInMethod::Nsec,
-                started_at: now,
-            };
-            // AddNsecSigner calls nmp.add_signer(LocalNsec(nsec), true).
-            // Success → IdentityChanged(Some(pubkey)); failure → SignInFailed.
-            // Fire-and-forget: reducer never awaits the result.
-            vec![Effect::AddNsecSigner { nsec }]
-        }
+        AppAction::SignInNsec { nsec } => auth::reduce_action_sign_in_nsec(state, nsec, now),
 
         // ── Phase 2B additions ────────────────────────────────────────────────
-        AppAction::PairBunker { uri } => {
-            state.session = SessionState::SigningIn {
-                method: SignInMethod::Bunker,
-                started_at: now,
-            };
-            // AddBunkerSigner routes through the NIP-46 broker (nmp_signer_broker_init
-            // must have run at boot). Fire-and-forget: broker resolves the signer
-            // async; success arrives as IdentityChanged(Some).
-            vec![Effect::AddBunkerSigner { uri }]
-        }
+        AppAction::PairBunker { uri } => auth::reduce_action_pair_bunker(state, uri, now),
 
-        AppAction::StartNostrConnect => {
-            state.session = SessionState::SigningIn {
-                method: SignInMethod::NostrConnect,
-                started_at: now,
-            };
-            // MintNostrConnectUri calls nmp_app_nostrconnect_uri and feeds the
-            // result back as KernelEvent::NostrConnectUriReady so the iOS QR
-            // sheet can render it. The broker then waits for the remote signer
-            // to connect; success arrives as IdentityChanged(Some).
-            vec![Effect::MintNostrConnectUri]
-        }
+        AppAction::StartNostrConnect => auth::reduce_action_start_nostr_connect(state, now),
 
-        AppAction::SignInNip55 => {
-            state.session = SessionState::SigningIn {
-                method: SignInMethod::Nip55,
-                started_at: now,
-            };
-            // StartNip55SignIn calls nmp_app_signin_nip55(app, null). Fire-and-
-            // forget: the host capability bridge exchanges with the external
-            // signer app; success arrives as IdentityChanged(Some).
-            vec![Effect::StartNip55SignIn]
-        }
+        AppAction::SignInNip55 => auth::reduce_action_sign_in_nip55(state, now),
 
         // ── Phase 2C additions ────────────────────────────────────────────────
         AppAction::CreateAccount { profile_name } => {
-            state.session = SessionState::SigningIn {
-                method: SignInMethod::CreateAccount,
-                started_at: now,
-            };
-            // Effect runner calls actor_sender().send(ActorCommand::CreateAccount{...}).
-            // Relay + follow policy is read from injected KernelPolicy at effect
-            // run time (D3 — no hardcoded relay literals in kernel logic).
-            // Success → IdentityChanged(Some(pubkey)); clock timeout covers failure.
-            vec![Effect::CreateAccount { profile_name }]
+            auth::reduce_action_create_account(state, profile_name, now)
         }
     }
 }
 
+/// Thin dispatcher: routes each `KernelEvent` variant to its owning domain handler.
 fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effect> {
     match event {
         KernelEvent::SessionRestored { present, pubkey } => {
-            if present {
-                state.session = SessionState::Present {
-                    pubkey: pubkey.unwrap_or_default(),
-                    signer_kind: SignerKind::LocalNsec,
-                };
-            } else {
-                state.session = SessionState::Absent;
-            }
-            vec![]
+            session::reduce_event_session_restored(state, present, pubkey)
         }
 
         KernelEvent::OnboardingStateLoaded(complete) => {
-            state.onboarding.complete = complete;
-            state.onboarding.loaded = true;
-            vec![]
+            route::reduce_event_onboarding_state_loaded(state, complete)
         }
 
-        KernelEvent::CapabilityResult(result) => reduce_capability_result(state, result),
-
-        KernelEvent::IdentityChanged(pubkey) => {
-            // NMP identity change — `Some(pk)` means a signer is now active;
-            // `None` means the account was removed / logged out.
-            match pubkey {
-                Some(pk) if !pk.is_empty() => {
-                    // Determine signer kind from the method we were SigningIn with.
-                    // Bunker and NostrConnect both resolve to Nip46 (NIP-46 remote).
-                    // Session restore and unknown paths default to LocalNsec.
-                    let signer_kind = match &state.session {
-                        SessionState::SigningIn { method, .. } => match method {
-                            SignInMethod::Nsec | SignInMethod::CreateAccount => {
-                                SignerKind::LocalNsec
-                            }
-                            SignInMethod::Bunker | SignInMethod::NostrConnect => SignerKind::Nip46,
-                            SignInMethod::Nip55 => SignerKind::Nip55,
-                        },
-                        _ => SignerKind::LocalNsec,
-                    };
-                    // Clear the pending NostrConnect URI — the handshake is done.
-                    state.nostrconnect_uri = None;
-                    state.session = SessionState::Present {
-                        pubkey: pk,
-                        signer_kind,
-                    };
-                }
-                _ => {
-                    // None or empty pubkey → no active account.
-                    state.nostrconnect_uri = None;
-                    state.session = SessionState::Absent;
-                }
-            }
-            vec![]
+        KernelEvent::CapabilityResult(result) => {
+            session::reduce_event_capability_result(state, result)
         }
+
+        KernelEvent::IdentityChanged(pubkey) => auth::reduce_event_identity_changed(state, pubkey),
 
         KernelEvent::ClockTick => {
             // Clock-driven checks already ran in `clock_checks` at the top of
@@ -340,18 +204,12 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
 
         // ── Phase 2A additions ────────────────────────────────────────────────
         KernelEvent::SignInFailed { method, error } => {
-            // Surface failures in session state (D6 — never as Result).
-            state.session = SessionState::SignInFailed { method, error };
-            vec![]
+            auth::reduce_event_sign_in_failed(state, method, error)
         }
 
         // ── Phase 2B additions ────────────────────────────────────────────────
         KernelEvent::NostrConnectUriReady { uri } => {
-            // Store the minted URI so the snapshot can expose it to the iOS
-            // QR-code sheet. The NostrConnect sign-in session stays in SigningIn
-            // until the remote signer completes the handshake (IdentityChanged).
-            state.nostrconnect_uri = Some(uri);
-            vec![]
+            auth::reduce_event_nostrconnect_uri_ready(state, uri)
         }
 
         KernelEvent::BunkerHandshakeState { .. } => {
@@ -359,35 +217,6 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // change. Future phases may surface these in a dedicated snapshot.
             vec![]
         }
-    }
-}
-
-fn reduce_capability_result(state: &mut AppState, result: CapabilityResult) -> Vec<Effect> {
-    use crate::capabilities::KeychainResult;
-    match result {
-        CapabilityResult::Keychain(kr) => match kr {
-            KeychainResult::SessionSecret(Some(secret)) => {
-                // Phase 1 path: keychain returned a secret string (pre-nmp).
-                // In Phase 2, nmp keyring restores fire IdentityChanged instead.
-                state.session = SessionState::Present {
-                    pubkey: secret,
-                    signer_kind: SignerKind::LocalNsec,
-                };
-                vec![]
-            }
-            KeychainResult::SessionSecret(None) => {
-                state.session = SessionState::Absent;
-                vec![]
-            }
-            KeychainResult::Cleared => {
-                // Session already cleared by Logout action; this is the ack.
-                vec![]
-            }
-            KeychainResult::Error(e) => {
-                state.session = SessionState::RestoreFailed { error: e };
-                vec![]
-            }
-        },
     }
 }
 
@@ -399,43 +228,7 @@ pub(crate) fn project_snapshot(
     id: &ViewId,
     clock_now: u64,
 ) -> Option<ViewSnapshot> {
-    match id {
-        ViewId::AppRoot => Some(ViewSnapshot::AppRoot(project_app_root(state))),
-        ViewId::RootShell => Some(ViewSnapshot::RootShell(project_root_shell(
-            state, clock_now,
-        ))),
-    }
-}
-
-fn project_app_root(state: &AppState) -> AppRootSnapshot {
-    let session_present = matches!(state.session, SessionState::Present { .. });
-    let route_kind = if !state.onboarding.complete {
-        RouteKind::Onboarding
-    } else if !session_present {
-        RouteKind::Login
-    } else {
-        RouteKind::RootShell
-    };
-    AppRootSnapshot {
-        route_kind,
-        session_present,
-        onboarding_complete: state.onboarding.complete,
-        // Phase 2B: expose pending NostrConnect URI to the iOS QR-code sheet.
-        nostrconnect_uri: state.nostrconnect_uri.clone(),
-    }
-}
-
-fn project_root_shell(state: &AppState, _clock_now: u64) -> RootShellSnapshot {
-    let toast = state.chrome.toast.as_ref().map(|t| ToastSnapshot {
-        message: t.message.clone(),
-        dismiss_at_unix: t.dismiss_at_unix,
-    });
-    RootShellSnapshot {
-        selected_tab: state.route.root_tab,
-        tab_count: 5, // Feed / Discover / Capture / Notifications / Settings
-        toast,
-        sheet_id: state.route.sheet_id.clone(),
-    }
+    route::project_snapshot(state, id, clock_now)
 }
 
 // ─── Effect runner ───────────────────────────────────────────────────────────
@@ -458,161 +251,46 @@ pub(crate) async fn run_effect(
 ) {
     match effect {
         Effect::LoadOnboardingFlag => {
-            let complete = onboarding_store.is_complete();
-            let _ = tx.send(Cmd::Event(KernelEvent::OnboardingStateLoaded(complete)));
+            route::run_effect_load_onboarding_flag(onboarding_store, tx).await;
         }
 
         Effect::RestoreSessionSecret => {
-            // Ask native for the keychain secret via the observer.
-            // The round-trip completes when provide_capability_result is called.
-            let observer = shared.observer.read().clone();
-            if let Some(obs) = observer {
-                obs.on_capability_request(CapabilityRequest::Keychain(KeychainOp::LoadSession));
-            } else {
-                // No observer registered yet — treat as absent session.
-                let _ = tx.send(Cmd::Event(KernelEvent::SessionRestored {
-                    present: false,
-                    pubkey: None,
-                }));
-            }
+            session::run_effect_restore_session_secret(shared, tx).await;
         }
 
         Effect::ClearSession => {
-            let observer = shared.observer.read().clone();
-            if let Some(obs) = observer {
-                obs.on_capability_request(CapabilityRequest::Keychain(KeychainOp::ClearSession));
-            }
+            session::run_effect_clear_session(shared).await;
         }
 
         Effect::EmitCapabilityRequest(req) => {
-            let observer = shared.observer.read().clone();
-            if let Some(obs) = observer {
-                obs.on_capability_request(req);
-            }
+            session::run_effect_emit_capability_request(req, shared).await;
         }
 
         // ── Phase 2A additions ────────────────────────────────────────────────
         Effect::AddNsecSigner { nsec } => {
-            // Call nmp.add_signer(LocalNsec(nsec), make_active: true).
-            // NMP auto-persists to its keyring when make_active && LocalNsec.
-            // This is truly fire-and-forget: add_signer returns () and NMP handles
-            // both the success and error paths internally —
-            //   Success: the identity-change observer fires IdentityChanged(Some).
-            //   Invalid nsec: NMP calls set_last_error_toast internally and returns
-            //     without firing the observer. The clock-driven SIGN_IN_TIMEOUT_SECS
-            //     check in clock_checks will then transition SigningIn → SignInFailed.
-            // hl never awaits a Result from add_signer (Non-Negotiable #2/D6).
-            if let Some(handle) = nmp {
-                let nmp_ref: &NmpApp = unsafe { handle.0.as_ref() };
-                nmp_ref.add_signer(
-                    nmp_core::SignerSource::LocalNsec(Zeroizing::new(nsec)),
-                    true, // make_active — also auto-persists to nmp keyring
-                );
-            }
-            // No nmp handle (test mode) → test injects IdentityChanged directly.
+            auth::run_effect_add_nsec_signer(nsec, nmp);
         }
 
         Effect::RemoveActiveAccount => {
-            // Read the active pubkey from the nmp slot, then remove it.
-            // Fire-and-forget: the observer fires IdentityChanged(None) on success.
-            if let Some(handle) = nmp {
-                let nmp_ref: &NmpApp = unsafe { handle.0.as_ref() };
-                let active_slot = nmp_ref.active_account_handle();
-                let maybe_pubkey: Option<String> =
-                    active_slot.lock().ok().and_then(|guard| guard.clone());
-                if let Some(pubkey) = maybe_pubkey {
-                    nmp_ref.remove_account(pubkey);
-                }
-            }
+            auth::run_effect_remove_active_account(nmp);
         }
 
         // ── Phase 2B additions ────────────────────────────────────────────────
         Effect::AddBunkerSigner { uri } => {
-            // Route via nmp.add_signer(BunkerUri(uri), true). The NIP-46 broker
-            // (nmp_signer_broker_init called at boot) takes over the handshake
-            // async. Fire-and-forget: success arrives as IdentityChanged(Some).
-            if let Some(handle) = nmp {
-                let nmp_ref: &NmpApp = unsafe { handle.0.as_ref() };
-                nmp_ref.add_signer(nmp_core::SignerSource::BunkerUri(uri), true);
-            }
-            // No nmp handle (test mode) → test injects IdentityChanged directly.
+            auth::run_effect_add_bunker_signer(uri, nmp);
         }
 
         Effect::MintNostrConnectUri => {
-            // Call nmp_app_nostrconnect_uri(app_ptr, null, null) — relay and
-            // callback are resolved by nmp from its internal bootstrap relay slot
-            // (V-65). Returns an owned `nostrconnect://` C string or null if no
-            // relay is configured. Feed the result back as NostrConnectUriReady.
-            if let Some(handle) = nmp {
-                let raw_ptr = handle.0.as_ptr();
-                let uri_ptr = nmp_app_nostrconnect_uri(raw_ptr, std::ptr::null(), std::ptr::null());
-                if !uri_ptr.is_null() {
-                    // SAFETY: uri_ptr is a CString::into_raw pointer owned by
-                    // nmp-ffi. We take ownership here and free it with from_raw.
-                    let uri = unsafe { std::ffi::CStr::from_ptr(uri_ptr) }
-                        .to_string_lossy()
-                        .into_owned();
-                    // SAFETY: uri_ptr came from CString::into_raw in nmp-ffi.
-                    let _ = unsafe { CString::from_raw(uri_ptr) };
-                    let _ = tx.send(Cmd::Event(KernelEvent::NostrConnectUriReady { uri }));
-                }
-                // null return → no relay configured; stay in SigningIn until timeout.
-            }
-            // No nmp handle (test mode) → test injects NostrConnectUriReady directly.
+            auth::run_effect_mint_nostrconnect_uri(nmp, tx).await;
         }
 
         Effect::StartNip55SignIn => {
-            // Call nmp_app_signin_nip55(app_ptr, null) — null signer_package
-            // lets the OS resolver pick the NIP-55 signer app (e.g. Amber).
-            // nmp_app_signin_nip55 lazy-inits the external-signer driver if
-            // nmp_external_signer_init was not already called at boot.
-            // Fire-and-forget: success arrives as IdentityChanged(Some).
-            if let Some(handle) = nmp {
-                let raw_ptr = handle.0.as_ptr();
-                nmp_app_signin_nip55(raw_ptr, std::ptr::null());
-            }
-            // No nmp handle (test mode) → test injects IdentityChanged directly.
+            auth::run_effect_start_nip55_sign_in(nmp);
         }
 
         // ── Phase 2C additions ────────────────────────────────────────────────
         Effect::CreateAccount { profile_name } => {
-            // Build the profile HashMap from the supplied display name.
-            // Relays and initial_follows come from the injected KernelPolicy
-            // (D3: no hardcoded relay literals in kernel source).
-            if let Some(handle) = nmp {
-                let nmp_ref: &NmpApp = unsafe { handle.0.as_ref() };
-
-                let mut profile = std::collections::HashMap::new();
-                profile.insert("name".to_string(), profile_name);
-
-                let relays: Vec<(String, String)> = policy
-                    .create_account
-                    .seed_relays
-                    .iter()
-                    .map(|r| (r.url.clone(), r.role.clone()))
-                    .collect();
-
-                // ADR-0059 §5: initial_follows is app policy (empty = no kind:3).
-                // NMP no longer hardcodes any default follow set (#1493); the
-                // caller is responsible for supplying the initial contacts list.
-                // An empty vec is the correct default: the account starts with
-                // no contacts and no cold-start kind:3 is published.
-                let initial_follows = policy.create_account.initial_follows.clone();
-
-                // Fire-and-forget via actor_sender (first actor_sender use in hl).
-                // Returns Result<(), CommandSendError>; we discard the error
-                // (D6 — timeout in clock_checks will surface the failure as state).
-                let _ = nmp_ref
-                    .actor_sender()
-                    .send(nmp_core::ActorCommand::CreateAccount {
-                        profile,
-                        relays,
-                        initial_follows,
-                        mls: false,
-                        make_active: true,
-                    });
-            }
-            // No nmp handle (test mode) → test injects IdentityChanged directly.
+            auth::run_effect_create_account(profile_name, nmp, policy);
         }
     }
 
@@ -807,7 +485,10 @@ mod tests {
         let mut state = make_state();
         let clock = ManualClock::default();
         step(&mut state, &clock, Cmd::Action(AppAction::RestoreSession));
-        assert!(matches!(state.session, SessionState::Restoring { .. }));
+        assert!(matches!(
+            state.session,
+            crate::kernel::app::SessionState::Restoring { .. }
+        ));
 
         let err = CapabilityResult::Keychain(KeychainResult::Error("keychain locked".into()));
         step(
@@ -817,7 +498,7 @@ mod tests {
         );
         assert!(matches!(
             state.session,
-            SessionState::RestoreFailed { ref error } if error.contains("keychain locked")
+            crate::kernel::app::SessionState::RestoreFailed { ref error } if error.contains("keychain locked")
         ));
     }
 
@@ -933,7 +614,7 @@ mod tests {
     // Gate 8: session restore timeout via clock.
     #[test]
     fn session_restore_timeout_via_clock() {
-        use crate::kernel::app::SESSION_RESTORE_TIMEOUT_SECS;
+        use crate::kernel::app::{SessionState, SESSION_RESTORE_TIMEOUT_SECS};
         let mut state = make_state();
         let clock = ManualClock::new(0);
 
@@ -1017,12 +698,16 @@ mod tests {
         for _ in 0..3 {
             step(&mut state, &clock, Cmd::Shutdown);
         }
-        assert!(matches!(state.session, SessionState::Unknown));
+        assert!(matches!(
+            state.session,
+            crate::kernel::app::SessionState::Unknown
+        ));
     }
 
     // Gate 11: logout cancels view-scoped effects via epoch bump.
     #[test]
     fn logout_cancels_view_scoped_effects() {
+        use crate::kernel::app::SessionState;
         let mut state = make_state();
         let clock = ManualClock::default();
         step(
@@ -1046,6 +731,8 @@ mod tests {
     //        the runner calls add_signer with make_active=true).
     #[test]
     fn nsec_sign_in_enqueues_local_signer_make_active_true() {
+        use crate::kernel::action::SignInMethod;
+        use crate::kernel::app::SessionState;
         let mut state = make_state();
         let clock = ManualClock::new(42);
         let effects = step(
@@ -1079,6 +766,7 @@ mod tests {
     // P2A-2: IdentityChanged(Some(pubkey)) routes to SessionState::Present.
     #[test]
     fn identity_changed_some_routes_to_present() {
+        use crate::kernel::app::SessionState;
         let mut state = make_state();
         let clock = ManualClock::default();
         // Start in SigningIn to simulate the normal flow.
@@ -1108,6 +796,7 @@ mod tests {
     // P2A-3: IdentityChanged(None) routes to SessionState::Absent.
     #[test]
     fn identity_changed_none_routes_to_absent() {
+        use crate::kernel::app::SessionState;
         let mut state = make_state();
         let clock = ManualClock::default();
         // Put the state in Present first.
@@ -1133,6 +822,7 @@ mod tests {
     // P2A-4: Logout emits RemoveActiveAccount + ClearSession and bumps epoch.
     #[test]
     fn logout_calls_remove_account_and_bumps_epoch() {
+        use crate::kernel::app::SessionState;
         let mut state = make_state();
         let clock = ManualClock::default();
         // Simulate a logged-in session.
@@ -1161,6 +851,8 @@ mod tests {
     //        call succeeds — errors arrive via KernelEvent::SignInFailed.
     #[test]
     fn sign_in_failure_surfaces_in_session_state_not_return() {
+        use crate::kernel::action::SignInMethod;
+        use crate::kernel::app::SessionState;
         let mut state = make_state();
         let clock = ManualClock::default();
         // Transition to SigningIn first.
@@ -1200,6 +892,7 @@ mod tests {
     //        fire-and-forget (#3).
     #[test]
     fn dispatch_signin_returns_unit() {
+        use crate::kernel::app::SessionState;
         let mut state = make_state();
         let clock = ManualClock::new(0);
         // This must compile and run — the return value of step() is Vec<Effect>,
@@ -1225,7 +918,8 @@ mod tests {
     //        never gets stuck in SigningIn forever (D6 — failure surfaces as state).
     #[test]
     fn sign_in_timeout_transitions_signing_in_to_failed() {
-        use crate::kernel::app::SIGN_IN_TIMEOUT_SECS;
+        use crate::kernel::action::SignInMethod;
+        use crate::kernel::app::{SessionState, SIGN_IN_TIMEOUT_SECS};
         let mut state = make_state();
         let clock = ManualClock::new(0);
 
@@ -1267,6 +961,8 @@ mod tests {
     // P2B-1: PairBunker transitions to SigningIn{Bunker} and emits AddBunkerSigner.
     #[test]
     fn pair_bunker_enqueues_bunker_uri_source() {
+        use crate::kernel::action::SignInMethod;
+        use crate::kernel::app::SessionState;
         let mut state = make_state();
         let clock = ManualClock::new(10);
         let effects = step(
@@ -1307,6 +1003,8 @@ mod tests {
     //        exposes it via AppRootSnapshot::nostrconnect_uri.
     #[test]
     fn nostrconnect_uri_ready_event_to_snapshot() {
+        use crate::kernel::action::SignInMethod;
+        use crate::kernel::app::SessionState;
         let mut state = make_state();
         let clock = ManualClock::default();
 
@@ -1372,6 +1070,8 @@ mod tests {
     //        (no nmp handle) success is injected as IdentityChanged.
     #[test]
     fn nip55_signin_invokes_external_hook() {
+        use crate::kernel::action::{SignInMethod, SignerKind};
+        use crate::kernel::app::SessionState;
         let mut state = make_state();
         let clock = ManualClock::new(5);
         let effects = step(&mut state, &clock, Cmd::Action(AppAction::SignInNip55));
@@ -1439,7 +1139,8 @@ mod tests {
     //        Reuses the 2A clock arm which covers ALL SigningIn variants.
     #[test]
     fn bunker_signing_in_times_out_to_failed() {
-        use crate::kernel::app::SIGN_IN_TIMEOUT_SECS;
+        use crate::kernel::action::SignInMethod;
+        use crate::kernel::app::{SessionState, SIGN_IN_TIMEOUT_SECS};
         let mut state = make_state();
         let clock = ManualClock::new(0);
 
@@ -1479,6 +1180,8 @@ mod tests {
     // P2B-6: IdentityChanged after Bunker/NostrConnect → signer_kind is Nip46.
     #[test]
     fn bunker_identity_changed_sets_nip46_signer_kind() {
+        use crate::kernel::action::SignerKind;
+        use crate::kernel::app::SessionState;
         let mut state = make_state();
         let clock = ManualClock::default();
 
@@ -1514,6 +1217,8 @@ mod tests {
     //        make_active=true is baked into the effect runner, not the reducer data.
     #[test]
     fn create_account_sends_effect_create_account() {
+        use crate::kernel::action::SignInMethod;
+        use crate::kernel::app::SessionState;
         let mut state = make_state();
         let clock = ManualClock::new(42);
         let effects = step(
@@ -1603,6 +1308,8 @@ mod tests {
     //        → SessionState::Present (same observer path as nsec sign-in).
     #[test]
     fn create_account_success_via_identity_changed() {
+        use crate::kernel::action::{SignInMethod, SignerKind};
+        use crate::kernel::app::SessionState;
         let mut state = make_state();
         let clock = ManualClock::new(0);
 
@@ -1680,6 +1387,7 @@ mod tests {
     // P2C-6: dispatch(CreateAccount) returns () — fire-and-forget contract.
     #[test]
     fn dispatch_create_account_returns_unit() {
+        use crate::kernel::app::SessionState;
         let mut state = make_state();
         let clock = ManualClock::new(0);
         let _effects: Vec<Effect> = step(
@@ -1698,7 +1406,8 @@ mod tests {
     //        SignInMethod::CreateAccount just as it does for Nsec.
     #[test]
     fn create_account_timeout_covered_by_existing_clock_check() {
-        use crate::kernel::app::SIGN_IN_TIMEOUT_SECS;
+        use crate::kernel::action::SignInMethod;
+        use crate::kernel::app::{SessionState, SIGN_IN_TIMEOUT_SECS};
         let mut state = make_state();
         let clock = ManualClock::new(0);
 
