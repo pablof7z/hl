@@ -90,6 +90,12 @@ pub struct RelayDiagnosticsViewSnapshot {
 /// Bounded by open views: the kernel only emits a snapshot for a view that
 /// has been registered via `open_view`. Closed views produce nothing
 /// (Non-Negotiable #7).
+// Phase 3D: ProfileSnapshot is large (13 String fields + Vec<CommunityRow>).
+// Boxing is not an option here because uniffi::Enum requires variants to be
+// uniffi-compatible (Box<T> is not). The size difference is accepted because
+// ViewSnapshot is passed by value rarely (once per snapshot push, not in hot
+// loops) and profiling has not flagged this path.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, uniffi::Enum)]
 pub enum ViewSnapshot {
     AppRoot(AppRootSnapshot),
@@ -108,6 +114,11 @@ pub enum ViewSnapshot {
     // ── Phase 3E additions (append-only) ─────────────────────────────────────
     /// Room explorer / discovery screen.
     RoomExplorer(KernelRoomExplorerSnapshot),
+
+    // ── Phase 3D additions (append-only) ─────────────────────────────────────
+    /// Single-profile view — identity + relationship + communities.
+    /// Articles/highlights deferred to Phase 4.
+    Profile(ProfileSnapshot),
 }
 
 // ── Phase 3B additions (append-only) ─────────────────────────────────────────
@@ -202,4 +213,60 @@ pub struct KernelRoomExplorerSnapshot {
     pub friends_shelf: Vec<RecommendationRow>,
     /// Rooms from authors you read. Empty in Phase 3 (requires Phase 4 feed data).
     pub authors_shelf: Vec<RecommendationRow>,
+}
+
+// ── Phase 3D additions (append-only) ─────────────────────────────────────────
+
+/// Snapshot for `ViewId::Profile{pubkey}` — the profile detail view.
+///
+/// Raw `ProfileCardModel` fields + relationship + communities (Phase 3D scope).
+/// Articles and highlights deferred to Phase 4.
+///
+/// Raw-data doctrine (D3 / ADR-0032): Swift formats ALL display strings from
+/// these raw fields. Kernel emits no bech32 (`npub`), no NIP-05 label strip
+/// (`"_@example.com"→"example.com"`), no handle fallback, no `"abc123…d789"`
+/// short-pubkey abbreviation — those are Swift-side presentation decisions.
+///
+/// `is_following` is derived from `AppState::is_following(pubkey)` (3C), which
+/// reads the active account's `follows` projection.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ProfileSnapshot {
+    /// Raw 64-char hex pubkey of the viewed profile.
+    pub pubkey: String,
+    /// `ProfileCardModel::display_name` — `Some` if the kind:0 has a
+    /// non-empty `"display_name"` field. Swift formats fallback order.
+    pub display_name: Option<String>,
+    /// `ProfileCardModel::name` — `Some` if the kind:0 has a non-empty
+    /// `"name"` (username) field.
+    pub name: Option<String>,
+    /// `ProfileCardModel::raw_display_name` — `Some` if the kind:0 has a
+    /// non-empty `"display_name"` without the camelCase normalisation.
+    pub raw_display_name: Option<String>,
+    /// `ProfileCardModel::picture_url` — `Some` if the kind:0 has a
+    /// non-empty `"picture"` URL.
+    pub picture_url: Option<String>,
+    /// `ProfileCardModel::banner` — `Some` if the kind:0 has a non-empty
+    /// `"banner"` URL.
+    pub banner: Option<String>,
+    /// `ProfileCardModel::website` — `Some` if the kind:0 has a non-empty
+    /// `"website"` field.
+    pub website: Option<String>,
+    /// `ProfileCardModel::nip05` — raw NIP-05 identifier string (e.g.
+    /// `"_@example.com"` or `"alice@example.com"`). Swift strips the leading
+    /// `"_@"` prefix for display (`"example.com"`). Empty string if absent.
+    pub nip05: String,
+    /// `ProfileCardModel::about` — raw bio / about text. Empty string if absent.
+    pub about: String,
+    /// `ProfileCardModel::lud16` — Lightning address, if present.
+    pub lud16: Option<String>,
+    /// `true` if the active account follows this pubkey (derived from the
+    /// `FollowListSnapshot` via `AppState::is_following`). Updated on every
+    /// `FollowListUpdated` event — the Profile view reflects follow state
+    /// changes without requiring a re-claim.
+    pub is_following: bool,
+    /// Communities (joined groups) that are known to the active account.
+    /// Phase 3D: surfaces the active account's joined-groups list as context.
+    /// Phase 4 will add per-pubkey group-membership interests.
+    /// Bounded by the `JoinedGroupsSnapshot` (never grows with the event store).
+    pub communities: Vec<CommunityRow>,
 }

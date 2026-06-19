@@ -4,6 +4,7 @@
 //! The state is split into sub-models by concern; all live as fields on
 //! `AppState` so the reducer can read and write the full picture atomically.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::kernel::action::{SignInMethod, SignerKind};
@@ -139,6 +140,27 @@ pub struct AppState {
     /// Room policy injected at construction time (D3: no wss-scheme literals
     /// in kernel logic). Sourced from `AppConfig`-adjacent bootstrap code.
     pub room_policy: crate::kernel::app::RoomPolicy,
+
+    // ── Phase 3D additions ────────────────────────────────────────────────────
+    /// The active account's own profile card, decoded from the `"profile"`
+    /// built-in typed sidecar. `None` until the first `"profile"` frame arrives
+    /// from the NMP update callback. No `ClaimProfile` call is needed for the
+    /// own account — the kernel projects it automatically.
+    ///
+    /// Used as the fallback source for a `ViewId::Profile{pubkey}` where
+    /// `pubkey` equals the active account (before a `claimed_profiles` entry
+    /// arrives, or if the view is the own-profile screen).
+    pub own_profile: Option<nmp_core::typed_projections::ProfileCardModel>,
+
+    /// Profiles for visited pubkeys, decoded from the `"claimed_profiles"`
+    /// typed sidecar. Keyed by raw hex pubkey (64 lowercase chars). Populated
+    /// by `nmp_app_claim_profile` / released by `nmp_app_release_profile`
+    /// (driven by `Effect::ClaimProfile` / `Effect::ReleaseProfile`).
+    ///
+    /// Bounded by the number of concurrently open `Profile` views — never
+    /// grows with the unbounded event store (Non-Negotiable #7). Cleared on
+    /// `IdentityChanged(None)` and `Logout`.
+    pub claimed_profiles: HashMap<String, nmp_core::typed_projections::ProfileCardModel>,
 }
 
 impl Default for AppState {
@@ -155,6 +177,8 @@ impl Default for AppState {
             follows: Vec::new(),
             discovered_groups: Vec::new(),
             room_policy: RoomPolicy::default(),
+            own_profile: None,
+            claimed_profiles: HashMap::new(),
         }
     }
 }
