@@ -115,12 +115,56 @@ impl Default for AppState {
     }
 }
 
+// ── Phase 2C additions ────────────────────────────────────────────────────────
+
+/// A single relay entry in the `CreateAccount` seed relay policy.
+///
+/// Values come from `AppConfig::relay_policy` (injected at construction time),
+/// never from hardcoded literals inside kernel logic (D3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SeedRelay {
+    /// WebSocket URL (e.g. a `wss`-scheme relay URL). Stored opaquely; the
+    /// kernel never constructs relay URLs itself (D3).
+    pub url: String,
+    /// NIP-65 / kind:10002 role string expected by `ActorCommand::CreateAccount`.
+    /// One of `"read"`, `"write"`, `"both"`, `"indexer"`, or a composite.
+    pub role: String,
+}
+
+/// Account-creation policy injected into `AppConfig` (D3: no hardcoded
+/// relay or follow literals in kernel logic).
+///
+/// `seed_relays` is passed verbatim to `ActorCommand::CreateAccount.relays`.
+/// `initial_follows` governs kind:3 publication per ADR-0059: an empty vec
+/// means no kind:3 is published (the account starts with no contacts).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct CreateAccountPolicy {
+    /// Relays to register and publish to a fresh account's kind:10002.
+    /// Sourced from `relay_policy.json` seed_defaults at app construction.
+    pub seed_relays: Vec<SeedRelay>,
+    /// Hex pubkeys the new account auto-follows (kind:3 prepopulate).
+    /// ADR-0059 §5: empty → no kind:3 published.
+    pub initial_follows: Vec<String>,
+}
+
 /// Configuration passed to `HighlighterApp::new`.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct AppConfig {
     /// Application-support / documents directory for this app instance.
     /// The kernel will create `<data_dir>/nmp-lane/` for its own storage.
     pub data_dir: String,
+}
+
+/// Runtime policy injected into the kernel that cannot cross uniffi (not a
+/// `uniffi::Record`) because it holds Rust-only types. Constructed by the
+/// `HighlighterApp` bootstrap from `relay_policy.json` seed defaults.
+///
+/// Kept separate from `AppConfig` (which is a uniffi Record) so native callers
+/// don't need to supply or understand relay/follow policy — it's Rust-owned.
+#[derive(Debug, Clone, Default)]
+pub struct KernelPolicy {
+    /// Policy for `AppAction::CreateAccount`.
+    pub create_account: CreateAccountPolicy,
 }
 
 /// UNIX seconds after dispatch of `RestoreSession` before the kernel

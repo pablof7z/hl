@@ -55,4 +55,18 @@ pub enum Effect {
     /// Fire-and-forget: the host capability bridge exchanges with the signer
     /// app async; success arrives as `KernelEvent::IdentityChanged(Some)`.
     StartNip55SignIn,
+
+    // ── Phase 2C additions (append-only) ─────────────────────────────────────
+    /// Call `nmp.actor_sender().send(ActorCommand::CreateAccount{...})`.
+    ///
+    /// Profile metadata, relays, and initial_follows come from the kernel's
+    /// injected `KernelPolicy` — never from hardcoded literals (D3). Bootstrap
+    /// publish semantics follow ADR-0059: kind:0 and kind:10002 are published;
+    /// kind:3 is skipped when `initial_follows` is empty. Fire-and-forget:
+    /// success arrives via `KernelEvent::IdentityChanged(Some(pubkey))`.
+    /// The 2A clock-driven timeout (SIGN_IN_TIMEOUT_SECS) covers SigningIn.
+    CreateAccount {
+        /// Display name for the fresh account's kind:0 profile.
+        profile_name: String,
+    },
 }
