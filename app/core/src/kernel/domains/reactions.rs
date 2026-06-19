@@ -2,39 +2,46 @@
 //!
 //! ## Responsibilities
 //!
-//! * **READ** — register `ReactionProjection` (nmp-nip25) as a `KernelEventObserver`
-//!   and wrap its `snapshot_for(target_event_id)` accessor into a
-//!   `register_typed_snapshot_projection` closure under the hl-owned key
-//!   `"hl.reactions"`. This keeps Family-B projections on the same single
-//!   reducer pipeline as Family-A (no second read channel, no actor-thread
-//!   blocking). The JSON sidecar (`serde_json` wire) arrives via the NMP update
-//!   callback as `KernelEvent::NmpSnapshotFrame` → `projections::dispatch_typed_frame`
-//!   → `apply_reaction_state` (this module). Decoded into `AppState::reaction_state`
-//!   keyed by `target_event_id`.
+//! * **READ** — register a `ReactionObserver` wrapper around `ReactionProjection`
+//!   (nmp-nip25) as a `KernelEventObserver`. On each kind:7/kind:5 event the
+//!   observer (a) updates the underlying `ReactionProjection` by delegating to
+//!   its own `on_kernel_event` impl, then (b) extracts the `["e", target_event_id]`
+//!   tag and calls `projection.snapshot_for(target_event_id)` to produce a
+//!   `ReactionSnapshot`, and (c) sends `KernelEvent::ReactionStateUpdated` back
+//!   into the actor channel. The actor's `reduce_event` arm stores the update in
+//!   `AppState::reaction_state` keyed by `target_event_id`.
+//!
+//!   This is the correct Family-B integration pattern — the observer→actor-channel
+//!   path. The typed-snapshot-projection path (Family-A, FlatBuffers schema_id)
+//!   is NOT used here because `ReactionProjection` has no FlatBuffers encoding
+//!   and `snapshot_for` is per-target with no public entry iterator.
 //!
 //! * **WRITE** — `AppAction::React{target_event_id, reaction, target_author_pubkey?}`
 //!   → reducer emits `Effect::DispatchReactAction{namespace:"nmp.nip25.react", json}`
-//!   (serde payload) → effect runner calls `nmp_app_dispatch_action` fire-and-forget.
+//!   (serde_json payload) → effect runner calls `nmp_app_dispatch_action` fire-and-forget.
 //!   `AppAction::Unreact{reaction_event_id}` → `"nmp.nip25.unreact"`.
 //!
 //!   The kernel is the **sole kind:7 writer** for ported screens (no live-lane
 //!   double-publish for reactions on articles/highlights/artifacts).
 //!
-//! ## Family-B wrap pattern (EXACTLY like `follows.rs:216`)
+//! ## Wire registration
 //!
-//! `ReactionProjection` has no FlatBuffers schema_id (confirmed: zero hits for
-//! `SCHEMA_ID` / `register_typed_snapshot_projection` in nmp-nip25 at b4404159).
-//! hl wraps it by registering a closure that calls `projection.snapshot_for(id)`
-//! and serialises the result to JSON inside a `TypedProjectionData` envelope with
-//! an hl-owned key + schema_id `"hl.reactions"`. `dispatch_typed_frame` decodes
-//! the JSON envelope and calls `apply_reaction_state`.
+//! `register_reaction_projection(nmp_ref, viewer_pubkey, tx)` is called at boot
+//! (after `nmp_app_start`) from `start_nmp_app` and re-called on every
+//! `Effect::WireReactionProjection` (emitted on `IdentityChanged(Some)`) so the
+//! viewer pubkey tracks the active account.
 //!
 //! ## Threading
 //!
-//! `apply_reaction_state` runs on the **actor thread** (inside
-//! `projections::dispatch_typed_frame`, called from `reduce_event`). It is
-//! synchronous and non-blocking (serde_json decode only, no I/O). D6: decode
-//! errors leave `AppState::reaction_state` unchanged.
+//! `ReactionObserver::on_kernel_event` is called from the NMP event-dispatch
+//! thread (same thread as `FollowListProjection::on_kernel_event`). It:
+//! 1. Acquires a Mutex lock on the `ReactionProjection` internal entries (inside
+//!    the nmp-nip25 projection). Lock is brief (ingest + snapshot of one entry).
+//! 2. Sends `Cmd::Event(KernelEvent::ReactionStateUpdated)` into the
+//!    `UnboundedSender` — a non-blocking channel send. D8 compliant: no blocking.
+//!
+//! `AppState::reaction_state` is only mutated by the actor thread (inside
+//!  `reduce_event` — Non-Negotiable #2).
 //!
 //! ## D-rules satisfied
 //!
@@ -42,8 +49,8 @@
 //!   No `"X likes"` label, no formatted count string, no optimistic delta.
 //!   Swift owns all optimistic UI state (count increment before the projection
 //!   fires, toggle animation, accessibility label).
-//! * D6 — malformed serde JSON → no-op; unknown fields silently ignored
-//!   (`#[serde(deny_unknown_fields)]` NOT set — forward-compat by default).
+//! * D6 — missing/malformed tags in kind:7 events → silent no-op (no tag with
+//!   key `"e"` means no `target_event_id` to snapshot, so no event is sent).
 //! * Non-Negotiable #3 — `React`/`Unreact` reduce to `Vec<Effect>` (never
 //!   `Result`); fire-and-forget.
 
@@ -53,23 +60,19 @@ use std::sync::Arc;
 
 use nmp_core::KernelEventObserver;
 use nmp_ffi::NmpApp;
-use nmp_nip25::ReactionProjection;
-use serde::{Deserialize, Serialize};
+use nmp_nip25::{ReactionProjection, KIND_REACTION, KIND_REACTION_DELETE};
+use tokio::sync::mpsc;
 
+use crate::kernel::action::KernelEvent;
+use crate::kernel::actor::Cmd;
 use crate::kernel::app::AppState;
-use crate::kernel::snapshot::ReactionRow;
-
-// Re-export the hl-owned schema_id so `projections.rs` can match it without
-// duplicating the string literal. This schema_id is purely hl-owned — it does
-// not correspond to any nmp-nip25 constant (Family-B has no FlatBuffers schema).
-pub(crate) const REACTIONS_SCHEMA_ID: &str = "hl.reactions";
 
 // ─── nmp-ffi C ABI declarations ─────────────────────────────────────────────
 
 // `nmp_app_dispatch_action` is #[no_mangle] extern "C" in nmp-ffi/src/action.rs.
 // Declared here so the reactions effect runner can call it directly without
 // importing the full nmp-ffi action surface.
-#[allow(improper_ctypes)]
+#[allow(improper_ctypes)] // NmpApp is opaque; the pointer is safe — nmp-ffi uses the same ABI.
 extern "C" {
     fn nmp_app_dispatch_action(
         app: *mut NmpApp,
@@ -80,52 +83,81 @@ extern "C" {
 
 use nmp_ffi::nmp_free_string;
 
-// ─── Wire type for the hl.reactions serde envelope ──────────────────────────
+// ─── READ side: KernelEventObserver wrapper ──────────────────────────────────
 
-/// JSON wire shape for the `"hl.reactions"` typed-snapshot sidecar payload.
+/// Observer wrapper that ingests NMP `KernelEvent`s (raw Nostr events) into
+/// the `ReactionProjection` and then sends `KernelEvent::ReactionStateUpdated`
+/// back into the actor channel for each affected `target_event_id`.
 ///
-/// Written by `register_reaction_projection` (closure serialises this via
-/// `serde_json`), read by `apply_reaction_state` (also via `serde_json`).
-/// Intentionally minimal — raw count + viewer-reacted bool only (D1).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct ReactionWire {
-    /// Target event id (raw 64-char hex).
-    target_event_id: String,
-    /// Number of `+` (or default) reactions for this target event.
-    count: u32,
-    /// `true` if the current viewer has reacted.
-    viewer_reacted: bool,
+/// This is the correct Family-B integration pattern: the observer receives
+/// raw kind:7/kind:5 events, delegates ingest to the underlying
+/// `ReactionProjection`, then immediately snapshots the affected target and
+/// sends the result to the actor channel. No typed-snapshot registration is
+/// used because `snapshot_for` is per-target and `ReactionProjection` has no
+/// public entry iterator at `b4404159`.
+struct ReactionObserver {
+    projection: Arc<ReactionProjection>,
+    tx: mpsc::UnboundedSender<Cmd>,
 }
 
-// ─── READ side: apply projection frame ──────────────────────────────────────
-
-/// Apply a decoded `"hl.reactions"` serde payload to `state`.
-///
-/// Called from `projections::dispatch_typed_frame` when `schema_id ==
-/// "hl.reactions"`. Upserts `AppState::reaction_state` for the given
-/// `target_event_id`. D6: any serde decode error leaves `reaction_state`
-/// unchanged (silent no-op — the prior value, if any, is retained).
-///
-/// Must be non-blocking — runs on the actor thread (serde_json decode only).
-pub(crate) fn apply_reaction_state(state: &mut AppState, payload: &[u8]) {
-    let wire: ReactionWire = match serde_json::from_slice(payload) {
-        Ok(w) => w,
-        Err(e) => {
-            tracing::trace!(
-                error = %e,
-                "reactions::apply_reaction_state: serde decode error — reaction_state unchanged (D6)"
-            );
+impl KernelEventObserver for ReactionObserver {
+    fn on_kernel_event(&self, event: &nmp_core::substrate::KernelEvent) {
+        // Only process reaction kinds (7 = react, 5 = kind:5 delete).
+        if event.kind != KIND_REACTION && event.kind != KIND_REACTION_DELETE {
             return;
         }
-    };
-    state.reaction_state.insert(
-        wire.target_event_id.clone(),
-        ReactionRow {
-            target_event_id: wire.target_event_id,
-            count: wire.count,
-            viewer_reacted: wire.viewer_reacted,
-        },
-    );
+
+        // Delegate to the ReactionProjection to update its internal state.
+        // This call acquires and releases the projection's internal Mutex.
+        self.projection.on_kernel_event(event);
+
+        // Extract the target_event_id from the ["e", _] tag.
+        // D6: a kind:7 without an "e" tag is malformed — silent no-op.
+        let target_event_id = match first_tag_value(&event.tags, "e") {
+            Some(id) => id,
+            None => return,
+        };
+
+        // Snapshot the updated state for this target.
+        let snapshot = self.projection.snapshot_for(&target_event_id);
+
+        // Compute derived fields. D1: raw count + viewer_reacted bool only.
+        // `snapshot.reactions` is the authoritative list from the projection.
+        let count = snapshot.reactions.len() as u32;
+        let viewer_reacted = snapshot.viewer_reaction.is_some();
+
+        // Send the updated state to the actor channel. Fire-and-forget (D6):
+        // if the actor has shut down the send error is silently dropped.
+        let _ = self.tx.send(Cmd::Event(KernelEvent::ReactionStateUpdated {
+            target_event_id,
+            count,
+            viewer_reacted,
+        }));
+    }
+}
+
+/// Extract the first `value` from tags where the first element equals `name`.
+/// Returns `None` if no matching tag exists or the value is empty.
+fn first_tag_value(tags: &[Vec<String>], name: &str) -> Option<String> {
+    tags.iter().find_map(|tag| {
+        if tag.first().is_some_and(|n| n == name) {
+            tag.get(1).filter(|v| !v.is_empty()).cloned()
+        } else {
+            None
+        }
+    })
+}
+
+// ─── State clear on identity loss ────────────────────────────────────────────
+
+/// Clear `reaction_state` from `AppState` when the active account is lost
+/// (Logout or IdentityChanged(None)).
+///
+/// Called from `auth::reduce_action_logout` and the `None` arm of
+/// `auth::reduce_event_identity_changed` so stale reaction counts from a prior
+/// account never surface under a new identity.
+pub(crate) fn clear_on_identity_lost(state: &mut AppState) {
+    state.reaction_state.clear();
 }
 
 // ─── WRITE side: reduce_action helpers ──────────────────────────────────────
@@ -138,7 +170,7 @@ pub(crate) fn apply_reaction_state(state: &mut AppState, payload: &[u8]) {
 /// The kernel does NOT speculatively update `AppState::reaction_state`
 /// (optimistic UI lives in Swift — D1). The authoritative count arrives
 /// back via `KernelEvent::ReactionStateUpdated` once the
-/// `ReactionProjection` tick fires (D6).
+/// `ReactionObserver` fires (D6).
 pub(crate) fn reduce_action_react(
     target_event_id: String,
     reaction: String,
@@ -181,7 +213,8 @@ pub(crate) fn reduce_action_unreact(
     reaction_event_id: String,
 ) -> Vec<crate::kernel::effect::Effect> {
     // Wire shape matches `nmp_nip25::UnreactAction { reaction_event_id, reason }`.
-    // `reason` defaults to empty string per nmp action contract.
+    // `reason` is `pub reason: String` with `#[serde(default)]` — empty string
+    // is the correct zero value (not None; the field is not Option<String>).
     let payload = serde_json::json!({
         "reaction_event_id": reaction_event_id,
         "reason": "",
@@ -199,18 +232,6 @@ pub(crate) fn reduce_action_unreact(
     }]
 }
 
-// ─── State clear on identity loss ────────────────────────────────────────────
-
-/// Clear `reaction_state` from `AppState` when the active account is lost
-/// (Logout or IdentityChanged(None)).
-///
-/// Called from `auth::reduce_action_logout` and the `None` arm of
-/// `auth::reduce_event_identity_changed` so stale reaction counts from a prior
-/// account never surface under a new identity.
-pub(crate) fn clear_on_identity_lost(state: &mut AppState) {
-    state.reaction_state.clear();
-}
-
 // ─── Effect runner ───────────────────────────────────────────────────────────
 
 /// Execute `Effect::DispatchReactAction` — calls `nmp_app_dispatch_action`
@@ -219,7 +240,8 @@ pub(crate) fn clear_on_identity_lost(state: &mut AppState) {
 ///
 /// Fire-and-forget (D6, Non-Negotiable #3): the returned correlation_id JSON
 /// string is freed and discarded. The authoritative reaction state arrives back
-/// via `KernelEvent::ReactionStateUpdated` on the next `ReactionProjection` tick.
+/// via `KernelEvent::ReactionStateUpdated` from the `ReactionObserver` on the
+/// next kind:7/kind:5 event.
 ///
 /// No-op if `nmp` is `None` (test mode — tests inject `ReactionStateUpdated`
 /// directly to drive the reducer).
@@ -242,11 +264,13 @@ pub(crate) fn run_effect_dispatch_react_action(
     // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
     // NmpHandle for the full actor lifetime. ns_c and json_c are valid
     // CStrings alive for the duration of this call. The returned pointer is
-    // freed below via nmp_free_string (same Rust allocator).
+    // freed below via nmp_free_string (same Rust allocator as the allocation).
     let result_ptr =
         unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
 
     // Free the returned correlation-id JSON string (same Rust allocator path).
+    // A null pointer is a no-op (nmp-ffi D6 null-safety contract), but guard
+    // explicitly to document the non-null path.
     if !result_ptr.is_null() {
         nmp_free_string(result_ptr);
     }
@@ -254,105 +278,47 @@ pub(crate) fn run_effect_dispatch_react_action(
 
 // ─── Projection registration ─────────────────────────────────────────────────
 
-/// Wire the `ReactionProjection` event observer + wrap its `snapshot_for`
-/// into a `register_typed_snapshot_projection` closure under hl key
-/// `"hl.reactions"` (serde JSON wire, schema_id `"hl.reactions"`).
+/// Wire the `ReactionObserver` (wrapping `ReactionProjection`) as a
+/// `KernelEventObserver` against `nmp_ref`.
 ///
-/// This is the Family-B wrap pattern — identical in structure to
-/// `follows.rs::register_follow_list_projection` (`:196`). The difference is
-/// that Family-B projections have no FlatBuffers schema, so the closure
-/// serialises the snapshot to JSON instead of FlatBuffers bytes.
+/// On each ingested kind:7 or kind:5 event the observer:
+/// 1. Updates the underlying `ReactionProjection` state.
+/// 2. Extracts the `["e", target_event_id]` tag.
+/// 3. Calls `projection.snapshot_for(target_event_id)` to get the fresh count.
+/// 4. Sends `KernelEvent::ReactionStateUpdated` into the actor channel `tx`.
+///
+/// `viewer_pubkey` is the active account's hex pubkey (or `None` at boot
+/// before the first `IdentityChanged(Some)` fires). Pass the current active
+/// pubkey from `nmp_ref.active_account_handle()` so `viewer_reacted` reflects
+/// the signed-in user.
 ///
 /// ## When to call
 ///
-/// Call at boot (after `nmp_app_start`) and on every `IdentityChanged(Some)`
-/// via `Effect::WireReactionProjection` (not yet wired — see Phase 4B Note)
-/// so `viewer_pubkey` tracks the active account. Passing the live
-/// `active_account_slot` Arc (from `nmp_ref.active_account_handle()`) is the
-/// cleanest option; alternatively re-register on every `IdentityChanged`.
+/// Called once at boot from `start_nmp_app` (after `nmp_app_start`). Also
+/// re-called via `Effect::WireReactionProjection` on every
+/// `IdentityChanged(Some)` so the `viewer_pubkey` tracks the active account.
+/// A fresh `ReactionProjection` is created on each call; prior observations
+/// are discarded (consistent with the follows/joined-groups pattern).
 ///
-/// ## Note: per-target vs. global snapshot
-///
-/// Unlike the follow-list projection (which has a single global snapshot),
-/// `ReactionProjection::snapshot_for(target_event_id)` is per-target. The
-/// closure captures a reference to the projection Arc and is called by NMP on
-/// each tick. Because NMP only fires the closure once per tick and the closure
-/// itself calls `snapshot_for` for every currently tracked target, we emit one
-/// JSON object per target in the `TypedProjectionData` payload vector.
-///
-/// For Phase 4B the registration is left as a no-op-safe stub (the projection
-/// must be registered at the point where the viewer pubkey is known, i.e. after
-/// `IdentityChanged(Some)` has fired). This function is called from the
-/// `Effect::WireReactionProjection` runner once that effect is introduced.
-///
-/// D6: a null or poisoned observer slot degrades to a silent return.
-// Staged for Phase 4B: called once `Effect::WireReactionProjection` is
-// introduced (after IdentityChanged(Some) has fired with the viewer pubkey).
-// `dead_code` is expected until the effect arm wires this in a follow-on slice.
-#[allow(dead_code)]
-pub(crate) fn register_reaction_projection(nmp_ref: &NmpApp, viewer_pubkey: Option<String>) {
+/// D6: if `register_event_observer` returns id `0` (slot full), the observer
+/// is silently dropped and reaction state will not update (logged as a warning).
+pub(crate) fn register_reaction_projection(
+    nmp_ref: &NmpApp,
+    viewer_pubkey: Option<String>,
+    tx: mpsc::UnboundedSender<Cmd>,
+) {
     let projection = Arc::new(ReactionProjection::new(viewer_pubkey));
+    let observer = Arc::new(ReactionObserver { projection, tx });
 
-    let observer_id =
-        nmp_ref.register_event_observer(Arc::clone(&projection) as Arc<dyn KernelEventObserver>);
+    let observer_id = nmp_ref.register_event_observer(observer as Arc<dyn KernelEventObserver>);
     if observer_id.0 == 0 {
+        // Observer slot is full or poisoned — reaction counts will not update.
         tracing::warn!(
             "reactions::register_reaction_projection: event-observer registration failed (D6)"
         );
-        return;
     }
-
-    // Wrap snapshot_for into register_typed_snapshot_projection.
-    // The closure is called by NMP on each projection tick. It snapshots every
-    // entry currently tracked by the projection and emits one sidecar per
-    // target event id.
-    //
-    // Phase 4B simplified: emit a single sidecar per call using the projection's
-    // internal state. For per-target fan-out the caller must query by target id.
-    // The sidecar carries a JSON array; `apply_reaction_state` handles one entry.
-    //
-    // Since we must provide a single `TypedProjectionData` per call but the
-    // projection is keyed per target, we emit a sentinel "global" snapshot with
-    // an empty target_event_id and zero counts as the registration payload.
-    // Per-target snapshots are fetched on-demand by the write-side caller.
-    //
-    // In practice, `register_typed_snapshot_projection` fires once per NMP tick
-    // and the host emits the sidecar bytes into the update callback. For Phase 4B
-    // we keep the sidecar minimal: the typed projection fires only when the
-    // viewer's own reactions change (via the KernelEventObserver ingest path).
-    let typed_proj = Arc::clone(&projection);
-    nmp_ref.register_typed_snapshot_projection(REACTIONS_SCHEMA_ID, move || {
-        // Collect all currently tracked target_event_ids from the projection.
-        // `ReactionProjection` does not expose an iterator directly — the
-        // entries are in a private BoundedMessageMap. We therefore snapshot
-        // the full in-memory state by iterating over the entries map indirectly:
-        // nmp-nip25's projection keeps `entries: Mutex<BoundedMessageMap<String, ReactionEntry>>`
-        // where the key is `reaction_event_id`. We can reconstruct per-target
-        // snapshots by locking entries and collecting unique target_event_ids.
-        //
-        // Because we cannot access private fields directly, we use the public
-        // `snapshot_for` API. To enumerate targets we maintain a separate
-        // projection-level summary: serialise the per-target snapshots for all
-        // known target ids. Since the BoundedMessageMap is private, we emit a
-        // single zero-payload sentinel here to keep the registration alive;
-        // per-target delivery is driven by the `apply_reaction_state` path once
-        // the iOS write layer calls `React`/`Unreact` and the projection ingests
-        // the resulting kind:7 / kind:5 via the KernelEventObserver.
-        //
-        // This is the correct Phase 4B approach: the full fan-out to per-target
-        // sidecars would require either a snapshot-all accessor on
-        // ReactionProjection (not yet exposed at b4404159) or maintaining a
-        // separate hl-side target id registry. We do not add that complexity;
-        // per-target counts are delivered via `KernelEvent::ReactionStateUpdated`
-        // when the iOS layer explicitly requests a snapshot for a given target id
-        // (Phase 4 §1.5 spec: "wrap its snapshot into register_typed_snapshot_projection
-        // under hl key"). The typed projection registration is the wire channel;
-        // the per-target data arrives when the caller drives it.
-        //
-        // Emit the sentinel to satisfy the registration contract.
-        let _ = &*typed_proj; // keep Arc alive
-        None // No sidecar to emit until a target is known.
-    });
+    // No typed-snapshot registration needed: the ReactionObserver posts
+    // KernelEvent::ReactionStateUpdated directly into the actor channel.
 }
 
 // ─── Unit tests ──────────────────────────────────────────────────────────────
@@ -364,6 +330,7 @@ mod tests {
     use crate::kernel::actor::{reduce, Cmd};
     use crate::kernel::clock::{Clock, ManualClock};
     use crate::kernel::effect::Effect;
+    use crate::kernel::snapshot::ReactionRow;
 
     fn make_state() -> AppState {
         AppState::default()
@@ -453,14 +420,13 @@ mod tests {
                     "+",
                     "reaction must be in payload"
                 );
-                // target_author_pubkey must be absent when None.
+                // target_author_pubkey must be absent (omitted, not null) when None.
                 assert!(
-                    parsed.get("target_author_pubkey").is_none()
-                        || parsed["target_author_pubkey"].is_null(),
-                    "target_author_pubkey must be absent when not supplied"
+                    parsed.get("target_author_pubkey").is_none(),
+                    "target_author_pubkey must be absent (not null) when not supplied"
                 );
             }
-            other => panic!("expected DispatchReactAction, got {:?}", other),
+            _ => panic!("expected DispatchReactAction"),
         }
     }
 
@@ -494,7 +460,7 @@ mod tests {
                     "target_author_pubkey must appear in payload when supplied"
                 );
             }
-            other => panic!("expected DispatchReactAction, got {:?}", other),
+            _ => panic!("expected DispatchReactAction"),
         }
     }
 
@@ -531,8 +497,14 @@ mod tests {
                     reaction_id,
                     "reaction_event_id must be in payload"
                 );
+                // reason must be present as an empty string (UnreactAction.reason: String).
+                assert_eq!(
+                    parsed["reason"].as_str().unwrap(),
+                    "",
+                    "reason must be present as empty string"
+                );
             }
-            other => panic!("expected DispatchReactAction, got {:?}", other),
+            _ => panic!("expected DispatchReactAction"),
         }
     }
 
@@ -579,33 +551,88 @@ mod tests {
         );
     }
 
-    // 4B-T6: malformed_reaction_serde_payload_is_noop
+    // 4B-T6: reaction_observer_on_kernel_event_sends_state_updated
     //
-    // apply_reaction_state called with garbage bytes must not panic or corrupt state.
-    // D6: decode errors leave reaction_state unchanged.
+    // ReactionObserver::on_kernel_event must send KernelEvent::ReactionStateUpdated
+    // into the channel when a kind:7 event with an "e" tag is ingested.
+    // This validates the observer→channel path that backs real NMP events.
     #[test]
-    fn malformed_reaction_serde_payload_is_noop() {
-        let mut state = make_state();
-        let existing = "existing_target_000000000000000000000000000000000000000000000000";
-        state.reaction_state.insert(
-            existing.to_string(),
-            ReactionRow {
-                target_event_id: existing.to_string(),
-                count: 5,
-                viewer_reacted: false,
-            },
-        );
+    fn reaction_observer_on_kernel_event_sends_state_updated() {
+        let (tx, mut rx) = mpsc::unbounded_channel::<Cmd>();
+        let viewer = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let target = "bbbb000000000000000000000000000000000000000000000000000000000002";
+        let reaction_id = "cccc000000000000000000000000000000000000000000000000000000000003";
 
-        apply_reaction_state(&mut state, b"NOT VALID JSON !!!");
+        let projection = Arc::new(ReactionProjection::new(Some(viewer.to_string())));
+        let observer = ReactionObserver { projection, tx };
 
-        assert_eq!(
-            state.reaction_state.get(existing).map(|r| r.count),
-            Some(5),
-            "malformed payload must leave reaction_state unchanged (D6)"
+        // Construct a fake kind:7 event with the required tags.
+        let event = nmp_core::substrate::KernelEvent {
+            id: reaction_id.to_string(),
+            author: viewer.to_string(),
+            kind: KIND_REACTION,
+            created_at: 1_000_000,
+            tags: vec![
+                vec!["e".to_string(), target.to_string()],
+                vec!["p".to_string(), "author_pubkey".to_string()],
+            ],
+            content: "+".to_string(),
+            relay_provenance: vec![],
+        };
+
+        observer.on_kernel_event(&event);
+
+        // The observer must have sent a ReactionStateUpdated command.
+        let cmd = rx.try_recv().expect("ReactionStateUpdated must be sent");
+        match cmd {
+            Cmd::Event(KernelEvent::ReactionStateUpdated {
+                target_event_id,
+                count,
+                viewer_reacted,
+            }) => {
+                assert_eq!(
+                    target_event_id, target,
+                    "target_event_id must match the e tag"
+                );
+                assert_eq!(count, 1, "count must be 1 after one reaction ingested");
+                assert!(
+                    viewer_reacted,
+                    "viewer_reacted must be true when viewer is the reactor"
+                );
+            }
+            _ => panic!("expected ReactionStateUpdated from channel"),
+        }
+    }
+
+    // 4B-T7: reaction_observer_noop_on_missing_e_tag (D6)
+    //
+    // A kind:7 event without an "e" tag is malformed per NIP-25. The observer
+    // must not panic or send a command — silent no-op (D6).
+    #[test]
+    fn reaction_observer_noop_on_missing_e_tag() {
+        let (tx, mut rx) = mpsc::unbounded_channel::<Cmd>();
+        let projection = Arc::new(ReactionProjection::new(None));
+        let observer = ReactionObserver { projection, tx };
+
+        let event = nmp_core::substrate::KernelEvent {
+            id: "aaaa000000000000000000000000000000000000000000000000000000000001".to_string(),
+            author: "bbbb000000000000000000000000000000000000000000000000000000000002".to_string(),
+            kind: KIND_REACTION,
+            created_at: 1_000_000,
+            tags: vec![], // No "e" tag — malformed
+            content: "+".to_string(),
+            relay_provenance: vec![],
+        };
+
+        observer.on_kernel_event(&event);
+
+        assert!(
+            rx.try_recv().is_err(),
+            "malformed kind:7 (no e tag) must not send any command (D6)"
         );
     }
 
-    // 4B-T7: reaction_state_cleared_on_logout
+    // 4B-T8: reaction_state_cleared_on_logout
     //
     // AppAction::Logout must wipe AppState::reaction_state so stale reaction
     // counts from the previous account don't survive into the next session.
@@ -640,10 +667,10 @@ mod tests {
         );
     }
 
-    // 4B-T8: reaction_state_cleared_on_identity_changed_none
+    // 4B-T9: reaction_state_cleared_on_identity_changed_none
     //
     // IdentityChanged(None) must wipe reaction_state so stale counts don't
-    // outlive the removed account (symmetric with T7 via the event path).
+    // outlive the removed account (symmetric with T8 via the event path).
     #[test]
     fn reaction_state_cleared_on_identity_changed_none() {
         let mut state = make_state();
@@ -678,7 +705,7 @@ mod tests {
         );
     }
 
-    // 4B-T9: dispatch_react_returns_unit (fire-and-forget, Non-Negotiable #3)
+    // 4B-T10: dispatch_react_returns_unit (fire-and-forget, Non-Negotiable #3)
     //
     // The return type Vec<Effect> models the fire-and-forget () contract.
     // No Result, no panic.
@@ -699,28 +726,30 @@ mod tests {
         // No panic, no Result — fire-and-forget contract satisfied.
     }
 
-    // 4B-T10: apply_reaction_state_raw_no_labels
+    // 4B-T11: reaction_state_raw_no_labels
     //
-    // `ReactionRow` must carry only raw count + viewer_reacted (D1). The test
-    // verifies that the stored row contains no formatted strings like "X likes".
+    // ReactionRow must carry only raw count + viewer_reacted (D1). The stored
+    // row must not contain formatted strings like "X likes".
     #[test]
-    fn apply_reaction_state_raw_no_labels() {
+    fn reaction_state_raw_no_labels() {
         let mut state = make_state();
+        let clock = ManualClock::default();
         let target = "1234000000000000000000000000000000000000000000000000000000000001";
-        let payload = serde_json::to_vec(&serde_json::json!({
-            "target_event_id": target,
-            "count": 99,
-            "viewer_reacted": false,
-        }))
-        .unwrap();
 
-        apply_reaction_state(&mut state, &payload);
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::ReactionStateUpdated {
+                target_event_id: target.to_string(),
+                count: 99,
+                viewer_reacted: false,
+            }),
+        );
 
         let row = state.reaction_state.get(target).unwrap();
-        // D1: no label strings. The row type only has u32 count and bool viewer_reacted.
         assert_eq!(row.count, 99);
         assert!(!row.viewer_reacted);
-        // Verify no "likes" substring in the debug representation.
+        // D1: no label strings in the debug representation.
         let debug_str = format!("{:?}", row);
         assert!(
             !debug_str.contains("likes"),

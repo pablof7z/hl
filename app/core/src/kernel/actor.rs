@@ -668,7 +668,7 @@ pub(crate) async fn run_effect(
             // actor channel.
             if let Some(handle) = nmp {
                 let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
-                reactions::register_reaction_projection(nmp_ref, viewer_pubkey);
+                reactions::register_reaction_projection(nmp_ref, viewer_pubkey, tx.clone());
             }
         }
     }
@@ -878,6 +878,19 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
         communities::register_joined_groups_projection(nmp_ref, boot_pubkey);
     }
 
+    // Phase 4B: register ReactionObserver at boot.
+    // Mirrors the JoinedGroupsProjection boot pattern above. The viewer_pubkey
+    // is None at boot if no account is persisted (the first IdentityChanged(Some)
+    // will fire Effect::WireReactionProjection with the real pubkey).
+    {
+        let boot_pubkey: Option<String> = nmp_ref
+            .active_account_handle()
+            .lock()
+            .ok()
+            .and_then(|g| g.clone());
+        reactions::register_reaction_projection(nmp_ref, boot_pubkey, tx.clone());
+    }
+
     // Wire identity-change observer → KernelEvent::IdentityChanged.
     // Pattern from nmp_runtime.rs:758-778.
     let tx_id = tx.clone();
@@ -907,19 +920,6 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
     // observation is harmless — both projections read the same events. The write
     // actions are NOT re-registered here (nmp-defaults already wired them).
     bookmarks::register_bookmark_list_projection(nmp_ref, nmp_ref.active_account_handle());
-
-    // Phase 4B: register ReactionObserver at boot.
-    // Mirrors the JoinedGroupsProjection boot pattern above. The viewer_pubkey
-    // is None at boot if no account is persisted (the first IdentityChanged(Some)
-    // will fire Effect::WireReactionProjection with the real pubkey).
-    {
-        let boot_pubkey: Option<String> = nmp_ref
-            .active_account_handle()
-            .lock()
-            .ok()
-            .and_then(|g| g.clone());
-        reactions::register_reaction_projection(nmp_ref, boot_pubkey);
-    }
 
     // Phase 3A: register the update callback so NMP snapshot frames are
     // forwarded into the actor as KernelEvent::NmpSnapshotFrame. The
