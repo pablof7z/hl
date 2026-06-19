@@ -141,6 +141,25 @@ pub enum ViewSnapshot {
     ArticleReader(KernelArticleReaderSnapshot),
 }
 
+// ── Phase 4B additions (append-only) ─────────────────────────────────────────
+
+/// Reaction state for a single target event — raw counts only (D1: no labels).
+///
+/// Swift owns optimistic UI state (count adjustment, toggled icon) — the kernel
+/// exposes only the authoritative nmp-projected values. No `"X likes"` string
+/// or count formatting here.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ReactionRow {
+    /// The event id that was reacted to (raw 64-char hex).
+    pub target_event_id: String,
+    /// Total number of `+` (like) reactions from all authors as projected
+    /// by `ReactionProjection`. Raw u32 — no labels.
+    pub count: u32,
+    /// `true` if the active viewer has reacted to this event.
+    /// Optimistic toggling lives in Swift (D1).
+    pub viewer_reacted: bool,
+}
+
 // ── Phase 3B additions (append-only) ─────────────────────────────────────────
 
 /// One joined group as seen by the active account.

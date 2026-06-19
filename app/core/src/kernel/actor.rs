@@ -37,8 +37,8 @@ use nmp_defaults::{NmpAppBuilder, RunConfig};
 
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
 use crate::kernel::domains::{
-    articles, auth, bookmarks, communities, discovery, follows, profiles, projections, relays,
-    room_home, route, session,
+    articles, auth, bookmarks, communities, discovery, follows, profiles, projections, reactions,
+    relays, room_home, route, session,
 };
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
@@ -307,6 +307,7 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
             target_author_pubkey,
             repost,
         ),
+
         // ── Phase 4C additions (append-only) ─────────────────────────────────
         AppAction::AddBookmark { item } => {
             bookmarks::reduce_action_add_bookmark_for_state(state, item)
@@ -324,6 +325,17 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         // AppAction arms exist for Rust-side lifecycle coordination (reserved
         // for future per-address fetch in later slices). No effects emitted.
         AppAction::OpenArticle { .. } | AppAction::CloseArticle { .. } => vec![],
+
+        // ── Phase 4B additions ────────────────────────────────────────────────
+        AppAction::React {
+            target_event_id,
+            reaction,
+            target_author_pubkey,
+        } => reactions::reduce_action_react(target_event_id, reaction, target_author_pubkey),
+
+        AppAction::Unreact { reaction_event_id } => {
+            reactions::reduce_action_unreact(reaction_event_id)
+        }
     }
 }
 
@@ -424,6 +436,25 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // via Cmd::Event (no live NmpApp needed — reducer path is identical).
             // D1: rows carry raw protocol data only (no formatted strings).
             state.articles = rows.into_iter().map(|r| (r.address.clone(), r)).collect();
+            vec![]
+        }
+
+        // ── Phase 4B additions (append-only) ─────────────────────────────────
+        KernelEvent::ReactionStateUpdated {
+            target_event_id,
+            count,
+            viewer_reacted,
+        } => {
+            // Upsert raw reaction state for the target event. No optimistic
+            // delta applied here — D1: Swift owns optimistic UI state.
+            state.reaction_state.insert(
+                target_event_id.clone(),
+                crate::kernel::snapshot::ReactionRow {
+                    target_event_id,
+                    count,
+                    viewer_reacted,
+                },
+            );
             vec![]
         }
     }
@@ -607,6 +638,7 @@ pub(crate) async fn run_effect(
         Effect::DispatchShareToRoom { namespace, json } => {
             room_home::run_effect_dispatch_share_to_room(namespace, json, nmp);
         }
+
         // ── Phase 4C additions (append-only) ─────────────────────────────────
         Effect::DispatchBookmarkAction { namespace, json } => {
             // Call nmp_app_dispatch_action with the NIP-51 bookmark namespace
@@ -614,6 +646,30 @@ pub(crate) async fn run_effect(
             // kind:10003 list arrives back through the BookmarksUpdated
             // projection event.
             bookmarks::run_effect_dispatch_bookmark_action(namespace, json, nmp);
+        }
+
+        // ── Phase 4B additions (append-only) ─────────────────────────────────
+        Effect::DispatchReactAction { namespace, json } => {
+            // Call nmp_app_dispatch_action with "nmp.nip25.react" or
+            // "nmp.nip25.unreact" and the serde-JSON payload. Fire-and-forget
+            // (D6): the returned correlation_id JSON is freed and discarded.
+            // The authoritative reaction state arrives back via
+            // KernelEvent::ReactionStateUpdated on the next projection tick.
+            reactions::run_effect_dispatch_react_action(namespace, json, nmp);
+        }
+
+        Effect::WireReactionProjection { viewer_pubkey } => {
+            // Re-register the ReactionObserver for the new account pubkey so
+            // viewer_reacted tracks the correct account after account switches.
+            // A fresh ReactionProjection is created; prior observations are
+            // discarded (consistent with JoinedGroupsProjection re-wire).
+            // Called on every IdentityChanged(Some). Fire-and-forget: the next
+            // kind:7 event drives KernelEvent::ReactionStateUpdated into the
+            // actor channel.
+            if let Some(handle) = nmp {
+                let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+                reactions::register_reaction_projection(nmp_ref, viewer_pubkey);
+            }
         }
     }
 
@@ -851,6 +907,19 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
     // observation is harmless — both projections read the same events. The write
     // actions are NOT re-registered here (nmp-defaults already wired them).
     bookmarks::register_bookmark_list_projection(nmp_ref, nmp_ref.active_account_handle());
+
+    // Phase 4B: register ReactionObserver at boot.
+    // Mirrors the JoinedGroupsProjection boot pattern above. The viewer_pubkey
+    // is None at boot if no account is persisted (the first IdentityChanged(Some)
+    // will fire Effect::WireReactionProjection with the real pubkey).
+    {
+        let boot_pubkey: Option<String> = nmp_ref
+            .active_account_handle()
+            .lock()
+            .ok()
+            .and_then(|g| g.clone());
+        reactions::register_reaction_projection(nmp_ref, boot_pubkey);
+    }
 
     // Phase 3A: register the update callback so NMP snapshot frames are
     // forwarded into the actor as KernelEvent::NmpSnapshotFrame. The

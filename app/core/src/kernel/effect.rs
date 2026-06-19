@@ -234,6 +234,7 @@ pub enum Effect {
         /// JSON-serialized action payload (serde_json, not format!).
         json: String,
     },
+
     // ── Phase 4C additions (append-only) ─────────────────────────────────────
     /// Call `nmp_app_dispatch_action` with a NIP-51 bookmark namespace and the
     /// `BookmarkUpdateInput { account_pubkey, item }` JSON payload.
@@ -254,5 +255,47 @@ pub enum Effect {
         namespace: String,
         /// Serialised `BookmarkUpdateInput { account_pubkey, item }` JSON.
         json: String,
+    },
+
+    // ── Phase 4B additions (append-only) ─────────────────────────────────────
+    /// Call `nmp_app_dispatch_action` with the `"nmp.nip25.react"` or
+    /// `"nmp.nip25.unreact"` namespace and the serialised NIP-25 action payload.
+    ///
+    /// `"nmp.nip25.react"` payload: `ReactAction { target_event_id, reaction,
+    /// target_author_pubkey? }` — builds and publishes kind:7.
+    /// `"nmp.nip25.unreact"` payload: `UnreactAction { reaction_event_id, reason }`
+    /// — builds and publishes kind:5 deletion.
+    ///
+    /// Fire-and-forget (D6, Non-Negotiable #3): the returned correlation_id JSON
+    /// is freed and discarded. The authoritative reaction state arrives back via
+    /// `KernelEvent::ReactionStateUpdated` on the next `ReactionProjection` tick.
+    ///
+    /// The kernel is the sole kind:7 writer for ported screens (no live-lane
+    /// double-publish for reactions on articles/highlights/artifacts).
+    DispatchReactAction {
+        /// NIP-25 action namespace (`"nmp.nip25.react"` or `"nmp.nip25.unreact"`).
+        namespace: String,
+        /// JSON-serialised NIP-25 action payload (`serde_json::to_string` — never
+        /// `format!`). `ReactAction` or `UnreactAction` depending on `namespace`.
+        json: String,
+    },
+    /// Register (or re-register) the `ReactionObserver` wrapping
+    /// `nmp-nip25::ReactionProjection` as a `KernelEventObserver` on the live
+    /// `NmpApp`, so kind:7 and kind:5 events are ingested into the projection
+    /// and fed back as `KernelEvent::ReactionStateUpdated`.
+    ///
+    /// Must be emitted at boot (via `start_nmp_app`) and on every
+    /// `IdentityChanged(Some(viewer_pubkey))` so the `viewer_reacted` field
+    /// tracks the correct account after account switches. A fresh
+    /// `ReactionProjection` is created on each call; prior observations are
+    /// discarded (consistent with the follows/joined-groups pattern).
+    ///
+    /// Fire-and-forget: the next kind:7 event drives the first
+    /// `KernelEvent::ReactionStateUpdated` back into the actor channel.
+    WireReactionProjection {
+        /// Hex pubkey of the active account, used to set `viewer_reacted` in
+        /// `ReactionSnapshot`. Pass `None` at boot before the first
+        /// `IdentityChanged(Some)` fires.
+        viewer_pubkey: Option<String>,
     },
 }

@@ -278,6 +278,7 @@ pub enum AppAction {
         /// When `false` → kind:11 share (`"nmp.nip29.share_event_in_group"`).
         repost: bool,
     },
+
     // ── Phase 4C additions (append-only) ─────────────────────────────────────
     /// Add a bookmark item to the active account's NIP-51 kind:10003 list by
     /// dispatching `"nmp.nip51.add_bookmark"` with a `BookmarkUpdateInput`
@@ -313,6 +314,39 @@ pub enum AppAction {
     /// Close an article reader view — deregisters `ViewId::ArticleReader{address}`.
     /// Fire-and-forget. No NMP release is needed (longform projection is session-scoped).
     CloseArticle { address: String },
+
+    // ── Phase 4B additions (append-only) ─────────────────────────────────────
+    /// React to an event with a NIP-25 kind:7 reaction.
+    ///
+    /// Dispatches `"nmp.nip25.react"` via `nmp_app_dispatch_action`. The wire
+    /// payload is `ReactAction { target_event_id, reaction, target_author_pubkey? }`.
+    /// `reaction` defaults to `"+"` (like) when not supplied; any non-empty
+    /// emoji or custom string is accepted.
+    ///
+    /// The kernel is the sole kind:7 writer for ported screens (no live-lane
+    /// double-publish). Fire-and-forget (D6, Non-Negotiable #3): the updated
+    /// reaction count arrives back via `KernelEvent::ReactionStateUpdated` once
+    /// the `ReactionProjection` tick fires.
+    React {
+        /// Target event id (raw 64-char hex).
+        target_event_id: String,
+        /// Reaction content — defaults to `"+"`. Must be non-empty.
+        reaction: String,
+        /// Optional author pubkey for the `["p", _]` tag (raw 64-char hex).
+        target_author_pubkey: Option<String>,
+    },
+
+    /// Remove a prior reaction by publishing a kind:5 deletion via
+    /// `"nmp.nip25.unreact"`.
+    ///
+    /// The wire payload is `UnreactAction { reaction_event_id, reason }`.
+    /// `reaction_event_id` must be the raw 64-char hex id of the kind:7 event
+    /// to delete. `reason` is an optional freetext string (sent as empty when
+    /// absent). Fire-and-forget (D6).
+    Unreact {
+        /// The kind:7 reaction event id to delete (raw 64-char hex).
+        reaction_event_id: String,
+    },
 }
 
 /// NIP-65 / kind:10002 role for a configured relay.
@@ -477,4 +511,24 @@ pub enum KernelEvent {
     /// `AppState::articles` with the new set. Also injectable directly from
     /// tests via `Cmd::Event` (no live NmpApp needed).
     ArticlesUpdated(Vec<crate::kernel::snapshot::ArticleRow>),
+
+    // ── Phase 4B additions (append-only) ─────────────────────────────────────
+    /// The `"hl.reactions"` wrapped typed-snapshot was decoded from the NMP
+    /// update callback and applied to `AppState::reaction_state`.
+    ///
+    /// Produced by `projections::dispatch_typed_frame` when the `"hl.reactions"`
+    /// schema_id sidecar arrives. Carries raw count + viewer-reacted bool for
+    /// one target event — no formatted strings (D1). The reducer stores it in
+    /// `AppState::reaction_state` keyed by `target_event_id`.
+    ///
+    /// Optimistic UI state (count delta, toggled icon) lives in Swift (D1).
+    /// The kernel exposes only the authoritative `ReactionProjection` values.
+    ReactionStateUpdated {
+        /// Target event id that was reacted to (raw 64-char hex).
+        target_event_id: String,
+        /// Total reaction count from all authors (authoritative from projection).
+        count: u32,
+        /// `true` if the active viewer has reacted.
+        viewer_reacted: bool,
+    },
 }

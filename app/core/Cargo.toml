@@ -28,6 +28,7 @@ nmp-defaults = { git = "https://github.com/pablof7z/nostr-multi-platform.git", r
 nmp-signers = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "b4404159d0d87325f8c65574f7ba46981fc0098f" }
 nmp-nip11 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "b4404159d0d87325f8c65574f7ba46981fc0098f" }
 nmp-nip02 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "b4404159d0d87325f8c65574f7ba46981fc0098f" }
+nmp-nip25 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "b4404159d0d87325f8c65574f7ba46981fc0098f" }
 nmp-nip29 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "b4404159d0d87325f8c65574f7ba46981fc0098f" }
 nmp-nip51 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "b4404159d0d87325f8c65574f7ba46981fc0098f" }
 nmp-nip78 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "b4404159d0d87325f8c65574f7ba46981fc0098f" }

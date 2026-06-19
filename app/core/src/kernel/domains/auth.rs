@@ -115,6 +115,11 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     // AppState::articles holds kind:30023 data for the departing account's
     // subscriptions. Wipe so stale articles don't surface for the next account.
     state.articles.clear();
+    // ── Phase 4B: clear reaction state on logout ──────────────────────────────
+    // Stale reaction counts from the departing account must not surface under
+    // a new identity. The ReactionProjection viewer_pubkey is updated on
+    // re-registration; wipe the hl-side cache here immediately.
+    super::reactions::clear_on_identity_lost(state);
     // RemoveActiveAccount fires nmp.remove_account; ClearSession
     // emits a CapabilityRequest to native for its keychain.
     vec![Effect::RemoveActiveAccount, Effect::ClearSession]
@@ -152,7 +157,15 @@ pub(crate) fn reduce_event_identity_changed(
                 signer_kind,
             };
             // Phase 3B: re-register joined-groups projection for the new account.
-            return vec![Effect::WireJoinedGroups { pubkey: pk }];
+            // Phase 4B: re-register reaction projection so viewer_reacted tracks
+            // the new account. The fresh ReactionObserver starts empty; kind:7
+            // events from prior relay subscriptions replay the counts.
+            return vec![
+                Effect::WireJoinedGroups { pubkey: pk.clone() },
+                Effect::WireReactionProjection {
+                    viewer_pubkey: Some(pk),
+                },
+            ];
         }
         _ => {
             // None or empty pubkey → no active account.
@@ -173,6 +186,8 @@ pub(crate) fn reduce_event_identity_changed(
             state.bookmarks = Vec::new();
             // ── Phase 4A: clear articles on account removal ───────────────────
             state.articles.clear();
+            // ── Phase 4B: clear reaction state on account removal ─────────────
+            super::reactions::clear_on_identity_lost(state);
         }
     }
     vec![]
