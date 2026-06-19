@@ -8,5 +8,6 @@
 
 pub(crate) mod auth;
 pub(crate) mod projections;
+pub(crate) mod relays;
 pub(crate) mod route;
 pub(crate) mod session;

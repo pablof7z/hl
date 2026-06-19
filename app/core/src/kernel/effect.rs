@@ -69,4 +69,37 @@ pub enum Effect {
         /// Display name for the fresh account's kind:0 profile.
         profile_name: String,
     },
+
+    // ── Phase 2D additions (append-only) ─────────────────────────────────────
+    /// Call `nmp.actor_sender().send(ActorCommand::AddRelay { url, role })`.
+    ///
+    /// `role` is the canonical wire string produced by `RelayRole::normalize()`
+    /// (e.g. `"both,indexer"`). Fire-and-forget: nmp updates the active
+    /// account's kind:10002 relay list asynchronously. D3: no wss-scheme literals
+    /// in the kernel — the URL comes from the caller, the role from the
+    /// normalized `RelayRole` variant.
+    AddRelay { url: String, role: String },
+    /// Call `nmp.actor_sender().send(ActorCommand::RemoveRelay { url })`.
+    ///
+    /// Fire-and-forget: nmp removes the relay from the active account's
+    /// kind:10002 list. D6: no-op if the relay is not present.
+    RemoveRelay { url: String },
+    /// Change role: equivalent to a `RemoveRelay` followed by `AddRelay` in
+    /// nmp's T66a relay-edit model. Implemented by the effect runner as a
+    /// single `ActorCommand::AddRelay` with the new role (nmp upserts).
+    /// Fire-and-forget. D3: no wss-scheme literals.
+    SetRelayRole { url: String, role: String },
+    /// Sign and publish a kind:30078 app-data event via
+    /// `ActorCommand::PublishRawEvent`.
+    ///
+    /// Used to persist the hl rooms relay list under the hl-owned d-tag
+    /// `"com.highlighter.relays"`. The kernel builds the JSON `content` and
+    /// the `["d", "com.highlighter.relays"]` tag; the active signer signs it
+    /// through nmp's standard publish path. Fire-and-forget: nmp handles relay
+    /// routing via `PublishTarget::Auto` (NIP-65 outbox; D3). No wss-scheme
+    /// literals in the kernel — relay URLs are embedded inside `content` only.
+    PublishRoomsRelayList {
+        /// JSON-serialized rooms relay list to embed in the event content.
+        content: String,
+    },
 }

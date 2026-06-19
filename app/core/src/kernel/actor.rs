@@ -36,7 +36,7 @@ use crate::onboarding::OnboardingStore;
 use nmp_defaults::{NmpAppBuilder, RunConfig};
 
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
-use crate::kernel::domains::{auth, projections, route, session};
+use crate::kernel::domains::{auth, projections, relays, route, session};
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
 
@@ -237,6 +237,16 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         AppAction::CreateAccount { profile_name } => {
             auth::reduce_action_create_account(state, profile_name, now)
         }
+
+        // ── Phase 2D additions ────────────────────────────────────────────────
+        AppAction::AddRelay { url, role } => relays::reduce_action_add_relay(state, url, role),
+        AppAction::RemoveRelay { url } => relays::reduce_action_remove_relay(state, url),
+        AppAction::SetRelayRole { url, role } => {
+            relays::reduce_action_set_relay_role(state, url, role)
+        }
+        AppAction::SetRoomsRelayList { relay_urls } => {
+            relays::reduce_action_set_rooms_relay_list(state, relay_urls)
+        }
     }
 }
 
@@ -361,6 +371,20 @@ pub(crate) async fn run_effect(
         // ── Phase 2C additions ────────────────────────────────────────────────
         Effect::CreateAccount { profile_name } => {
             auth::run_effect_create_account(profile_name, nmp, policy);
+        }
+
+        // ── Phase 2D additions ────────────────────────────────────────────────
+        Effect::AddRelay { url, role } => {
+            relays::run_effect_add_relay(url, role, nmp);
+        }
+        Effect::RemoveRelay { url } => {
+            relays::run_effect_remove_relay(url, nmp);
+        }
+        Effect::SetRelayRole { url, role } => {
+            relays::run_effect_set_relay_role(url, role, nmp);
+        }
+        Effect::PublishRoomsRelayList { content } => {
+            relays::run_effect_publish_rooms_relay_list(content, nmp);
         }
     }
 
@@ -1467,6 +1491,7 @@ mod tests {
                 }],
                 initial_follows: follows.clone(),
             },
+            relay: Default::default(),
         };
         assert_eq!(
             policy_with_follows.create_account.initial_follows, follows,

@@ -112,6 +112,80 @@ pub enum AppAction {
     /// `IdentityChanged(Some(pubkey))` observer → `SessionState::Present`.
     /// The 2A clock timeout (SIGN_IN_TIMEOUT_SECS) covers the SigningIn period.
     CreateAccount { profile_name: String },
+
+    // ── Phase 2D additions (append-only) ─────────────────────────────────────
+    /// Add a relay to the active account's NIP-65 relay list.
+    ///
+    /// `url` is the WebSocket relay URL (opaque string — kernel never
+    /// constructs URLs; D3). `role` is the NIP-65 / kind:10002 role for the
+    /// relay; the kernel normalises it via `RelayRole::normalize` before
+    /// forwarding to nmp. Fire-and-forget: emits `Effect::AddRelay`.
+    AddRelay { url: String, role: RelayRole },
+    /// Remove a relay from the active account's NIP-65 relay list.
+    ///
+    /// Fire-and-forget: emits `Effect::RemoveRelay`. No-op if the relay is
+    /// not present (nmp is idempotent here; D6).
+    RemoveRelay { url: String },
+    /// Change the role of an already-configured relay.
+    ///
+    /// Semantically equivalent to `RemoveRelay` + `AddRelay` in nmp's relay
+    /// edit model (T66a). Fire-and-forget: emits `Effect::SetRelayRole`.
+    SetRelayRole { url: String, role: RelayRole },
+    /// Persist the rooms relay list (relays that host NIP-29 rooms) as a
+    /// kind:30078 app-data event with d-tag `"com.highlighter.relays"`.
+    ///
+    /// `relay_urls` is the ordered list of room relay WebSocket URLs to store.
+    /// The kernel builds the JSON payload and publishes via
+    /// `ActorCommand::PublishRawEvent`. No wss-scheme literals are hardcoded here;
+    /// the hl-owned d-tag string `"com.highlighter.relays"` is the only
+    /// constant (it is product-controlled, not a relay URL).
+    /// Fire-and-forget: emits `Effect::PublishRoomsRelayList`.
+    SetRoomsRelayList { relay_urls: Vec<String> },
+}
+
+/// NIP-65 / kind:10002 role for a configured relay.
+///
+/// Maps to the composite token strings that `nmp-core` accepts in
+/// `ActorCommand::AddRelay { role }`. `normalize()` produces the canonical
+/// wire string; `Nip65Role::parse` in nmp validates / rejects unknown tokens.
+///
+/// Append-only: new variants at the bottom keep rebases mechanical.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum RelayRole {
+    /// Read-only relay (kind:10002 `"read"`).
+    Read,
+    /// Write-only relay (kind:10002 `"write"`).
+    Write,
+    /// Read + write relay (kind:10002 `"both"`).
+    Both,
+    /// Indexer relay (kind:10002 `"indexer"`).
+    Indexer,
+    /// Read + indexer composite (kind:10002 `"read,indexer"`).
+    ReadIndexer,
+    /// Write + indexer composite (kind:10002 `"write,indexer"`).
+    WriteIndexer,
+    /// Read + write + indexer composite (kind:10002 `"both,indexer"`).
+    BothIndexer,
+}
+
+impl RelayRole {
+    /// Produce the canonical wire-string expected by nmp's `Nip65Role::parse`.
+    ///
+    /// These token strings match `nmp-core`'s `relay_roles.rs` exactly —
+    /// verified against origin/master. No wss-scheme literals; only the role
+    /// vocabulary is embedded here (D3 compliant: role strings are kernel
+    /// policy, not relay URLs).
+    pub fn normalize(&self) -> &'static str {
+        match self {
+            RelayRole::Read => "read",
+            RelayRole::Write => "write",
+            RelayRole::Both => "both",
+            RelayRole::Indexer => "indexer",
+            RelayRole::ReadIndexer => "read,indexer",
+            RelayRole::WriteIndexer => "write,indexer",
+            RelayRole::BothIndexer => "both,indexer",
+        }
+    }
 }
 
 /// Internal kernel event — produced by async effects and native capability

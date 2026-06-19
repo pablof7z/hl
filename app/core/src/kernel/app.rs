@@ -155,6 +155,29 @@ pub struct AppConfig {
     pub data_dir: String,
 }
 
+// ── Phase 2D additions ────────────────────────────────────────────────────────
+
+/// Relay-management policy injected into the kernel (D3: no wss-scheme literals
+/// in kernel logic — all relay seed URLs live here, not in relays.rs or
+/// any other kernel module).
+///
+/// Used by `AppAction::AddRelay` / `RemoveRelay` / `SetRelayRole` to validate
+/// that relay URLs are non-empty before forwarding to nmp. The rooms d-tag is
+/// a product constant owned by Highlighter; it is NOT a relay URL and is kept
+/// in kernel code rather than here (a relay URL injected from outside would
+/// be more complicated than embedding a fixed product-identifier string).
+#[derive(Debug, Clone, Default)]
+pub struct RelayPolicy {
+    /// Default relay set surfaced to the UI for onboarding / settings
+    /// (informational only; kernel does not auto-add these — host triggers
+    /// explicit `AppAction::AddRelay` calls for each entry at the right time).
+    ///
+    /// Values come from `relay_policy.json` seed_defaults. Opaque strings;
+    /// the kernel never constructs or validates relay URLs beyond checking
+    /// for non-empty (nmp validates the actual wss-scheme scheme / parse).
+    pub seed_relay_urls: Vec<String>,
+}
+
 /// Runtime policy injected into the kernel that cannot cross uniffi (not a
 /// `uniffi::Record`) because it holds Rust-only types. Constructed by the
 /// `HighlighterApp` bootstrap from `relay_policy.json` seed defaults.
@@ -165,6 +188,8 @@ pub struct AppConfig {
 pub struct KernelPolicy {
     /// Policy for `AppAction::CreateAccount`.
     pub create_account: CreateAccountPolicy,
+    /// Policy for relay-management actions (Phase 2D).
+    pub relay: RelayPolicy,
 }
 
 /// UNIX seconds after dispatch of `RestoreSession` before the kernel
