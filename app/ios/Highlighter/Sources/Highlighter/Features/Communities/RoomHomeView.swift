@@ -6,6 +6,7 @@ struct RoomHomeView: View {
     let groupId: String
 
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var room = RoomStore()
     @State private var selectedTab: Tab = .home
     @State private var composerPresented: Bool = false
@@ -16,6 +17,13 @@ struct RoomHomeView: View {
     @State private var hasChatActivity: Bool = false
     @State private var chatUnread: Bool = false
     @State private var chatPresenceProbe = ChatPresenceProbe()
+
+    /// Phase 3G: room header/metadata from the kernel snapshot.
+    /// Falls back to the live lane's joined-communities list while the kernel
+    /// snapshot is loading (ensures the title renders immediately on first open).
+    private var kernelRoomSnapshot: KernelRoomHomeSnapshot? {
+        kernel.roomHomeSnapshots[groupId]
+    }
 
     var body: some View {
         tabContent
@@ -55,6 +63,10 @@ struct RoomHomeView: View {
                 if tab == .chat { chatUnread = false }
             }
             .task {
+                // Phase 3G: open the kernel RoomHome view so the kernel wires
+                // GroupEventsProjection and pushes KernelRoomHomeSnapshot.
+                kernel.openRoomHome(groupId: groupId)
+
                 await room.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
                 await chatPresenceProbe.start(
                     groupId: groupId,
@@ -67,6 +79,9 @@ struct RoomHomeView: View {
                 )
             }
             .onDisappear {
+                // Phase 3G: close the kernel view, releasing the GroupEventsProjection.
+                kernel.closeRoomHome(groupId: groupId)
+
                 room.stop()
                 chatPresenceProbe.stop()
                 if selectedTab == .chat && !hasChatActivity {
@@ -290,7 +305,18 @@ struct RoomHomeView: View {
 
     // MARK: - Header
 
+    /// Room display name.
+    ///
+    /// Phase 3G: prefers the kernel snapshot's raw `name` field (D3 — Swift
+    /// formats the fallback). Falls back to the live lane's `joinedCommunities`
+    /// list while the kernel snapshot is loading, then to "Community".
     private var communityName: String {
+        // Kernel snapshot is the authoritative source after Phase 3G cutover.
+        if let snap = kernelRoomSnapshot, let name = snap.name, !name.isEmpty {
+            return name
+        }
+        // Fallback: live lane's joined-communities list (available immediately
+        // on first open before the kernel snapshot arrives).
         let match = app.joinedCommunities.first { $0.id == groupId }
         if let name = match?.name, !name.isEmpty { return name }
         return "Community"
