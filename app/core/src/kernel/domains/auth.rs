@@ -192,7 +192,7 @@ pub(crate) fn run_effect_add_nsec_signer(nsec: String, nmp: Option<&NmpHandle>) 
     //     check in clock_checks will then transition SigningIn → SignInFailed.
     // hl never awaits a Result from add_signer (Non-Negotiable #2/D6).
     if let Some(handle) = nmp {
-        let nmp_ref: &NmpApp = unsafe { handle.0.as_ref() };
+        let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
         nmp_ref.add_signer(
             nmp_core::SignerSource::LocalNsec(Zeroizing::new(nsec)),
             true, // make_active — also auto-persists to nmp keyring
@@ -206,7 +206,7 @@ pub(crate) fn run_effect_add_bunker_signer(uri: String, nmp: Option<&NmpHandle>)
     // (nmp_signer_broker_init called at boot) takes over the handshake
     // async. Fire-and-forget: success arrives as IdentityChanged(Some).
     if let Some(handle) = nmp {
-        let nmp_ref: &NmpApp = unsafe { handle.0.as_ref() };
+        let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
         nmp_ref.add_signer(nmp_core::SignerSource::BunkerUri(uri), true);
     }
     // No nmp handle (test mode) → test injects IdentityChanged directly.
@@ -221,7 +221,7 @@ pub(crate) async fn run_effect_mint_nostrconnect_uri(
     // (V-65). Returns an owned `nostrconnect://` C string or null if no
     // relay is configured. Feed the result back as NostrConnectUriReady.
     if let Some(handle) = nmp {
-        let raw_ptr = handle.0.as_ptr();
+        let raw_ptr = handle.ptr.as_ptr();
         let uri_ptr = nmp_app_nostrconnect_uri(raw_ptr, std::ptr::null(), std::ptr::null());
         if !uri_ptr.is_null() {
             // SAFETY: uri_ptr is a CString::into_raw pointer owned by
@@ -245,7 +245,7 @@ pub(crate) fn run_effect_start_nip55_sign_in(nmp: Option<&NmpHandle>) {
     // nmp_external_signer_init was not already called at boot.
     // Fire-and-forget: success arrives as IdentityChanged(Some).
     if let Some(handle) = nmp {
-        let raw_ptr = handle.0.as_ptr();
+        let raw_ptr = handle.ptr.as_ptr();
         nmp_app_signin_nip55(raw_ptr, std::ptr::null());
     }
     // No nmp handle (test mode) → test injects IdentityChanged directly.
@@ -255,7 +255,7 @@ pub(crate) fn run_effect_remove_active_account(nmp: Option<&NmpHandle>) {
     // Read the active pubkey from the nmp slot, then remove it.
     // Fire-and-forget: the observer fires IdentityChanged(None) on success.
     if let Some(handle) = nmp {
-        let nmp_ref: &NmpApp = unsafe { handle.0.as_ref() };
+        let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
         let active_slot = nmp_ref.active_account_handle();
         let maybe_pubkey: Option<String> = active_slot.lock().ok().and_then(|guard| guard.clone());
         if let Some(pubkey) = maybe_pubkey {
@@ -273,7 +273,7 @@ pub(crate) fn run_effect_create_account(
     // Relays and initial_follows come from the injected KernelPolicy
     // (D3: no hardcoded relay literals in kernel source).
     if let Some(handle) = nmp {
-        let nmp_ref: &NmpApp = unsafe { handle.0.as_ref() };
+        let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
 
         let mut profile = std::collections::HashMap::new();
         profile.insert("name".to_string(), profile_name);
