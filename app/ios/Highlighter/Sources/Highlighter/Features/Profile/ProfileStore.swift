@@ -160,21 +160,21 @@ final class ProfileStore {
         // (fire-and-forget, D6). The `FollowListUpdated` projection event
         // flows back via the NMP update callback → kernel observer →
         // `ProfileSnapshot.isFollowing` update → next snapshot push.
+        //
+        // NOTE: the optimistic isFollowing flip above is the only UI signal —
+        // do NOT call the live lane's applyProfileFollowMutation here.
+        // Coexistence keeps the live lane for READS only; writes must come
+        // from exactly one writer (the kernel) to avoid double kind:3 publishes.
         if mutation.requestedFollowState {
             kernel?.app.dispatch(action: .follow(pubkey: pubkey))
         } else {
             kernel?.app.dispatch(action: .unfollow(pubkey: pubkey))
         }
 
-        // Fallback: also run the live-lane mutation so the live lane's
-        // follow state stays in sync during Phase 3G coexistence.
-        // Removed in Phase 7 when the live lane is deleted.
-        let snapshot = await safeCore.applyProfileFollowMutation(input: mutation)
-        let projection = safeCore.projectProfileFollowMutationApply(
-            input: ProfileFollowMutationApplyInput(snapshot: snapshot)
-        )
-        isFollowing = projection.isFollowing
-        followError = projection.errorMessage
+        // isMutatingFollow is cleared when the kernel's FollowListUpdated event
+        // arrives and applyKernelSnapshot() flips isFollowing.  As a safety net,
+        // also clear it here so the button never gets permanently stuck if the
+        // NMP round-trip is delayed.
         isMutatingFollow = false
     }
 

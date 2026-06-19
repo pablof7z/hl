@@ -116,18 +116,15 @@ final class HighlighterAppKernel {
         roomExplorer = nil
     }
 
-    /// Re-dispatch room discovery to the kernel (e.g. for pull-to-refresh).
+    /// Re-trigger room discovery for pull-to-refresh.
     ///
-    /// The kernel auto-starts discovery when `RoomExplorer` first opens (via
-    /// `discovery::lifecycle_effects_for_view_open`). This method lets the UI
-    /// re-trigger it without closing and re-opening the view.
-    ///
-    /// The relay URL mirrors `relay_policy.json` `"room_explorer_curator"`.
-    /// D3: this is the ONLY place in Swift that names the discovery relay URL.
+    /// Re-sends `Cmd::OpenView(RoomExplorer)` to the actor. The registry
+    /// treats it as idempotent (view stays open, existing snapshot preserved),
+    /// but the actor's lifecycle hook re-fires
+    /// `discovery::lifecycle_effects_for_view_open` which reads
+    /// `state.room_policy.discovery_relay` — no relay URL literal in Swift (D3).
     func refreshRoomExplorer() {
-        // relay_policy.json "room_explorer_curator" — kept in sync by review gate.
-        let discoveryRelay = "wss://relay.highlighter.com"
-        app.dispatch(action: .startRoomDiscovery(relayUrl: discoveryRelay))
+        app.openView(viewId: .roomExplorer, route: .roomExplorer)
     }
 
     /// Open a profile view for `pubkey` and send `ClaimProfile` to NMP.
