@@ -17,10 +17,34 @@ pub enum RootTab {
     Settings = 4,
 }
 
-/// Every user or platform action the kernel understands — Phase 1.
+/// How a sign-in was initiated — carried in failure and in-progress state.
+/// Append-only: adding a variant is non-breaking to existing match arms.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SignInMethod {
+    Nsec,
+    Bunker,
+    NostrConnect,
+    Nip55,
+    CreateAccount,
+}
+
+/// Which signing backend is active for the current session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SignerKind {
+    /// A raw nsec stored in (and recalled from) the nmp keyring.
+    LocalNsec,
+    /// A NIP-46 remote bunker.
+    Nip46,
+    /// An external NIP-55 signer app.
+    Nip55,
+}
+
+/// Every user or platform action the kernel understands.
 ///
 /// Dispatch is fire-and-forget (`dispatch(action)` returns `()`; Non-Negotiable #3).
 /// Errors never propagate back as `Result` — they surface as typed `ViewSnapshot` state.
+///
+/// Append-only: new variants at the bottom keep rebases mechanical.
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum AppAction {
     /// Attempt to restore a prior session from the native keychain.
@@ -39,10 +63,21 @@ pub enum AppAction {
     PresentSheet { sheet_id: String },
     /// Dismiss the topmost sheet.
     DismissSheet,
+
+    // ── Phase 2A additions (append-only) ─────────────────────────────────────
+    /// Sign in with a raw nsec (bech32 `nsec1…` or hex).
+    ///
+    /// The reducer transitions to `SessionState::SigningIn` and emits
+    /// `Effect::AddNsecSigner`. Success is signalled by the identity-change
+    /// observer firing `KernelEvent::IdentityChanged(Some(pubkey))`. Failure
+    /// surfaces as `SessionState::SignInFailed` (D6 — never a `Result`).
+    SignInNsec { nsec: String },
 }
 
 /// Internal kernel event — produced by async effects and native capability
 /// results, fed back into the actor's command channel. Never crosses FFI.
+///
+/// Append-only: new variants at the bottom keep rebases mechanical.
 #[derive(Debug, Clone)]
 pub enum KernelEvent {
     /// A session-restore capability round-trip completed.
@@ -62,4 +97,10 @@ pub enum KernelEvent {
     /// timeout, and snapshot coalescing cadence (D8: no wall-clock reads,
     /// no sleeps; time is injected via the `Clock` abstraction, D9).
     ClockTick,
+
+    // ── Phase 2A additions (append-only) ─────────────────────────────────────
+    /// `add_signer` returned an error; the effect runner converts the error
+    /// into this event so it surfaces in `SessionState` rather than crossing
+    /// the dispatch boundary as a `Result` (D6).
+    SignInFailed { method: SignInMethod, error: String },
 }

@@ -6,7 +6,12 @@
 
 use std::path::PathBuf;
 
+use crate::kernel::action::{SignInMethod, SignerKind};
+
 /// Session state machine.
+///
+/// Append-only: new variants at the bottom keep rebases mechanical.
+/// Signer policy lives here in Rust; native never mutates session facts.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SessionState {
     /// Not yet attempted to restore a session.
@@ -17,12 +22,28 @@ pub enum SessionState {
         started_at: u64,
     },
     /// A session secret is in memory; `pubkey` is the decoded hex public key
-    /// (Phase 1: carried forward from the capability result string).
-    Present { pubkey: String },
+    /// and `signer_kind` records which backend is active.
+    Present {
+        pubkey: String,
+        signer_kind: SignerKind,
+    },
     /// No session secret found (user never logged in or has logged out).
     Absent,
     /// Restore attempt failed — diagnostic carried as state (D6).
     RestoreFailed { error: String },
+
+    // ── Phase 2A additions (append-only) ─────────────────────────────────────
+    /// `add_signer` / `add_bunker` call dispatched; waiting for the
+    /// identity-change observer to fire. The clock-driven timeout (30 s) will
+    /// transition to `SignInFailed` if the observer never fires.
+    SigningIn {
+        method: SignInMethod,
+        /// UNIX second when sign-in was started (for timeout, future phases).
+        started_at: u64,
+    },
+    /// Sign-in attempt failed — method and error carried as state (D6).
+    /// Never returned across the dispatch boundary as a `Result`.
+    SignInFailed { method: SignInMethod, error: String },
 }
 
 /// Durable onboarding completion flag.
@@ -101,6 +122,15 @@ pub const SESSION_RESTORE_TIMEOUT_SECS: u64 = 30;
 /// Duration in seconds after presentation before the kernel auto-dismisses
 /// a chrome toast (clock-driven, no Swift Timer).
 pub const TOAST_DISMISS_SECS: u64 = 3;
+
+/// UNIX seconds after dispatch of a sign-in action before the kernel
+/// transitions to `SessionState::SignInFailed`.
+///
+/// NMP handles parse errors internally (`set_last_error_toast`) without firing
+/// the identity-change observer. This clock-driven timeout ensures an invalid
+/// nsec — or any other case where the observer never fires — surfaces in
+/// `SessionState` rather than leaving the UI stuck in `SigningIn` forever (D6).
+pub const SIGN_IN_TIMEOUT_SECS: u64 = 30;
 
 impl AppState {
     /// Storage sub-directory the new lane's `NmpApp` will use.
