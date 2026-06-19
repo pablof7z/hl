@@ -406,6 +406,22 @@ private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt8: FfiConverterPrimitive {
+    typealias FfiType = UInt8
+    typealias SwiftType = UInt8
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt8 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: UInt8, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt16: FfiConverterPrimitive {
     typealias FfiType = UInt16
     typealias SwiftType = UInt16
@@ -751,6 +767,309 @@ public func FfiConverterTypeEventCallback_lift(_ pointer: UnsafeMutableRawPointe
 #endif
 public func FfiConverterTypeEventCallback_lower(_ value: EventCallback) -> UnsafeMutableRawPointer {
     return FfiConverterTypeEventCallback.lower(value)
+}
+
+
+
+
+
+
+/**
+ * The new-lane kernel object. Swift holds one of these alongside the live
+ * `HighlighterCore` during Phase 1; later phases migrate screens one by one.
+ *
+ * Thread safety: all public methods are `&self` — internal mutation is
+ * routed through the mpsc channel or shared `Arc<Mutex<...>>` (no `&mut self`
+ * needed across the UniFFI boundary).
+ */
+public protocol HighlighterAppProtocol: AnyObject, Sendable {
+
+    /**
+     * Deregister a view's projection. No further snapshots will be emitted
+     * for this `view_id` (Non-Negotiable #7 / D5).
+     */
+    func closeView(viewId: ViewId)
+
+    /**
+     * Pull the latest computed snapshot for a view without waiting for the
+     * actor (useful for initial render / recovery after background).
+     * Returns `None` if the view is not open.
+     */
+    func currentSnapshot(viewId: ViewId)  -> ViewSnapshot?
+
+    /**
+     * Fire-and-forget action dispatch. Never returns a Result (Non-Negotiable #3).
+     */
+    func dispatch(action: AppAction)
+
+    /**
+     * Register a bounded projection for a view. Subsequent state changes will
+     * emit snapshots for this view until `close_view` is called.
+     */
+    func openView(viewId: ViewId, route: ViewRoute)
+
+    /**
+     * Deliver the native shell's response to a `CapabilityRequest`.
+     */
+    func provideCapabilityResult(result: CapabilityResult)
+
+    /**
+     * Notify the kernel that the app entered the foreground.
+     */
+    func resume()
+
+    /**
+     * Register the platform observer for snapshot push and capability requests.
+     */
+    func setObserver(observer: HighlighterObserver)
+
+    /**
+     * Idempotent shutdown. Safe to call multiple times.
+     */
+    func shutdown()
+
+    /**
+     * Notify the kernel that the app entered the background.
+     */
+    func suspend()
+
+    /**
+     * Send a clock tick to the actor — useful for deterministic testing of
+     * clock-driven behavior (toast dismiss, session timeout) without relying
+     * on wall-clock time (D8 / D9).
+     */
+    func tick()
+
+}
+/**
+ * The new-lane kernel object. Swift holds one of these alongside the live
+ * `HighlighterCore` during Phase 1; later phases migrate screens one by one.
+ *
+ * Thread safety: all public methods are `&self` — internal mutation is
+ * routed through the mpsc channel or shared `Arc<Mutex<...>>` (no `&mut self`
+ * needed across the UniFFI boundary).
+ */
+open class HighlighterApp: HighlighterAppProtocol, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_highlighter_core_fn_clone_highlighterapp(self.pointer, $0) }
+    }
+    /**
+     * Construct the kernel and start the actor task.
+     *
+     * May fail only for unrecoverable local init (tokio runtime creation,
+     * storage path creation). Recoverable failures are state.
+     */
+public convenience init(config: AppConfig) {
+    let pointer =
+        try! rustCall() {
+    uniffi_highlighter_core_fn_constructor_highlighterapp_new(
+        FfiConverterTypeAppConfig_lower(config),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_highlighter_core_fn_free_highlighterapp(pointer, $0) }
+    }
+
+
+
+
+    /**
+     * Deregister a view's projection. No further snapshots will be emitted
+     * for this `view_id` (Non-Negotiable #7 / D5).
+     */
+open func closeView(viewId: ViewId)  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_close_view(self.uniffiClonePointer(),
+        FfiConverterTypeViewId_lower(viewId),$0
+    )
+}
+}
+
+    /**
+     * Pull the latest computed snapshot for a view without waiting for the
+     * actor (useful for initial render / recovery after background).
+     * Returns `None` if the view is not open.
+     */
+open func currentSnapshot(viewId: ViewId) -> ViewSnapshot?  {
+    return try!  FfiConverterOptionTypeViewSnapshot.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_current_snapshot(self.uniffiClonePointer(),
+        FfiConverterTypeViewId_lower(viewId),$0
+    )
+})
+}
+
+    /**
+     * Fire-and-forget action dispatch. Never returns a Result (Non-Negotiable #3).
+     */
+open func dispatch(action: AppAction)  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_dispatch(self.uniffiClonePointer(),
+        FfiConverterTypeAppAction_lower(action),$0
+    )
+}
+}
+
+    /**
+     * Register a bounded projection for a view. Subsequent state changes will
+     * emit snapshots for this view until `close_view` is called.
+     */
+open func openView(viewId: ViewId, route: ViewRoute)  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_open_view(self.uniffiClonePointer(),
+        FfiConverterTypeViewId_lower(viewId),
+        FfiConverterTypeViewRoute_lower(route),$0
+    )
+}
+}
+
+    /**
+     * Deliver the native shell's response to a `CapabilityRequest`.
+     */
+open func provideCapabilityResult(result: CapabilityResult)  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_provide_capability_result(self.uniffiClonePointer(),
+        FfiConverterTypeCapabilityResult_lower(result),$0
+    )
+}
+}
+
+    /**
+     * Notify the kernel that the app entered the foreground.
+     */
+open func resume()  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_resume(self.uniffiClonePointer(),$0
+    )
+}
+}
+
+    /**
+     * Register the platform observer for snapshot push and capability requests.
+     */
+open func setObserver(observer: HighlighterObserver)  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_set_observer(self.uniffiClonePointer(),
+        FfiConverterTypeHighlighterObserver_lower(observer),$0
+    )
+}
+}
+
+    /**
+     * Idempotent shutdown. Safe to call multiple times.
+     */
+open func shutdown()  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_shutdown(self.uniffiClonePointer(),$0
+    )
+}
+}
+
+    /**
+     * Notify the kernel that the app entered the background.
+     */
+open func suspend()  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_suspend(self.uniffiClonePointer(),$0
+    )
+}
+}
+
+    /**
+     * Send a clock tick to the actor — useful for deterministic testing of
+     * clock-driven behavior (toast dismiss, session timeout) without relying
+     * on wall-clock time (D8 / D9).
+     */
+open func tick()  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_tick(self.uniffiClonePointer(),$0
+    )
+}
+}
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterApp: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = HighlighterApp
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> HighlighterApp {
+        return HighlighterApp(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: HighlighterApp) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterApp {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: HighlighterApp, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterApp_lift(_ pointer: UnsafeMutableRawPointer) throws -> HighlighterApp {
+    return try FfiConverterTypeHighlighterApp.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterApp_lower(_ value: HighlighterApp) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeHighlighterApp.lower(value)
 }
 
 
@@ -6237,6 +6556,235 @@ public func FfiConverterTypeHighlighterCore_lower(_ value: HighlighterCore) -> U
 
 
 
+
+
+/**
+ * Platform observer registered via `HighlighterApp::set_observer`.
+ * Both methods must be non-blocking; called from the actor tokio task.
+ */
+public protocol HighlighterObserver: AnyObject, Sendable {
+
+    /**
+     * A view's snapshot changed.
+     */
+    func onSnapshot(viewId: ViewId, snapshot: ViewSnapshot)
+
+    /**
+     * The kernel is requesting a native capability execution.
+     */
+    func onCapabilityRequest(request: CapabilityRequest)
+
+}
+/**
+ * Platform observer registered via `HighlighterApp::set_observer`.
+ * Both methods must be non-blocking; called from the actor tokio task.
+ */
+open class HighlighterObserverImpl: HighlighterObserver, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_highlighter_core_fn_clone_highlighterobserver(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_highlighter_core_fn_free_highlighterobserver(pointer, $0) }
+    }
+
+
+
+
+    /**
+     * A view's snapshot changed.
+     */
+open func onSnapshot(viewId: ViewId, snapshot: ViewSnapshot)  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterobserver_on_snapshot(self.uniffiClonePointer(),
+        FfiConverterTypeViewId_lower(viewId),
+        FfiConverterTypeViewSnapshot_lower(snapshot),$0
+    )
+}
+}
+
+    /**
+     * The kernel is requesting a native capability execution.
+     */
+open func onCapabilityRequest(request: CapabilityRequest)  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterobserver_on_capability_request(self.uniffiClonePointer(),
+        FfiConverterTypeCapabilityRequest_lower(request),$0
+    )
+}
+}
+
+
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceHighlighterObserver {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceHighlighterObserver] = [UniffiVTableCallbackInterfaceHighlighterObserver(
+        onSnapshot: { (
+            uniffiHandle: UInt64,
+            viewId: RustBuffer,
+            snapshot: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeHighlighterObserver.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.onSnapshot(
+                     viewId: try FfiConverterTypeViewId_lift(viewId),
+                     snapshot: try FfiConverterTypeViewSnapshot_lift(snapshot)
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        onCapabilityRequest: { (
+            uniffiHandle: UInt64,
+            request: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeHighlighterObserver.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.onCapabilityRequest(
+                     request: try FfiConverterTypeCapabilityRequest_lift(request)
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            let result = try? FfiConverterTypeHighlighterObserver.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface HighlighterObserver: handle missing in uniffiFree")
+            }
+        }
+    )]
+}
+
+private func uniffiCallbackInitHighlighterObserver() {
+    uniffi_highlighter_core_fn_init_callback_vtable_highlighterobserver(UniffiCallbackInterfaceHighlighterObserver.vtable)
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlighterObserver: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<HighlighterObserver>()
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = HighlighterObserver
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> HighlighterObserver {
+        return HighlighterObserverImpl(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: HighlighterObserver) -> UnsafeMutableRawPointer {
+        guard let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: handleMap.insert(obj: value))) else {
+            fatalError("Cast to UnsafeMutableRawPointer failed")
+        }
+        return ptr
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlighterObserver {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: HighlighterObserver, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterObserver_lift(_ pointer: UnsafeMutableRawPointer) throws -> HighlighterObserver {
+    return try FfiConverterTypeHighlighterObserver.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlighterObserver_lower(_ value: HighlighterObserver) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeHighlighterObserver.lower(value)
+}
+
+
+
+
 public struct AccountGenerationSnapshot {
     public var account: GeneratedAccount?
     public var succeeded: Bool
@@ -6564,6 +7112,178 @@ public func FfiConverterTypeAddRelaySheetProjectionInput_lift(_ buf: RustBuffer)
 #endif
 public func FfiConverterTypeAddRelaySheetProjectionInput_lower(_ value: AddRelaySheetProjectionInput) -> RustBuffer {
     return FfiConverterTypeAddRelaySheetProjectionInput.lower(value)
+}
+
+
+/**
+ * Configuration passed to `HighlighterApp::new`.
+ */
+public struct AppConfig {
+    /**
+     * Application-support / documents directory for this app instance.
+     * The kernel will create `<data_dir>/nmp-lane/` for its own storage.
+     */
+    public var dataDir: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Application-support / documents directory for this app instance.
+         * The kernel will create `<data_dir>/nmp-lane/` for its own storage.
+         */dataDir: String) {
+        self.dataDir = dataDir
+    }
+}
+
+#if compiler(>=6)
+extension AppConfig: Sendable {}
+#endif
+
+
+extension AppConfig: Equatable, Hashable {
+    public static func ==(lhs: AppConfig, rhs: AppConfig) -> Bool {
+        if lhs.dataDir != rhs.dataDir {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(dataDir)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAppConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppConfig {
+        return
+            try AppConfig(
+                dataDir: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AppConfig, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.dataDir, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppConfig_lift(_ buf: RustBuffer) throws -> AppConfig {
+    return try FfiConverterTypeAppConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppConfig_lower(_ value: AppConfig) -> RustBuffer {
+    return FfiConverterTypeAppConfig.lower(value)
+}
+
+
+/**
+ * Snapshot for the `ViewId::AppRoot` projection.
+ */
+public struct AppRootSnapshot {
+    /**
+     * Which top-level screen to render.
+     */
+    public var routeKind: RouteKind
+    /**
+     * Whether a session secret is currently in memory.
+     */
+    public var sessionPresent: Bool
+    /**
+     * Whether the user has completed onboarding.
+     */
+    public var onboardingComplete: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Which top-level screen to render.
+         */routeKind: RouteKind,
+        /**
+         * Whether a session secret is currently in memory.
+         */sessionPresent: Bool,
+        /**
+         * Whether the user has completed onboarding.
+         */onboardingComplete: Bool) {
+        self.routeKind = routeKind
+        self.sessionPresent = sessionPresent
+        self.onboardingComplete = onboardingComplete
+    }
+}
+
+#if compiler(>=6)
+extension AppRootSnapshot: Sendable {}
+#endif
+
+
+extension AppRootSnapshot: Equatable, Hashable {
+    public static func ==(lhs: AppRootSnapshot, rhs: AppRootSnapshot) -> Bool {
+        if lhs.routeKind != rhs.routeKind {
+            return false
+        }
+        if lhs.sessionPresent != rhs.sessionPresent {
+            return false
+        }
+        if lhs.onboardingComplete != rhs.onboardingComplete {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(routeKind)
+        hasher.combine(sessionPresent)
+        hasher.combine(onboardingComplete)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAppRootSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppRootSnapshot {
+        return
+            try AppRootSnapshot(
+                routeKind: FfiConverterTypeRouteKind.read(from: &buf),
+                sessionPresent: FfiConverterBool.read(from: &buf),
+                onboardingComplete: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AppRootSnapshot, into buf: inout [UInt8]) {
+        FfiConverterTypeRouteKind.write(value.routeKind, into: &buf)
+        FfiConverterBool.write(value.sessionPresent, into: &buf)
+        FfiConverterBool.write(value.onboardingComplete, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppRootSnapshot_lift(_ buf: RustBuffer) throws -> AppRootSnapshot {
+    return try FfiConverterTypeAppRootSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppRootSnapshot_lower(_ value: AppRootSnapshot) -> RustBuffer {
+    return FfiConverterTypeAppRootSnapshot.lower(value)
 }
 
 
@@ -36742,6 +37462,119 @@ public func FfiConverterTypeRoomShareLinkSnapshot_lower(_ value: RoomShareLinkSn
 }
 
 
+/**
+ * Snapshot for the `ViewId::RootShell` projection.
+ */
+public struct RootShellSnapshot {
+    /**
+     * Index of the currently selected tab (matches `RootTab` raw values).
+     */
+    public var selectedTab: UInt8
+    /**
+     * Total number of tabs — fixed in Phase 1.
+     */
+    public var tabCount: UInt8
+    /**
+     * Active toast, if any. Cleared by the kernel when `clock >= dismiss_at_unix`.
+     */
+    public var toast: ToastSnapshot?
+    /**
+     * ID of the sheet currently covering the root shell, if any.
+     */
+    public var sheetId: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Index of the currently selected tab (matches `RootTab` raw values).
+         */selectedTab: UInt8,
+        /**
+         * Total number of tabs — fixed in Phase 1.
+         */tabCount: UInt8,
+        /**
+         * Active toast, if any. Cleared by the kernel when `clock >= dismiss_at_unix`.
+         */toast: ToastSnapshot?,
+        /**
+         * ID of the sheet currently covering the root shell, if any.
+         */sheetId: String?) {
+        self.selectedTab = selectedTab
+        self.tabCount = tabCount
+        self.toast = toast
+        self.sheetId = sheetId
+    }
+}
+
+#if compiler(>=6)
+extension RootShellSnapshot: Sendable {}
+#endif
+
+
+extension RootShellSnapshot: Equatable, Hashable {
+    public static func ==(lhs: RootShellSnapshot, rhs: RootShellSnapshot) -> Bool {
+        if lhs.selectedTab != rhs.selectedTab {
+            return false
+        }
+        if lhs.tabCount != rhs.tabCount {
+            return false
+        }
+        if lhs.toast != rhs.toast {
+            return false
+        }
+        if lhs.sheetId != rhs.sheetId {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(selectedTab)
+        hasher.combine(tabCount)
+        hasher.combine(toast)
+        hasher.combine(sheetId)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRootShellSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RootShellSnapshot {
+        return
+            try RootShellSnapshot(
+                selectedTab: FfiConverterUInt8.read(from: &buf),
+                tabCount: FfiConverterUInt8.read(from: &buf),
+                toast: FfiConverterOptionTypeToastSnapshot.read(from: &buf),
+                sheetId: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RootShellSnapshot, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.selectedTab, into: &buf)
+        FfiConverterUInt8.write(value.tabCount, into: &buf)
+        FfiConverterOptionTypeToastSnapshot.write(value.toast, into: &buf)
+        FfiConverterOptionString.write(value.sheetId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootShellSnapshot_lift(_ buf: RustBuffer) throws -> RootShellSnapshot {
+    return try FfiConverterTypeRootShellSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootShellSnapshot_lower(_ value: RootShellSnapshot) -> RustBuffer {
+    return FfiConverterTypeRootShellSnapshot.lower(value)
+}
+
+
 public struct SearchArticleResultsSnapshot {
     public var articles: [ArticleRecord]
 
@@ -40130,6 +40963,87 @@ public func FfiConverterTypeSubscriptionStartSnapshot_lower(_ value: Subscriptio
 }
 
 
+/**
+ * A transient toast message visible in the root shell.
+ */
+public struct ToastSnapshot {
+    public var message: String
+    /**
+     * UNIX second at which the kernel will auto-dismiss this toast
+     * (clock-driven, D8/D9 — no Swift `Timer` involved).
+     */
+    public var dismissAtUnix: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(message: String,
+        /**
+         * UNIX second at which the kernel will auto-dismiss this toast
+         * (clock-driven, D8/D9 — no Swift `Timer` involved).
+         */dismissAtUnix: UInt64) {
+        self.message = message
+        self.dismissAtUnix = dismissAtUnix
+    }
+}
+
+#if compiler(>=6)
+extension ToastSnapshot: Sendable {}
+#endif
+
+
+extension ToastSnapshot: Equatable, Hashable {
+    public static func ==(lhs: ToastSnapshot, rhs: ToastSnapshot) -> Bool {
+        if lhs.message != rhs.message {
+            return false
+        }
+        if lhs.dismissAtUnix != rhs.dismissAtUnix {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(message)
+        hasher.combine(dismissAtUnix)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeToastSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ToastSnapshot {
+        return
+            try ToastSnapshot(
+                message: FfiConverterString.read(from: &buf),
+                dismissAtUnix: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ToastSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.message, into: &buf)
+        FfiConverterUInt64.write(value.dismissAtUnix, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeToastSnapshot_lift(_ buf: RustBuffer) throws -> ToastSnapshot {
+    return try FfiConverterTypeToastSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeToastSnapshot_lower(_ value: ToastSnapshot) -> RustBuffer {
+    return FfiConverterTypeToastSnapshot.lower(value)
+}
+
+
 public struct TranscriptSegment {
     public var id: String
     public var start: Double
@@ -41467,6 +42381,146 @@ extension AddRelayProbeStatus: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * Every user or platform action the kernel understands — Phase 1.
+ *
+ * Dispatch is fire-and-forget (`dispatch(action)` returns `()`; Non-Negotiable #3).
+ * Errors never propagate back as `Result` — they surface as typed `ViewSnapshot` state.
+ */
+
+public enum AppAction {
+
+    /**
+     * Attempt to restore a prior session from the native keychain.
+     */
+    case restoreSession
+    /**
+     * Retry a failed restore (same effect as `RestoreSession`; separate
+     * variant for UI affordance clarity).
+     */
+    case retryRestore
+    /**
+     * Clear the active session, emit a `ClearSession` capability request,
+     * bump the session epoch to cancel in-flight view-scoped effects.
+     */
+    case logout
+    /**
+     * Mark onboarding as complete in the durable `OnboardingStore`.
+     */
+    case completeOnboarding
+    /**
+     * Switch the active root tab.
+     */
+    case selectRootTab(tab: RootTab
+    )
+    /**
+     * Present a named sheet over the root shell.
+     */
+    case presentSheet(sheetId: String
+    )
+    /**
+     * Dismiss the topmost sheet.
+     */
+    case dismissSheet
+}
+
+
+#if compiler(>=6)
+extension AppAction: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
+    typealias SwiftType = AppAction
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppAction {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .restoreSession
+
+        case 2: return .retryRestore
+
+        case 3: return .logout
+
+        case 4: return .completeOnboarding
+
+        case 5: return .selectRootTab(tab: try FfiConverterTypeRootTab.read(from: &buf)
+        )
+
+        case 6: return .presentSheet(sheetId: try FfiConverterString.read(from: &buf)
+        )
+
+        case 7: return .dismissSheet
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AppAction, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .restoreSession:
+            writeInt(&buf, Int32(1))
+
+
+        case .retryRestore:
+            writeInt(&buf, Int32(2))
+
+
+        case .logout:
+            writeInt(&buf, Int32(3))
+
+
+        case .completeOnboarding:
+            writeInt(&buf, Int32(4))
+
+
+        case let .selectRootTab(tab):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeRootTab.write(tab, into: &buf)
+
+
+        case let .presentSheet(sheetId):
+            writeInt(&buf, Int32(6))
+            FfiConverterString.write(sheetId, into: &buf)
+
+
+        case .dismissSheet:
+            writeInt(&buf, Int32(7))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppAction_lift(_ buf: RustBuffer) throws -> AppAction {
+    return try FfiConverterTypeAppAction.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppAction_lower(_ value: AppAction) -> RustBuffer {
+    return FfiConverterTypeAppAction.lower(value)
+}
+
+
+extension AppAction: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * Native-shell destination for an artifact detail tap. Rust owns the
  * NIP/source/reference interpretation; platform shells only render the
  * matching native screen.
@@ -41785,6 +42839,152 @@ public func FfiConverterTypeBookmarkLibraryScope_lower(_ value: BookmarkLibraryS
 
 
 extension BookmarkLibraryScope: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * A request from the Rust kernel to the native shell to execute an OS
+ * capability. Emitted via `HighlighterObserver::on_capability_request`.
+ */
+
+public enum CapabilityRequest {
+
+    /**
+     * Keychain load/clear request.
+     */
+    case keychain(KeychainOp
+    )
+}
+
+
+#if compiler(>=6)
+extension CapabilityRequest: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCapabilityRequest: FfiConverterRustBuffer {
+    typealias SwiftType = CapabilityRequest
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CapabilityRequest {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .keychain(try FfiConverterTypeKeychainOp.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CapabilityRequest, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .keychain(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeKeychainOp.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCapabilityRequest_lift(_ buf: RustBuffer) throws -> CapabilityRequest {
+    return try FfiConverterTypeCapabilityRequest.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCapabilityRequest_lower(_ value: CapabilityRequest) -> RustBuffer {
+    return FfiConverterTypeCapabilityRequest.lower(value)
+}
+
+
+extension CapabilityRequest: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * The native shell's response to a prior `CapabilityRequest`. Delivered via
+ * `HighlighterApp::provide_capability_result`.
+ */
+
+public enum CapabilityResult {
+
+    /**
+     * Response to a `CapabilityRequest::Keychain`.
+     */
+    case keychain(KeychainResult
+    )
+}
+
+
+#if compiler(>=6)
+extension CapabilityResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCapabilityResult: FfiConverterRustBuffer {
+    typealias SwiftType = CapabilityResult
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CapabilityResult {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .keychain(try FfiConverterTypeKeychainResult.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CapabilityResult, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .keychain(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeKeychainResult.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCapabilityResult_lift(_ buf: RustBuffer) throws -> CapabilityResult {
+    return try FfiConverterTypeCapabilityResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCapabilityResult_lower(_ value: CapabilityResult) -> RustBuffer {
+    return FfiConverterTypeCapabilityResult.lower(value)
+}
+
+
+extension CapabilityResult: Equatable, Hashable {}
 
 
 
@@ -42509,6 +43709,182 @@ public func FfiConverterTypeHighlightSourceKind_lower(_ value: HighlightSourceKi
 
 
 extension HighlightSourceKind: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * What the kernel is asking the native keychain to do.
+ */
+
+public enum KeychainOp {
+
+    /**
+     * Load the persisted session secret (nsec or bunker URI).
+     */
+    case loadSession
+    /**
+     * Delete the persisted session secret (on logout).
+     */
+    case clearSession
+}
+
+
+#if compiler(>=6)
+extension KeychainOp: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeychainOp: FfiConverterRustBuffer {
+    typealias SwiftType = KeychainOp
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeychainOp {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .loadSession
+
+        case 2: return .clearSession
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: KeychainOp, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .loadSession:
+            writeInt(&buf, Int32(1))
+
+
+        case .clearSession:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeychainOp_lift(_ buf: RustBuffer) throws -> KeychainOp {
+    return try FfiConverterTypeKeychainOp.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeychainOp_lower(_ value: KeychainOp) -> RustBuffer {
+    return FfiConverterTypeKeychainOp.lower(value)
+}
+
+
+extension KeychainOp: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Raw result from the native keychain, reported via `provide_capability_result`.
+ */
+
+public enum KeychainResult {
+
+    /**
+     * `LoadSession` completed. `Some(secret)` when a secret was found,
+     * `None` when the slot was empty (no prior session).
+     */
+    case sessionSecret(String?
+    )
+    /**
+     * `ClearSession` completed successfully.
+     */
+    case cleared
+    /**
+     * The native keychain returned an error (OS / access denial).
+     * Errors are data (D6) — the kernel surfaces them as typed state.
+     */
+    case error(String
+    )
+}
+
+
+#if compiler(>=6)
+extension KeychainResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeychainResult: FfiConverterRustBuffer {
+    typealias SwiftType = KeychainResult
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeychainResult {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .sessionSecret(try FfiConverterOptionString.read(from: &buf)
+        )
+
+        case 2: return .cleared
+
+        case 3: return .error(try FfiConverterString.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: KeychainResult, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .sessionSecret(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterOptionString.write(v1, into: &buf)
+
+
+        case .cleared:
+            writeInt(&buf, Int32(2))
+
+
+        case let .error(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeychainResult_lift(_ buf: RustBuffer) throws -> KeychainResult {
+    return try FfiConverterTypeKeychainResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKeychainResult_lower(_ value: KeychainResult) -> RustBuffer {
+    return FfiConverterTypeKeychainResult.lower(value)
+}
+
+
+extension KeychainResult: Equatable, Hashable {}
 
 
 
@@ -44510,6 +45886,428 @@ extension RoomVisibility: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * The active root tab. Tab index matches the Swift `MainTabView` order.
+ */
+
+public enum RootTab {
+
+    case feed
+    case discover
+    case capture
+    case notifications
+    case settings
+}
+
+
+#if compiler(>=6)
+extension RootTab: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRootTab: FfiConverterRustBuffer {
+    typealias SwiftType = RootTab
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RootTab {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .feed
+
+        case 2: return .discover
+
+        case 3: return .capture
+
+        case 4: return .notifications
+
+        case 5: return .settings
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RootTab, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .feed:
+            writeInt(&buf, Int32(1))
+
+
+        case .discover:
+            writeInt(&buf, Int32(2))
+
+
+        case .capture:
+            writeInt(&buf, Int32(3))
+
+
+        case .notifications:
+            writeInt(&buf, Int32(4))
+
+
+        case .settings:
+            writeInt(&buf, Int32(5))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootTab_lift(_ buf: RustBuffer) throws -> RootTab {
+    return try FfiConverterTypeRootTab.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRootTab_lower(_ value: RootTab) -> RustBuffer {
+    return FfiConverterTypeRootTab.lower(value)
+}
+
+
+extension RootTab: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Which screen the root shell should display.
+ */
+
+public enum RouteKind {
+
+    /**
+     * User has not completed onboarding; show the onboarding flow.
+     */
+    case onboarding
+    /**
+     * Onboarding complete but no active session; show the login screen.
+     */
+    case login
+    /**
+     * Session present; show the main tab shell.
+     */
+    case rootShell
+}
+
+
+#if compiler(>=6)
+extension RouteKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRouteKind: FfiConverterRustBuffer {
+    typealias SwiftType = RouteKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RouteKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .onboarding
+
+        case 2: return .login
+
+        case 3: return .rootShell
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RouteKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .onboarding:
+            writeInt(&buf, Int32(1))
+
+
+        case .login:
+            writeInt(&buf, Int32(2))
+
+
+        case .rootShell:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRouteKind_lift(_ buf: RustBuffer) throws -> RouteKind {
+    return try FfiConverterTypeRouteKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRouteKind_lower(_ value: RouteKind) -> RustBuffer {
+    return FfiConverterTypeRouteKind.lower(value)
+}
+
+
+extension RouteKind: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Stable identifier for an open view instance.
+ *
+ * In Phase 1 there are two: the app-root decision surface and the root shell.
+ * Later phases add per-screen identifiers.
+ */
+
+public enum ViewId {
+
+    /**
+     * The root entry point that decides which top-level route to show
+     * (`Onboarding`, `Login`, or `RootShell`).
+     */
+    case appRoot
+    /**
+     * The main tab shell (visible only when session is present).
+     */
+    case rootShell
+}
+
+
+#if compiler(>=6)
+extension ViewId: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeViewId: FfiConverterRustBuffer {
+    typealias SwiftType = ViewId
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ViewId {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .appRoot
+
+        case 2: return .rootShell
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ViewId, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .appRoot:
+            writeInt(&buf, Int32(1))
+
+
+        case .rootShell:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewId_lift(_ buf: RustBuffer) throws -> ViewId {
+    return try FfiConverterTypeViewId.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewId_lower(_ value: ViewId) -> RustBuffer {
+    return FfiConverterTypeViewId.lower(value)
+}
+
+
+extension ViewId: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Which projection to compute for a registered view.
+ */
+
+public enum ViewRoute {
+
+    case appRoot
+    case rootShell
+}
+
+
+#if compiler(>=6)
+extension ViewRoute: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeViewRoute: FfiConverterRustBuffer {
+    typealias SwiftType = ViewRoute
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ViewRoute {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .appRoot
+
+        case 2: return .rootShell
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ViewRoute, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .appRoot:
+            writeInt(&buf, Int32(1))
+
+
+        case .rootShell:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewRoute_lift(_ buf: RustBuffer) throws -> ViewRoute {
+    return try FfiConverterTypeViewRoute.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewRoute_lower(_ value: ViewRoute) -> RustBuffer {
+    return FfiConverterTypeViewRoute.lower(value)
+}
+
+
+extension ViewRoute: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Tagged union of all view snapshots — one variant per `ViewRoute`.
+ *
+ * Bounded by open views: the kernel only emits a snapshot for a view that
+ * has been registered via `open_view`. Closed views produce nothing
+ * (Non-Negotiable #7).
+ */
+
+public enum ViewSnapshot {
+
+    case appRoot(AppRootSnapshot
+    )
+    case rootShell(RootShellSnapshot
+    )
+}
+
+
+#if compiler(>=6)
+extension ViewSnapshot: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeViewSnapshot: FfiConverterRustBuffer {
+    typealias SwiftType = ViewSnapshot
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ViewSnapshot {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .appRoot(try FfiConverterTypeAppRootSnapshot.read(from: &buf)
+        )
+
+        case 2: return .rootShell(try FfiConverterTypeRootShellSnapshot.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ViewSnapshot, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .appRoot(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeAppRootSnapshot.write(v1, into: &buf)
+
+
+        case let .rootShell(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeRootShellSnapshot.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewSnapshot_lift(_ buf: RustBuffer) throws -> ViewSnapshot {
+    return try FfiConverterTypeViewSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeViewSnapshot_lower(_ value: ViewSnapshot) -> RustBuffer {
+    return FfiConverterTypeViewSnapshot.lower(value)
+}
+
+
+extension ViewSnapshot: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum WaveformWifiStatus {
 
@@ -45332,6 +47130,30 @@ fileprivate struct FfiConverterOptionTypeShareArtifactTargetProjection: FfiConve
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeToastSnapshot: FfiConverterRustBuffer {
+    typealias SwiftType = ToastSnapshot?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeToastSnapshot.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeToastSnapshot.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeTranscriptSegment: FfiConverterRustBuffer {
     typealias SwiftType = TranscriptSegment?
 
@@ -45396,6 +47218,30 @@ fileprivate struct FfiConverterOptionTypeNostrEntityRef: FfiConverterRustBuffer 
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeNostrEntityRef.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeViewSnapshot: FfiConverterRustBuffer {
+    typealias SwiftType = ViewSnapshot?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeViewSnapshot.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeViewSnapshot.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -46840,6 +48686,36 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_eventcallback_on_data_changed() != 54279) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_close_view() != 64554) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_current_snapshot() != 21980) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_dispatch() != 26805) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_open_view() != 29686) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_provide_capability_result() != 16552) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_resume() != 61329) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_set_observer() != 43077) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_shutdown() != 21662) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_suspend() != 2060) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_tick() != 48249) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_apply_network_path_status() != 37260) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -47764,11 +49640,21 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_upsert_relay() != 45711) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlighterobserver_on_snapshot() != 28110) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighterobserver_on_capability_request() != 18133) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_constructor_highlighterapp_new() != 21709) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_constructor_highlightercore_new() != 37739) {
         return InitializationResult.apiChecksumMismatch
     }
 
     uniffiCallbackInitEventCallback()
+    uniffiCallbackInitHighlighterObserver()
     return InitializationResult.ok
 }()
 
