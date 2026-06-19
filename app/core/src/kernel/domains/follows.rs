@@ -177,11 +177,14 @@ pub(crate) fn run_effect_dispatch_follow_action(
 /// against `nmp_ref`. Follows the Chirp pattern in
 /// `apps/chirp/nmp-app-chirp/src/ffi/register.rs::nmp_app_chirp_register_follow_list`.
 ///
-/// Must be called:
-///   1. Once at boot (after `nmp_app_start`), with `active_pubkey = None` if
-///      the account is not yet known.
-///   2. On `IdentityChanged(Some(pubkey))` — re-call with the new pubkey to
-///      route the follow-list snapshot to the correct account's kind:3.
+/// `active_account_slot` is the live `Arc<Mutex<Option<String>>>` that NMP
+/// itself updates on sign-in/switch/logout. Pass `nmp_ref.active_account_handle()`
+/// so the projection auto-tracks the active account without manual updates.
+/// Using a fresh `Arc::new(Mutex::new(None))` would leave the projection
+/// permanently pointed at None, so follows would never populate AppState.
+///
+/// Must be called once at boot (after `nmp_app_start`). The slot automatically
+/// reflects future identity changes because NMP writes through the same Arc.
 ///
 /// The kernel already fetches kind:3 for the active account via the
 /// `account_profile_interest` (kind:0 + kind:3 + kind:10002); no separate
@@ -190,10 +193,11 @@ pub(crate) fn run_effect_dispatch_follow_action(
 /// D6: a null or poisoned observer slot degrades to a silent return without
 /// registering the typed projection (so the snapshot never updates but the
 /// app does not crash).
-pub(crate) fn register_follow_list_projection(nmp_ref: &NmpApp, active_pubkey: Option<String>) {
-    let active_pubkey_slot: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(active_pubkey));
-
-    let projection = Arc::new(FollowListProjection::new(Arc::clone(&active_pubkey_slot)));
+pub(crate) fn register_follow_list_projection(
+    nmp_ref: &NmpApp,
+    active_account_slot: Arc<Mutex<Option<String>>>,
+) {
+    let projection = Arc::new(FollowListProjection::new(active_account_slot));
 
     let observer_id =
         nmp_ref.register_event_observer(Arc::clone(&projection) as Arc<dyn KernelEventObserver>);
@@ -402,7 +406,73 @@ mod tests {
         );
     }
 
-    // 3C-T7: empty follow list clears the follow set
+    // 3C-T7: follows cleared on Logout
+    //
+    // AppAction::Logout must wipe AppState::follows so stale contacts from the
+    // previous account don't survive into the next session.
+    #[test]
+    fn follows_cleared_on_logout() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        let pk = "deadbeef00000000000000000000000000000000000000000000000000000001";
+
+        // Seed follows and a present session.
+        state.follows = vec![pk.to_string()];
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::IdentityChanged(Some("somepubkey".into()))),
+        );
+
+        // Logout — follows must be cleared.
+        step(&mut state, &clock, Cmd::Action(AppAction::Logout));
+
+        assert!(
+            state.follows.is_empty(),
+            "follows must be empty after Logout"
+        );
+        assert!(
+            !state.is_following(pk),
+            "is_following must return false after Logout"
+        );
+    }
+
+    // 3C-T8: follows cleared on IdentityChanged(None)
+    //
+    // NMP fires IdentityChanged(None) on account removal. AppState::follows
+    // must be wiped so stale contacts don't outlive the removed account.
+    #[test]
+    fn follows_cleared_on_identity_changed_none() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        let pk = "deadbeef00000000000000000000000000000000000000000000000000000002";
+
+        // Seed follows and a present session.
+        state.follows = vec![pk.to_string()];
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::IdentityChanged(Some("anotherpubkey".into()))),
+        );
+
+        // Account removed — follows must be cleared.
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::IdentityChanged(None)),
+        );
+
+        assert!(
+            state.follows.is_empty(),
+            "follows must be empty after IdentityChanged(None)"
+        );
+        assert!(
+            !state.is_following(pk),
+            "is_following must return false after account removal"
+        );
+    }
+
+    // 3C-T9: empty follow list clears the follow set
     //
     // A valid follow-list frame with zero entries must empty AppState::follows.
     // This is the correct behaviour when the user unfollows everyone.

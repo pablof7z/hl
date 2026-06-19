@@ -97,6 +97,11 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     state.session_epoch += 1;
     // Clear any pending NostrConnect URI on logout.
     state.nostrconnect_uri = None;
+    // ── Phase 3C: clear follow set so stale follows don't survive logout ──────
+    // The FollowListProjection active-account slot auto-resets via the shared
+    // Arc, but AppState::follows must also be wiped so is_following never
+    // returns true for the previous account's contacts.
+    state.follows = Vec::new();
     // RemoveActiveAccount fires nmp.remove_account; ClearSession
     // emits a CapabilityRequest to native for its keychain.
     vec![Effect::RemoveActiveAccount, Effect::ClearSession]
@@ -134,6 +139,10 @@ pub(crate) fn reduce_event_identity_changed(
             // None or empty pubkey → no active account.
             state.nostrconnect_uri = None;
             state.session = SessionState::Absent;
+            // ── Phase 3C: clear follow set on account removal ─────────────────
+            // NMP fires IdentityChanged(None) on logout / account removal. Wipe
+            // AppState::follows so stale contacts don't outlive the session.
+            state.follows = Vec::new();
         }
     }
     vec![]

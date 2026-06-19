@@ -567,7 +567,10 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
     // kind:3 events for all observed authors and filters to the active pubkey
     // at snapshot time. The kernel's standing `account_profile_interest`
     // (kind:0 + kind:3 + kind:10002) means no separate interest push is needed.
-    follows::register_follow_list_projection(nmp_ref, None);
+    // Pass the live active-account slot so the projection auto-tracks the
+    // active account. A fresh Arc::new(Mutex::new(None)) would leave it
+    // permanently pointed at None and follows would never populate AppState.
+    follows::register_follow_list_projection(nmp_ref, nmp_ref.active_account_handle());
 
     // Phase 3A: register the update callback so NMP snapshot frames are
     // forwarded into the actor as KernelEvent::NmpSnapshotFrame. The
