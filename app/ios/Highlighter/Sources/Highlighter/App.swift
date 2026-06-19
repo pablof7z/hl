@@ -1,8 +1,11 @@
 import SwiftUI
 
 @main
-struct HighlighterApp: App {
+// Renamed from `HighlighterApp` to avoid collision with the UniFFI-generated
+// `open class HighlighterApp` (Phase 1 nmp-lane kernel FFI object).
+struct AppEntry: App {
     @State private var store = HighlighterStore()
+    @State private var kernel = HighlighterAppKernel()
 
     // MARK: - What's-new sheet wiring
     //
@@ -12,14 +15,34 @@ struct HighlighterApp: App {
     // sitting on top causes the sheet's content closure to read stale entries.
     @State private var whatsNewPresentation: WhatsNewPresentation?
 
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some Scene {
         WindowGroup {
             RootSceneView()
                 .environment(store)
+                .environment(kernel)
                 .task {
+                    // Kick the kernel's session-restore loop first so the
+                    // route state is available as early as possible.
+                    kernel.app.dispatch(action: .restoreSession)
+
+                    // Live-lane: prepare the what's-new sheet.
                     let snapshot = await store.safeCore.prepareWhatsNew()
                     if snapshot.shouldPresent {
                         whatsNewPresentation = WhatsNewPresentation(entries: snapshot.entries)
+                    }
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    // Forward app lifecycle to the kernel (belt-and-suspenders:
+                    // RootSceneView also handles the live-lane side effects).
+                    switch newPhase {
+                    case .active:
+                        kernel.app.resume()
+                    case .background, .inactive:
+                        kernel.app.suspend()
+                    @unknown default:
+                        break
                     }
                 }
                 .sheet(item: $whatsNewPresentation) { presentation in
