@@ -107,7 +107,9 @@ pub(crate) fn apply_discovered_groups(state: &mut AppState, payload: &[u8]) {
 /// `KernelEvent::DiscoveredGroupsUpdated` on the next NMP projection tick.
 /// No relay URL literals appear here — `relay_url` is opaque (D3).
 pub(crate) fn reduce_action_start_room_discovery(relay_url: String) -> Vec<Effect> {
-    let json = format!("{{\"relay_url\":\"{relay_url}\"}}");
+    // Use serde_json to safely serialize the relay_url; a naïve format! would
+    // produce invalid JSON if the URL ever contained quotes or backslashes.
+    let json = serde_json::json!({"relay_url": relay_url}).to_string();
     vec![
         Effect::DispatchNip29Action {
             namespace: "nmp.nip29.discover".to_string(),
