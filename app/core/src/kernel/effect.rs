@@ -102,4 +102,21 @@ pub enum Effect {
         /// JSON-serialized rooms relay list to embed in the event content.
         content: String,
     },
+
+    // ── Phase 3C additions (append-only) ─────────────────────────────────────
+    /// Call `nmp_app_dispatch_action` with `"nmp.follow"` or `"nmp.unfollow"`
+    /// namespace and `{"pubkey":"<hex>"}` JSON. Fire-and-forget (D6, Non-
+    /// Negotiable #3): the updated follow list arrives back through the
+    /// `FollowListUpdated` projection event (via the NMP update callback).
+    ///
+    /// The `nmp.follow` / `nmp.unfollow` action namespaces (via
+    /// `nmp_nip02::FollowModule` / `UnfollowModule`) enqueue
+    /// `ActorCommand::Follow` / `Unfollow` on the nmp actor thread which
+    /// rebuilds + re-publishes kind:3.
+    DispatchFollowAction {
+        /// `true` → `"nmp.follow"` namespace; `false` → `"nmp.unfollow"`.
+        follow: bool,
+        /// Raw 64-char lowercase hex pubkey to follow or unfollow.
+        pubkey: String,
+    },
 }

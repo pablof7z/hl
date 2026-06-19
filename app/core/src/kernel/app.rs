@@ -100,6 +100,19 @@ pub struct AppState {
     /// String ≤ 512 bytes per NIP-46 spec. Exposed via `AppRootSnapshot` so
     /// the iOS QR-code sheet can render it without polling.
     pub nostrconnect_uri: Option<String>,
+
+    // ── Phase 3C additions ────────────────────────────────────────────────────
+    /// Raw hex pubkeys in the active account's NIP-02 follow set (kind:3).
+    ///
+    /// Updated by `KernelEvent::FollowListUpdated` — a decoded
+    /// `"nmp.nip02.follow_list"` typed sidecar from the NMP update callback.
+    /// Empty until the first follow-list frame arrives. No formatting — the
+    /// presentation layer (Swift) handles bech32/abbreviation/avatar.
+    ///
+    /// Phase 3D `Profile` snapshots and 3E recommendation heuristics read
+    /// this field via `AppState::is_following(pubkey)` — the single query
+    /// point so no caller duplicates the Vec scan.
+    pub follows: Vec<String>,
 }
 
 impl Default for AppState {
@@ -111,6 +124,7 @@ impl Default for AppState {
             chrome: ChromeState::default(),
             session_epoch: 0,
             nostrconnect_uri: None,
+            follows: Vec::new(),
         }
     }
 }
@@ -213,5 +227,17 @@ impl AppState {
     /// Storage sub-directory the new lane's `NmpApp` will use.
     pub fn nmp_storage_path(data_dir: &str) -> PathBuf {
         PathBuf::from(data_dir).join("nmp-lane")
+    }
+
+    // ── Phase 3C additions ────────────────────────────────────────────────────
+
+    /// Return `true` if `pubkey` (raw 64-char hex) is in the active account's
+    /// follow set as last projected from the `"nmp.nip02.follow_list"` sidecar.
+    ///
+    /// Phase 3D `ProfileSnapshot::is_following` and Phase 3E friends-shelf
+    /// recommendation heuristics call this rather than scanning `follows`
+    /// directly — single query point, logic in one place.
+    pub fn is_following(&self, pubkey: &str) -> bool {
+        self.follows.iter().any(|pk| pk == pubkey)
     }
 }

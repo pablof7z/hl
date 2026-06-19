@@ -36,7 +36,7 @@ use crate::onboarding::OnboardingStore;
 use nmp_defaults::{NmpAppBuilder, RunConfig};
 
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
-use crate::kernel::domains::{auth, projections, relays, route, session};
+use crate::kernel::domains::{auth, follows, projections, relays, route, session};
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
 
@@ -247,6 +247,11 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         AppAction::SetRoomsRelayList { relay_urls } => {
             relays::reduce_action_set_rooms_relay_list(state, relay_urls)
         }
+
+        // ── Phase 3C additions ────────────────────────────────────────────────
+        AppAction::Follow { pubkey } => follows::reduce_action_follow(pubkey),
+
+        AppAction::Unfollow { pubkey } => follows::reduce_action_unfollow(pubkey),
     }
 }
 
@@ -296,6 +301,15 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // and dispatch to the projections domain handler which routes each
             // schema_id into the appropriate AppState field (or a no-op in 3A).
             projections::dispatch_typed_frame(state, &bytes)
+        }
+
+        // ── Phase 3C additions (append-only) ─────────────────────────────────
+        KernelEvent::FollowListUpdated(pubkeys) => {
+            // Store raw hex pubkeys decoded from the "nmp.nip02.follow_list"
+            // typed sidecar. Also injectable directly from tests via Cmd::Event
+            // (no live NmpApp needed — the reducer path is identical).
+            state.follows = pubkeys;
+            vec![]
         }
     }
 }
@@ -385,6 +399,11 @@ pub(crate) async fn run_effect(
         }
         Effect::PublishRoomsRelayList { content } => {
             relays::run_effect_publish_rooms_relay_list(content, nmp);
+        }
+
+        // ── Phase 3C additions ────────────────────────────────────────────────
+        Effect::DispatchFollowAction { follow, pubkey } => {
+            follows::run_effect_dispatch_follow_action(follow, pubkey, nmp);
         }
     }
 
@@ -540,6 +559,15 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
     nmp_ref.register_identity_change_observer(move |active| {
         let _ = tx_id.send(Cmd::Event(KernelEvent::IdentityChanged(active)));
     });
+
+    // Phase 3C: wire the follow-list typed snapshot projection so NIP-02
+    // kind:3 events from the active account surface in `AppState::follows`.
+    // Called with `active_pubkey=None` at boot (account unknown until the
+    // identity-change observer fires); the `FollowListProjection` accumulates
+    // kind:3 events for all observed authors and filters to the active pubkey
+    // at snapshot time. The kernel's standing `account_profile_interest`
+    // (kind:0 + kind:3 + kind:10002) means no separate interest push is needed.
+    follows::register_follow_list_projection(nmp_ref, None);
 
     // Phase 3A: register the update callback so NMP snapshot frames are
     // forwarded into the actor as KernelEvent::NmpSnapshotFrame. The
