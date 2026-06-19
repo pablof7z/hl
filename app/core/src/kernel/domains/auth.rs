@@ -157,15 +157,10 @@ pub(crate) fn reduce_event_identity_changed(
                 signer_kind,
             };
             // Phase 3B: re-register joined-groups projection for the new account.
-            // Phase 4B: re-register reaction projection so viewer_reacted tracks
-            // the new account. The fresh ReactionObserver starts empty; kind:7
-            // events from prior relay subscriptions replay the counts.
-            return vec![
-                Effect::WireJoinedGroups { pubkey: pk.clone() },
-                Effect::WireReactionProjection {
-                    viewer_pubkey: Some(pk),
-                },
-            ];
+            // Phase 4B: the ReactionObserver is registered ONCE at boot with
+            // nmp_ref.active_account_handle() and auto-tracks account switches
+            // via the live Arc — no WireReactionProjection effect needed here.
+            return vec![Effect::WireJoinedGroups { pubkey: pk.clone() }];
         }
         _ => {
             // None or empty pubkey → no active account.

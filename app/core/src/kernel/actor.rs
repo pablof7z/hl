@@ -657,20 +657,6 @@ pub(crate) async fn run_effect(
             // KernelEvent::ReactionStateUpdated on the next projection tick.
             reactions::run_effect_dispatch_react_action(namespace, json, nmp);
         }
-
-        Effect::WireReactionProjection { viewer_pubkey } => {
-            // Re-register the ReactionObserver for the new account pubkey so
-            // viewer_reacted tracks the correct account after account switches.
-            // A fresh ReactionProjection is created; prior observations are
-            // discarded (consistent with JoinedGroupsProjection re-wire).
-            // Called on every IdentityChanged(Some). Fire-and-forget: the next
-            // kind:7 event drives KernelEvent::ReactionStateUpdated into the
-            // actor channel.
-            if let Some(handle) = nmp {
-                let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
-                reactions::register_reaction_projection(nmp_ref, viewer_pubkey, tx.clone());
-            }
-        }
     }
 
     let _ = session_epoch; // carried for future epoch-keyed effect cancellation
@@ -878,18 +864,12 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
         communities::register_joined_groups_projection(nmp_ref, boot_pubkey);
     }
 
-    // Phase 4B: register ReactionObserver at boot.
-    // Mirrors the JoinedGroupsProjection boot pattern above. The viewer_pubkey
-    // is None at boot if no account is persisted (the first IdentityChanged(Some)
-    // will fire Effect::WireReactionProjection with the real pubkey).
-    {
-        let boot_pubkey: Option<String> = nmp_ref
-            .active_account_handle()
-            .lock()
-            .ok()
-            .and_then(|g| g.clone());
-        reactions::register_reaction_projection(nmp_ref, boot_pubkey, tx.clone());
-    }
+    // Phase 4B: register ReactionObserver ONCE at boot with the live
+    // active_account_handle() Arc so the observer auto-tracks account switches.
+    // No re-registration on IdentityChanged(Some) is needed (the Arc is updated
+    // in-place by NMP on every sign-in/switch/logout). This avoids the observer-
+    // stacking bug where each IdentityChanged(Some) would add a new observer.
+    reactions::register_reaction_projection(nmp_ref, nmp_ref.active_account_handle(), tx.clone());
 
     // Wire identity-change observer → KernelEvent::IdentityChanged.
     // Pattern from nmp_runtime.rs:758-778.

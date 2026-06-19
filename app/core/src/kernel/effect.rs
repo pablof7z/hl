@@ -279,23 +279,4 @@ pub enum Effect {
         /// `format!`). `ReactAction` or `UnreactAction` depending on `namespace`.
         json: String,
     },
-    /// Register (or re-register) the `ReactionObserver` wrapping
-    /// `nmp-nip25::ReactionProjection` as a `KernelEventObserver` on the live
-    /// `NmpApp`, so kind:7 and kind:5 events are ingested into the projection
-    /// and fed back as `KernelEvent::ReactionStateUpdated`.
-    ///
-    /// Must be emitted at boot (via `start_nmp_app`) and on every
-    /// `IdentityChanged(Some(viewer_pubkey))` so the `viewer_reacted` field
-    /// tracks the correct account after account switches. A fresh
-    /// `ReactionProjection` is created on each call; prior observations are
-    /// discarded (consistent with the follows/joined-groups pattern).
-    ///
-    /// Fire-and-forget: the next kind:7 event drives the first
-    /// `KernelEvent::ReactionStateUpdated` back into the actor channel.
-    WireReactionProjection {
-        /// Hex pubkey of the active account, used to set `viewer_reacted` in
-        /// `ReactionSnapshot`. Pass `None` at boot before the first
-        /// `IdentityChanged(Some)` fires.
-        viewer_pubkey: Option<String>,
-    },
 }

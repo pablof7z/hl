@@ -26,18 +26,22 @@
 //!
 //! ## Wire registration
 //!
-//! `register_reaction_projection(nmp_ref, viewer_pubkey, tx)` is called at boot
-//! (after `nmp_app_start`) from `start_nmp_app` and re-called on every
-//! `Effect::WireReactionProjection` (emitted on `IdentityChanged(Some)`) so the
-//! viewer pubkey tracks the active account.
+//! `register_reaction_projection(nmp_ref, active_account, tx)` is called ONCE at
+//! boot (after `nmp_app_start`) from `start_nmp_app` using
+//! `nmp_ref.active_account_handle()` so the observer auto-tracks the active
+//! account. No re-registration on `IdentityChanged(Some)` is needed — the
+//! `ReactionObserver` reads the live `Arc<Mutex<Option<String>>>` on every event
+//! and calls `projection.set_viewer_pubkey(current)` so `viewer_reacted` is
+//! always current. `Effect::WireReactionProjection` does not exist.
 //!
 //! ## Threading
 //!
 //! `ReactionObserver::on_kernel_event` is called from the NMP event-dispatch
 //! thread (same thread as `FollowListProjection::on_kernel_event`). It:
-//! 1. Acquires a Mutex lock on the `ReactionProjection` internal entries (inside
-//!    the nmp-nip25 projection). Lock is brief (ingest + snapshot of one entry).
-//! 2. Sends `Cmd::Event(KernelEvent::ReactionStateUpdated)` into the
+//! 1. Acquires a Mutex lock on the `reaction_id_to_target` secondary map.
+//! 2. Acquires a Mutex lock on the `ReactionProjection` internal entries (inside
+//!    the nmp-nip25 projection). Locks are brief and never held simultaneously.
+//! 3. Sends `Cmd::Event(KernelEvent::ReactionStateUpdated)` into the
 //!    `UnboundedSender` — a non-blocking channel send. D8 compliant: no blocking.
 //!
 //! `AppState::reaction_state` is only mutated by the actor thread (inside
@@ -54,9 +58,10 @@
 //! * Non-Negotiable #3 — `React`/`Unreact` reduce to `Vec<Effect>` (never
 //!   `Result`); fire-and-forget.
 
+use std::collections::HashMap;
 use std::ffi::CString;
 use std::os::raw::c_char;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use nmp_core::KernelEventObserver;
 use nmp_ffi::NmpApp;
@@ -95,41 +100,138 @@ use nmp_ffi::nmp_free_string;
 /// sends the result to the actor channel. No typed-snapshot registration is
 /// used because `snapshot_for` is per-target and `ReactionProjection` has no
 /// public entry iterator at `b4404159`.
+///
+/// ## Bug-fix: kind:5 wrong-key fix
+///
+/// For kind:5 deletion events, the `["e", ...]` tags contain the
+/// *reaction_event_id* being deleted, NOT the original target_event_id.
+/// `reaction_id_to_target` maps `reaction_event_id → target_event_id` so the
+/// observer can look up which target's count changed before the projection
+/// removes the entry from its `entries` map.
+///
+/// ## Bug-fix: single registration / viewer auto-tracking
+///
+/// `active_account` is the live `Arc<Mutex<Option<String>>>` from
+/// `nmp_ref.active_account_handle()`. The observer reads it on every event and
+/// calls `projection.set_viewer_pubkey(current)` so `viewer_reacted` always
+/// reflects the signed-in account without re-registering the observer on every
+/// `IdentityChanged(Some)`.
 struct ReactionObserver {
     projection: Arc<ReactionProjection>,
+    /// Live active-account slot from `nmp_ref.active_account_handle()`.
+    /// Updated by NMP on sign-in / switch / logout without re-registration.
+    active_account: Arc<Mutex<Option<String>>>,
+    /// Secondary index: reaction_event_id → target_event_id.
+    /// Populated on every kind:7 ingest; consulted on kind:5 to find the
+    /// target whose count must be refreshed after the deletion.
+    reaction_id_to_target: Mutex<HashMap<String, String>>,
     tx: mpsc::UnboundedSender<Cmd>,
 }
 
 impl KernelEventObserver for ReactionObserver {
     fn on_kernel_event(&self, event: &nmp_core::substrate::KernelEvent) {
-        // Only process reaction kinds (7 = react, 5 = kind:5 delete).
-        if event.kind != KIND_REACTION && event.kind != KIND_REACTION_DELETE {
-            return;
+        match event.kind {
+            KIND_REACTION => self.handle_kind7(event),
+            KIND_REACTION_DELETE => self.handle_kind5(event),
+            _ => {}
         }
+    }
+}
 
-        // Delegate to the ReactionProjection to update its internal state.
-        // This call acquires and releases the projection's internal Mutex.
-        self.projection.on_kernel_event(event);
-
-        // Extract the target_event_id from the ["e", _] tag.
-        // D6: a kind:7 without an "e" tag is malformed — silent no-op.
+impl ReactionObserver {
+    /// Handle kind:7 — a new reaction.
+    ///
+    /// 1. Record `reaction_event_id → target_event_id` in the secondary map.
+    /// 2. Update `viewer_pubkey` from the live active-account slot.
+    /// 3. Delegate ingest to `ReactionProjection`.
+    /// 4. Snapshot the affected target and send `ReactionStateUpdated`.
+    fn handle_kind7(&self, event: &nmp_core::substrate::KernelEvent) {
+        // D6: kind:7 without an "e" tag is malformed — silent no-op.
         let target_event_id = match first_tag_value(&event.tags, "e") {
             Some(id) => id,
             None => return,
         };
 
-        // Snapshot the updated state for this target.
-        let snapshot = self.projection.snapshot_for(&target_event_id);
+        // Record the mapping before ingest so kind:5 deletions can resolve
+        // targets. This is a brief Mutex acquire (HashMap insert).
+        if let Ok(mut map) = self.reaction_id_to_target.lock() {
+            map.insert(event.id.clone(), target_event_id.clone());
+        }
 
-        // Compute derived fields. D1: raw count + viewer_reacted bool only.
-        // `snapshot.reactions` is the authoritative list from the projection.
+        // Sync viewer_pubkey from the live active-account Arc before
+        // snapshotting so viewer_reacted is always current (Bug 2 fix).
+        let current_viewer = self.active_account.lock().ok().and_then(|g| g.clone());
+        self.projection.set_viewer_pubkey(current_viewer);
+
+        // Delegate ingest to the projection (updates internal entries map).
+        self.projection.on_kernel_event(event);
+
+        // Snapshot the updated state for this target and push to actor.
+        self.push_snapshot(&target_event_id);
+    }
+
+    /// Handle kind:5 — deletion of one or more reaction events.
+    ///
+    /// kind:5 `["e", ...]` tags contain *reaction_event_ids* (not target ids).
+    /// Look up each in `reaction_id_to_target` BEFORE delegating to the
+    /// projection (which removes them from its entries map), then snapshot each
+    /// unique affected target and send `ReactionStateUpdated`.
+    fn handle_kind5(&self, event: &nmp_core::substrate::KernelEvent) {
+        // Collect deleted reaction_event_ids from all ["e", ...] tags.
+        let deleted_reaction_ids: Vec<String> = event
+            .tags
+            .iter()
+            .filter_map(|tag| {
+                if tag.first().is_some_and(|name| name == "e") {
+                    tag.get(1).filter(|v| !v.is_empty()).cloned()
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if deleted_reaction_ids.is_empty() {
+            return; // D6: malformed kind:5 with no "e" tags — silent no-op.
+        }
+
+        // Resolve the affected target_event_ids BEFORE the projection removes
+        // the entries (we need the mapping while it still exists). Collect into
+        // a deduped set so we don't snapshot the same target twice.
+        let mut affected_targets: Vec<String> = Vec::new();
+        if let Ok(map) = self.reaction_id_to_target.lock() {
+            for reaction_id in &deleted_reaction_ids {
+                if let Some(target_id) = map.get(reaction_id) {
+                    if !affected_targets.contains(target_id) {
+                        affected_targets.push(target_id.clone());
+                    }
+                }
+            }
+        }
+
+        // Sync viewer before snapshotting.
+        let current_viewer = self.active_account.lock().ok().and_then(|g| g.clone());
+        self.projection.set_viewer_pubkey(current_viewer);
+
+        // Let the projection remove the entries from its internal map.
+        self.projection.on_kernel_event(event);
+
+        // Snapshot each affected target and push updated counts.
+        for target_id in &affected_targets {
+            self.push_snapshot(target_id);
+        }
+    }
+
+    /// Snapshot `target_event_id` from `projection` and send
+    /// `KernelEvent::ReactionStateUpdated` into the actor channel.
+    ///
+    /// D1: raw count + viewer_reacted bool only.
+    /// D6: send errors (actor shut down) are silently dropped.
+    fn push_snapshot(&self, target_event_id: &str) {
+        let snapshot = self.projection.snapshot_for(target_event_id);
         let count = snapshot.reactions.len() as u32;
         let viewer_reacted = snapshot.viewer_reaction.is_some();
-
-        // Send the updated state to the actor channel. Fire-and-forget (D6):
-        // if the actor has shut down the send error is silently dropped.
         let _ = self.tx.send(Cmd::Event(KernelEvent::ReactionStateUpdated {
-            target_event_id,
+            target_event_id: target_event_id.to_string(),
             count,
             viewer_reacted,
         }));
@@ -282,33 +384,36 @@ pub(crate) fn run_effect_dispatch_react_action(
 /// `KernelEventObserver` against `nmp_ref`.
 ///
 /// On each ingested kind:7 or kind:5 event the observer:
-/// 1. Updates the underlying `ReactionProjection` state.
-/// 2. Extracts the `["e", target_event_id]` tag.
-/// 3. Calls `projection.snapshot_for(target_event_id)` to get the fresh count.
-/// 4. Sends `KernelEvent::ReactionStateUpdated` into the actor channel `tx`.
-///
-/// `viewer_pubkey` is the active account's hex pubkey (or `None` at boot
-/// before the first `IdentityChanged(Some)` fires). Pass the current active
-/// pubkey from `nmp_ref.active_account_handle()` so `viewer_reacted` reflects
-/// the signed-in user.
+/// 1. Reads the current viewer from `active_account` and calls
+///    `projection.set_viewer_pubkey(current)` so `viewer_reacted` is always current.
+/// 2. Records `reaction_event_id → target_event_id` (kind:7) or resolves the
+///    target before deletion (kind:5) using the `reaction_id_to_target` map.
+/// 3. Delegates ingest to the `ReactionProjection`.
+/// 4. Calls `projection.snapshot_for(target_event_id)` and sends
+///    `KernelEvent::ReactionStateUpdated` into the actor channel `tx`.
 ///
 /// ## When to call
 ///
-/// Called once at boot from `start_nmp_app` (after `nmp_app_start`). Also
-/// re-called via `Effect::WireReactionProjection` on every
-/// `IdentityChanged(Some)` so the `viewer_pubkey` tracks the active account.
-/// A fresh `ReactionProjection` is created on each call; prior observations
-/// are discarded (consistent with the follows/joined-groups pattern).
+/// Called **ONCE** at boot from `start_nmp_app` (after `nmp_app_start`) with
+/// `nmp_ref.active_account_handle()`. The observer auto-tracks account
+/// switches via the live `Arc<Mutex<Option<String>>>` — no re-registration on
+/// `IdentityChanged(Some)` is needed or desired (re-calling would STACK
+/// observers, causing memory leaks and duplicate events).
 ///
 /// D6: if `register_event_observer` returns id `0` (slot full), the observer
 /// is silently dropped and reaction state will not update (logged as a warning).
 pub(crate) fn register_reaction_projection(
     nmp_ref: &NmpApp,
-    viewer_pubkey: Option<String>,
+    active_account: Arc<Mutex<Option<String>>>,
     tx: mpsc::UnboundedSender<Cmd>,
 ) {
-    let projection = Arc::new(ReactionProjection::new(viewer_pubkey));
-    let observer = Arc::new(ReactionObserver { projection, tx });
+    let projection = Arc::new(ReactionProjection::new(None));
+    let observer = Arc::new(ReactionObserver {
+        projection,
+        active_account,
+        reaction_id_to_target: Mutex::new(HashMap::new()),
+        tx,
+    });
 
     let observer_id = nmp_ref.register_event_observer(observer as Arc<dyn KernelEventObserver>);
     if observer_id.0 == 0 {
@@ -563,8 +668,14 @@ mod tests {
         let target = "bbbb000000000000000000000000000000000000000000000000000000000002";
         let reaction_id = "cccc000000000000000000000000000000000000000000000000000000000003";
 
-        let projection = Arc::new(ReactionProjection::new(Some(viewer.to_string())));
-        let observer = ReactionObserver { projection, tx };
+        let active_account = Arc::new(Mutex::new(Some(viewer.to_string())));
+        let projection = Arc::new(ReactionProjection::new(None));
+        let observer = ReactionObserver {
+            projection,
+            active_account,
+            reaction_id_to_target: Mutex::new(HashMap::new()),
+            tx,
+        };
 
         // Construct a fake kind:7 event with the required tags.
         let event = nmp_core::substrate::KernelEvent {
@@ -612,7 +723,12 @@ mod tests {
     fn reaction_observer_noop_on_missing_e_tag() {
         let (tx, mut rx) = mpsc::unbounded_channel::<Cmd>();
         let projection = Arc::new(ReactionProjection::new(None));
-        let observer = ReactionObserver { projection, tx };
+        let observer = ReactionObserver {
+            projection,
+            active_account: Arc::new(Mutex::new(None)),
+            reaction_id_to_target: Mutex::new(HashMap::new()),
+            tx,
+        };
 
         let event = nmp_core::substrate::KernelEvent {
             id: "aaaa000000000000000000000000000000000000000000000000000000000001".to_string(),
@@ -755,5 +871,195 @@ mod tests {
             !debug_str.contains("likes"),
             "ReactionRow must not contain label strings (D1)"
         );
+    }
+
+    // 4B-T12: unreact_updates_target_count_not_reaction_event_key
+    //
+    // Bug 1 regression test: when a kind:5 deletion event arrives, the
+    // ReactionObserver must snapshot the ORIGINAL target's count (which goes
+    // from 1→0), NOT the reaction_event_id key (which was never in
+    // AppState::reaction_state and would emit a spurious zeroed row there).
+    //
+    // Sequence:
+    //   1. Ingest a kind:7 reaction (reaction_id → target).
+    //   2. Ingest a kind:5 delete referencing reaction_id.
+    //   3. The channel must carry two ReactionStateUpdated events:
+    //      - First for the kind:7 (count=1, target_id key).
+    //      - Second for the kind:5 (count=0, target_id key — NOT reaction_id key).
+    #[test]
+    fn unreact_updates_target_count_not_reaction_event_key() {
+        let (tx, mut rx) = mpsc::unbounded_channel::<Cmd>();
+        let viewer = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let target_id = "bbbb000000000000000000000000000000000000000000000000000000000002";
+        let reaction_id = "cccc000000000000000000000000000000000000000000000000000000000003";
+
+        let active_account = Arc::new(Mutex::new(Some(viewer.to_string())));
+        let projection = Arc::new(ReactionProjection::new(None));
+        let observer = ReactionObserver {
+            projection,
+            active_account,
+            reaction_id_to_target: Mutex::new(HashMap::new()),
+            tx,
+        };
+
+        // Step 1: ingest a kind:7 reaction.
+        let kind7 = nmp_core::substrate::KernelEvent {
+            id: reaction_id.to_string(),
+            author: viewer.to_string(),
+            kind: KIND_REACTION,
+            created_at: 1_000_000,
+            tags: vec![vec!["e".to_string(), target_id.to_string()]],
+            content: "+".to_string(),
+            relay_provenance: vec![],
+        };
+        observer.on_kernel_event(&kind7);
+
+        // Consume the kind:7 update (count=1 for target).
+        let cmd7 = rx
+            .try_recv()
+            .expect("kind:7 must send ReactionStateUpdated");
+        match cmd7 {
+            Cmd::Event(KernelEvent::ReactionStateUpdated {
+                ref target_event_id,
+                count,
+                ..
+            }) => {
+                assert_eq!(
+                    target_event_id, target_id,
+                    "kind:7 update must key on target_id"
+                );
+                assert_eq!(count, 1, "count must be 1 after kind:7 ingest");
+            }
+            _ => panic!("expected ReactionStateUpdated for kind:7"),
+        }
+
+        // Step 2: ingest a kind:5 deletion referencing reaction_id (not target_id).
+        let kind5 = nmp_core::substrate::KernelEvent {
+            id: "dddd000000000000000000000000000000000000000000000000000000000004".to_string(),
+            author: viewer.to_string(),
+            kind: KIND_REACTION_DELETE,
+            created_at: 1_000_001,
+            tags: vec![vec!["e".to_string(), reaction_id.to_string()]],
+            content: String::new(),
+            relay_provenance: vec![],
+        };
+        observer.on_kernel_event(&kind5);
+
+        // Step 3: the channel must contain a ReactionStateUpdated for TARGET_ID
+        // (count=0), not for reaction_id.
+        let cmd5 = rx
+            .try_recv()
+            .expect("kind:5 must send ReactionStateUpdated");
+        match cmd5 {
+            Cmd::Event(KernelEvent::ReactionStateUpdated {
+                target_event_id,
+                count,
+                ..
+            }) => {
+                assert_eq!(
+                    target_event_id, target_id,
+                    "kind:5 update must key on the original target_id, not the reaction_event_id"
+                );
+                assert_eq!(count, 0, "count must be 0 after the reaction is deleted");
+            }
+            _ => panic!("expected ReactionStateUpdated for kind:5"),
+        }
+
+        // No spurious updates should be buffered.
+        assert!(
+            rx.try_recv().is_err(),
+            "no extra updates must be sent (only one target was affected)"
+        );
+    }
+
+    // 4B-T13: reaction_observer_viewer_tracks_active_account
+    //
+    // Bug 2 regression test: the ReactionObserver must read the current viewer
+    // from the live active_account Arc on EACH event. If the Arc changes
+    // (account switch), viewer_reacted in the next snapshot must reflect the
+    // NEW account — without re-registering the observer.
+    //
+    // Sequence:
+    //   1. Observer created with viewer=A in active_account.
+    //   2. Ingest a kind:7 reaction from viewer A → viewer_reacted=true.
+    //   3. Simulate account switch: update active_account to viewer=B.
+    //   4. Ingest a second kind:7 reaction from viewer A for the same target.
+    //   5. The second update must have viewer_reacted=false (B didn't react).
+    #[test]
+    fn reaction_observer_viewer_tracks_active_account() {
+        let (tx, mut rx) = mpsc::unbounded_channel::<Cmd>();
+        let viewer_a = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let viewer_b = "bbbb000000000000000000000000000000000000000000000000000000000002";
+        let target_id = "cccc000000000000000000000000000000000000000000000000000000000003";
+        let reaction_id1 = "dddd000000000000000000000000000000000000000000000000000000000004";
+        let reaction_id2 = "eeee000000000000000000000000000000000000000000000000000000000005";
+
+        // Start with viewer_a active.
+        let active_account: Arc<Mutex<Option<String>>> =
+            Arc::new(Mutex::new(Some(viewer_a.to_string())));
+        let projection = Arc::new(ReactionProjection::new(None));
+        let observer = ReactionObserver {
+            projection,
+            active_account: Arc::clone(&active_account),
+            reaction_id_to_target: Mutex::new(HashMap::new()),
+            tx,
+        };
+
+        // Step 2: ingest a kind:7 from viewer_a.
+        let event1 = nmp_core::substrate::KernelEvent {
+            id: reaction_id1.to_string(),
+            author: viewer_a.to_string(),
+            kind: KIND_REACTION,
+            created_at: 1_000_000,
+            tags: vec![vec!["e".to_string(), target_id.to_string()]],
+            content: "+".to_string(),
+            relay_provenance: vec![],
+        };
+        observer.on_kernel_event(&event1);
+
+        let cmd1 = rx.try_recv().expect("first kind:7 must send update");
+        match cmd1 {
+            Cmd::Event(KernelEvent::ReactionStateUpdated { viewer_reacted, .. }) => {
+                assert!(
+                    viewer_reacted,
+                    "viewer_reacted must be true when active account (viewer_a) has reacted"
+                );
+            }
+            _ => panic!("expected ReactionStateUpdated"),
+        }
+
+        // Step 3: simulate account switch — update the Arc in-place (no observer re-registration).
+        if let Ok(mut guard) = active_account.lock() {
+            *guard = Some(viewer_b.to_string());
+        }
+
+        // Step 4: ingest a second kind:7 from viewer_a.
+        let event2 = nmp_core::substrate::KernelEvent {
+            id: reaction_id2.to_string(),
+            author: viewer_a.to_string(),
+            kind: KIND_REACTION,
+            created_at: 1_000_001,
+            tags: vec![vec!["e".to_string(), target_id.to_string()]],
+            content: "+".to_string(),
+            relay_provenance: vec![],
+        };
+        observer.on_kernel_event(&event2);
+
+        // Step 5: viewer_reacted must now be false because active account is viewer_b.
+        let cmd2 = rx.try_recv().expect("second kind:7 must send update");
+        match cmd2 {
+            Cmd::Event(KernelEvent::ReactionStateUpdated {
+                viewer_reacted,
+                count,
+                ..
+            }) => {
+                assert_eq!(count, 2, "two reactions ingested — count must be 2");
+                assert!(
+                    !viewer_reacted,
+                    "viewer_reacted must be false after account switch to viewer_b (who has not reacted)"
+                );
+            }
+            _ => panic!("expected ReactionStateUpdated"),
+        }
     }
 }
