@@ -9,12 +9,18 @@
 //!   deferred to Phase 4; metadata from `AppState::communities`, already
 //!   wired in 3B).
 //!
-//! * **WRITE** — four NIP-29 write actions, each mapped to a
-//!   `Effect::DispatchNip29Action` with a safe `serde_json` payload:
-//!   - `AppAction::JoinRoom`            → `"nmp.nip29.join"`            (kind:9021)
-//!   - `AppAction::CreateRoom`          → `"nmp.nip29.create_public_group"` (kind:9007+9002)
-//!   - `AppAction::AddRoomMember`       → `"nmp.nip29.put_user"`        (kind:9000)
-//!   - `AppAction::CreateRoomInvites`   → `"nmp.nip29.create_invite"`   (kind:9009)
+//! * **WRITE** — five NIP-29 write actions (Phase 3F: four; Phase 4E: one more):
+//!   - `AppAction::JoinRoom`            → `"nmp.nip29.join"`                   (kind:9021)
+//!   - `AppAction::CreateRoom`          → `"nmp.nip29.create_public_group"`    (kind:9007+9002)
+//!   - `AppAction::AddRoomMember`       → `"nmp.nip29.put_user"`               (kind:9000)
+//!   - `AppAction::CreateRoomInvites`   → `"nmp.nip29.create_invite"`          (kind:9009)
+//!   - `AppAction::ShareToRoom (repost=false)` → `"nmp.nip29.share_event_in_group"` (kind:11)
+//!   - `AppAction::ShareToRoom (repost=true)`  → `"nmp.nip29.repost_in_group"` (kind:16)
+//!
+//!   Namespaces verified on pinned nmp b4404159
+//!   (`crates/nmp-nip29/src/action/group_event.rs:101,124`).
+//!   Phase 4E adds `Effect::DispatchShareToRoom` (distinct from `DispatchNip29Action`)
+//!   to keep the effect runner attribution clear. Same C-ABI dispatch path.
 //!
 //!   `LeaveRoom` (kind:9022) is NOT implemented — there is no `nmp.nip29.leave`
 //!   action on pinned nmp (b4404159). See nmp issue #1598.
@@ -311,6 +317,105 @@ pub(crate) fn reduce_action_create_room_invites(
         namespace: "nmp.nip29.create_invite".to_string(),
         json,
     }]
+}
+
+/// Handle `AppAction::ShareToRoom { group_id, host_relay_url, target_event_id, target_author_pubkey, repost }`.
+///
+/// Routes to one of two NIP-29 actions (verified on pinned nmp b4404159,
+/// `crates/nmp-nip29/src/action/group_event.rs:101,124`):
+/// - `repost == false` → `"nmp.nip29.share_event_in_group"` (kind:11)
+///   Payload shape: `ShareEventInGroupInput { group: { host_relay_url, local_id }, target: { event_id, author_pubkey? }, content: "", additional_tags: [] }`
+/// - `repost == true`  → `"nmp.nip29.repost_in_group"` (kind:16)
+///   Payload shape: `RepostInGroupInput` — identical fields to `ShareEventInGroupInput`.
+///
+/// Both payloads are built with `serde_json::json!` (never `format!`) so
+/// special characters in any field are safely escaped (D-rule: serde only).
+///
+/// Emits exactly one `Effect::DispatchShareToRoom`. Fire-and-forget (D6).
+/// Kernel is the sole writer for these events on ported screens — no
+/// double-publish with the bespoke lane. D3: no relay URL literals.
+pub(crate) fn reduce_action_share_to_room(
+    group_id: String,
+    host_relay_url: String,
+    target_event_id: String,
+    target_author_pubkey: Option<String>,
+    repost: bool,
+) -> Vec<Effect> {
+    let namespace = if repost {
+        "nmp.nip29.repost_in_group"
+    } else {
+        "nmp.nip29.share_event_in_group"
+    };
+
+    let json = serde_json::json!({
+        "group": {
+            "host_relay_url": host_relay_url,
+            "local_id": group_id
+        },
+        "target": {
+            "event_id": target_event_id,
+            "author_pubkey": target_author_pubkey
+        },
+        "content": "",
+        "additional_tags": []
+    })
+    .to_string();
+
+    vec![Effect::DispatchShareToRoom {
+        namespace: namespace.to_string(),
+        json,
+    }]
+}
+
+// ─── Effect runner: DispatchShareToRoom ──────────────────────────────────────
+
+/// Execute `Effect::DispatchShareToRoom { namespace, json }`.
+///
+/// Calls `nmp_app_dispatch_action(nmp_ref, namespace, json_ptr)` with the
+/// pre-serialized payload. The returned correlation_id C string is freed via
+/// `nmp_free_string` and discarded — fire-and-forget (D6, Non-Negotiable #3).
+///
+/// No-op if `nmp` is `None` (test mode — tests inspect the emitted `Effect`
+/// directly without running it against a live `NmpApp`).
+pub(crate) fn run_effect_dispatch_share_to_room(
+    namespace: String,
+    json: String,
+    nmp: Option<&crate::kernel::actor::NmpHandle>,
+) {
+    use nmp_ffi::nmp_free_string;
+    use std::ffi::CString;
+
+    #[allow(improper_ctypes)]
+    extern "C" {
+        fn nmp_app_dispatch_action(
+            app: *mut NmpApp,
+            namespace: *const std::os::raw::c_char,
+            action_json: *const std::os::raw::c_char,
+        ) -> *mut std::os::raw::c_char;
+    }
+
+    let Some(handle) = nmp else { return };
+
+    let ns_c = match CString::new(namespace) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    let json_c = match CString::new(json) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+
+    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
+    // NmpHandle for the full actor lifetime. ns_c and json_c are valid CStrings
+    // alive for the duration of this call. The returned pointer is freed below.
+    let result_ptr =
+        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
+
+    // Free the returned correlation-id JSON string via the nmp allocator.
+    // A null pointer is a no-op (guard for clarity).
+    if !result_ptr.is_null() {
+        nmp_free_string(result_ptr);
+    }
 }
 
 // ─── Snapshot projection ─────────────────────────────────────────────────────
@@ -764,5 +869,176 @@ mod tests {
                 "serde_json serialization must escape special chars: {json}"
             );
         }
+    }
+
+    // ─── Phase 4E tests ───────────────────────────────────────────────────────
+
+    // 4E-T1: share_to_room_repost_false_dispatches_share_event_in_group
+    //
+    // AppAction::ShareToRoom with repost=false must emit exactly one
+    // Effect::DispatchShareToRoom with namespace="nmp.nip29.share_event_in_group"
+    // and a valid serde_json payload with the expected structure.
+    // Namespace verified on pinned nmp b4404159
+    // (crates/nmp-nip29/src/action/group_event.rs:101).
+    #[test]
+    fn share_to_room_repost_false_dispatches_share_event_in_group() {
+        let mut state = AppState::default();
+        let clock = ManualClock::default();
+        let target_event_id = "abc123".to_string();
+        let author_pubkey = "deadbeef".repeat(8); // 64-char hex
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::ShareToRoom {
+                group_id: TEST_GROUP.to_string(),
+                host_relay_url: TEST_RELAY.to_string(),
+                target_event_id: target_event_id.clone(),
+                target_author_pubkey: Some(author_pubkey.clone()),
+                repost: false,
+            }),
+        );
+
+        assert_eq!(
+            effects.len(),
+            1,
+            "ShareToRoom(repost=false) must emit exactly one effect"
+        );
+        match &effects[0] {
+            Effect::DispatchShareToRoom { namespace, json } => {
+                assert_eq!(
+                    namespace, "nmp.nip29.share_event_in_group",
+                    "repost=false must route to share_event_in_group (kind:11)"
+                );
+
+                let parsed: serde_json::Value =
+                    serde_json::from_str(json).expect("share payload must be valid JSON");
+                assert_eq!(
+                    parsed["group"]["host_relay_url"].as_str().unwrap(),
+                    TEST_RELAY
+                );
+                assert_eq!(parsed["group"]["local_id"].as_str().unwrap(), TEST_GROUP);
+                assert_eq!(
+                    parsed["target"]["event_id"].as_str().unwrap(),
+                    target_event_id
+                );
+                assert_eq!(
+                    parsed["target"]["author_pubkey"].as_str().unwrap(),
+                    author_pubkey
+                );
+            }
+            other => panic!("expected DispatchShareToRoom, got {other:?}"),
+        }
+    }
+
+    // 4E-T2: share_to_room_repost_true_dispatches_repost_in_group
+    //
+    // AppAction::ShareToRoom with repost=true must emit exactly one
+    // Effect::DispatchShareToRoom with namespace="nmp.nip29.repost_in_group".
+    // Namespace verified on pinned nmp b4404159
+    // (crates/nmp-nip29/src/action/group_event.rs:124).
+    #[test]
+    fn share_to_room_repost_true_dispatches_repost_in_group() {
+        let mut state = AppState::default();
+        let clock = ManualClock::default();
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::ShareToRoom {
+                group_id: TEST_GROUP.to_string(),
+                host_relay_url: TEST_RELAY.to_string(),
+                target_event_id: "event-xyz".to_string(),
+                target_author_pubkey: None,
+                repost: true,
+            }),
+        );
+
+        assert_eq!(
+            effects.len(),
+            1,
+            "ShareToRoom(repost=true) must emit exactly one effect"
+        );
+        match &effects[0] {
+            Effect::DispatchShareToRoom { namespace, json } => {
+                assert_eq!(
+                    namespace, "nmp.nip29.repost_in_group",
+                    "repost=true must route to repost_in_group (kind:16)"
+                );
+
+                let parsed: serde_json::Value =
+                    serde_json::from_str(json).expect("repost payload must be valid JSON");
+                assert_eq!(parsed["group"]["local_id"].as_str().unwrap(), TEST_GROUP);
+                assert_eq!(parsed["target"]["event_id"].as_str().unwrap(), "event-xyz");
+                // author_pubkey absent → JSON null (serde serialises Option::None as null)
+                assert!(
+                    parsed["target"]["author_pubkey"].is_null(),
+                    "author_pubkey must be null when not provided"
+                );
+            }
+            other => panic!("expected DispatchShareToRoom, got {other:?}"),
+        }
+    }
+
+    // 4E-T3: payload_built_with_serde_not_format
+    //
+    // Payloads with special characters (quotes, backslashes) must be valid JSON.
+    // A naïve format! would produce broken JSON; serde_json::json! must escape
+    // them correctly. (D-rule: serde, not format!.)
+    #[test]
+    fn payload_built_with_serde_not_format() {
+        let tricky_event_id = r#"evt"with"quotes"#;
+        let tricky_group = r#"group"id"#;
+
+        let effects = reduce_action_share_to_room(
+            tricky_group.to_string(),
+            TEST_RELAY.to_string(),
+            tricky_event_id.to_string(),
+            None,
+            false,
+        );
+
+        assert_eq!(effects.len(), 1);
+        if let Effect::DispatchShareToRoom { json, .. } = &effects[0] {
+            // MUST parse cleanly — format! would produce broken JSON here.
+            let parsed: Result<serde_json::Value, _> = serde_json::from_str(json);
+            assert!(
+                parsed.is_ok(),
+                "serde_json must escape special chars in share payload: {json}"
+            );
+            let v = parsed.unwrap();
+            assert_eq!(v["group"]["local_id"].as_str().unwrap(), tricky_group);
+            assert_eq!(v["target"]["event_id"].as_str().unwrap(), tricky_event_id);
+        } else {
+            panic!("expected DispatchShareToRoom");
+        }
+    }
+
+    // 4E-T4: share_dispatch_returns_unit
+    //
+    // reduce_action_share_to_room returns a Vec (not a Result).
+    // The sole item is a DispatchShareToRoom effect (fire-and-forget).
+    // This test documents the "dispatch returns ()" / Non-Negotiable #3 contract:
+    // the reducer never returns a Result; errors do not cross the dispatch seam.
+    #[test]
+    fn share_dispatch_returns_unit() {
+        let effects = reduce_action_share_to_room(
+            TEST_GROUP.to_string(),
+            TEST_RELAY.to_string(),
+            "event-id-123".to_string(),
+            Some("author-pubkey".to_string()),
+            false,
+        );
+
+        // Exactly one effect — no second side-channel write (kernel sole writer).
+        assert_eq!(
+            effects.len(),
+            1,
+            "share action must emit exactly one effect (sole writer, no double-publish)"
+        );
+        assert!(
+            matches!(&effects[0], Effect::DispatchShareToRoom { .. }),
+            "the sole effect must be DispatchShareToRoom"
+        );
     }
 }

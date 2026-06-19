@@ -291,6 +291,21 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
             host_relay_url,
             codes,
         } => room_home::reduce_action_create_room_invites(group_id, host_relay_url, codes),
+
+        // ── Phase 4E additions (append-only) ─────────────────────────────────
+        AppAction::ShareToRoom {
+            group_id,
+            host_relay_url,
+            target_event_id,
+            target_author_pubkey,
+            repost,
+        } => room_home::reduce_action_share_to_room(
+            group_id,
+            host_relay_url,
+            target_event_id,
+            target_author_pubkey,
+            repost,
+        ),
     }
 }
 
@@ -535,6 +550,11 @@ pub(crate) async fn run_effect(
             // Handled inline in actor_task; should not reach run_effect.
             let _ = group_id;
             tracing::trace!("WireGroupEvents/ReleaseGroupEvents reached run_effect — no-op (handled inline by actor_task)");
+        }
+
+        // ── Phase 4E additions (append-only) ─────────────────────────────────
+        Effect::DispatchShareToRoom { namespace, json } => {
+            room_home::run_effect_dispatch_share_to_room(namespace, json, nmp);
         }
     }
 
