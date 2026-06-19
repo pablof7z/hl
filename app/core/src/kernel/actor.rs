@@ -15,6 +15,7 @@
 //! D8:   No sleeps or poll loops; time advances through the injected Clock.
 //! D9:   Wall-clock reads confined to `SystemClock`; tests inject `ManualClock`.
 
+use std::ffi::CString;
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex};
 
@@ -22,7 +23,10 @@ use parking_lot::RwLock;
 use tokio::sync::mpsc;
 
 use nmp_defaults::{NmpAppBuilder, RunConfig};
-use nmp_ffi::{nmp_app_free, NmpApp};
+use nmp_ffi::{
+    nmp_app_free, nmp_app_nostrconnect_uri, nmp_app_signin_nip55, nmp_external_signer_init,
+    nmp_signer_broker_init, NmpApp,
+};
 use zeroize::Zeroizing;
 
 use crate::capabilities::{CapabilityRequest, CapabilityResult, KeychainOp};
@@ -179,6 +183,8 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         AppAction::Logout => {
             state.session = SessionState::Absent;
             state.session_epoch += 1;
+            // Clear any pending NostrConnect URI on logout.
+            state.nostrconnect_uri = None;
             // RemoveActiveAccount fires nmp.remove_account; ClearSession
             // emits a CapabilityRequest to native for its keychain.
             vec![Effect::RemoveActiveAccount, Effect::ClearSession]
@@ -219,6 +225,41 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
             // Fire-and-forget: reducer never awaits the result.
             vec![Effect::AddNsecSigner { nsec }]
         }
+
+        // ── Phase 2B additions ────────────────────────────────────────────────
+        AppAction::PairBunker { uri } => {
+            state.session = SessionState::SigningIn {
+                method: SignInMethod::Bunker,
+                started_at: now,
+            };
+            // AddBunkerSigner routes through the NIP-46 broker (nmp_signer_broker_init
+            // must have run at boot). Fire-and-forget: broker resolves the signer
+            // async; success arrives as IdentityChanged(Some).
+            vec![Effect::AddBunkerSigner { uri }]
+        }
+
+        AppAction::StartNostrConnect => {
+            state.session = SessionState::SigningIn {
+                method: SignInMethod::NostrConnect,
+                started_at: now,
+            };
+            // MintNostrConnectUri calls nmp_app_nostrconnect_uri and feeds the
+            // result back as KernelEvent::NostrConnectUriReady so the iOS QR
+            // sheet can render it. The broker then waits for the remote signer
+            // to connect; success arrives as IdentityChanged(Some).
+            vec![Effect::MintNostrConnectUri]
+        }
+
+        AppAction::SignInNip55 => {
+            state.session = SessionState::SigningIn {
+                method: SignInMethod::Nip55,
+                started_at: now,
+            };
+            // StartNip55SignIn calls nmp_app_signin_nip55(app, null). Fire-and-
+            // forget: the host capability bridge exchanges with the external
+            // signer app; success arrives as IdentityChanged(Some).
+            vec![Effect::StartNip55SignIn]
+        }
     }
 }
 
@@ -249,16 +290,21 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // `None` means the account was removed / logged out.
             match pubkey {
                 Some(pk) if !pk.is_empty() => {
-                    // Determine signer kind from the previous state.
-                    // When we were SigningIn{Nsec}, it's LocalNsec.
-                    // For session restore and unknown paths, default to LocalNsec.
+                    // Determine signer kind from the method we were SigningIn with.
+                    // Bunker and NostrConnect both resolve to Nip46 (NIP-46 remote).
+                    // Session restore and unknown paths default to LocalNsec.
                     let signer_kind = match &state.session {
-                        SessionState::SigningIn {
-                            method: SignInMethod::Nsec,
-                            ..
-                        } => SignerKind::LocalNsec,
+                        SessionState::SigningIn { method, .. } => match method {
+                            SignInMethod::Nsec | SignInMethod::CreateAccount => {
+                                SignerKind::LocalNsec
+                            }
+                            SignInMethod::Bunker | SignInMethod::NostrConnect => SignerKind::Nip46,
+                            SignInMethod::Nip55 => SignerKind::Nip55,
+                        },
                         _ => SignerKind::LocalNsec,
                     };
+                    // Clear the pending NostrConnect URI — the handshake is done.
+                    state.nostrconnect_uri = None;
                     state.session = SessionState::Present {
                         pubkey: pk,
                         signer_kind,
@@ -266,6 +312,7 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
                 }
                 _ => {
                     // None or empty pubkey → no active account.
+                    state.nostrconnect_uri = None;
                     state.session = SessionState::Absent;
                 }
             }
@@ -282,6 +329,21 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
         KernelEvent::SignInFailed { method, error } => {
             // Surface failures in session state (D6 — never as Result).
             state.session = SessionState::SignInFailed { method, error };
+            vec![]
+        }
+
+        // ── Phase 2B additions ────────────────────────────────────────────────
+        KernelEvent::NostrConnectUriReady { uri } => {
+            // Store the minted URI so the snapshot can expose it to the iOS
+            // QR-code sheet. The NostrConnect sign-in session stays in SigningIn
+            // until the remote signer completes the handshake (IdentityChanged).
+            state.nostrconnect_uri = Some(uri);
+            vec![]
+        }
+
+        KernelEvent::BunkerHandshakeState { .. } => {
+            // Broker progress events are diagnostic only — no reducer state
+            // change. Future phases may surface these in a dedicated snapshot.
             vec![]
         }
     }
@@ -345,6 +407,8 @@ fn project_app_root(state: &AppState) -> AppRootSnapshot {
         route_kind,
         session_present,
         onboarding_complete: state.onboarding.complete,
+        // Phase 2B: expose pending NostrConnect URI to the iOS QR-code sheet.
+        nostrconnect_uri: state.nostrconnect_uri.clone(),
     }
 }
 
@@ -446,6 +510,54 @@ pub(crate) async fn run_effect(
                     nmp_ref.remove_account(pubkey);
                 }
             }
+        }
+
+        // ── Phase 2B additions ────────────────────────────────────────────────
+        Effect::AddBunkerSigner { uri } => {
+            // Route via nmp.add_signer(BunkerUri(uri), true). The NIP-46 broker
+            // (nmp_signer_broker_init called at boot) takes over the handshake
+            // async. Fire-and-forget: success arrives as IdentityChanged(Some).
+            if let Some(handle) = nmp {
+                let nmp_ref: &NmpApp = unsafe { handle.0.as_ref() };
+                nmp_ref.add_signer(nmp_core::SignerSource::BunkerUri(uri), true);
+            }
+            // No nmp handle (test mode) → test injects IdentityChanged directly.
+        }
+
+        Effect::MintNostrConnectUri => {
+            // Call nmp_app_nostrconnect_uri(app_ptr, null, null) — relay and
+            // callback are resolved by nmp from its internal bootstrap relay slot
+            // (V-65). Returns an owned `nostrconnect://` C string or null if no
+            // relay is configured. Feed the result back as NostrConnectUriReady.
+            if let Some(handle) = nmp {
+                let raw_ptr = handle.0.as_ptr();
+                let uri_ptr = nmp_app_nostrconnect_uri(raw_ptr, std::ptr::null(), std::ptr::null());
+                if !uri_ptr.is_null() {
+                    // SAFETY: uri_ptr is a CString::into_raw pointer owned by
+                    // nmp-ffi. We take ownership here and free it with from_raw.
+                    let uri = unsafe { std::ffi::CStr::from_ptr(uri_ptr) }
+                        .to_string_lossy()
+                        .into_owned();
+                    // SAFETY: uri_ptr came from CString::into_raw in nmp-ffi.
+                    let _ = unsafe { CString::from_raw(uri_ptr) };
+                    let _ = tx.send(Cmd::Event(KernelEvent::NostrConnectUriReady { uri }));
+                }
+                // null return → no relay configured; stay in SigningIn until timeout.
+            }
+            // No nmp handle (test mode) → test injects NostrConnectUriReady directly.
+        }
+
+        Effect::StartNip55SignIn => {
+            // Call nmp_app_signin_nip55(app_ptr, null) — null signer_package
+            // lets the OS resolver pick the NIP-55 signer app (e.g. Amber).
+            // nmp_app_signin_nip55 lazy-inits the external-signer driver if
+            // nmp_external_signer_init was not already called at boot.
+            // Fire-and-forget: success arrives as IdentityChanged(Some).
+            if let Some(handle) = nmp {
+                let raw_ptr = handle.0.as_ptr();
+                nmp_app_signin_nip55(raw_ptr, std::ptr::null());
+            }
+            // No nmp handle (test mode) → test injects IdentityChanged directly.
         }
     }
 
@@ -581,6 +693,15 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
 
     let handle = NonNull::new(raw).map(NmpHandle)?;
     let nmp_ref: &NmpApp = unsafe { handle.0.as_ref() };
+
+    // Phase 2B: initialise NIP-46 broker (needed for PairBunker and
+    // StartNostrConnect). Idempotent per ADR-0052 §D3 — safe to call once.
+    nmp_signer_broker_init(handle.0.as_ptr());
+
+    // Phase 2B: initialise NIP-55 external-signer driver (needed for
+    // SignInNip55). nmp_app_signin_nip55 lazy-inits too, but calling
+    // explicitly here makes the init order deterministic.
+    nmp_external_signer_init(handle.0.as_ptr());
 
     // Wire identity-change observer → KernelEvent::IdentityChanged.
     // Pattern 2 from nmp_runtime.rs:758-778.
@@ -1078,6 +1199,251 @@ mod tests {
                 }
             ),
             "should be SignInFailed at timeout, got {:?}",
+            state.session
+        );
+    }
+
+    // ── Phase 2B tests ────────────────────────────────────────────────────────
+
+    // P2B-1: PairBunker transitions to SigningIn{Bunker} and emits AddBunkerSigner.
+    #[test]
+    fn pair_bunker_enqueues_bunker_uri_source() {
+        let mut state = make_state();
+        let clock = ManualClock::new(10);
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::PairBunker {
+                uri: "bunker://pubkey?relay=wss://relay.example.com".into(),
+            }),
+        );
+        assert!(
+            matches!(
+                &state.session,
+                SessionState::SigningIn {
+                    method: SignInMethod::Bunker,
+                    started_at: 10
+                }
+            ),
+            "expected SigningIn{{Bunker}}, got {:?}",
+            state.session
+        );
+        assert_eq!(
+            effects.len(),
+            1,
+            "expected exactly one effect from PairBunker"
+        );
+        assert!(
+            matches!(
+                &effects[0],
+                Effect::AddBunkerSigner { uri }
+                    if uri == "bunker://pubkey?relay=wss://relay.example.com"
+            ),
+            "expected AddBunkerSigner with the uri, got {:?}",
+            effects[0]
+        );
+    }
+
+    // P2B-2: NostrConnectUriReady stores the URI in state and the snapshot
+    //        exposes it via AppRootSnapshot::nostrconnect_uri.
+    #[test]
+    fn nostrconnect_uri_ready_event_to_snapshot() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+
+        // Begin a NostrConnect sign-in.
+        step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::StartNostrConnect),
+        );
+        assert!(
+            matches!(
+                &state.session,
+                SessionState::SigningIn {
+                    method: SignInMethod::NostrConnect,
+                    ..
+                }
+            ),
+            "expected SigningIn{{NostrConnect}}, got {:?}",
+            state.session
+        );
+        assert!(state.nostrconnect_uri.is_none(), "URI not set yet");
+
+        // Simulate the effect runner delivering the minted URI.
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::NostrConnectUriReady {
+                uri: "nostrconnect://pubkey?relay=wss://relay.example.com".into(),
+            }),
+        );
+        assert_eq!(
+            state.nostrconnect_uri.as_deref(),
+            Some("nostrconnect://pubkey?relay=wss://relay.example.com"),
+            "URI should be stored in state"
+        );
+
+        // Project a snapshot and verify the URI is present.
+        let now = clock.now_unix_seconds();
+        if let Some(ViewSnapshot::AppRoot(snap)) = project_snapshot(&state, &ViewId::AppRoot, now) {
+            assert_eq!(
+                snap.nostrconnect_uri.as_deref(),
+                Some("nostrconnect://pubkey?relay=wss://relay.example.com"),
+                "URI must appear in AppRootSnapshot"
+            );
+        } else {
+            panic!("expected AppRoot snapshot");
+        }
+
+        // When IdentityChanged fires (handshake complete), URI is cleared.
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::IdentityChanged(Some("resolvedpubkey".into()))),
+        );
+        assert!(
+            state.nostrconnect_uri.is_none(),
+            "URI must be cleared after IdentityChanged"
+        );
+    }
+
+    // P2B-3: SignInNip55 transitions to SigningIn{Nip55} and emits StartNip55SignIn.
+    //        The effect runner would call nmp_app_signin_nip55; in test mode
+    //        (no nmp handle) success is injected as IdentityChanged.
+    #[test]
+    fn nip55_signin_invokes_external_hook() {
+        let mut state = make_state();
+        let clock = ManualClock::new(5);
+        let effects = step(&mut state, &clock, Cmd::Action(AppAction::SignInNip55));
+        assert!(
+            matches!(
+                &state.session,
+                SessionState::SigningIn {
+                    method: SignInMethod::Nip55,
+                    started_at: 5
+                }
+            ),
+            "expected SigningIn{{Nip55}}, got {:?}",
+            state.session
+        );
+        assert_eq!(effects.len(), 1, "expected one effect from SignInNip55");
+        assert!(
+            matches!(&effects[0], Effect::StartNip55SignIn),
+            "expected StartNip55SignIn effect, got {:?}",
+            effects[0]
+        );
+
+        // Simulate success via IdentityChanged — signer_kind should be Nip55.
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::IdentityChanged(Some("nip55pubkey".into()))),
+        );
+        assert!(
+            matches!(
+                &state.session,
+                SessionState::Present {
+                    pubkey,
+                    signer_kind: SignerKind::Nip55
+                } if pubkey == "nip55pubkey"
+            ),
+            "expected Present{{Nip55}}, got {:?}",
+            state.session
+        );
+    }
+
+    // P2B-4: dispatch(PairBunker/StartNostrConnect/SignInNip55) returns () —
+    //        the fire-and-forget contract (Non-Negotiable #3).
+    #[test]
+    fn dispatch_returns_unit() {
+        let mut state = make_state();
+        let clock = ManualClock::new(0);
+
+        let _: Vec<Effect> = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::PairBunker {
+                uri: "bunker://x".into(),
+            }),
+        );
+        let _: Vec<Effect> = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::StartNostrConnect),
+        );
+        let _: Vec<Effect> = step(&mut state, &clock, Cmd::Action(AppAction::SignInNip55));
+        // No panic and no Result return — fire-and-forget contract satisfied.
+    }
+
+    // P2B-5: bunker sign-in times out → SignInFailed{Bunker}.
+    //        Reuses the 2A clock arm which covers ALL SigningIn variants.
+    #[test]
+    fn bunker_signing_in_times_out_to_failed() {
+        use crate::kernel::app::SIGN_IN_TIMEOUT_SECS;
+        let mut state = make_state();
+        let clock = ManualClock::new(0);
+
+        step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::PairBunker {
+                uri: "bunker://pubkey?relay=wss://r.example.com".into(),
+            }),
+        );
+        assert!(matches!(&state.session, SessionState::SigningIn { .. }));
+
+        // Just before timeout — still SigningIn.
+        clock.advance(SIGN_IN_TIMEOUT_SECS - 1);
+        step(&mut state, &clock, Cmd::Event(KernelEvent::ClockTick));
+        assert!(
+            matches!(&state.session, SessionState::SigningIn { .. }),
+            "should still be SigningIn before timeout"
+        );
+
+        // At timeout — should be SignInFailed{Bunker}.
+        clock.advance(1);
+        step(&mut state, &clock, Cmd::Event(KernelEvent::ClockTick));
+        assert!(
+            matches!(
+                &state.session,
+                SessionState::SignInFailed {
+                    method: SignInMethod::Bunker,
+                    ..
+                }
+            ),
+            "should be SignInFailed{{Bunker}} at timeout, got {:?}",
+            state.session
+        );
+    }
+
+    // P2B-6: IdentityChanged after Bunker/NostrConnect → signer_kind is Nip46.
+    #[test]
+    fn bunker_identity_changed_sets_nip46_signer_kind() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+
+        step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::PairBunker {
+                uri: "bunker://pk".into(),
+            }),
+        );
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::IdentityChanged(Some("bunkerpk".into()))),
+        );
+        assert!(
+            matches!(
+                &state.session,
+                SessionState::Present {
+                    pubkey,
+                    signer_kind: SignerKind::Nip46
+                } if pubkey == "bunkerpk"
+            ),
+            "expected Present{{Nip46}}, got {:?}",
             state.session
         );
     }

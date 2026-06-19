@@ -27,6 +27,13 @@ pub struct AppRootSnapshot {
     pub session_present: bool,
     /// Whether the user has completed onboarding.
     pub onboarding_complete: bool,
+
+    // ── Phase 2B additions ────────────────────────────────────────────────────
+    /// The most recently minted `nostrconnect://` URI, or `None` when no
+    /// NostrConnect sign-in is in progress. The iOS QR-code sheet renders this
+    /// directly. Cleared when `IdentityChanged` fires or on `Logout`.
+    /// Bounded: one string ≤ 512 bytes (NIP-46 spec limit).
+    pub nostrconnect_uri: Option<String>,
 }
 
 /// A transient toast message visible in the root shell.

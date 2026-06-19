@@ -72,6 +72,31 @@ pub enum AppAction {
     /// observer firing `KernelEvent::IdentityChanged(Some(pubkey))`. Failure
     /// surfaces as `SessionState::SignInFailed` (D6 — never a `Result`).
     SignInNsec { nsec: String },
+
+    // ── Phase 2B additions (append-only) ─────────────────────────────────────
+    /// Sign in via NIP-46 bunker URI (e.g. `bunker://pubkey?relay=…`).
+    ///
+    /// Requires `nmp_signer_broker_init` to have been called at boot. The
+    /// reducer transitions to `SessionState::SigningIn{Bunker}` and emits
+    /// `Effect::AddBunkerSigner`. The broker completes the NIP-46 handshake
+    /// async; success arrives as `KernelEvent::IdentityChanged(Some(pubkey))`.
+    PairBunker { uri: String },
+    /// Request a NostrConnect URI so the user can scan it on a remote signer.
+    ///
+    /// Requires `nmp_signer_broker_init` to have been called at boot. The
+    /// reducer transitions to `SessionState::SigningIn{NostrConnect}` and emits
+    /// `Effect::MintNostrConnectUri`. The URI is delivered back via
+    /// `KernelEvent::NostrConnectUriReady`; completion arrives as
+    /// `KernelEvent::IdentityChanged(Some(pubkey))` once the remote signer
+    /// scans the QR and completes the handshake.
+    StartNostrConnect,
+    /// Sign in via NIP-55 external signer app (e.g. Amber on Android).
+    ///
+    /// Requires `nmp_external_signer_init` to have been called at boot. The
+    /// reducer transitions to `SessionState::SigningIn{Nip55}` and emits
+    /// `Effect::StartNip55SignIn`. Success arrives via the identity-change
+    /// observer as `KernelEvent::IdentityChanged(Some(pubkey))`.
+    SignInNip55,
 }
 
 /// Internal kernel event — produced by async effects and native capability
@@ -103,4 +128,14 @@ pub enum KernelEvent {
     /// into this event so it surfaces in `SessionState` rather than crossing
     /// the dispatch boundary as a `Result` (D6).
     SignInFailed { method: SignInMethod, error: String },
+
+    // ── Phase 2B additions (append-only) ─────────────────────────────────────
+    /// `nmp_app_nostrconnect_uri` produced a URI the UI can display as a QR
+    /// code. Carried into the snapshot so the iOS sheet can render it without
+    /// polling. The URI is bounded (one string ≤ 512 bytes per NIP-46 spec).
+    NostrConnectUriReady { uri: String },
+    /// The NIP-46 broker reported handshake progress. `stage` is an opaque
+    /// label (e.g. `"connecting"`, `"authenticating"`); `message` is a
+    /// human-readable description for debug/diagnostics — not shown in UI.
+    BunkerHandshakeState { stage: String, message: String },
 }

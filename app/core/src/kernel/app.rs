@@ -93,6 +93,13 @@ pub struct AppState {
     /// epoch are silently dropped when the epoch has advanced (idempotent
     /// cancellation — plan line 157).
     pub session_epoch: u64,
+
+    // ── Phase 2B additions ────────────────────────────────────────────────────
+    /// The most recently minted `nostrconnect://` URI, if any. Cleared when
+    /// sign-in completes (IdentityChanged fires) or on Logout. Bounded: one
+    /// String ≤ 512 bytes per NIP-46 spec. Exposed via `AppRootSnapshot` so
+    /// the iOS QR-code sheet can render it without polling.
+    pub nostrconnect_uri: Option<String>,
 }
 
 impl Default for AppState {
@@ -103,6 +110,7 @@ impl Default for AppState {
             route: RouteState::default(),
             chrome: ChromeState::default(),
             session_epoch: 0,
+            nostrconnect_uri: None,
         }
     }
 }
