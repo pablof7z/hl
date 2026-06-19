@@ -8,6 +8,7 @@ pub mod action;
 pub mod actor;
 pub mod app;
 pub mod clock;
+pub(crate) mod domains;
 pub mod effect;
 pub mod snapshot;
 pub mod view;
