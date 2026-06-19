@@ -161,6 +161,18 @@ pub struct AppState {
     /// grows with the unbounded event store (Non-Negotiable #7). Cleared on
     /// `IdentityChanged(None)` and `Logout`.
     pub claimed_profiles: HashMap<String, nmp_core::typed_projections::ProfileCardModel>,
+
+    // ── Phase 3F additions ────────────────────────────────────────────────────
+    /// Raw group events for open RoomHome views, decoded from the
+    /// `"nmp.nip29.group_events"` typed sidecar. Keyed by `group_id` (local id).
+    ///
+    /// Populated when a `ViewId::RoomHome{group_id}` is opened (via
+    /// `Effect::WireGroupEvents`) and cleared when the view is closed (via
+    /// `Effect::ReleaseGroupEvents`). Bounded per-group at 256 rows
+    /// (`ROOM_HOME_EVENTS_CAP` in `room_home.rs`). Lane bodies are empty in
+    /// Phase 3F — the events are buffered so Phase 4 can decode feed content
+    /// without re-opening a subscription (Non-Negotiable #7).
+    pub room_home_events: HashMap<String, Vec<nmp_nip29::GroupEventRow>>,
 }
 
 impl Default for AppState {
@@ -179,6 +191,8 @@ impl Default for AppState {
             room_policy: RoomPolicy::default(),
             own_profile: None,
             claimed_profiles: HashMap::new(),
+            // ── Phase 3F additions ────────────────────────────────────────────
+            room_home_events: HashMap::new(),
         }
     }
 }

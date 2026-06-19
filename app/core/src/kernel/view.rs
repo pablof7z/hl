@@ -42,6 +42,18 @@ pub enum ViewId {
         /// Raw 64-char hex pubkey of the profile being viewed.
         pubkey: String,
     },
+
+    // ── Phase 3F additions (append-only) ─────────────────────────────────────
+    /// Per-room home shell view for a specific NIP-29 group.
+    ///
+    /// `group_id` is the NIP-29 local group id (the `["d", _]` tag value).
+    /// Opened by the native UI when the user taps on a room; the actor wires
+    /// the `GroupEventsProjection` via `Effect::WireGroupEvents` on view open
+    /// and releases the buffer via `Effect::ReleaseGroupEvents` on close.
+    RoomHome {
+        /// NIP-29 local group id.
+        group_id: String,
+    },
 }
 
 /// Which projection to compute for a registered view.
@@ -69,6 +81,14 @@ pub enum ViewRoute {
     Profile {
         /// Raw 64-char hex pubkey of the profile to project.
         pubkey: String,
+    },
+
+    // ── Phase 3F additions (append-only) ─────────────────────────────────────
+    /// Room-home projection — `RoomHomeSnapshot` (header + metadata + membership
+    /// + empty lanes). Lane bodies deferred to Phase 4.
+    RoomHome {
+        /// NIP-29 local group id.
+        group_id: String,
     },
 }
 

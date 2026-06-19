@@ -91,8 +91,7 @@ pub struct RelayDiagnosticsViewSnapshot {
 /// has been registered via `open_view`. Closed views produce nothing
 /// (Non-Negotiable #7).
 // Phase 3D: ProfileSnapshot is large (13 String fields + Vec<CommunityRow>).
-// Boxing is not an option here because uniffi::Enum requires variants to be
-// uniffi-compatible (Box<T> is not). The size difference is accepted because
+// Phase 3F: KernelRoomHomeSnapshot is similarly sized (11 fields + Vec<String>). Both are accepted because
 // ViewSnapshot is passed by value rarely (once per snapshot push, not in hot
 // loops) and profiling has not flagged this path.
 #[allow(clippy::large_enum_variant)]
@@ -119,6 +118,15 @@ pub enum ViewSnapshot {
     /// Single-profile view — identity + relationship + communities.
     /// Articles/highlights deferred to Phase 4.
     Profile(ProfileSnapshot),
+
+    // ── Phase 3F additions (append-only) ─────────────────────────────────────
+    /// Per-room home shell — header + metadata + membership + empty lanes.
+    /// Lane bodies (kind:11/9 content feeds) deferred to Phase 4.
+    ///
+    /// Named `KernelRoomHomeSnapshot` to avoid collision with the legacy
+    /// `RoomHomeSnapshot` in `room_home.rs` (bespoke live lane — Phase 3F
+    /// coexists with the live lane until the iOS cutover, Non-Negotiable #6).
+    RoomHome(KernelRoomHomeSnapshot),
 }
 
 // ── Phase 3B additions (append-only) ─────────────────────────────────────────
@@ -269,4 +277,51 @@ pub struct ProfileSnapshot {
     /// Phase 4 will add per-pubkey group-membership interests.
     /// Bounded by the `JoinedGroupsSnapshot` (never grows with the event store).
     pub communities: Vec<CommunityRow>,
+}
+
+// ── Phase 3F additions (append-only) ─────────────────────────────────────────
+
+/// Snapshot for `ViewId::RoomHome{group_id}` — the per-room home shell.
+///
+/// Ships the room header (metadata) + membership state + an empty lanes
+/// structure. Lane bodies (kind:11/kind:9 content feeds) are deferred to Phase 4.
+///
+/// Raw-data doctrine (D3 / ADR-0032): Swift formats ALL display strings from
+/// these raw fields. Kernel emits no formatted strings (`"{n} members"`, etc.).
+///
+/// `lanes` is empty in Phase 3F. The `GroupEventsProjection` is already wired
+/// (via `Effect::WireGroupEvents` on view open) so Phase 4 can decode feed
+/// bodies from the already-flowing events without re-opening a subscription.
+///
+/// `invite_link_base` is supplied from `AppState::room_policy.invite_link_base`
+/// (D3: injected at construction, never hardcoded). Swift composes the full
+/// invite URL by appending the invite code to this base.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelRoomHomeSnapshot {
+    /// NIP-29 local group id (the `["d", _]` tag value).
+    pub group_id: String,
+    /// Host relay URL. Together with `group_id` forms the stable `GroupId`.
+    pub host_relay_url: String,
+    /// `["name", _]` tag value from kind:39000, if present.
+    pub name: Option<String>,
+    /// `["picture", _]` tag value from kind:39000, if present.
+    pub picture: Option<String>,
+    /// `["about", _]` tag value from kind:39000, if present.
+    pub about: Option<String>,
+    /// Cardinality of `["p", _]` tags on the latest kind:39002 (member list).
+    pub member_count: u32,
+    /// `true` iff the latest kind:39000 lacks a `["private"]` tag.
+    pub public: bool,
+    /// `true` iff the latest kind:39000 lacks a `["closed"]` tag.
+    pub open: bool,
+    /// `true` iff the active account holds admin rights for this group.
+    pub is_admin: bool,
+    /// Lane identifiers for this room (e.g. `"general"`, `"notes"`).
+    /// Empty in Phase 3F — lane bodies deferred to Phase 4.
+    /// Bounded by the number of lanes configured for the room (non-negotiable #7).
+    pub lane_ids: Vec<String>,
+    /// Base URL for invite links (e.g. `"https://highlighter.com/r"`).
+    /// Swift composes the full invite URL: `"{invite_link_base}/{code}"`.
+    /// Sourced from `AppState::room_policy.invite_link_base` (D3 — never hardcoded).
+    pub invite_link_base: String,
 }

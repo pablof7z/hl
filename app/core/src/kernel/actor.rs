@@ -37,7 +37,7 @@ use nmp_defaults::{NmpAppBuilder, RunConfig};
 
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
 use crate::kernel::domains::{
-    auth, communities, discovery, follows, profiles, projections, relays, route, session,
+    auth, communities, discovery, follows, profiles, projections, relays, room_home, route, session,
 };
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
@@ -264,6 +264,33 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         AppAction::ClaimProfile { pubkey } => profiles::reduce_action_claim_profile(pubkey),
 
         AppAction::ReleaseProfile { pubkey } => profiles::reduce_action_release_profile(pubkey),
+
+        // ── Phase 3F additions (append-only) ─────────────────────────────────
+        AppAction::JoinRoom {
+            group_id,
+            host_relay_url,
+            invite_code,
+        } => room_home::reduce_action_join_room(group_id, host_relay_url, invite_code),
+
+        AppAction::CreateRoom {
+            group_id,
+            host_relay_url,
+            name,
+            about,
+        } => room_home::reduce_action_create_room(group_id, host_relay_url, name, about),
+
+        AppAction::AddRoomMember {
+            group_id,
+            host_relay_url,
+            pubkey,
+            role,
+        } => room_home::reduce_action_add_room_member(group_id, host_relay_url, pubkey, role),
+
+        AppAction::CreateRoomInvites {
+            group_id,
+            host_relay_url,
+            codes,
+        } => room_home::reduce_action_create_room_invites(group_id, host_relay_url, codes),
     }
 }
 
@@ -364,6 +391,9 @@ pub(crate) fn project_snapshot(
 
         // ── Phase 3D additions (append-only) ─────────────────────────────────
         ViewId::Profile { pubkey } => profiles::project_profile_snapshot(state, pubkey),
+
+        // ── Phase 3F additions (append-only) ─────────────────────────────────
+        ViewId::RoomHome { group_id } => room_home::project_room_home_snapshot(state, group_id),
 
         _ => route::project_snapshot(state, id, clock_now),
     }
@@ -490,6 +520,22 @@ pub(crate) async fn run_effect(
             // test mode (nmp=None).
             profiles::run_effect_release_profile(pubkey, nmp);
         }
+
+        // ── Phase 3F additions (append-only) ─────────────────────────────────
+        //
+        // WireGroupEvents and ReleaseGroupEvents require access to AppState
+        // (to resolve host_relay_url from communities, or to clear the event
+        // buffer). `run_effect` does not have a direct AppState parameter.
+        // These effects are therefore handled INLINE in the actor task loop
+        // (see the inline_effect dispatch block in actor_task) before the
+        // generic run_effect is called. The arms below are unreachable in
+        // normal operation — they are kept here to satisfy the exhaustive match
+        // and to document the delegation contract.
+        Effect::WireGroupEvents { group_id } | Effect::ReleaseGroupEvents { group_id } => {
+            // Handled inline in actor_task; should not reach run_effect.
+            let _ = group_id;
+            tracing::trace!("WireGroupEvents/ReleaseGroupEvents reached run_effect — no-op (handled inline by actor_task)");
+        }
     }
 
     let _ = session_epoch; // carried for future epoch-keyed effect cancellation
@@ -534,10 +580,14 @@ pub(crate) async fn actor_task(
                 registry.open(id.clone(), route.clone());
                 // ── Phase 3D: claim a profile subscription when its view opens ──
                 lifecycle_effects.extend(profiles::lifecycle_effects_for_view_open(id));
+                // ── Phase 3F: wire group-events projection when room-home view opens ──
+                lifecycle_effects.extend(room_home::lifecycle_effects_for_view_open(id));
             }
             Cmd::CloseView(id) => {
                 // ── Phase 3D: release the profile subscription before removing from registry ──
                 lifecycle_effects.extend(profiles::lifecycle_effects_for_view_close(id));
+                // ── Phase 3F: release group-events buffer when room-home view closes ──
+                lifecycle_effects.extend(room_home::lifecycle_effects_for_view_close(id));
                 registry.close(id);
             }
             Cmd::Resume => {
@@ -555,7 +605,27 @@ pub(crate) async fn actor_task(
         let effects = reduce(&mut state, cmd, now);
 
         // Run lifecycle effects first (profile claim/release), then reducer effects.
+        // Phase 3F: WireGroupEvents and ReleaseGroupEvents require AppState and are
+        // handled INLINE here before the generic run_effect path (they need to
+        // resolve host_relay_url from AppState::communities or mutate room_home_events).
         for effect in lifecycle_effects.into_iter().chain(effects) {
+            match &effect {
+                Effect::WireGroupEvents { group_id } => {
+                    // Resolve host_relay_url from communities and wire the projection.
+                    room_home::run_effect_wire_group_events(
+                        group_id.clone(),
+                        &state,
+                        nmp_handle.as_ref(),
+                    );
+                    continue;
+                }
+                Effect::ReleaseGroupEvents { group_id } => {
+                    // Clear the hl-side event buffer to bound memory.
+                    state.room_home_events.remove(group_id);
+                    continue;
+                }
+                _ => {}
+            }
             run_effect(
                 effect,
                 state.session_epoch,

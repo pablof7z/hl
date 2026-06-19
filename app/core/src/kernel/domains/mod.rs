@@ -14,5 +14,6 @@ pub(crate) mod profiles;
 pub(crate) mod projections;
 pub(crate) mod relay_diagnostics;
 pub(crate) mod relays;
+pub(crate) mod room_home;
 pub(crate) mod route;
 pub(crate) mod session;
