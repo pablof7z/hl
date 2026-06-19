@@ -153,4 +153,14 @@ pub enum KernelEvent {
     /// label (e.g. `"connecting"`, `"authenticating"`); `message` is a
     /// human-readable description for debug/diagnostics — not shown in UI.
     BunkerHandshakeState { stage: String, message: String },
+
+    // ── Phase 3A additions (append-only) ─────────────────────────────────────
+    /// The NMP update callback received a raw snapshot frame.
+    ///
+    /// The frame is forwarded from the callback thread into the actor channel
+    /// without decoding (callback must be non-blocking; decode happens in the
+    /// actor). The actor's `reduce_event` arm dispatches to
+    /// `projections::dispatch_typed_frame` which decodes the sidecar and
+    /// produces the appropriate `*Updated` events.
+    NmpSnapshotFrame(Vec<u8>),
 }
