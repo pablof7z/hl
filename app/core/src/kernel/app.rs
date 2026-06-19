@@ -123,6 +123,15 @@ pub const SESSION_RESTORE_TIMEOUT_SECS: u64 = 30;
 /// a chrome toast (clock-driven, no Swift Timer).
 pub const TOAST_DISMISS_SECS: u64 = 3;
 
+/// UNIX seconds after dispatch of a sign-in action before the kernel
+/// transitions to `SessionState::SignInFailed`.
+///
+/// NMP handles parse errors internally (`set_last_error_toast`) without firing
+/// the identity-change observer. This clock-driven timeout ensures an invalid
+/// nsec — or any other case where the observer never fires — surfaces in
+/// `SessionState` rather than leaving the UI stuck in `SigningIn` forever (D6).
+pub const SIGN_IN_TIMEOUT_SECS: u64 = 30;
+
 impl AppState {
     /// Storage sub-directory the new lane's `NmpApp` will use.
     pub fn nmp_storage_path(data_dir: &str) -> PathBuf {

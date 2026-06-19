@@ -27,7 +27,9 @@ use zeroize::Zeroizing;
 
 use crate::capabilities::{CapabilityRequest, CapabilityResult, KeychainOp};
 use crate::kernel::action::{AppAction, KernelEvent, SignInMethod, SignerKind};
-use crate::kernel::app::{AppState, SessionState, SESSION_RESTORE_TIMEOUT_SECS};
+use crate::kernel::app::{
+    AppState, SessionState, SESSION_RESTORE_TIMEOUT_SECS, SIGN_IN_TIMEOUT_SECS,
+};
 use crate::kernel::clock::Clock;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::{
@@ -148,6 +150,18 @@ fn clock_checks(state: &mut AppState, now: u64) -> Vec<Effect> {
     if let SessionState::Restoring { started_at } = &state.session {
         if now.saturating_sub(*started_at) >= SESSION_RESTORE_TIMEOUT_SECS {
             state.session = SessionState::Absent;
+        }
+    }
+
+    // Sign-in timeout: NMP handles parse errors internally (set_last_error_toast)
+    // without firing the identity-change observer — so an invalid nsec leaves us
+    // in SigningIn indefinitely without this clock-driven fallback (D8).
+    if let SessionState::SigningIn { started_at, method } = &state.session {
+        if now.saturating_sub(*started_at) >= SIGN_IN_TIMEOUT_SECS {
+            state.session = SessionState::SignInFailed {
+                method: method.clone(),
+                error: "sign-in timed out — no identity change observed".into(),
+            };
         }
     }
 
@@ -403,17 +417,19 @@ pub(crate) async fn run_effect(
         Effect::AddNsecSigner { nsec } => {
             // Call nmp.add_signer(LocalNsec(nsec), make_active: true).
             // NMP auto-persists to its keyring when make_active && LocalNsec.
-            // Success fires the identity-change observer → IdentityChanged(Some).
-            // We catch errors here and feed them back as KernelEvent::SignInFailed
-            // so they surface in SessionState rather than crossing the dispatch
-            // boundary as a Result (D6).
+            // This is truly fire-and-forget: add_signer returns () and NMP handles
+            // both the success and error paths internally —
+            //   Success: the identity-change observer fires IdentityChanged(Some).
+            //   Invalid nsec: NMP calls set_last_error_toast internally and returns
+            //     without firing the observer. The clock-driven SIGN_IN_TIMEOUT_SECS
+            //     check in clock_checks will then transition SigningIn → SignInFailed.
+            // hl never awaits a Result from add_signer (Non-Negotiable #2/D6).
             if let Some(handle) = nmp {
                 let nmp_ref: &NmpApp = unsafe { handle.0.as_ref() };
                 nmp_ref.add_signer(
                     nmp_core::SignerSource::LocalNsec(Zeroizing::new(nsec)),
                     true, // make_active — also auto-persists to nmp keyring
                 );
-                // No await, no Result: success arrives via identity-change observer.
             }
             // No nmp handle (test mode) → test injects IdentityChanged directly.
         }
@@ -1020,6 +1036,49 @@ mod tests {
         assert!(
             matches!(&state.session, SessionState::SigningIn { .. }),
             "SignInNsec must transition to SigningIn synchronously"
+        );
+    }
+
+    // P2A-7: clock drives sign-in timeout → SignInFailed.
+    //        NMP handles invalid nsec parse errors internally without firing the
+    //        identity-change observer; this clock-driven fallback ensures the UI
+    //        never gets stuck in SigningIn forever (D6 — failure surfaces as state).
+    #[test]
+    fn sign_in_timeout_transitions_signing_in_to_failed() {
+        use crate::kernel::app::SIGN_IN_TIMEOUT_SECS;
+        let mut state = make_state();
+        let clock = ManualClock::new(0);
+
+        step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::SignInNsec {
+                nsec: "nsec1invalid".into(),
+            }),
+        );
+        assert!(matches!(&state.session, SessionState::SigningIn { .. }));
+
+        // Just before timeout — still SigningIn.
+        clock.advance(SIGN_IN_TIMEOUT_SECS - 1);
+        step(&mut state, &clock, Cmd::Event(KernelEvent::ClockTick));
+        assert!(
+            matches!(&state.session, SessionState::SigningIn { .. }),
+            "should still be SigningIn before timeout"
+        );
+
+        // At timeout — should transition to SignInFailed.
+        clock.advance(1);
+        step(&mut state, &clock, Cmd::Event(KernelEvent::ClockTick));
+        assert!(
+            matches!(
+                &state.session,
+                SessionState::SignInFailed {
+                    method: SignInMethod::Nsec,
+                    ..
+                }
+            ),
+            "should be SignInFailed at timeout, got {:?}",
+            state.session
         );
     }
 }
