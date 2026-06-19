@@ -960,6 +960,7 @@ mod tests {
                 initial_follows: follows.clone(),
             },
             relay: Default::default(),
+            room: Default::default(),
         };
         assert_eq!(
             policy_with_follows.create_account.initial_follows, follows,

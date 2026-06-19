@@ -114,7 +114,9 @@ pub(crate) fn lifecycle_effects_for_view_open(
     }
     let relay_url = &state.room_policy.discovery_relay;
     if relay_url.is_empty() {
-        tracing::trace!("discovery::lifecycle_effects_for_view_open: discovery_relay is empty — no auto-start");
+        tracing::trace!(
+            "discovery::lifecycle_effects_for_view_open: discovery_relay is empty — no auto-start"
+        );
         return Vec::new();
     }
     reduce_action_start_room_discovery(relay_url.clone())
