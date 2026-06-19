@@ -127,6 +127,18 @@ pub struct AppState {
     /// this field via `AppState::is_following(pubkey)` — the single query
     /// point so no caller duplicates the Vec scan.
     pub follows: Vec<String>,
+
+    // ── Phase 3E additions ────────────────────────────────────────────────────
+    /// Discovered groups from the active discovery relay, decoded from the
+    /// `"nmp.nip29.discovered_groups"` typed sidecar. Empty until
+    /// `AppAction::StartRoomDiscovery` is dispatched and the projection frame
+    /// arrives. Bounded by the discovery relay's group catalog (cap at 256
+    /// per §2.2 of the 3E spec).
+    pub discovered_groups: Vec<crate::kernel::snapshot::DiscoveredRow>,
+
+    /// Room policy injected at construction time (D3: no wss-scheme literals
+    /// in kernel logic). Sourced from `AppConfig`-adjacent bootstrap code.
+    pub room_policy: crate::kernel::app::RoomPolicy,
 }
 
 impl Default for AppState {
@@ -141,6 +153,8 @@ impl Default for AppState {
             relay_diagnostics: RelayDiagnosticsState::default(),
             communities: Vec::new(),
             follows: Vec::new(),
+            discovered_groups: Vec::new(),
+            room_policy: RoomPolicy::default(),
         }
     }
 }
@@ -256,4 +270,24 @@ impl AppState {
     pub fn is_following(&self, pubkey: &str) -> bool {
         self.follows.iter().any(|pk| pk == pubkey)
     }
+}
+
+// ── Phase 3E additions ────────────────────────────────────────────────────────
+
+/// Room discovery and curator policy (D3: no hardcoded relays in kernel).
+///
+/// Injected at kernel construction time from `AppConfig`-adjacent bootstrap
+/// code. The kernel reads `room_policy.discovery_relay` when wiring the
+/// `DiscoveredGroupsProjection`; it never constructs relay URLs itself (D3).
+#[derive(Debug, Clone, Default)]
+pub struct RoomPolicy {
+    /// Relay to discover groups on. Empty = no active discovery.
+    /// Set via `AppConfig`/`KernelPolicy`-adjacent bootstrap, not hardcoded.
+    pub discovery_relay: String,
+    /// Optional curator pubkey for featured rooms (NIP-11 curator pattern).
+    /// Empty until Phase 3F wires curator filtering.
+    pub curator_pubkey: Option<String>,
+    /// Base URL for invite links (e.g. `"https://highlighter.com/r"`).
+    /// The kernel supplies raw group_id+code; Swift composes the full URL.
+    pub invite_link_base: String,
 }

@@ -36,7 +36,9 @@ use crate::onboarding::OnboardingStore;
 use nmp_defaults::{NmpAppBuilder, RunConfig};
 
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
-use crate::kernel::domains::{auth, communities, follows, projections, relays, route, session};
+use crate::kernel::domains::{
+    auth, communities, discovery, follows, projections, relays, route, session,
+};
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
 
@@ -252,6 +254,11 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         AppAction::Follow { pubkey } => follows::reduce_action_follow(pubkey),
 
         AppAction::Unfollow { pubkey } => follows::reduce_action_unfollow(pubkey),
+
+        // ── Phase 3E additions ────────────────────────────────────────────────
+        AppAction::StartRoomDiscovery { relay_url } => {
+            discovery::reduce_action_start_room_discovery(relay_url)
+        }
     }
 }
 
@@ -316,6 +323,11 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             state.follows = pubkeys;
             vec![]
         }
+
+        // ── Phase 3E additions (append-only) ─────────────────────────────────
+        KernelEvent::DiscoveredGroupsUpdated(rows) => {
+            discovery::reduce_event_discovered_groups_updated(state, rows)
+        }
     }
 }
 
@@ -329,6 +341,8 @@ pub(crate) fn project_snapshot(
 ) -> Option<ViewSnapshot> {
     match id {
         ViewId::Communities => communities::project_communities_snapshot(state),
+        // ── Phase 3E additions ────────────────────────────────────────────────
+        ViewId::RoomExplorer => discovery::project_room_explorer_snapshot(state),
         _ => route::project_snapshot(state, id, clock_now),
     }
 }
@@ -424,6 +438,18 @@ pub(crate) async fn run_effect(
         // ── Phase 3C additions ────────────────────────────────────────────────
         Effect::DispatchFollowAction { follow, pubkey } => {
             follows::run_effect_dispatch_follow_action(follow, pubkey, nmp);
+        }
+
+        // ── Phase 3E additions (append-only) ─────────────────────────────────
+        Effect::DispatchNip29Action { namespace, json } => {
+            discovery::run_effect_dispatch_nip29_action(namespace, json, nmp);
+        }
+
+        Effect::WireGroupDiscovery { relay_url } => {
+            if let Some(handle) = nmp {
+                let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+                discovery::run_effect_wire_group_discovery(relay_url, nmp_ref);
+            }
         }
     }
 

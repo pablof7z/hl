@@ -104,6 +104,10 @@ pub enum ViewSnapshot {
     // ── Phase 3B additions (append-only) ─────────────────────────────────────
     /// Joined-groups / communities list for the active account.
     Communities(CommunitiesSnapshot),
+
+    // ── Phase 3E additions (append-only) ─────────────────────────────────────
+    /// Room explorer / discovery screen.
+    RoomExplorer(KernelRoomExplorerSnapshot),
 }
 
 // ── Phase 3B additions (append-only) ─────────────────────────────────────────
@@ -143,4 +147,59 @@ pub struct CommunitiesSnapshot {
     /// (at most as many entries as the account has joined); never grows
     /// with the event store (Non-Negotiable #7).
     pub groups: Vec<CommunityRow>,
+}
+
+// ── Phase 3E additions (append-only) ─────────────────────────────────────────
+
+/// One discovered group row — raw protocol data only (D3 / ADR-0032).
+/// Swift shell formats display strings (name fallback, member label, etc.).
+/// Fields mirror `nmp_nip29::projection::DiscoveredGroup`.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct DiscoveredRow {
+    pub group_id: String,
+    pub host_relay_url: String,
+    pub name: Option<String>,
+    pub picture: Option<String>,
+    pub about: Option<String>,
+    pub member_count: u32,
+    pub public: bool,
+    pub open: bool,
+}
+
+/// A recommendation row for the friends/authors shelves.
+///
+/// Raw data only — Swift builds `"@{handle} + N you follow"` from `reason_pubkeys`.
+/// `total_reason_count` may exceed `reason_pubkeys.len()` if the vec is capped.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct RecommendationRow {
+    pub group_id: String,
+    pub host_relay_url: String,
+    pub name: Option<String>,
+    pub picture: Option<String>,
+    pub about: Option<String>,
+    /// Pubkeys of the follows who are in this group (capped for snapshot size).
+    pub reason_pubkeys: Vec<String>,
+    /// Total follows count in this group before capping `reason_pubkeys`.
+    pub total_reason_count: u32,
+}
+
+/// Snapshot for `ViewId::RoomExplorer` — the discovery screen.
+///
+/// Named `KernelRoomExplorerSnapshot` to avoid collision with the legacy
+/// `RoomExplorerSnapshot` in `room_explorer.rs` (bespoke live lane — Phase 3E
+/// coexists with the live lane until the iOS cutover, Non-Negotiable #6).
+///
+/// Bounded by projection: `featured` is empty until curator logic is wired
+/// (Phase 3F); `new_noteworthy` is capped at 256; shelves are empty until
+/// Phase 4 feeds.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelRoomExplorerSnapshot {
+    /// Featured rooms (curator-selected). Empty in Phase 3 — wired in Phase 3F.
+    pub featured: Vec<DiscoveredRow>,
+    /// Discovered rooms (public+open, excluding joined), newest-first, cap 256.
+    pub new_noteworthy: Vec<DiscoveredRow>,
+    /// Rooms with ≥2 follows inside. Empty in Phase 3 (requires Phase 4 member events).
+    pub friends_shelf: Vec<RecommendationRow>,
+    /// Rooms from authors you read. Empty in Phase 3 (requires Phase 4 feed data).
+    pub authors_shelf: Vec<RecommendationRow>,
 }

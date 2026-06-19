@@ -133,4 +133,28 @@ pub enum Effect {
         /// Raw 64-char lowercase hex pubkey to follow or unfollow.
         pubkey: String,
     },
+
+    // ── Phase 3E additions (append-only) ─────────────────────────────────────
+    /// Call `nmp_app_dispatch_action` with the given namespace and JSON payload.
+    ///
+    /// Used for NIP-29 write/subscribe actions (discover, join, create, etc.).
+    /// Fire-and-forget (D6): the returned correlation_id JSON is freed and
+    /// discarded. Results arrive via the relevant `KernelEvent::*Updated` event.
+    DispatchNip29Action {
+        /// NIP-29 action namespace (e.g. `"nmp.nip29.discover"`).
+        namespace: String,
+        /// JSON payload for the action (e.g. `{"relay_url":"..."}`).
+        json: String,
+    },
+    /// Wire the `DiscoveredGroupsProjection` event observer + typed snapshot
+    /// projection for `relay_url` into the live `NmpApp`.
+    ///
+    /// Called when `AppAction::StartRoomDiscovery` is dispatched. Registers the
+    /// observer that accumulates kind:39000/39001/39002 events from the relay.
+    /// Fire-and-forget: the snapshot arrives via the NMP update callback as
+    /// `KernelEvent::NmpSnapshotFrame` on the next projection tick.
+    WireGroupDiscovery {
+        /// The discovery relay URL (opaque string; kernel never constructs URLs, D3).
+        relay_url: String,
+    },
 }

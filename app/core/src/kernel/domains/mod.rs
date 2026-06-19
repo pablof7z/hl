@@ -8,6 +8,7 @@
 
 pub(crate) mod auth;
 pub(crate) mod communities;
+pub(crate) mod discovery;
 pub(crate) mod follows;
 pub(crate) mod projections;
 pub(crate) mod relay_diagnostics;
