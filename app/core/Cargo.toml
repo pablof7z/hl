@@ -28,6 +28,7 @@ nmp-defaults = { git = "https://github.com/pablof7z/nostr-multi-platform.git", b
 nmp-signers = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
 nmp-nip11 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
 nmp-nip29 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-nip78 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
 nmp-blossom = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
 nmp-content = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
 nmp-kinds = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }

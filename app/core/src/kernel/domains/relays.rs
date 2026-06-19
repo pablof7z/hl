@@ -39,9 +39,6 @@ use crate::kernel::effect::Effect;
 /// injected from outside; it is owned by hl).
 pub(crate) const ROOMS_RELAY_D_TAG: &str = "com.highlighter.relays";
 
-/// NIP-78 kind for parameterised replaceable app-data events.
-const APP_DATA_KIND: u32 = 30078;
-
 // ─── Reducer arms ───────────────────────────────────────────────────────────
 
 /// Handle `AppAction::AddRelay`.
@@ -144,30 +141,54 @@ pub(crate) fn run_effect_set_relay_role(url: String, role: String, nmp: Option<&
 
 /// Execute `Effect::PublishRoomsRelayList`.
 ///
-/// Publishes a kind:30078 event with d-tag `"com.highlighter.relays"` and
-/// the serialized relay list as content. Uses `ActorCommand::PublishRawEvent`
-/// with `PublishTarget::Auto` (NIP-65 outbox routing; D3 — the kernel never
-/// names a specific wss-scheme endpoint for publish routing).
+/// Builds a kind:30078 unsigned event via `nmp_nip78::build_app_data_event`
+/// with d-tag `"com.highlighter.relays"` and the serialized relay list as
+/// content, then publishes it through `ActorCommand::PublishUnsignedEvent`.
+/// The actor signs with the active account, stamps `created_at` (D7), and
+/// routes via the NIP-65 outbox resolver (D3 — no relay URL literals here).
 ///
-/// `nmp-nip78` does not exist on origin/master at the time of slice 2D;
-/// we publish via the generic `PublishRawEvent` path instead. This is
-/// semantically equivalent: nmp builds and signs the event, stamps the
-/// timestamp (D7), and routes via NIP-65.
+/// `pubkey` is passed as `""` — nmp overwrites it with the signing account's
+/// key during publish (documented in nmp-nip78 `build_app_data_event` comment).
+/// `created_at` is passed as `0` — nmp stamps the real wall-clock time (D7).
+///
+/// D6: if `build_app_data_event` returns an error (only on empty d-tag, which
+/// cannot happen with the constant `ROOMS_RELAY_D_TAG`) we log at warn and
+/// return without sending — never a panic or Result across the dispatch boundary.
 pub(crate) fn run_effect_publish_rooms_relay_list(content: String, nmp: Option<&NmpHandle>) {
     let Some(handle) = nmp else { return };
     let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
-    // NIP-78 parameterised replaceable event (kind:30078).
-    // Tags: ["d", "com.highlighter.relays"] — required for replaceable events.
-    let tags = vec![vec!["d".to_owned(), ROOMS_RELAY_D_TAG.to_owned()]];
+
+    // Build the unsigned kind:30078 event using the canonical nmp-nip78 helper.
+    // `pubkey` is a hint only — the actor overwrites it with the active account.
+    // `created_at = 0` — actor stamps D7 wall-clock time before signing.
+    let unsigned_event = match nmp_nip78::build_app_data_event(
+        "",                // pubkey hint — actor overwrites
+        ROOMS_RELAY_D_TAG, // hl-owned d-tag: "com.highlighter.relays"
+        content,
+        0,      // created_at hint — actor stamps real timestamp (D7)
+        vec![], // no extra tags
+    ) {
+        Ok(event) => event,
+        Err(e) => {
+            // D6: never a panic or Result across FFI.
+            // EmptyDTag cannot occur with ROOMS_RELAY_D_TAG; InvalidExtraTag
+            // cannot occur with an empty extra_tags vec.
+            tracing::warn!(
+                error = %e,
+                "PublishRoomsRelayList: build_app_data_event failed — discarding (D6)"
+            );
+            return;
+        }
+    };
+
+    // Publish via PublishUnsignedEvent — actor signs, timestamps (D7), and
+    // routes through NIP-65 outbox (D3: no explicit relay set). Fire-and-forget.
     let _ = nmp_ref
         .actor_sender()
-        .send(nmp_core::ActorCommand::PublishRawEvent {
-            kind: APP_DATA_KIND,
-            tags,
-            content,
-            target: nmp_core::publish::PublishTarget::Auto,
-            signer_pubkey: None,
+        .send(nmp_core::ActorCommand::PublishUnsignedEvent {
+            event: unsigned_event,
             correlation_id: None,
+            signer_pubkey: None, // sign with the active account
         });
 }
 
