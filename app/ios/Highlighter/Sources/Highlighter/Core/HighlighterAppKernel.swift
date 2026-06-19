@@ -23,7 +23,8 @@ final class HighlighterAppKernel {
     private(set) var appRoot: AppRootSnapshot = AppRootSnapshot(
         routeKind: .onboarding,
         sessionPresent: false,
-        onboardingComplete: false
+        onboardingComplete: false,
+        nostrconnectUri: nil
     )
 
     /// Latest projection for the root-shell chrome (tabs, toast, sheet).

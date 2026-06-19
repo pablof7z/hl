@@ -7204,6 +7204,13 @@ public struct AppRootSnapshot {
      * Whether the user has completed onboarding.
      */
     public var onboardingComplete: Bool
+    /**
+     * The most recently minted `nostrconnect://` URI, or `None` when no
+     * NostrConnect sign-in is in progress. The iOS QR-code sheet renders this
+     * directly. Cleared when `IdentityChanged` fires or on `Logout`.
+     * Bounded: one string ≤ 512 bytes (NIP-46 spec limit).
+     */
+    public var nostrconnectUri: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -7216,10 +7223,17 @@ public struct AppRootSnapshot {
          */sessionPresent: Bool,
         /**
          * Whether the user has completed onboarding.
-         */onboardingComplete: Bool) {
+         */onboardingComplete: Bool,
+        /**
+         * The most recently minted `nostrconnect://` URI, or `None` when no
+         * NostrConnect sign-in is in progress. The iOS QR-code sheet renders this
+         * directly. Cleared when `IdentityChanged` fires or on `Logout`.
+         * Bounded: one string ≤ 512 bytes (NIP-46 spec limit).
+         */nostrconnectUri: String?) {
         self.routeKind = routeKind
         self.sessionPresent = sessionPresent
         self.onboardingComplete = onboardingComplete
+        self.nostrconnectUri = nostrconnectUri
     }
 }
 
@@ -7239,6 +7253,9 @@ extension AppRootSnapshot: Equatable, Hashable {
         if lhs.onboardingComplete != rhs.onboardingComplete {
             return false
         }
+        if lhs.nostrconnectUri != rhs.nostrconnectUri {
+            return false
+        }
         return true
     }
 
@@ -7246,6 +7263,7 @@ extension AppRootSnapshot: Equatable, Hashable {
         hasher.combine(routeKind)
         hasher.combine(sessionPresent)
         hasher.combine(onboardingComplete)
+        hasher.combine(nostrconnectUri)
     }
 }
 
@@ -7260,7 +7278,8 @@ public struct FfiConverterTypeAppRootSnapshot: FfiConverterRustBuffer {
             try AppRootSnapshot(
                 routeKind: FfiConverterTypeRouteKind.read(from: &buf),
                 sessionPresent: FfiConverterBool.read(from: &buf),
-                onboardingComplete: FfiConverterBool.read(from: &buf)
+                onboardingComplete: FfiConverterBool.read(from: &buf),
+                nostrconnectUri: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -7268,6 +7287,7 @@ public struct FfiConverterTypeAppRootSnapshot: FfiConverterRustBuffer {
         FfiConverterTypeRouteKind.write(value.routeKind, into: &buf)
         FfiConverterBool.write(value.sessionPresent, into: &buf)
         FfiConverterBool.write(value.onboardingComplete, into: &buf)
+        FfiConverterOptionString.write(value.nostrconnectUri, into: &buf)
     }
 }
 
@@ -42381,10 +42401,12 @@ extension AddRelayProbeStatus: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
- * Every user or platform action the kernel understands — Phase 1.
+ * Every user or platform action the kernel understands.
  *
  * Dispatch is fire-and-forget (`dispatch(action)` returns `()`; Non-Negotiable #3).
  * Errors never propagate back as `Result` — they surface as typed `ViewSnapshot` state.
+ *
+ * Append-only: new variants at the bottom keep rebases mechanical.
  */
 
 public enum AppAction {
@@ -42421,6 +42443,46 @@ public enum AppAction {
      * Dismiss the topmost sheet.
      */
     case dismissSheet
+    /**
+     * Sign in with a raw nsec (bech32 `nsec1…` or hex).
+     *
+     * The reducer transitions to `SessionState::SigningIn` and emits
+     * `Effect::AddNsecSigner`. Success is signalled by the identity-change
+     * observer firing `KernelEvent::IdentityChanged(Some(pubkey))`. Failure
+     * surfaces as `SessionState::SignInFailed` (D6 — never a `Result`).
+     */
+    case signInNsec(nsec: String
+    )
+    /**
+     * Sign in via NIP-46 bunker URI (e.g. `bunker://pubkey?relay=…`).
+     *
+     * Requires `nmp_signer_broker_init` to have been called at boot. The
+     * reducer transitions to `SessionState::SigningIn{Bunker}` and emits
+     * `Effect::AddBunkerSigner`. The broker completes the NIP-46 handshake
+     * async; success arrives as `KernelEvent::IdentityChanged(Some(pubkey))`.
+     */
+    case pairBunker(uri: String
+    )
+    /**
+     * Request a NostrConnect URI so the user can scan it on a remote signer.
+     *
+     * Requires `nmp_signer_broker_init` to have been called at boot. The
+     * reducer transitions to `SessionState::SigningIn{NostrConnect}` and emits
+     * `Effect::MintNostrConnectUri`. The URI is delivered back via
+     * `KernelEvent::NostrConnectUriReady`; completion arrives as
+     * `KernelEvent::IdentityChanged(Some(pubkey))` once the remote signer
+     * scans the QR and completes the handshake.
+     */
+    case startNostrConnect
+    /**
+     * Sign in via NIP-55 external signer app (e.g. Amber on Android).
+     *
+     * Requires `nmp_external_signer_init` to have been called at boot. The
+     * reducer transitions to `SessionState::SigningIn{Nip55}` and emits
+     * `Effect::StartNip55SignIn`. Success arrives via the identity-change
+     * observer as `KernelEvent::IdentityChanged(Some(pubkey))`.
+     */
+    case signInNip55
 }
 
 
@@ -42453,6 +42515,16 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
         )
 
         case 7: return .dismissSheet
+
+        case 8: return .signInNsec(nsec: try FfiConverterString.read(from: &buf)
+        )
+
+        case 9: return .pairBunker(uri: try FfiConverterString.read(from: &buf)
+        )
+
+        case 10: return .startNostrConnect
+
+        case 11: return .signInNip55
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -42490,6 +42562,24 @@ public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
 
         case .dismissSheet:
             writeInt(&buf, Int32(7))
+
+
+        case let .signInNsec(nsec):
+            writeInt(&buf, Int32(8))
+            FfiConverterString.write(nsec, into: &buf)
+
+
+        case let .pairBunker(uri):
+            writeInt(&buf, Int32(9))
+            FfiConverterString.write(uri, into: &buf)
+
+
+        case .startNostrConnect:
+            writeInt(&buf, Int32(10))
+
+
+        case .signInNip55:
+            writeInt(&buf, Int32(11))
 
         }
     }
