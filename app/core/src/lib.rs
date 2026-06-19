@@ -1,5 +1,18 @@
 uniffi::setup_scaffolding!();
 
+// ── New nmp-lane kernel (Phase 1) ────────────────────────────────────────────
+pub mod capabilities;
+pub mod ffi;
+pub mod kernel;
+
+pub use capabilities::{CapabilityRequest, CapabilityResult, KeychainOp, KeychainResult};
+pub use ffi::HighlighterApp;
+pub use kernel::{
+    AppAction, AppConfig, AppRootSnapshot, HighlighterObserver, ManualClock, RootShellSnapshot,
+    RootTab, RouteKind, SystemClock, ToastSnapshot, ViewId, ViewRoute, ViewSnapshot,
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 pub mod article_reader;
 pub mod articles;
 pub mod artifact_detail;

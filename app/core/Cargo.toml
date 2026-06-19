@@ -59,3 +59,8 @@ path = "src/bin/uniffi-bindgen.rs"
 
 [dev-dependencies]
 tempfile = "3"
+
+# Pre-existing codebase uses sort_by with closures throughout; suppress at
+# crate level rather than touching every pre-existing call site.
+[lints.clippy]
+unnecessary_sort_by = "allow"
