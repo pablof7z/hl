@@ -272,6 +272,10 @@ pub struct KernelPolicy {
     pub create_account: CreateAccountPolicy,
     /// Policy for relay-management actions (Phase 2D).
     pub relay: RelayPolicy,
+    /// Room discovery and curator policy (Phase 3G).
+    /// Copied into `AppState::room_policy` at actor boot so the kernel can
+    /// auto-start discovery when `ViewId::RoomExplorer` is opened.
+    pub room: RoomPolicy,
 }
 
 /// UNIX seconds after dispatch of `RestoreSession` before the kernel

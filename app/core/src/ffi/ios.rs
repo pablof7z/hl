@@ -18,7 +18,7 @@ use tokio::sync::mpsc;
 use crate::capabilities::CapabilityResult;
 use crate::kernel::action::AppAction;
 use crate::kernel::actor::{actor_task, start_nmp_app, Cmd, HighlighterObserver, SharedState};
-use crate::kernel::app::{AppConfig, CreateAccountPolicy, KernelPolicy, SeedRelay};
+use crate::kernel::app::{AppConfig, CreateAccountPolicy, KernelPolicy, RoomPolicy, SeedRelay};
 use crate::kernel::clock::SystemClock;
 use crate::kernel::snapshot::ViewSnapshot;
 use crate::kernel::view::{ViewId, ViewRoute};
@@ -202,6 +202,12 @@ fn build_kernel_policy() -> KernelPolicy {
             initial_follows: Vec::new(), // ADR-0059 §5: empty → no kind:3
         },
         relay: Default::default(), // Phase 2D: seed_relay_urls populated at runtime
+        // Phase 3G: wire discovery relay so RoomExplorer auto-starts on view-open.
+        // URL comes from relay_policy.json ("room_explorer_curator") — D3 compliant.
+        room: RoomPolicy {
+            discovery_relay: crate::relays::room_explorer_curator_relay().to_string(),
+            ..Default::default()
+        },
     }
 }
 

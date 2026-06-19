@@ -559,6 +559,9 @@ pub(crate) async fn actor_task(
     policy: Arc<KernelPolicy>,
 ) {
     let mut state = AppState::default();
+    // Phase 3G: propagate room policy from bootstrap into AppState so the
+    // discovery lifecycle hook can read it without needing to import the policy Arc.
+    state.room_policy = policy.room.clone();
     let mut registry = ViewRegistry::default();
     let mut last_emit_at: u64 = 0;
     let mut suspended = false;
@@ -582,6 +585,8 @@ pub(crate) async fn actor_task(
                 lifecycle_effects.extend(profiles::lifecycle_effects_for_view_open(id));
                 // ── Phase 3F: wire group-events projection when room-home view opens ──
                 lifecycle_effects.extend(room_home::lifecycle_effects_for_view_open(id));
+                // ── Phase 3G: auto-start room discovery when RoomExplorer opens ──
+                lifecycle_effects.extend(discovery::lifecycle_effects_for_view_open(id, &state));
             }
             Cmd::CloseView(id) => {
                 // ── Phase 3D: release the profile subscription before removing from registry ──

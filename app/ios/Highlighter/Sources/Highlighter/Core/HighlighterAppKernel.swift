@@ -95,12 +95,40 @@ final class HighlighterAppKernel {
         // resident in the background tab shell (no open/close lifecycle).
         kernelApp.openView(viewId: .communities, route: .communities)
 
-        // Phase 3G: open the RoomExplorer view immediately — the Rooms tab
-        // is always present in the main tab shell.
-        kernelApp.openView(viewId: .roomExplorer, route: .roomExplorer)
+        // Note: RoomExplorer is NOT opened here. RoomExplorerView manages its
+        // own open/close lifecycle (openRoomExplorer on .task, closeRoomExplorer
+        // on .onDisappear). The kernel auto-starts discovery via the lifecycle
+        // hook when the view is opened (Phase 3G).
     }
 
     // MARK: - Phase 3G: per-view lifecycle helpers
+
+    /// Open the RoomExplorer view. The kernel's lifecycle hook auto-starts
+    /// discovery on open (Phase 3G). Call from `RoomExplorerView.task`.
+    func openRoomExplorer() {
+        app.openView(viewId: .roomExplorer, route: .roomExplorer)
+    }
+
+    /// Close the RoomExplorer view and clear its cached snapshot.
+    /// Call from `RoomExplorerView.onDisappear`.
+    func closeRoomExplorer() {
+        app.closeView(viewId: .roomExplorer)
+        roomExplorer = nil
+    }
+
+    /// Re-dispatch room discovery to the kernel (e.g. for pull-to-refresh).
+    ///
+    /// The kernel auto-starts discovery when `RoomExplorer` first opens (via
+    /// `discovery::lifecycle_effects_for_view_open`). This method lets the UI
+    /// re-trigger it without closing and re-opening the view.
+    ///
+    /// The relay URL mirrors `relay_policy.json` `"room_explorer_curator"`.
+    /// D3: this is the ONLY place in Swift that names the discovery relay URL.
+    func refreshRoomExplorer() {
+        // relay_policy.json "room_explorer_curator" — kept in sync by review gate.
+        let discoveryRelay = "wss://relay.highlighter.com"
+        app.dispatch(action: .startRoomDiscovery(relayUrl: discoveryRelay))
+    }
 
     /// Open a profile view for `pubkey` and send `ClaimProfile` to NMP.
     /// Call from `ProfileView.task(id:)`. Idempotent — nop if already open.

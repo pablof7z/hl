@@ -8,16 +8,16 @@ import SwiftUI
 /// Phase 3G cutover: reads joined-groups and discovery data from the
 /// `HighlighterAppKernel` typed snapshots (`CommunitiesSnapshot` and
 /// `KernelRoomExplorerSnapshot`) rather than from the live lane's
-/// `HighlighterStore`/`RoomExplorerStore`. The kernel view is opened at
-/// app startup in `HighlighterAppKernel.init()` (always resident).
-/// `StartRoomDiscovery` is dispatched on appear to kick relay discovery.
+/// `HighlighterStore`/`RoomExplorerStore`. The kernel view is opened on
+/// `.task` and closed on `.onDisappear`; the actor's lifecycle hook
+/// auto-starts room discovery (via `RoomPolicy.discoveryRelay`) when the
+/// view opens — no explicit relay URL needed from Swift.
 struct RoomExplorerView: View {
     @Environment(HighlighterStore.self) private var appStore
     @Environment(HighlighterAppKernel.self) private var kernel
     @State private var previewRoom: CommunitySummary?
     @State private var createSheetPresented = false
     @State private var navigationPath = NavigationPath()
-    @State private var hasStartedDiscovery = false
 
     // MARK: - Derived shelf data from kernel snapshots
 
@@ -125,22 +125,19 @@ struct RoomExplorerView: View {
             }
         }
         .task {
-            // Dispatch StartRoomDiscovery once to kick relay discovery;
-            // the kernel wires the DiscoveredGroupsProjection which feeds
-            // KernelRoomExplorerSnapshot updates back via the observer.
-            guard !hasStartedDiscovery else { return }
-            hasStartedDiscovery = true
-            // Use the discovery relay from AppConfig / RoomPolicy (injected at
-            // construction time in the kernel). For Phase 3G the action takes
-            // the relay URL; the kernel has the policy value.
-            // We dispatch via the legacy safeCore path for the relay URL resolution
-            // until Phase 4 wires the policy injection into AppConfig.
-            Task { await appStore.safeCore.startRoomDiscovery() }
+            // Open the RoomExplorer kernel view. The actor's lifecycle hook
+            // fires StartRoomDiscovery automatically using RoomPolicy.discoveryRelay
+            // (set from relay_policy.json at boot). Discovery results arrive back
+            // as KernelEvent::DiscoveredGroupsUpdated → kernel.roomExplorer.
+            kernel.openRoomExplorer()
+        }
+        .onDisappear {
+            kernel.closeRoomExplorer()
         }
         .refreshable {
-            // Pull-to-refresh re-dispatches discovery; kernel projection
-            // update arrives via the observer callback.
-            Task { await appStore.safeCore.startRoomDiscovery() }
+            // Re-dispatch discovery to the kernel (pull-to-refresh).
+            // kernel.roomExplorer stays populated during the refresh — no UI flash.
+            kernel.refreshRoomExplorer()
         }
     }
 
