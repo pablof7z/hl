@@ -33,7 +33,10 @@ enum HighlighterAction {
     case addRelay(url: String, role: String)
     case removeRelay(url: String)
     case setRelayRole(url: String, role: String)
-    case setRoomsRelayList(relayUrls: [String])
+    /// Publish the kind:30078 `com.highlighter.relays` app-data event carrying the
+    /// FULL relay set's {url, rooms, indexer} flags (one replaceable event — rooms
+    /// AND indexer are per-relay flags within it, not separate lists). Phase 7.
+    case setRoomsRelayList(entries: [RelayAppDataEntry])
 
     // ── Follows ───────────────────────────────────────────────────────────────
     case follow(pubkey: String)
@@ -220,9 +223,12 @@ enum HighlighterAction {
         case .setRelayRole(let url, let role):
             return AppActionEnvelope(namespace: "hl.relay.set_role",
                                      json: jsonObject(["url": url, "role": role]))
-        case .setRoomsRelayList(let relayUrls):
+        case .setRoomsRelayList(let entries):
+            let mapped: [[String: Any]] = entries.map {
+                ["url": $0.url, "rooms": $0.rooms, "indexer": $0.indexer]
+            }
             return AppActionEnvelope(namespace: "hl.relay.set_rooms_relay_list",
-                                     json: jsonArray(["relay_urls": relayUrls]))
+                                     json: jsonAny(["entries": mapped]))
 
         // ── Follows ───────────────────────────────────────────────────────────
         case .follow(let pubkey):
