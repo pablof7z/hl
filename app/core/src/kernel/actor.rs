@@ -37,8 +37,8 @@ use nmp_defaults::{NmpAppBuilder, RunConfig};
 
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
 use crate::kernel::domains::{
-    articles, auth, bookmarks, communities, discovery, follows, profiles, projections, reactions,
-    relays, room_home, route, search, session,
+    articles, auth, bookmarks, communities, discovery, feed, follows, profiles, projections,
+    reactions, relays, room_home, route, search, session,
 };
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
@@ -470,6 +470,53 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             state.search_results = rows;
             vec![]
         }
+
+        // ── Phase 4F additions (append-only) ─────────────────────────────────
+        KernelEvent::FeedPage {
+            key,
+            cursor_id: _,
+            rows,
+            next_after_seq,
+            exhausted,
+            gap_rebased_to,
+        } => {
+            // Route on key to the correct FeedState in AppState and apply the page.
+            // 4G/4H/4I add further routing arms here for their feed keys.
+            // The generic engine (feed::apply_feed_page) handles all states.
+            //
+            // Inline: also send AdvancePullCursor so the kernel wake arm knows
+            // the cursor has advanced (re-arms an immediate wake when there is
+            // still data waiting). This keeps the cursor registry in sync without
+            // a separate effect pass (the advance is non-reducing, fire-and-forget).
+            //
+            // Phase 4F wires article_feed / highlight_feed / room_lanes as the
+            // extension seam; 4G/4H/4I add their consume arms here.
+            let feed_state = match key.as_str() {
+                "hl.feed.articles" => Some(&mut state.article_feed),
+                "hl.feed.highlights" => Some(&mut state.highlight_feed),
+                k if k.starts_with("hl.feed.room.") => {
+                    // Lazily insert a FeedState for this group_id if not present.
+                    let group_key = k.to_string();
+                    state.room_lanes.entry(group_key).or_default();
+                    state.room_lanes.get_mut(k)
+                }
+                _ => {
+                    tracing::warn!(?key, "FeedPage: unknown feed key — no-op");
+                    None
+                }
+            };
+
+            if let Some(fs) = feed_state {
+                feed::apply_feed_page(fs, rows, next_after_seq, exhausted, gap_rebased_to);
+            }
+
+            // Note: AdvancePullCursor is sent from the inline effect handler in
+            // actor_task (after run_effect for DrainFeed) rather than here,
+            // because we need the NmpHandle which is not available in reduce_event
+            // (a pure, synchronous function — D9). The inline handler calls
+            // feed::advance_feed_cursor after the FeedPage event is processed.
+            vec![]
+        }
     }
 }
 
@@ -686,9 +733,58 @@ pub(crate) async fn run_effect(
             // snapshot callback. No-op if nmp is None (test mode).
             search::run_effect_run_search(query, scope_json, interest_id, nmp);
         }
+
+        // ── Phase 4F additions (append-only) ─────────────────────────────────
+        //
+        // RegisterFeedCursor, DrainFeed, and ReleaseFeedCursor require access
+        // to AppState (to look up cursor_id for DrainFeed and ReleaseFeedCursor).
+        // They are handled INLINE in actor_task before the generic run_effect
+        // path (same pattern as WireGroupEvents / ReleaseGroupEvents which also
+        // need AppState). The arms below are unreachable in normal operation
+        // — kept here to satisfy the exhaustive match and document the contract.
+        Effect::RegisterFeedCursor { key, .. }
+        | Effect::DrainFeed { key }
+        | Effect::ReleaseFeedCursor { key } => {
+            // Handled inline in actor_task; should not reach run_effect.
+            let _ = key;
+            tracing::trace!(
+                "RegisterFeedCursor/DrainFeed/ReleaseFeedCursor reached run_effect — no-op (handled inline by actor_task)"
+            );
+        }
     }
 
     let _ = session_epoch; // carried for future epoch-keyed effect cancellation
+}
+
+// ─── Phase 4F helpers ────────────────────────────────────────────────────────
+
+/// Return the `cursor_id` stored in the `FeedState` for the given feed key.
+///
+/// Used by the inline DrainFeed / ReleaseFeedCursor handlers in `actor_task`
+/// to look up which cursor to drain or unregister without an actor round-trip.
+/// Returns `0` (no-op sentinel) when the key is unknown or the cursor was
+/// not yet registered.
+fn feed_state_cursor_id(state: &AppState, key: &str) -> u64 {
+    match key {
+        "hl.feed.articles" => state.article_feed.cursor_id,
+        "hl.feed.highlights" => state.highlight_feed.cursor_id,
+        k if k.starts_with("hl.feed.room.") => state.room_lanes.get(k).map_or(0, |fs| fs.cursor_id),
+        _ => 0,
+    }
+}
+
+/// Return the `after_seq` stored in the `FeedState` for the given feed key.
+///
+/// Passed to `run_effect_register_feed_cursor` on (re-)registration so the
+/// kernel cursor resumes from the last known position rather than rewinding
+/// to zero on view re-open (D6: idempotent re-registration).
+fn feed_state_after_seq(state: &AppState, key: &str) -> u64 {
+    match key {
+        "hl.feed.articles" => state.article_feed.after_seq,
+        "hl.feed.highlights" => state.highlight_feed.after_seq,
+        k if k.starts_with("hl.feed.room.") => state.room_lanes.get(k).map_or(0, |fs| fs.after_seq),
+        _ => 0,
+    }
 }
 
 // ─── Actor task ─────────────────────────────────────────────────────────────
@@ -781,6 +877,9 @@ pub(crate) async fn actor_task(
         // Phase 3F: WireGroupEvents and ReleaseGroupEvents require AppState and are
         // handled INLINE here before the generic run_effect path (they need to
         // resolve host_relay_url from AppState::communities or mutate room_home_events).
+        // Phase 4F: RegisterFeedCursor, DrainFeed, ReleaseFeedCursor also handled
+        // inline because they need AppState::article_feed / highlight_feed / room_lanes
+        // to look up cursor_id (for drain and release) or to call advance_feed_cursor.
         for effect in lifecycle_effects.into_iter().chain(effects) {
             match &effect {
                 Effect::WireGroupEvents { group_id } => {
@@ -795,6 +894,62 @@ pub(crate) async fn actor_task(
                 Effect::ReleaseGroupEvents { group_id } => {
                     // Clear the hl-side event buffer to bound memory.
                     state.room_home_events.remove(group_id);
+                    continue;
+                }
+                // ── Phase 4F inline effect handlers ──────────────────────────
+                Effect::RegisterFeedCursor {
+                    key,
+                    cursor_id,
+                    scope,
+                } => {
+                    // Store cursor_id in the appropriate FeedState so DrainFeed
+                    // and ReleaseFeedCursor can look it up without an actor
+                    // round-trip. Then register with the kernel.
+                    let id = *cursor_id;
+                    let key_clone = key.clone();
+                    let after_seq = feed_state_after_seq(&state, key);
+                    match key.as_str() {
+                        "hl.feed.articles" => state.article_feed.cursor_id = id,
+                        "hl.feed.highlights" => state.highlight_feed.cursor_id = id,
+                        k if k.starts_with("hl.feed.room.") => {
+                            state.room_lanes.entry(k.to_string()).or_default().cursor_id = id;
+                        }
+                        _ => {}
+                    }
+                    feed::run_effect_register_feed_cursor(
+                        key_clone,
+                        id,
+                        scope.clone(),
+                        after_seq,
+                        nmp_handle.as_ref(),
+                    );
+                    continue;
+                }
+                Effect::DrainFeed { key } => {
+                    // Look up the cursor_id from AppState and call nmp_app_pull_page.
+                    // Fire-and-forget (D6): the decoded FeedPage event is sent back
+                    // via the tx channel, triggering reduce_event::FeedPage above.
+                    // D8: a single pull_page call per DrainFeed — no polling loop.
+                    let cursor_id = feed_state_cursor_id(&state, key);
+                    feed::run_effect_drain_feed(key.clone(), cursor_id, &tx, nmp_handle.as_ref());
+                    continue;
+                }
+                Effect::ReleaseFeedCursor { key } => {
+                    // Look up cursor_id and unregister. Also clear the FeedState
+                    // rows to bound memory (cursor_id is preserved so a re-open
+                    // can re-register with the same id — idempotent, D6).
+                    let cursor_id = feed_state_cursor_id(&state, key);
+                    feed::run_effect_release_feed_cursor(cursor_id, nmp_handle.as_ref());
+                    match key.as_str() {
+                        "hl.feed.articles" => state.article_feed.clear(),
+                        "hl.feed.highlights" => state.highlight_feed.clear(),
+                        k if k.starts_with("hl.feed.room.") => {
+                            if let Some(fs) = state.room_lanes.get_mut(k) {
+                                fs.clear();
+                            }
+                        }
+                        _ => {}
+                    }
                     continue;
                 }
                 _ => {}

@@ -237,6 +237,30 @@ pub struct AppState {
     /// hard cap 500 from nmp-nip50 — Non-Negotiable #7).
     /// D1: `SearchHitRow` is raw protocol data only — no formatted strings.
     pub search_results: Vec<crate::kernel::snapshot::SearchHitRow>,
+
+    // ── Phase 4F additions ────────────────────────────────────────────────────
+    /// Pull-cursor state for the article feed (kind:30023 over follows).
+    ///
+    /// Registered by Phase 4G when the article-feed view opens (via
+    /// `lifecycle_effects_for_view_open` emitting `Effect::RegisterFeedCursor`
+    /// with key `"hl.feed.articles"`). Cleared on `Logout` / `IdentityChanged(None)`.
+    ///
+    /// `cursor_id` is minted by `feed::mint_cursor_id("hl.feed.articles")`.
+    /// `rows` holds raw `KernelEvent`s projected to `ArticleRow`s by 4G.
+    pub article_feed: crate::kernel::domains::feed::FeedState,
+
+    /// Pull-cursor state for the highlights feed (kind:9802, any author).
+    ///
+    /// Registered by Phase 4H when the highlights feed view opens.
+    /// Cleared on `Logout` / `IdentityChanged(None)`.
+    pub highlight_feed: crate::kernel::domains::feed::FeedState,
+
+    /// Pull-cursor state per room-lane feed, keyed by `group_id`.
+    ///
+    /// Each entry is registered by Phase 4I when a `ViewId::RoomHome{group_id}`
+    /// opens. Key is `"hl.feed.room.<group_id>"`. Bounded by open room views.
+    /// Cleared on `Logout` / `IdentityChanged(None)`.
+    pub room_lanes: HashMap<String, crate::kernel::domains::feed::FeedState>,
 }
 
 impl Default for AppState {
@@ -265,6 +289,10 @@ impl Default for AppState {
             reaction_state: HashMap::new(),
             // ── Phase 4D additions ────────────────────────────────────────────
             search_results: Vec::new(),
+            // ── Phase 4F additions ────────────────────────────────────────────
+            article_feed: crate::kernel::domains::feed::FeedState::default(),
+            highlight_feed: crate::kernel::domains::feed::FeedState::default(),
+            room_lanes: HashMap::new(),
         }
     }
 }

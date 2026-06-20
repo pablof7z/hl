@@ -585,4 +585,40 @@ pub enum KernelEvent {
     /// unbounded (Non-Negotiable #7). No labels or formatted strings — Swift
     /// formats all search result UI (D1).
     SearchResultsUpdated(Vec<crate::kernel::snapshot::SearchHitRow>),
+
+    // ── Phase 4F additions (append-only) ─────────────────────────────────────
+    /// `nmp_app_pull_page` returned a decoded page (or a Gap rebase) for the
+    /// named feed cursor.
+    ///
+    /// Produced by the `DrainFeed` effect runner after decoding the binary Page
+    /// wire from `nmp_ffi::pull::nmp_app_pull_page`. The reducer routes on `key`
+    /// to the correct `FeedState` in `AppState` and calls
+    /// `feed::apply_feed_page`.
+    ///
+    /// - `rows`: positive (Inserted/Replaced) entries decoded into raw
+    ///   `KernelEvent`s in ingest-seq order. Empty on a Gap (clear-and-rebase).
+    /// - `next_after_seq`: the kernel's `next_after_seq` from the wire — the
+    ///   cursor should advance to this value.
+    /// - `exhausted`: `true` when `has_more == false` (fully caught up).
+    /// - `gap_rebased_to`: `Some(seq)` on a Gap; the reducer clears `rows` and
+    ///   resets `after_seq` to `seq` (ADR-0058 §10).
+    ///
+    /// D1: `KernelEvent` fields are raw protocol data — no formatted strings.
+    /// D5: rows are bounded by `FEED_PAGE_SIZE` per drain call.
+    /// D8: no polling — this event arrives once per `DrainFeed` effect,
+    ///     not from a timer.
+    FeedPage {
+        /// Stable feed key matching the `RegisterFeedCursor.key`.
+        key: String,
+        /// Cursor id that was drained (for the actor to call `AdvancePullCursor`).
+        cursor_id: u64,
+        /// Decoded positive-log rows from this page (ingest-seq order).
+        rows: Vec<nmp_core::substrate::KernelEvent>,
+        /// The kernel's `next_after_seq` — advance the cursor here.
+        next_after_seq: u64,
+        /// `true` when `has_more == false` (the feed is fully caught up).
+        exhausted: bool,
+        /// `Some(seq)` on a Gap — the reducer must clear rows and rebase to seq.
+        gap_rebased_to: Option<u64>,
+    },
 }

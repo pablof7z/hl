@@ -25,3 +25,9 @@ pub(crate) mod articles;
 
 // ── Phase 4D additions (append-only) ─────────────────────────────────────────
 pub(crate) mod search;
+
+// ── Phase 4F additions (append-only) ─────────────────────────────────────────
+/// Feed-pull core — ADR-0058 shared engine (Phase 4F).
+///
+/// `pub` so `AppState` in `app.rs` can name `feed::FeedState` without an alias.
+pub mod feed;
