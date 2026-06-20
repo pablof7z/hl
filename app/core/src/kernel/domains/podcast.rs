@@ -618,32 +618,42 @@ pub(crate) fn reduce_event_transcript_failed(state: &mut AppState) -> Vec<Effect
 
 /// Reduce `hl.audio.clip_mark_in` — set clip start to `current_time`,
 /// clear end if it is now before start.
+///
+/// Clamps `current_time` to `≥ 0`; non-finite values are a no-op (D6).
 pub(crate) fn reduce_action_clip_mark_in(state: &mut AppState, current_time: f64) -> Vec<Effect> {
+    if !current_time.is_finite() {
+        tracing::warn!("clip_mark_in: non-finite current_time — no-op (D6)");
+        return vec![];
+    }
     let Some(ep) = state.podcast.current.as_mut() else {
         return vec![];
     };
+    let t = current_time.max(0.0);
     let sel = ep.clip_selection.get_or_insert_with(ClipSelection::default);
-    sel.clip_start_seconds = Some(current_time);
-    if sel
-        .clip_end_seconds
-        .map(|end| end < current_time)
-        .unwrap_or(false)
-    {
+    sel.clip_start_seconds = Some(t);
+    if sel.clip_end_seconds.map(|end| end < t).unwrap_or(false) {
         sel.clip_end_seconds = None;
     }
     vec![]
 }
 
 /// Reduce `hl.audio.clip_mark_out` — set clip end, clear start if reversed.
+///
+/// Clamps `current_time` to `≥ 0`; non-finite values are a no-op (D6).
 pub(crate) fn reduce_action_clip_mark_out(state: &mut AppState, current_time: f64) -> Vec<Effect> {
+    if !current_time.is_finite() {
+        tracing::warn!("clip_mark_out: non-finite current_time — no-op (D6)");
+        return vec![];
+    }
     let Some(ep) = state.podcast.current.as_mut() else {
         return vec![];
     };
+    let t = current_time.max(0.0);
     let sel = ep.clip_selection.get_or_insert_with(ClipSelection::default);
-    sel.clip_end_seconds = Some(current_time);
+    sel.clip_end_seconds = Some(t);
     if sel
         .clip_start_seconds
-        .map(|start| start > current_time)
+        .map(|start| start > t)
         .unwrap_or(false)
     {
         sel.clip_start_seconds = None;
@@ -687,8 +697,13 @@ pub(crate) fn reduce_action_clip_extend_segment(
     vec![]
 }
 
-/// Reduce `hl.audio.clip_set_start` — set clip start, clamped so start ≤ end − 0.05 s.
+/// Reduce `hl.audio.clip_set_start` — set clip start, clamped to `≥ 0` and
+/// so `start ≤ end − 0.05 s`. Non-finite values are a no-op (D6).
 pub(crate) fn reduce_action_clip_set_start(state: &mut AppState, value: f64) -> Vec<Effect> {
+    if !value.is_finite() {
+        tracing::warn!("clip_set_start: non-finite value — no-op (D6)");
+        return vec![];
+    }
     let Some(ep) = state.podcast.current.as_mut() else {
         return vec![];
     };
@@ -701,21 +716,28 @@ pub(crate) fn reduce_action_clip_set_start(state: &mut AppState, value: f64) -> 
     vec![]
 }
 
-/// Reduce `hl.audio.clip_set_end` — set clip end, clamped to duration and so end ≥ start + 0.05 s.
+/// Reduce `hl.audio.clip_set_end` — set clip end, clamped to `[0, duration]`
+/// and so `end ≥ start + 0.05 s`. Non-finite values are a no-op (D6).
 pub(crate) fn reduce_action_clip_set_end(
     state: &mut AppState,
     value: f64,
     duration_seconds: f64,
 ) -> Vec<Effect> {
+    if !value.is_finite() {
+        tracing::warn!("clip_set_end: non-finite value — no-op (D6)");
+        return vec![];
+    }
     let Some(ep) = state.podcast.current.as_mut() else {
         return vec![];
     };
     let sel = ep.clip_selection.get_or_insert_with(ClipSelection::default);
+    // Clamp to [0, duration]; if duration unknown, still floor at 0.
     let mut end = if duration_seconds > 0.0 {
         value.min(duration_seconds)
     } else {
         value
-    };
+    }
+    .max(0.0);
     if let Some(start) = sel.clip_start_seconds {
         end = end.max(start + 0.05);
     }

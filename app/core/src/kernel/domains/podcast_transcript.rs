@@ -466,9 +466,45 @@ async fn read_limited(
 mod tests {
     use super::*;
 
+    // ── Parity helper ────────────────────────────────────────────────────────
+    //
+    // Maps any segment type (kernel or live) to a comparable tuple so we can
+    // assert_eq! across the two crate boundaries without unified types.
+    fn seg_tuple(
+        id: &str,
+        start: f64,
+        end: f64,
+        speaker: &str,
+        text: &str,
+    ) -> (String, f64, f64, String, String) {
+        (
+            id.to_string(),
+            start,
+            end,
+            speaker.to_string(),
+            text.to_string(),
+        )
+    }
+
+    fn kernel_to_tuples(segs: &[TranscriptSegment]) -> Vec<(String, f64, f64, String, String)> {
+        segs.iter()
+            .map(|s| seg_tuple(&s.id, s.start, s.end, &s.speaker, &s.text))
+            .collect()
+    }
+
+    fn live_to_tuples(
+        segs: &[crate::podcast_transcript::TranscriptSegment],
+    ) -> Vec<(String, f64, f64, String, String)> {
+        segs.iter()
+            .map(|s| seg_tuple(&s.id, s.start, s.end, &s.speaker, &s.text))
+            .collect()
+    }
+
     // 5I-T1: transcript_parses_vtt_to_segments
     //
-    // Parity with live parse_transcript_bytes: same VTT fixture → same segments.
+    // Calls BOTH the kernel parser and the live bespoke parser on the same
+    // fixture bytes, then asserts they produce identical output (parity gate).
+    // Also anchors the expected values directly so any single-side drift fails.
     #[test]
     fn transcript_parses_vtt_to_segments() {
         let bytes = br#"WEBVTT
@@ -480,21 +516,31 @@ mod tests {
 Bob: Thanks.
 "#;
 
-        let segments = parse_bytes(bytes, Some("text/vtt"), None);
+        let kernel_segs = parse_bytes(bytes, Some("text/vtt"), None);
+        let live_segs =
+            crate::podcast_transcript::parse_transcript_bytes(bytes, Some("text/vtt"), None);
 
-        assert_eq!(segments.len(), 2);
-        assert_eq!(segments[0].id, "vtt-0");
-        assert_eq!(segments[0].start, 1.0);
-        assert_eq!(segments[0].end, 3.5);
-        assert_eq!(segments[0].speaker, "Alice");
-        assert_eq!(segments[0].text, "Welcome to the show.");
-        assert_eq!(segments[1].speaker, "Bob");
-        assert_eq!(segments[1].text, "Thanks.");
+        // Parity: kernel and live must produce identical output.
+        assert_eq!(
+            kernel_to_tuples(&kernel_segs),
+            live_to_tuples(&live_segs),
+            "kernel VTT parser must match live parser output"
+        );
+
+        // Anchor expected values so any single-side drift also fails.
+        assert_eq!(kernel_segs.len(), 2);
+        assert_eq!(kernel_segs[0].id, "vtt-0");
+        assert_eq!(kernel_segs[0].start, 1.0);
+        assert_eq!(kernel_segs[0].end, 3.5);
+        assert_eq!(kernel_segs[0].speaker, "Alice");
+        assert_eq!(kernel_segs[0].text, "Welcome to the show.");
+        assert_eq!(kernel_segs[1].speaker, "Bob");
+        assert_eq!(kernel_segs[1].text, "Thanks.");
     }
 
     // 5I-T2: transcript_parses_srt_to_segments
     //
-    // Parity with live parser: same SRT fixture → same segments.
+    // Calls BOTH parsers on the same SRT fixture and asserts identical output.
     #[test]
     fn transcript_parses_srt_to_segments() {
         let bytes = br#"12
@@ -502,19 +548,26 @@ Bob: Thanks.
 HOST: Segment text.
 "#;
 
-        let segments = parse_bytes(bytes, None, Some("srt"));
+        let kernel_segs = parse_bytes(bytes, None, Some("srt"));
+        let live_segs = crate::podcast_transcript::parse_transcript_bytes(bytes, None, Some("srt"));
 
-        assert_eq!(segments.len(), 1);
-        assert_eq!(segments[0].id, "srt-12");
-        assert_eq!(segments[0].start, 62.25);
-        assert_eq!(segments[0].end, 64.0);
-        assert_eq!(segments[0].speaker, "HOST");
-        assert_eq!(segments[0].text, "Segment text.");
+        assert_eq!(
+            kernel_to_tuples(&kernel_segs),
+            live_to_tuples(&live_segs),
+            "kernel SRT parser must match live parser output"
+        );
+
+        assert_eq!(kernel_segs.len(), 1);
+        assert_eq!(kernel_segs[0].id, "srt-12");
+        assert_eq!(kernel_segs[0].start, 62.25);
+        assert_eq!(kernel_segs[0].end, 64.0);
+        assert_eq!(kernel_segs[0].speaker, "HOST");
+        assert_eq!(kernel_segs[0].text, "Segment text.");
     }
 
     // 5I-T3: transcript_parses_json_to_segments
     //
-    // Parity with live parser: nested JSON with string startTime → same output.
+    // Calls BOTH parsers on the same JSON fixture and asserts identical output.
     #[test]
     fn transcript_parses_json_to_segments() {
         let bytes = br#"{
@@ -523,14 +576,25 @@ HOST: Segment text.
   ]
 }"#;
 
-        let segments = parse_bytes(bytes, Some("application/json"), None);
+        let kernel_segs = parse_bytes(bytes, Some("application/json"), None);
+        let live_segs = crate::podcast_transcript::parse_transcript_bytes(
+            bytes,
+            Some("application/json"),
+            None,
+        );
 
-        assert_eq!(segments.len(), 1);
-        assert_eq!(segments[0].id, "a");
-        assert_eq!(segments[0].start, 1.5);
-        assert_eq!(segments[0].end, 2.0);
-        assert_eq!(segments[0].speaker, "Ada");
-        assert_eq!(segments[0].text, "hello world");
+        assert_eq!(
+            kernel_to_tuples(&kernel_segs),
+            live_to_tuples(&live_segs),
+            "kernel JSON parser must match live parser output"
+        );
+
+        assert_eq!(kernel_segs.len(), 1);
+        assert_eq!(kernel_segs[0].id, "a");
+        assert_eq!(kernel_segs[0].start, 1.5);
+        assert_eq!(kernel_segs[0].end, 2.0);
+        assert_eq!(kernel_segs[0].speaker, "Ada");
+        assert_eq!(kernel_segs[0].text, "hello world");
     }
 
     // 5I-T4: malformed_transcript_is_empty_no_op
@@ -948,6 +1012,135 @@ Hello.
         assert!(
             nostr.is_empty(),
             "TranscriptReady MUST NOT emit nostr publish effects (device-local): {nostr:?}"
+        );
+    }
+
+    // 5I-T11: clip_set_end_negative_is_clamped
+    //
+    // clip_set_end with a negative value and no start must clamp to 0, not store
+    // a negative end time (D6 — kernel never stores invalid state).
+    #[test]
+    fn clip_set_end_negative_is_clamped() {
+        use crate::kernel::action::{AppAction, AppActionEnvelope};
+        use crate::kernel::actor::{reduce, Cmd};
+        use crate::kernel::app::AppState;
+        use crate::kernel::clock::{Clock as KClock, ManualClock};
+
+        let mut state = AppState::default();
+        let clk = ManualClock::default();
+        clk.set(1_000);
+
+        let artifact = minimal_artifact("ep-guid", "https://cdn.example/ep.mp3");
+        reduce(
+            &mut state,
+            Cmd::Action(AppAction::AudioPlay {
+                url: "https://cdn.example/ep.mp3".into(),
+                guid: "ep-guid".into(),
+                artifact_json: serde_json::to_string(&artifact).unwrap(),
+            }),
+            KClock::now_unix_seconds(&clk),
+        );
+
+        // Set end to a negative value — must clamp to 0.
+        reduce(
+            &mut state,
+            Cmd::ActionEnvelope(AppActionEnvelope {
+                namespace: "hl.audio.clip_set_end".into(),
+                json: serde_json::json!({"value": -5.0, "duration_seconds": 60.0}).to_string(),
+            }),
+            KClock::now_unix_seconds(&clk),
+        );
+        let sel = state
+            .podcast
+            .current
+            .as_ref()
+            .unwrap()
+            .clip_selection
+            .as_ref()
+            .unwrap();
+        assert!(
+            sel.clip_end_seconds.unwrap() >= 0.0,
+            "clip_end_seconds must not be negative after clip_set_end(-5)"
+        );
+    }
+
+    // 5I-T12: clip_times_clamped_to_duration
+    //
+    // clip_mark_in / clip_mark_out with negative values must be clamped to 0 (≥ 0 rule).
+    #[test]
+    fn clip_times_clamped_to_duration() {
+        use crate::kernel::action::{AppAction, AppActionEnvelope};
+        use crate::kernel::actor::{reduce, Cmd};
+        use crate::kernel::app::AppState;
+        use crate::kernel::clock::{Clock as KClock, ManualClock};
+
+        let mut state = AppState::default();
+        let clk = ManualClock::default();
+        clk.set(1_000);
+
+        let artifact = minimal_artifact("ep-guid", "https://cdn.example/ep.mp3");
+        reduce(
+            &mut state,
+            Cmd::Action(AppAction::AudioPlay {
+                url: "https://cdn.example/ep.mp3".into(),
+                guid: "ep-guid".into(),
+                artifact_json: serde_json::to_string(&artifact).unwrap(),
+            }),
+            KClock::now_unix_seconds(&clk),
+        );
+
+        // mark_in at negative time → clamped to 0.
+        reduce(
+            &mut state,
+            Cmd::ActionEnvelope(AppActionEnvelope {
+                namespace: "hl.audio.clip_mark_in".into(),
+                json: serde_json::json!({"current_time": -3.0}).to_string(),
+            }),
+            KClock::now_unix_seconds(&clk),
+        );
+        let sel = state
+            .podcast
+            .current
+            .as_ref()
+            .unwrap()
+            .clip_selection
+            .as_ref()
+            .unwrap();
+        assert_eq!(
+            sel.clip_start_seconds,
+            Some(0.0),
+            "clip_start from negative current_time must clamp to 0"
+        );
+
+        // mark_out at negative time → clamped to 0 (start stays at 0, end = 0, reversed rule fires).
+        // Reset first.
+        reduce(
+            &mut state,
+            Cmd::ActionEnvelope(AppActionEnvelope {
+                namespace: "hl.audio.clip_clear".into(),
+                json: "{}".into(),
+            }),
+            KClock::now_unix_seconds(&clk),
+        );
+        reduce(
+            &mut state,
+            Cmd::ActionEnvelope(AppActionEnvelope {
+                namespace: "hl.audio.clip_mark_out".into(),
+                json: serde_json::json!({"current_time": -2.0}).to_string(),
+            }),
+            KClock::now_unix_seconds(&clk),
+        );
+        let sel = state
+            .podcast
+            .current
+            .as_ref()
+            .unwrap()
+            .clip_selection
+            .as_ref()
+            .unwrap();
+        assert!(
+            sel.clip_end_seconds.unwrap() >= 0.0,
+            "clip_end from negative current_time must clamp to 0"
         );
     }
 
