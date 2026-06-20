@@ -18,12 +18,48 @@
 //! ```text
 //!   Idle ──set_quote(non-empty)──▶ Reviewing ──publish(can_publish)──▶ Publishing
 //!                                                                          │
+//!                       clock_check (PUBLISH_TIMEOUT_SECS) → Error ───────┤
 //!                                            CaptureDraftPublishResult ────┤
 //!                                                                          ▼
 //!                                                              Done | Error{message}
 //! ```
 //!
 //! `reset` returns to `Idle` and clears all draft fields.
+//!
+//! ## Publishing → Done/Error completion path
+//!
+//! `run_effect_publish_highlight_event` (Phase 4H) dispatches via
+//! `ActorCommand::PublishRawEvent` which is **fire-and-forget** — it does not
+//! return a completion event. The full `action_results` typed-projection wiring
+//! (correlation_id → Done/Error) is 5G's responsibility. Until 5G ships, the
+//! reducer accepts `KernelEvent::CaptureDraftPublishResult` injected directly
+//! (works in tests and from any future completion wiring), AND a clock-driven
+//! timeout transitions `Publishing → Error` after `PUBLISH_TIMEOUT_SECS`
+//! (mirroring the Phase 2A sign-in timeout pattern). This prevents the capture
+//! screen from hanging on a spinner indefinitely in production.
+//!
+//! ## Text normalization
+//!
+//! All draft text (quote, context, note) is trimmed and blank-whitespace-only
+//! strings are rejected as empty, matching the live lane's `should_stash`
+//! rejection logic (`capture.rs::stash_projection`, `:170`) and note/context
+//! trimming (`:235,:256`).
+//!
+//! ## `has_upload` and the cross-slice dependency on 5G
+//!
+//! The live `capture.rs::publish_projection` (`:182`) gates `can_publish` on
+//! `phase_allows_publish && has_upload`. In the live lane every capture is
+//! image-based (camera → Blossom upload). The kernel lane decouples the two
+//! paths:
+//!
+//! * **Quote path** (kind:9802 text highlight): text-only publish is valid
+//!   without a Blossom image; `has_upload` is NOT required here. The image
+//!   becomes an optional enhancement once 5G/5E ship.
+//! * **Markdown/kind:11 path**: `has_upload` IS required because a kind:11
+//!   capture is an image share — publishing without the image descriptor is
+//!   semantically wrong. 5G sets `has_upload = true` via
+//!   `KernelEvent::BlossomUploadResult`; until 5G ships this path will not
+//!   satisfy `can_publish` and is effectively gated closed.
 //!
 //! ## Fidelity reference
 //!
@@ -42,6 +78,26 @@ use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::{KernelCaptureDraftPhase, KernelCaptureSnapshot, ViewSnapshot};
 
+/// Seconds after the publish effect is emitted before the FSM times out to
+/// `Error`. Mirrors the Phase 2A sign-in timeout pattern (D8: clock-driven,
+/// no sleeps). 5G will replace this with the real action_results completion.
+pub(crate) const PUBLISH_TIMEOUT_SECS: u64 = 30;
+
+/// Clock-driven timeout: if the phase has been `Publishing` for longer than
+/// `PUBLISH_TIMEOUT_SECS`, advance to `Error` so the capture screen does not
+/// hang on a spinner indefinitely.
+///
+/// Called from `clock_checks` in `actor.rs` on every reduce pass (D8 / D9).
+pub(crate) fn clock_check_publish_timeout(state: &mut AppState, now: u64) {
+    if let CaptureDraftPhase::Publishing { started_at } = state.capture_draft.publish_phase {
+        if now.saturating_sub(started_at) >= PUBLISH_TIMEOUT_SECS {
+            state.capture_draft.publish_phase = CaptureDraftPhase::Error {
+                message: "publish timed out".to_string(),
+            };
+        }
+    }
+}
+
 // ─── Publish-phase FSM ─────────────────────────────────────────────────────────
 
 /// Publish-phase FSM for a capture draft.
@@ -50,6 +106,11 @@ use crate::kernel::snapshot::{KernelCaptureDraftPhase, KernelCaptureSnapshot, Vi
 /// the `Processing` (upload-in-flight) phase, which the nmp-lane does not model
 /// at slice 5F (image upload is deferred). `Error { message }` carries the raw
 /// publish error so the snapshot can surface it (D1: Swift formats the copy).
+///
+/// `Publishing { started_at }` records the UNIX second the effect was emitted so
+/// `clock_check_publish_timeout` can drive a terminal transition to `Error` when
+/// the completion event never arrives (fire-and-forget path; 5G will close the
+/// loop properly via the action_results typed projection).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum CaptureDraftPhase {
     /// No draft in progress.
@@ -58,7 +119,14 @@ pub enum CaptureDraftPhase {
     /// A non-empty quote (or markdown source) is staged and editable.
     Reviewing,
     /// A publish effect has been emitted; awaiting the result.
-    Publishing,
+    ///
+    /// `started_at` is the UNIX second of the transition — used by
+    /// `clock_check_publish_timeout` to drive a terminal `Error` if the result
+    /// never arrives within `PUBLISH_TIMEOUT_SECS`.
+    Publishing {
+        /// UNIX second when `reduce_action_publish` transitioned into this phase.
+        started_at: u64,
+    },
     /// The publish completed successfully.
     Done,
     /// The publish failed. `message` is the raw error (D1).
@@ -95,21 +163,28 @@ pub struct CaptureDraftState {
 }
 
 impl CaptureDraftState {
-    /// The publish gate.
+    /// The publish gate — mirrors `publish_projection` from the live lane
+    /// (`capture.rs:182`) with per-path `has_upload` semantics.
     ///
-    /// `can_publish` ⟺ phase is `Reviewing` AND
-    /// (quote is non-empty) OR (OCR markdown is non-empty AND a target group is set).
+    /// * **Quote path** (kind:9802 text highlight): `phase == Reviewing` AND
+    ///   `quote` is non-empty after trim. A Blossom image is NOT required —
+    ///   NIP-84 text highlights are valid without an image URL. `has_upload`
+    ///   becomes optional metadata that 5G attaches when the camera was used.
     ///
-    /// The quote path publishes a free-standing kind:9802 highlight; the
-    /// markdown path publishes a kind:11 capture into a group.
+    /// * **Markdown/kind:11 path**: `phase == Reviewing` AND markdown is
+    ///   non-empty AND a target group is set AND `has_upload == true`. The live
+    ///   lane requires `has_upload` for every capture because every capture is
+    ///   image-based. This path is gated closed until 5G sets `has_upload`.
     pub fn can_publish(&self, ocr_markdown: &str) -> bool {
         if self.publish_phase != CaptureDraftPhase::Reviewing {
             return false;
         }
+        // Quote path: text highlight, no image upload required.
         if !self.quote.is_empty() {
             return true;
         }
-        !ocr_markdown.is_empty() && self.target_group_id.is_some()
+        // Markdown/kind:11 path: requires an uploaded image (5G wires this).
+        self.has_upload && !ocr_markdown.is_empty() && self.target_group_id.is_some()
     }
 }
 
@@ -117,21 +192,21 @@ impl CaptureDraftState {
 
 /// `hl.capture.set_quote { quote }` — set the draft quote.
 ///
-/// A non-empty quote transitions `Idle → Reviewing` (the draft becomes
-/// publishable). An empty quote is a no-op when the phase is `Idle` (D6: nothing
-/// to review) — the phase is NOT forced backward, mirroring the live lane's
-/// `should_stash` rejection of blank quotes.
+/// Trims whitespace before storing (mirrors live `stash_projection` `:170`).
+/// A blank-whitespace-only quote is rejected as a no-op (D6): the phase is NOT
+/// forced backward, and a prior non-empty quote is not clobbered. A non-empty
+/// trimmed quote transitions `Idle → Reviewing`.
 pub(crate) fn reduce_action_set_quote(
     state: &mut AppState,
     quote: String,
     _now: u64,
 ) -> Vec<Effect> {
-    if quote.is_empty() {
-        // Blank quote: no-op (live lane rejects blank stashes). Do not advance
-        // the FSM and do not clobber a prior quote with an empty one.
+    let trimmed = quote.trim().to_string();
+    if trimmed.is_empty() {
+        // Blank / whitespace-only: no-op (live lane rejects blank stashes).
         return vec![];
     }
-    state.capture_draft.quote = quote;
+    state.capture_draft.quote = trimmed;
     if state.capture_draft.publish_phase == CaptureDraftPhase::Idle {
         state.capture_draft.publish_phase = CaptureDraftPhase::Reviewing;
     }
@@ -139,14 +214,20 @@ pub(crate) fn reduce_action_set_quote(
 }
 
 /// `hl.capture.set_context { context }` — set the surrounding source context.
+///
+/// Trims whitespace (mirrors live `stash_projection` `:235`). Blank-whitespace
+/// is stored as the empty string (no FSM effect).
 pub(crate) fn reduce_action_set_context(state: &mut AppState, context: String) -> Vec<Effect> {
-    state.capture_draft.context = context;
+    state.capture_draft.context = context.trim().to_string();
     vec![]
 }
 
 /// `hl.capture.set_note { note }` — set the user-authored note.
+///
+/// Trims whitespace (mirrors live `highlight_draft_projection` `:256`). Blank
+/// note is stored as the empty string.
 pub(crate) fn reduce_action_set_note(state: &mut AppState, note: String) -> Vec<Effect> {
-    state.capture_draft.note = note;
+    state.capture_draft.note = note.trim().to_string();
     vec![]
 }
 
@@ -210,7 +291,7 @@ pub(crate) fn reduce_action_clear_target_group(state: &mut AppState) -> Vec<Effe
 ///
 /// All event JSON is built with `serde_json::json!` (never `format!`) so quotes
 /// and backslashes in user text are safe (D-rule: serde, not format).
-pub(crate) fn reduce_action_publish(state: &mut AppState, _now: u64) -> Vec<Effect> {
+pub(crate) fn reduce_action_publish(state: &mut AppState, now: u64) -> Vec<Effect> {
     let markdown = state.ocr.markdown.clone();
     if !state.capture_draft.can_publish(&markdown) {
         tracing::debug!("capture.publish: not publishable — no-op (D6)");
@@ -221,6 +302,8 @@ pub(crate) fn reduce_action_publish(state: &mut AppState, _now: u64) -> Vec<Effe
 
     let effect = if !draft.quote.is_empty() {
         // Quote path → kind:9802 highlight via the Phase 4H raw publish path.
+        // Content and tags are already trimmed (reduced in set_quote/set_context/
+        // set_note), so `draft.quote` etc. are guaranteed non-empty / trimmed here.
         let event_json = serde_json::json!({
             "kind": 9802,
             "content": draft.quote,
@@ -238,7 +321,8 @@ pub(crate) fn reduce_action_publish(state: &mut AppState, _now: u64) -> Vec<Effe
         }
     } else {
         // Markdown path → kind:11 plain capture via the raw publish path.
-        // `target_group_id` is guaranteed `Some` here by `can_publish`.
+        // `target_group_id` is guaranteed `Some` AND `has_upload` is `true`
+        // here (enforced by `can_publish`).
         let group_id = draft.target_group_id.clone().unwrap_or_default();
         let event_json = serde_json::json!({
             "kind": 11,
@@ -257,7 +341,9 @@ pub(crate) fn reduce_action_publish(state: &mut AppState, _now: u64) -> Vec<Effe
         }
     };
 
-    state.capture_draft.publish_phase = CaptureDraftPhase::Publishing;
+    // Record `now` so the clock-driven timeout can detect a stuck Publishing state.
+    // 5G will close the loop properly via the action_results typed projection.
+    state.capture_draft.publish_phase = CaptureDraftPhase::Publishing { started_at: now };
     vec![effect]
 }
 
@@ -312,7 +398,7 @@ pub(crate) fn project_capture_snapshot(state: &AppState) -> Option<ViewSnapshot>
     let phase = match &draft.publish_phase {
         CaptureDraftPhase::Idle => KernelCaptureDraftPhase::Idle,
         CaptureDraftPhase::Reviewing => KernelCaptureDraftPhase::Reviewing,
-        CaptureDraftPhase::Publishing => KernelCaptureDraftPhase::Publishing,
+        CaptureDraftPhase::Publishing { .. } => KernelCaptureDraftPhase::Publishing,
         CaptureDraftPhase::Done => KernelCaptureDraftPhase::Done,
         CaptureDraftPhase::Error { .. } => KernelCaptureDraftPhase::Error,
     };
@@ -594,10 +680,14 @@ mod tests {
             assert_eq!(v["tags"][1][1], "a thought");
         }
 
-        // Phase advanced to Publishing.
-        assert_eq!(
-            state.capture_draft.publish_phase,
-            CaptureDraftPhase::Publishing
+        // Phase advanced to Publishing (carries started_at).
+        assert!(
+            matches!(
+                state.capture_draft.publish_phase,
+                CaptureDraftPhase::Publishing { .. }
+            ),
+            "expected Publishing after publish; got: {:?}",
+            state.capture_draft.publish_phase
         );
 
         // Result event → Done.
@@ -621,9 +711,11 @@ mod tests {
         state.communities = vec![community("group-a", "Group A")];
         inject_ocr(&mut state, &clock);
 
-        // No quote, but markdown present + a target group → markdown path.
+        // No quote, but markdown present + a target group + has_upload → markdown path.
         // Force Reviewing (no quote set, so set_quote can't advance it).
         state.capture_draft.publish_phase = CaptureDraftPhase::Reviewing;
+        // 5G sets has_upload when the Blossom upload completes; simulate that here.
+        state.capture_draft.has_upload = true;
         step(
             &mut state,
             &clock,
@@ -649,9 +741,13 @@ mod tests {
             assert_eq!(v["tags"][0][0], "h");
             assert_eq!(v["tags"][0][1], "group-a");
         }
-        assert_eq!(
-            state.capture_draft.publish_phase,
-            CaptureDraftPhase::Publishing
+        assert!(
+            matches!(
+                state.capture_draft.publish_phase,
+                CaptureDraftPhase::Publishing { .. }
+            ),
+            "expected Publishing after markdown publish; got: {:?}",
+            state.capture_draft.publish_phase
         );
     }
 
@@ -777,5 +873,215 @@ mod tests {
         assert!(state.capture_draft.target_group_id.is_none());
         assert!(state.capture_draft.selected_word_indices.is_empty());
         assert_eq!(state.capture_draft.publish_phase, CaptureDraftPhase::Idle);
+    }
+
+    // 5F-T8: publish_advances_to_done_on_result — the completion event drives Done.
+    #[test]
+    fn publish_advances_to_done_on_result() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+
+        step(
+            &mut state,
+            &clock,
+            envelope("hl.capture.set_quote", r#"{"quote":"the quote"}"#),
+        );
+        step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
+        assert!(
+            matches!(
+                state.capture_draft.publish_phase,
+                CaptureDraftPhase::Publishing { .. }
+            ),
+            "should be Publishing after publish dispatch"
+        );
+
+        // Inject success result (simulates the completion path wired by 5G).
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::CaptureDraftPublishResult {
+                success: true,
+                event_id: "deadbeef".to_string(),
+                error: String::new(),
+            }),
+        );
+        assert_eq!(
+            state.capture_draft.publish_phase,
+            CaptureDraftPhase::Done,
+            "CaptureDraftPublishResult(success=true) must advance to Done"
+        );
+    }
+
+    // 5F-T9: publish_advances_to_error_on_failure — the failure result drives Error.
+    #[test]
+    fn publish_advances_to_error_on_failure() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+
+        step(
+            &mut state,
+            &clock,
+            envelope("hl.capture.set_quote", r#"{"quote":"the quote"}"#),
+        );
+        step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
+
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::CaptureDraftPublishResult {
+                success: false,
+                event_id: String::new(),
+                error: "relay rejected".to_string(),
+            }),
+        );
+        assert!(
+            matches!(
+                &state.capture_draft.publish_phase,
+                CaptureDraftPhase::Error { message } if message == "relay rejected"
+            ),
+            "CaptureDraftPublishResult(success=false) must advance to Error with message"
+        );
+    }
+
+    // 5F-T10: clock timeout drives Publishing → Error when result never arrives.
+    #[test]
+    fn publish_timeout_drives_error() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+
+        step(
+            &mut state,
+            &clock,
+            envelope("hl.capture.set_quote", r#"{"quote":"the quote"}"#),
+        );
+        let effects = step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
+        assert!(!effects.is_empty(), "publish must emit an effect");
+        assert!(matches!(
+            state.capture_draft.publish_phase,
+            CaptureDraftPhase::Publishing { .. }
+        ));
+
+        // Advance clock past the timeout threshold.
+        clock.advance(PUBLISH_TIMEOUT_SECS);
+        // Any subsequent reduce pass runs clock_checks which fires the timeout.
+        step(&mut state, &clock, Cmd::Event(KernelEvent::ClockTick));
+
+        assert!(
+            matches!(
+                &state.capture_draft.publish_phase,
+                CaptureDraftPhase::Error { message } if message.contains("timed out")
+            ),
+            "clock timeout must drive Publishing → Error; got: {:?}",
+            state.capture_draft.publish_phase
+        );
+    }
+
+    // 5F-T11: blank-whitespace quote is rejected (mirrors live stash_projection).
+    #[test]
+    fn blank_whitespace_quote_rejected() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+
+        // Pure whitespace.
+        step(
+            &mut state,
+            &clock,
+            envelope("hl.capture.set_quote", r#"{"quote":"   \t\n  "}"#),
+        );
+        assert_eq!(
+            state.capture_draft.quote, "",
+            "whitespace-only quote must be rejected"
+        );
+        assert_eq!(
+            state.capture_draft.publish_phase,
+            CaptureDraftPhase::Idle,
+            "blank quote must not advance to Reviewing"
+        );
+
+        // Context and note are also trimmed.
+        step(
+            &mut state,
+            &clock,
+            envelope("hl.capture.set_context", r#"{"context":"  ctx  "}"#),
+        );
+        assert_eq!(
+            state.capture_draft.context, "ctx",
+            "context must be trimmed"
+        );
+
+        step(
+            &mut state,
+            &clock,
+            envelope("hl.capture.set_note", r#"{"note":"  note  "}"#),
+        );
+        assert_eq!(state.capture_draft.note, "note", "note must be trimmed");
+
+        // A real non-blank quote IS accepted.
+        step(
+            &mut state,
+            &clock,
+            envelope("hl.capture.set_quote", r#"{"quote":"  real quote  "}"#),
+        );
+        assert_eq!(
+            state.capture_draft.quote, "real quote",
+            "non-blank quote must be trimmed and stored"
+        );
+        assert_eq!(
+            state.capture_draft.publish_phase,
+            CaptureDraftPhase::Reviewing,
+            "non-blank trimmed quote must advance to Reviewing"
+        );
+    }
+
+    // 5F-T12: can_publish_requires_upload for the markdown/kind:11 path.
+    #[test]
+    fn can_publish_requires_upload_for_markdown_path() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        state.communities = vec![community("group-a", "Group A")];
+        inject_ocr(&mut state, &clock);
+
+        // Force Reviewing, set target group — but no has_upload yet.
+        state.capture_draft.publish_phase = CaptureDraftPhase::Reviewing;
+        step(
+            &mut state,
+            &clock,
+            envelope("hl.capture.set_target_group", r#"{"group_id":"group-a"}"#),
+        );
+
+        // Without has_upload the markdown path must NOT publish.
+        let effects = step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
+        let publish_effects: Vec<_> = effects
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    Effect::PublishHighlightEvent { .. } | Effect::PublishCaptureEvent { .. }
+                )
+            })
+            .collect();
+        assert!(
+            publish_effects.is_empty(),
+            "markdown path must not publish without has_upload; got: {effects:?}"
+        );
+        // Phase must not have advanced.
+        assert_eq!(
+            state.capture_draft.publish_phase,
+            CaptureDraftPhase::Reviewing,
+            "phase must stay Reviewing when publish was blocked by !has_upload"
+        );
+
+        // Now set has_upload (simulates 5G Blossom result).
+        state.capture_draft.has_upload = true;
+        let effects2 = step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
+        let capture_effects: Vec<_> = effects2
+            .iter()
+            .filter(|e| matches!(e, Effect::PublishCaptureEvent { .. }))
+            .collect();
+        assert_eq!(
+            capture_effects.len(),
+            1,
+            "markdown path must publish once has_upload is true; got: {effects2:?}"
+        );
     }
 }

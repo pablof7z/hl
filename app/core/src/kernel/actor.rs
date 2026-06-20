@@ -239,6 +239,8 @@ fn clock_checks(state: &mut AppState, now: u64) -> Vec<Effect> {
     route::clock_check_toast_dismiss(state, now);
     session::clock_check_restore_timeout(state, now);
     auth::clock_check_sign_in_timeout(state, now);
+    // ── Phase 5F additions ─────────────────────────────────────────────────────
+    capture_draft::clock_check_publish_timeout(state, now);
 
     effects
 }
