@@ -102,7 +102,7 @@ struct RoomExplorerView: View {
                             // Dispatch JoinRoom kernel action — fire-and-forget (D6).
                             if let discoveredRow = kernel.roomExplorer?.newNoteworthy.first(where: { $0.groupId == room.id })
                                 ?? kernel.roomExplorer?.featured.first(where: { $0.groupId == room.id }) {
-                                kernel.app.dispatch(action: .joinRoom(
+                                kernel.app.dispatch(.joinRoom(
                                     groupId: discoveredRow.groupId,
                                     hostRelayUrl: discoveredRow.hostRelayUrl,
                                     inviteCode: nil

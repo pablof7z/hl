@@ -443,7 +443,7 @@ pub struct RoomLaneRow {
 /// Mirrors `nmp_nip51::BookmarkItem` but as a `uniffi::Enum` for FFI.
 /// Variants match the NIP-51 tag types: `e` (event), `a` (address),
 /// `r` (URL), `t` (hashtag).
-#[derive(Debug, Clone, PartialEq, uniffi::Enum)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, uniffi::Enum)]
 pub enum BookmarkRow {
     /// `["e", <event-id>, <optional-relay>]` — a bookmarked Nostr event.
     Event {

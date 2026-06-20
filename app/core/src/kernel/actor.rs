@@ -149,6 +149,7 @@ impl Drop for NmpHandle {
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum Cmd {
     Action(AppAction),
+    ActionEnvelope(crate::kernel::action::AppActionEnvelope),
     Event(KernelEvent),
     OpenView(ViewId, ViewRoute),
     CloseView(ViewId),
@@ -202,6 +203,9 @@ pub(crate) fn reduce(state: &mut AppState, cmd: Cmd, now: u64) -> Vec<Effect> {
 
     match cmd {
         Cmd::Action(action) => effects.extend(reduce_action(state, action, now)),
+        Cmd::ActionEnvelope(envelope) => {
+            effects.extend(reduce_action_envelope(state, envelope, now))
+        }
         Cmd::Event(event) => effects.extend(reduce_event(state, event, now)),
         Cmd::OpenView(..) | Cmd::CloseView(..) | Cmd::Resume | Cmd::Suspend | Cmd::Tick => {
             // OpenView/CloseView/Resume/Suspend/Tick are handled by the actor loop
@@ -410,6 +414,293 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
 
         // ── Phase 5K additions (append-only) ─────────────────────────────────
         AppAction::DrainShareQueue => share::reduce_action_drain_share_queue(),
+    }
+}
+
+/// Routes an `AppActionEnvelope` (namespace + json) to domain reducers.
+///
+/// This replaces the UniFFI-exported `AppAction` enum at the FFI boundary.
+/// Unknown namespace → invalid-action toast (D6: never a panic).
+fn reduce_action_envelope(
+    state: &mut AppState,
+    envelope: crate::kernel::action::AppActionEnvelope,
+    now: u64,
+) -> Vec<Effect> {
+    // Helper: parse json, emit invalid-action toast on failure
+    macro_rules! parse {
+        ($T:ty) => {
+            match serde_json::from_str::<$T>(&envelope.json) {
+                Ok(p) => p,
+                Err(e) => {
+                    return emit_invalid_action_toast(
+                        state,
+                        format!("{}: bad payload: {e}", &envelope.namespace),
+                        now,
+                    );
+                }
+            }
+        };
+    }
+
+    use crate::kernel::action::{
+        AddBookmarkPayload, AddRelayPayload, AddRoomMemberPayload, ClaimProfilePayload,
+        CreateAccountPayload, CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload,
+        JoinRoomPayload, LookupIsbnPayload, MarkWhatsNewSeenPayload, PairBunkerPayload,
+        PresentSheetPayload, PublishHighlightPayload, ReactPayload, ReleaseProfilePayload,
+        RemoveBookmarkPayload, RemoveRelayPayload, RunSearchPayload, SelectRootTabPayload,
+        SetRelayRolePayload, SetRoomsRelayListPayload, ShareToRoomPayload, SignInNsecPayload,
+        StartRoomDiscoveryPayload, UnfollowPayload, UnreactPayload,
+    };
+
+    match envelope.namespace.as_str() {
+        // ── Auth / session ────────────────────────────────────────────────────
+        "hl.auth.restore_session" | "hl.auth.retry_restore" => {
+            session::reduce_action_restore_session(state, now)
+        }
+        "hl.auth.logout" => auth::reduce_action_logout(state),
+        "hl.auth.sign_in_nsec" => {
+            let p = parse!(SignInNsecPayload);
+            auth::reduce_action_sign_in_nsec(state, p.nsec, now)
+        }
+        "hl.auth.pair_bunker" => {
+            let p = parse!(PairBunkerPayload);
+            auth::reduce_action_pair_bunker(state, p.uri, now)
+        }
+        "hl.auth.start_nostr_connect" => auth::reduce_action_start_nostr_connect(state, now),
+        "hl.auth.sign_in_nip55" => auth::reduce_action_sign_in_nip55(state, now),
+        "hl.auth.create_account" => {
+            let p = parse!(CreateAccountPayload);
+            auth::reduce_action_create_account(state, p.profile_name, now)
+        }
+
+        // ── Onboarding / route ────────────────────────────────────────────────
+        "hl.route.complete_onboarding" => route::reduce_action_complete_onboarding(state),
+        "hl.route.select_root_tab" => {
+            let p = parse!(SelectRootTabPayload);
+            route::reduce_action_select_root_tab(state, p.tab)
+        }
+        "hl.route.present_sheet" => {
+            let p = parse!(PresentSheetPayload);
+            route::reduce_action_present_sheet(state, p.sheet_id)
+        }
+        "hl.route.dismiss_sheet" => route::reduce_action_dismiss_sheet(state),
+
+        // ── Relays ────────────────────────────────────────────────────────────
+        "hl.relay.add" => {
+            let p = parse!(AddRelayPayload);
+            let role = relay_role_from_str(state, &envelope.namespace, &p.role, now);
+            let role = match role {
+                Some(r) => r,
+                None => return vec![],
+            };
+            relays::reduce_action_add_relay(state, p.url, role)
+        }
+        "hl.relay.remove" => {
+            let p = parse!(RemoveRelayPayload);
+            relays::reduce_action_remove_relay(state, p.url)
+        }
+        "hl.relay.set_role" => {
+            let p = parse!(SetRelayRolePayload);
+            let role = relay_role_from_str(state, &envelope.namespace, &p.role, now);
+            let role = match role {
+                Some(r) => r,
+                None => return vec![],
+            };
+            relays::reduce_action_set_relay_role(state, p.url, role)
+        }
+        "hl.relay.set_rooms_relay_list" => {
+            let p = parse!(SetRoomsRelayListPayload);
+            relays::reduce_action_set_rooms_relay_list(state, p.relay_urls)
+        }
+
+        // ── Follows ───────────────────────────────────────────────────────────
+        "hl.profile.follow" => {
+            let p = parse!(FollowPayload);
+            follows::reduce_action_follow(p.pubkey)
+        }
+        "hl.profile.unfollow" => {
+            let p = parse!(UnfollowPayload);
+            follows::reduce_action_unfollow(p.pubkey)
+        }
+
+        // ── Profiles (claim/release) ──────────────────────────────────────────
+        "hl.profile.claim" => {
+            let p = parse!(ClaimProfilePayload);
+            profiles::reduce_action_claim_profile(p.pubkey)
+        }
+        "hl.profile.release" => {
+            let p = parse!(ReleaseProfilePayload);
+            profiles::reduce_action_release_profile(p.pubkey)
+        }
+
+        // ── Room discovery ────────────────────────────────────────────────────
+        "hl.room.start_discovery" => {
+            let p = parse!(StartRoomDiscoveryPayload);
+            discovery::reduce_action_start_room_discovery(p.relay_url)
+        }
+
+        // ── Room actions ──────────────────────────────────────────────────────
+        "hl.room.join" => {
+            let p = parse!(JoinRoomPayload);
+            room_home::reduce_action_join_room(p.group_id, p.host_relay_url, p.invite_code)
+        }
+        "hl.room.create" => {
+            let p = parse!(CreateRoomPayload);
+            room_home::reduce_action_create_room(p.group_id, p.host_relay_url, p.name, p.about)
+        }
+        "hl.room.add_member" => {
+            let p = parse!(AddRoomMemberPayload);
+            room_home::reduce_action_add_room_member(p.group_id, p.host_relay_url, p.pubkey, p.role)
+        }
+        "hl.room.create_invites" => {
+            let p = parse!(CreateRoomInvitesPayload);
+            room_home::reduce_action_create_room_invites(p.group_id, p.host_relay_url, p.codes)
+        }
+        "hl.room.share_to_room" => {
+            let p = parse!(ShareToRoomPayload);
+            room_home::reduce_action_share_to_room(
+                p.group_id,
+                p.host_relay_url,
+                p.target_event_id,
+                p.target_author_pubkey,
+                p.repost,
+            )
+        }
+
+        // ── Bookmarks ─────────────────────────────────────────────────────────
+        "hl.bookmark.add" => {
+            let p = parse!(AddBookmarkPayload);
+            bookmarks::reduce_action_add_bookmark_for_state(state, p.item)
+        }
+        "hl.bookmark.remove" => {
+            let p = parse!(RemoveBookmarkPayload);
+            bookmarks::reduce_action_remove_bookmark_for_state(state, p.item)
+        }
+
+        // ── Articles ──────────────────────────────────────────────────────────
+        "hl.article.open" | "hl.article.close" => vec![],
+        "hl.article.load_more" => articles_feed::reduce_action_load_more_articles(state),
+
+        // ── Reactions ─────────────────────────────────────────────────────────
+        "hl.reaction.react" => {
+            let p = parse!(ReactPayload);
+            reactions::reduce_action_react(p.target_event_id, p.reaction, p.target_author_pubkey)
+        }
+        "hl.reaction.unreact" => {
+            let p = parse!(UnreactPayload);
+            reactions::reduce_action_unreact(p.reaction_event_id)
+        }
+
+        // ── Search ────────────────────────────────────────────────────────────
+        "hl.search.run" => {
+            let p = parse!(RunSearchPayload);
+            let scope = search_scope_from_str(state, &envelope.namespace, &p.scope, now);
+            let scope = match scope {
+                Some(s) => s,
+                None => return vec![],
+            };
+            search::reduce_action_run_search(p.query, scope)
+        }
+
+        // ── What's New ────────────────────────────────────────────────────────
+        "hl.whats_new.prepare" => whats_new::reduce_action_prepare_whats_new(),
+        "hl.whats_new.mark_seen" => {
+            let p = parse!(MarkWhatsNewSeenPayload);
+            whats_new::reduce_action_mark_whats_new_seen(state, p.shipped_at_unix)
+        }
+
+        // ── Highlight feed ────────────────────────────────────────────────────
+        "hl.highlight.drain_feed" => {
+            if state.highlight_feed.exhausted {
+                vec![]
+            } else {
+                feed::reduce_drain_feed(highlight_feed::HIGHLIGHT_FEED_KEY.to_string())
+            }
+        }
+        "hl.highlight.publish" => {
+            let p = parse!(PublishHighlightPayload);
+            if p.content.is_empty() {
+                vec![]
+            } else {
+                highlight_feed::reduce_action_publish_highlight(
+                    p.content,
+                    p.source_reference,
+                    p.relay_hint,
+                )
+            }
+        }
+
+        // ── ISBN ──────────────────────────────────────────────────────────────
+        "hl.isbn.lookup" => {
+            let p = parse!(LookupIsbnPayload);
+            isbn::reduce_action_lookup_isbn(state, p.isbn)
+        }
+
+        // ── Share queue ───────────────────────────────────────────────────────
+        "hl.share.drain_queue" => share::reduce_action_drain_share_queue(),
+
+        // ── Unknown namespace ─────────────────────────────────────────────────
+        _ => emit_invalid_action_toast(
+            state,
+            format!("unknown action namespace: {}", envelope.namespace),
+            now,
+        ),
+    }
+}
+
+/// Emit an invalid-action toast and return an empty effect list.
+/// D6: never panics on bad input — surfaces error as a transient UI toast.
+fn emit_invalid_action_toast(state: &mut AppState, message: String, now: u64) -> Vec<Effect> {
+    use crate::kernel::app::{ToastState, TOAST_DISMISS_SECS};
+    tracing::warn!("invalid action: {message}");
+    state.chrome.toast = Some(ToastState {
+        message,
+        dismiss_at_unix: now + TOAST_DISMISS_SECS,
+    });
+    vec![]
+}
+
+/// Parse a relay role string into a `RelayRole` variant.
+/// Emits an invalid-action toast on failure (D6: no panic).
+fn relay_role_from_str(
+    state: &mut AppState,
+    ns: &str,
+    role: &str,
+    now: u64,
+) -> Option<crate::kernel::action::RelayRole> {
+    use crate::kernel::action::RelayRole;
+    match role {
+        "read" => Some(RelayRole::Read),
+        "write" => Some(RelayRole::Write),
+        "both" => Some(RelayRole::Both),
+        "indexer" => Some(RelayRole::Indexer),
+        "read,indexer" => Some(RelayRole::ReadIndexer),
+        "write,indexer" => Some(RelayRole::WriteIndexer),
+        "both,indexer" => Some(RelayRole::BothIndexer),
+        _ => {
+            emit_invalid_action_toast(state, format!("{ns}: unknown relay role: {role}"), now);
+            None
+        }
+    }
+}
+
+/// Parse a search scope string into a `SearchScope` variant.
+/// Emits an invalid-action toast on failure (D6: no panic).
+fn search_scope_from_str(
+    state: &mut AppState,
+    ns: &str,
+    scope: &str,
+    now: u64,
+) -> Option<crate::kernel::action::SearchScope> {
+    use crate::kernel::action::SearchScope;
+    match scope {
+        "users" => Some(SearchScope::Users),
+        "long_form" => Some(SearchScope::LongForm),
+        "notes" => Some(SearchScope::Notes),
+        _ => {
+            emit_invalid_action_toast(state, format!("{ns}: unknown search scope: {scope}"), now);
+            None
+        }
     }
 }
 

@@ -25,7 +25,7 @@ struct AppEntry: App {
                 .task {
                     // Kick the kernel's session-restore loop first so the
                     // route state is available as early as possible.
-                    kernel.app.dispatch(action: .restoreSession)
+                    kernel.app.dispatch(.restoreSession)
 
                     // Live-lane: prepare the what's-new sheet.
                     let snapshot = await store.safeCore.prepareWhatsNew()

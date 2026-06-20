@@ -16,7 +16,7 @@ use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 
 use crate::capabilities::CapabilityResult;
-use crate::kernel::action::AppAction;
+use crate::kernel::action::{AppAction, AppActionEnvelope};
 use crate::kernel::actor::{actor_task, start_nmp_app, Cmd, HighlighterObserver, SharedState};
 use crate::kernel::app::{AppConfig, CreateAccountPolicy, KernelPolicy, RoomPolicy, SeedRelay};
 use crate::kernel::clock::SystemClock;
@@ -98,9 +98,11 @@ impl HighlighterApp {
         *self.shared.observer.write() = Some(observer);
     }
 
-    /// Fire-and-forget action dispatch. Never returns a Result (Non-Negotiable #3).
-    pub fn dispatch(&self, action: AppAction) {
-        let _ = self.tx.send(Cmd::Action(action));
+    /// Envelope-based fire-and-forget action dispatch. The namespace keys a
+    /// typed serde payload; the kernel router decodes and routes it.
+    /// Never returns a Result (Non-Negotiable #3 / D6).
+    pub fn dispatch_action(&self, action: AppActionEnvelope) {
+        let _ = self.tx.send(Cmd::ActionEnvelope(action));
     }
 
     /// Register a bounded projection for a view. Subsequent state changes will
@@ -158,6 +160,20 @@ impl HighlighterApp {
     /// on wall-clock time (D8 / D9).
     pub fn tick(&self) {
         let _ = self.tx.send(Cmd::Tick);
+    }
+}
+
+// ─── Compatibility shim (not UniFFI-exported) ────────────────────────────────
+
+impl HighlighterApp {
+    /// Frozen compatibility shim — Rust-internal use only (tests, legacy call sites).
+    ///
+    /// `AppAction` is no longer a `uniffi::Enum` (BUF_SIZE limit — see
+    /// `dispatch_action` for the replacement FFI method). This non-exported
+    /// method keeps the Rust API stable for unit tests that drive the kernel
+    /// directly via `AppAction` variants without crossing the UniFFI boundary.
+    pub fn dispatch(&self, action: AppAction) {
+        let _ = self.tx.send(Cmd::Action(action));
     }
 }
 

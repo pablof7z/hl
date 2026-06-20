@@ -798,9 +798,11 @@ public protocol HighlighterAppProtocol: AnyObject, Sendable {
     func currentSnapshot(viewId: ViewId)  -> ViewSnapshot?
 
     /**
-     * Fire-and-forget action dispatch. Never returns a Result (Non-Negotiable #3).
+     * Envelope-based fire-and-forget action dispatch. The namespace keys a
+     * typed serde payload; the kernel router decodes and routes it.
+     * Never returns a Result (Non-Negotiable #3 / D6).
      */
-    func dispatch(action: AppAction)
+    func dispatchAction(action: AppActionEnvelope)
 
     /**
      * Register a bounded projection for a view. Subsequent state changes will
@@ -940,11 +942,13 @@ open func currentSnapshot(viewId: ViewId) -> ViewSnapshot?  {
 }
 
     /**
-     * Fire-and-forget action dispatch. Never returns a Result (Non-Negotiable #3).
+     * Envelope-based fire-and-forget action dispatch. The namespace keys a
+     * typed serde payload; the kernel router decodes and routes it.
+     * Never returns a Result (Non-Negotiable #3 / D6).
      */
-open func dispatch(action: AppAction)  {try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlighterapp_dispatch(self.uniffiClonePointer(),
-        FfiConverterTypeAppAction_lower(action),$0
+open func dispatchAction(action: AppActionEnvelope)  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_dispatch_action(self.uniffiClonePointer(),
+        FfiConverterTypeAppActionEnvelope_lower(action),$0
     )
 }
 }
@@ -7116,6 +7120,84 @@ public func FfiConverterTypeAddRelaySheetProjectionInput_lower(_ value: AddRelay
 
 
 /**
+ * Thin envelope that carries actions across the UniFFI boundary.
+ *
+ * Replaces the direct `#[uniffi::Enum] AppAction` export. The `namespace`
+ * keys a typed serde payload in `json`; the kernel router decodes each
+ * namespace to the correct domain reducer. Unknown namespaces produce an
+ * invalid-action toast (D6 — never a panic).
+ */
+public struct AppActionEnvelope {
+    public var namespace: String
+    public var json: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(namespace: String, json: String) {
+        self.namespace = namespace
+        self.json = json
+    }
+}
+
+#if compiler(>=6)
+extension AppActionEnvelope: Sendable {}
+#endif
+
+
+extension AppActionEnvelope: Equatable, Hashable {
+    public static func ==(lhs: AppActionEnvelope, rhs: AppActionEnvelope) -> Bool {
+        if lhs.namespace != rhs.namespace {
+            return false
+        }
+        if lhs.json != rhs.json {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(namespace)
+        hasher.combine(json)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAppActionEnvelope: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppActionEnvelope {
+        return
+            try AppActionEnvelope(
+                namespace: FfiConverterString.read(from: &buf),
+                json: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AppActionEnvelope, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.namespace, into: &buf)
+        FfiConverterString.write(value.json, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppActionEnvelope_lift(_ buf: RustBuffer) throws -> AppActionEnvelope {
+    return try FfiConverterTypeAppActionEnvelope.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppActionEnvelope_lower(_ value: AppActionEnvelope) -> RustBuffer {
+    return FfiConverterTypeAppActionEnvelope.lower(value)
+}
+
+
+/**
  * Configuration passed to `HighlighterApp::new`.
  */
 public struct AppConfig {
@@ -7989,6 +8071,283 @@ public func FfiConverterTypeArticleBookmarksSnapshotApplyProjection_lift(_ buf: 
 #endif
 public func FfiConverterTypeArticleBookmarksSnapshotApplyProjection_lower(_ value: ArticleBookmarksSnapshotApplyProjection) -> RustBuffer {
     return FfiConverterTypeArticleBookmarksSnapshotApplyProjection.lower(value)
+}
+
+
+/**
+ * One kind:30023 article row from the "Following reads" feed.
+ *
+ * Decoded from a raw `KernelEvent` emitted by the Phase 4F feed-pull engine.
+ * Raw protocol data only (D1 / ADR-0032): Swift formats ALL display strings
+ * from these raw fields. No `"Untitled"` title fallback, no `"{n} min read"`
+ * label, no `"#{tag}"` hashtag formatting — those are Swift-side concerns.
+ *
+ * Distinct from `ArticleRow` (Phase 4A): `ArticleRow` is keyed by addressable
+ * coordinate in `AppState::articles` and carries `content_tree_bytes` for the
+ * full article body. `ArticleFeedRow` is lighter (no body bytes) and is used
+ * for feed list display only.
+ */
+public struct ArticleFeedRow {
+    /**
+     * Addressable coordinate `kind:author_hex:d_tag` (built from the raw event).
+     */
+    public var address: String
+    /**
+     * 64-character hex event id of the kind:30023 event.
+     */
+    public var id: String
+    /**
+     * 64-character hex author pubkey. Swift formats bech32 `npub`.
+     */
+    public var authorPubkey: String
+    /**
+     * `["title", _]` tag value, or `None` when absent.
+     * D1: no "Untitled" fallback — `None` means genuinely absent.
+     */
+    public var title: String?
+    /**
+     * `["summary", _]` tag value, or `None` when absent.
+     */
+    public var summary: String?
+    /**
+     * `["image", _]` tag value as a URL, or `None` when absent.
+     */
+    public var heroImageUrl: String?
+    /**
+     * Addressable `d` tag value.
+     */
+    public var dTag: String
+    /**
+     * Event creation time as Unix seconds. Swift formats the display date.
+     */
+    public var createdAt: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Addressable coordinate `kind:author_hex:d_tag` (built from the raw event).
+         */address: String,
+        /**
+         * 64-character hex event id of the kind:30023 event.
+         */id: String,
+        /**
+         * 64-character hex author pubkey. Swift formats bech32 `npub`.
+         */authorPubkey: String,
+        /**
+         * `["title", _]` tag value, or `None` when absent.
+         * D1: no "Untitled" fallback — `None` means genuinely absent.
+         */title: String?,
+        /**
+         * `["summary", _]` tag value, or `None` when absent.
+         */summary: String?,
+        /**
+         * `["image", _]` tag value as a URL, or `None` when absent.
+         */heroImageUrl: String?,
+        /**
+         * Addressable `d` tag value.
+         */dTag: String,
+        /**
+         * Event creation time as Unix seconds. Swift formats the display date.
+         */createdAt: UInt64) {
+        self.address = address
+        self.id = id
+        self.authorPubkey = authorPubkey
+        self.title = title
+        self.summary = summary
+        self.heroImageUrl = heroImageUrl
+        self.dTag = dTag
+        self.createdAt = createdAt
+    }
+}
+
+#if compiler(>=6)
+extension ArticleFeedRow: Sendable {}
+#endif
+
+
+extension ArticleFeedRow: Equatable, Hashable {
+    public static func ==(lhs: ArticleFeedRow, rhs: ArticleFeedRow) -> Bool {
+        if lhs.address != rhs.address {
+            return false
+        }
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.authorPubkey != rhs.authorPubkey {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.summary != rhs.summary {
+            return false
+        }
+        if lhs.heroImageUrl != rhs.heroImageUrl {
+            return false
+        }
+        if lhs.dTag != rhs.dTag {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(address)
+        hasher.combine(id)
+        hasher.combine(authorPubkey)
+        hasher.combine(title)
+        hasher.combine(summary)
+        hasher.combine(heroImageUrl)
+        hasher.combine(dTag)
+        hasher.combine(createdAt)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleFeedRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleFeedRow {
+        return
+            try ArticleFeedRow(
+                address: FfiConverterString.read(from: &buf),
+                id: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                title: FfiConverterOptionString.read(from: &buf),
+                summary: FfiConverterOptionString.read(from: &buf),
+                heroImageUrl: FfiConverterOptionString.read(from: &buf),
+                dTag: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleFeedRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.address, into: &buf)
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.authorPubkey, into: &buf)
+        FfiConverterOptionString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.summary, into: &buf)
+        FfiConverterOptionString.write(value.heroImageUrl, into: &buf)
+        FfiConverterString.write(value.dTag, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleFeedRow_lift(_ buf: RustBuffer) throws -> ArticleFeedRow {
+    return try FfiConverterTypeArticleFeedRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleFeedRow_lower(_ value: ArticleFeedRow) -> RustBuffer {
+    return FfiConverterTypeArticleFeedRow.lower(value)
+}
+
+
+/**
+ * Snapshot for `ViewId::ArticleFeed` — the "Following reads" article feed.
+ *
+ * Raw protocol rows only (D1): Swift formats all list-cell display strings
+ * (title fallback, author name, date label, read-time estimate, hero image).
+ * Bounded by accumulated feed pages (`FEED_PAGE_SIZE` × number of drains,
+ * D5 / Non-Negotiable #7).
+ */
+public struct ArticleFeedSnapshot {
+    /**
+     * Decoded kind:30023 article rows in ingest-seq order (newest first from
+     * the network, but stored in the order drained from the pager). Raw fields
+     * only — no labels, no formatted strings (D1).
+     */
+    public var rows: [ArticleFeedRow]
+    /**
+     * `true` when `has_more == false` from the last drain (fully caught up).
+     * Swift uses this to decide whether to show a "load more" affordance.
+     */
+    public var exhausted: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Decoded kind:30023 article rows in ingest-seq order (newest first from
+         * the network, but stored in the order drained from the pager). Raw fields
+         * only — no labels, no formatted strings (D1).
+         */rows: [ArticleFeedRow],
+        /**
+         * `true` when `has_more == false` from the last drain (fully caught up).
+         * Swift uses this to decide whether to show a "load more" affordance.
+         */exhausted: Bool) {
+        self.rows = rows
+        self.exhausted = exhausted
+    }
+}
+
+#if compiler(>=6)
+extension ArticleFeedSnapshot: Sendable {}
+#endif
+
+
+extension ArticleFeedSnapshot: Equatable, Hashable {
+    public static func ==(lhs: ArticleFeedSnapshot, rhs: ArticleFeedSnapshot) -> Bool {
+        if lhs.rows != rhs.rows {
+            return false
+        }
+        if lhs.exhausted != rhs.exhausted {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rows)
+        hasher.combine(exhausted)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArticleFeedSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArticleFeedSnapshot {
+        return
+            try ArticleFeedSnapshot(
+                rows: FfiConverterSequenceTypeArticleFeedRow.read(from: &buf),
+                exhausted: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArticleFeedSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeArticleFeedRow.write(value.rows, into: &buf)
+        FfiConverterBool.write(value.exhausted, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleFeedSnapshot_lift(_ buf: RustBuffer) throws -> ArticleFeedSnapshot {
+    return try FfiConverterTypeArticleFeedSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArticleFeedSnapshot_lower(_ value: ArticleFeedSnapshot) -> RustBuffer {
+    return FfiConverterTypeArticleFeedSnapshot.lower(value)
 }
 
 
@@ -11242,6 +11601,108 @@ public func FfiConverterTypeBookDetailSnapshotApplyProjection_lower(_ value: Boo
 }
 
 
+/**
+ * Snapshot for `ViewId::BookPicker` — pending lookup + last result + cache size.
+ *
+ * Device-local (no nostr facts). Raw fields only (D1). `cache_size` is a
+ * diagnostic counter; Swift shows it in debug/settings only.
+ */
+public struct BookPickerKernelSnapshot {
+    /**
+     * ISBN currently being looked up, or `None` when idle.
+     */
+    public var pendingIsbn: String?
+    /**
+     * Outcome of the most recent lookup (persists until the next lookup starts).
+     */
+    public var lastResult: KernelArtifactPreviewResult?
+    /**
+     * Number of entries currently in the in-memory cache (diagnostic).
+     */
+    public var cacheSize: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * ISBN currently being looked up, or `None` when idle.
+         */pendingIsbn: String?,
+        /**
+         * Outcome of the most recent lookup (persists until the next lookup starts).
+         */lastResult: KernelArtifactPreviewResult?,
+        /**
+         * Number of entries currently in the in-memory cache (diagnostic).
+         */cacheSize: UInt64) {
+        self.pendingIsbn = pendingIsbn
+        self.lastResult = lastResult
+        self.cacheSize = cacheSize
+    }
+}
+
+#if compiler(>=6)
+extension BookPickerKernelSnapshot: Sendable {}
+#endif
+
+
+extension BookPickerKernelSnapshot: Equatable, Hashable {
+    public static func ==(lhs: BookPickerKernelSnapshot, rhs: BookPickerKernelSnapshot) -> Bool {
+        if lhs.pendingIsbn != rhs.pendingIsbn {
+            return false
+        }
+        if lhs.lastResult != rhs.lastResult {
+            return false
+        }
+        if lhs.cacheSize != rhs.cacheSize {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pendingIsbn)
+        hasher.combine(lastResult)
+        hasher.combine(cacheSize)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookPickerKernelSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookPickerKernelSnapshot {
+        return
+            try BookPickerKernelSnapshot(
+                pendingIsbn: FfiConverterOptionString.read(from: &buf),
+                lastResult: FfiConverterOptionTypeKernelArtifactPreviewResult.read(from: &buf),
+                cacheSize: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookPickerKernelSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.pendingIsbn, into: &buf)
+        FfiConverterOptionTypeKernelArtifactPreviewResult.write(value.lastResult, into: &buf)
+        FfiConverterUInt64.write(value.cacheSize, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookPickerKernelSnapshot_lift(_ buf: RustBuffer) throws -> BookPickerKernelSnapshot {
+    return try FfiConverterTypeBookPickerKernelSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookPickerKernelSnapshot_lower(_ value: BookPickerKernelSnapshot) -> RustBuffer {
+    return FfiConverterTypeBookPickerKernelSnapshot.lower(value)
+}
+
+
 public struct BookPickerQueryProjection {
     public var searchQuery: String
     public var hasQuery: Bool
@@ -12525,6 +12986,85 @@ public func FfiConverterTypeBookmarkedArticleRowProjectionInput_lift(_ buf: Rust
 #endif
 public func FfiConverterTypeBookmarkedArticleRowProjectionInput_lower(_ value: BookmarkedArticleRowProjectionInput) -> RustBuffer {
     return FfiConverterTypeBookmarkedArticleRowProjectionInput.lower(value)
+}
+
+
+/**
+ * Snapshot for `ViewId::Bookmarks` — the active account's NIP-51 kind:10003
+ * bookmark list.
+ *
+ * Raw protocol data only (D1): Swift formats all display strings, toolbar
+ * icons, swipe actions, empty-state copy, and accessibility labels.
+ * Bounded by the bookmark list length (non-negotiable #7: never grows with
+ * the unbounded event store — only the latest kind:10003 is projected).
+ */
+public struct BookmarksSnapshot {
+    /**
+     * Bookmark items from the active account's kind:10003 list.
+     * Raw `BookmarkRow` values — no labels or presentation formatting (D1).
+     */
+    public var rows: [BookmarkRow]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Bookmark items from the active account's kind:10003 list.
+         * Raw `BookmarkRow` values — no labels or presentation formatting (D1).
+         */rows: [BookmarkRow]) {
+        self.rows = rows
+    }
+}
+
+#if compiler(>=6)
+extension BookmarksSnapshot: Sendable {}
+#endif
+
+
+extension BookmarksSnapshot: Equatable, Hashable {
+    public static func ==(lhs: BookmarksSnapshot, rhs: BookmarksSnapshot) -> Bool {
+        if lhs.rows != rhs.rows {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rows)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarksSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarksSnapshot {
+        return
+            try BookmarksSnapshot(
+                rows: FfiConverterSequenceTypeBookmarkRow.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookmarksSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeBookmarkRow.write(value.rows, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarksSnapshot_lift(_ buf: RustBuffer) throws -> BookmarksSnapshot {
+    return try FfiConverterTypeBookmarksSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarksSnapshot_lower(_ value: BookmarksSnapshot) -> RustBuffer {
+    return FfiConverterTypeBookmarksSnapshot.lower(value)
 }
 
 
@@ -21558,6 +22098,104 @@ public func FfiConverterTypeHighlightFeedContentProjectionInput_lower(_ value: H
 }
 
 
+/**
+ * Snapshot for `ViewId::HighlightFeed` — the home/own highlights feed.
+ *
+ * Carries the decoded highlight rows from `AppState::highlight_feed`, sorted by
+ * `created_at` descending (newest first), deduplicated by `event_id`.
+ *
+ * Raw-data doctrine (D1): Swift formats ALL display strings from these raw
+ * fields. No `"Highlighted by {name}"` byline, no avatar URLs, no
+ * source-kind labels, no share-message composition — those are Swift concerns.
+ *
+ * Bounded by the accumulated pull pages (each page is capped at
+ * `feed::FEED_PAGE_SIZE = 20` entries — Non-Negotiable #7). `exhausted`
+ * signals when the cursor has caught up to the ingest log head.
+ */
+public struct HighlightFeedSnapshot {
+    /**
+     * Decoded highlight rows, sorted newest-first. Raw fields only (D1).
+     */
+    public var rows: [HighlightRow]
+    /**
+     * `true` when the pull cursor is caught up (`has_more == false` on last drain).
+     * Swift uses this to hide the "load more" affordance.
+     */
+    public var exhausted: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Decoded highlight rows, sorted newest-first. Raw fields only (D1).
+         */rows: [HighlightRow],
+        /**
+         * `true` when the pull cursor is caught up (`has_more == false` on last drain).
+         * Swift uses this to hide the "load more" affordance.
+         */exhausted: Bool) {
+        self.rows = rows
+        self.exhausted = exhausted
+    }
+}
+
+#if compiler(>=6)
+extension HighlightFeedSnapshot: Sendable {}
+#endif
+
+
+extension HighlightFeedSnapshot: Equatable, Hashable {
+    public static func ==(lhs: HighlightFeedSnapshot, rhs: HighlightFeedSnapshot) -> Bool {
+        if lhs.rows != rhs.rows {
+            return false
+        }
+        if lhs.exhausted != rhs.exhausted {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rows)
+        hasher.combine(exhausted)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightFeedSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightFeedSnapshot {
+        return
+            try HighlightFeedSnapshot(
+                rows: FfiConverterSequenceTypeHighlightRow.read(from: &buf),
+                exhausted: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightFeedSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeHighlightRow.write(value.rows, into: &buf)
+        FfiConverterBool.write(value.exhausted, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightFeedSnapshot_lift(_ buf: RustBuffer) throws -> HighlightFeedSnapshot {
+    return try FfiConverterTypeHighlightFeedSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightFeedSnapshot_lower(_ value: HighlightFeedSnapshot) -> RustBuffer {
+    return FfiConverterTypeHighlightFeedSnapshot.lower(value)
+}
+
+
 public struct HighlightGroupCardProjection {
     public var showHighlightersStrip: Bool
     public var visibleHighlighters: [HighlightGroupHighlighterProjection]
@@ -22600,6 +23238,160 @@ public func FfiConverterTypeHighlightResourceHeaderProjectionInput_lift(_ buf: R
 #endif
 public func FfiConverterTypeHighlightResourceHeaderProjectionInput_lower(_ value: HighlightResourceHeaderProjectionInput) -> RustBuffer {
     return FfiConverterTypeHighlightResourceHeaderProjectionInput.lower(value)
+}
+
+
+/**
+ * One NIP-84 kind:9802 highlight row stored in the highlight feed.
+ *
+ * Decoded from a raw `KernelEvent` (kind:9802) pulled via the
+ * `"hl.feed.highlights"` feed cursor (ADR-0058). Raw protocol data only
+ * (D1 / ADR-0032): Swift formats ALL display strings.
+ *
+ * D1: no byline composition (`"Highlighted by {name}, {name2} and {n} others"`),
+ * no avatar URL assembly, no source-kind icon/label, no "share" copy — those
+ * are Swift-side presentation decisions. The kernel emits only the raw
+ * `content`, `source_reference`, `author_pubkey`, and `created_at`.
+ */
+public struct HighlightRow {
+    /**
+     * 64-character hex event id of the kind:9802 event.
+     */
+    public var eventId: String
+    /**
+     * 64-character hex author pubkey. D1: Swift formats bech32 `npub`.
+     */
+    public var authorPubkey: String
+    /**
+     * The highlighted text content from the kind:9802 event's `content` field.
+     * Raw UTF-8 — no truncation or ellipsis (D1: Swift owns display formatting).
+     */
+    public var content: String
+    /**
+     * NIP-84 source reference extracted from the `a` (addressable) or `e`
+     * (non-addressable) tag of the kind:9802 event, if present.
+     *
+     * - `a` tag: `"<kind>:<pubkey>:<d_tag>"` coordinate (used for NIP-23 articles).
+     * - `e` tag: raw 64-char hex event id.
+     * - `None` when no source tag is present (valid per NIP-84 §3.2 for
+     * free-standing highlights not anchored to a specific resource).
+     *
+     * D3: opaque string from the protocol — kernel never constructs references.
+     */
+    public var sourceReference: String?
+    /**
+     * Event creation time as Unix seconds. D1: Swift formats the display date.
+     */
+    public var createdAt: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * 64-character hex event id of the kind:9802 event.
+         */eventId: String,
+        /**
+         * 64-character hex author pubkey. D1: Swift formats bech32 `npub`.
+         */authorPubkey: String,
+        /**
+         * The highlighted text content from the kind:9802 event's `content` field.
+         * Raw UTF-8 — no truncation or ellipsis (D1: Swift owns display formatting).
+         */content: String,
+        /**
+         * NIP-84 source reference extracted from the `a` (addressable) or `e`
+         * (non-addressable) tag of the kind:9802 event, if present.
+         *
+         * - `a` tag: `"<kind>:<pubkey>:<d_tag>"` coordinate (used for NIP-23 articles).
+         * - `e` tag: raw 64-char hex event id.
+         * - `None` when no source tag is present (valid per NIP-84 §3.2 for
+         * free-standing highlights not anchored to a specific resource).
+         *
+         * D3: opaque string from the protocol — kernel never constructs references.
+         */sourceReference: String?,
+        /**
+         * Event creation time as Unix seconds. D1: Swift formats the display date.
+         */createdAt: UInt64) {
+        self.eventId = eventId
+        self.authorPubkey = authorPubkey
+        self.content = content
+        self.sourceReference = sourceReference
+        self.createdAt = createdAt
+    }
+}
+
+#if compiler(>=6)
+extension HighlightRow: Sendable {}
+#endif
+
+
+extension HighlightRow: Equatable, Hashable {
+    public static func ==(lhs: HighlightRow, rhs: HighlightRow) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.authorPubkey != rhs.authorPubkey {
+            return false
+        }
+        if lhs.content != rhs.content {
+            return false
+        }
+        if lhs.sourceReference != rhs.sourceReference {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(authorPubkey)
+        hasher.combine(content)
+        hasher.combine(sourceReference)
+        hasher.combine(createdAt)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHighlightRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HighlightRow {
+        return
+            try HighlightRow(
+                eventId: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                content: FfiConverterString.read(from: &buf),
+                sourceReference: FfiConverterOptionString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: HighlightRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.authorPubkey, into: &buf)
+        FfiConverterString.write(value.content, into: &buf)
+        FfiConverterOptionString.write(value.sourceReference, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightRow_lift(_ buf: RustBuffer) throws -> HighlightRow {
+    return try FfiConverterTypeHighlightRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHighlightRow_lower(_ value: HighlightRow) -> RustBuffer {
+    return FfiConverterTypeHighlightRow.lower(value)
 }
 
 
@@ -24453,6 +25245,921 @@ public func FfiConverterTypeJoinedCommunitiesSnapshotApplyProjection_lower(_ val
 
 
 /**
+ * Snapshot for `ViewId::ArticleReader{address}` — the article reader view.
+ *
+ * Carries the full article document fields from the `ArticleProjection`
+ * (via `AppState::articles`). Raw-data doctrine (D1 / ADR-0032): Swift
+ * formats ALL display strings from these raw fields. No `"Untitled"` title
+ * fallback, no `"{n} min read"` label, no `"#{tag}"` hashtag formatting.
+ *
+ * `content_tree_bytes` is the opaque serialised `ContentTreeWire` for the
+ * article body. Empty until the full article document arrives (the feed-list
+ * trimmed summary has no body). Swift / platform layer decodes these bytes
+ * using the `nmp-content` wire codec.
+ */
+public struct KernelArticleReaderSnapshot {
+    /**
+     * Addressable coordinate `kind:author_hex:d_tag`.
+     */
+    public var address: String
+    /**
+     * 64-character hex event id.
+     */
+    public var id: String
+    /**
+     * 64-character hex author pubkey. Swift formats bech32 `npub`.
+     */
+    public var authorPubkey: String
+    /**
+     * Optional display name from the author's kind:0 (enriched by projection).
+     */
+    public var authorDisplayName: String?
+    /**
+     * Optional author picture URL from kind:0.
+     */
+    public var authorPictureUrl: String?
+    /**
+     * `title` tag, or `None` when absent. D1: no "Untitled" fallback.
+     */
+    public var title: String?
+    /**
+     * `summary` tag, or `None` when absent.
+     */
+    public var summary: String?
+    /**
+     * `image` (hero) tag URL, or `None` when absent.
+     */
+    public var heroImageUrl: String?
+    /**
+     * Addressable `d` tag value.
+     */
+    public var dTag: String
+    /**
+     * Event creation time as Unix seconds. Swift formats the display date.
+     */
+    public var createdAt: UInt64
+    /**
+     * Opaque `ContentTreeWire` bytes for the article body.
+     * Empty until the full document arrives. Swift / platform decodes via
+     * `nmp_content::wire::decode_content_tree`.
+     */
+    public var contentTreeBytes: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Addressable coordinate `kind:author_hex:d_tag`.
+         */address: String,
+        /**
+         * 64-character hex event id.
+         */id: String,
+        /**
+         * 64-character hex author pubkey. Swift formats bech32 `npub`.
+         */authorPubkey: String,
+        /**
+         * Optional display name from the author's kind:0 (enriched by projection).
+         */authorDisplayName: String?,
+        /**
+         * Optional author picture URL from kind:0.
+         */authorPictureUrl: String?,
+        /**
+         * `title` tag, or `None` when absent. D1: no "Untitled" fallback.
+         */title: String?,
+        /**
+         * `summary` tag, or `None` when absent.
+         */summary: String?,
+        /**
+         * `image` (hero) tag URL, or `None` when absent.
+         */heroImageUrl: String?,
+        /**
+         * Addressable `d` tag value.
+         */dTag: String,
+        /**
+         * Event creation time as Unix seconds. Swift formats the display date.
+         */createdAt: UInt64,
+        /**
+         * Opaque `ContentTreeWire` bytes for the article body.
+         * Empty until the full document arrives. Swift / platform decodes via
+         * `nmp_content::wire::decode_content_tree`.
+         */contentTreeBytes: Data) {
+        self.address = address
+        self.id = id
+        self.authorPubkey = authorPubkey
+        self.authorDisplayName = authorDisplayName
+        self.authorPictureUrl = authorPictureUrl
+        self.title = title
+        self.summary = summary
+        self.heroImageUrl = heroImageUrl
+        self.dTag = dTag
+        self.createdAt = createdAt
+        self.contentTreeBytes = contentTreeBytes
+    }
+}
+
+#if compiler(>=6)
+extension KernelArticleReaderSnapshot: Sendable {}
+#endif
+
+
+extension KernelArticleReaderSnapshot: Equatable, Hashable {
+    public static func ==(lhs: KernelArticleReaderSnapshot, rhs: KernelArticleReaderSnapshot) -> Bool {
+        if lhs.address != rhs.address {
+            return false
+        }
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.authorPubkey != rhs.authorPubkey {
+            return false
+        }
+        if lhs.authorDisplayName != rhs.authorDisplayName {
+            return false
+        }
+        if lhs.authorPictureUrl != rhs.authorPictureUrl {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.summary != rhs.summary {
+            return false
+        }
+        if lhs.heroImageUrl != rhs.heroImageUrl {
+            return false
+        }
+        if lhs.dTag != rhs.dTag {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.contentTreeBytes != rhs.contentTreeBytes {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(address)
+        hasher.combine(id)
+        hasher.combine(authorPubkey)
+        hasher.combine(authorDisplayName)
+        hasher.combine(authorPictureUrl)
+        hasher.combine(title)
+        hasher.combine(summary)
+        hasher.combine(heroImageUrl)
+        hasher.combine(dTag)
+        hasher.combine(createdAt)
+        hasher.combine(contentTreeBytes)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelArticleReaderSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelArticleReaderSnapshot {
+        return
+            try KernelArticleReaderSnapshot(
+                address: FfiConverterString.read(from: &buf),
+                id: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                authorDisplayName: FfiConverterOptionString.read(from: &buf),
+                authorPictureUrl: FfiConverterOptionString.read(from: &buf),
+                title: FfiConverterOptionString.read(from: &buf),
+                summary: FfiConverterOptionString.read(from: &buf),
+                heroImageUrl: FfiConverterOptionString.read(from: &buf),
+                dTag: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
+                contentTreeBytes: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelArticleReaderSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.address, into: &buf)
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.authorPubkey, into: &buf)
+        FfiConverterOptionString.write(value.authorDisplayName, into: &buf)
+        FfiConverterOptionString.write(value.authorPictureUrl, into: &buf)
+        FfiConverterOptionString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.summary, into: &buf)
+        FfiConverterOptionString.write(value.heroImageUrl, into: &buf)
+        FfiConverterString.write(value.dTag, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+        FfiConverterData.write(value.contentTreeBytes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelArticleReaderSnapshot_lift(_ buf: RustBuffer) throws -> KernelArticleReaderSnapshot {
+    return try FfiConverterTypeKernelArticleReaderSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelArticleReaderSnapshot_lower(_ value: KernelArticleReaderSnapshot) -> RustBuffer {
+    return FfiConverterTypeKernelArticleReaderSnapshot.lower(value)
+}
+
+
+/**
+ * Lightweight book preview — snapshot-safe uniffi::Record for crossing FFI.
+ *
+ * Mirrors `ArtifactPreview` in the bespoke live lane but without fields that
+ * are irrelevant to the book/ISBN domain (podcast GUIDs, audio URLs, chapters).
+ * All fields are raw strings (D1: no presentation formatting in the kernel).
+ */
+public struct KernelArtifactPreview {
+    /**
+     * Deterministic artifact id: `c{fnv1a_hex}` (same algorithm as the live lane
+     * so both lanes produce the same id for the same ISBN).
+     */
+    public var id: String
+    /**
+     * Book title from Open Library (empty on cache miss / partial preview).
+     */
+    public var title: String
+    /**
+     * Author name(s) joined by `", "` (empty on cache miss / partial preview).
+     */
+    public var author: String
+    /**
+     * Cover image URL from `covers.openlibrary.org` (empty on cache miss).
+     */
+    public var image: String
+    /**
+     * Book description from Open Library (empty when absent).
+     */
+    public var description: String
+    /**
+     * Catalog id: `"isbn:{isbn13}"` — stable key for deduplication.
+     */
+    public var catalogId: String
+    /**
+     * Catalog kind: always `"isbn"` for this domain.
+     */
+    public var catalogKind: String
+    /**
+     * NIP-73 reference tag name: always `"i"` for ISBN-sourced books.
+     */
+    public var referenceTagName: String
+    /**
+     * NIP-73 reference tag value: `"isbn:{isbn13}"`.
+     */
+    public var referenceTagValue: String
+    /**
+     * Highlight tag name: always `"i"` (the NIP-73 `i` tag anchors highlights).
+     */
+    public var highlightTagName: String
+    /**
+     * Highlight tag value: `"isbn:{isbn13}"`.
+     */
+    public var highlightTagValue: String
+    /**
+     * Highlight reference key: `"i:isbn:{isbn13}"` (stable dedup key).
+     */
+    public var highlightReferenceKey: String
+    /**
+     * Source kind: always `"book"`.
+     */
+    public var source: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Deterministic artifact id: `c{fnv1a_hex}` (same algorithm as the live lane
+         * so both lanes produce the same id for the same ISBN).
+         */id: String,
+        /**
+         * Book title from Open Library (empty on cache miss / partial preview).
+         */title: String,
+        /**
+         * Author name(s) joined by `", "` (empty on cache miss / partial preview).
+         */author: String,
+        /**
+         * Cover image URL from `covers.openlibrary.org` (empty on cache miss).
+         */image: String,
+        /**
+         * Book description from Open Library (empty when absent).
+         */description: String,
+        /**
+         * Catalog id: `"isbn:{isbn13}"` — stable key for deduplication.
+         */catalogId: String,
+        /**
+         * Catalog kind: always `"isbn"` for this domain.
+         */catalogKind: String,
+        /**
+         * NIP-73 reference tag name: always `"i"` for ISBN-sourced books.
+         */referenceTagName: String,
+        /**
+         * NIP-73 reference tag value: `"isbn:{isbn13}"`.
+         */referenceTagValue: String,
+        /**
+         * Highlight tag name: always `"i"` (the NIP-73 `i` tag anchors highlights).
+         */highlightTagName: String,
+        /**
+         * Highlight tag value: `"isbn:{isbn13}"`.
+         */highlightTagValue: String,
+        /**
+         * Highlight reference key: `"i:isbn:{isbn13}"` (stable dedup key).
+         */highlightReferenceKey: String,
+        /**
+         * Source kind: always `"book"`.
+         */source: String) {
+        self.id = id
+        self.title = title
+        self.author = author
+        self.image = image
+        self.description = description
+        self.catalogId = catalogId
+        self.catalogKind = catalogKind
+        self.referenceTagName = referenceTagName
+        self.referenceTagValue = referenceTagValue
+        self.highlightTagName = highlightTagName
+        self.highlightTagValue = highlightTagValue
+        self.highlightReferenceKey = highlightReferenceKey
+        self.source = source
+    }
+}
+
+#if compiler(>=6)
+extension KernelArtifactPreview: Sendable {}
+#endif
+
+
+extension KernelArtifactPreview: Equatable, Hashable {
+    public static func ==(lhs: KernelArtifactPreview, rhs: KernelArtifactPreview) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.author != rhs.author {
+            return false
+        }
+        if lhs.image != rhs.image {
+            return false
+        }
+        if lhs.description != rhs.description {
+            return false
+        }
+        if lhs.catalogId != rhs.catalogId {
+            return false
+        }
+        if lhs.catalogKind != rhs.catalogKind {
+            return false
+        }
+        if lhs.referenceTagName != rhs.referenceTagName {
+            return false
+        }
+        if lhs.referenceTagValue != rhs.referenceTagValue {
+            return false
+        }
+        if lhs.highlightTagName != rhs.highlightTagName {
+            return false
+        }
+        if lhs.highlightTagValue != rhs.highlightTagValue {
+            return false
+        }
+        if lhs.highlightReferenceKey != rhs.highlightReferenceKey {
+            return false
+        }
+        if lhs.source != rhs.source {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(title)
+        hasher.combine(author)
+        hasher.combine(image)
+        hasher.combine(description)
+        hasher.combine(catalogId)
+        hasher.combine(catalogKind)
+        hasher.combine(referenceTagName)
+        hasher.combine(referenceTagValue)
+        hasher.combine(highlightTagName)
+        hasher.combine(highlightTagValue)
+        hasher.combine(highlightReferenceKey)
+        hasher.combine(source)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelArtifactPreview: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelArtifactPreview {
+        return
+            try KernelArtifactPreview(
+                id: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                author: FfiConverterString.read(from: &buf),
+                image: FfiConverterString.read(from: &buf),
+                description: FfiConverterString.read(from: &buf),
+                catalogId: FfiConverterString.read(from: &buf),
+                catalogKind: FfiConverterString.read(from: &buf),
+                referenceTagName: FfiConverterString.read(from: &buf),
+                referenceTagValue: FfiConverterString.read(from: &buf),
+                highlightTagName: FfiConverterString.read(from: &buf),
+                highlightTagValue: FfiConverterString.read(from: &buf),
+                highlightReferenceKey: FfiConverterString.read(from: &buf),
+                source: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelArtifactPreview, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.author, into: &buf)
+        FfiConverterString.write(value.image, into: &buf)
+        FfiConverterString.write(value.description, into: &buf)
+        FfiConverterString.write(value.catalogId, into: &buf)
+        FfiConverterString.write(value.catalogKind, into: &buf)
+        FfiConverterString.write(value.referenceTagName, into: &buf)
+        FfiConverterString.write(value.referenceTagValue, into: &buf)
+        FfiConverterString.write(value.highlightTagName, into: &buf)
+        FfiConverterString.write(value.highlightTagValue, into: &buf)
+        FfiConverterString.write(value.highlightReferenceKey, into: &buf)
+        FfiConverterString.write(value.source, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelArtifactPreview_lift(_ buf: RustBuffer) throws -> KernelArtifactPreview {
+    return try FfiConverterTypeKernelArtifactPreview.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelArtifactPreview_lower(_ value: KernelArtifactPreview) -> RustBuffer {
+    return FfiConverterTypeKernelArtifactPreview.lower(value)
+}
+
+
+/**
+ * ISBN lookup result carried in `AppState::isbn.last_result` and exposed via
+ * the `BookPickerKernelSnapshot`.
+ *
+ * `uniffi::Record` so Swift can read the outcome without polling.
+ */
+public struct KernelArtifactPreviewResult {
+    /**
+     * The normalized 13-digit Bookland ISBN that was looked up.
+     */
+    public var isbn13: String
+    /**
+     * Fetched or cached preview. `None` only when normalization failed (should
+     * not happen — the reducer normalizes before dispatching the effect).
+     */
+    public var preview: KernelArtifactPreview?
+    /**
+     * Non-empty if the HTTP fetch failed; empty on success or cache hit.
+     */
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The normalized 13-digit Bookland ISBN that was looked up.
+         */isbn13: String,
+        /**
+         * Fetched or cached preview. `None` only when normalization failed (should
+         * not happen — the reducer normalizes before dispatching the effect).
+         */preview: KernelArtifactPreview?,
+        /**
+         * Non-empty if the HTTP fetch failed; empty on success or cache hit.
+         */error: String) {
+        self.isbn13 = isbn13
+        self.preview = preview
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension KernelArtifactPreviewResult: Sendable {}
+#endif
+
+
+extension KernelArtifactPreviewResult: Equatable, Hashable {
+    public static func ==(lhs: KernelArtifactPreviewResult, rhs: KernelArtifactPreviewResult) -> Bool {
+        if lhs.isbn13 != rhs.isbn13 {
+            return false
+        }
+        if lhs.preview != rhs.preview {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(isbn13)
+        hasher.combine(preview)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelArtifactPreviewResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelArtifactPreviewResult {
+        return
+            try KernelArtifactPreviewResult(
+                isbn13: FfiConverterString.read(from: &buf),
+                preview: FfiConverterOptionTypeKernelArtifactPreview.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelArtifactPreviewResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.isbn13, into: &buf)
+        FfiConverterOptionTypeKernelArtifactPreview.write(value.preview, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelArtifactPreviewResult_lift(_ buf: RustBuffer) throws -> KernelArtifactPreviewResult {
+    return try FfiConverterTypeKernelArtifactPreviewResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelArtifactPreviewResult_lower(_ value: KernelArtifactPreviewResult) -> RustBuffer {
+    return FfiConverterTypeKernelArtifactPreviewResult.lower(value)
+}
+
+
+/**
+ * One row in the merged home feed.
+ *
+ * For `KernelHomeFeedRowKind::Highlight`: carries the grouped highlight event ids and
+ * the common source_reference (if any).
+ * For `KernelHomeFeedRowKind::Article`: carries the article address, event id, and author.
+ *
+ * D1: raw structural fields only — no bylines, no "min read", no "Untitled"
+ * fallback, no avatar URLs. Swift owns all presentation.
+ * D3: opaque source_reference and article_address strings from the protocol —
+ * the kernel never constructs them.
+ *
+ * Named `KernelHomeFeedRow` to avoid collision with any legacy type in the
+ * bespoke live lane (Non-Negotiable #6 coexistence).
+ */
+public struct KernelHomeFeedRow {
+    /**
+     * Deterministic structural key for stable SwiftUI list identity.
+     * - `"h:src:<source_reference>"` for highlight groups with a source reference.
+     * - `"h:evt:<event_id>"` for solo highlights without a source reference.
+     * - `"r:<article_address>"` for standalone article rows.
+     *
+     * D1: this is a structural identity key, not a user-visible label.
+     */
+    public var stableId: String
+    /**
+     * Timestamp used for inter-row sort order (descending: newest first).
+     * For highlight rows: the maximum `created_at` of all highlights in the group.
+     * For article rows: the article's `created_at`.
+     */
+    public var sortKey: UInt64
+    /**
+     * Row type discriminant. Swift switches on this to decide which cell
+     * template to render.
+     */
+    public var kind: KernelHomeFeedRowKind
+    /**
+     * 64-char hex event ids of the highlights in this group, sorted by
+     * `created_at` ascending (oldest first within the group — matches live lane).
+     * Empty for `KernelHomeFeedRowKind::Article` rows.
+     */
+    public var highlightEventIds: [String]
+    /**
+     * Author pubkeys of the highlights in this group (parallel to
+     * `highlight_event_ids`). D1: Swift formats bech32 `npub` / display name.
+     * Empty for `KernelHomeFeedRowKind::Article` rows.
+     */
+    public var highlightAuthorPubkeys: [String]
+    /**
+     * NIP-84 source reference common to all highlights in this group, if
+     * present. `None` for solo highlights not anchored to a resource.
+     * `a`-tag form: `"kind:pubkey:d_tag"` (addressable).
+     * `e`-tag form: raw 64-char hex event id.
+     * D3: opaque from the protocol.
+     */
+    public var sourceReference: String?
+    /**
+     * Addressable coordinate `"kind:author_hex:d_tag"` of the article.
+     * `None` for `KernelHomeFeedRowKind::Highlight` rows.
+     */
+    public var articleAddress: String?
+    /**
+     * 64-char hex event id of the kind:30023 article event.
+     * `None` for `KernelHomeFeedRowKind::Highlight` rows.
+     */
+    public var articleId: String?
+    /**
+     * 64-char hex author pubkey of the article.
+     * D1: Swift formats bech32 `npub` / display name.
+     * `None` for `KernelHomeFeedRowKind::Highlight` rows.
+     */
+    public var articleAuthorPubkey: String?
+    /**
+     * Unix-second `created_at` of the article event.
+     * D1: Swift formats the display date.
+     * `None` for `KernelHomeFeedRowKind::Highlight` rows.
+     */
+    public var articleCreatedAt: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Deterministic structural key for stable SwiftUI list identity.
+         * - `"h:src:<source_reference>"` for highlight groups with a source reference.
+         * - `"h:evt:<event_id>"` for solo highlights without a source reference.
+         * - `"r:<article_address>"` for standalone article rows.
+         *
+         * D1: this is a structural identity key, not a user-visible label.
+         */stableId: String,
+        /**
+         * Timestamp used for inter-row sort order (descending: newest first).
+         * For highlight rows: the maximum `created_at` of all highlights in the group.
+         * For article rows: the article's `created_at`.
+         */sortKey: UInt64,
+        /**
+         * Row type discriminant. Swift switches on this to decide which cell
+         * template to render.
+         */kind: KernelHomeFeedRowKind,
+        /**
+         * 64-char hex event ids of the highlights in this group, sorted by
+         * `created_at` ascending (oldest first within the group — matches live lane).
+         * Empty for `KernelHomeFeedRowKind::Article` rows.
+         */highlightEventIds: [String],
+        /**
+         * Author pubkeys of the highlights in this group (parallel to
+         * `highlight_event_ids`). D1: Swift formats bech32 `npub` / display name.
+         * Empty for `KernelHomeFeedRowKind::Article` rows.
+         */highlightAuthorPubkeys: [String],
+        /**
+         * NIP-84 source reference common to all highlights in this group, if
+         * present. `None` for solo highlights not anchored to a resource.
+         * `a`-tag form: `"kind:pubkey:d_tag"` (addressable).
+         * `e`-tag form: raw 64-char hex event id.
+         * D3: opaque from the protocol.
+         */sourceReference: String?,
+        /**
+         * Addressable coordinate `"kind:author_hex:d_tag"` of the article.
+         * `None` for `KernelHomeFeedRowKind::Highlight` rows.
+         */articleAddress: String?,
+        /**
+         * 64-char hex event id of the kind:30023 article event.
+         * `None` for `KernelHomeFeedRowKind::Highlight` rows.
+         */articleId: String?,
+        /**
+         * 64-char hex author pubkey of the article.
+         * D1: Swift formats bech32 `npub` / display name.
+         * `None` for `KernelHomeFeedRowKind::Highlight` rows.
+         */articleAuthorPubkey: String?,
+        /**
+         * Unix-second `created_at` of the article event.
+         * D1: Swift formats the display date.
+         * `None` for `KernelHomeFeedRowKind::Highlight` rows.
+         */articleCreatedAt: UInt64?) {
+        self.stableId = stableId
+        self.sortKey = sortKey
+        self.kind = kind
+        self.highlightEventIds = highlightEventIds
+        self.highlightAuthorPubkeys = highlightAuthorPubkeys
+        self.sourceReference = sourceReference
+        self.articleAddress = articleAddress
+        self.articleId = articleId
+        self.articleAuthorPubkey = articleAuthorPubkey
+        self.articleCreatedAt = articleCreatedAt
+    }
+}
+
+#if compiler(>=6)
+extension KernelHomeFeedRow: Sendable {}
+#endif
+
+
+extension KernelHomeFeedRow: Equatable, Hashable {
+    public static func ==(lhs: KernelHomeFeedRow, rhs: KernelHomeFeedRow) -> Bool {
+        if lhs.stableId != rhs.stableId {
+            return false
+        }
+        if lhs.sortKey != rhs.sortKey {
+            return false
+        }
+        if lhs.kind != rhs.kind {
+            return false
+        }
+        if lhs.highlightEventIds != rhs.highlightEventIds {
+            return false
+        }
+        if lhs.highlightAuthorPubkeys != rhs.highlightAuthorPubkeys {
+            return false
+        }
+        if lhs.sourceReference != rhs.sourceReference {
+            return false
+        }
+        if lhs.articleAddress != rhs.articleAddress {
+            return false
+        }
+        if lhs.articleId != rhs.articleId {
+            return false
+        }
+        if lhs.articleAuthorPubkey != rhs.articleAuthorPubkey {
+            return false
+        }
+        if lhs.articleCreatedAt != rhs.articleCreatedAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(stableId)
+        hasher.combine(sortKey)
+        hasher.combine(kind)
+        hasher.combine(highlightEventIds)
+        hasher.combine(highlightAuthorPubkeys)
+        hasher.combine(sourceReference)
+        hasher.combine(articleAddress)
+        hasher.combine(articleId)
+        hasher.combine(articleAuthorPubkey)
+        hasher.combine(articleCreatedAt)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelHomeFeedRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelHomeFeedRow {
+        return
+            try KernelHomeFeedRow(
+                stableId: FfiConverterString.read(from: &buf),
+                sortKey: FfiConverterUInt64.read(from: &buf),
+                kind: FfiConverterTypeKernelHomeFeedRowKind.read(from: &buf),
+                highlightEventIds: FfiConverterSequenceString.read(from: &buf),
+                highlightAuthorPubkeys: FfiConverterSequenceString.read(from: &buf),
+                sourceReference: FfiConverterOptionString.read(from: &buf),
+                articleAddress: FfiConverterOptionString.read(from: &buf),
+                articleId: FfiConverterOptionString.read(from: &buf),
+                articleAuthorPubkey: FfiConverterOptionString.read(from: &buf),
+                articleCreatedAt: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelHomeFeedRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.stableId, into: &buf)
+        FfiConverterUInt64.write(value.sortKey, into: &buf)
+        FfiConverterTypeKernelHomeFeedRowKind.write(value.kind, into: &buf)
+        FfiConverterSequenceString.write(value.highlightEventIds, into: &buf)
+        FfiConverterSequenceString.write(value.highlightAuthorPubkeys, into: &buf)
+        FfiConverterOptionString.write(value.sourceReference, into: &buf)
+        FfiConverterOptionString.write(value.articleAddress, into: &buf)
+        FfiConverterOptionString.write(value.articleId, into: &buf)
+        FfiConverterOptionString.write(value.articleAuthorPubkey, into: &buf)
+        FfiConverterOptionUInt64.write(value.articleCreatedAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelHomeFeedRow_lift(_ buf: RustBuffer) throws -> KernelHomeFeedRow {
+    return try FfiConverterTypeKernelHomeFeedRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelHomeFeedRow_lower(_ value: KernelHomeFeedRow) -> RustBuffer {
+    return FfiConverterTypeKernelHomeFeedRow.lower(value)
+}
+
+
+/**
+ * Snapshot for `ViewId::HomeFeed` — the merged home feed.
+ *
+ * Carries the merged, suppressed, grouped, and sorted list of home-feed rows
+ * derived from `AppState::article_feed` (Phase 4G) and
+ * `AppState::highlight_feed` (Phase 4H).
+ *
+ * Raw-data doctrine (D1 / ADR-0032): Swift formats ALL display strings from
+ * these raw fields. No `"Highlighted by {name}"`, no `"{n} min read"`, no
+ * `"#{tag}"` formatting, no `"Untitled"` fallback — those are Swift-side
+ * presentation decisions.
+ *
+ * Bounded by the underlying feed pages (`FEED_PAGE_SIZE` × drain calls per
+ * feed — Non-Negotiable #7). The number of output rows ≤ sum of both feed
+ * page sizes (suppression only reduces the count).
+ *
+ * Named `KernelHomeFeedSnapshot` to avoid collision with the legacy
+ * `HomeFeedSnapshot` in `home_feed.rs` (bespoke live lane — Phase 4J
+ * coexists with the live lane until the iOS cutover, Non-Negotiable #6).
+ */
+public struct KernelHomeFeedSnapshot {
+    /**
+     * Merged rows sorted by `sort_key` descending. Raw structural fields only (D1).
+     */
+    public var rows: [KernelHomeFeedRow]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Merged rows sorted by `sort_key` descending. Raw structural fields only (D1).
+         */rows: [KernelHomeFeedRow]) {
+        self.rows = rows
+    }
+}
+
+#if compiler(>=6)
+extension KernelHomeFeedSnapshot: Sendable {}
+#endif
+
+
+extension KernelHomeFeedSnapshot: Equatable, Hashable {
+    public static func ==(lhs: KernelHomeFeedSnapshot, rhs: KernelHomeFeedSnapshot) -> Bool {
+        if lhs.rows != rhs.rows {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rows)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelHomeFeedSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelHomeFeedSnapshot {
+        return
+            try KernelHomeFeedSnapshot(
+                rows: FfiConverterSequenceTypeKernelHomeFeedRow.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelHomeFeedSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeKernelHomeFeedRow.write(value.rows, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelHomeFeedSnapshot_lift(_ buf: RustBuffer) throws -> KernelHomeFeedSnapshot {
+    return try FfiConverterTypeKernelHomeFeedSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelHomeFeedSnapshot_lower(_ value: KernelHomeFeedSnapshot) -> RustBuffer {
+    return FfiConverterTypeKernelHomeFeedSnapshot.lower(value)
+}
+
+
+/**
  * Snapshot for the `ViewId::NetworkSettings` projection.
  *
  * Read-side only: raw relay list with URL, role tone, and connection state.
@@ -24656,15 +26363,12 @@ public func FfiConverterTypeKernelRoomExplorerSnapshot_lower(_ value: KernelRoom
 /**
  * Snapshot for `ViewId::RoomHome{group_id}` — the per-room home shell.
  *
- * Ships the room header (metadata) + membership state + an empty lanes
- * structure. Lane bodies (kind:11/kind:9 content feeds) are deferred to Phase 4.
+ * Ships the room header (metadata) + membership state + lane bodies.
+ * Phase 3F shipped an empty lanes structure; Phase 4I fills lane bodies via
+ * the feed-pull engine (ADR-0058).
  *
  * Raw-data doctrine (D3 / ADR-0032): Swift formats ALL display strings from
  * these raw fields. Kernel emits no formatted strings (`"{n} members"`, etc.).
- *
- * `lanes` is empty in Phase 3F. The `GroupEventsProjection` is already wired
- * (via `Effect::WireGroupEvents` on view open) so Phase 4 can decode feed
- * bodies from the already-flowing events without re-opening a subscription.
  *
  * `invite_link_base` is supplied from `AppState::room_policy.invite_link_base`
  * (D3: injected at construction, never hardcoded). Swift composes the full
@@ -24709,7 +26413,8 @@ public struct KernelRoomHomeSnapshot {
     public var isAdmin: Bool
     /**
      * Lane identifiers for this room (e.g. `"general"`, `"notes"`).
-     * Empty in Phase 3F — lane bodies deferred to Phase 4.
+     * Phase 4I fills these via the feed-pull engine (ADR-0058).
+     * Empty when no feed rows have arrived yet.
      * Bounded by the number of lanes configured for the room (non-negotiable #7).
      */
     public var laneIds: [String]
@@ -24719,6 +26424,13 @@ public struct KernelRoomHomeSnapshot {
      * Sourced from `AppState::room_policy.invite_link_base` (D3 — never hardcoded).
      */
     public var inviteLinkBase: String
+    /**
+     * Raw event rows from the room-lane feed (kind:9 or kind:11 with `#h` tag).
+     * Populated by the ADR-0058 pull engine when `ViewId::RoomHome` is open.
+     * Bounded at `ROOM_LANE_ROW_CAP` rows per group in `room_home.rs`.
+     * Empty until the first feed page arrives.
+     */
+    public var lanes: [RoomLaneRow]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -24752,14 +26464,21 @@ public struct KernelRoomHomeSnapshot {
          */isAdmin: Bool,
         /**
          * Lane identifiers for this room (e.g. `"general"`, `"notes"`).
-         * Empty in Phase 3F — lane bodies deferred to Phase 4.
+         * Phase 4I fills these via the feed-pull engine (ADR-0058).
+         * Empty when no feed rows have arrived yet.
          * Bounded by the number of lanes configured for the room (non-negotiable #7).
          */laneIds: [String],
         /**
          * Base URL for invite links (e.g. `"https://highlighter.com/r"`).
          * Swift composes the full invite URL: `"{invite_link_base}/{code}"`.
          * Sourced from `AppState::room_policy.invite_link_base` (D3 — never hardcoded).
-         */inviteLinkBase: String) {
+         */inviteLinkBase: String,
+        /**
+         * Raw event rows from the room-lane feed (kind:9 or kind:11 with `#h` tag).
+         * Populated by the ADR-0058 pull engine when `ViewId::RoomHome` is open.
+         * Bounded at `ROOM_LANE_ROW_CAP` rows per group in `room_home.rs`.
+         * Empty until the first feed page arrives.
+         */lanes: [RoomLaneRow]) {
         self.groupId = groupId
         self.hostRelayUrl = hostRelayUrl
         self.name = name
@@ -24771,6 +26490,7 @@ public struct KernelRoomHomeSnapshot {
         self.isAdmin = isAdmin
         self.laneIds = laneIds
         self.inviteLinkBase = inviteLinkBase
+        self.lanes = lanes
     }
 }
 
@@ -24814,6 +26534,9 @@ extension KernelRoomHomeSnapshot: Equatable, Hashable {
         if lhs.inviteLinkBase != rhs.inviteLinkBase {
             return false
         }
+        if lhs.lanes != rhs.lanes {
+            return false
+        }
         return true
     }
 
@@ -24829,6 +26552,7 @@ extension KernelRoomHomeSnapshot: Equatable, Hashable {
         hasher.combine(isAdmin)
         hasher.combine(laneIds)
         hasher.combine(inviteLinkBase)
+        hasher.combine(lanes)
     }
 }
 
@@ -24851,7 +26575,8 @@ public struct FfiConverterTypeKernelRoomHomeSnapshot: FfiConverterRustBuffer {
                 open: FfiConverterBool.read(from: &buf),
                 isAdmin: FfiConverterBool.read(from: &buf),
                 laneIds: FfiConverterSequenceString.read(from: &buf),
-                inviteLinkBase: FfiConverterString.read(from: &buf)
+                inviteLinkBase: FfiConverterString.read(from: &buf),
+                lanes: FfiConverterSequenceTypeRoomLaneRow.read(from: &buf)
         )
     }
 
@@ -24867,6 +26592,7 @@ public struct FfiConverterTypeKernelRoomHomeSnapshot: FfiConverterRustBuffer {
         FfiConverterBool.write(value.isAdmin, into: &buf)
         FfiConverterSequenceString.write(value.laneIds, into: &buf)
         FfiConverterString.write(value.inviteLinkBase, into: &buf)
+        FfiConverterSequenceTypeRoomLaneRow.write(value.lanes, into: &buf)
     }
 }
 
@@ -24883,6 +26609,151 @@ public func FfiConverterTypeKernelRoomHomeSnapshot_lift(_ buf: RustBuffer) throw
 #endif
 public func FfiConverterTypeKernelRoomHomeSnapshot_lower(_ value: KernelRoomHomeSnapshot) -> RustBuffer {
     return FfiConverterTypeKernelRoomHomeSnapshot.lower(value)
+}
+
+
+/**
+ * uniffi-compatible search hit row for FFI (uniffi::Record requires simple types).
+ *
+ * Mirrors `SearchHitRow` with `tags` flattened to `Vec<String>` (uniffi
+ * does not support `Vec<Vec<String>>`). The Rust-internal `SearchHitRow`
+ * uses the native 2D Vec; this struct is for the snapshot FFI boundary only.
+ */
+public struct KernelSearchHitRow {
+    /**
+     * 64-character hex event id.
+     */
+    public var id: String
+    /**
+     * 64-character hex author pubkey. D1: Swift formats bech32 `npub`.
+     */
+    public var author: String
+    /**
+     * Nostr event kind number (raw u32).
+     */
+    public var kind: UInt32
+    /**
+     * Event creation time as Unix seconds.
+     */
+    public var createdAt: UInt64
+    /**
+     * Raw event `content` field.
+     */
+    public var content: String
+    /**
+     * Relay URLs this event was observed on.
+     */
+    public var relayProvenance: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * 64-character hex event id.
+         */id: String,
+        /**
+         * 64-character hex author pubkey. D1: Swift formats bech32 `npub`.
+         */author: String,
+        /**
+         * Nostr event kind number (raw u32).
+         */kind: UInt32,
+        /**
+         * Event creation time as Unix seconds.
+         */createdAt: UInt64,
+        /**
+         * Raw event `content` field.
+         */content: String,
+        /**
+         * Relay URLs this event was observed on.
+         */relayProvenance: [String]) {
+        self.id = id
+        self.author = author
+        self.kind = kind
+        self.createdAt = createdAt
+        self.content = content
+        self.relayProvenance = relayProvenance
+    }
+}
+
+#if compiler(>=6)
+extension KernelSearchHitRow: Sendable {}
+#endif
+
+
+extension KernelSearchHitRow: Equatable, Hashable {
+    public static func ==(lhs: KernelSearchHitRow, rhs: KernelSearchHitRow) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.author != rhs.author {
+            return false
+        }
+        if lhs.kind != rhs.kind {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.content != rhs.content {
+            return false
+        }
+        if lhs.relayProvenance != rhs.relayProvenance {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(author)
+        hasher.combine(kind)
+        hasher.combine(createdAt)
+        hasher.combine(content)
+        hasher.combine(relayProvenance)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelSearchHitRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelSearchHitRow {
+        return
+            try KernelSearchHitRow(
+                id: FfiConverterString.read(from: &buf),
+                author: FfiConverterString.read(from: &buf),
+                kind: FfiConverterUInt32.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
+                content: FfiConverterString.read(from: &buf),
+                relayProvenance: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelSearchHitRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.author, into: &buf)
+        FfiConverterUInt32.write(value.kind, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+        FfiConverterString.write(value.content, into: &buf)
+        FfiConverterSequenceString.write(value.relayProvenance, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelSearchHitRow_lift(_ buf: RustBuffer) throws -> KernelSearchHitRow {
+    return try FfiConverterTypeKernelSearchHitRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelSearchHitRow_lower(_ value: KernelSearchHitRow) -> RustBuffer {
+    return FfiConverterTypeKernelSearchHitRow.lower(value)
 }
 
 
@@ -32617,6 +34488,244 @@ public func FfiConverterTypePublicKeyDisplayProjectionInput_lower(_ value: Publi
 }
 
 
+/**
+ * One raw share payload from the App Group handoff store.
+ *
+ * All fields are raw strings (D1: no formatted strings, no decoded/validated
+ * types across the capability boundary). The kernel validates and processes
+ * them. `id` is the share item's stable identifier (for dedupe).
+ */
+public struct RawSharePayload {
+    /**
+     * Stable identifier for this share item (for dedupe by the kernel).
+     */
+    public var id: String
+    /**
+     * NIP-29 local group id the share should be posted into.
+     */
+    public var groupId: String
+    /**
+     * URL or text content the user shared.
+     */
+    public var url: String
+    /**
+     * Optional note the user added in the share extension UI.
+     */
+    public var note: String
+    /**
+     * UNIX second timestamp when the share was queued.
+     */
+    public var createdAtUnixSeconds: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Stable identifier for this share item (for dedupe by the kernel).
+         */id: String,
+        /**
+         * NIP-29 local group id the share should be posted into.
+         */groupId: String,
+        /**
+         * URL or text content the user shared.
+         */url: String,
+        /**
+         * Optional note the user added in the share extension UI.
+         */note: String,
+        /**
+         * UNIX second timestamp when the share was queued.
+         */createdAtUnixSeconds: Double) {
+        self.id = id
+        self.groupId = groupId
+        self.url = url
+        self.note = note
+        self.createdAtUnixSeconds = createdAtUnixSeconds
+    }
+}
+
+#if compiler(>=6)
+extension RawSharePayload: Sendable {}
+#endif
+
+
+extension RawSharePayload: Equatable, Hashable {
+    public static func ==(lhs: RawSharePayload, rhs: RawSharePayload) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.url != rhs.url {
+            return false
+        }
+        if lhs.note != rhs.note {
+            return false
+        }
+        if lhs.createdAtUnixSeconds != rhs.createdAtUnixSeconds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(groupId)
+        hasher.combine(url)
+        hasher.combine(note)
+        hasher.combine(createdAtUnixSeconds)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRawSharePayload: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RawSharePayload {
+        return
+            try RawSharePayload(
+                id: FfiConverterString.read(from: &buf),
+                groupId: FfiConverterString.read(from: &buf),
+                url: FfiConverterString.read(from: &buf),
+                note: FfiConverterString.read(from: &buf),
+                createdAtUnixSeconds: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RawSharePayload, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterString.write(value.note, into: &buf)
+        FfiConverterDouble.write(value.createdAtUnixSeconds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRawSharePayload_lift(_ buf: RustBuffer) throws -> RawSharePayload {
+    return try FfiConverterTypeRawSharePayload.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRawSharePayload_lower(_ value: RawSharePayload) -> RustBuffer {
+    return FfiConverterTypeRawSharePayload.lower(value)
+}
+
+
+/**
+ * Reaction state for a single target event — raw counts only (D1: no labels).
+ *
+ * Swift owns optimistic UI state (count adjustment, toggled icon) — the kernel
+ * exposes only the authoritative nmp-projected values. No `"X likes"` string
+ * or count formatting here.
+ */
+public struct ReactionRow {
+    /**
+     * The event id that was reacted to (raw 64-char hex).
+     */
+    public var targetEventId: String
+    /**
+     * Total number of `+` (like) reactions from all authors as projected
+     * by `ReactionProjection`. Raw u32 — no labels.
+     */
+    public var count: UInt32
+    /**
+     * `true` if the active viewer has reacted to this event.
+     * Optimistic toggling lives in Swift (D1).
+     */
+    public var viewerReacted: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The event id that was reacted to (raw 64-char hex).
+         */targetEventId: String,
+        /**
+         * Total number of `+` (like) reactions from all authors as projected
+         * by `ReactionProjection`. Raw u32 — no labels.
+         */count: UInt32,
+        /**
+         * `true` if the active viewer has reacted to this event.
+         * Optimistic toggling lives in Swift (D1).
+         */viewerReacted: Bool) {
+        self.targetEventId = targetEventId
+        self.count = count
+        self.viewerReacted = viewerReacted
+    }
+}
+
+#if compiler(>=6)
+extension ReactionRow: Sendable {}
+#endif
+
+
+extension ReactionRow: Equatable, Hashable {
+    public static func ==(lhs: ReactionRow, rhs: ReactionRow) -> Bool {
+        if lhs.targetEventId != rhs.targetEventId {
+            return false
+        }
+        if lhs.count != rhs.count {
+            return false
+        }
+        if lhs.viewerReacted != rhs.viewerReacted {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(targetEventId)
+        hasher.combine(count)
+        hasher.combine(viewerReacted)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReactionRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReactionRow {
+        return
+            try ReactionRow(
+                targetEventId: FfiConverterString.read(from: &buf),
+                count: FfiConverterUInt32.read(from: &buf),
+                viewerReacted: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ReactionRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.targetEventId, into: &buf)
+        FfiConverterUInt32.write(value.count, into: &buf)
+        FfiConverterBool.write(value.viewerReacted, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReactionRow_lift(_ buf: RustBuffer) throws -> ReactionRow {
+    return try FfiConverterTypeReactionRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReactionRow_lower(_ value: ReactionRow) -> RustBuffer {
+    return FfiConverterTypeReactionRow.lower(value)
+}
+
+
 public struct ReadingFeedCardProjection {
     public var displayTitle: String
     public var titleIsFallback: Bool
@@ -37134,6 +39243,153 @@ public func FfiConverterTypeRoomLane_lower(_ value: RoomLane) -> RustBuffer {
 }
 
 
+/**
+ * One raw event row from the room-lane feed (kind:9 or kind:11 with `#h` tag).
+ *
+ * Raw protocol data only (D1): no formatted strings, no labels, no presenter
+ * logic. Swift formats author names, timestamps, content previews, etc.
+ * Bounded: rows are capped at `ROOM_LANE_ROW_CAP` per group in `room_home.rs`.
+ */
+public struct RoomLaneRow {
+    /**
+     * Raw 64-char hex event id.
+     */
+    public var eventId: String
+    /**
+     * Raw 64-char hex author pubkey.
+     */
+    public var authorPubkey: String
+    /**
+     * Nostr event kind (9 = chat message, 11 = share/artifact).
+     */
+    public var kind: UInt32
+    /**
+     * Event content field (raw text — no formatting, no HTML; D1).
+     */
+    public var content: String
+    /**
+     * UNIX seconds `created_at` field (integer, no "X ago" format; D1).
+     */
+    public var createdAt: UInt64
+    /**
+     * Raw tag list as delivered by the nmp kernel.
+     * Swift extracts `#h`, `#e`, `#a` tag values for display/routing.
+     */
+    public var tags: [[String]]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Raw 64-char hex event id.
+         */eventId: String,
+        /**
+         * Raw 64-char hex author pubkey.
+         */authorPubkey: String,
+        /**
+         * Nostr event kind (9 = chat message, 11 = share/artifact).
+         */kind: UInt32,
+        /**
+         * Event content field (raw text — no formatting, no HTML; D1).
+         */content: String,
+        /**
+         * UNIX seconds `created_at` field (integer, no "X ago" format; D1).
+         */createdAt: UInt64,
+        /**
+         * Raw tag list as delivered by the nmp kernel.
+         * Swift extracts `#h`, `#e`, `#a` tag values for display/routing.
+         */tags: [[String]]) {
+        self.eventId = eventId
+        self.authorPubkey = authorPubkey
+        self.kind = kind
+        self.content = content
+        self.createdAt = createdAt
+        self.tags = tags
+    }
+}
+
+#if compiler(>=6)
+extension RoomLaneRow: Sendable {}
+#endif
+
+
+extension RoomLaneRow: Equatable, Hashable {
+    public static func ==(lhs: RoomLaneRow, rhs: RoomLaneRow) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.authorPubkey != rhs.authorPubkey {
+            return false
+        }
+        if lhs.kind != rhs.kind {
+            return false
+        }
+        if lhs.content != rhs.content {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.tags != rhs.tags {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(authorPubkey)
+        hasher.combine(kind)
+        hasher.combine(content)
+        hasher.combine(createdAt)
+        hasher.combine(tags)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomLaneRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLaneRow {
+        return
+            try RoomLaneRow(
+                eventId: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                kind: FfiConverterUInt32.read(from: &buf),
+                content: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
+                tags: FfiConverterSequenceSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomLaneRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.authorPubkey, into: &buf)
+        FfiConverterUInt32.write(value.kind, into: &buf)
+        FfiConverterString.write(value.content, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+        FfiConverterSequenceSequenceString.write(value.tags, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLaneRow_lift(_ buf: RustBuffer) throws -> RoomLaneRow {
+    return try FfiConverterTypeRoomLaneRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomLaneRow_lower(_ value: RoomLaneRow) -> RustBuffer {
+    return FfiConverterTypeRoomLaneRow.lower(value)
+}
+
+
 public struct RoomLibraryArticleCardProjection {
     public var displayTitle: String
     public var titleIsFallback: Bool
@@ -40644,6 +42900,83 @@ public func FfiConverterTypeSearchScheduleProjection_lower(_ value: SearchSchedu
 }
 
 
+/**
+ * Snapshot for `ViewId::Search` — NIP-50 relay search results view.
+ *
+ * Raw protocol data only (D1): Swift formats all display strings.
+ * Bounded by `SearchResultsProjection`'s `max_hits` cap
+ * (default `DEFAULT_MAX_SEARCH_HITS = 200` from nmp-nip50 — Non-Negotiable #7).
+ */
+public struct SearchSnapshot {
+    /**
+     * Ordered (by `created_at` descending, then `id` ascending) search hit rows.
+     * Raw fields only — no "X results" count label, no formatted strings (D1).
+     */
+    public var hits: [KernelSearchHitRow]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Ordered (by `created_at` descending, then `id` ascending) search hit rows.
+         * Raw fields only — no "X results" count label, no formatted strings (D1).
+         */hits: [KernelSearchHitRow]) {
+        self.hits = hits
+    }
+}
+
+#if compiler(>=6)
+extension SearchSnapshot: Sendable {}
+#endif
+
+
+extension SearchSnapshot: Equatable, Hashable {
+    public static func ==(lhs: SearchSnapshot, rhs: SearchSnapshot) -> Bool {
+        if lhs.hits != rhs.hits {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(hits)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchSnapshot {
+        return
+            try SearchSnapshot(
+                hits: FfiConverterSequenceTypeKernelSearchHitRow.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SearchSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeKernelSearchHitRow.write(value.hits, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchSnapshot_lift(_ buf: RustBuffer) throws -> SearchSnapshot {
+    return try FfiConverterTypeSearchSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchSnapshot_lower(_ value: SearchSnapshot) -> RustBuffer {
+    return FfiConverterTypeSearchSnapshot.lower(value)
+}
+
+
 public struct SearchSuggestionsProjection {
     public var queries: [String]
 
@@ -41543,6 +43876,242 @@ public func FfiConverterTypeShareArtifactTargetProjectionInput_lift(_ buf: RustB
 #endif
 public func FfiConverterTypeShareArtifactTargetProjectionInput_lower(_ value: ShareArtifactTargetProjectionInput) -> RustBuffer {
     return FfiConverterTypeShareArtifactTargetProjectionInput.lower(value)
+}
+
+
+/**
+ * Raw share-composer snapshot.
+ *
+ * All fields are raw (D1): Swift formats display labels, community names, etc.
+ * The `community_rows` are the same rows from `AppState::communities` projected
+ * down to the fields the share composer needs.
+ */
+public struct ShareComposerRow {
+    /**
+     * NIP-29 local group id.
+     */
+    public var groupId: String
+    /**
+     * Host relay URL.
+     */
+    public var hostRelayUrl: String
+    /**
+     * Community display name, if known.
+     */
+    public var name: String?
+    /**
+     * Community picture URL, if known.
+     */
+    public var picture: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * NIP-29 local group id.
+         */groupId: String,
+        /**
+         * Host relay URL.
+         */hostRelayUrl: String,
+        /**
+         * Community display name, if known.
+         */name: String?,
+        /**
+         * Community picture URL, if known.
+         */picture: String?) {
+        self.groupId = groupId
+        self.hostRelayUrl = hostRelayUrl
+        self.name = name
+        self.picture = picture
+    }
+}
+
+#if compiler(>=6)
+extension ShareComposerRow: Sendable {}
+#endif
+
+
+extension ShareComposerRow: Equatable, Hashable {
+    public static func ==(lhs: ShareComposerRow, rhs: ShareComposerRow) -> Bool {
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.hostRelayUrl != rhs.hostRelayUrl {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.picture != rhs.picture {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groupId)
+        hasher.combine(hostRelayUrl)
+        hasher.combine(name)
+        hasher.combine(picture)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareComposerRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareComposerRow {
+        return
+            try ShareComposerRow(
+                groupId: FfiConverterString.read(from: &buf),
+                hostRelayUrl: FfiConverterString.read(from: &buf),
+                name: FfiConverterOptionString.read(from: &buf),
+                picture: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ShareComposerRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterString.write(value.hostRelayUrl, into: &buf)
+        FfiConverterOptionString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.picture, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareComposerRow_lift(_ buf: RustBuffer) throws -> ShareComposerRow {
+    return try FfiConverterTypeShareComposerRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareComposerRow_lower(_ value: ShareComposerRow) -> RustBuffer {
+    return FfiConverterTypeShareComposerRow.lower(value)
+}
+
+
+/**
+ * Snapshot for `ViewId::ShareComposer` — the share-extension intake screen.
+ *
+ * Raw fields only (D1). The kernel emits this after draining the App Group
+ * queue so the iOS composer can present the pending share item alongside the
+ * community picker.
+ */
+public struct ShareComposerSnapshot {
+    /**
+     * The pending share item currently being composed, if any.
+     */
+    public var pendingUrl: String
+    public var pendingNote: String
+    public var pendingGroupId: String
+    /**
+     * Available target communities for the picker (raw rows from joined groups).
+     */
+    public var communities: [ShareComposerRow]
+    /**
+     * Non-empty when a drain just completed with at least one success.
+     */
+    public var toast: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The pending share item currently being composed, if any.
+         */pendingUrl: String, pendingNote: String, pendingGroupId: String,
+        /**
+         * Available target communities for the picker (raw rows from joined groups).
+         */communities: [ShareComposerRow],
+        /**
+         * Non-empty when a drain just completed with at least one success.
+         */toast: String?) {
+        self.pendingUrl = pendingUrl
+        self.pendingNote = pendingNote
+        self.pendingGroupId = pendingGroupId
+        self.communities = communities
+        self.toast = toast
+    }
+}
+
+#if compiler(>=6)
+extension ShareComposerSnapshot: Sendable {}
+#endif
+
+
+extension ShareComposerSnapshot: Equatable, Hashable {
+    public static func ==(lhs: ShareComposerSnapshot, rhs: ShareComposerSnapshot) -> Bool {
+        if lhs.pendingUrl != rhs.pendingUrl {
+            return false
+        }
+        if lhs.pendingNote != rhs.pendingNote {
+            return false
+        }
+        if lhs.pendingGroupId != rhs.pendingGroupId {
+            return false
+        }
+        if lhs.communities != rhs.communities {
+            return false
+        }
+        if lhs.toast != rhs.toast {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pendingUrl)
+        hasher.combine(pendingNote)
+        hasher.combine(pendingGroupId)
+        hasher.combine(communities)
+        hasher.combine(toast)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareComposerSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareComposerSnapshot {
+        return
+            try ShareComposerSnapshot(
+                pendingUrl: FfiConverterString.read(from: &buf),
+                pendingNote: FfiConverterString.read(from: &buf),
+                pendingGroupId: FfiConverterString.read(from: &buf),
+                communities: FfiConverterSequenceTypeShareComposerRow.read(from: &buf),
+                toast: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ShareComposerSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pendingUrl, into: &buf)
+        FfiConverterString.write(value.pendingNote, into: &buf)
+        FfiConverterString.write(value.pendingGroupId, into: &buf)
+        FfiConverterSequenceTypeShareComposerRow.write(value.communities, into: &buf)
+        FfiConverterOptionString.write(value.toast, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareComposerSnapshot_lift(_ buf: RustBuffer) throws -> ShareComposerSnapshot {
+    return try FfiConverterTypeShareComposerSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareComposerSnapshot_lower(_ value: ShareComposerSnapshot) -> RustBuffer {
+    return FfiConverterTypeShareComposerSnapshot.lower(value)
 }
 
 
@@ -43696,6 +46265,115 @@ public func FfiConverterTypeWhatsNewEntry_lower(_ value: WhatsNewEntry) -> RustB
 }
 
 
+/**
+ * One What's New changelog entry from the bundled `resources/whats-new.json`.
+ *
+ * Raw protocol data only (D1): Swift formats all display strings from these
+ * raw fields. No bullet formatting, no "New!" badge, no date labels —
+ * those are Swift-side presentation decisions.
+ *
+ * Used both in `KernelEvent::WhatsNewLoaded` and in `WhatsNewSnapshot`.
+ */
+public struct WhatsNewEntryRow {
+    /**
+     * ISO-8601 UTC timestamp string as it appears in the bundled JSON
+     * (e.g. `"2026-05-14T21:45:00Z"`). D1: Swift formats the display date.
+     */
+    public var shippedAtIso: String
+    /**
+     * UNIX seconds parsed from `shipped_at_iso`. D1: no "X ago" label.
+     */
+    public var shippedAtUnix: UInt64
+    /**
+     * Changelog bullet lines for this release. Raw strings — no `"• "` prefix
+     * or markdown formatting added by the kernel (D1: Swift owns presentation).
+     */
+    public var lines: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * ISO-8601 UTC timestamp string as it appears in the bundled JSON
+         * (e.g. `"2026-05-14T21:45:00Z"`). D1: Swift formats the display date.
+         */shippedAtIso: String,
+        /**
+         * UNIX seconds parsed from `shipped_at_iso`. D1: no "X ago" label.
+         */shippedAtUnix: UInt64,
+        /**
+         * Changelog bullet lines for this release. Raw strings — no `"• "` prefix
+         * or markdown formatting added by the kernel (D1: Swift owns presentation).
+         */lines: [String]) {
+        self.shippedAtIso = shippedAtIso
+        self.shippedAtUnix = shippedAtUnix
+        self.lines = lines
+    }
+}
+
+#if compiler(>=6)
+extension WhatsNewEntryRow: Sendable {}
+#endif
+
+
+extension WhatsNewEntryRow: Equatable, Hashable {
+    public static func ==(lhs: WhatsNewEntryRow, rhs: WhatsNewEntryRow) -> Bool {
+        if lhs.shippedAtIso != rhs.shippedAtIso {
+            return false
+        }
+        if lhs.shippedAtUnix != rhs.shippedAtUnix {
+            return false
+        }
+        if lhs.lines != rhs.lines {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shippedAtIso)
+        hasher.combine(shippedAtUnix)
+        hasher.combine(lines)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWhatsNewEntryRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WhatsNewEntryRow {
+        return
+            try WhatsNewEntryRow(
+                shippedAtIso: FfiConverterString.read(from: &buf),
+                shippedAtUnix: FfiConverterUInt64.read(from: &buf),
+                lines: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WhatsNewEntryRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.shippedAtIso, into: &buf)
+        FfiConverterUInt64.write(value.shippedAtUnix, into: &buf)
+        FfiConverterSequenceString.write(value.lines, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWhatsNewEntryRow_lift(_ buf: RustBuffer) throws -> WhatsNewEntryRow {
+    return try FfiConverterTypeWhatsNewEntryRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWhatsNewEntryRow_lower(_ value: WhatsNewEntryRow) -> RustBuffer {
+    return FfiConverterTypeWhatsNewEntryRow.lower(value)
+}
+
+
 public struct WhatsNewPresentationSnapshot {
     public var entries: [WhatsNewEntry]
     public var shouldPresent: Bool
@@ -43771,6 +46449,102 @@ public func FfiConverterTypeWhatsNewPresentationSnapshot_lift(_ buf: RustBuffer)
 #endif
 public func FfiConverterTypeWhatsNewPresentationSnapshot_lower(_ value: WhatsNewPresentationSnapshot) -> RustBuffer {
     return FfiConverterTypeWhatsNewPresentationSnapshot.lower(value)
+}
+
+
+/**
+ * Snapshot for `ViewId::WhatsNew` — the What's New sheet.
+ *
+ * Device-local: never derived from or published to Nostr events.
+ * Raw-data doctrine (D1): Swift formats all display strings from these raw
+ * fields. No `"N new features"` count label, no badge formatting.
+ *
+ * Bounded by the number of entries in the bundled JSON (typically < 20;
+ * Non-Negotiable #7 — does not grow with the event store).
+ */
+public struct WhatsNewSnapshot {
+    /**
+     * Unseen What's New entries (filtered: `shipped_at_unix > last_seen_marker`).
+     * Sorted newest-first. Empty when no unseen entries exist.
+     */
+    public var entries: [WhatsNewEntryRow]
+    /**
+     * `true` when `entries` is non-empty and the sheet should be presented.
+     * Swift uses this flag to trigger the sheet presentation.
+     */
+    public var shouldPresent: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Unseen What's New entries (filtered: `shipped_at_unix > last_seen_marker`).
+         * Sorted newest-first. Empty when no unseen entries exist.
+         */entries: [WhatsNewEntryRow],
+        /**
+         * `true` when `entries` is non-empty and the sheet should be presented.
+         * Swift uses this flag to trigger the sheet presentation.
+         */shouldPresent: Bool) {
+        self.entries = entries
+        self.shouldPresent = shouldPresent
+    }
+}
+
+#if compiler(>=6)
+extension WhatsNewSnapshot: Sendable {}
+#endif
+
+
+extension WhatsNewSnapshot: Equatable, Hashable {
+    public static func ==(lhs: WhatsNewSnapshot, rhs: WhatsNewSnapshot) -> Bool {
+        if lhs.entries != rhs.entries {
+            return false
+        }
+        if lhs.shouldPresent != rhs.shouldPresent {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(entries)
+        hasher.combine(shouldPresent)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWhatsNewSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WhatsNewSnapshot {
+        return
+            try WhatsNewSnapshot(
+                entries: FfiConverterSequenceTypeWhatsNewEntryRow.read(from: &buf),
+                shouldPresent: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WhatsNewSnapshot, into buf: inout [UInt8]) {
+        FfiConverterSequenceTypeWhatsNewEntryRow.write(value.entries, into: &buf)
+        FfiConverterBool.write(value.shouldPresent, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWhatsNewSnapshot_lift(_ buf: RustBuffer) throws -> WhatsNewSnapshot {
+    return try FfiConverterTypeWhatsNewSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWhatsNewSnapshot_lower(_ value: WhatsNewSnapshot) -> RustBuffer {
+    return FfiConverterTypeWhatsNewSnapshot.lower(value)
 }
 
 // Note that we don't yet support `indirect` for enums.
@@ -43851,526 +46625,6 @@ public func FfiConverterTypeAddRelayProbeStatus_lower(_ value: AddRelayProbeStat
 
 
 extension AddRelayProbeStatus: Equatable, Hashable {}
-
-
-
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-/**
- * Every user or platform action the kernel understands.
- *
- * Dispatch is fire-and-forget (`dispatch(action)` returns `()`; Non-Negotiable #3).
- * Errors never propagate back as `Result` — they surface as typed `ViewSnapshot` state.
- *
- * Append-only: new variants at the bottom keep rebases mechanical.
- */
-
-public enum AppAction {
-
-    /**
-     * Attempt to restore a prior session from the native keychain.
-     */
-    case restoreSession
-    /**
-     * Retry a failed restore (same effect as `RestoreSession`; separate
-     * variant for UI affordance clarity).
-     */
-    case retryRestore
-    /**
-     * Clear the active session, emit a `ClearSession` capability request,
-     * bump the session epoch to cancel in-flight view-scoped effects.
-     */
-    case logout
-    /**
-     * Mark onboarding as complete in the durable `OnboardingStore`.
-     */
-    case completeOnboarding
-    /**
-     * Switch the active root tab.
-     */
-    case selectRootTab(tab: RootTab
-    )
-    /**
-     * Present a named sheet over the root shell.
-     */
-    case presentSheet(sheetId: String
-    )
-    /**
-     * Dismiss the topmost sheet.
-     */
-    case dismissSheet
-    /**
-     * Sign in with a raw nsec (bech32 `nsec1…` or hex).
-     *
-     * The reducer transitions to `SessionState::SigningIn` and emits
-     * `Effect::AddNsecSigner`. Success is signalled by the identity-change
-     * observer firing `KernelEvent::IdentityChanged(Some(pubkey))`. Failure
-     * surfaces as `SessionState::SignInFailed` (D6 — never a `Result`).
-     */
-    case signInNsec(nsec: String
-    )
-    /**
-     * Sign in via NIP-46 bunker URI (e.g. `bunker://pubkey?relay=…`).
-     *
-     * Requires `nmp_signer_broker_init` to have been called at boot. The
-     * reducer transitions to `SessionState::SigningIn{Bunker}` and emits
-     * `Effect::AddBunkerSigner`. The broker completes the NIP-46 handshake
-     * async; success arrives as `KernelEvent::IdentityChanged(Some(pubkey))`.
-     */
-    case pairBunker(uri: String
-    )
-    /**
-     * Request a NostrConnect URI so the user can scan it on a remote signer.
-     *
-     * Requires `nmp_signer_broker_init` to have been called at boot. The
-     * reducer transitions to `SessionState::SigningIn{NostrConnect}` and emits
-     * `Effect::MintNostrConnectUri`. The URI is delivered back via
-     * `KernelEvent::NostrConnectUriReady`; completion arrives as
-     * `KernelEvent::IdentityChanged(Some(pubkey))` once the remote signer
-     * scans the QR and completes the handshake.
-     */
-    case startNostrConnect
-    /**
-     * Sign in via NIP-55 external signer app (e.g. Amber on Android).
-     *
-     * Requires `nmp_external_signer_init` to have been called at boot. The
-     * reducer transitions to `SessionState::SigningIn{Nip55}` and emits
-     * `Effect::StartNip55SignIn`. Success arrives via the identity-change
-     * observer as `KernelEvent::IdentityChanged(Some(pubkey))`.
-     */
-    case signInNip55
-    /**
-     * Create a fresh Nostr account with the supplied display name.
-     *
-     * Relays and initial follows are Rust POLICY injected from `AppConfig` —
-     * they are NOT caller arguments (D3: no hardcoded relay literals in
-     * kernel logic). Bootstrap publish semantics follow ADR-0059: kind:0 and
-     * kind:10002 are published; kind:3 is skipped when `initial_follows` is
-     * empty (per ADR-0059 §5).
-     *
-     * The reducer transitions to `SessionState::SigningIn{CreateAccount}` and
-     * emits `Effect::CreateAccount`. Success arrives via the existing
-     * `IdentityChanged(Some(pubkey))` observer → `SessionState::Present`.
-     * The 2A clock timeout (SIGN_IN_TIMEOUT_SECS) covers the SigningIn period.
-     */
-    case createAccount(profileName: String
-    )
-    /**
-     * Add a relay to the active account's NIP-65 relay list.
-     *
-     * `url` is the WebSocket relay URL (opaque string — kernel never
-     * constructs URLs; D3). `role` is the NIP-65 / kind:10002 role for the
-     * relay; the kernel normalises it via `RelayRole::normalize` before
-     * forwarding to nmp. Fire-and-forget: emits `Effect::AddRelay`.
-     */
-    case addRelay(url: String, role: RelayRole
-    )
-    /**
-     * Remove a relay from the active account's NIP-65 relay list.
-     *
-     * Fire-and-forget: emits `Effect::RemoveRelay`. No-op if the relay is
-     * not present (nmp is idempotent here; D6).
-     */
-    case removeRelay(url: String
-    )
-    /**
-     * Change the role of an already-configured relay.
-     *
-     * Semantically equivalent to `RemoveRelay` + `AddRelay` in nmp's relay
-     * edit model (T66a). Fire-and-forget: emits `Effect::SetRelayRole`.
-     */
-    case setRelayRole(url: String, role: RelayRole
-    )
-    /**
-     * Persist the rooms relay list (relays that host NIP-29 rooms) as a
-     * kind:30078 app-data event with d-tag `"com.highlighter.relays"`.
-     *
-     * `relay_urls` is the ordered list of room relay WebSocket URLs to store.
-     * The kernel builds the JSON payload and publishes via
-     * `ActorCommand::PublishRawEvent`. No wss-scheme literals are hardcoded here;
-     * the hl-owned d-tag string `"com.highlighter.relays"` is the only
-     * constant (it is product-controlled, not a relay URL).
-     * Fire-and-forget: emits `Effect::PublishRoomsRelayList`.
-     */
-    case setRoomsRelayList(relayUrls: [String]
-    )
-    /**
-     * Follow a pubkey — appends it to the active account's kind:3 follow set
-     * and republishes. Fire-and-forget (D6, Non-Negotiable #3): the updated
-     * follow list arrives back via the `FollowListUpdated` projection frame.
-     *
-     * `pubkey` is a raw 64-char lowercase hex pubkey. Hex-shape validation
-     * lives in the nmp-nip02 action module; semantic errors surface as NMP
-     * toasts rather than crossing the dispatch boundary.
-     */
-    case follow(pubkey: String
-    )
-    /**
-     * Unfollow a pubkey — removes it from the active account's kind:3 follow
-     * set and republishes. Symmetric with `Follow`; fire-and-forget (D6).
-     */
-    case unfollow(pubkey: String
-    )
-    /**
-     * Start room discovery on a relay — dispatches `"nmp.nip29.discover"` action
-     * (pushes the relay_discovery_interest) and wires the DiscoveredGroupsProjection.
-     * `relay_url` is the WebSocket relay URL to discover rooms on (opaque string;
-     * kernel never constructs relay URLs — D3). Fire-and-forget: the discovered
-     * groups catalog arrives via the `DiscoveredGroupsUpdated` projection event.
-     */
-    case startRoomDiscovery(relayUrl: String
-    )
-    /**
-     * Open a profile view for `pubkey` — triggers `nmp_app_claim_profile` via
-     * `Effect::ClaimProfile`. The profile card arrives back as
-     * `KernelEvent::ProfileCardUpdated` via the `"claimed_profiles"` typed
-     * sidecar on the NMP update callback.
-     *
-     * `pubkey` is a raw 64-char lowercase hex pubkey. The kernel uses a stable
-     * consumer-id (`"hl.profile.<pubkey>"`) so the refcount is scoped to this
-     * view instance. Fire-and-forget (D6, Non-Negotiable #3).
-     */
-    case claimProfile(pubkey: String
-    )
-    /**
-     * Close a profile view — triggers `nmp_app_release_profile`. Decrements the
-     * per-consumer refcount; when it reaches zero NMP cancels the kind:0
-     * subscription. Fire-and-forget (D6).
-     */
-    case releaseProfile(pubkey: String
-    )
-    /**
-     * Join a NIP-29 group by publishing a kind:9021 join-request via
-     * `"nmp.nip29.join"`. The relay's response arrives as a joined-groups
-     * projection update (`KernelEvent::JoinedGroupsUpdated`). Fire-and-forget.
-     *
-     * `group_id` is the NIP-29 local group id; `host_relay_url` is the relay
-     * URL (opaque string — kernel never constructs URLs, D3). `invite_code`
-     * is required for closed groups, optional for open groups.
-     *
-     * NOTE: LeaveRoom (kind:9022) is NOT implemented — there is no
-     * `nmp.nip29.leave` action on pinned nmp b4404159. See nmp issue #1598.
-     */
-    case joinRoom(
-        /**
-         * NIP-29 local group id.
-         */groupId: String,
-        /**
-         * Host relay WebSocket URL (opaque — D3).
-         */hostRelayUrl: String,
-        /**
-         * Optional preauth invite code for closed groups.
-         */inviteCode: String?
-    )
-    /**
-     * Create a new public NIP-29 group by publishing kind:9007 + kind:9002
-     * via `"nmp.nip29.create_public_group"`. Fire-and-forget.
-     *
-     * `group_id` is the desired local group id (`[a-z0-9-_]+`). `name` is
-     * the human-readable display name (required). `about` is optional.
-     */
-    case createRoom(
-        /**
-         * NIP-29 local group id (must match `[a-z0-9-_]+`).
-         */groupId: String,
-        /**
-         * Host relay WebSocket URL (opaque — D3).
-         */hostRelayUrl: String,
-        /**
-         * Human-readable room name (required, non-empty).
-         */name: String,
-        /**
-         * Optional description.
-         */about: String?
-    )
-    /**
-     * Add a member to a NIP-29 group by publishing kind:9000 via
-     * `"nmp.nip29.put_user"`. Requires admin rights on the target relay.
-     * Fire-and-forget.
-     *
-     * `pubkey` is a raw 64-char lowercase hex pubkey. `role` is an optional
-     * role string (e.g. `"admin"`) or `None` for a plain member.
-     */
-    case addRoomMember(
-        /**
-         * NIP-29 local group id.
-         */groupId: String,
-        /**
-         * Host relay WebSocket URL (opaque — D3).
-         */hostRelayUrl: String,
-        /**
-         * Raw 64-char lowercase hex pubkey of the user to add.
-         */pubkey: String,
-        /**
-         * Optional role (e.g. `"admin"`). `None` = plain member.
-         */role: String?
-    )
-    /**
-     * Mint one or more invite codes for a NIP-29 group by publishing kind:9009
-     * via `"nmp.nip29.create_invite"`. Requires admin rights. Fire-and-forget.
-     *
-     * `codes` must be non-empty; nmp fans out into multiple kind:9009 events
-     * if more than 10 codes are supplied (MAX_CODES_PER_INVITE_EVENT).
-     * The invite_link_base URL is NOT a kernel concern — Swift composes the
-     * full invite URL from `AppState::room_policy.invite_link_base` + code (D3).
-     */
-    case createRoomInvites(
-        /**
-         * NIP-29 local group id.
-         */groupId: String,
-        /**
-         * Host relay WebSocket URL (opaque — D3).
-         */hostRelayUrl: String,
-        /**
-         * Invite codes (≥1 required; max 128 chars each; printable ASCII only).
-         */codes: [String]
-    )
-}
-
-
-#if compiler(>=6)
-extension AppAction: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeAppAction: FfiConverterRustBuffer {
-    typealias SwiftType = AppAction
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppAction {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-
-        case 1: return .restoreSession
-
-        case 2: return .retryRestore
-
-        case 3: return .logout
-
-        case 4: return .completeOnboarding
-
-        case 5: return .selectRootTab(tab: try FfiConverterTypeRootTab.read(from: &buf)
-        )
-
-        case 6: return .presentSheet(sheetId: try FfiConverterString.read(from: &buf)
-        )
-
-        case 7: return .dismissSheet
-
-        case 8: return .signInNsec(nsec: try FfiConverterString.read(from: &buf)
-        )
-
-        case 9: return .pairBunker(uri: try FfiConverterString.read(from: &buf)
-        )
-
-        case 10: return .startNostrConnect
-
-        case 11: return .signInNip55
-
-        case 12: return .createAccount(profileName: try FfiConverterString.read(from: &buf)
-        )
-
-        case 13: return .addRelay(url: try FfiConverterString.read(from: &buf), role: try FfiConverterTypeRelayRole.read(from: &buf)
-        )
-
-        case 14: return .removeRelay(url: try FfiConverterString.read(from: &buf)
-        )
-
-        case 15: return .setRelayRole(url: try FfiConverterString.read(from: &buf), role: try FfiConverterTypeRelayRole.read(from: &buf)
-        )
-
-        case 16: return .setRoomsRelayList(relayUrls: try FfiConverterSequenceString.read(from: &buf)
-        )
-
-        case 17: return .follow(pubkey: try FfiConverterString.read(from: &buf)
-        )
-
-        case 18: return .unfollow(pubkey: try FfiConverterString.read(from: &buf)
-        )
-
-        case 19: return .startRoomDiscovery(relayUrl: try FfiConverterString.read(from: &buf)
-        )
-
-        case 20: return .claimProfile(pubkey: try FfiConverterString.read(from: &buf)
-        )
-
-        case 21: return .releaseProfile(pubkey: try FfiConverterString.read(from: &buf)
-        )
-
-        case 22: return .joinRoom(groupId: try FfiConverterString.read(from: &buf), hostRelayUrl: try FfiConverterString.read(from: &buf), inviteCode: try FfiConverterOptionString.read(from: &buf)
-        )
-
-        case 23: return .createRoom(groupId: try FfiConverterString.read(from: &buf), hostRelayUrl: try FfiConverterString.read(from: &buf), name: try FfiConverterString.read(from: &buf), about: try FfiConverterOptionString.read(from: &buf)
-        )
-
-        case 24: return .addRoomMember(groupId: try FfiConverterString.read(from: &buf), hostRelayUrl: try FfiConverterString.read(from: &buf), pubkey: try FfiConverterString.read(from: &buf), role: try FfiConverterOptionString.read(from: &buf)
-        )
-
-        case 25: return .createRoomInvites(groupId: try FfiConverterString.read(from: &buf), hostRelayUrl: try FfiConverterString.read(from: &buf), codes: try FfiConverterSequenceString.read(from: &buf)
-        )
-
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: AppAction, into buf: inout [UInt8]) {
-        switch value {
-
-
-        case .restoreSession:
-            writeInt(&buf, Int32(1))
-
-
-        case .retryRestore:
-            writeInt(&buf, Int32(2))
-
-
-        case .logout:
-            writeInt(&buf, Int32(3))
-
-
-        case .completeOnboarding:
-            writeInt(&buf, Int32(4))
-
-
-        case let .selectRootTab(tab):
-            writeInt(&buf, Int32(5))
-            FfiConverterTypeRootTab.write(tab, into: &buf)
-
-
-        case let .presentSheet(sheetId):
-            writeInt(&buf, Int32(6))
-            FfiConverterString.write(sheetId, into: &buf)
-
-
-        case .dismissSheet:
-            writeInt(&buf, Int32(7))
-
-
-        case let .signInNsec(nsec):
-            writeInt(&buf, Int32(8))
-            FfiConverterString.write(nsec, into: &buf)
-
-
-        case let .pairBunker(uri):
-            writeInt(&buf, Int32(9))
-            FfiConverterString.write(uri, into: &buf)
-
-
-        case .startNostrConnect:
-            writeInt(&buf, Int32(10))
-
-
-        case .signInNip55:
-            writeInt(&buf, Int32(11))
-
-
-        case let .createAccount(profileName):
-            writeInt(&buf, Int32(12))
-            FfiConverterString.write(profileName, into: &buf)
-
-
-        case let .addRelay(url,role):
-            writeInt(&buf, Int32(13))
-            FfiConverterString.write(url, into: &buf)
-            FfiConverterTypeRelayRole.write(role, into: &buf)
-
-
-        case let .removeRelay(url):
-            writeInt(&buf, Int32(14))
-            FfiConverterString.write(url, into: &buf)
-
-
-        case let .setRelayRole(url,role):
-            writeInt(&buf, Int32(15))
-            FfiConverterString.write(url, into: &buf)
-            FfiConverterTypeRelayRole.write(role, into: &buf)
-
-
-        case let .setRoomsRelayList(relayUrls):
-            writeInt(&buf, Int32(16))
-            FfiConverterSequenceString.write(relayUrls, into: &buf)
-
-
-        case let .follow(pubkey):
-            writeInt(&buf, Int32(17))
-            FfiConverterString.write(pubkey, into: &buf)
-
-
-        case let .unfollow(pubkey):
-            writeInt(&buf, Int32(18))
-            FfiConverterString.write(pubkey, into: &buf)
-
-
-        case let .startRoomDiscovery(relayUrl):
-            writeInt(&buf, Int32(19))
-            FfiConverterString.write(relayUrl, into: &buf)
-
-
-        case let .claimProfile(pubkey):
-            writeInt(&buf, Int32(20))
-            FfiConverterString.write(pubkey, into: &buf)
-
-
-        case let .releaseProfile(pubkey):
-            writeInt(&buf, Int32(21))
-            FfiConverterString.write(pubkey, into: &buf)
-
-
-        case let .joinRoom(groupId,hostRelayUrl,inviteCode):
-            writeInt(&buf, Int32(22))
-            FfiConverterString.write(groupId, into: &buf)
-            FfiConverterString.write(hostRelayUrl, into: &buf)
-            FfiConverterOptionString.write(inviteCode, into: &buf)
-
-
-        case let .createRoom(groupId,hostRelayUrl,name,about):
-            writeInt(&buf, Int32(23))
-            FfiConverterString.write(groupId, into: &buf)
-            FfiConverterString.write(hostRelayUrl, into: &buf)
-            FfiConverterString.write(name, into: &buf)
-            FfiConverterOptionString.write(about, into: &buf)
-
-
-        case let .addRoomMember(groupId,hostRelayUrl,pubkey,role):
-            writeInt(&buf, Int32(24))
-            FfiConverterString.write(groupId, into: &buf)
-            FfiConverterString.write(hostRelayUrl, into: &buf)
-            FfiConverterString.write(pubkey, into: &buf)
-            FfiConverterOptionString.write(role, into: &buf)
-
-
-        case let .createRoomInvites(groupId,hostRelayUrl,codes):
-            writeInt(&buf, Int32(25))
-            FfiConverterString.write(groupId, into: &buf)
-            FfiConverterString.write(hostRelayUrl, into: &buf)
-            FfiConverterSequenceString.write(codes, into: &buf)
-
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAppAction_lift(_ buf: RustBuffer) throws -> AppAction {
-    return try FfiConverterTypeAppAction.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAppAction_lower(_ value: AppAction) -> RustBuffer {
-    return FfiConverterTypeAppAction.lower(value)
-}
-
-
-extension AppAction: Equatable, Hashable {}
 
 
 
@@ -44707,6 +46961,144 @@ extension BookmarkLibraryScope: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * One bookmark item from the active account's NIP-51 kind:10003 list.
+ *
+ * Raw protocol data only (D1): no presentation strings, no formatted labels,
+ * no toolbar chrome. Swift formats all user-visible bookmark UI.
+ *
+ * Mirrors `nmp_nip51::BookmarkItem` but as a `uniffi::Enum` for FFI.
+ * Variants match the NIP-51 tag types: `e` (event), `a` (address),
+ * `r` (URL), `t` (hashtag).
+ */
+
+public enum BookmarkRow {
+
+    /**
+     * `["e", <event-id>, <optional-relay>]` — a bookmarked Nostr event.
+     */
+    case event(
+        /**
+         * Raw 64-char lowercase hex event id.
+         */eventId: String,
+        /**
+         * Optional relay hint (opaque URL string; D3 — never constructed).
+         */relay: String?
+    )
+    /**
+     * `["a", <kind:pubkey:d>, <optional-relay>]` — a bookmarked replaceable event.
+     */
+    case address(
+        /**
+         * NIP-19 address coordinate: `"<kind>:<pubkey>:<d-tag>"`.
+         */coordinate: String,
+        /**
+         * Optional relay hint.
+         */relay: String?
+    )
+    /**
+     * `["r", <url>]` — a bookmarked web URL.
+     */
+    case url(
+        /**
+         * Raw HTTP/HTTPS URL string.
+         */url: String
+    )
+    /**
+     * `["t", <hashtag>]` — a bookmarked hashtag.
+     */
+    case hashtag(
+        /**
+         * Normalised lowercase hashtag string (without `#` prefix).
+         */hashtag: String
+    )
+}
+
+
+#if compiler(>=6)
+extension BookmarkRow: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkRow: FfiConverterRustBuffer {
+    typealias SwiftType = BookmarkRow
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkRow {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .event(eventId: try FfiConverterString.read(from: &buf), relay: try FfiConverterOptionString.read(from: &buf)
+        )
+
+        case 2: return .address(coordinate: try FfiConverterString.read(from: &buf), relay: try FfiConverterOptionString.read(from: &buf)
+        )
+
+        case 3: return .url(url: try FfiConverterString.read(from: &buf)
+        )
+
+        case 4: return .hashtag(hashtag: try FfiConverterString.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: BookmarkRow, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .event(eventId,relay):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(eventId, into: &buf)
+            FfiConverterOptionString.write(relay, into: &buf)
+
+
+        case let .address(coordinate,relay):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(coordinate, into: &buf)
+            FfiConverterOptionString.write(relay, into: &buf)
+
+
+        case let .url(url):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(url, into: &buf)
+
+
+        case let .hashtag(hashtag):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(hashtag, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkRow_lift(_ buf: RustBuffer) throws -> BookmarkRow {
+    return try FfiConverterTypeBookmarkRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkRow_lower(_ value: BookmarkRow) -> RustBuffer {
+    return FfiConverterTypeBookmarkRow.lower(value)
+}
+
+
+extension BookmarkRow: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * A request from the Rust kernel to the native shell to execute an OS
  * capability. Emitted via `HighlighterObserver::on_capability_request`.
  */
@@ -44717,6 +47109,11 @@ public enum CapabilityRequest {
      * Keychain load/clear request.
      */
     case keychain(KeychainOp
+    )
+    /**
+     * Share-extension App Group read/write request.
+     */
+    case share(ShareOp
     )
 }
 
@@ -44738,6 +47135,9 @@ public struct FfiConverterTypeCapabilityRequest: FfiConverterRustBuffer {
         case 1: return .keychain(try FfiConverterTypeKeychainOp.read(from: &buf)
         )
 
+        case 2: return .share(try FfiConverterTypeShareOp.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -44749,6 +47149,11 @@ public struct FfiConverterTypeCapabilityRequest: FfiConverterRustBuffer {
         case let .keychain(v1):
             writeInt(&buf, Int32(1))
             FfiConverterTypeKeychainOp.write(v1, into: &buf)
+
+
+        case let .share(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeShareOp.write(v1, into: &buf)
 
         }
     }
@@ -44791,6 +47196,11 @@ public enum CapabilityResult {
      */
     case keychain(KeychainResult
     )
+    /**
+     * Response to a `CapabilityRequest::Share`.
+     */
+    case share(ShareResult
+    )
 }
 
 
@@ -44811,6 +47221,9 @@ public struct FfiConverterTypeCapabilityResult: FfiConverterRustBuffer {
         case 1: return .keychain(try FfiConverterTypeKeychainResult.read(from: &buf)
         )
 
+        case 2: return .share(try FfiConverterTypeShareResult.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -44822,6 +47235,11 @@ public struct FfiConverterTypeCapabilityResult: FfiConverterRustBuffer {
         case let .keychain(v1):
             writeInt(&buf, Int32(1))
             FfiConverterTypeKeychainResult.write(v1, into: &buf)
+
+
+        case let .share(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeShareResult.write(v1, into: &buf)
 
         }
     }
@@ -45568,6 +47986,92 @@ public func FfiConverterTypeHighlightSourceKind_lower(_ value: HighlightSourceKi
 
 
 extension HighlightSourceKind: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Discriminant for a row in the merged home feed.
+ *
+ * D1: no user-visible label — Swift maps this to display strings.
+ * `Highlight` rows carry one or more highlight event ids grouped by source;
+ * `Article` rows carry the article coordinate for a standalone (non-highlighted) read.
+ *
+ * Named `KernelHomeFeedRowKind` to avoid collision with any legacy type in the
+ * bespoke live lane (Non-Negotiable #6 coexistence).
+ */
+
+public enum KernelHomeFeedRowKind {
+
+    /**
+     * One or more highlights grouped by the same source reference (article/URL).
+     */
+    case highlight
+    /**
+     * A standalone article read (not suppressed by any highlight).
+     */
+    case article
+}
+
+
+#if compiler(>=6)
+extension KernelHomeFeedRowKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelHomeFeedRowKind: FfiConverterRustBuffer {
+    typealias SwiftType = KernelHomeFeedRowKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelHomeFeedRowKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .highlight
+
+        case 2: return .article
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: KernelHomeFeedRowKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .highlight:
+            writeInt(&buf, Int32(1))
+
+
+        case .article:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelHomeFeedRowKind_lift(_ buf: RustBuffer) throws -> KernelHomeFeedRowKind {
+    return try FfiConverterTypeKernelHomeFeedRowKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelHomeFeedRowKind_lower(_ value: KernelHomeFeedRowKind) -> RustBuffer {
+    return FfiConverterTypeKernelHomeFeedRowKind.lower(value)
+}
+
+
+extension KernelHomeFeedRowKind: Equatable, Hashable {}
 
 
 
@@ -48167,6 +50671,288 @@ extension RouteKind: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * NIP-50 search scope — which event kinds the relay-search targets.
+ *
+ * Serialised into the `LogicalInterest`'s `InterestShape.kinds` field via
+ * `nmp_nip50::SearchScope::interest_shape()`. Append-only.
+ */
+
+public enum SearchScope {
+
+    /**
+     * kind:0 profile metadata — search for users.
+     */
+    case users
+    /**
+     * kind:30023 long-form articles — search for articles.
+     */
+    case longForm
+    /**
+     * kind:1 short text notes — search for notes.
+     */
+    case notes
+}
+
+
+#if compiler(>=6)
+extension SearchScope: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSearchScope: FfiConverterRustBuffer {
+    typealias SwiftType = SearchScope
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchScope {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .users
+
+        case 2: return .longForm
+
+        case 3: return .notes
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SearchScope, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .users:
+            writeInt(&buf, Int32(1))
+
+
+        case .longForm:
+            writeInt(&buf, Int32(2))
+
+
+        case .notes:
+            writeInt(&buf, Int32(3))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchScope_lift(_ buf: RustBuffer) throws -> SearchScope {
+    return try FfiConverterTypeSearchScope.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSearchScope_lower(_ value: SearchScope) -> RustBuffer {
+    return FfiConverterTypeSearchScope.lower(value)
+}
+
+
+extension SearchScope: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * What the kernel is asking the native share bridge to do.
+ */
+
+public enum ShareOp {
+
+    /**
+     * Read `pending-shares-v1.json` from the App Group, return its contents
+     * as raw payloads, then delete the file. The kernel deduplicate and
+     * processes the items; native just reads and clears the handoff store.
+     */
+    case drainQueue
+    /**
+     * Write the communities-picker JSON the iOS share extension reads at
+     * launch time into the App Group container
+     * (`joined-communities-v1.json`). The JSON bytes are built by the kernel
+     * from `AppState::communities` (ported `communities_snapshot_json` logic).
+     * Native atomically overwrites the file.
+     */
+    case writeCommunitiesSnapshot(
+        /**
+         * UTF-8 JSON bytes produced by the kernel.
+         */jsonBytes: Data
+    )
+}
+
+
+#if compiler(>=6)
+extension ShareOp: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareOp: FfiConverterRustBuffer {
+    typealias SwiftType = ShareOp
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareOp {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .drainQueue
+
+        case 2: return .writeCommunitiesSnapshot(jsonBytes: try FfiConverterData.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ShareOp, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .drainQueue:
+            writeInt(&buf, Int32(1))
+
+
+        case let .writeCommunitiesSnapshot(jsonBytes):
+            writeInt(&buf, Int32(2))
+            FfiConverterData.write(jsonBytes, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareOp_lift(_ buf: RustBuffer) throws -> ShareOp {
+    return try FfiConverterTypeShareOp.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareOp_lower(_ value: ShareOp) -> RustBuffer {
+    return FfiConverterTypeShareOp.lower(value)
+}
+
+
+extension ShareOp: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Raw result from the native share capability bridge, reported via
+ * `provide_capability_result`. Errors are data (D6).
+ */
+
+public enum ShareResult {
+
+    /**
+     * `DrainQueue` completed. Contains all pending share payloads (possibly
+     * empty when no shares were queued). The native side has already deleted
+     * the file.
+     */
+    case pending([RawSharePayload]
+    )
+    /**
+     * `WriteCommunitiesSnapshot` completed successfully.
+     */
+    case communitiesWritten
+    /**
+     * A native OS error occurred (file-not-found counts as empty, not an error
+     * — see note in kernel domain handler). Errors are data (D6).
+     */
+    case error(String
+    )
+}
+
+
+#if compiler(>=6)
+extension ShareResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeShareResult: FfiConverterRustBuffer {
+    typealias SwiftType = ShareResult
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ShareResult {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .pending(try FfiConverterSequenceTypeRawSharePayload.read(from: &buf)
+        )
+
+        case 2: return .communitiesWritten
+
+        case 3: return .error(try FfiConverterString.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ShareResult, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .pending(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterSequenceTypeRawSharePayload.write(v1, into: &buf)
+
+
+        case .communitiesWritten:
+            writeInt(&buf, Int32(2))
+
+
+        case let .error(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareResult_lift(_ buf: RustBuffer) throws -> ShareResult {
+    return try FfiConverterTypeShareResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeShareResult_lower(_ value: ShareResult) -> RustBuffer {
+    return FfiConverterTypeShareResult.lower(value)
+}
+
+
+extension ShareResult: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * Stable identifier for an open view instance.
  *
  * In Phase 1 there are two: the app-root decision surface and the root shell.
@@ -48225,6 +51011,83 @@ public enum ViewId {
          * NIP-29 local group id.
          */groupId: String
     )
+    /**
+     * Bookmark library view — the active account's NIP-51 kind:10003 list.
+     * Kind:10003 article-bookmark toggle only (sets/web/curation stay bespoke).
+     */
+    case bookmarks
+    /**
+     * NIP-23 article reader view for a specific kind:30023 article.
+     *
+     * `address` is the addressable coordinate `kind:author_hex:d_tag` that
+     * identifies the article. Opened by `AppAction::OpenArticle{address}`;
+     * closed by `AppAction::CloseArticle{address}`. The snapshot is computed
+     * directly from `AppState::articles` — no NMP claim is needed because the
+     * longform typed projection already carries full `ArticleProjection`
+     * documents (including `content_tree`) for every article seen this session.
+     */
+    case articleReader(
+        /**
+         * Addressable coordinate: `kind:author_hex:d_tag`.
+         */address: String
+    )
+    /**
+     * NIP-50 relay search results view.
+     *
+     * Opened when the user submits a search query; closed when the user
+     * navigates away. On open (lifecycle): no projection wiring needed — the
+     * `SearchResultsProjection` is registered when `AppAction::RunSearch` is
+     * dispatched. On close: `AppState::search_results` is cleared to bound
+     * memory. The snapshot is `ViewSnapshot::Search(SearchSnapshot)`.
+     */
+    case search
+    /**
+     * "Following reads" article feed — kind:30023 events over the active
+     * account's follow authors, pulled via the Phase 4F feed-pull engine.
+     *
+     * On open: `articles_feed::lifecycle_effects_for_view_open` registers the
+     * `"hl.feed.articles"` pull cursor (fail-closed when follows is empty) and
+     * emits an initial `DrainFeed` for the first page.
+     * On close: `articles_feed::lifecycle_effects_for_view_close` releases the
+     * cursor. The snapshot is `ViewSnapshot::ArticleFeed(ArticleFeedSnapshot)`.
+     *
+     * Pagination: the UI dispatches `AppAction::LoadMoreArticles` on
+     * scroll-to-end; the reducer emits `DrainFeed` (D8: no polling).
+     */
+    case articleFeed
+    /**
+     * Home/own highlights feed — kind:9802 events via the `"hl.feed.highlights"`
+     * pull cursor (ADR-0058). On open: emits `RegisterFeedCursor` + `DrainFeed`.
+     * On close: emits `ReleaseFeedCursor`. The snapshot is
+     * `ViewSnapshot::HighlightFeed(HighlightFeedSnapshot)`.
+     */
+    case highlightFeed
+    /**
+     * Merged home feed — composition of the article feed (Phase 4G, kind:30023)
+     * and highlight feed (Phase 4H, kind:9802). On open: emits lifecycle effects
+     * for both underlying feeds. On close: releases both cursors. The snapshot
+     * is `ViewSnapshot::HomeFeed(HomeFeedSnapshot)`.
+     */
+    case homeFeed
+    /**
+     * What's New sheet — device-local seen-state (no nostr publish).
+     */
+    case whatsNew
+    /**
+     * Book picker / ISBN preview — shows pending lookup + last result.
+     * Snapshot: `ViewSnapshot::BookPicker(BookPickerKernelSnapshot)`.
+     */
+    case bookPicker
+    /**
+     * Share-extension intake composer.
+     *
+     * Opened by the main app when it receives a `highlighter://process-share`
+     * URL open (after the share extension wrote `pending-shares-v1.json` to the
+     * App Group and dispatched `AppAction::DrainShareQueue`). The snapshot
+     * is `ViewSnapshot::ShareComposer(ShareComposerSnapshot)` — raw fields
+     * for the pending share item and the available community picker rows (D1).
+     */
+    case shareComposer
 }
 
 
@@ -48259,6 +51122,25 @@ public struct FfiConverterTypeViewId: FfiConverterRustBuffer {
 
         case 8: return .roomHome(groupId: try FfiConverterString.read(from: &buf)
         )
+
+        case 9: return .bookmarks
+
+        case 10: return .articleReader(address: try FfiConverterString.read(from: &buf)
+        )
+
+        case 11: return .search
+
+        case 12: return .articleFeed
+
+        case 13: return .highlightFeed
+
+        case 14: return .homeFeed
+
+        case 15: return .whatsNew
+
+        case 16: return .bookPicker
+
+        case 17: return .shareComposer
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -48300,6 +51182,43 @@ public struct FfiConverterTypeViewId: FfiConverterRustBuffer {
         case let .roomHome(groupId):
             writeInt(&buf, Int32(8))
             FfiConverterString.write(groupId, into: &buf)
+
+
+        case .bookmarks:
+            writeInt(&buf, Int32(9))
+
+
+        case let .articleReader(address):
+            writeInt(&buf, Int32(10))
+            FfiConverterString.write(address, into: &buf)
+
+
+        case .search:
+            writeInt(&buf, Int32(11))
+
+
+        case .articleFeed:
+            writeInt(&buf, Int32(12))
+
+
+        case .highlightFeed:
+            writeInt(&buf, Int32(13))
+
+
+        case .homeFeed:
+            writeInt(&buf, Int32(14))
+
+
+        case .whatsNew:
+            writeInt(&buf, Int32(15))
+
+
+        case .bookPicker:
+            writeInt(&buf, Int32(16))
+
+
+        case .shareComposer:
+            writeInt(&buf, Int32(17))
 
         }
     }
@@ -48369,6 +51288,57 @@ public enum ViewRoute {
          * NIP-29 local group id.
          */groupId: String
     )
+    /**
+     * Bookmarks projection — `BookmarksSnapshot` (raw kind:10003 rows).
+     * Kind:10003 article-bookmark toggle only.
+     */
+    case bookmarks
+    /**
+     * NIP-23 article reader projection — `ArticleReaderSnapshot` (raw fields
+     * from `ArticleProjection` including `content_tree_bytes`). D1: no
+     * formatted strings ("Untitled", "min read", etc.) — Swift owns those.
+     */
+    case articleReader(
+        /**
+         * Addressable coordinate: `kind:author_hex:d_tag`.
+         */address: String
+    )
+    /**
+     * NIP-50 relay search results projection — `SearchSnapshot` (bounded raw
+     * hit rows). D1: no "X results" label, no formatted kind/author strings.
+     */
+    case search
+    /**
+     * "Following reads" article feed projection — `ArticleFeedSnapshot`
+     * (raw kind:30023 rows from the 4F feed-pull engine). D1: no formatted
+     * strings, no "Untitled" fallback, no "min read" labels.
+     */
+    case articleFeed
+    /**
+     * Home/own highlights feed projection — `HighlightFeedSnapshot` (kind:9802
+     * rows from the pull cursor, sorted newest-first). D1: no byline formatting.
+     */
+    case highlightFeed
+    /**
+     * Merged home feed projection — `HomeFeedSnapshot` (merged, suppressed,
+     * grouped, sorted rows from the article + highlight feeds). D1: raw rows
+     * only — no bylines, no "min read", no "Untitled" fallback.
+     */
+    case homeFeed
+    /**
+     * What's New sheet projection — `WhatsNewSnapshot` (unseen entries, should_present flag).
+     */
+    case whatsNew
+    /**
+     * Book picker projection — pending isbn, last result, cache size.
+     */
+    case bookPicker
+    /**
+     * Share-extension intake composer projection — `ShareComposerSnapshot`
+     * (raw pending share item fields + community picker rows). D1: no formatted
+     * strings, no community name fallbacks, no URL validation strings.
+     */
+    case shareComposer
 }
 
 
@@ -48403,6 +51373,25 @@ public struct FfiConverterTypeViewRoute: FfiConverterRustBuffer {
 
         case 8: return .roomHome(groupId: try FfiConverterString.read(from: &buf)
         )
+
+        case 9: return .bookmarks
+
+        case 10: return .articleReader(address: try FfiConverterString.read(from: &buf)
+        )
+
+        case 11: return .search
+
+        case 12: return .articleFeed
+
+        case 13: return .highlightFeed
+
+        case 14: return .homeFeed
+
+        case 15: return .whatsNew
+
+        case 16: return .bookPicker
+
+        case 17: return .shareComposer
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -48444,6 +51433,43 @@ public struct FfiConverterTypeViewRoute: FfiConverterRustBuffer {
         case let .roomHome(groupId):
             writeInt(&buf, Int32(8))
             FfiConverterString.write(groupId, into: &buf)
+
+
+        case .bookmarks:
+            writeInt(&buf, Int32(9))
+
+
+        case let .articleReader(address):
+            writeInt(&buf, Int32(10))
+            FfiConverterString.write(address, into: &buf)
+
+
+        case .search:
+            writeInt(&buf, Int32(11))
+
+
+        case .articleFeed:
+            writeInt(&buf, Int32(12))
+
+
+        case .highlightFeed:
+            writeInt(&buf, Int32(13))
+
+
+        case .homeFeed:
+            writeInt(&buf, Int32(14))
+
+
+        case .whatsNew:
+            writeInt(&buf, Int32(15))
+
+
+        case .bookPicker:
+            writeInt(&buf, Int32(16))
+
+
+        case .shareComposer:
+            writeInt(&buf, Int32(17))
 
         }
     }
@@ -48524,6 +51550,74 @@ public enum ViewSnapshot {
      */
     case roomHome(KernelRoomHomeSnapshot
     )
+    /**
+     * Active account's NIP-51 kind:10003 bookmark list.
+     * Raw protocol rows only — no labels or formatted strings (D1).
+     * Swift formats bookmark chrome (toolbar icons, swipe titles, etc.).
+     */
+    case bookmarks(BookmarksSnapshot
+    )
+    /**
+     * NIP-23 article reader — full `ArticleProjection` raw fields including
+     * `content_tree_bytes` for the article body. D1: no formatted strings
+     * ("Untitled", "min read", hashtag labels) — those are Swift-side concerns.
+     */
+    case articleReader(KernelArticleReaderSnapshot
+    )
+    /**
+     * NIP-50 relay search results — bounded raw hit rows.
+     * D1: no "X results" count label, no formatted kind/author strings.
+     */
+    case search(SearchSnapshot
+    )
+    /**
+     * "Following reads" article feed — kind:30023 events over follow authors,
+     * pulled via the Phase 4F feed-pull engine. Raw rows only (D1: no
+     * formatted strings, no "Untitled" fallback, no "min read" labels).
+     * Bounded by the accumulated feed pages (D5: `FEED_PAGE_SIZE` per drain).
+     */
+    case articleFeed(ArticleFeedSnapshot
+    )
+    /**
+     * Home/own highlights feed — kind:9802 rows from the pull cursor.
+     * Sorted newest-first; bounded by accumulated pull pages (Non-Negotiable #7).
+     * D1: no byline formatting, no avatar assembly, no source-kind labels — Swift.
+     */
+    case highlightFeed(HighlightFeedSnapshot
+    )
+    /**
+     * Home feed — merged view of kind:9802 highlights + kind:30023 article reads.
+     * Highlights are grouped by source reference; reads are suppressed when the
+     * article they reference is highlighted. Sorted by latest activity.
+     * Raw rows only (D1: no bylines, no "min read", no "Untitled" fallback).
+     *
+     * Named `KernelHomeFeedSnapshot` to avoid collision with the legacy
+     * `HomeFeedSnapshot` in `home_feed.rs` (bespoke live lane — Phase 4J
+     * coexists with the live lane until the iOS cutover, Non-Negotiable #6).
+     */
+    case homeFeed(KernelHomeFeedSnapshot
+    )
+    /**
+     * What's New sheet — device-local seen-state projection.
+     * `should_present` drives the sheet; `entries` lists the unseen items.
+     * D1: no "N new features" count label — raw rows only.
+     */
+    case whatsNew(WhatsNewSnapshot
+    )
+    /**
+     * Book picker — ISBN lookup state (pending + last result + cache size).
+     * Device-local (no nostr facts). Raw fields only (D1).
+     */
+    case bookPicker(BookPickerKernelSnapshot
+    )
+    /**
+     * Share-extension intake composer — pending share item + community picker.
+     * Raw fields only (D1: no formatted strings, no community name fallbacks).
+     * Swift formats display labels and handles the share flow after reading the
+     * raw snapshot.
+     */
+    case shareComposer(ShareComposerSnapshot
+    )
 }
 
 
@@ -48563,6 +51657,33 @@ public struct FfiConverterTypeViewSnapshot: FfiConverterRustBuffer {
         )
 
         case 8: return .roomHome(try FfiConverterTypeKernelRoomHomeSnapshot.read(from: &buf)
+        )
+
+        case 9: return .bookmarks(try FfiConverterTypeBookmarksSnapshot.read(from: &buf)
+        )
+
+        case 10: return .articleReader(try FfiConverterTypeKernelArticleReaderSnapshot.read(from: &buf)
+        )
+
+        case 11: return .search(try FfiConverterTypeSearchSnapshot.read(from: &buf)
+        )
+
+        case 12: return .articleFeed(try FfiConverterTypeArticleFeedSnapshot.read(from: &buf)
+        )
+
+        case 13: return .highlightFeed(try FfiConverterTypeHighlightFeedSnapshot.read(from: &buf)
+        )
+
+        case 14: return .homeFeed(try FfiConverterTypeKernelHomeFeedSnapshot.read(from: &buf)
+        )
+
+        case 15: return .whatsNew(try FfiConverterTypeWhatsNewSnapshot.read(from: &buf)
+        )
+
+        case 16: return .bookPicker(try FfiConverterTypeBookPickerKernelSnapshot.read(from: &buf)
+        )
+
+        case 17: return .shareComposer(try FfiConverterTypeShareComposerSnapshot.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -48611,6 +51732,51 @@ public struct FfiConverterTypeViewSnapshot: FfiConverterRustBuffer {
         case let .roomHome(v1):
             writeInt(&buf, Int32(8))
             FfiConverterTypeKernelRoomHomeSnapshot.write(v1, into: &buf)
+
+
+        case let .bookmarks(v1):
+            writeInt(&buf, Int32(9))
+            FfiConverterTypeBookmarksSnapshot.write(v1, into: &buf)
+
+
+        case let .articleReader(v1):
+            writeInt(&buf, Int32(10))
+            FfiConverterTypeKernelArticleReaderSnapshot.write(v1, into: &buf)
+
+
+        case let .search(v1):
+            writeInt(&buf, Int32(11))
+            FfiConverterTypeSearchSnapshot.write(v1, into: &buf)
+
+
+        case let .articleFeed(v1):
+            writeInt(&buf, Int32(12))
+            FfiConverterTypeArticleFeedSnapshot.write(v1, into: &buf)
+
+
+        case let .highlightFeed(v1):
+            writeInt(&buf, Int32(13))
+            FfiConverterTypeHighlightFeedSnapshot.write(v1, into: &buf)
+
+
+        case let .homeFeed(v1):
+            writeInt(&buf, Int32(14))
+            FfiConverterTypeKernelHomeFeedSnapshot.write(v1, into: &buf)
+
+
+        case let .whatsNew(v1):
+            writeInt(&buf, Int32(15))
+            FfiConverterTypeWhatsNewSnapshot.write(v1, into: &buf)
+
+
+        case let .bookPicker(v1):
+            writeInt(&buf, Int32(16))
+            FfiConverterTypeBookPickerKernelSnapshot.write(v1, into: &buf)
+
+
+        case let .shareComposer(v1):
+            writeInt(&buf, Int32(17))
+            FfiConverterTypeShareComposerSnapshot.write(v1, into: &buf)
 
         }
     }
@@ -49223,6 +52389,54 @@ fileprivate struct FfiConverterOptionTypeHighlightRecord: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeKernelArtifactPreview: FfiConverterRustBuffer {
+    typealias SwiftType = KernelArtifactPreview?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeKernelArtifactPreview.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeKernelArtifactPreview.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeKernelArtifactPreviewResult: FfiConverterRustBuffer {
+    typealias SwiftType = KernelArtifactPreviewResult?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeKernelArtifactPreviewResult.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeKernelArtifactPreviewResult.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeNip11Document: FfiConverterRustBuffer {
     typealias SwiftType = Nip11Document?
 
@@ -49650,6 +52864,31 @@ fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeArticleFeedRow: FfiConverterRustBuffer {
+    typealias SwiftType = [ArticleFeedRow]
+
+    public static func write(_ value: [ArticleFeedRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeArticleFeedRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ArticleFeedRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ArticleFeedRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeArticleFeedRow.read(from: &buf))
         }
         return seq
     }
@@ -50283,6 +53522,31 @@ fileprivate struct FfiConverterSequenceTypeHighlightResourceAuthorProfile: FfiCo
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeHighlightRow: FfiConverterRustBuffer {
+    typealias SwiftType = [HighlightRow]
+
+    public static func write(_ value: [HighlightRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHighlightRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlightRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [HighlightRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHighlightRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeHomeFeedItem: FfiConverterRustBuffer {
     typealias SwiftType = [HomeFeedItem]
 
@@ -50350,6 +53614,56 @@ fileprivate struct FfiConverterSequenceTypeImportRelayRow: FfiConverterRustBuffe
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeImportRelayRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeKernelHomeFeedRow: FfiConverterRustBuffer {
+    typealias SwiftType = [KernelHomeFeedRow]
+
+    public static func write(_ value: [KernelHomeFeedRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeKernelHomeFeedRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [KernelHomeFeedRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [KernelHomeFeedRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeKernelHomeFeedRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeKernelSearchHitRow: FfiConverterRustBuffer {
+    typealias SwiftType = [KernelSearchHitRow]
+
+    public static func write(_ value: [KernelSearchHitRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeKernelSearchHitRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [KernelSearchHitRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [KernelSearchHitRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeKernelSearchHitRow.read(from: &buf))
         }
         return seq
     }
@@ -50525,6 +53839,31 @@ fileprivate struct FfiConverterSequenceTypeProfileMetadata: FfiConverterRustBuff
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeProfileMetadata.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeRawSharePayload: FfiConverterRustBuffer {
+    typealias SwiftType = [RawSharePayload]
+
+    public static func write(_ value: [RawSharePayload], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRawSharePayload.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RawSharePayload] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RawSharePayload]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRawSharePayload.read(from: &buf))
         }
         return seq
     }
@@ -50758,6 +54097,31 @@ fileprivate struct FfiConverterSequenceTypeRoomLane: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeRoomLaneRow: FfiConverterRustBuffer {
+    typealias SwiftType = [RoomLaneRow]
+
+    public static func write(_ value: [RoomLaneRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeRoomLaneRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RoomLaneRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [RoomLaneRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeRoomLaneRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeRoomPreviewArtifactRowProjection: FfiConverterRustBuffer {
     typealias SwiftType = [RoomPreviewArtifactRowProjection]
 
@@ -50875,6 +54239,31 @@ fileprivate struct FfiConverterSequenceTypeSearchTextMatchSpan: FfiConverterRust
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeSearchTextMatchSpan.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeShareComposerRow: FfiConverterRustBuffer {
+    typealias SwiftType = [ShareComposerRow]
+
+    public static func write(_ value: [ShareComposerRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeShareComposerRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ShareComposerRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ShareComposerRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeShareComposerRow.read(from: &buf))
         }
         return seq
     }
@@ -51008,6 +54397,56 @@ fileprivate struct FfiConverterSequenceTypeWhatsNewEntry: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeWhatsNewEntryRow: FfiConverterRustBuffer {
+    typealias SwiftType = [WhatsNewEntryRow]
+
+    public static func write(_ value: [WhatsNewEntryRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeWhatsNewEntryRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [WhatsNewEntryRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [WhatsNewEntryRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeWhatsNewEntryRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeBookmarkRow: FfiConverterRustBuffer {
+    typealias SwiftType = [BookmarkRow]
+
+    public static func write(_ value: [BookmarkRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBookmarkRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BookmarkRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BookmarkRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBookmarkRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeNostrContentRun: FfiConverterRustBuffer {
     typealias SwiftType = [NostrContentRun]
 
@@ -51050,6 +54489,31 @@ fileprivate struct FfiConverterSequenceTypeNostrEntityRef: FfiConverterRustBuffe
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeNostrEntityRef.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [[String]]
+
+    public static func write(_ value: [[String]], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterSequenceString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [[String]] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [[String]]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterSequenceString.read(from: &buf))
         }
         return seq
     }
@@ -51125,7 +54589,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlighterapp_current_snapshot() != 21980) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlighterapp_dispatch() != 26805) {
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_dispatch_action() != 62969) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlighterapp_open_view() != 29686) {

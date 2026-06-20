@@ -132,13 +132,13 @@ final class HighlighterAppKernel {
     func openProfile(pubkey: String) {
         let viewId = ViewId.profile(pubkey: pubkey)
         app.openView(viewId: viewId, route: .profile(pubkey: pubkey))
-        app.dispatch(action: .claimProfile(pubkey: pubkey))
+        app.dispatch(.claimProfile(pubkey: pubkey))
     }
 
     /// Close a profile view for `pubkey` and send `ReleaseProfile` to NMP.
     /// Call from `ProfileView.onDisappear`. Clears the cached snapshot.
     func closeProfile(pubkey: String) {
-        app.dispatch(action: .releaseProfile(pubkey: pubkey))
+        app.dispatch(.releaseProfile(pubkey: pubkey))
         app.closeView(viewId: .profile(pubkey: pubkey))
         profileSnapshots.removeValue(forKey: pubkey)
     }
@@ -180,6 +180,14 @@ final class HighlighterAppKernel {
         // Phase 2E (network settings / relay diagnostics) — handled elsewhere.
         case .networkSettings, .relayDiagnostics:
             break
+
+        // Phase 4+ snapshots — managed by their owning views / stores via
+        // `current_snapshot`; the observer push is handled by those stores
+        // directly. No-op here (the actor still pushes; non-resident views
+        // are closed before they can receive stale data — D5).
+        case .bookmarks, .articleReader, .search, .articleFeed,
+             .highlightFeed, .homeFeed, .whatsNew, .bookPicker, .shareComposer:
+            break
         }
     }
 
@@ -189,6 +197,11 @@ final class HighlighterAppKernel {
         switch request {
         case .keychain(let op):
             fulfillKeychain(op)
+        // Phase 5K: share-extension App Group capability — handled by
+        // the share capability bridge registered at startup; the observer
+        // here is a fallback no-op so the switch remains exhaustive (D6).
+        case .share:
+            break
         }
     }
 
