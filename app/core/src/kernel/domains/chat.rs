@@ -127,6 +127,13 @@ struct ChatObserver {
     group_id: String,
     projection: Arc<GroupChatProjection>,
     tx: mpsc::UnboundedSender<Cmd>,
+    /// Accumulated `event_id → reply_to_event_id` recovered from raw tags.
+    /// `GroupChatProjection.snapshot()` does not carry `reply_to`, and a single
+    /// `on_kernel_event` only has the raw tags for the *triggering* event — so we
+    /// remember each event's recovered reply target here and look every message's
+    /// reply_to up by id when rebuilding rows. Without this, every row except the
+    /// newest loses its reply preview on each resnapshot.
+    reply_index: std::sync::Mutex<std::collections::HashMap<String, String>>,
 }
 
 impl KernelEventObserver for ChatObserver {
@@ -140,35 +147,38 @@ impl KernelEventObserver for ChatObserver {
         // Delegate ingest to the projection (updates its internal BoundedMessageMap).
         self.projection.on_kernel_event(event);
 
-        // Recover reply_to_event_id from the raw event tags.
-        // Per design: prefer ["e", id, "", "reply"] marker; fallback to first "e" tag.
-        let reply_to = recover_reply_to(&event.tags);
+        // Recover reply_to_event_id from the raw event tags and remember it,
+        // keyed by this event's id. Per design: prefer ["e", id, "", "reply"]
+        // marker; fallback to first "e" tag.
+        if let Some(reply_to) = recover_reply_to(&event.tags) {
+            if let Ok(mut idx) = self.reply_index.lock() {
+                idx.insert(event.id.clone(), reply_to);
+            }
+        }
 
         // Snapshot the updated group message list (brief Mutex acquire).
         let snapshot = self.projection.snapshot();
 
-        // Build raw rows from the GroupChatMessage list; inject reply_to for
-        // the triggering event (other rows carry the reply_to from their own tags
-        // but we only have the raw tag data for the *current* event here).
-        // Rows include all messages, newest-first.
-        let mut messages: Vec<ChatMessageRawRow> = snapshot
-            .messages
-            .into_iter()
-            .map(|m| {
-                let reply = if m.id == event.id {
-                    reply_to.clone()
-                } else {
-                    None // reply_to for other messages is recovered on full resnapshot
-                };
-                ChatMessageRawRow {
-                    event_id: m.id,
-                    author_pubkey: m.pubkey,
-                    content: m.content,
-                    created_at: m.created_at,
-                    reply_to_event_id: reply,
-                }
-            })
-            .collect();
+        // Build raw rows from the GroupChatMessage list, looking each message's
+        // reply_to up in the accumulated index so EVERY message retains its
+        // reply preview across subsequent events (not just the triggering one).
+        let mut messages: Vec<ChatMessageRawRow> = {
+            let idx = self.reply_index.lock().ok();
+            snapshot
+                .messages
+                .into_iter()
+                .map(|m| {
+                    let reply = idx.as_ref().and_then(|i| i.get(&m.id).cloned());
+                    ChatMessageRawRow {
+                        event_id: m.id,
+                        author_pubkey: m.pubkey,
+                        content: m.content,
+                        created_at: m.created_at,
+                        reply_to_event_id: reply,
+                    }
+                })
+                .collect()
+        };
 
         // Sort newest-first for the authoritative buffer
         messages.sort_by(|a, b| {
@@ -220,7 +230,12 @@ pub(crate) fn reduce_event_chat_room_updated(
     group_id: String,
     messages: Vec<ChatMessageRawRow>,
 ) -> Vec<Effect> {
-    let entry = state.chat_rooms.entry(group_id).or_default();
+    // D6: only update a room that is currently OPEN. After `hl.chat.close` or
+    // logout the room entry is removed; a stray event from an observer that has
+    // not yet been released must NOT recreate the room (cross-session leak).
+    let Some(entry) = state.chat_rooms.get_mut(&group_id) else {
+        return vec![];
+    };
     entry.activity_revision = entry.activity_revision.saturating_add(1);
     entry.messages = messages;
     vec![]
@@ -352,6 +367,7 @@ pub(crate) fn run_effect_wire_group_chat(
         group_id,
         projection,
         tx,
+        reply_index: std::sync::Mutex::new(std::collections::HashMap::new()),
     });
 
     // SAFETY: ptr is a valid non-null NmpApp pointer kept alive by NmpHandle
@@ -569,6 +585,9 @@ mod tests {
         group_id: &str,
         messages: Vec<ChatMessageRawRow>,
     ) -> Vec<Effect> {
+        // Realistic flow: the room must be OPEN before observer events land
+        // (`reduce_event_chat_room_updated` no-ops on a closed/absent room — D6).
+        state.chat_rooms.entry(group_id.to_string()).or_default();
         step(
             state,
             clock,
@@ -611,6 +630,7 @@ mod tests {
             group_id: group_id.clone(),
             projection,
             tx,
+            reply_index: std::sync::Mutex::new(std::collections::HashMap::new()),
         };
 
         // kind:11 event with matching h tag — must be rejected by ChatObserver
@@ -841,6 +861,53 @@ mod tests {
         assert!(
             state.chat_rooms.is_empty(),
             "chat_rooms must be empty after IdentityChanged(None)"
+        );
+    }
+
+    // 7-C5b: chat_event_after_close_or_logout_is_dropped
+    //
+    // A stray observer event (ChatRoomUpdated) that arrives AFTER the room was
+    // closed (or after logout) must NOT recreate the room — otherwise a not-yet-
+    // released observer leaks stale messages into the next session.
+    #[test]
+    fn chat_event_after_close_or_logout_is_dropped() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        let group_id = "ghost-room";
+
+        // Room was never opened (closed / logged out): injecting an event is a no-op.
+        let msgs = vec![make_raw_row("evt1", "author1", "stale", 1_000_000)];
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::ChatRoomUpdated {
+                group_id: group_id.to_string(),
+                messages: msgs,
+            }),
+        );
+        assert!(
+            !state.chat_rooms.contains_key(group_id),
+            "ChatRoomUpdated for a closed/absent room must NOT recreate it (D6)"
+        );
+
+        // Open then close, then a late observer event must not resurrect it.
+        reduce_action_open_chat(&mut state, group_id.to_string(), "wss://r.example".into());
+        reduce_action_close_chat(&mut state, group_id.to_string());
+        assert!(
+            !state.chat_rooms.contains_key(group_id),
+            "closed room removed"
+        );
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::ChatRoomUpdated {
+                group_id: group_id.to_string(),
+                messages: vec![make_raw_row("evt2", "author1", "late", 1_000_001)],
+            }),
+        );
+        assert!(
+            !state.chat_rooms.contains_key(group_id),
+            "late event after close must not resurrect the room"
         );
     }
 
