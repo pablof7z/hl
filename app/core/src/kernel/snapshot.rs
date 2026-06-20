@@ -961,6 +961,33 @@ pub struct KernelHomeFeedRow {
     /// source. Swift looks this up in `KernelHomeFeedSnapshot.artifact_previews`
     /// to render the resource card (skeleton while the preview is pending). D3.
     pub artifact_coordinate: Option<String>,
+
+    // ── Phase 7 home-feed aggregation additions (append-only) ────────────────
+    /// `true` iff the article author is in the active account's follow set
+    /// (`state.is_following(article_author_pubkey)`).
+    /// D1: a boolean fact, not a display label ("Following" copy is Swift-side).
+    /// Always `false` for `KernelHomeFeedRowKind::Highlight` rows (no article author
+    /// to surface — may change in a future product iteration).
+    pub author_followed: bool,
+
+    /// Hex pubkeys of follows who have interacted with this article (kind 1, 7, 16,
+    /// or 1111 with `#k=30023`), deduped and sorted: latest-interaction-time
+    /// descending, then pubkey ascending as a tie-break.
+    /// D1: raw hex pubkeys — Swift formats bech32 / display names.
+    /// Empty for `KernelHomeFeedRowKind::Highlight` rows.
+    pub interactor_pubkeys: Vec<String>,
+
+    /// The latest-activity timestamp for this row — max of the article
+    /// `created_at` and all matching interaction `created_at` values.
+    /// Equals `sort_key` for both row kinds. Unix seconds (D1: no "X ago" label).
+    pub latest_activity_at: u64,
+
+    /// Enriched highlight rows for this group, sorted oldest-first within the
+    /// group (matches the bespoke live lane ordering). Populated from the same
+    /// raw kind:9802 events as `highlight_event_ids`, decoded via the shared
+    /// `decode_highlight_row` so they carry the full NIP-84/NIP-73 fields.
+    /// Empty for `KernelHomeFeedRowKind::Article` rows.
+    pub highlights: Vec<HighlightRow>,
 }
 
 /// Snapshot for `ViewId::HomeFeed` — the merged home feed.
