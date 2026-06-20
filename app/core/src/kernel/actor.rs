@@ -476,13 +476,14 @@ fn reduce_action_envelope(
         AddBookmarkPayload, AddRelayPayload, AddRoomMemberPayload, AudioPlayPayload,
         AudioSeekPayload, AudioSetResumePayload, CaptureSelectWordPayload,
         CaptureSetContextPayload, CaptureSetNotePayload, CaptureSetQuotePayload,
-        CaptureSetTargetGroupPayload, ClaimProfilePayload, CreateAccountPayload,
-        CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload, JoinRoomPayload,
-        LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload, PairBunkerPayload,
-        PresentSheetPayload, PublishHighlightPayload, ReactPayload, ReleaseProfilePayload,
-        RemoveBookmarkPayload, RemoveRelayPayload, RunSearchPayload, SelectRootTabPayload,
-        SetRelayRolePayload, SetRoomsRelayListPayload, ShareToRoomPayload, SignInNsecPayload,
-        StartRoomDiscoveryPayload, UnfollowPayload, UnreactPayload,
+        CaptureSetTargetGroupPayload, ClaimProfilePayload, ClipExtendSegmentPayload,
+        ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload, ClipSetStartPayload,
+        CreateAccountPayload, CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload,
+        JoinRoomPayload, LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload,
+        PairBunkerPayload, PresentSheetPayload, PublishHighlightPayload, ReactPayload,
+        ReleaseProfilePayload, RemoveBookmarkPayload, RemoveRelayPayload, RunSearchPayload,
+        SelectRootTabPayload, SetRelayRolePayload, SetRoomsRelayListPayload, ShareToRoomPayload,
+        SignInNsecPayload, StartRoomDiscoveryPayload, UnfollowPayload, UnreactPayload,
     };
 
     match envelope.namespace.as_str() {
@@ -698,6 +699,30 @@ fn reduce_action_envelope(
             let p = parse!(AudioSetResumePayload);
             podcast::reduce_action_set_resume(state, p.seconds)
         }
+
+        // ── Transcript ────────────────────────────────────────────────────────
+        "hl.transcript.load" => podcast::reduce_action_load_transcript(state),
+        "hl.audio.clip_mark_in" => {
+            let p = parse!(ClipMarkInPayload);
+            podcast::reduce_action_clip_mark_in(state, p.current_time)
+        }
+        "hl.audio.clip_mark_out" => {
+            let p = parse!(ClipMarkOutPayload);
+            podcast::reduce_action_clip_mark_out(state, p.current_time)
+        }
+        "hl.audio.clip_extend_segment" => {
+            let p = parse!(ClipExtendSegmentPayload);
+            podcast::reduce_action_clip_extend_segment(state, p.segment_id)
+        }
+        "hl.audio.clip_set_start" => {
+            let p = parse!(ClipSetStartPayload);
+            podcast::reduce_action_clip_set_start(state, p.value)
+        }
+        "hl.audio.clip_set_end" => {
+            let p = parse!(ClipSetEndPayload);
+            podcast::reduce_action_clip_set_end(state, p.value, p.duration_seconds)
+        }
+        "hl.audio.clip_clear" => podcast::reduce_action_clip_clear(state),
 
         // ── OCR ───────────────────────────────────────────────────────────────
         "hl.ocr.recognize" => {
@@ -1042,6 +1067,12 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             event_id,
             error,
         } => capture_draft::reduce_event_publish_result(state, success, event_id, error),
+
+        // ── Phase 5I additions (append-only) ─────────────────────────────────
+        KernelEvent::TranscriptReady { segments } => {
+            podcast::reduce_event_transcript_ready(state, segments)
+        }
+        KernelEvent::TranscriptFetchFailed => podcast::reduce_event_transcript_failed(state),
     }
 }
 
@@ -1390,6 +1421,14 @@ pub(crate) async fn run_effect(
             // just PublishRawEvent. Fire-and-forget (D6). No-op when nmp is None.
             highlight_feed::run_effect_publish_highlight(json, nmp);
         }
+
+        // ── Phase 5I additions (append-only) ─────────────────────────────────
+        Effect::FetchTranscript { url } => {
+            let tx_clone = tx.clone();
+            tokio::spawn(async move {
+                run_effect_fetch_transcript(url, &tx_clone).await;
+            });
+        }
     }
 
     let _ = session_epoch; // carried for future epoch-keyed effect cancellation
@@ -1632,6 +1671,27 @@ async fn run_effect_save_podcast_position(
     if let Err(e) = tokio::fs::rename(&tmp, &path).await {
         tracing::warn!(path = %path.display(), error = %e, "save_podcast_position: rename error (D6)");
     }
+}
+
+// ─── Phase 5I helpers ────────────────────────────────────────────────────────
+
+/// Fetch and parse a transcript from `url`, then send the result back as a
+/// `KernelEvent`. Ported parsing logic from bespoke `podcast_transcript.rs`.
+/// D6: any fetch or parse failure sends `TranscriptFetchFailed` (no panic).
+/// DEVICE-LOCAL — transcript content is never published to nostr.
+async fn run_effect_fetch_transcript(url: String, tx: &mpsc::UnboundedSender<Cmd>) {
+    use crate::kernel::domains::podcast_transcript as pt;
+
+    let event = match pt::fetch_and_parse(&url).await {
+        Ok(segments) => {
+            Cmd::Event(crate::kernel::action::KernelEvent::TranscriptReady { segments })
+        }
+        Err(e) => {
+            tracing::warn!(url = %url, error = %e, "transcript fetch failed (D6)");
+            Cmd::Event(crate::kernel::action::KernelEvent::TranscriptFetchFailed)
+        }
+    };
+    let _ = tx.send(event);
 }
 
 // ─── Phase 4F helpers ────────────────────────────────────────────────────────

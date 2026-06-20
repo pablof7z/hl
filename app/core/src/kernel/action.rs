@@ -231,6 +231,45 @@ pub(crate) struct AudioSetResumePayload {
     pub seconds: f64,
 }
 
+// ── Phase 5I payload structs ─────────────────────────────────────────────────
+
+/// `hl.transcript.load` envelope payload — no fields needed (URL comes from
+/// the already-loaded `AppState::podcast.current.artifact`).
+#[allow(dead_code)]
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct TranscriptLoadPayload {}
+
+/// `hl.audio.clip_mark_in` payload.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct ClipMarkInPayload {
+    pub current_time: f64,
+}
+
+/// `hl.audio.clip_mark_out` payload.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct ClipMarkOutPayload {
+    pub current_time: f64,
+}
+
+/// `hl.audio.clip_extend_segment` payload.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct ClipExtendSegmentPayload {
+    pub segment_id: String,
+}
+
+/// `hl.audio.clip_set_start` payload.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct ClipSetStartPayload {
+    pub value: f64,
+}
+
+/// `hl.audio.clip_set_end` payload.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct ClipSetEndPayload {
+    pub value: f64,
+    pub duration_seconds: f64,
+}
+
 // ── Phase 5D additions (append-only) ─────────────────────────────────────────
 
 #[derive(Debug, serde::Deserialize)]
@@ -1103,4 +1142,16 @@ pub enum KernelEvent {
         /// Raw error message (empty on success). D1.
         error: String,
     },
+
+    // ── Phase 5I additions (append-only) ─────────────────────────────────────
+    /// Transcript fetch+parse completed successfully.
+    ///
+    /// Injected by `run_effect_fetch_transcript` after HTTP fetch and format
+    /// detection/parsing. Routed to `podcast::reduce_event_transcript_ready`.
+    /// DEVICE-LOCAL — never a nostr fact.
+    TranscriptReady {
+        segments: Vec<crate::kernel::domains::podcast::TranscriptSegment>,
+    },
+    /// Transcript fetch or parse failed. D6 — availability set to Unavailable.
+    TranscriptFetchFailed,
 }

@@ -45,7 +45,9 @@ use crate::clock::Clock;
 use crate::errors::CoreError;
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
-use crate::kernel::snapshot::{PodcastListeningSnapshot, ViewSnapshot};
+use crate::kernel::snapshot::{
+    KernelTranscriptAvailability, KernelTranscriptSegment, PodcastListeningSnapshot, ViewSnapshot,
+};
 use crate::models::{ArtifactRecord, PodcastPositionRecord};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -72,6 +74,41 @@ pub struct PodcastState {
     pub current: Option<LoadedEpisode>,
 }
 
+/// Transcript segment — a time-bounded utterance within an episode.
+///
+/// Ported from the bespoke `podcast_transcript.rs::TranscriptSegment`.
+/// DEVICE-LOCAL — fetched per session, never published to nostr.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TranscriptSegment {
+    pub id: String,
+    pub start: f64,
+    pub end: f64,
+    pub speaker: String,
+    pub text: String,
+}
+
+/// Transcript availability state for the current episode.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum TranscriptAvailability {
+    #[default]
+    NotRequested,
+    Loading,
+    Available,
+    Unavailable,
+}
+
+/// In-progress clip selection.
+///
+/// Built by the clip-mark-in/mark-out/extend-segment actions.
+/// DEVICE-LOCAL — only the published kind:9802 is a nostr fact (Phase 5J).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ClipSelection {
+    pub clip_start_seconds: Option<f64>,
+    pub clip_end_seconds: Option<f64>,
+    pub speaker: String,
+    pub selected_segment_ids: Vec<String>,
+}
+
 /// State for the currently loaded episode.
 #[derive(Debug, Clone)]
 pub struct LoadedEpisode {
@@ -92,6 +129,13 @@ pub struct LoadedEpisode {
     pub is_playing: bool,
     /// Waveform peaks SHA-256 cache key (URL-keyed, used by Phase 5J waveform).
     pub waveform_cache_key: Option<String>,
+    /// Transcript segments fetched for this episode. Empty until
+    /// `Effect::FetchTranscript` completes. DEVICE-LOCAL — never published.
+    pub transcript_segments: Vec<TranscriptSegment>,
+    /// Availability of the transcript for this episode.
+    pub transcript_availability: TranscriptAvailability,
+    /// In-progress clip selection. `None` when no clip is being assembled.
+    pub clip_selection: Option<ClipSelection>,
 }
 
 // ─── Position store ───────────────────────────────────────────────────────────
@@ -274,6 +318,9 @@ pub(crate) fn reduce_action_play(
         previous_position_for_tick: resume_at.unwrap_or(0.0),
         is_playing: false,
         waveform_cache_key: None,
+        transcript_segments: Vec::new(),
+        transcript_availability: TranscriptAvailability::NotRequested,
+        clip_selection: None,
     });
 
     vec![Effect::EmitCapabilityRequest(CapabilityRequest::Audio(
@@ -490,10 +537,220 @@ pub(crate) fn project_podcast_listening_snapshot(state: &AppState) -> Option<Vie
         duration_seconds: ep.duration_seconds,
         position_seconds: ep.position_seconds,
         is_playing: ep.is_playing,
-        // Clip range deferred to Phase 5I/5J — empty for 5H.
-        clip_start_seconds: None,
-        clip_end_seconds: None,
+        clip_start_seconds: ep
+            .clip_selection
+            .as_ref()
+            .and_then(|s| s.clip_start_seconds),
+        clip_end_seconds: ep.clip_selection.as_ref().and_then(|s| s.clip_end_seconds),
+        transcript_segments: ep
+            .transcript_segments
+            .iter()
+            .map(|s| KernelTranscriptSegment {
+                id: s.id.clone(),
+                start: s.start,
+                end: s.end,
+                speaker: s.speaker.clone(),
+                text: s.text.clone(),
+            })
+            .collect(),
+        transcript_availability: match ep.transcript_availability {
+            TranscriptAvailability::NotRequested => KernelTranscriptAvailability::NotRequested,
+            TranscriptAvailability::Loading => KernelTranscriptAvailability::Loading,
+            TranscriptAvailability::Available => KernelTranscriptAvailability::Available,
+            TranscriptAvailability::Unavailable => KernelTranscriptAvailability::Unavailable,
+        },
+        clip_speaker: ep
+            .clip_selection
+            .as_ref()
+            .map(|s| s.speaker.clone())
+            .unwrap_or_default(),
+        clip_selected_segment_ids: ep
+            .clip_selection
+            .as_ref()
+            .map(|s| s.selected_segment_ids.clone())
+            .unwrap_or_default(),
     }))
+}
+
+// ─── Phase 5I action reducers ─────────────────────────────────────────────────
+
+/// Reduce `hl.transcript.load` — emit `Effect::FetchTranscript` for the
+/// episode's transcript URL. No-op when no episode is loaded or the URL is
+/// empty. Sets availability to `Loading`.
+pub(crate) fn reduce_action_load_transcript(state: &mut AppState) -> Vec<Effect> {
+    let Some(ep) = state.podcast.current.as_mut() else {
+        return vec![];
+    };
+    let url = ep.artifact.preview.transcript_url.trim().to_string();
+    if url.is_empty() {
+        ep.transcript_availability = TranscriptAvailability::Unavailable;
+        return vec![];
+    }
+    ep.transcript_availability = TranscriptAvailability::Loading;
+    ep.transcript_segments.clear();
+    vec![Effect::FetchTranscript { url }]
+}
+
+/// Handle `KernelEvent::TranscriptReady` — store parsed segments.
+pub(crate) fn reduce_event_transcript_ready(
+    state: &mut AppState,
+    segments: Vec<TranscriptSegment>,
+) -> Vec<Effect> {
+    let Some(ep) = state.podcast.current.as_mut() else {
+        return vec![];
+    };
+    if segments.is_empty() {
+        ep.transcript_availability = TranscriptAvailability::Unavailable;
+    } else {
+        ep.transcript_availability = TranscriptAvailability::Available;
+        ep.transcript_segments = segments;
+    }
+    vec![]
+}
+
+/// Handle `KernelEvent::TranscriptFetchFailed` — mark unavailable. D6.
+pub(crate) fn reduce_event_transcript_failed(state: &mut AppState) -> Vec<Effect> {
+    if let Some(ep) = state.podcast.current.as_mut() {
+        ep.transcript_availability = TranscriptAvailability::Unavailable;
+    }
+    vec![]
+}
+
+/// Reduce `hl.audio.clip_mark_in` — set clip start to `current_time`,
+/// clear end if it is now before start.
+///
+/// Clamps `current_time` to `≥ 0`; non-finite values are a no-op (D6).
+pub(crate) fn reduce_action_clip_mark_in(state: &mut AppState, current_time: f64) -> Vec<Effect> {
+    if !current_time.is_finite() {
+        tracing::warn!("clip_mark_in: non-finite current_time — no-op (D6)");
+        return vec![];
+    }
+    let Some(ep) = state.podcast.current.as_mut() else {
+        return vec![];
+    };
+    let t = current_time.max(0.0);
+    let sel = ep.clip_selection.get_or_insert_with(ClipSelection::default);
+    sel.clip_start_seconds = Some(t);
+    if sel.clip_end_seconds.map(|end| end < t).unwrap_or(false) {
+        sel.clip_end_seconds = None;
+    }
+    vec![]
+}
+
+/// Reduce `hl.audio.clip_mark_out` — set clip end, clear start if reversed.
+///
+/// Clamps `current_time` to `≥ 0`; non-finite values are a no-op (D6).
+pub(crate) fn reduce_action_clip_mark_out(state: &mut AppState, current_time: f64) -> Vec<Effect> {
+    if !current_time.is_finite() {
+        tracing::warn!("clip_mark_out: non-finite current_time — no-op (D6)");
+        return vec![];
+    }
+    let Some(ep) = state.podcast.current.as_mut() else {
+        return vec![];
+    };
+    let t = current_time.max(0.0);
+    let sel = ep.clip_selection.get_or_insert_with(ClipSelection::default);
+    sel.clip_end_seconds = Some(t);
+    if sel
+        .clip_start_seconds
+        .map(|start| start > t)
+        .unwrap_or(false)
+    {
+        sel.clip_start_seconds = None;
+    }
+    vec![]
+}
+
+/// Reduce `hl.audio.clip_extend_segment` — expand clip bounds to include
+/// `segment_id` from the loaded transcript; deduplicate; adopt speaker if
+/// the selection has none yet.
+pub(crate) fn reduce_action_clip_extend_segment(
+    state: &mut AppState,
+    segment_id: String,
+) -> Vec<Effect> {
+    let Some(ep) = state.podcast.current.as_mut() else {
+        return vec![];
+    };
+    let Some(seg) = ep
+        .transcript_segments
+        .iter()
+        .find(|s| s.id == segment_id)
+        .cloned()
+    else {
+        return vec![];
+    };
+    let sel = ep.clip_selection.get_or_insert_with(ClipSelection::default);
+    sel.clip_start_seconds = Some(match sel.clip_start_seconds {
+        Some(start) => start.min(seg.start),
+        None => seg.start,
+    });
+    sel.clip_end_seconds = Some(match sel.clip_end_seconds {
+        Some(end) => end.max(seg.end),
+        None => seg.end,
+    });
+    if !sel.selected_segment_ids.iter().any(|id| id == &seg.id) {
+        sel.selected_segment_ids.push(seg.id.clone());
+    }
+    if sel.speaker.is_empty() && !seg.speaker.is_empty() {
+        sel.speaker = seg.speaker.clone();
+    }
+    vec![]
+}
+
+/// Reduce `hl.audio.clip_set_start` — set clip start, clamped to `≥ 0` and
+/// so `start ≤ end − 0.05 s`. Non-finite values are a no-op (D6).
+pub(crate) fn reduce_action_clip_set_start(state: &mut AppState, value: f64) -> Vec<Effect> {
+    if !value.is_finite() {
+        tracing::warn!("clip_set_start: non-finite value — no-op (D6)");
+        return vec![];
+    }
+    let Some(ep) = state.podcast.current.as_mut() else {
+        return vec![];
+    };
+    let sel = ep.clip_selection.get_or_insert_with(ClipSelection::default);
+    let mut start = value.max(0.0);
+    if let Some(end) = sel.clip_end_seconds {
+        start = start.min((end - 0.05).max(0.0));
+    }
+    sel.clip_start_seconds = Some(start);
+    vec![]
+}
+
+/// Reduce `hl.audio.clip_set_end` — set clip end, clamped to `[0, duration]`
+/// and so `end ≥ start + 0.05 s`. Non-finite values are a no-op (D6).
+pub(crate) fn reduce_action_clip_set_end(
+    state: &mut AppState,
+    value: f64,
+    duration_seconds: f64,
+) -> Vec<Effect> {
+    if !value.is_finite() {
+        tracing::warn!("clip_set_end: non-finite value — no-op (D6)");
+        return vec![];
+    }
+    let Some(ep) = state.podcast.current.as_mut() else {
+        return vec![];
+    };
+    let sel = ep.clip_selection.get_or_insert_with(ClipSelection::default);
+    // Clamp to [0, duration]; if duration unknown, still floor at 0.
+    let mut end = if duration_seconds > 0.0 {
+        value.min(duration_seconds)
+    } else {
+        value
+    }
+    .max(0.0);
+    if let Some(start) = sel.clip_start_seconds {
+        end = end.max(start + 0.05);
+    }
+    sel.clip_end_seconds = Some(end);
+    vec![]
+}
+
+/// Reduce `hl.audio.clip_clear` — reset the clip selection.
+pub(crate) fn reduce_action_clip_clear(state: &mut AppState) -> Vec<Effect> {
+    if let Some(ep) = state.podcast.current.as_mut() {
+        ep.clip_selection = None;
+    }
+    vec![]
 }
 
 // ─── Unit tests ───────────────────────────────────────────────────────────────
