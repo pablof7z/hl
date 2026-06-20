@@ -1168,6 +1168,16 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
                     state.room_lanes.entry(group_key).or_default();
                     state.room_lanes.get_mut(k)
                 }
+                k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => {
+                    // Phase 7: per-article highlight feed. Lazily insert a
+                    // FeedState for this article address if not present.
+                    let article_key = k.to_string();
+                    state
+                        .article_highlight_feeds
+                        .entry(article_key)
+                        .or_default();
+                    state.article_highlight_feeds.get_mut(k)
+                }
                 _ => {
                     tracing::warn!(?key, "FeedPage: unknown feed key — no-op");
                     None
@@ -2158,6 +2168,10 @@ fn feed_state_cursor_id(state: &AppState, key: &str) -> u64 {
         "hl.feed.articles" => state.article_feed.cursor_id,
         "hl.feed.highlights" => state.highlight_feed.cursor_id,
         k if k.starts_with("hl.feed.room.") => state.room_lanes.get(k).map_or(0, |fs| fs.cursor_id),
+        k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => state
+            .article_highlight_feeds
+            .get(k)
+            .map_or(0, |fs| fs.cursor_id),
         _ => 0,
     }
 }
@@ -2172,6 +2186,10 @@ fn feed_state_after_seq(state: &AppState, key: &str) -> u64 {
         "hl.feed.articles" => state.article_feed.after_seq,
         "hl.feed.highlights" => state.highlight_feed.after_seq,
         k if k.starts_with("hl.feed.room.") => state.room_lanes.get(k).map_or(0, |fs| fs.after_seq),
+        k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => state
+            .article_highlight_feeds
+            .get(k)
+            .map_or(0, |fs| fs.after_seq),
         _ => 0,
     }
 }
@@ -2343,6 +2361,13 @@ pub(crate) async fn actor_task(
                         k if k.starts_with("hl.feed.room.") => {
                             state.room_lanes.entry(k.to_string()).or_default().cursor_id = id;
                         }
+                        k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => {
+                            state
+                                .article_highlight_feeds
+                                .entry(k.to_string())
+                                .or_default()
+                                .cursor_id = id;
+                        }
                         _ => {}
                     }
                     feed::run_effect_register_feed_cursor(
@@ -2374,6 +2399,11 @@ pub(crate) async fn actor_task(
                         "hl.feed.highlights" => state.highlight_feed.clear(),
                         k if k.starts_with("hl.feed.room.") => {
                             if let Some(fs) = state.room_lanes.get_mut(k) {
+                                fs.clear();
+                            }
+                        }
+                        k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => {
+                            if let Some(fs) = state.article_highlight_feeds.get_mut(k) {
                                 fs.clear();
                             }
                         }

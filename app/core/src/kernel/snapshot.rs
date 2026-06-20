@@ -651,6 +651,12 @@ pub struct KernelArticleReaderSnapshot {
     /// Empty until the full document arrives. Swift / platform decodes via
     /// `nmp_content::wire::decode_content_tree`.
     pub content_tree_bytes: Vec<u8>,
+    /// Overlay highlights anchored to this article (kind:9802 tagged `#a ==
+    /// address`), newest-first, deduped by event id. Carries the SAME enriched
+    /// NIP-84/NIP-73 fields as the highlight feed (decoded via the shared
+    /// `decode_highlight_row`). Empty in the brief window between OpenView and
+    /// the first highlight-feed page (Phase 7).
+    pub highlights: Vec<HighlightRow>,
 }
 
 // ── Phase 4D additions (append-only) ─────────────────────────────────────────
