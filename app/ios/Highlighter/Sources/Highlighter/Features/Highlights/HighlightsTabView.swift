@@ -7,6 +7,7 @@ import SwiftUI
 /// signals fall through to the existing `ReadingFeedCardView`.
 struct HighlightsTabView: View {
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var store: HomeFeedStore?
     @State private var shareTarget: ShareToCommunityTarget?
     @State private var capturePresented: Bool = false
@@ -58,9 +59,12 @@ struct HighlightsTabView: View {
         .captureFlow(isPresented: $capturePresented)
         .task {
             guard store == nil else { return }
-            let s = HomeFeedStore(safeCore: app.safeCore, eventBridge: app.eventBridge)
+            let s = HomeFeedStore(kernel: kernel)
             store = s
             await s.start()
+        }
+        .onChange(of: kernel.homeFeed) { _, _ in
+            store?.applyKernelSnapshot()
         }
         .onDisappear {
             store?.stop()
