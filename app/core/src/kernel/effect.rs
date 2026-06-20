@@ -318,4 +318,56 @@ pub enum Effect {
         /// to dedup or replace the prior search interest on re-query.
         interest_id: u64,
     },
+
+    // ── Phase 4F additions (append-only) ─────────────────────────────────────
+    /// Register a pull cursor with the nmp kernel for the named feed.
+    ///
+    /// Sends `ActorCommand::RegisterPullCursor` via `actor_sender()` with
+    /// `mode: GapAllowed` and limits derived from `feed::FEED_PAGE_SIZE`. The
+    /// `cursor_id` is minted deterministically from `key` via
+    /// `feed::mint_cursor_id` so re-registering after a view close/re-open
+    /// is idempotent (Replace-by-cursor_id semantics in the kernel).
+    ///
+    /// Fire-and-forget (D6). No-op when `nmp` is `None` (test mode — tests
+    /// inject `KernelEvent::FeedPage` directly).
+    RegisterFeedCursor {
+        /// Stable feed key (e.g. `"hl.feed.articles"`, `"hl.feed.highlights"`,
+        /// `"hl.feed.room.<group_id>"`). Must match the key used in `DrainFeed` /
+        /// `ReleaseFeedCursor` / `KernelEvent::FeedPage`.
+        key: String,
+        /// Non-zero cursor id minted by `feed::mint_cursor_id(key)`.
+        cursor_id: u64,
+        /// The pull scope (`InterestShape` for article/highlight/room-lane feeds).
+        /// The kernel filters the ingest log to matching entries.
+        scope: nmp_core::PullScope,
+    },
+
+    /// Call `nmp_app_pull_page` for the named feed and emit
+    /// `KernelEvent::FeedPage` with the decoded rows.
+    ///
+    /// The effect runner decodes the binary Page wire format, converts positive
+    /// (Inserted/Replaced) entries to `KernelEvent`s, and sends
+    /// `KernelEvent::FeedPage` back to the actor. On a `Gap` result the event
+    /// carries `gap_rebased_to = Some(first_available_seq)` so the reducer can
+    /// clear and rebase the cursor (ADR-0058 §10).
+    ///
+    /// Single `nmp_app_pull_page` call per effect (D5: bounded, D8: no polling).
+    /// The consumer emits further `DrainFeed` effects for pagination (e.g.
+    /// scroll-to-end). Fire-and-forget (D6). No-op when `nmp` is `None`.
+    DrainFeed {
+        /// Feed key identifying the cursor to drain.
+        key: String,
+    },
+
+    /// Unregister the pull cursor for the named feed.
+    ///
+    /// Sends `ActorCommand::UnregisterPullCursor` via `actor_sender()`.
+    /// The `cursor_id` for the unregister call is looked up from `AppState`
+    /// inline in `actor_task` (same pattern as `ReleaseGroupEvents`).
+    ///
+    /// Fire-and-forget (D6). No-op when `nmp` is `None`.
+    ReleaseFeedCursor {
+        /// Feed key identifying the cursor to unregister.
+        key: String,
+    },
 }

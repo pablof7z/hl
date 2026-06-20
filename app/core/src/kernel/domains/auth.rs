@@ -124,6 +124,11 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     // AppState::search_results holds NIP-50 hits for the departing account's
     // query. Wipe so stale search results don't survive into the next session.
     state.search_results.clear();
+    // ── Phase 4F: clear feed-pull state on logout ─────────────────────────────
+    // FeedState rows and cursors belong to the departing account's subscriptions.
+    // Wipe so stale feed rows don't surface for the next account. cursor_id is
+    // reset to 0 (the unregistered sentinel) so the next open re-registers.
+    clear_feed_state_on_identity_lost(state);
     // RemoveActiveAccount fires nmp.remove_account; ClearSession
     // emits a CapabilityRequest to native for its keychain.
     vec![Effect::RemoveActiveAccount, Effect::ClearSession]
@@ -189,6 +194,8 @@ pub(crate) fn reduce_event_identity_changed(
             super::reactions::clear_on_identity_lost(state);
             // ── Phase 4D: clear search results on account removal ─────────────
             state.search_results.clear();
+            // ── Phase 4F: clear feed-pull state on account removal ────────────
+            clear_feed_state_on_identity_lost(state);
         }
     }
     vec![]
@@ -361,6 +368,21 @@ pub(crate) fn run_effect_create_account(
             });
     }
     // No nmp handle (test mode) → test injects IdentityChanged directly.
+}
+
+// ─── Phase 4F helper ─────────────────────────────────────────────────────────
+
+/// Clear all feed-pull state when the active identity is lost.
+///
+/// Called by both `reduce_action_logout` and `reduce_event_identity_changed`
+/// (the `None`/removed account arm). Resets `article_feed`, `highlight_feed`,
+/// and all `room_lanes` to their default empty state. cursor_id is reset to 0
+/// so the next view-open re-registers fresh (idempotent, D6). Rows are cleared
+/// so stale feed content from the departing account never surfaces to the next.
+pub(crate) fn clear_feed_state_on_identity_lost(state: &mut AppState) {
+    state.article_feed = crate::kernel::domains::feed::FeedState::default();
+    state.highlight_feed = crate::kernel::domains::feed::FeedState::default();
+    state.room_lanes.clear();
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
