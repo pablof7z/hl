@@ -446,7 +446,7 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
             guid,
             artifact_json,
         } => {
-            let artifact = match serde_json::from_str::<crate::models::ArtifactRecord>(
+            let artifact = match serde_json::from_str::<crate::kernel::models::ArtifactRecord>(
                 &artifact_json,
             ) {
                 Ok(a) => a,
@@ -699,17 +699,18 @@ fn reduce_action_envelope(
         // ── Audio / podcast ───────────────────────────────────────────────────
         "hl.audio.play" => {
             let p = parse!(AudioPlayPayload);
-            let artifact =
-                match serde_json::from_str::<crate::models::ArtifactRecord>(&p.artifact_json) {
-                    Ok(a) => a,
-                    Err(e) => {
-                        return emit_invalid_action_toast(
-                            state,
-                            format!("hl.audio.play: bad artifact_json: {e}"),
-                            now,
-                        );
-                    }
-                };
+            let artifact = match serde_json::from_str::<crate::kernel::models::ArtifactRecord>(
+                &p.artifact_json,
+            ) {
+                Ok(a) => a,
+                Err(e) => {
+                    return emit_invalid_action_toast(
+                        state,
+                        format!("hl.audio.play: bad artifact_json: {e}"),
+                        now,
+                    );
+                }
+            };
             let saved = state.podcast_resume_cache.get(&p.guid).copied();
             podcast::reduce_action_play(state, p.url, p.guid, artifact, saved)
         }
@@ -750,18 +751,19 @@ fn reduce_action_envelope(
         // ── Phase 5J additions (append-only) ──────────────────────────────────
         "hl.podcast.publish_clip" => {
             let p = parse!(PublishClipPayload);
-            let artifact =
-                match serde_json::from_str::<crate::models::ArtifactRecord>(&p.artifact_json) {
-                    Ok(a) => a,
-                    Err(e) => {
-                        tracing::warn!("hl.podcast.publish_clip: bad artifact_json: {e}");
-                        return emit_invalid_action_toast(
-                            state,
-                            format!("hl.podcast.publish_clip: bad artifact_json: {e}"),
-                            now,
-                        );
-                    }
-                };
+            let artifact = match serde_json::from_str::<crate::kernel::models::ArtifactRecord>(
+                &p.artifact_json,
+            ) {
+                Ok(a) => a,
+                Err(e) => {
+                    tracing::warn!("hl.podcast.publish_clip: bad artifact_json: {e}");
+                    return emit_invalid_action_toast(
+                        state,
+                        format!("hl.podcast.publish_clip: bad artifact_json: {e}"),
+                        now,
+                    );
+                }
+            };
             podcast::reduce_action_publish_clip(state, artifact, p.note)
         }
 
@@ -2012,7 +2014,7 @@ async fn run_effect_load_podcast_position(
     if data_dir.is_empty() {
         return;
     }
-    use crate::models::PodcastPositionRecord;
+    use crate::kernel::models::PodcastPositionRecord;
 
     let path =
         std::path::Path::new(data_dir).join(crate::kernel::domains::podcast::POSITION_FILE_NAME);
@@ -2050,12 +2052,12 @@ async fn run_effect_save_podcast_position(
     data_dir: &str,
     guid: String,
     position_seconds: f64,
-    artifact: crate::models::ArtifactRecord,
+    artifact: crate::kernel::models::ArtifactRecord,
 ) {
     if data_dir.is_empty() {
         return;
     }
-    use crate::models::PodcastPositionRecord;
+    use crate::kernel::models::PodcastPositionRecord;
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
