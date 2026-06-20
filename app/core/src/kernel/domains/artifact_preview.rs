@@ -441,8 +441,6 @@ fn article_row_to_preview(coordinate: String, row: &ArticleRow) -> ArtifactPrevi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kernel::action::{AppAction, KernelEvent};
-    use crate::kernel::actor::{reduce, Cmd};
     use crate::kernel::app::AppState;
     use crate::kernel::clock::Clock;
     use crate::kernel::clock::ManualClock;
