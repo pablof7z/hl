@@ -40,6 +40,8 @@ use crate::kernel::domains::{
     articles,
     articles_feed,
     auth,
+    // ── Phase 5G additions (append-only) ─────────────────────────────────────
+    blossom,
     bookmarks,
     // ── Phase 5E additions (append-only) ─────────────────────────────────────
     camera,
@@ -476,7 +478,7 @@ fn reduce_action_envelope(
 
     use crate::kernel::action::{
         AddBookmarkPayload, AddRelayPayload, AddRoomMemberPayload, AudioPlayPayload,
-        AudioSeekPayload, AudioSetResumePayload, CaptureSelectWordPayload,
+        AudioSeekPayload, AudioSetResumePayload, BlossomUploadPayload, CaptureSelectWordPayload,
         CaptureSetContextPayload, CaptureSetNotePayload, CaptureSetQuotePayload,
         CaptureSetTargetGroupPayload, ClaimProfilePayload, ClipExtendSegmentPayload,
         ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload, ClipSetStartPayload,
@@ -762,6 +764,15 @@ fn reduce_action_envelope(
         "hl.capture.clear_target_group" => capture_draft::reduce_action_clear_target_group(state),
         "hl.capture.publish" => capture_draft::reduce_action_publish(state, now),
         "hl.capture.reset" => capture_draft::reduce_action_reset(state),
+
+        // ── Phase 5G additions (append-only) ──────────────────────────────────
+        // `hl.blossom.upload { image_handle, servers }` — dispatch a Blossom
+        // image upload via nmp.blossom.upload. The blob descriptor arrives
+        // back via the `"action_results"` typed projection sidecar.
+        "hl.blossom.upload" => {
+            let p = parse!(BlossomUploadPayload);
+            blossom::reduce_action_blossom_upload(state, p.image_handle, p.servers, now)
+        }
 
         // ── Unknown namespace ─────────────────────────────────────────────────
         _ => emit_invalid_action_toast(
@@ -1074,6 +1085,24 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             event_id,
             error,
         } => capture_draft::reduce_event_publish_result(state, success, event_id, error),
+
+        // ── Phase 5G additions (append-only) ─────────────────────────────────
+        KernelEvent::NmpBlossomCorrelationMinted {
+            placeholder_correlation_id,
+            nmp_correlation_id,
+        } => blossom::reduce_event_nmp_blossom_correlation_minted(
+            state,
+            placeholder_correlation_id,
+            nmp_correlation_id,
+        ),
+        KernelEvent::BlossomUploadResult {
+            success,
+            blob_url,
+            error,
+        } => blossom::reduce_event_blossom_upload_result(state, success, blob_url, error),
+        KernelEvent::CapturePublishActionResult { success, error } => {
+            capture_draft::reduce_event_capture_publish_action_result(state, success, error)
+        }
 
         // ── Phase 5I additions (append-only) ─────────────────────────────────
         KernelEvent::TranscriptReady { segments } => {
@@ -1439,6 +1468,29 @@ pub(crate) async fn run_effect(
             // at pinned b4404159; reuse the highlight publish runner since both are
             // just PublishRawEvent. Fire-and-forget (D6). No-op when nmp is None.
             highlight_feed::run_effect_publish_highlight(json, nmp);
+        }
+
+        // ── Phase 5G additions (append-only) ─────────────────────────────────
+        Effect::BlossomUpload {
+            correlation_id,
+            image_handle,
+            servers,
+        } => {
+            // Dispatch nmp.blossom.upload and overwrite the placeholder
+            // correlation_id with the nmp-minted id. Fire-and-forward on the
+            // current thread (no I/O here — just an FFI call). No-op when nmp
+            // is None (test mode injects KernelEvent::BlossomUploadResult directly).
+            blossom::run_effect_blossom_upload(correlation_id, image_handle, servers, nmp, tx);
+        }
+
+        Effect::PublishCaptureWithCorrelation {
+            json,
+            correlation_id,
+        } => {
+            // Dispatch nmp.publish WITH a correlation_id so the action_results
+            // projection can route the outcome to CapturePublishActionResult.
+            // This closes the 5F loop that previously only had a clock-timeout.
+            blossom::run_effect_publish_capture_with_correlation(json, correlation_id, nmp, tx);
         }
 
         // ── Phase 5I additions (append-only) ─────────────────────────────────

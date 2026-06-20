@@ -28,11 +28,12 @@
 //! `AppState` — the previous value is left unchanged.
 
 use nmp_core::typed_projections::{
-    CLAIMED_PROFILES_SCHEMA_ID, PROFILE_SCHEMA_ID, RELAY_DIAGNOSTICS_SCHEMA_ID,
+    decode_action_results, ACTION_RESULTS_SCHEMA_ID, CLAIMED_PROFILES_SCHEMA_ID, PROFILE_SCHEMA_ID,
+    RELAY_DIAGNOSTICS_SCHEMA_ID,
 };
 
 use crate::kernel::app::AppState;
-use crate::kernel::domains::{profiles, relay_diagnostics};
+use crate::kernel::domains::{blossom, profiles, relay_diagnostics};
 use crate::kernel::effect::Effect;
 
 /// Decode one NMP snapshot frame, route each typed-projection sidecar by
@@ -73,7 +74,7 @@ pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> 
         Ok(Err(_)) | Err(_) => return vec![], // decode error or panic — D6
     };
 
-    let effects: Vec<Effect> = Vec::new();
+    let mut effects: Vec<Effect> = Vec::new();
 
     for proj in &projections {
         // Extension seam: future slices append arms before the `_` default.
@@ -173,6 +174,28 @@ pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> 
             super::search::SEARCH_SCHEMA_ID => {
                 super::search::apply_search_results(state, &proj.payload);
             }
+
+            // ── Phase 5G arm: "action_results" ───────────────────────────────
+            // Decode the Tier-2 kernel-owned `"action_results"` typed sidecar
+            // (FlatBuffers KARS file identifier). Each row carries a settled
+            // action result keyed by `correlation_id`. Route to the blossom
+            // domain which matches upload and capture-publish correlation_ids
+            // against `AppState::capture_draft` pending ids and applies the
+            // appropriate state mutation (upload result + has_upload / FSM
+            // transition). Unknown correlation_ids are a silent no-op (D6).
+            // Append-only: new arms go BELOW this one.
+            ACTION_RESULTS_SCHEMA_ID => match decode_action_results(&proj.payload) {
+                Ok(model) => {
+                    let mut new_effects = blossom::apply_action_results(state, &model);
+                    effects.append(&mut new_effects);
+                }
+                Err(e) => {
+                    tracing::trace!(
+                        error = %e,
+                        "dispatch_typed_frame: action_results decode failed — no-op (D6)"
+                    );
+                }
+            },
 
             // ── Default: unknown schema_id — silent no-op (D6) ────────────────
             // Projections registered by nmp-defaults that hl has not opted into

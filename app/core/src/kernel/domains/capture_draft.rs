@@ -78,9 +78,26 @@ use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::{KernelCaptureDraftPhase, KernelCaptureSnapshot, ViewSnapshot};
 
+/// Generate a random hex correlation id for action dispatch tracking.
+///
+/// Uses 16 random bytes (128 bits of entropy) encoded as a lowercase hex string
+/// (32 chars). Matches the nmp correlation_id alphabet: the registry mints 32-hex
+/// ids; hl mints the same shape so the action_results projection can compare by
+/// string equality without length or charset checks.
+///
+/// Uses `uuid::Uuid::new_v4()` for true cryptographic randomness via the OS
+/// random source (not clock-based XOR). Collision probability across all
+/// in-flight uploads within a session is negligible at 128 bits.
+pub(crate) fn new_correlation_id() -> String {
+    // simple() encodes as 32 lowercase hex chars with no dashes — matches the
+    // nmp correlation_id alphabet exactly (see nmp correlation id registry).
+    uuid::Uuid::new_v4().simple().to_string()
+}
+
 /// Seconds after the publish effect is emitted before the FSM times out to
 /// `Error`. Mirrors the Phase 2A sign-in timeout pattern (D8: clock-driven,
-/// no sleeps). 5G will replace this with the real action_results completion.
+/// no sleeps). 5G closes the loop via action_results; this timeout is the
+/// safety net for cases where nmp never posts a result (relay/network failure).
 pub(crate) const PUBLISH_TIMEOUT_SECS: u64 = 30;
 
 /// Clock-driven timeout: if the phase has been `Publishing` for longer than
@@ -158,8 +175,28 @@ pub struct CaptureDraftState {
     pub target_group_id: Option<String>,
     /// Publish-phase FSM state.
     pub publish_phase: CaptureDraftPhase,
-    /// `true` once an image upload has completed (deferred in 5F — always false).
+    /// `true` once an image upload has completed successfully.
+    /// Set by `reduce_event_blossom_upload_result(success=true)` in the blossom domain.
+    /// Until set, the kind:11 markdown publish path stays gated (see `can_publish`).
     pub has_upload: bool,
+
+    // ── Phase 5G additions (append-only) ─────────────────────────────────────
+    /// Canonical Blossom blob URL, populated when `has_upload` becomes `true`.
+    /// Empty until a successful upload result arrives. D1 — raw URL only.
+    pub blossom_image_url: String,
+    /// Set of correlation ids for in-flight Blossom upload actions.
+    /// Each dispatched `hl.blossom.upload` adds one id (initially a placeholder;
+    /// overwritten by the nmp-minted id via `NmpBlossomCorrelationMinted`). An
+    /// arriving action_results row clears the matching id from the set.
+    /// Using a set (not a single Option) supports two concurrent uploads (e.g.
+    /// user re-taps while the first upload is in flight) without the second
+    /// dispatch silently orphaning the first id.
+    pub pending_upload_correlation_ids: std::collections::HashSet<String>,
+    /// Correlation id of the in-flight capture-publish action (set when
+    /// `Effect::PublishCaptureWithCorrelation` is emitted; cleared after the
+    /// result arrives). The action_results projection matches arriving results
+    /// against this id. `None` when no publish is in flight.
+    pub pending_publish_correlation_id: Option<String>,
 }
 
 impl CaptureDraftState {
@@ -279,15 +316,17 @@ pub(crate) fn reduce_action_clear_target_group(state: &mut AppState) -> Vec<Effe
 /// Publish decision (no new nmp.publish namespace — both routes reuse the Phase
 /// 4H raw publish path via `PublishRawEvent`):
 ///
-/// * `quote` non-empty → `Effect::PublishHighlightEvent { json }` (kind:9802),
-///   the same effect Phase 4H emits. Tags carry the context as `["source", ..]`
-///   and the note as `["alt", ..]`.
-/// * `quote` empty but OCR markdown present → `Effect::PublishCaptureEvent { json }`
-///   (kind:11). Same `PublishRawEvent` runner.
+/// * `quote` non-empty → `Effect::PublishCaptureWithCorrelation { json, correlation_id }`
+///   (kind:9802 highlight). Tags carry the context as `["source", ..]` and the
+///   note as `["alt", ..]`. The correlation_id is stored in `pending_publish_correlation_id`
+///   so the action_results projection can route the result back.
+/// * `quote` empty but OCR markdown present → `Effect::PublishCaptureWithCorrelation`
+///   (kind:11). Same correlation_id wiring.
 ///
 /// When `can_publish` is false the action is a no-op (D6 — no event, no phase
 /// change). On a successful emit the phase advances to `Publishing`; the result
-/// arrives via `KernelEvent::CaptureDraftPublishResult`.
+/// arrives via `KernelEvent::CapturePublishActionResult` (action_results live path)
+/// or `KernelEvent::CaptureDraftPublishResult` (test injection path).
 ///
 /// All event JSON is built with `serde_json::json!` (never `format!`) so quotes
 /// and backslashes in user text are safe (D-rule: serde, not format).
@@ -298,9 +337,13 @@ pub(crate) fn reduce_action_publish(state: &mut AppState, now: u64) -> Vec<Effec
         return vec![];
     }
 
+    // Mint a correlation_id so the action_results projection can route the
+    // publish outcome back to this draft. 5G closes the loop that 5F left open.
+    let correlation_id = new_correlation_id();
+
     let draft = &state.capture_draft;
 
-    let effect = if !draft.quote.is_empty() {
+    let event_json_result = if !draft.quote.is_empty() {
         // Quote path → kind:9802 highlight via the Phase 4H raw publish path.
         // Content and tags are already trimmed (reduced in set_quote/set_context/
         // set_note), so `draft.quote` etc. are guaranteed non-empty / trimmed here.
@@ -312,13 +355,7 @@ pub(crate) fn reduce_action_publish(state: &mut AppState, now: u64) -> Vec<Effec
                 ["alt", draft.note],
             ],
         });
-        match serde_json::to_string(&event_json) {
-            Ok(json) => Effect::PublishHighlightEvent { json },
-            Err(_) => {
-                tracing::warn!("capture.publish: serde_json failed (9802) — no-op (D6)");
-                return vec![];
-            }
-        }
+        serde_json::to_string(&event_json).map_err(|_| "serde_json failed (9802)")
     } else {
         // Markdown path → kind:11 plain capture via the raw publish path.
         // `target_group_id` is guaranteed `Some` AND `has_upload` is `true`
@@ -332,19 +369,25 @@ pub(crate) fn reduce_action_publish(state: &mut AppState, now: u64) -> Vec<Effec
                 ["alt", draft.note],
             ],
         });
-        match serde_json::to_string(&event_json) {
-            Ok(json) => Effect::PublishCaptureEvent { json },
-            Err(_) => {
-                tracing::warn!("capture.publish: serde_json failed (11) — no-op (D6)");
-                return vec![];
-            }
+        serde_json::to_string(&event_json).map_err(|_| "serde_json failed (11)")
+    };
+
+    let json = match event_json_result {
+        Ok(j) => j,
+        Err(msg) => {
+            tracing::warn!("capture.publish: {} — no-op (D6)", msg);
+            return vec![];
         }
     };
 
-    // Record `now` so the clock-driven timeout can detect a stuck Publishing state.
-    // 5G will close the loop properly via the action_results typed projection.
+    // Store the correlation_id so the action_results arm can look it up.
+    state.capture_draft.pending_publish_correlation_id = Some(correlation_id.clone());
+    // Record `now` for the clock-driven timeout fallback (D8).
     state.capture_draft.publish_phase = CaptureDraftPhase::Publishing { started_at: now };
-    vec![effect]
+    vec![Effect::PublishCaptureWithCorrelation {
+        json,
+        correlation_id,
+    }]
 }
 
 /// `hl.capture.reset` — reset all draft state to defaults (phase back to Idle).
@@ -366,6 +409,28 @@ pub(crate) fn reduce_event_publish_result(
     _event_id: String,
     error: String,
 ) -> Vec<Effect> {
+    state.capture_draft.publish_phase = if success {
+        CaptureDraftPhase::Done
+    } else {
+        CaptureDraftPhase::Error { message: error }
+    };
+    vec![]
+}
+
+// ─── Phase 5G event reducers ────────────────────────────────────────────────────
+
+/// `KernelEvent::CapturePublishActionResult` — live action_results completion.
+///
+/// Routed from `blossom::route_action_result` when the correlation_id matches
+/// `AppState::capture_draft.pending_publish_correlation_id`. Drives
+/// `CaptureDraftPhase::Publishing → Done | Error` for real (not just the
+/// clock-timeout fallback). Clears `pending_publish_correlation_id` after settling.
+pub(crate) fn reduce_event_capture_publish_action_result(
+    state: &mut AppState,
+    success: bool,
+    error: String,
+) -> Vec<Effect> {
+    state.capture_draft.pending_publish_correlation_id = None;
     state.capture_draft.publish_phase = if success {
         CaptureDraftPhase::Done
     } else {
@@ -619,8 +684,9 @@ mod tests {
         assert!(state.capture_draft.target_group_id.is_none());
     }
 
-    // 5F-T4: publish routes to the existing Phase 4H highlight path (quote path),
-    // reusing Effect::PublishHighlightEvent (no new publish lane).
+    // 5G-updated-T4: publish routes to PublishCaptureWithCorrelation for the quote
+    // (kind:9802 highlight) path. 5G replaced the fire-and-forget effects with the
+    // correlation-id-tracked variant so the action_results sidecar can close the loop.
     #[test]
     fn publish_routes_to_existing_highlight_or_artifact_path() {
         let mut state = make_state();
@@ -648,29 +714,23 @@ mod tests {
 
         let effects = step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
 
-        // Exactly one effect, and it is the Phase 4H highlight publish path.
-        let highlight: Vec<_> = effects
+        // 5G: quote path now emits PublishCaptureWithCorrelation (tracked, not fire-and-forget).
+        let tracked: Vec<_> = effects
             .iter()
-            .filter(|e| matches!(e, Effect::PublishHighlightEvent { .. }))
+            .filter(|e| matches!(e, Effect::PublishCaptureWithCorrelation { .. }))
             .collect();
         assert_eq!(
-            highlight.len(),
+            tracked.len(),
             1,
-            "quote path must reuse Effect::PublishHighlightEvent; got: {effects:?}"
-        );
-
-        // No kind:11 capture effect on the quote path.
-        let capture: Vec<_> = effects
-            .iter()
-            .filter(|e| matches!(e, Effect::PublishCaptureEvent { .. }))
-            .collect();
-        assert!(
-            capture.is_empty(),
-            "quote path must not emit PublishCaptureEvent"
+            "quote path must emit Effect::PublishCaptureWithCorrelation; got: {effects:?}"
         );
 
         // The event template is kind:9802 with the quote as content.
-        if let Effect::PublishHighlightEvent { json } = highlight[0] {
+        if let Effect::PublishCaptureWithCorrelation {
+            json,
+            correlation_id,
+        } = tracked[0]
+        {
             let v: serde_json::Value = serde_json::from_str(json).expect("valid json");
             assert_eq!(v["kind"], 9802);
             assert_eq!(v["content"], "highlight me");
@@ -678,6 +738,10 @@ mod tests {
             assert_eq!(v["tags"][0][1], "source paragraph");
             assert_eq!(v["tags"][1][0], "alt");
             assert_eq!(v["tags"][1][1], "a thought");
+            assert!(
+                !correlation_id.is_empty(),
+                "correlation_id must be non-empty"
+            );
         }
 
         // Phase advanced to Publishing (carries started_at).
@@ -690,20 +754,20 @@ mod tests {
             state.capture_draft.publish_phase
         );
 
-        // Result event → Done.
+        // Result event via 5G completion seam → Done.
         step(
             &mut state,
             &clock,
-            Cmd::Event(KernelEvent::CaptureDraftPublishResult {
+            Cmd::Event(KernelEvent::CapturePublishActionResult {
                 success: true,
-                event_id: "abc".to_string(),
                 error: String::new(),
             }),
         );
         assert_eq!(state.capture_draft.publish_phase, CaptureDraftPhase::Done);
     }
 
-    // 5F-T4b: markdown-only path routes to Effect::PublishCaptureEvent (kind:11).
+    // 5G-updated-T4b: markdown-only path routes to PublishCaptureWithCorrelation (kind:11).
+    // 5G replaced PublishCaptureEvent with the tracked variant for the action_results seam.
     #[test]
     fn publish_markdown_path_routes_to_capture_event() {
         let mut state = make_state();
@@ -724,17 +788,18 @@ mod tests {
 
         let effects = step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
 
-        let capture: Vec<_> = effects
+        // 5G: markdown path also emits PublishCaptureWithCorrelation, not PublishCaptureEvent.
+        let tracked: Vec<_> = effects
             .iter()
-            .filter(|e| matches!(e, Effect::PublishCaptureEvent { .. }))
+            .filter(|e| matches!(e, Effect::PublishCaptureWithCorrelation { .. }))
             .collect();
         assert_eq!(
-            capture.len(),
+            tracked.len(),
             1,
-            "markdown path must emit Effect::PublishCaptureEvent; got: {effects:?}"
+            "markdown path must emit Effect::PublishCaptureWithCorrelation; got: {effects:?}"
         );
 
-        if let Effect::PublishCaptureEvent { json } = capture[0] {
+        if let Effect::PublishCaptureWithCorrelation { json, .. } = tracked[0] {
             let v: serde_json::Value = serde_json::from_str(json).expect("valid json");
             assert_eq!(v["kind"], 11);
             assert!(!v["content"].as_str().unwrap_or("").is_empty());
@@ -826,9 +891,12 @@ mod tests {
         let publish: Vec<_> = effects
             .iter()
             .filter(|e| {
+                // 5G: fire-and-forget effects replaced by the tracked variant.
                 matches!(
                     e,
-                    Effect::PublishHighlightEvent { .. } | Effect::PublishCaptureEvent { .. }
+                    Effect::PublishCaptureWithCorrelation { .. }
+                        | Effect::PublishHighlightEvent { .. }
+                        | Effect::PublishCaptureEvent { .. }
                 )
             })
             .collect();
@@ -1033,7 +1101,8 @@ mod tests {
         );
     }
 
-    // 5F-T12: can_publish_requires_upload for the markdown/kind:11 path.
+    // 5G-updated-T12: can_publish_requires_upload for the markdown/kind:11 path.
+    // 5G replaced PublishCaptureEvent with PublishCaptureWithCorrelation.
     #[test]
     fn can_publish_requires_upload_for_markdown_path() {
         let mut state = make_state();
@@ -1056,7 +1125,9 @@ mod tests {
             .filter(|e| {
                 matches!(
                     e,
-                    Effect::PublishHighlightEvent { .. } | Effect::PublishCaptureEvent { .. }
+                    Effect::PublishCaptureWithCorrelation { .. }
+                        | Effect::PublishHighlightEvent { .. }
+                        | Effect::PublishCaptureEvent { .. }
                 )
             })
             .collect();
@@ -1074,12 +1145,13 @@ mod tests {
         // Now set has_upload (simulates 5G Blossom result).
         state.capture_draft.has_upload = true;
         let effects2 = step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
-        let capture_effects: Vec<_> = effects2
+        // 5G: now emits PublishCaptureWithCorrelation.
+        let tracked_effects: Vec<_> = effects2
             .iter()
-            .filter(|e| matches!(e, Effect::PublishCaptureEvent { .. }))
+            .filter(|e| matches!(e, Effect::PublishCaptureWithCorrelation { .. }))
             .collect();
         assert_eq!(
-            capture_effects.len(),
+            tracked_effects.len(),
             1,
             "markdown path must publish once has_upload is true; got: {effects2:?}"
         );
