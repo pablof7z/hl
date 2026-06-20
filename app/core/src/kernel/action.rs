@@ -184,6 +184,17 @@ pub(crate) struct ReactPayload {
     pub target_author_pubkey: Option<String>,
 }
 
+/// `hl.reaction.toggle` envelope payload — like-or-unlike a target by id.
+///
+/// The kernel decides react-vs-unreact from its own viewer-reaction tracking
+/// (`AppState::viewer_reaction_ids`); the reaction kind:7 event id never crosses
+/// FFI. Optional `target_author_pubkey` is used only on the react path (`["p"]`).
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ToggleReactionPayload {
+    pub target_event_id: String,
+    pub target_author_pubkey: Option<String>,
+}
+
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct UnreactPayload {
     pub reaction_event_id: String,
@@ -1080,6 +1091,11 @@ pub enum KernelEvent {
         count: u32,
         /// `true` if the active viewer has reacted.
         viewer_reacted: bool,
+        /// The active viewer's own kind:7 reaction event id for this target, if
+        /// any. Kernel-INTERNAL only (this is `KernelEvent`, not an FFI type) —
+        /// stored in `AppState::viewer_reaction_ids` so `hl.reaction.toggle` can
+        /// emit the unreact effect without ever surfacing the id across FFI.
+        viewer_reaction_event_id: Option<String>,
     },
 
     // ── Phase 4D additions (append-only) ─────────────────────────────────────

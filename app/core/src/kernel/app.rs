@@ -219,6 +219,13 @@ pub struct AppState {
     /// in practice bounded by opened views (Non-Negotiable #7).
     pub reaction_state: HashMap<String, crate::kernel::snapshot::ReactionRow>,
 
+    /// The active viewer's own kind:7 reaction event id per target event id.
+    /// Kernel-INTERNAL (never crosses FFI): populated from the reaction observer
+    /// via `KernelEvent::ReactionStateUpdated` so `hl.reaction.toggle` can emit
+    /// the unreact effect with the correct reaction_event_id. Cleared alongside
+    /// `reaction_state` on identity loss.
+    pub viewer_reaction_ids: HashMap<String, String>,
+
     // ── Phase 4D additions ────────────────────────────────────────────────────
     /// NIP-50 relay search results for the current active search query.
     ///
@@ -440,6 +447,7 @@ impl Default for AppState {
             articles: BTreeMap::new(),
             // ── Phase 4B additions ────────────────────────────────────────────
             reaction_state: HashMap::new(),
+            viewer_reaction_ids: HashMap::new(),
             // ── Phase 4D additions ────────────────────────────────────────────
             search_results: Vec::new(),
             // ── Phase 4F additions ────────────────────────────────────────────

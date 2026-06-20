@@ -122,16 +122,14 @@ final class CommentsStore {
         likeCounts[commentId] ?? 0
     }
 
-    /// Like `comment` via the kernel (kind:7 `+`). The kernel reaction
-    /// projection updates `viewer_reacted` / `count` and the next snapshot push
-    /// re-renders. Un-like (delete) requires the reaction event id, which the
-    /// kernel does not yet surface — pending the `hl.reaction.toggle` action;
-    /// until then a repeat tap re-asserts the like (relay-deduped).
+    /// Toggle a like on `comment` via the kernel (kind:7 `+`). The kernel
+    /// decides react-vs-unreact from its own viewer-reaction tracking (the
+    /// reaction event id stays kernel-internal); the reaction projection updates
+    /// `viewer_reacted` / `count` and the next snapshot push re-renders.
     func toggleLike(_ comment: CommentRecord) async {
         guard let kernel else { return }
-        kernel.app.dispatch(.react(
+        kernel.app.dispatch(.toggleReaction(
             targetEventId: comment.eventId,
-            reaction: "+",
             targetAuthorPubkey: comment.pubkey
         ))
     }
