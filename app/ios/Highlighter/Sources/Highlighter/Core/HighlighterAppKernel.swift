@@ -65,6 +65,14 @@ final class HighlighterAppKernel {
     /// `openSearch()`), `nil` otherwise.
     private(set) var search: SearchSnapshot?
 
+    // MARK: - Published snapshots (Phase 7 cutovers)
+
+    /// Per-group-id room chat snapshots, keyed by NIP-29 local group id.
+    /// Populated while a `ViewId.roomChat(groupId:)` view is open (the chat
+    /// store opens it via `hl.chat.open`). The kernel owns the bounded message
+    /// window; Swift renders rows and formats display strings (D1).
+    private(set) var roomChatSnapshots: [String: RoomChatSnapshot] = [:]
+
     // MARK: - Kernel handle
 
     /// The Rust-side kernel object. Callers may dispatch actions and manage
@@ -190,6 +198,24 @@ final class HighlighterAppKernel {
         search = nil
     }
 
+    // MARK: - Phase 7: room chat lifecycle
+
+    /// Open a room-chat view for `groupId`. Opens the kernel view (so snapshots
+    /// stream into `roomChatSnapshots`) and dispatches `hl.chat.open` to wire the
+    /// per-room `ChatObserver`. Call from `ChatView.task`.
+    func openRoomChat(groupId: String, hostRelayUrl: String) {
+        app.openView(viewId: .roomChat(groupId: groupId), route: .roomChat(groupId: groupId))
+        app.dispatch(.chatOpen(groupId: groupId, hostRelayUrl: hostRelayUrl))
+    }
+
+    /// Close a room-chat view for `groupId`. Dispatches `hl.chat.close` (releases
+    /// the room buffer) and closes the kernel view. Call from `ChatView.onDisappear`.
+    func closeRoomChat(groupId: String) {
+        app.dispatch(.chatClose(groupId: groupId))
+        app.closeView(viewId: .roomChat(groupId: groupId))
+        roomChatSnapshots.removeValue(forKey: groupId)
+    }
+
     // MARK: - Snapshot ingestion (called on main actor by KernelObserver)
 
     fileprivate func receive(viewId: ViewId, snapshot: ViewSnapshot) {
@@ -215,6 +241,10 @@ final class HighlighterAppKernel {
         case .search(let s):
             search = s
 
+        // Phase 7 cutover: room chat snapshot (ChatStore reads this dict).
+        case .roomChat(let s):
+            roomChatSnapshots[s.groupId] = s
+
         // Phase 2E (network settings / relay diagnostics) — handled elsewhere.
         case .networkSettings, .relayDiagnostics:
             break
@@ -225,7 +255,10 @@ final class HighlighterAppKernel {
         // are closed before they can receive stale data — D5).
         case .bookmarks, .articleReader, .search, .articleFeed,
              .highlightFeed, .homeFeed, .whatsNew, .bookPicker, .shareComposer,
-             .commentThread:
+             .commentThread,
+             // Phase 7 cutovers (Batch 1) — managed by their owning stores via
+             // `current_snapshot` when those screens are cut; no-op push here.
+             .roomDiscussions, .feedbackThreads, .feedbackThread:
             break
 
         // Phase 5+ snapshots (podcast, OCR capture) — managed by their owning

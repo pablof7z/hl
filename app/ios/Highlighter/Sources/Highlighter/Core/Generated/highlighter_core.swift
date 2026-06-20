@@ -24573,6 +24573,12 @@ public struct HighlightRow {
      */
     public var sourceReference: String?
     /**
+     * Optional user note attached to the highlight, from the NIP-84 `comment`
+     * tag of the kind:9802 event. `None` when absent or empty. Raw UTF-8 (D1:
+     * Swift owns blank-note display rules). Mirrors the live lane's `note`.
+     */
+    public var note: String?
+    /**
      * Event creation time as Unix seconds. D1: Swift formats the display date.
      */
     public var createdAt: UInt64
@@ -24602,12 +24608,18 @@ public struct HighlightRow {
          * D3: opaque string from the protocol — kernel never constructs references.
          */sourceReference: String?,
         /**
+         * Optional user note attached to the highlight, from the NIP-84 `comment`
+         * tag of the kind:9802 event. `None` when absent or empty. Raw UTF-8 (D1:
+         * Swift owns blank-note display rules). Mirrors the live lane's `note`.
+         */note: String?,
+        /**
          * Event creation time as Unix seconds. D1: Swift formats the display date.
          */createdAt: UInt64) {
         self.eventId = eventId
         self.authorPubkey = authorPubkey
         self.content = content
         self.sourceReference = sourceReference
+        self.note = note
         self.createdAt = createdAt
     }
 }
@@ -24631,6 +24643,9 @@ extension HighlightRow: Equatable, Hashable {
         if lhs.sourceReference != rhs.sourceReference {
             return false
         }
+        if lhs.note != rhs.note {
+            return false
+        }
         if lhs.createdAt != rhs.createdAt {
             return false
         }
@@ -24642,6 +24657,7 @@ extension HighlightRow: Equatable, Hashable {
         hasher.combine(authorPubkey)
         hasher.combine(content)
         hasher.combine(sourceReference)
+        hasher.combine(note)
         hasher.combine(createdAt)
     }
 }
@@ -24659,6 +24675,7 @@ public struct FfiConverterTypeHighlightRow: FfiConverterRustBuffer {
                 authorPubkey: FfiConverterString.read(from: &buf),
                 content: FfiConverterString.read(from: &buf),
                 sourceReference: FfiConverterOptionString.read(from: &buf),
+                note: FfiConverterOptionString.read(from: &buf),
                 createdAt: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -24668,6 +24685,7 @@ public struct FfiConverterTypeHighlightRow: FfiConverterRustBuffer {
         FfiConverterString.write(value.authorPubkey, into: &buf)
         FfiConverterString.write(value.content, into: &buf)
         FfiConverterOptionString.write(value.sourceReference, into: &buf)
+        FfiConverterOptionString.write(value.note, into: &buf)
         FfiConverterUInt64.write(value.createdAt, into: &buf)
     }
 }
