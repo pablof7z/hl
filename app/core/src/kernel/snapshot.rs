@@ -852,6 +852,34 @@ pub struct HighlightRow {
     pub note: Option<String>,
     /// Event creation time as Unix seconds. D1: Swift formats the display date.
     pub created_at: u64,
+
+    // ── Phase 7 enrichment: NIP-84/NIP-73 source + clip + image fields ────────
+    // Mirrors the bespoke `highlights.rs::record_from_cached_event` parse so the
+    // highlight CARD (resource header, podcast-clip chrome, page-scan image) can
+    // render from kernel rows. Empty string / None when the tag is absent (D1).
+    /// `context` tag — the paragraph the quote was lifted from.
+    pub context: String,
+    /// `a` tag — addressable artifact coordinate `kind:pubkey:d` (NIP-23 etc).
+    pub artifact_address: String,
+    /// `e` tag — non-addressable source event id.
+    pub event_reference: String,
+    /// `i` tag — NIP-73 external content id (`podcast:item:guid:…`, `isbn:…`).
+    pub external_reference: String,
+    /// `r` tag — source URL (web highlight).
+    pub source_url: String,
+    /// Canonical source key: `a:…` / `e:…` / `i:…` / `r:…` in priority order,
+    /// or empty when no source tag is present (mirrors the live lane).
+    pub source_reference_key: String,
+    /// `start` tag — podcast-clip start in seconds. `None` when absent.
+    pub clip_start_seconds: Option<f64>,
+    /// `end` tag — podcast-clip end in seconds. `None` when absent.
+    pub clip_end_seconds: Option<f64>,
+    /// `speaker` tag — podcast-clip speaker. Empty when absent.
+    pub clip_speaker: String,
+    /// All `segment` tag values — transcript segment ids for a podcast clip.
+    pub clip_transcript_segment_ids: Vec<String>,
+    /// NIP-92 `imeta` image URL — the page-scan photo. Empty when absent.
+    pub image_url: String,
 }
 
 /// Snapshot for `ViewId::HighlightFeed` — the home/own highlights feed.
