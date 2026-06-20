@@ -337,7 +337,7 @@ mod tests {
     use crate::kernel::clock::{Clock, ManualClock};
     use crate::kernel::effect::Effect;
     use crate::kernel::snapshot::ViewSnapshot;
-    use crate::kernel::view::{ViewId, ViewRegistry, ViewRoute};
+    use crate::kernel::view::ViewId;
 
     fn make_state() -> AppState {
         AppState::default()
