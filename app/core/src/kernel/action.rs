@@ -1164,10 +1164,12 @@ pub enum KernelEvent {
     // ── Phase 5G additions (append-only) ─────────────────────────────────────
     /// nmp returned a dispatch correlation_id for a Blossom upload that differs
     /// from the placeholder the reducer minted. Sent by `run_effect_blossom_upload`
-    /// after `nmp_app_dispatch_action` returns. The actor overwrites
-    /// `AppState::capture_draft.pending_upload_correlation_id` with this id so
-    /// `route_action_result` can match the arriving `action_results` row.
+    /// after `nmp_app_dispatch_action` returns. The actor swaps the placeholder
+    /// out of `pending_upload_correlation_ids` and inserts the real nmp id so
+    /// `apply_action_result_row` can match the arriving `action_results` row.
     NmpBlossomCorrelationMinted {
+        /// The reducer-minted placeholder id to remove from the set.
+        placeholder_correlation_id: String,
         /// The real id nmp assigned to the upload (from the dispatch return JSON).
         nmp_correlation_id: String,
     },

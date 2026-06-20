@@ -84,21 +84,14 @@ use crate::kernel::snapshot::{KernelCaptureDraftPhase, KernelCaptureSnapshot, Vi
 /// (32 chars). Matches the nmp correlation_id alphabet: the registry mints 32-hex
 /// ids; hl mints the same shape so the action_results projection can compare by
 /// string equality without length or charset checks.
+///
+/// Uses `uuid::Uuid::new_v4()` for true cryptographic randomness via the OS
+/// random source (not clock-based XOR). Collision probability across all
+/// in-flight uploads within a session is negligible at 128 bits.
 pub(crate) fn new_correlation_id() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    // Deterministic-enough for uniqueness within a session: XOR of wall-clock
-    // nanos and a static counter. Tests inject correlation_ids directly so they
-    // never call this path (no non-determinism in test suites).
-    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let seq = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.subsec_nanos() as u64)
-        .unwrap_or(0);
-    // Combine into 16 pseudo-random bytes (two u64s).
-    let a = nanos ^ (seq.wrapping_mul(0x9e37_79b9_7f4a_7c15));
-    let b = seq.wrapping_add(0x6c62_272e_07bb_0142);
-    format!("{a:016x}{b:016x}")
+    // simple() encodes as 32 lowercase hex chars with no dashes — matches the
+    // nmp correlation_id alphabet exactly (see nmp correlation id registry).
+    uuid::Uuid::new_v4().simple().to_string()
 }
 
 /// Seconds after the publish effect is emitted before the FSM times out to
@@ -191,11 +184,14 @@ pub struct CaptureDraftState {
     /// Canonical Blossom blob URL, populated when `has_upload` becomes `true`.
     /// Empty until a successful upload result arrives. D1 — raw URL only.
     pub blossom_image_url: String,
-    /// Correlation id of the in-flight Blossom upload action (set when
-    /// `Effect::BlossomUpload` is emitted; cleared after the result arrives).
-    /// The action_results projection matches arriving results against this id.
-    /// `None` when no upload is in flight.
-    pub pending_upload_correlation_id: Option<String>,
+    /// Set of correlation ids for in-flight Blossom upload actions.
+    /// Each dispatched `hl.blossom.upload` adds one id (initially a placeholder;
+    /// overwritten by the nmp-minted id via `NmpBlossomCorrelationMinted`). An
+    /// arriving action_results row clears the matching id from the set.
+    /// Using a set (not a single Option) supports two concurrent uploads (e.g.
+    /// user re-taps while the first upload is in flight) without the second
+    /// dispatch silently orphaning the first id.
+    pub pending_upload_correlation_ids: std::collections::HashSet<String>,
     /// Correlation id of the in-flight capture-publish action (set when
     /// `Effect::PublishCaptureWithCorrelation` is emitted; cleared after the
     /// result arrives). The action_results projection matches arriving results

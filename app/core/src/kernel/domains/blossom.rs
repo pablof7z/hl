@@ -108,11 +108,15 @@ pub(crate) fn reduce_action_blossom_upload(
         }
     };
 
-    // Mint a placeholder id; the real nmp id is written back via
+    // Mint a placeholder id; the real nmp id overwrites it via
     // KernelEvent::NmpBlossomCorrelationMinted after the effect runner calls
-    // nmp_app_dispatch_action.
+    // nmp_app_dispatch_action. Insert into the set (not overwrite) so a
+    // second concurrent dispatch does not orphan the first in-flight id.
     let correlation_id = new_correlation_id();
-    state.capture_draft.pending_upload_correlation_id = Some(correlation_id.clone());
+    state
+        .capture_draft
+        .pending_upload_correlation_ids
+        .insert(correlation_id.clone());
 
     vec![Effect::BlossomUpload {
         correlation_id,
@@ -154,10 +158,24 @@ fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow) {
     use crate::kernel::domains::capture_draft::reduce_event_capture_publish_action_result;
 
     let cid = &row.correlation_id;
-    let success = row.status == "success";
+    // nmp maps its internal "ok" terminal to "published" in the action_results
+    // wire format (publish_engine_terminals.rs:73: `"ok" => "published"`).
+    // Failure terminals are written as "failed". A status other than "published"
+    // is treated as failure (D6 — unknown statuses degrade gracefully).
+    let success = row.status == "published";
 
-    // 1. Blossom upload correlation_id?
-    if state.capture_draft.pending_upload_correlation_id.as_deref() == Some(cid.as_str()) {
+    // 1. Blossom upload correlation_id? (set lookup — supports multiple in-flight)
+    if state
+        .capture_draft
+        .pending_upload_correlation_ids
+        .contains(cid.as_str())
+    {
+        // Remove this id from the set so re-delivery is a no-op (D6).
+        state
+            .capture_draft
+            .pending_upload_correlation_ids
+            .remove(cid.as_str());
+
         // Parse blob URL from the opaque result JSON (ADR-0043 Decision 4).
         // nmp.blossom.upload sets result = `{"url":"…","sha256":"…",…}`.
         let blob_url = if success {
@@ -228,28 +246,61 @@ pub(crate) fn reduce_event_blossom_upload_result(
     vec![]
 }
 
-/// Inner state mutation for a Blossom upload result — shared between the
-/// `KernelEvent` path and the direct `apply_action_result_row` path.
+/// Inner state mutation for a Blossom upload result — called by the
+/// `apply_action_result_row` path AFTER the matching id has already been
+/// removed from `pending_upload_correlation_ids`. The `KernelEvent` path
+/// (test injection via `KernelEvent::BlossomUploadResult`) calls this
+/// directly since it has no correlation_id to remove from the set.
 fn reduce_event_blossom_upload_result_inner(state: &mut AppState, success: bool, blob_url: String) {
-    state.capture_draft.pending_upload_correlation_id = None;
     if success {
         state.capture_draft.has_upload = true;
         state.capture_draft.blossom_image_url = blob_url;
+    } else {
+        // On failure: clear stale URL and has_upload so the UI can offer a retry.
+        // If a previous upload succeeded (has_upload=true) and this is a
+        // different concurrent upload that failed, preserve the prior success —
+        // only clear when no prior successful URL exists.
+        if !state.capture_draft.has_upload {
+            state.capture_draft.blossom_image_url = String::new();
+        }
     }
 }
 
-/// `KernelEvent::NmpBlossomCorrelationMinted` — overwrite the placeholder
-/// `pending_upload_correlation_id` with the real nmp-minted id.
+/// `KernelEvent::NmpBlossomCorrelationMinted` — swap the reducer-minted
+/// placeholder out of `pending_upload_correlation_ids` and insert the real
+/// nmp-minted id in its place.
 ///
 /// `run_effect_blossom_upload` sends this after `nmp_app_dispatch_action`
 /// returns the dispatch JSON `{"correlation_id":"<32-hex>"}`. Until this event
-/// is processed, `route_action_result` will not match the arriving action_results
-/// row (because nmp's id differs from the reducer placeholder).
+/// is processed, `apply_action_result_row` will not match the arriving
+/// action_results row (because nmp's id differs from the reducer placeholder).
+///
+/// The swap is safe even if a `reset` raced ahead: if the placeholder was
+/// already removed from the set (by reset clearing it or by a prior swap),
+/// `remove` is a no-op and the nmp id is simply never inserted — the upload
+/// result row will arrive as an unknown-correlation_id no-op (D6).
 pub(crate) fn reduce_event_nmp_blossom_correlation_minted(
     state: &mut AppState,
+    placeholder_correlation_id: String,
     nmp_correlation_id: String,
 ) -> Vec<Effect> {
-    state.capture_draft.pending_upload_correlation_id = Some(nmp_correlation_id);
+    // Only swap if the placeholder is still in the set (guard against reset race).
+    if state
+        .capture_draft
+        .pending_upload_correlation_ids
+        .remove(&placeholder_correlation_id)
+    {
+        state
+            .capture_draft
+            .pending_upload_correlation_ids
+            .insert(nmp_correlation_id);
+    } else {
+        tracing::debug!(
+            placeholder = %placeholder_correlation_id,
+            nmp_cid = %nmp_correlation_id,
+            "reduce_event_nmp_blossom_correlation_minted: placeholder not in set (reset race?) — dropping"
+        );
+    }
     vec![]
 }
 
@@ -339,19 +390,21 @@ pub(crate) fn run_effect_blossom_upload(
 
     match nmp_cid {
         Some(nmp_id) if nmp_id != correlation_id => {
-            // nmp minted a different id; update AppState so route_action_result
-            // can match the real id when the action_results frame arrives.
+            // nmp minted a different id; swap the placeholder in AppState so
+            // apply_action_result_row can match the real id when the
+            // action_results frame arrives.
             tracing::debug!(
-                reducer_cid = %correlation_id,
+                placeholder_cid = %correlation_id,
                 nmp_cid = %nmp_id,
-                "run_effect_blossom_upload: overwriting pending id with nmp id"
+                "run_effect_blossom_upload: swapping placeholder with nmp id"
             );
             let _ = tx.send(Cmd::Event(KernelEvent::NmpBlossomCorrelationMinted {
+                placeholder_correlation_id: correlation_id,
                 nmp_correlation_id: nmp_id,
             }));
         }
         Some(_) => {
-            // nmp returned the same id — no update needed, action_results will match.
+            // nmp returned the same id — no swap needed, action_results will match.
         }
         None => {
             // nmp returned an error JSON or no correlation_id. Upload was rejected.
@@ -369,31 +422,26 @@ pub(crate) fn run_effect_blossom_upload(
 }
 
 /// Run `Effect::PublishCaptureWithCorrelation` — dispatch a capture-draft
-/// publish through the same `ActorCommand::PublishRawEvent` path as Phase 4H,
-/// now WITH a correlation_id so the action_results projection can close the loop.
+/// publish via `ActorCommand::PublishRawEvent` with an explicit `correlation_id`
+/// so the nmp publish engine reports the outcome in `action_results` keyed on
+/// that id. This mirrors the `run_effect_publish_highlight` path (Phase 4H) but
+/// carries `correlation_id: Some(...)` to close the 5F FSM loop.
 ///
-/// The correlation_id was minted by `capture_draft::reduce_action_publish` and
-/// stored in `AppState::capture_draft.pending_publish_correlation_id`. nmp will
-/// mint its own internal id when the publish is accepted; for captures that go
-/// through `nmp.publish` the publish-engine ALREADY reports the outcome in
-/// `action_results` keyed on the dispatch's correlation_id. So unlike the
-/// blossom case we do NOT need to overwrite the pending id — the publish engine
-/// uses the id we pass via `ActorCommand::PublishRawEventWithCorrelation`.
+/// The publish engine writes the terminal verdict into `action_results` using
+/// the correlation_id attached to `ActorCommand::PublishRawEvent`. When the
+/// matching row arrives in `apply_action_result_row` with status `"published"`,
+/// `reduce_event_capture_publish_action_result` drives the FSM to Done; on
+/// `"failed"` it drives to Error. The 30 s clock-timeout in `clock_checks`
+/// remains as a safety net.
 ///
-/// D6: if nmp is None (test mode), emits a no-op. The 5F clock-timeout fallback
-/// still applies if the result never arrives.
+/// D6: if nmp is None (test mode) this is a no-op; tests inject
+/// `KernelEvent::CapturePublishActionResult` directly.
 pub(crate) fn run_effect_publish_capture_with_correlation(
     json: String,
     correlation_id: String,
     nmp: Option<&crate::kernel::actor::NmpHandle>,
-    tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
+    _tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
 ) {
-    use crate::kernel::actor::Cmd;
-
-    // In test mode (nmp = None), inject a success result immediately so tests
-    // can drive the FSM without a real nmp. The caller's test should inject
-    // KernelEvent::CapturePublishActionResult or CaptureDraftPublishResult directly
-    // instead of relying on this path.
     let Some(handle) = nmp else {
         tracing::debug!(
             "run_effect_publish_capture_with_correlation: no nmp handle (test mode) — no-op"
@@ -401,66 +449,42 @@ pub(crate) fn run_effect_publish_capture_with_correlation(
         return;
     };
 
-    // Build the nmp.publish action JSON. nmp will sign and publish the event;
-    // the correlation_id threads through so action_results maps to this dispatch.
-    // We set `correlation_id_override` so the publish engine reports THIS id in
-    // action_results (same pattern as ActorCommand::PublishRawEvent with override).
-    let action_json = serde_json::json!({
-        "event": serde_json::from_str::<serde_json::Value>(&json)
-            .unwrap_or(serde_json::Value::Null),
-        "correlation_id_override": correlation_id,
-    });
-    let action_json_str = match serde_json::to_string(&action_json) {
-        Ok(s) => s,
+    // Deserialize the event template — same as run_effect_publish_highlight (Phase 4H).
+    // The JSON carries `kind`, `content`, `tags`; nmp fills `id/sig/pubkey/created_at`.
+    #[derive(serde::Deserialize)]
+    struct EventTemplate {
+        kind: u32,
+        content: String,
+        tags: Vec<Vec<String>>,
+    }
+
+    let template = match serde_json::from_str::<EventTemplate>(&json) {
+        Ok(t) => t,
         Err(e) => {
-            tracing::warn!("run_effect_publish_capture_with_correlation: serde_json failed: {e}");
-            // Emit a failure so the FSM can recover.
-            let _ = tx.send(Cmd::Event(KernelEvent::CapturePublishActionResult {
-                success: false,
-                error: format!("serialise failed: {e}"),
-            }));
+            tracing::warn!(
+                "run_effect_publish_capture_with_correlation: failed to deserialize event template: {e} — no-op (D6)"
+            );
             return;
         }
     };
 
-    let ns_c = match CString::new("nmp.publish") {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let json_c = match CString::new(action_json_str) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-
-    // SAFETY: same contract as run_effect_blossom_upload above.
-    let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
-
-    if !result_ptr.is_null() {
-        // Parse to check for an error; free regardless.
-        let result_json = {
-            let cstr = unsafe { std::ffi::CStr::from_ptr(result_ptr) };
-            let s = cstr.to_string_lossy().to_string();
-            nmp_free_string(result_ptr);
-            s
-        };
-        // If dispatch itself failed (no correlation_id in return), emit failure now.
-        let has_cid = serde_json::from_str::<serde_json::Value>(&result_json)
-            .ok()
-            .and_then(|v| v.get("correlation_id").cloned())
-            .is_some();
-        if !has_cid {
-            tracing::warn!(
-                result = %result_json,
-                "run_effect_publish_capture_with_correlation: nmp rejected publish"
-            );
-            let _ = tx.send(Cmd::Event(KernelEvent::CapturePublishActionResult {
-                success: false,
-                error: result_json,
-            }));
-        }
-        // On acceptance: the result will arrive via action_results sidecar.
-    }
+    // Send ActorCommand::PublishRawEvent with correlation_id: Some(...).
+    // The nmp publish engine threads this id onto the action_results terminal so
+    // `apply_action_result_row` can route the verdict back to the capture FSM.
+    // This is the ONLY correct way to get a correlation_id on a PublishRaw at
+    // b4404159: `ActorCommand::PublishRawEvent::correlation_id` is passed
+    // directly into the engine, not via `nmp_app_dispatch_action`.
+    let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
+    let _ = nmp_ref
+        .actor_sender()
+        .send(nmp_core::ActorCommand::PublishRawEvent {
+            kind: template.kind,
+            content: template.content,
+            tags: template.tags,
+            target: nmp_core::publish::PublishTarget::Auto,
+            signer_pubkey: None,
+            correlation_id: Some(correlation_id),
+        });
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
@@ -523,25 +547,33 @@ mod tests {
             assert_eq!(servers, &["https://blossom.example"]);
         }
 
-        // Correlation id stored in pending_upload_correlation_id so action_results can match.
+        // Correlation id inserted into pending_upload_correlation_ids so action_results can match.
         assert!(
-            state.capture_draft.pending_upload_correlation_id.is_some(),
-            "pending_upload_correlation_id must be set"
+            !state
+                .capture_draft
+                .pending_upload_correlation_ids
+                .is_empty(),
+            "pending_upload_correlation_ids must be non-empty"
         );
     }
 
     // 5G-T2: apply_action_results routes by correlation_id — an arriving
     // upload result with the matching id sets has_upload=true and blossom_image_url.
+    // Status "published" is the wire value nmp writes for a successful publish
+    // terminal (publish_engine_terminals.rs:73: `"ok" => "published"`).
     #[test]
     fn action_result_routes_by_correlation_id() {
         let mut state = make_state();
         let cid = "deadbeef00000001deadbeef00000001".to_string();
-        state.capture_draft.pending_upload_correlation_id = Some(cid.clone());
+        state
+            .capture_draft
+            .pending_upload_correlation_ids
+            .insert(cid.clone());
 
         let model = ActionResultsModel {
             results: vec![ActionResultRow {
                 correlation_id: cid.clone(),
-                status: "success".to_string(),
+                status: "published".to_string(),
                 error: None,
                 result: Some(r#"{"url":"https://blossom.example/img.jpg"}"#.to_string()),
             }],
@@ -558,8 +590,11 @@ mod tests {
             "https://blossom.example/img.jpg"
         );
         assert!(
-            state.capture_draft.pending_upload_correlation_id.is_none(),
-            "pending_upload_correlation_id must be cleared"
+            state
+                .capture_draft
+                .pending_upload_correlation_ids
+                .is_empty(),
+            "pending_upload_correlation_ids must be empty after result consumed"
         );
     }
 
@@ -599,7 +634,10 @@ mod tests {
             state.capture_draft.blossom_image_url,
             "https://cdn.example/photo.jpg"
         );
-        assert!(state.capture_draft.pending_upload_correlation_id.is_none());
+        // The pending set should still contain the correlation_id because
+        // KernelEvent::BlossomUploadResult (injected in test mode) does NOT
+        // remove from the set — removal only happens via apply_action_result_row.
+        // The set tracks in-flight nmp dispatches; test-injected events bypass nmp.
         let _ = cid; // used above, silence lint
     }
 
@@ -674,5 +712,144 @@ mod tests {
         assert!(state.capture_draft.blossom_image_url.is_empty());
         // Phase must remain Idle — no state change.
         assert_eq!(state.capture_draft.publish_phase, CaptureDraftPhase::Idle);
+    }
+
+    // 5G-T7: the publish action_results shape uses "published" (not "success")
+    // as the status for a successful publish terminal.
+    //
+    // Verifies that `apply_action_result_row` correctly maps `status="published"`
+    // to a successful CapturePublishActionResult, driving the FSM to Done.
+    // ("success" was a former incorrect assumption — nmp writes "published" via
+    // publish_engine_terminals.rs:73: `"ok" => "published"`.)
+    #[test]
+    fn publish_uses_correct_nmp_action_shape() {
+        let mut state = make_state();
+        let cid = "cafe0000cafe0000cafe0000cafe0001".to_string();
+        state.capture_draft.publish_phase = CaptureDraftPhase::Publishing { started_at: 100 };
+        state.capture_draft.pending_publish_correlation_id = Some(cid.clone());
+
+        // Status "published" is what nmp writes for a successful publish terminal
+        // (publish_engine_terminals.rs:73: `"ok" => "published"`).
+        let model = ActionResultsModel {
+            results: vec![ActionResultRow {
+                correlation_id: cid.clone(),
+                status: "published".to_string(),
+                error: None,
+                result: None,
+            }],
+        };
+
+        apply_action_results(&mut state, &model);
+
+        assert_eq!(
+            state.capture_draft.publish_phase,
+            CaptureDraftPhase::Done,
+            "FSM must reach Done when status=\"published\" arrives"
+        );
+        assert!(
+            state.capture_draft.pending_publish_correlation_id.is_none(),
+            "pending_publish_correlation_id must be cleared on Done"
+        );
+
+        // Verify that "success" (the WRONG status) does NOT drive FSM to Done —
+        // this would remain Publishing if an incorrect string were used.
+        let mut state2 = make_state();
+        let cid2 = "cafe0000cafe0000cafe0000cafe0002".to_string();
+        state2.capture_draft.publish_phase = CaptureDraftPhase::Publishing { started_at: 100 };
+        state2.capture_draft.pending_publish_correlation_id = Some(cid2.clone());
+        let model2 = ActionResultsModel {
+            results: vec![ActionResultRow {
+                correlation_id: cid2,
+                status: "success".to_string(), // WRONG — nmp never sends this
+                error: None,
+                result: None,
+            }],
+        };
+        apply_action_results(&mut state2, &model2);
+        assert!(
+            !matches!(state2.capture_draft.publish_phase, CaptureDraftPhase::Done),
+            "status=\"success\" must NOT drive FSM to Done (nmp sends \"published\", not \"success\")"
+        );
+    }
+
+    // 5G-T8: two concurrent uploads both resolve independently — the HashSet
+    // design does not orphan the first id when a second upload is dispatched.
+    //
+    // Simulates: dispatch upload A → dispatch upload B → result for A → result for B.
+    // Verifies both results are recognised and the set is empty at the end.
+    #[test]
+    fn two_concurrent_uploads_both_resolve() {
+        let mut state = make_state();
+
+        let cid_a = "aaa00000000000000000000000000001".to_string();
+        let cid_b = "bbb00000000000000000000000000002".to_string();
+
+        // Insert both ids into the set (simulating two in-flight dispatches).
+        state
+            .capture_draft
+            .pending_upload_correlation_ids
+            .insert(cid_a.clone());
+        state
+            .capture_draft
+            .pending_upload_correlation_ids
+            .insert(cid_b.clone());
+
+        assert_eq!(state.capture_draft.pending_upload_correlation_ids.len(), 2);
+
+        // Result for A arrives.
+        let model_a = ActionResultsModel {
+            results: vec![ActionResultRow {
+                correlation_id: cid_a.clone(),
+                status: "published".to_string(),
+                error: None,
+                result: Some(r#"{"url":"https://cdn.example/a.jpg"}"#.to_string()),
+            }],
+        };
+        apply_action_results(&mut state, &model_a);
+
+        assert!(
+            state.capture_draft.has_upload,
+            "A success must set has_upload"
+        );
+        assert_eq!(
+            state.capture_draft.blossom_image_url,
+            "https://cdn.example/a.jpg"
+        );
+        assert_eq!(
+            state.capture_draft.pending_upload_correlation_ids.len(),
+            1,
+            "B's id must still be in the set"
+        );
+        assert!(
+            state
+                .capture_draft
+                .pending_upload_correlation_ids
+                .contains(&cid_b),
+            "B's id must survive A's result"
+        );
+
+        // Result for B arrives (different URL — should overwrite A's URL if success).
+        let model_b = ActionResultsModel {
+            results: vec![ActionResultRow {
+                correlation_id: cid_b.clone(),
+                status: "published".to_string(),
+                error: None,
+                result: Some(r#"{"url":"https://cdn.example/b.jpg"}"#.to_string()),
+            }],
+        };
+        apply_action_results(&mut state, &model_b);
+
+        assert!(state.capture_draft.has_upload);
+        assert_eq!(
+            state.capture_draft.blossom_image_url,
+            "https://cdn.example/b.jpg"
+        );
+        assert!(
+            state
+                .capture_draft
+                .pending_upload_correlation_ids
+                .is_empty(),
+            "set must be empty after both results consumed"
+        );
     }
 }

@@ -1087,9 +1087,14 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
         } => capture_draft::reduce_event_publish_result(state, success, event_id, error),
 
         // ── Phase 5G additions (append-only) ─────────────────────────────────
-        KernelEvent::NmpBlossomCorrelationMinted { nmp_correlation_id } => {
-            blossom::reduce_event_nmp_blossom_correlation_minted(state, nmp_correlation_id)
-        }
+        KernelEvent::NmpBlossomCorrelationMinted {
+            placeholder_correlation_id,
+            nmp_correlation_id,
+        } => blossom::reduce_event_nmp_blossom_correlation_minted(
+            state,
+            placeholder_correlation_id,
+            nmp_correlation_id,
+        ),
         KernelEvent::BlossomUploadResult {
             success,
             blob_url,
