@@ -204,6 +204,10 @@ pub(crate) fn project_snapshot(
         // ViewId::RoomChat is handled upstream in actor::project_snapshot.
         // This arm is unreachable in practice but required for exhaustive match.
         ViewId::RoomChat { .. } => None,
+        // ── Phase 7 discussions additions (append-only) ──────────────────────
+        // ViewId::RoomDiscussions is handled upstream in actor::project_snapshot.
+        // This arm is unreachable in practice but required for exhaustive match.
+        ViewId::RoomDiscussions { .. } => None,
     }
 }
 

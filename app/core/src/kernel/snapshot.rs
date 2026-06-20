@@ -220,6 +220,11 @@ pub enum ViewSnapshot {
     /// D1: no formatted timestamps, no byline strings, no `is_from_me`.
     /// Swift owns all display formatting and optimistic affordances.
     RoomChat(RoomChatSnapshot),
+    // ── Phase 7 discussions additions (append-only) ──────────────────────────
+    /// Per-room kind:11 discussions list — raw rows filtered from
+    /// `GroupEventsProjection`, bounded at 64 per room, newest-first.
+    /// D1: no title fallback, no formatted timestamps.
+    RoomDiscussions(RoomDiscussionsSnapshot),
 }
 
 // ── Phase 4B additions (append-only) ─────────────────────────────────────────
@@ -1078,6 +1083,46 @@ pub struct KernelCaptureSnapshot {
     pub publish_error: String,
 }
 
+// ── Phase 7 discussions additions (append-only) ──────────────────────────────
+
+/// One kind:11 discussion row from a NIP-29 room — raw protocol data only (D1).
+///
+/// Filtered from `GroupEventsProjection` rows: kind==11 AND `["t","discussion"]`
+/// tag present. `title` comes from the `["title", _]` tag; `body` is the event
+/// `content` field. `attachment_url` is extracted from an `["r", url]` tag.
+///
+/// D1: no `"Untitled discussion"` fallback — Swift owns display fallbacks.
+/// D1: no formatted timestamps — `created_at` is raw Unix seconds.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct DiscussionRow {
+    /// Raw 64-char hex event id of the kind:11 event.
+    pub event_id: String,
+    /// Raw 64-char hex author pubkey.
+    pub author_pubkey: String,
+    /// `["title", _]` tag value, or empty string when absent. D1: no fallback.
+    pub title: String,
+    /// Event `content` field (discussion body). May be empty.
+    pub body: String,
+    /// `["r", url]` tag value if present, else `None`.
+    pub attachment_url: Option<String>,
+    /// Event `created_at` Unix seconds. D1: no "X ago" formatting.
+    pub created_at: u64,
+}
+
+/// Snapshot for `ViewId::RoomDiscussions{group_id}` — the per-room discussions tab.
+///
+/// Raw protocol rows only (D1): Swift formats all display strings (title fallback,
+/// author name, date label, attachment chip, empty-state copy).
+///
+/// Bounded at `ROOM_DISCUSSIONS_CAP` (64) rows per room, newest-first.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct RoomDiscussionsSnapshot {
+    /// NIP-29 local group id this snapshot is for.
+    pub group_id: String,
+    /// Filtered kind:11+discussion rows, newest-first. Bounded at 64.
+    pub rows: Vec<DiscussionRow>,
+}
+
 // ── Phase 7 additions (append-only) ─────────────────────────────────────────
 
 /// A single NIP-22 kind:1111 comment record row — raw protocol data only (D1).
@@ -1115,6 +1160,17 @@ pub struct CommentRecordRow {
     /// per NIP-22 §3). Swift may use this to efficiently partition
     /// root comments from replies without re-computing the comparison.
     pub is_top_level: bool,
+    /// Per-comment like count from `AppState::reaction_state` (kind:7 `+`
+    /// reactions to this comment's `event_id`), as projected by the global
+    /// `ReactionProjection`. Raw u32 — Swift formats any label (D1). `0` when
+    /// no reactions are known for this event.
+    pub like_count: u32,
+    /// `true` when the active viewer has liked this comment (`viewer_reacted`
+    /// from `AppState::reaction_state`). Optimistic toggling lives in Swift (D1).
+    pub viewer_reacted: bool,
+    /// `true` when this comment's `event_id` is in the active account's
+    /// kind:10003 bookmark list (`AppState::bookmarks`). D1.
+    pub bookmarked: bool,
 }
 
 /// Snapshot for `ViewId::CommentThread` — flat raw comment list for one root.

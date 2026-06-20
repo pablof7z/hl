@@ -53,6 +53,8 @@ use crate::kernel::domains::{
     comments,
     communities,
     discovery,
+    // ── Phase 7 discussions additions (append-only) ──────────────────────────
+    discussions,
     feed,
     // ── Phase 7 feedback additions (append-only) ─────────────────────────────
     feedback,
@@ -857,6 +859,14 @@ fn reduce_action_envelope(
             let p: chat::MarkSeenChatPayload = parse!(chat::MarkSeenChatPayload);
             chat::reduce_action_mark_seen(state, p.group_id, p.visible_event_ids)
         }
+        // ── Phase 7 discussions additions (append-only) ───────────────────────
+        // `hl.discussion.post` — publish a kind:11 discussion thread via
+        // ActorCommand::PublishRawEvent. No nmp action namespace for kind:11 yet.
+        "hl.discussion.post" => {
+            use crate::kernel::action::PostDiscussionPayload;
+            let p = parse!(PostDiscussionPayload);
+            discussions::reduce_action_post_discussion(p)
+        }
 
         // ── Unknown namespace ─────────────────────────────────────────────────
         _ => emit_invalid_action_toast(
@@ -1233,6 +1243,13 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // D1: ChatMessageRawRow carries raw protocol fields only.
             chat::reduce_event_chat_room_updated(state, group_id, messages)
         }
+        // ── Phase 7 discussions additions (append-only) ───────────────────────
+        KernelEvent::RoomDiscussionsUpdated { group_id, rows } => {
+            // Store bounded kind:11+discussion rows in AppState::room_discussions
+            // keyed by group_id. Produced by DiscussionObserver (per open room)
+            // or injected directly from tests via Cmd::Event. D1: raw rows only.
+            discussions::reduce_event_room_discussions_updated(state, group_id, rows)
+        }
     }
 }
 
@@ -1326,6 +1343,13 @@ pub(crate) fn project_snapshot(
             // D1: RoomChatSnapshot carries raw protocol fields only — no formatted strings.
             let snapshot = chat::compute_room_chat_snapshot(state, group_id);
             Some(crate::kernel::snapshot::ViewSnapshot::RoomChat(snapshot))
+        }
+        // ── Phase 7 discussions additions (append-only) ───────────────────────
+        ViewId::RoomDiscussions { group_id } => {
+            let snapshot = discussions::compute_room_discussions_snapshot(state, group_id);
+            Some(crate::kernel::snapshot::ViewSnapshot::RoomDiscussions(
+                snapshot,
+            ))
         }
 
         _ => route::project_snapshot(state, id, clock_now),
@@ -1707,6 +1731,16 @@ pub(crate) async fn run_effect(
             // No-op when nmp is None (test mode — tests inject ChatRoomUpdated directly).
             chat::run_effect_dispatch_chat_post(json, nmp);
         }
+        // ── Phase 7 discussions additions (append-only) ───────────────────────
+        Effect::PublishDiscussionEvent { json } => {
+            // Sends ActorCommand::PublishRawEvent with a kind:11 event template
+            // via actor_sender(). nmp fills id/sig/pubkey/created_at (D7, D9).
+            // Fire-and-forget (D6, Non-Negotiable #3). The authoritative row
+            // arrives back via KernelEvent::RoomDiscussionsUpdated from the
+            // DiscussionObserver once the relay echoes the published event.
+            // No-op when nmp is None (test mode — tests inspect Effect directly).
+            discussions::run_effect_publish_discussion(json, nmp);
+        }
     }
 
     let _ = session_epoch; // carried for future epoch-keyed effect cancellation
@@ -2064,6 +2098,19 @@ pub(crate) async fn actor_task(
                 lifecycle_effects.extend(highlight_feed::lifecycle_effects_for_view_open(id));
                 // ── Phase 4J: home feed — compose both underlying feed lifecycles ──
                 lifecycle_effects.extend(home_feed::lifecycle_effects_for_view_open(id, &state));
+                // ── Phase 7 discussions: register DiscussionObserver per room ──
+                // Inline (not an Effect) because it needs the NmpHandle directly.
+                // No-op when nmp_handle is None (test mode) or group_id is empty.
+                if let (ViewId::RoomDiscussions { group_id }, Some(handle)) =
+                    (id, nmp_handle.as_ref())
+                {
+                    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+                    discussions::register_discussion_observer(
+                        nmp_ref,
+                        group_id.clone(),
+                        tx.clone(),
+                    );
+                }
             }
             Cmd::CloseView(id) => {
                 // ── Phase 3D: release the profile subscription before removing from registry ──
