@@ -26,8 +26,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     fileprivate struct Registry: @unchecked Sendable {
         var rooms: [UInt64: WeakBox<RoomStore>] = [:]
         var discussions: [UInt64: WeakBox<DiscussionStore>] = [:]
-        var chats: [UInt64: WeakBox<ChatStore>] = [:]
-        var chatPresence: [UInt64: WeakBox<ChatPresenceProbe>] = [:]
         var profiles: [UInt64: WeakBox<ProfileStore>] = [:]
         var articles: [UInt64: WeakBox<ArticleReaderStore>] = [:]
         var homeFeeds: [UInt64: WeakBox<HomeFeedStore>] = [:]
@@ -45,8 +43,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         mutating func prune() {
             rooms = rooms.filter { $0.value.value != nil }
             discussions = discussions.filter { $0.value.value != nil }
-            chats = chats.filter { $0.value.value != nil }
-            chatPresence = chatPresence.filter { $0.value.value != nil }
             profiles = profiles.filter { $0.value.value != nil }
             articles = articles.filter { $0.value.value != nil }
             homeFeeds = homeFeeds.filter { $0.value.value != nil }
@@ -79,19 +75,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         }
     }
 
-    func registerChat(_ store: ChatStore, handle: UInt64) {
-        registry.withLock { reg in
-            reg.chats[handle] = WeakBox(store)
-            reg.prune()
-        }
-    }
-
-    func registerChatPresence(_ probe: ChatPresenceProbe, handle: UInt64) {
-        registry.withLock { reg in
-            reg.chatPresence[handle] = WeakBox(probe)
-            reg.prune()
-        }
-    }
 
     func registerProfile(_ store: ProfileStore, handle: UInt64) {
         registry.withLock { reg in
@@ -166,8 +149,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         registry.withLock { reg in
             _ = reg.rooms.removeValue(forKey: handle)
             _ = reg.discussions.removeValue(forKey: handle)
-            _ = reg.chats.removeValue(forKey: handle)
-            _ = reg.chatPresence.removeValue(forKey: handle)
             _ = reg.profiles.removeValue(forKey: handle)
             _ = reg.articles.removeValue(forKey: handle)
             _ = reg.homeFeeds.removeValue(forKey: handle)
@@ -196,8 +177,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 RoutedStores(
                     room: reg.rooms[id]?.value,
                     discussion: reg.discussions[id]?.value,
-                    chat: reg.chats[id]?.value,
-                    chatPresence: reg.chatPresence[id]?.value,
                     profile: reg.profiles[id]?.value,
                     article: reg.articles[id]?.value,
                     homeFeed: reg.homeFeeds[id]?.value,
@@ -214,10 +193,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 self.dispatchRoom(change, store: store)
             } else if let store = routed.discussion {
                 self.dispatchDiscussions(change, store: store)
-            } else if let store = routed.chat {
-                self.dispatchChat(change, store: store)
-            } else if let probe = routed.chatPresence {
-                self.dispatchChatPresence(change, probe: probe)
             } else if let store = routed.profile {
                 self.dispatchProfile(change, store: store)
             } else if let store = routed.article {
@@ -246,8 +221,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     private struct RoutedStores {
         let room: RoomStore?
         let discussion: DiscussionStore?
-        let chat: ChatStore?
-        let chatPresence: ChatPresenceProbe?
         let profile: ProfileStore?
         let article: ArticleReaderStore?
         let homeFeed: HomeFeedStore?
@@ -351,23 +324,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             Task { await store.reloadFromCache() }
         default:
             break
-        }
-    }
-
-    @MainActor
-    private func dispatchChat(_ change: DataChangeType, store: ChatStore) {
-        switch change {
-        case .chatMessageUpserted(_, let message):
-            Task { await store.reloadFromCache(activityEventId: message.eventId) }
-        default:
-            break
-        }
-    }
-
-    @MainActor
-    private func dispatchChatPresence(_ change: DataChangeType, probe: ChatPresenceProbe) {
-        if case .chatMessageUpserted = change {
-            probe.notifyActivity()
         }
     }
 

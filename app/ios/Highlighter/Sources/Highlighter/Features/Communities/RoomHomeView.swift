@@ -70,13 +70,19 @@ struct RoomHomeView: View {
                 await room.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
                 await chatPresenceProbe.start(
                     groupId: groupId,
-                    core: app.safeCore,
-                    bridge: app.eventBridge,
+                    hostRelayUrl: kernelRoomSnapshot?.hostRelayUrl ?? "",
+                    kernel: kernel,
                     onActivity: {
                         hasChatActivity = true
                         if selectedTab != .chat { chatUnread = true }
                     }
                 )
+            }
+            .onChange(of: kernel.roomChatSnapshots[groupId]) { _, _ in
+                // Kernel pushed a new chat snapshot — re-evaluate room activity
+                // so the Chat tab unhides live on the first kind:9 (the probe
+                // owns the kernel chat view lifecycle for this room).
+                chatPresenceProbe.refreshActivity()
             }
             .onDisappear {
                 // Phase 3G: close the kernel view, releasing the GroupEventsProjection.
