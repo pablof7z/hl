@@ -168,20 +168,23 @@ pub(crate) fn build_home_feed_rows(state: &AppState) -> Vec<KernelHomeFeedRow> {
 
         let extracted = extract_source_reference(&ev.tags);
 
-        // Track the `a` tag value separately for suppression — only an `a` tag
-        // (addressable coordinate) can match a kind:30023 article address.
-        if let Some((ref val, SourceRefKind::Address)) = extracted {
-            highlighted_addresses.insert(val.clone());
+        // Track the raw `a` tag value separately for suppression — only an `a`
+        // tag (addressable coordinate) can match a kind:30023 article address.
+        // Suppression uses the RAW value (e.g. "30023:pubkey:d"), not the
+        // prefixed group key "a:30023:pubkey:d". This mirrors live
+        // `build_items` which uses `highlight.highlight.artifact_address` directly.
+        if let Some((_, ref raw_val, SourceRefKind::Address)) = extracted {
+            highlighted_addresses.insert(raw_val.clone());
         }
 
-        let (source_reference, source_ref_kind) = match extracted {
-            Some((val, kind)) => (Some(val), Some(kind)),
-            None => (None, None),
+        let (group_key_val, source_reference, source_ref_kind) = match extracted {
+            Some((gk, raw, kind)) => (Some(gk), Some(raw), Some(kind)),
+            None => (None, None, None),
         };
 
-        let key = source_reference
-            .clone()
-            .unwrap_or_else(|| format!("solo:{}", ev.id));
+        // Prefixed group key matches live `source_reference_key` format.
+        // Solo highlights use "solo:<event_id>" (same as live lane).
+        let key = group_key_val.unwrap_or_else(|| format!("solo:{}", ev.id));
 
         if !group_map.contains_key(&key) {
             group_order.push(key.clone());
@@ -281,18 +284,30 @@ pub(crate) fn build_home_feed_rows(state: &AppState) -> Vec<KernelHomeFeedRow> {
 /// Which NIP-84 tag provided the source reference for a highlight.
 ///
 /// Used by `highlight_stable_id` to decide between `"h:src:*"` (for `a` and `r`
-/// tags) and `"h:evt:*"` (for `e`-only and solo highlights). The live bespoke
-/// `home_feed.rs::highlight_stable_id` only emits `"h:src:*"` when
+/// tags) and `"h:evt:*"` (for `e`, `i`, and solo highlights). The live bespoke
+/// `home_feed.rs::highlight_stable_id` (lines 124-135) only emits `"h:src:*"` when
 /// `artifact_address` (`a` tag) or `source_url` (`r` tag) is present; for
-/// `e`-only and solo cases it falls back to `"h:evt:<highlight_event_id>"`.
+/// `e`-only, `i`-only, and solo cases it falls back to
+/// `"h:evt:<highlight_event_id>"`.
+///
+/// Grouping key format (mirrors live `highlights.rs:1442` `source_reference_key`):
+///   `"a:<val>"` | `"e:<val>"` | `"i:<val>"` | `"r:<val>"` | `"solo:<event_id>"`
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum SourceRefKind {
-    /// From an `a` tag — addressable coordinate. Stable_id uses `"h:src:*"`.
+    /// From an `a` tag — addressable coordinate. Group key `"a:<val>"`.
+    /// Stable_id uses `"h:src:<val>"` (mirrors live `artifact_address` branch).
     Address,
-    /// From an `r` tag — URL. Stable_id uses `"h:src:*"`.
+    /// From an `r` tag — URL anchor. Group key `"r:<val>"`.
+    /// Stable_id uses `"h:src:<val>"` (mirrors live `source_url` branch).
     Url,
-    /// From an `e` tag — referenced event id. Stable_id falls back to `"h:evt:*"`.
+    /// From an `e` tag — referenced event id. Group key `"e:<val>"`.
+    /// Stable_id falls back to `"h:evt:<highlight_event_id>"` (live has no `e`
+    /// branch in `highlight_stable_id`; it falls through to the event_id default).
     Event,
+    /// From an `i` tag — external identifier (ISBN, podcast, URL-like ref).
+    /// Group key `"i:<val>"`. Stable_id falls back to `"h:evt:<highlight_event_id>"`
+    /// (live has no `i` branch in `highlight_stable_id` either).
+    ExternalRef,
 }
 
 /// Minimal highlight record used during merge computation.
@@ -310,11 +325,15 @@ struct RawHighlight {
 /// Ported from `home_feed.rs::highlight_stable_id` (lines 124-135). Uses the
 /// first highlight in the (created_at-ascending-sorted) group:
 ///
-/// - `"h:src:<ref>"` when `source_ref_kind` is `Address` (`a` tag) or `Url`
-///   (`r` tag) — mirrors live `artifact_address` / `source_url` branches.
-/// - `"h:evt:<highlight_event_id>"` for `e`-only and solo highlights — mirrors
-///   live `format!("h:evt:{}", first.highlight.event_id)`. Note: this uses the
-///   **highlight's own event id**, not the referenced event id from the `e` tag.
+/// - `"h:src:<val>"` when `source_ref_kind` is `Address` (`a` tag) — mirrors
+///   live `artifact_address` branch. The `val` is the raw a-tag value
+///   (e.g. `"30023:pubkey:d_tag"`), NOT the prefixed group key `"a:<val>"`.
+/// - `"h:src:<val>"` when `source_ref_kind` is `Url` (`r` tag) — mirrors
+///   live `source_url` branch. The `val` is the raw r-tag value.
+/// - `"h:evt:<highlight_event_id>"` for `e`-only (`Event`), `i`-only
+///   (`ExternalRef`), and solo highlights — live `highlight_stable_id` has no
+///   branch for these; they fall to `format!("h:evt:{}", first.highlight.event_id)`.
+///   This uses the **highlight's own event id**, not the referenced tag value.
 ///
 /// D1: raw structural keys only — never a user-visible label.
 fn highlight_stable_id(group: &[RawHighlight]) -> String {
@@ -324,50 +343,52 @@ fn highlight_stable_id(group: &[RawHighlight]) -> String {
     match (&first.source_ref_kind, &first.source_reference) {
         (Some(SourceRefKind::Address), Some(ref src)) => format!("h:src:{src}"),
         (Some(SourceRefKind::Url), Some(ref src)) => format!("h:src:{src}"),
-        // e-only or solo: fall back to the highlight's own event id (live behavior).
+        // e-only, i-only, or solo: fall back to the highlight's own event id (live behavior).
         _ => format!("h:evt:{}", first.event_id),
     }
 }
 
-/// Extract the NIP-84 source reference from a tag list, returning both the
-/// value and the `SourceRefKind` so callers can compute the correct stable_id.
+/// Extract the NIP-84 source reference from a tag list, returning a
+/// `(group_key, raw_val, SourceRefKind)` triple so callers can:
+///   - use `group_key` as the grouping map key (prefixed: `"a:<v>"`, `"e:<v>"`,
+///     `"i:<v>"`, `"r:<v>"`) — matches live `highlights.rs:1442` `source_reference_key`
+///   - use `raw_val` for the `source_reference` field on the output row and for
+///     stable_id emission (Address/Url cases emit `"h:src:<raw_val>"`)
+///   - use `SourceRefKind` to choose the correct `highlight_stable_id` branch
 ///
-/// Priority order mirrors the live `highlights.rs::record_from_cached_event`
-/// `source_reference_key` logic:
-///   1. `a` tag — addressable coordinate `"kind:pubkey:d_tag"` (`SourceRefKind::Address`).
-///   2. `e` tag — plain hex event id (`SourceRefKind::Event`).
-///   3. `r` tag — URL string for web-page highlights (`SourceRefKind::Url`).
-///      The bespoke lane stores this as `HighlightRecord.source_url`; live
-///      `home_feed.rs::group_key` returns it via `source_reference_key`.
+/// Priority order mirrors live `highlights.rs::record_from_cached_event:1442`:
+///   a (artifact_address) → e (event_reference) → i (external_reference) → r (source_url)
 ///
-/// Returns `None` when none of the three tags is present (solo highlight).
-fn extract_source_reference(tags: &[Vec<String>]) -> Option<(String, SourceRefKind)> {
-    // 1. Prefer `a` tag (addressable — NIP-23 articles are the primary target).
-    if let Some(val) = tags
-        .iter()
-        .find(|t| t.first().map(|s| s == "a").unwrap_or(false))
-        .and_then(|t| t.get(1))
-        .cloned()
-    {
-        return Some((val, SourceRefKind::Address));
+/// Returns `None` when none of the four tags is present (solo highlight).
+fn extract_source_reference(tags: &[Vec<String>]) -> Option<(String, String, SourceRefKind)> {
+    fn first_tag<'a>(tags: &'a [Vec<String>], name: &str) -> Option<&'a str> {
+        tags.iter()
+            .find(|t| t.first().map(|s| s == name).unwrap_or(false))
+            .and_then(|t| t.get(1))
+            .map(String::as_str)
     }
-    // 2. Fall back to `e` tag (non-addressable event reference).
-    if let Some(val) = tags
-        .iter()
-        .find(|t| t.first().map(|s| s == "e").unwrap_or(false))
-        .and_then(|t| t.get(1))
-        .cloned()
-    {
-        return Some((val, SourceRefKind::Event));
+
+    // 1. `a` tag — addressable coordinate (NIP-23 articles, primary target).
+    if let Some(val) = first_tag(tags, "a") {
+        return Some((format!("a:{val}"), val.to_string(), SourceRefKind::Address));
     }
-    // 3. Fall back to `r` tag (URL anchor — web-page highlights).
-    //    The bespoke lane reads this as `HighlightRecord.source_url` and uses it
-    //    as the group key when no nostr-event reference is present.
-    tags.iter()
-        .find(|t| t.first().map(|s| s == "r").unwrap_or(false))
-        .and_then(|t| t.get(1))
-        .cloned()
-        .map(|val| (val, SourceRefKind::Url))
+    // 2. `e` tag — non-addressable event reference.
+    if let Some(val) = first_tag(tags, "e") {
+        return Some((format!("e:{val}"), val.to_string(), SourceRefKind::Event));
+    }
+    // 3. `i` tag — external identifier (ISBN, podcast episode, URL-like ref).
+    //    Added in live highlights.rs:1447; stable_id falls to h:evt:* (no i-branch
+    //    in live highlight_stable_id).
+    if let Some(val) = first_tag(tags, "i") {
+        return Some((
+            format!("i:{val}"),
+            val.to_string(),
+            SourceRefKind::ExternalRef,
+        ));
+    }
+    // 4. `r` tag — URL anchor (web-page highlights). Bespoke lane stores as
+    //    `HighlightRecord.source_url`; stable_id emits `"h:src:<url>"`.
+    first_tag(tags, "r").map(|val| (format!("r:{val}"), val.to_string(), SourceRefKind::Url))
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -811,6 +832,102 @@ mod tests {
                 assert!(
                     !stable.contains(referenced_event_id),
                     "stable_id must NOT embed the referenced event id, got: {stable}"
+                );
+            }
+            other => panic!("expected HomeFeed snapshot, got {:?}", other),
+        }
+    }
+
+    // 4J-T10: i_tag_highlight_groups_and_stable_id_matches_live
+    //
+    // A highlight anchored by an `i` tag (external identifier — ISBN, podcast,
+    // URL-like ref) must:
+    //   1. Group correctly (two highlights with the same `i` value → one row).
+    //   2. Emit `"h:evt:<highlight_event_id>"` as stable_id — live
+    //      `home_feed.rs::highlight_stable_id` has no `i` branch and falls
+    //      through to `format!("h:evt:{}", first.highlight.event_id)`.
+    //   3. NOT emit `"h:src:*"` (would be wrong — live only uses h:src for a/r).
+    //
+    // Also verifies the `i` tag is NOT in `highlighted_addresses`, so i-anchored
+    // highlights do not erroneously suppress article reads.
+    #[test]
+    fn i_tag_highlight_groups_and_stable_id_matches_live() {
+        let mut state = make_state();
+
+        // Build kind:9802 events with `i` tag manually (highlight_ev helper uses
+        // `a` vs `e` heuristic; `i` requires a direct construction).
+        fn i_tag_ev(
+            id: &str,
+            pubkey: &str,
+            i_val: &str,
+            created_at: u64,
+        ) -> nmp_core::substrate::KernelEvent {
+            nmp_core::substrate::KernelEvent {
+                id: id.to_string(),
+                author: pubkey.to_string(),
+                kind: 9802,
+                created_at,
+                tags: vec![vec!["i".to_string(), i_val.to_string()]],
+                content: "highlighted text".to_string(),
+                relay_provenance: vec![],
+            }
+        }
+
+        let i_val = "isbn:9780140449136"; // Iliad ISBN as a realistic i-tag value
+        let hl1_id = "hlh0000000000000000000000000000000000000000000000000000000000000001";
+        let hl2_id = "hlh0000000000000000000000000000000000000000000000000000000000000002";
+
+        let hl1 = i_tag_ev(hl1_id, "pub01", i_val, 1_700_000_200);
+        let hl2 = i_tag_ev(hl2_id, "pub02", i_val, 1_700_000_210);
+
+        // Also add an article to confirm it is NOT suppressed by the i-tag highlight.
+        let art = article_ev(
+            "art000000000000000000000000000000000000000000000000000000000000006",
+            "pub03",
+            "d6",
+            1_700_000_100,
+        );
+
+        apply_feed_page(&mut state.highlight_feed, vec![hl1, hl2], 20, false, None);
+        apply_feed_page(&mut state.article_feed, vec![art], 10, false, None);
+
+        let snap = project_home_feed_snapshot(&state).unwrap();
+        match snap {
+            ViewSnapshot::HomeFeed(ref s) => {
+                // Two i-tag highlights with same i-value → one group row + one article.
+                assert_eq!(
+                    s.rows.len(),
+                    2,
+                    "one i-tag highlight group + one unsuppressed article"
+                );
+
+                // Highlight group must be first (sort_key=1_700_000_210 > article 1_700_000_100).
+                let hl_row = &s.rows[0];
+                assert_eq!(hl_row.kind, KernelHomeFeedRowKind::Highlight);
+                assert_eq!(
+                    hl_row.highlight_event_ids.len(),
+                    2,
+                    "both i-tag highlights must be in the same group"
+                );
+
+                let stable = &hl_row.stable_id;
+                // Must be h:evt:<first_highlight_event_id> (ascending-sorted within group).
+                assert_eq!(
+                    stable,
+                    &format!("h:evt:{hl1_id}"),
+                    "i-tag highlight stable_id must be h:evt:<highlight_id>, got: {stable}"
+                );
+                assert!(
+                    !stable.starts_with("h:src:"),
+                    "i-tag highlight must NOT use h:src: prefix, got: {stable}"
+                );
+
+                // Article must NOT be suppressed (i-tag refs don't go into highlighted_addresses).
+                let art_row = &s.rows[1];
+                assert_eq!(
+                    art_row.kind,
+                    KernelHomeFeedRowKind::Article,
+                    "article must be present — i-tag highlights don't suppress articles"
                 );
             }
             other => panic!("expected HomeFeed snapshot, got {:?}", other),
