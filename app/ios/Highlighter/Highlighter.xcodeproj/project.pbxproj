@@ -33,6 +33,7 @@
 		2A7C8122C0DFE2FED18FFACC /* Color+Design.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91FC541346A385CE25897B18 /* Color+Design.swift */; };
 		D3B8DC162FE1D8DBAD64C49E /* OneShotUITimer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F0086C63D3437A97D1DF478 /* OneShotUITimer.swift */; };
 		2D36D9606CD3D1B52DDB4ECB /* OCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D440613F0159EB94851DA42F /* OCRService.swift */; };
+		E5F6A7B8C9D0E1F2A3B4C5D6 /* CapturePresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6A7B8C9D0E1F2A3B4C5D6E7 /* CapturePresenter.swift */; };
 		2E6CF960595A831EF8F09A07 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E16A359FC1C5B69DF399844 /* LoginView.swift */; };
 		2FB0225C4B61125BFE5C4E2A /* HighlightPageImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5C307F542E0909AA378D8B3 /* HighlightPageImage.swift */; };
 		31CABBF1F531C5239F7006DB /* ReadingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 920FC0E3AF21652B1A8FCCD5 /* ReadingCard.swift */; };
@@ -307,6 +308,7 @@
 		D07D5E8EBC538B7C0B3C5E78 /* AppSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSessionStore.swift; sourceTree = "<group>"; };
 		D24086C32EEA1A513E6403D8 /* DiscussionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscussionListView.swift; sourceTree = "<group>"; };
 		D440613F0159EB94851DA42F /* OCRService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRService.swift; sourceTree = "<group>"; };
+		F6A7B8C9D0E1F2A3B4C5D6E7 /* CapturePresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturePresenter.swift; sourceTree = "<group>"; };
 		D7F7AA33815B00FDBA427E65 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DA579D8C87B26DF0740A9498 /* SharedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedStore.swift; sourceTree = "<group>"; };
 		DEB7BE8A74F1FCF3E1EE8219 /* NostrRichText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrRichText.swift; sourceTree = "<group>"; };
@@ -353,6 +355,7 @@
 				488B7270B0BF2D577F655CBD /* ImageProcessing.swift */,
 				6D29C0BA966A767C20164FBE /* ManualISBNEntryView.swift */,
 				D440613F0159EB94851DA42F /* OCRService.swift */,
+				F6A7B8C9D0E1F2A3B4C5D6E7 /* CapturePresenter.swift */,
 				1082315DE0FF2734F453EDDF /* OCRTypes.swift */,
 			);
 			path = Capture;
@@ -995,6 +998,7 @@
 				ACA17C8EEC9768B46B11D0CB /* NetworkSettingsView.swift in Sources */,
 				A6148C000E1FC2734F5D085C /* NostrRichText.swift in Sources */,
 				2D36D9606CD3D1B52DDB4ECB /* OCRService.swift in Sources */,
+				E5F6A7B8C9D0E1F2A3B4C5D6 /* CapturePresenter.swift in Sources */,
 				B8C0FB14BB5219154785FB45 /* OCRTypes.swift in Sources */,
 				5F726F4688F60032ECCAD3D0 /* OnboardingCreateAccountView.swift in Sources */,
 				56B834DABF900FF450B35708 /* OnboardingInterestsView.swift in Sources */,
