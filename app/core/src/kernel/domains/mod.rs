@@ -73,3 +73,5 @@ pub(crate) mod comments;
 
 // ── Phase 7 feedback additions (append-only) ─────────────────────────────────
 pub(crate) mod feedback;
+// ── Phase 7 chat additions (append-only) ─────────────────────────────────────
+pub(crate) mod chat;

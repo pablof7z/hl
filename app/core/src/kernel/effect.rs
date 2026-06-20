@@ -531,6 +531,51 @@ pub enum Effect {
         correlation_id: String,
     },
 
+    // ── Phase 7 chat additions (append-only) ─────────────────────────────────
+    /// Register a `ChatObserver` wrapping a fresh `GroupChatProjection` scoped to
+    /// `group_id` as a `KernelEventObserver` against the live `NmpApp`.
+    ///
+    /// Sent when `hl.chat.open` is dispatched. The observer filters to kind:9,
+    /// recovers `reply_to_event_id` from raw tags, and sends
+    /// `KernelEvent::ChatRoomUpdated` into the actor channel on each accepted event.
+    ///
+    /// Fire-and-forget (D6). No-op when `nmp` is `None` (test mode).
+    WireGroupChat {
+        /// NIP-29 local group id.
+        group_id: String,
+        /// Host relay WebSocket URL for the `GroupId` construction.
+        host_relay_url: String,
+    },
+
+    /// Remove the hl-side chat message buffer for `group_id` from
+    /// `AppState::chat_rooms`.
+    ///
+    /// Sent when `hl.chat.close` is dispatched. The underlying `ChatObserver` in
+    /// nmp keeps running (singleton per-group observer); only the hl-side buffer
+    /// is cleared to bound memory. Fire-and-forget (D6).
+    ReleaseChatRoom {
+        /// NIP-29 local group id whose chat buffer to discard.
+        group_id: String,
+    },
+
+    /// Call `nmp_app_dispatch_action` with `"nmp.nip29.post_chat_message"` namespace
+    /// and the serialised `PostChatMessageInput` JSON payload.
+    ///
+    /// Payload shape: `{ group: { host_relay_url, local_id }, content,
+    /// previous_event_id_prefixes: [], reply_to_event_id? }`.
+    ///
+    /// Fire-and-forget (D6, Non-Negotiable #3): the returned correlation_id JSON
+    /// is freed and discarded. The authoritative message arrives back via
+    /// `KernelEvent::ChatRoomUpdated` from the `ChatObserver` on the next
+    /// kind:9 event (relay echo).
+    ///
+    /// The kernel is the sole kind:9 writer for ported screens.
+    DispatchChatPost {
+        /// Serialised `PostChatMessageInput` JSON payload (`serde_json::to_string`
+        /// — never `format!`).
+        json: String,
+    },
+
     // ── Phase 7 additions (append-only) ─────────────────────────────────────
     /// Call `nmp_app_dispatch_action` with `"nmp.nip22.post_comment"` namespace
     /// and the serialised NIP-22 `PostCommentAction` JSON payload.

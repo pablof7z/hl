@@ -47,6 +47,8 @@ use crate::kernel::domains::{
     camera,
     // ── Phase 5F additions (append-only) ─────────────────────────────────────
     capture_draft,
+    // ── Phase 7 chat additions (append-only) ─────────────────────────────────
+    chat,
     // ── Phase 7 additions (append-only) ─────────────────────────────────────
     comments,
     communities,
@@ -829,6 +831,32 @@ fn reduce_action_envelope(
                 p.parent_author_pubkey,
             )
         }
+        // ── Phase 7 chat additions (append-only) ──────────────────────────────
+        // `hl.chat.open` — register per-room ChatObserver and wire GroupChatProjection.
+        "hl.chat.open" => {
+            let p: chat::OpenChatPayload = parse!(chat::OpenChatPayload);
+            chat::reduce_action_open_chat(state, p.group_id, p.host_relay_url)
+        }
+        // `hl.chat.close` — clear per-room chat buffer in state + emit ReleaseChatRoom.
+        "hl.chat.close" => {
+            let p: chat::CloseChatPayload = parse!(chat::CloseChatPayload);
+            chat::reduce_action_close_chat(state, p.group_id)
+        }
+        // `hl.chat.load_more` — increment page_count (bounded at CHAT_MAX_PAGES).
+        "hl.chat.load_more" => {
+            let p: chat::LoadMoreChatPayload = parse!(chat::LoadMoreChatPayload);
+            chat::reduce_action_load_more_chat(state, p.group_id)
+        }
+        // `hl.chat.post` — write a kind:9 chat message via nmp.nip29.post_chat_message.
+        "hl.chat.post" => {
+            let p: chat::PostChatPayload = parse!(chat::PostChatPayload);
+            chat::reduce_action_post_chat(p)
+        }
+        // `hl.chat.mark_seen` — optional pill-reset hint (currently no-op in kernel).
+        "hl.chat.mark_seen" => {
+            let p: chat::MarkSeenChatPayload = parse!(chat::MarkSeenChatPayload);
+            chat::reduce_action_mark_seen(state, p.group_id, p.visible_event_ids)
+        }
 
         // ── Unknown namespace ─────────────────────────────────────────────────
         _ => emit_invalid_action_toast(
@@ -1195,6 +1223,16 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // D1: raw CommentThreadSnapshot only — no formatted strings.
             comments::reduce_event_comment_thread_updated(state, root_tag_value, snapshot)
         }
+
+        // ── Phase 7 chat additions (append-only) ─────────────────────────────
+        KernelEvent::ChatRoomUpdated { group_id, messages } => {
+            // Upsert the newest-first message buffer in AppState::chat_rooms[group_id].
+            // Increments activity_revision so the snapshot can signal new activity.
+            // Produced by ChatObserver::on_kernel_event (kind:9 only).
+            // Also injectable directly from tests via Cmd::Event (no live NmpApp needed).
+            // D1: ChatMessageRawRow carries raw protocol fields only.
+            chat::reduce_event_chat_room_updated(state, group_id, messages)
+        }
     }
 }
 
@@ -1280,6 +1318,14 @@ pub(crate) fn project_snapshot(
             Some(crate::kernel::snapshot::ViewSnapshot::FeedbackThread(
                 snapshot,
             ))
+        }
+        // ── Phase 7 chat additions (append-only) ─────────────────────────────
+        ViewId::RoomChat { group_id } => {
+            // Compute a bounded RoomChatSnapshot for the open chat room.
+            // Rows are oldest-first in the visible window (page_count * 50, cap 1000).
+            // D1: RoomChatSnapshot carries raw protocol fields only — no formatted strings.
+            let snapshot = chat::compute_room_chat_snapshot(state, group_id);
+            Some(crate::kernel::snapshot::ViewSnapshot::RoomChat(snapshot))
         }
 
         _ => route::project_snapshot(state, id, clock_now),
@@ -1633,6 +1679,33 @@ pub(crate) async fn run_effect(
             // The authoritative update arrives back via CommentThreadUpdated for
             // root_tag_value = HIGHLIGHTER_PROJECT_COORDINATE.
             feedback::run_effect_dispatch_feedback_comment_action(json, nmp);
+        }
+        // ── Phase 7 chat additions (append-only) ─────────────────────────────
+        Effect::WireGroupChat {
+            group_id,
+            host_relay_url,
+        } => {
+            // Register a ChatObserver (wrapping a fresh GroupChatProjection scoped to
+            // group_id) as a KernelEventObserver against the live NmpApp. The observer
+            // filters to kind:9 events only, recovers reply_to_event_id from raw tags,
+            // and sends KernelEvent::ChatRoomUpdated into the actor channel.
+            // No-op when nmp is None (test mode — tests inject ChatRoomUpdated directly).
+            chat::run_effect_wire_group_chat(group_id, host_relay_url, nmp, tx.clone());
+        }
+        Effect::ReleaseChatRoom { group_id: _ } => {
+            // The hl-side chat buffer was already cleared in reduce_action_close_chat
+            // (the reducer has access to AppState; run_effect does not). This effect
+            // arm is reserved for future async observer-slot release (nmp unregister).
+            // Currently a no-op here.
+        }
+        Effect::DispatchChatPost { json } => {
+            // Call nmp_app_dispatch_action with "nmp.nip29.post_chat_message" and the
+            // serde-JSON PostChatMessageInput payload. Fire-and-forget (D6, Non-
+            // Negotiable #3): returned correlation_id is freed and discarded.
+            // The authoritative message arrives back via KernelEvent::ChatRoomUpdated
+            // from the ChatObserver on the relay echo (kind:9 event).
+            // No-op when nmp is None (test mode — tests inject ChatRoomUpdated directly).
+            chat::run_effect_dispatch_chat_post(json, nmp);
         }
     }
 
