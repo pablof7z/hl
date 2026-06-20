@@ -130,6 +130,14 @@ pub enum ViewId {
     /// is `ViewSnapshot::ShareComposer(ShareComposerSnapshot)` — raw fields
     /// for the pending share item and the available community picker rows (D1).
     ShareComposer,
+
+    // ── Phase 5H additions (append-only) ─────────────────────────────────────
+    /// Full-screen podcast player view.
+    ///
+    /// Opened when the user taps a podcast episode to play. Snapshot:
+    /// `ViewSnapshot::PodcastListening(PodcastListeningSnapshot)` — raw position,
+    /// duration, is_playing, and clip range fields (D1: Swift formats timestamps).
+    PodcastListening,
 }
 
 /// Which projection to compute for a registered view.
@@ -216,6 +224,12 @@ pub enum ViewRoute {
     /// (raw pending share item fields + community picker rows). D1: no formatted
     /// strings, no community name fallbacks, no URL validation strings.
     ShareComposer,
+
+    // ── Phase 5H additions (append-only) ─────────────────────────────────────
+    /// Podcast player projection — `PodcastListeningSnapshot` (now-playing +
+    /// position/duration/is_playing + clip range). D1: raw f64 seconds, no
+    /// "X:XX" formatted strings.
+    PodcastListening,
 }
 
 /// Tracks open views and their last-emitted snapshots.

@@ -178,6 +178,11 @@ pub(crate) fn project_snapshot(
         // ViewId::ShareComposer is handled upstream in actor::project_snapshot.
         // This arm is unreachable in practice but required for exhaustive match.
         ViewId::ShareComposer => None,
+
+        // ── Phase 5H additions (append-only) ─────────────────────────────────
+        // ViewId::PodcastListening is handled upstream in actor::project_snapshot.
+        // This arm is unreachable in practice but required for exhaustive match.
+        ViewId::PodcastListening => None,
     }
 }
 

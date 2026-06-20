@@ -49,3 +49,6 @@ pub(crate) mod isbn;
 
 // ── Phase 5K additions (append-only) ─────────────────────────────────────────
 pub(crate) mod share;
+
+// ── Phase 5H additions (append-only) ─────────────────────────────────────────
+pub(crate) mod podcast;
