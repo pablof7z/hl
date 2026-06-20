@@ -119,6 +119,19 @@ enum HighlighterAction {
     /// Publish a kind:9 chat message into the room (optional reply parent).
     case postChat(groupId: String, hostRelayUrl: String, content: String, replyToEventId: String?)
 
+    // ── Comments (Phase 7 cutover) ──────────────────────────────────────────────
+    /// Publish a NIP-22 kind:1111 comment. `parentEventId == nil` posts a
+    /// top-level comment (parent mirrors root); otherwise replies to that comment.
+    case postComment(
+        rootTagName: String,
+        rootTagValue: String,
+        rootKind: UInt32,
+        parentEventId: String?,
+        rootAuthorPubkey: String?,
+        parentAuthorPubkey: String?,
+        content: String
+    )
+
     // MARK: - Envelope serialization
 
     /// Encodes this action as an `AppActionEnvelope` ready for `dispatchAction`.
@@ -334,6 +347,21 @@ enum HighlighterAction {
             ]
             if let replyTo = replyToEventId { dict["reply_to_event_id"] = replyTo }
             return AppActionEnvelope(namespace: "hl.chat.post", json: jsonAny(dict))
+
+        // ── Comments (Phase 7 cutover) ──────────────────────────────────────
+        case .postComment(let rootTagName, let rootTagValue, let rootKind,
+                          let parentEventId, let rootAuthorPubkey,
+                          let parentAuthorPubkey, let content):
+            var dict: [String: Any] = [
+                "root_tag_name": rootTagName,
+                "root_tag_value": rootTagValue,
+                "root_kind": rootKind,
+                "content": content,
+            ]
+            if let parent = parentEventId { dict["parent_event_id"] = parent }
+            if let rootAuthor = rootAuthorPubkey { dict["root_author_pubkey"] = rootAuthor }
+            if let parentAuthor = parentAuthorPubkey { dict["parent_author_pubkey"] = parentAuthor }
+            return AppActionEnvelope(namespace: "hl.comment.post", json: jsonAny(dict))
         }
     }
 }
