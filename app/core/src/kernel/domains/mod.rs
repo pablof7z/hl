@@ -13,6 +13,7 @@ pub(crate) mod discovery;
 pub(crate) mod follows;
 pub(crate) mod profiles;
 pub(crate) mod projections;
+pub(crate) mod reactions;
 pub(crate) mod relay_diagnostics;
 pub(crate) mod relays;
 pub(crate) mod room_home;

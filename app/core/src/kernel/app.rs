@@ -206,6 +206,18 @@ pub struct AppState {
     ///
     /// D1: `ArticleRow` is raw protocol data only — no formatted strings.
     pub articles: BTreeMap<String, crate::kernel::snapshot::ArticleRow>,
+
+    // ── Phase 4B additions ────────────────────────────────────────────────────
+    /// Reaction state for target events, decoded from the `"hl.reactions"`
+    /// wrapped typed-snapshot projection. Keyed by target event id (raw
+    /// 64-char hex). Values carry raw count + viewer-reacted bool (D1: no
+    /// labels or formatting; optimistic UI state lives in Swift).
+    ///
+    /// Cleared on `Logout` and `IdentityChanged(None)` so stale reaction
+    /// counts from a prior account never surface under a new identity.
+    /// Bounded by the number of events whose reaction projection has fired —
+    /// in practice bounded by opened views (Non-Negotiable #7).
+    pub reaction_state: HashMap<String, crate::kernel::snapshot::ReactionRow>,
 }
 
 impl Default for AppState {
@@ -230,6 +242,8 @@ impl Default for AppState {
             bookmarks: Vec::new(),
             // ── Phase 4A additions ────────────────────────────────────────────
             articles: BTreeMap::new(),
+            // ── Phase 4B additions ────────────────────────────────────────────
+            reaction_state: HashMap::new(),
         }
     }
 }

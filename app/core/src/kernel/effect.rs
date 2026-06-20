@@ -234,6 +234,7 @@ pub enum Effect {
         /// JSON-serialized action payload (serde_json, not format!).
         json: String,
     },
+
     // ── Phase 4C additions (append-only) ─────────────────────────────────────
     /// Call `nmp_app_dispatch_action` with a NIP-51 bookmark namespace and the
     /// `BookmarkUpdateInput { account_pubkey, item }` JSON payload.
@@ -253,6 +254,29 @@ pub enum Effect {
         /// One of `"nmp.nip51.add_bookmark"` or `"nmp.nip51.remove_bookmark"`.
         namespace: String,
         /// Serialised `BookmarkUpdateInput { account_pubkey, item }` JSON.
+        json: String,
+    },
+
+    // ── Phase 4B additions (append-only) ─────────────────────────────────────
+    /// Call `nmp_app_dispatch_action` with the `"nmp.nip25.react"` or
+    /// `"nmp.nip25.unreact"` namespace and the serialised NIP-25 action payload.
+    ///
+    /// `"nmp.nip25.react"` payload: `ReactAction { target_event_id, reaction,
+    /// target_author_pubkey? }` — builds and publishes kind:7.
+    /// `"nmp.nip25.unreact"` payload: `UnreactAction { reaction_event_id, reason }`
+    /// — builds and publishes kind:5 deletion.
+    ///
+    /// Fire-and-forget (D6, Non-Negotiable #3): the returned correlation_id JSON
+    /// is freed and discarded. The authoritative reaction state arrives back via
+    /// `KernelEvent::ReactionStateUpdated` on the next `ReactionProjection` tick.
+    ///
+    /// The kernel is the sole kind:7 writer for ported screens (no live-lane
+    /// double-publish for reactions on articles/highlights/artifacts).
+    DispatchReactAction {
+        /// NIP-25 action namespace (`"nmp.nip25.react"` or `"nmp.nip25.unreact"`).
+        namespace: String,
+        /// JSON-serialised NIP-25 action payload (`serde_json::to_string` — never
+        /// `format!`). `ReactAction` or `UnreactAction` depending on `namespace`.
         json: String,
     },
 }
