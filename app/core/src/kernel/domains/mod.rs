@@ -22,3 +22,6 @@ pub(crate) mod session;
 
 // ── Phase 4A additions (append-only) ─────────────────────────────────────────
 pub(crate) mod articles;
+
+// ── Phase 4D additions (append-only) ─────────────────────────────────────────
+pub(crate) mod search;

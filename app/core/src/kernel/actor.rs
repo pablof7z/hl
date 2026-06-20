@@ -38,7 +38,7 @@ use nmp_defaults::{NmpAppBuilder, RunConfig};
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
 use crate::kernel::domains::{
     articles, auth, bookmarks, communities, discovery, follows, profiles, projections, reactions,
-    relays, room_home, route, session,
+    relays, room_home, route, search, session,
 };
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
@@ -336,6 +336,9 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         AppAction::Unreact { reaction_event_id } => {
             reactions::reduce_action_unreact(reaction_event_id)
         }
+
+        // ── Phase 4D additions (append-only) ─────────────────────────────────
+        AppAction::RunSearch { query, scope } => search::reduce_action_run_search(query, scope),
     }
 }
 
@@ -457,6 +460,16 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             );
             vec![]
         }
+
+        // ── Phase 4D additions (append-only) ─────────────────────────────────
+        KernelEvent::SearchResultsUpdated(rows) => {
+            // Replace AppState::search_results with the incoming hit rows.
+            // Produced by `projections::dispatch_typed_frame` when the
+            // "hl.search" JSON sidecar arrives, but also injectable directly
+            // from tests via Cmd::Event (no live NmpApp needed). D1: raw fields.
+            state.search_results = rows;
+            vec![]
+        }
     }
 }
 
@@ -491,6 +504,9 @@ pub(crate) fn project_snapshot(
         ViewId::ArticleReader { address } => {
             articles::project_article_reader_snapshot(state, address)
         }
+
+        // ── Phase 4D additions (append-only) ─────────────────────────────────
+        ViewId::Search => search::project_search_snapshot(state),
 
         _ => route::project_snapshot(state, id, clock_now),
     }
@@ -657,6 +673,19 @@ pub(crate) async fn run_effect(
             // KernelEvent::ReactionStateUpdated on the next projection tick.
             reactions::run_effect_dispatch_react_action(namespace, json, nmp);
         }
+
+        // ── Phase 4D additions (append-only) ─────────────────────────────────
+        Effect::RunSearch {
+            query,
+            scope_json,
+            interest_id,
+        } => {
+            // Push the NIP-50 search interest and replace the hl-owned
+            // SearchResultsProjection. Fire-and-forget (D6): search hits
+            // arrive back as KernelEvent::SearchResultsUpdated via the NMP
+            // snapshot callback. No-op if nmp is None (test mode).
+            search::run_effect_run_search(query, scope_json, interest_id, nmp);
+        }
     }
 
     let _ = session_epoch; // carried for future epoch-keyed effect cancellation
@@ -713,6 +742,9 @@ pub(crate) async fn actor_task(
                 // ── Phase 4A: article reader lifecycle (no-op — longform projection
                 //    auto-populates AppState::articles; no NMP claim needed) ──────
                 lifecycle_effects.extend(articles::lifecycle_effects_for_view_open(id));
+                // ── Phase 4D: search view lifecycle (no-op on open — projection
+                //    wired by RunSearch dispatch, not by view open) ───────────────
+                lifecycle_effects.extend(search::lifecycle_effects_for_view_open(id));
             }
             Cmd::CloseView(id) => {
                 // ── Phase 3D: release the profile subscription before removing from registry ──
@@ -721,6 +753,14 @@ pub(crate) async fn actor_task(
                 lifecycle_effects.extend(room_home::lifecycle_effects_for_view_close(id));
                 // ── Phase 4A: article reader close lifecycle (no-op in 4A) ─────
                 lifecycle_effects.extend(articles::lifecycle_effects_for_view_close(id));
+                // ── Phase 4D: clear search results inline when search view closes ──
+                // Handled inline (like ReleaseGroupEvents) because clearing
+                // AppState requires a mutable state reference that run_effect
+                // does not have.
+                if matches!(id, ViewId::Search) {
+                    state.search_results.clear();
+                }
+                lifecycle_effects.extend(search::lifecycle_effects_for_view_close(id));
                 registry.close(id);
             }
             Cmd::Resume => {

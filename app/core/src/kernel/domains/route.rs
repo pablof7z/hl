@@ -143,6 +143,11 @@ pub(crate) fn project_snapshot(
         // ViewId::ArticleReader is handled upstream in actor::project_snapshot.
         // This arm is unreachable in practice but required for exhaustive match.
         ViewId::ArticleReader { .. } => None,
+
+        // ── Phase 4D additions (append-only) ─────────────────────────────────
+        // ViewId::Search is handled upstream in actor::project_snapshot.
+        // This arm is unreachable in practice but required for exhaustive match.
+        ViewId::Search => None,
     }
 }
 

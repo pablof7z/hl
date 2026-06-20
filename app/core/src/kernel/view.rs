@@ -73,6 +73,16 @@ pub enum ViewId {
         /// Addressable coordinate: `kind:author_hex:d_tag`.
         address: String,
     },
+
+    // ── Phase 4D additions (append-only) ─────────────────────────────────────
+    /// NIP-50 relay search results view.
+    ///
+    /// Opened when the user submits a search query; closed when the user
+    /// navigates away. On open (lifecycle): no projection wiring needed — the
+    /// `SearchResultsProjection` is registered when `AppAction::RunSearch` is
+    /// dispatched. On close: `AppState::search_results` is cleared to bound
+    /// memory. The snapshot is `ViewSnapshot::Search(SearchSnapshot)`.
+    Search,
 }
 
 /// Which projection to compute for a registered view.
@@ -123,6 +133,11 @@ pub enum ViewRoute {
         /// Addressable coordinate: `kind:author_hex:d_tag`.
         address: String,
     },
+
+    // ── Phase 4D additions (append-only) ─────────────────────────────────────
+    /// NIP-50 relay search results projection — `SearchSnapshot` (bounded raw
+    /// hit rows). D1: no "X results" label, no formatted kind/author strings.
+    Search,
 }
 
 /// Tracks open views and their last-emitted snapshots.

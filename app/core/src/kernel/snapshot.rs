@@ -139,6 +139,11 @@ pub enum ViewSnapshot {
     /// `content_tree_bytes` for the article body. D1: no formatted strings
     /// ("Untitled", "min read", hashtag labels) — those are Swift-side concerns.
     ArticleReader(KernelArticleReaderSnapshot),
+
+    // ── Phase 4D additions (append-only) ─────────────────────────────────────
+    /// NIP-50 relay search results — bounded raw hit rows.
+    /// D1: no "X results" count label, no formatted kind/author strings.
+    Search(SearchSnapshot),
 }
 
 // ── Phase 4B additions (append-only) ─────────────────────────────────────────
@@ -485,4 +490,63 @@ pub struct KernelArticleReaderSnapshot {
     /// Empty until the full document arrives. Swift / platform decodes via
     /// `nmp_content::wire::decode_content_tree`.
     pub content_tree_bytes: Vec<u8>,
+}
+
+// ── Phase 4D additions (append-only) ─────────────────────────────────────────
+
+/// One NIP-50 search hit stored in `AppState::search_results`.
+///
+/// Raw protocol data only (D1 / ADR-0032): Swift formats all display strings
+/// (event-kind labels, author bech32, date, content preview, etc.).
+/// Fields mirror `nmp_nip50::SearchHit` — the bounded accumulator in
+/// `SearchResultsProjection` (max `DEFAULT_MAX_SEARCH_HITS = 200` entries).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SearchHitRow {
+    /// 64-character hex event id.
+    pub id: String,
+    /// 64-character hex author pubkey. D1: Swift formats bech32 `npub`.
+    pub author: String,
+    /// Nostr event kind number (raw u32 — D1: Swift maps to display label).
+    pub kind: u32,
+    /// Event creation time as Unix seconds. D1: Swift formats the display date.
+    pub created_at: u64,
+    /// Raw event `content` field.
+    pub content: String,
+    /// Event tags as a Vec of Vec<String> (same wire shape as Nostr JSON).
+    pub tags: Vec<Vec<String>>,
+    /// Relay URLs this event was observed on (may be empty for cache hits).
+    pub relay_provenance: Vec<String>,
+}
+
+/// Snapshot for `ViewId::Search` — NIP-50 relay search results view.
+///
+/// Raw protocol data only (D1): Swift formats all display strings.
+/// Bounded by `SearchResultsProjection`'s `max_hits` cap
+/// (default `DEFAULT_MAX_SEARCH_HITS = 200` from nmp-nip50 — Non-Negotiable #7).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct SearchSnapshot {
+    /// Ordered (by `created_at` descending, then `id` ascending) search hit rows.
+    /// Raw fields only — no "X results" count label, no formatted strings (D1).
+    pub hits: Vec<KernelSearchHitRow>,
+}
+
+/// uniffi-compatible search hit row for FFI (uniffi::Record requires simple types).
+///
+/// Mirrors `SearchHitRow` with `tags` flattened to `Vec<String>` (uniffi
+/// does not support `Vec<Vec<String>>`). The Rust-internal `SearchHitRow`
+/// uses the native 2D Vec; this struct is for the snapshot FFI boundary only.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelSearchHitRow {
+    /// 64-character hex event id.
+    pub id: String,
+    /// 64-character hex author pubkey. D1: Swift formats bech32 `npub`.
+    pub author: String,
+    /// Nostr event kind number (raw u32).
+    pub kind: u32,
+    /// Event creation time as Unix seconds.
+    pub created_at: u64,
+    /// Raw event `content` field.
+    pub content: String,
+    /// Relay URLs this event was observed on.
+    pub relay_provenance: Vec<String>,
 }

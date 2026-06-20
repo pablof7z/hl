@@ -162,6 +162,18 @@ pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> 
                 super::articles::apply_articles(state, &proj.payload);
             }
 
+            // ── Phase 4D arm: "hl.search" ─────────────────────────────────────
+            // Decode the hl-owned serde-JSON search snapshot (registered by
+            // `search::run_effect_run_search` on each `AppAction::RunSearch`
+            // dispatch) and store raw SearchHitRow items in
+            // AppState::search_results. Bounded by the projection's max_hits cap
+            // (default 200 — Non-Negotiable #7). D6: decode errors are silent
+            // no-ops. D1: raw fields only — no "X results" count labels.
+            // Append-only: new arms go BELOW this one.
+            super::search::SEARCH_SCHEMA_ID => {
+                super::search::apply_search_results(state, &proj.payload);
+            }
+
             // ── Default: unknown schema_id — silent no-op (D6) ────────────────
             // Projections registered by nmp-defaults that hl has not opted into
             // (e.g. action_stages, bunker_handshake) arrive here. This is the

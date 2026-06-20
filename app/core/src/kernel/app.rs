@@ -218,6 +218,25 @@ pub struct AppState {
     /// Bounded by the number of events whose reaction projection has fired —
     /// in practice bounded by opened views (Non-Negotiable #7).
     pub reaction_state: HashMap<String, crate::kernel::snapshot::ReactionRow>,
+
+    // ── Phase 4D additions ────────────────────────────────────────────────────
+    /// NIP-50 relay search results for the current active search query.
+    ///
+    /// Updated by `KernelEvent::SearchResultsUpdated` — produced when the
+    /// hl-owned `SearchResultsProjection` emits a snapshot tick. Empty until
+    /// `AppAction::RunSearch` is dispatched and hits arrive from relays.
+    ///
+    /// Cleared when:
+    ///   - `AppAction::RunSearch` with a new query replaces the projection
+    ///     (the new projection starts empty; the first tick sets `[]`).
+    ///   - `ViewId::Search` is closed (lifecycle effect clears the vec to bound
+    ///     memory between search sessions).
+    ///   - `Logout` / `IdentityChanged(None)`.
+    ///
+    /// Bounded by `SearchResultsProjection::max_hits` (default 200,
+    /// hard cap 500 from nmp-nip50 — Non-Negotiable #7).
+    /// D1: `SearchHitRow` is raw protocol data only — no formatted strings.
+    pub search_results: Vec<crate::kernel::snapshot::SearchHitRow>,
 }
 
 impl Default for AppState {
@@ -244,6 +263,8 @@ impl Default for AppState {
             articles: BTreeMap::new(),
             // ── Phase 4B additions ────────────────────────────────────────────
             reaction_state: HashMap::new(),
+            // ── Phase 4D additions ────────────────────────────────────────────
+            search_results: Vec::new(),
         }
     }
 }
