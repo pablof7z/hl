@@ -1027,6 +1027,12 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // Store raw hex pubkeys decoded from the "nmp.nip02.follow_list"
             // typed sidecar. Also injectable directly from tests via Cmd::Event
             // (no live NmpApp needed — the reducer path is identical).
+            //
+            // Phase 7: lifecycle effects for HomeFeed follow-update (missing
+            // cursor registrations) are emitted from the actor_task after reduce
+            // because the registry is only available there. See actor_task for the
+            // `FollowListUpdated` post-reduce hook that calls
+            // `home_feed::lifecycle_effects_for_follow_update`.
             state.follows = pubkeys;
             vec![]
         }
@@ -1168,6 +1174,8 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             let feed_state = match key.as_str() {
                 "hl.feed.articles" => Some(&mut state.article_feed),
                 "hl.feed.highlights" => Some(&mut state.highlight_feed),
+                // Phase 7: home-feed interaction cursor (kind:1/7/16/1111).
+                home_feed::HOME_INTERACTIONS_FEED_KEY => Some(&mut state.home_feed_interactions),
                 k if k.starts_with("hl.feed.room.") => {
                     // Lazily insert a FeedState for this group_id if not present.
                     let group_key = k.to_string();
@@ -1199,7 +1207,12 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // whose preview isn't cached yet. Ensure a (pending-or-resolved) row
             // exists for each so the next HomeFeed snapshot can attach it
             // (skeleton while pending). Idempotent; only for the home-feed sources.
-            if key == "hl.feed.articles" || key == "hl.feed.highlights" {
+            // Phase 7 aggregation: interaction pages may also resolve new article
+            // coordinates that need preview entries.
+            if key == "hl.feed.articles"
+                || key == "hl.feed.highlights"
+                || key == home_feed::HOME_INTERACTIONS_FEED_KEY
+            {
                 home_feed::ensure_artifact_previews(state);
             }
 
@@ -2173,6 +2186,7 @@ fn feed_state_cursor_id(state: &AppState, key: &str) -> u64 {
     match key {
         "hl.feed.articles" => state.article_feed.cursor_id,
         "hl.feed.highlights" => state.highlight_feed.cursor_id,
+        home_feed::HOME_INTERACTIONS_FEED_KEY => state.home_feed_interactions.cursor_id,
         k if k.starts_with("hl.feed.room.") => state.room_lanes.get(k).map_or(0, |fs| fs.cursor_id),
         k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => state
             .article_highlight_feeds
@@ -2191,6 +2205,7 @@ fn feed_state_after_seq(state: &AppState, key: &str) -> u64 {
     match key {
         "hl.feed.articles" => state.article_feed.after_seq,
         "hl.feed.highlights" => state.highlight_feed.after_seq,
+        home_feed::HOME_INTERACTIONS_FEED_KEY => state.home_feed_interactions.after_seq,
         k if k.starts_with("hl.feed.room.") => state.room_lanes.get(k).map_or(0, |fs| fs.after_seq),
         k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => state
             .article_highlight_feeds
@@ -2323,8 +2338,20 @@ pub(crate) async fn actor_task(
 
         let now = clock.now_unix_seconds();
 
+        // Detect FollowListUpdated before reduce so we can emit post-reduce
+        // effects that need the registry (which is not available in reduce_event).
+        let is_follow_list_updated = matches!(cmd, Cmd::Event(KernelEvent::FollowListUpdated(_)));
+
         // Reduce (pure, sync).
-        let effects = reduce(&mut state, cmd, now);
+        let mut effects = reduce(&mut state, cmd, now);
+
+        // Phase 7: if follows just updated and HomeFeed is open, emit any missing
+        // cursor registrations (article feed or interaction feed that were not
+        // registered at HomeFeed-open time because follows were empty). D8:
+        // effect-driven; no polling; no native close/reopen.
+        if is_follow_list_updated && registry.is_open(&ViewId::HomeFeed) {
+            effects.extend(home_feed::lifecycle_effects_for_follow_update(&state));
+        }
 
         // Run lifecycle effects first (profile claim/release), then reducer effects.
         // Phase 3F: WireGroupEvents and ReleaseGroupEvents require AppState and are
@@ -2364,6 +2391,9 @@ pub(crate) async fn actor_task(
                     match key.as_str() {
                         "hl.feed.articles" => state.article_feed.cursor_id = id,
                         "hl.feed.highlights" => state.highlight_feed.cursor_id = id,
+                        home_feed::HOME_INTERACTIONS_FEED_KEY => {
+                            state.home_feed_interactions.cursor_id = id;
+                        }
                         k if k.starts_with("hl.feed.room.") => {
                             state.room_lanes.entry(k.to_string()).or_default().cursor_id = id;
                         }
@@ -2403,6 +2433,9 @@ pub(crate) async fn actor_task(
                     match key.as_str() {
                         "hl.feed.articles" => state.article_feed.clear(),
                         "hl.feed.highlights" => state.highlight_feed.clear(),
+                        home_feed::HOME_INTERACTIONS_FEED_KEY => {
+                            state.home_feed_interactions.clear();
+                        }
                         k if k.starts_with("hl.feed.room.") => {
                             if let Some(fs) = state.room_lanes.get_mut(k) {
                                 fs.clear();

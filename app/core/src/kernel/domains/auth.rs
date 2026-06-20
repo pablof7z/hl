@@ -419,6 +419,9 @@ pub(crate) fn clear_feed_state_on_identity_lost(state: &mut AppState) {
     state.highlight_feed = crate::kernel::domains::feed::FeedState::default();
     state.room_lanes.clear();
     state.article_highlight_feeds.clear();
+    // Phase 7: interaction cursor is follow-scoped — clear on identity loss
+    // so the next account's follows drive a fresh registration.
+    state.home_feed_interactions = crate::kernel::domains::feed::FeedState::default();
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────

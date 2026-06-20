@@ -284,6 +284,19 @@ pub struct AppState {
     /// released on close. Cleared on `Logout` / `IdentityChanged(None)`.
     pub article_highlight_feeds: HashMap<String, crate::kernel::domains::feed::FeedState>,
 
+    // ── Phase 7 home-feed aggregation additions (append-only) ────────────────
+    /// Pull-cursor state for follow-authored article interactions.
+    ///
+    /// Registered when `ViewId::HomeFeed` opens (via
+    /// `lifecycle_effects_for_view_open` emitting `Effect::RegisterFeedCursor`
+    /// with key `"hl.feed.home_interactions"`). Carries kind:1/7/16/1111 events
+    /// authored by follows with `#k=30023`, used by `home_feed.rs` to compute
+    /// `interactor_pubkeys` and `latest_activity_at` for article rows.
+    ///
+    /// Fail-closed: not registered when `AppState::follows` is empty — no broad
+    /// scan (D5). Cleared on `Logout` / `IdentityChanged(None)`.
+    pub home_feed_interactions: crate::kernel::domains::feed::FeedState,
+
     // ── Phase 5A additions ────────────────────────────────────────────────────
     /// What's New seen-state — device-local, never published to Nostr.
     ///
@@ -471,6 +484,8 @@ impl Default for AppState {
             highlight_feed: crate::kernel::domains::feed::FeedState::default(),
             room_lanes: HashMap::new(),
             article_highlight_feeds: HashMap::new(),
+            // ── Phase 7 home-feed aggregation additions ───────────────────────
+            home_feed_interactions: crate::kernel::domains::feed::FeedState::default(),
             // ── Phase 5A additions ────────────────────────────────────────────
             whats_new: crate::kernel::domains::whats_new::WhatsNewState::default(),
             // ── Phase 5C additions ────────────────────────────────────────────

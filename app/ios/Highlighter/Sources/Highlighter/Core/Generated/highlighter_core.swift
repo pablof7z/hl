@@ -28111,6 +28111,36 @@ public struct KernelHomeFeedRow {
      * to render the resource card (skeleton while the preview is pending). D3.
      */
     public var artifactCoordinate: String?
+    /**
+     * `true` iff the article author is in the active account's follow set
+     * (`state.is_following(article_author_pubkey)`).
+     * D1: a boolean fact, not a display label ("Following" copy is Swift-side).
+     * Always `false` for `KernelHomeFeedRowKind::Highlight` rows (no article author
+     * to surface — may change in a future product iteration).
+     */
+    public var authorFollowed: Bool
+    /**
+     * Hex pubkeys of follows who have interacted with this article (kind 1, 7, 16,
+     * or 1111 with `#k=30023`), deduped and sorted: latest-interaction-time
+     * descending, then pubkey ascending as a tie-break.
+     * D1: raw hex pubkeys — Swift formats bech32 / display names.
+     * Empty for `KernelHomeFeedRowKind::Highlight` rows.
+     */
+    public var interactorPubkeys: [String]
+    /**
+     * The latest-activity timestamp for this row — max of the article
+     * `created_at` and all matching interaction `created_at` values.
+     * Equals `sort_key` for both row kinds. Unix seconds (D1: no "X ago" label).
+     */
+    public var latestActivityAt: UInt64
+    /**
+     * Enriched highlight rows for this group, sorted oldest-first within the
+     * group (matches the bespoke live lane ordering). Populated from the same
+     * raw kind:9802 events as `highlight_event_ids`, decoded via the shared
+     * `decode_highlight_row` so they carry the full NIP-84/NIP-73 fields.
+     * Empty for `KernelHomeFeedRowKind::Article` rows.
+     */
+    public var highlights: [HighlightRow]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -28174,7 +28204,33 @@ public struct KernelHomeFeedRow {
          * (`a:`/`e:`/`i:`/`r:`), or `None` for free-standing highlights with no
          * source. Swift looks this up in `KernelHomeFeedSnapshot.artifact_previews`
          * to render the resource card (skeleton while the preview is pending). D3.
-         */artifactCoordinate: String?) {
+         */artifactCoordinate: String?,
+        /**
+         * `true` iff the article author is in the active account's follow set
+         * (`state.is_following(article_author_pubkey)`).
+         * D1: a boolean fact, not a display label ("Following" copy is Swift-side).
+         * Always `false` for `KernelHomeFeedRowKind::Highlight` rows (no article author
+         * to surface — may change in a future product iteration).
+         */authorFollowed: Bool,
+        /**
+         * Hex pubkeys of follows who have interacted with this article (kind 1, 7, 16,
+         * or 1111 with `#k=30023`), deduped and sorted: latest-interaction-time
+         * descending, then pubkey ascending as a tie-break.
+         * D1: raw hex pubkeys — Swift formats bech32 / display names.
+         * Empty for `KernelHomeFeedRowKind::Highlight` rows.
+         */interactorPubkeys: [String],
+        /**
+         * The latest-activity timestamp for this row — max of the article
+         * `created_at` and all matching interaction `created_at` values.
+         * Equals `sort_key` for both row kinds. Unix seconds (D1: no "X ago" label).
+         */latestActivityAt: UInt64,
+        /**
+         * Enriched highlight rows for this group, sorted oldest-first within the
+         * group (matches the bespoke live lane ordering). Populated from the same
+         * raw kind:9802 events as `highlight_event_ids`, decoded via the shared
+         * `decode_highlight_row` so they carry the full NIP-84/NIP-73 fields.
+         * Empty for `KernelHomeFeedRowKind::Article` rows.
+         */highlights: [HighlightRow]) {
         self.stableId = stableId
         self.sortKey = sortKey
         self.kind = kind
@@ -28186,6 +28242,10 @@ public struct KernelHomeFeedRow {
         self.articleAuthorPubkey = articleAuthorPubkey
         self.articleCreatedAt = articleCreatedAt
         self.artifactCoordinate = artifactCoordinate
+        self.authorFollowed = authorFollowed
+        self.interactorPubkeys = interactorPubkeys
+        self.latestActivityAt = latestActivityAt
+        self.highlights = highlights
     }
 }
 
@@ -28229,6 +28289,18 @@ extension KernelHomeFeedRow: Equatable, Hashable {
         if lhs.artifactCoordinate != rhs.artifactCoordinate {
             return false
         }
+        if lhs.authorFollowed != rhs.authorFollowed {
+            return false
+        }
+        if lhs.interactorPubkeys != rhs.interactorPubkeys {
+            return false
+        }
+        if lhs.latestActivityAt != rhs.latestActivityAt {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
         return true
     }
 
@@ -28244,6 +28316,10 @@ extension KernelHomeFeedRow: Equatable, Hashable {
         hasher.combine(articleAuthorPubkey)
         hasher.combine(articleCreatedAt)
         hasher.combine(artifactCoordinate)
+        hasher.combine(authorFollowed)
+        hasher.combine(interactorPubkeys)
+        hasher.combine(latestActivityAt)
+        hasher.combine(highlights)
     }
 }
 
@@ -28266,7 +28342,11 @@ public struct FfiConverterTypeKernelHomeFeedRow: FfiConverterRustBuffer {
                 articleId: FfiConverterOptionString.read(from: &buf),
                 articleAuthorPubkey: FfiConverterOptionString.read(from: &buf),
                 articleCreatedAt: FfiConverterOptionUInt64.read(from: &buf),
-                artifactCoordinate: FfiConverterOptionString.read(from: &buf)
+                artifactCoordinate: FfiConverterOptionString.read(from: &buf),
+                authorFollowed: FfiConverterBool.read(from: &buf),
+                interactorPubkeys: FfiConverterSequenceString.read(from: &buf),
+                latestActivityAt: FfiConverterUInt64.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHighlightRow.read(from: &buf)
         )
     }
 
@@ -28282,6 +28362,10 @@ public struct FfiConverterTypeKernelHomeFeedRow: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.articleAuthorPubkey, into: &buf)
         FfiConverterOptionUInt64.write(value.articleCreatedAt, into: &buf)
         FfiConverterOptionString.write(value.artifactCoordinate, into: &buf)
+        FfiConverterBool.write(value.authorFollowed, into: &buf)
+        FfiConverterSequenceString.write(value.interactorPubkeys, into: &buf)
+        FfiConverterUInt64.write(value.latestActivityAt, into: &buf)
+        FfiConverterSequenceTypeHighlightRow.write(value.highlights, into: &buf)
     }
 }
 

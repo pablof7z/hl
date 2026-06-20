@@ -197,6 +197,29 @@ pub fn article_highlight_feed_scope(address: &str) -> PullScope {
     PullScope::InterestShape(shape)
 }
 
+/// Build a `PullScope` for the home-feed interaction cursor.
+///
+/// Phase 7 home-feed aggregation: returns kind:1/7/16/1111 events authored by
+/// the active account's follows, filtered by `#k=30023` (interaction with a
+/// long-form article). Fail-closed: returns `None` when the follow set is empty
+/// so no broad scan is issued (D5).
+///
+/// Mirrors the legacy `reads.rs` interaction stream but expressed as an
+/// `InterestShape` so it flows through the same feed-pull engine as the other
+/// home-feed cursors. Feed key: `"hl.feed.home_interactions"`.
+pub fn home_interaction_feed_scope(follow_pubkeys: &[String]) -> Option<PullScope> {
+    if follow_pubkeys.is_empty() {
+        return None;
+    }
+    let mut shape = InterestShape::default();
+    shape.kinds = [1, 7, 16, 1111].into_iter().collect();
+    shape.authors = follow_pubkeys.iter().cloned().collect();
+    shape
+        .tags
+        .insert("k".to_string(), ["30023".to_string()].into_iter().collect());
+    Some(PullScope::InterestShape(shape))
+}
+
 /// Build a `PullScope` for a room-lane feed (kind:9 and kind:11 tagged with `#h`).
 ///
 /// Used by Phase 4I. `group_id` is the NIP-29 local group id (the `#h` tag value).
