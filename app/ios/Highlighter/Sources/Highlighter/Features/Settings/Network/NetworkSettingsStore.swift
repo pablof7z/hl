@@ -31,10 +31,46 @@ final class NetworkSettingsStore {
     @ObservationIgnored private let core: SafeHighlighterCore
     @ObservationIgnored private weak var appStore: HighlighterStore?
     @ObservationIgnored private var inFlightNip11: [String] = []
+    /// Phase 7: the kernel is the SOLE WRITER for relay config. Read paths
+    /// (load / diagnostics) still come from the bespoke core (reads coexist
+    /// until Part C); writes dispatch kernel actions.
+    @ObservationIgnored private let kernel: HighlighterAppKernel
 
-    init(core: SafeHighlighterCore, appStore: HighlighterStore) {
+    init(core: SafeHighlighterCore, appStore: HighlighterStore, kernel: HighlighterAppKernel) {
         self.core = core
         self.appStore = appStore
+        self.kernel = kernel
+    }
+
+    // MARK: - Kernel write helpers (Phase 7)
+
+    /// NIP-65 (kind:10002) role marker from read/write flags — mirrors the bespoke
+    /// `relays.rs::nip65_tags`: both→"both" (unmarked r-tag), read-only→"read",
+    /// write-only→"write". indexer is NOT a kind:10002 marker (it lives in the
+    /// kind:30078 app-data, like rooms). A relay with neither read nor write
+    /// (rooms/indexer-only) keeps "both" at the transport layer; nmp owns the
+    /// NIP-65 r-tag emission (device-verify the rooms-only relay edge).
+    private func nip65Role(read: Bool, write: Bool) -> String {
+        if read && write { return "both" }
+        if read { return "read" }
+        if write { return "write" }
+        return "both"
+    }
+
+    /// Build the FULL relay set's {url, rooms, indexer} app-data entries (the
+    /// kind:30078 `com.highlighter.relays` event is a single replaceable record),
+    /// optionally overriding one URL's flags for an in-flight edit.
+    private func appDataEntries(
+        override url: String? = nil,
+        rooms: Bool = false,
+        indexer: Bool = false
+    ) -> [RelayAppDataEntry] {
+        relays.map { cfg in
+            if let url, cfg.url == url {
+                return RelayAppDataEntry(url: cfg.url, rooms: rooms, indexer: indexer)
+            }
+            return RelayAppDataEntry(url: cfg.url, rooms: cfg.rooms, indexer: cfg.indexer)
+        }
     }
 
     /// Index diagnostics by URL for O(1) lookup from row views.
@@ -157,27 +193,27 @@ final class NetworkSettingsStore {
     // MARK: - Writes
 
     func upsert(_ cfg: RelayConfig) async {
-        let snapshot = await core.upsertRelay(cfg)
-        let apply = core.projectNetworkSettingsMutationApply(
-            input: NetworkSettingsMutationApplyInput(snapshot: snapshot)
-        )
-        if apply.shouldReload {
-            await load()
-        } else if let errorMessage = apply.errorMessage {
-            lastError = errorMessage
+        // Optimistic local update so the next app-data publish + the UI reflect
+        // the change immediately (kernel publish is fire-and-forget).
+        if let idx = relays.firstIndex(where: { $0.url == cfg.url }) {
+            relays[idx] = cfg
+        } else {
+            relays.append(cfg)
         }
+        // kind:10002 (NIP-65) via addRelay (nmp upserts + auto-publishes); kind:30078
+        // app-data with the full relay set's rooms/indexer flags. Kernel sole writer.
+        kernel.app.dispatch(.addRelay(url: cfg.url, role: nip65Role(read: cfg.read, write: cfg.write)))
+        kernel.app.dispatch(.setRoomsRelayList(entries: appDataEntries()))
+        await load()
     }
 
     func remove(_ url: String) async {
-        let snapshot = await core.removeRelay(url)
-        let apply = core.projectNetworkSettingsMutationApply(
-            input: NetworkSettingsMutationApplyInput(snapshot: snapshot)
-        )
-        if apply.shouldReload {
-            await load()
-        } else if let errorMessage = apply.errorMessage {
-            lastError = errorMessage
-        }
+        relays.removeAll { $0.url == url }
+        // kind:10002 via removeRelay (nmp auto-publishes the updated list); kind:30078
+        // app-data rebuilt without the removed relay.
+        kernel.app.dispatch(.removeRelay(url: url))
+        kernel.app.dispatch(.setRoomsRelayList(entries: appDataEntries()))
+        await load()
     }
 
     func relayHostedRooms(hostedOnRelay url: String) async -> RelayHostedRoomsSnapshot {
@@ -192,17 +228,19 @@ final class NetworkSettingsStore {
     }
 
     func setRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async {
-        let snapshot = await core.setRelayRoles(
-            url: url, read: read, write: write, rooms: rooms, indexer: indexer
-        )
-        let apply = core.projectNetworkSettingsMutationApply(
-            input: NetworkSettingsMutationApplyInput(snapshot: snapshot)
-        )
-        if apply.shouldReload {
-            await load()
-        } else if let errorMessage = apply.errorMessage {
-            lastError = errorMessage
+        // Optimistic local update so the app-data publish carries the new flags.
+        if let idx = relays.firstIndex(where: { $0.url == url }) {
+            relays[idx] = RelayConfig(
+                url: url, read: read, write: write, rooms: rooms, indexer: indexer
+            )
         }
+        // read/write → kind:10002 (NIP-65 marker via set_role); rooms/indexer →
+        // kind:30078 app-data (full set, this url's flags updated). Kernel sole writer.
+        kernel.app.dispatch(.setRelayRole(url: url, role: nip65Role(read: read, write: write)))
+        kernel.app.dispatch(
+            .setRoomsRelayList(entries: appDataEntries(override: url, rooms: rooms, indexer: indexer))
+        )
+        await load()
     }
 
     // MARK: - Delta hook
