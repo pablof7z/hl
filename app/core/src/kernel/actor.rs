@@ -37,8 +37,8 @@ use nmp_defaults::{NmpAppBuilder, RunConfig};
 
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
 use crate::kernel::domains::{
-    articles, articles_feed, auth, bookmarks, communities, discovery, feed, follows, profiles,
-    projections, reactions, relays, room_home, route, search, session,
+    articles, articles_feed, auth, bookmarks, communities, discovery, feed, follows,
+    highlight_feed, profiles, projections, reactions, relays, room_home, route, search, session,
 };
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
@@ -342,6 +342,36 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
 
         // ── Phase 4G additions (append-only) ─────────────────────────────────
         AppAction::LoadMoreArticles => articles_feed::reduce_action_load_more_articles(state),
+
+        // ── Phase 4H additions (append-only) ─────────────────────────────────
+        // Pagination: emit DrainFeed when not already exhausted (D8: no polling).
+        AppAction::DrainHighlightFeed => {
+            // No-op when the cursor is caught up — avoids redundant drain calls
+            // against an exhausted pull cursor (D8: level-triggered, not polled).
+            // The `state` param is available because reduce_action borrows it.
+            if state.highlight_feed.exhausted {
+                vec![]
+            } else {
+                feed::reduce_drain_feed(highlight_feed::HIGHLIGHT_FEED_KEY.to_string())
+            }
+        }
+
+        AppAction::PublishHighlight {
+            content,
+            source_reference,
+            relay_hint,
+        } => {
+            // Empty content is a no-op (D6: invalid highlight not published).
+            if content.is_empty() {
+                vec![]
+            } else {
+                highlight_feed::reduce_action_publish_highlight(
+                    content,
+                    source_reference,
+                    relay_hint,
+                )
+            }
+        }
     }
 }
 
@@ -561,6 +591,9 @@ pub(crate) fn project_snapshot(
         // ── Phase 4G additions (append-only) ─────────────────────────────────
         ViewId::ArticleFeed => articles_feed::project_article_feed_snapshot(state),
 
+        // ── Phase 4H additions (append-only) ─────────────────────────────────
+        ViewId::HighlightFeed => highlight_feed::project_highlight_feed_snapshot(state),
+
         _ => route::project_snapshot(state, id, clock_now),
     }
 }
@@ -740,6 +773,15 @@ pub(crate) async fn run_effect(
             search::run_effect_run_search(query, scope_json, interest_id, nmp);
         }
 
+        // ── Phase 4H additions (append-only) ─────────────────────────────────
+        Effect::PublishHighlightEvent { json } => {
+            // Publish a kind:9802 highlight via ActorCommand::PublishRawEvent.
+            // There is no dedicated nmp action namespace for kind:9802 at pinned
+            // b4404159 — this is the same raw publish path Phase 2D uses for
+            // the rooms relay list. Fire-and-forget (D6).
+            highlight_feed::run_effect_publish_highlight(json, nmp);
+        }
+
         // ── Phase 4F additions (append-only) ─────────────────────────────────
         //
         // RegisterFeedCursor, DrainFeed, and ReleaseFeedCursor require access
@@ -850,6 +892,8 @@ pub(crate) async fn actor_task(
                 // ── Phase 4G: article feed lifecycle — register cursor + drain ──
                 lifecycle_effects
                     .extend(articles_feed::lifecycle_effects_for_view_open(id, &state));
+                // ── Phase 4H: highlight feed — register cursor + initial drain ──
+                lifecycle_effects.extend(highlight_feed::lifecycle_effects_for_view_open(id));
             }
             Cmd::CloseView(id) => {
                 // ── Phase 3D: release the profile subscription before removing from registry ──
@@ -868,6 +912,11 @@ pub(crate) async fn actor_task(
                 lifecycle_effects.extend(search::lifecycle_effects_for_view_close(id));
                 // ── Phase 4G: article feed lifecycle — release cursor ────────────
                 lifecycle_effects.extend(articles_feed::lifecycle_effects_for_view_close(id));
+                // ── Phase 4H: highlight feed — release cursor on close ─────────
+                // ReleaseFeedCursor is handled inline in the effect runner below
+                // (it needs cursor_id from AppState). The lifecycle fn emits the
+                // Effect::ReleaseFeedCursor data; the inline handler executes it.
+                lifecycle_effects.extend(highlight_feed::lifecycle_effects_for_view_close(id));
                 registry.close(id);
             }
             Cmd::Resume => {

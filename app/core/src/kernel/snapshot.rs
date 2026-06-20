@@ -151,6 +151,12 @@ pub enum ViewSnapshot {
     /// formatted strings, no "Untitled" fallback, no "min read" labels).
     /// Bounded by the accumulated feed pages (D5: `FEED_PAGE_SIZE` per drain).
     ArticleFeed(ArticleFeedSnapshot),
+
+    // ── Phase 4H additions (append-only) ─────────────────────────────────────
+    /// Home/own highlights feed — kind:9802 rows from the pull cursor.
+    /// Sorted newest-first; bounded by accumulated pull pages (Non-Negotiable #7).
+    /// D1: no byline formatting, no avatar assembly, no source-kind labels — Swift.
+    HighlightFeed(HighlightFeedSnapshot),
 }
 
 // ── Phase 4B additions (append-only) ─────────────────────────────────────────
@@ -636,4 +642,60 @@ pub struct KernelSearchHitRow {
     pub content: String,
     /// Relay URLs this event was observed on.
     pub relay_provenance: Vec<String>,
+}
+
+// ── Phase 4H additions (append-only) ─────────────────────────────────────────
+
+/// One NIP-84 kind:9802 highlight row stored in the highlight feed.
+///
+/// Decoded from a raw `KernelEvent` (kind:9802) pulled via the
+/// `"hl.feed.highlights"` feed cursor (ADR-0058). Raw protocol data only
+/// (D1 / ADR-0032): Swift formats ALL display strings.
+///
+/// D1: no byline composition (`"Highlighted by {name}, {name2} and {n} others"`),
+/// no avatar URL assembly, no source-kind icon/label, no "share" copy — those
+/// are Swift-side presentation decisions. The kernel emits only the raw
+/// `content`, `source_reference`, `author_pubkey`, and `created_at`.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct HighlightRow {
+    /// 64-character hex event id of the kind:9802 event.
+    pub event_id: String,
+    /// 64-character hex author pubkey. D1: Swift formats bech32 `npub`.
+    pub author_pubkey: String,
+    /// The highlighted text content from the kind:9802 event's `content` field.
+    /// Raw UTF-8 — no truncation or ellipsis (D1: Swift owns display formatting).
+    pub content: String,
+    /// NIP-84 source reference extracted from the `a` (addressable) or `e`
+    /// (non-addressable) tag of the kind:9802 event, if present.
+    ///
+    /// - `a` tag: `"<kind>:<pubkey>:<d_tag>"` coordinate (used for NIP-23 articles).
+    /// - `e` tag: raw 64-char hex event id.
+    /// - `None` when no source tag is present (valid per NIP-84 §3.2 for
+    ///   free-standing highlights not anchored to a specific resource).
+    ///
+    /// D3: opaque string from the protocol — kernel never constructs references.
+    pub source_reference: Option<String>,
+    /// Event creation time as Unix seconds. D1: Swift formats the display date.
+    pub created_at: u64,
+}
+
+/// Snapshot for `ViewId::HighlightFeed` — the home/own highlights feed.
+///
+/// Carries the decoded highlight rows from `AppState::highlight_feed`, sorted by
+/// `created_at` descending (newest first), deduplicated by `event_id`.
+///
+/// Raw-data doctrine (D1): Swift formats ALL display strings from these raw
+/// fields. No `"Highlighted by {name}"` byline, no avatar URLs, no
+/// source-kind labels, no share-message composition — those are Swift concerns.
+///
+/// Bounded by the accumulated pull pages (each page is capped at
+/// `feed::FEED_PAGE_SIZE = 20` entries — Non-Negotiable #7). `exhausted`
+/// signals when the cursor has caught up to the ingest log head.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct HighlightFeedSnapshot {
+    /// Decoded highlight rows, sorted newest-first. Raw fields only (D1).
+    pub rows: Vec<HighlightRow>,
+    /// `true` when the pull cursor is caught up (`has_more == false` on last drain).
+    /// Swift uses this to hide the "load more" affordance.
+    pub exhausted: bool,
 }

@@ -34,3 +34,6 @@ pub mod feed;
 
 // ── Phase 4G additions (append-only) ─────────────────────────────────────────
 pub(crate) mod articles_feed;
+
+// ── Phase 4H additions (append-only) ─────────────────────────────────────────
+pub(crate) mod highlight_feed;

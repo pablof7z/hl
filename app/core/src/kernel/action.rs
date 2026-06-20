@@ -360,6 +360,46 @@ pub enum AppAction {
     /// Fire-and-forget (D6, Non-Negotiable #3).
     LoadMoreArticles,
 
+    // ── Phase 4H additions (append-only) ─────────────────────────────────────
+    /// Request the next page from the `"hl.feed.highlights"` pull cursor.
+    ///
+    /// Emitted by the UI at scroll-to-end. Produces `Effect::DrainFeed{key:
+    /// "hl.feed.highlights"}`. Fire-and-forget (D6, Non-Negotiable #3): the next
+    /// page arrives as `KernelEvent::FeedPage` once the drain completes.
+    ///
+    /// No-op when the cursor is exhausted (`FeedState.exhausted == true`) —
+    /// the reducer checks exhaustion before emitting the effect to avoid
+    /// redundant drain calls against a caught-up cursor (D8 — no polling).
+    DrainHighlightFeed,
+
+    /// Publish a new NIP-84 kind:9802 highlight event.
+    ///
+    /// There is no dedicated nmp action namespace for kind:9802 at pinned nmp
+    /// b4404159 (verified by grep — see §6 of the Phase 4 spec). The kernel
+    /// publishes via `ActorCommand::PublishRawEvent` — the same write path
+    /// Phase 2D uses for the rooms relay list. Fire-and-forget (D6).
+    ///
+    /// Kernel is the sole kind:9802 writer on ported screens — no live-lane
+    /// double-publish. The new highlight will appear in the feed on the next
+    /// `DrainHighlightFeed` once the relay echoes the event back (normal
+    /// pub-echo cycle, no optimistic insert in the kernel — D1).
+    ///
+    /// D1: `content` and `source_reference` are raw strings. The kernel does
+    /// NOT format the NIP-84 `a`/`e` tag value — it receives the already-resolved
+    /// coordinate from the caller and embeds it verbatim (D3: no URL construction
+    /// or address normalization in kernel logic).
+    PublishHighlight {
+        /// The highlighted text passage. Must be non-empty (D6: empty content
+        /// is a no-op at the reducer level — no event is published).
+        content: String,
+        /// NIP-84 source reference: `"<kind>:<pubkey>:<d_tag>"` for addressable
+        /// (kind:30023 articles), or a raw 64-char hex event id for non-addressable.
+        /// D3: opaque string from the caller.
+        source_reference: String,
+        /// Optional relay URL hint for the `a`/`e` tag (D3: opaque from caller).
+        relay_hint: Option<String>,
+    },
+
     // ── Phase 4D additions (append-only) ─────────────────────────────────────
     /// Run a NIP-50 relay search for `query` with the given `scope`.
     ///

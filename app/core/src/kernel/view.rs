@@ -97,6 +97,13 @@ pub enum ViewId {
     /// Pagination: the UI dispatches `AppAction::LoadMoreArticles` on
     /// scroll-to-end; the reducer emits `DrainFeed` (D8: no polling).
     ArticleFeed,
+
+    // ── Phase 4H additions (append-only) ─────────────────────────────────────
+    /// Home/own highlights feed — kind:9802 events via the `"hl.feed.highlights"`
+    /// pull cursor (ADR-0058). On open: emits `RegisterFeedCursor` + `DrainFeed`.
+    /// On close: emits `ReleaseFeedCursor`. The snapshot is
+    /// `ViewSnapshot::HighlightFeed(HighlightFeedSnapshot)`.
+    HighlightFeed,
 }
 
 /// Which projection to compute for a registered view.
@@ -158,6 +165,11 @@ pub enum ViewRoute {
     /// (raw kind:30023 rows from the 4F feed-pull engine). D1: no formatted
     /// strings, no "Untitled" fallback, no "min read" labels.
     ArticleFeed,
+
+    // ── Phase 4H additions (append-only) ─────────────────────────────────────
+    /// Home/own highlights feed projection — `HighlightFeedSnapshot` (kind:9802
+    /// rows from the pull cursor, sorted newest-first). D1: no byline formatting.
+    HighlightFeed,
 }
 
 /// Tracks open views and their last-emitted snapshots.
