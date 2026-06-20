@@ -61,3 +61,6 @@ pub(crate) mod capture_draft;
 
 // ── Phase 5I additions (append-only) ─────────────────────────────────────────
 pub(crate) mod podcast_transcript;
+
+// ── Phase 5E additions (append-only) ─────────────────────────────────────────
+pub(crate) mod camera;

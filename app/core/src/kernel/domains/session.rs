@@ -92,6 +92,11 @@ pub(crate) fn reduce_event_capability_result(
         CapabilityResult::Ocr(or) => {
             crate::kernel::domains::ocr::reduce_event_ocr_result(state, or)
         }
+
+        // ── Phase 5E additions (append-only) ─────────────────────────────────
+        CapabilityResult::Camera(cr) => {
+            crate::kernel::domains::camera::reduce_capability_camera(state, cr)
+        }
     }
 }
 

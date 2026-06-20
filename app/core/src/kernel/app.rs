@@ -331,6 +331,15 @@ pub struct AppState {
     /// nostr event (kind:9802 or kind:11) via the raw publish path. Bounded
     /// fixed-overhead struct (Non-Negotiable #7).
     pub capture_draft: crate::kernel::domains::capture_draft::CaptureDraftState,
+
+    // ── Phase 5E additions (append-only) ─────────────────────────────────────
+    /// Camera-session state — device-local, never published to nostr.
+    ///
+    /// Tracks whether a `CameraOp` is in flight (`pending`), the dimensions of
+    /// the last captured page image, and any denial or error from the native
+    /// camera bridge. NOT cleared on `Logout` — camera state is per-device.
+    /// Bounded: fixed-size struct, no list growth (Non-Negotiable #7).
+    pub camera: crate::kernel::domains::camera::CameraState,
 }
 
 impl Default for AppState {
@@ -376,6 +385,8 @@ impl Default for AppState {
             ocr: crate::kernel::domains::ocr::OcrState::default(),
             // ── Phase 5F additions ────────────────────────────────────────────
             capture_draft: crate::kernel::domains::capture_draft::CaptureDraftState::default(),
+            // ── Phase 5E additions ────────────────────────────────────────────
+            camera: crate::kernel::domains::camera::CameraState::default(),
         }
     }
 }
