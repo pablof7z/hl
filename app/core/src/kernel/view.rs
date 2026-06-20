@@ -146,6 +146,24 @@ pub enum ViewId {
     /// `VNRecognizeTextRequest` is in flight; `markdown` and `selectable_words`
     /// are available once the OCR round-trip completes.
     Capture,
+
+    // ── Phase 7 additions (append-only) ─────────────────────────────────────
+    /// NIP-22 comment thread view for a specific root anchor.
+    ///
+    /// `root_tag_value` is the UPPERCASE root scope value from the NIP-22 `E`/`A`/`I`
+    /// tag (e.g. a 64-char hex event id for `E`, an addressable coord for `A`,
+    /// or an external URI for `I`). The snapshot is
+    /// `ViewSnapshot::CommentThread(CommentThreadKernelSnapshot)` — flat raw record
+    /// list + `comment_count` (D1: no formatted strings; Swift builds display tree).
+    ///
+    /// On open: no lifecycle wiring is needed — the `CommentObserver` registered at
+    /// boot automatically routes all kind:1111 events to `AppState::comment_threads`.
+    /// On close: the `comment_threads` entry is NOT cleared (content is session-scoped
+    /// and bounded by the NMP projection's `MAX_PROJECTION_MESSAGES` cap).
+    CommentThread {
+        /// Root scope tag value that anchors this thread (opaque from caller — D3).
+        root_tag_value: String,
+    },
 }
 
 /// Which projection to compute for a registered view.
@@ -243,6 +261,16 @@ pub enum ViewRoute {
     /// OCR capture projection — `KernelCaptureSnapshot`
     /// (reconstructed markdown + selectable words + raw lines + pending flag). D1.
     Capture,
+
+    // ── Phase 7 additions (append-only) ─────────────────────────────────────
+    /// NIP-22 comment thread projection — `CommentThreadKernelSnapshot` (flat
+    /// raw record list keyed by `root_tag_value`). D1: no formatted strings,
+    /// no tree nesting in snapshot — Swift builds the display tree from
+    /// `parent_tag_value` relationships.
+    CommentThread {
+        /// Root scope tag value that anchors this thread.
+        root_tag_value: String,
+    },
 }
 
 /// Tracks open views and their last-emitted snapshots.

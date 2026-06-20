@@ -531,6 +531,26 @@ pub enum Effect {
         correlation_id: String,
     },
 
+    // ── Phase 7 additions (append-only) ─────────────────────────────────────
+    /// Call `nmp_app_dispatch_action` with `"nmp.nip22.post_comment"` namespace
+    /// and the serialised NIP-22 `PostCommentAction` JSON payload.
+    ///
+    /// `json` is a serde_json-serialised `PostCommentAction` object:
+    /// `{ root_tag_name, root_tag_value, root_kind, content, parent_event_id?,
+    ///   root_author_pubkey?, parent_author_pubkey? }`.
+    ///
+    /// Fire-and-forget (D6, Non-Negotiable #3): the returned correlation_id JSON
+    /// is freed and discarded. The authoritative comment thread arrives back via
+    /// `KernelEvent::CommentThreadUpdated` on the next `CommentObserver` tick.
+    ///
+    /// The kernel is the sole kind:1111 writer for ported screens — no live-lane
+    /// double-publish for comments on articles/highlights/artifacts.
+    DispatchCommentAction {
+        /// Serialised `PostCommentAction` JSON payload (`serde_json::to_string`
+        /// — never `format!`). The namespace is fixed: `"nmp.nip22.post_comment"`.
+        json: String,
+    },
+
     // ── Phase 5J additions (append-only) ─────────────────────────────────────
     /// Publish a podcast clip as a kind:9802 highlight via `ActorCommand::PublishRawEvent`,
     /// carrying a `correlation_id` so the `action_results` projection can route

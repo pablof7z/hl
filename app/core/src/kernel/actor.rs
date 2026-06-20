@@ -47,6 +47,8 @@ use crate::kernel::domains::{
     camera,
     // ── Phase 5F additions (append-only) ─────────────────────────────────────
     capture_draft,
+    // ── Phase 7 additions (append-only) ─────────────────────────────────────
+    comments,
     communities,
     discovery,
     feed,
@@ -793,6 +795,14 @@ fn reduce_action_envelope(
             blossom::reduce_action_blossom_upload(state, p.image_handle, p.servers, now)
         }
 
+        // ── Phase 7 additions (append-only) ──────────────────────────────────
+        // `hl.comment.post` — post a NIP-22 kind:1111 comment via nmp.nip22.post_comment.
+        "hl.comment.post" => {
+            use crate::kernel::action::PostCommentPayload;
+            let p = parse!(PostCommentPayload);
+            comments::reduce_action_post_comment(p)
+        }
+
         // ── Unknown namespace ─────────────────────────────────────────────────
         _ => emit_invalid_action_toast(
             state,
@@ -1145,6 +1155,19 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // going through the capability round-trip.
             vec![]
         }
+
+        // ── Phase 7 additions (append-only) ─────────────────────────────────
+        KernelEvent::CommentThreadUpdated {
+            root_tag_value,
+            snapshot,
+        } => {
+            // Store the raw CommentThreadSnapshot in AppState::comment_threads
+            // keyed by root_tag_value. The snapshot is computed by the
+            // CommentObserver → KernelEvent::CommentThreadUpdated path.
+            // Also injectable directly from tests via Cmd::Event (no live NmpApp needed).
+            // D1: raw CommentThreadSnapshot only — no formatted strings.
+            comments::reduce_event_comment_thread_updated(state, root_tag_value, snapshot)
+        }
     }
 }
 
@@ -1209,6 +1232,14 @@ pub(crate) fn project_snapshot(
         // ── Phase 5F: capture_draft is now the authoritative Capture projector;
         //    it layers draft fields on top of the 5D OCR fields.
         ViewId::Capture => capture_draft::project_capture_snapshot(state),
+
+        // ── Phase 7 additions (append-only) ─────────────────────────────────
+        ViewId::CommentThread { root_tag_value } => {
+            let snapshot = comments::compute_comment_thread_snapshot(state, root_tag_value);
+            Some(crate::kernel::snapshot::ViewSnapshot::CommentThread(
+                snapshot,
+            ))
+        }
 
         _ => route::project_snapshot(state, id, clock_now),
     }
@@ -1538,6 +1569,18 @@ pub(crate) async fn run_effect(
             // the given correlation_id. No-op when nmp is None (test mode injects
             // KernelEvent::ClipPublishActionResult directly).
             blossom::run_effect_publish_capture_with_correlation(json, correlation_id, nmp, tx);
+        }
+
+        // ── Phase 7 additions (append-only) ─────────────────────────────────
+        Effect::DispatchCommentAction { json } => {
+            // Call nmp_app_dispatch_action with "nmp.nip22.post_comment" and the
+            // serde-JSON PostCommentAction payload. Fire-and-forget (D6, Non-
+            // Negotiable #3): the returned correlation_id JSON is freed and
+            // discarded. The authoritative comment thread arrives back via
+            // KernelEvent::CommentThreadUpdated on the next CommentObserver tick.
+            // No-op when nmp is None (test mode — tests inject
+            // KernelEvent::CommentThreadUpdated directly).
+            comments::run_effect_dispatch_comment_action(json, nmp);
         }
     }
 
@@ -2129,6 +2172,13 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
     // in-place by NMP on every sign-in/switch/logout). This avoids the observer-
     // stacking bug where each IdentityChanged(Some) would add a new observer.
     reactions::register_reaction_projection(nmp_ref, nmp_ref.active_account_handle(), tx.clone());
+
+    // Phase 7: register CommentObserver ONCE at boot. Creates a SECOND
+    // CommentThreadProjection (separate from the one in nmp-defaults
+    // register_defaults). Double-observation is harmless — both projections
+    // read the same kind:1111 events. The post_comment action is NOT
+    // re-registered (nmp-defaults already wired it via register_defaults).
+    comments::register_comment_projection(nmp_ref, tx.clone());
 
     // Wire identity-change observer → KernelEvent::IdentityChanged.
     // Pattern from nmp_runtime.rs:758-778.

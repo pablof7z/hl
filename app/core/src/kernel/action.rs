@@ -332,6 +332,33 @@ pub(crate) struct BlossomUploadPayload {
     pub servers: Vec<String>,
 }
 
+// ── Phase 7 payload structs (append-only) ────────────────────────────────────
+
+/// `hl.comment.post` envelope payload — post a NIP-22 kind:1111 comment.
+///
+/// The kernel routes `root_tag_name`/`root_tag_value`/`root_kind` to the
+/// `PostCommentAction` wire shape. The anchor resolution (A/E/I selection) is
+/// the caller's responsibility — Swift passes the already-resolved uppercase
+/// root scope tag name and value. Fire-and-forget (D6, Non-Negotiable #3).
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct PostCommentPayload {
+    /// Uppercase root scope tag name: `A` (addressable), `E` (event), `I` (external).
+    pub root_tag_name: String,
+    /// Root scope tag value (address / event-id / external-id). Must be non-empty (D6).
+    pub root_tag_value: String,
+    /// Root kind for the uppercase `K` tag (e.g. 30023 for articles, 1 for notes).
+    pub root_kind: u32,
+    /// Optional id of the kind:1111 parent comment being replied to.
+    /// `None` → top-level comment (parent mirrors root).
+    pub parent_event_id: Option<String>,
+    /// Optional hex pubkey of the root author (for the uppercase `P` tag).
+    pub root_author_pubkey: Option<String>,
+    /// Optional hex pubkey of the parent comment author (for the lowercase `p` tag).
+    pub parent_author_pubkey: Option<String>,
+    /// Comment body text. Must be non-empty (D6).
+    pub content: String,
+}
+
 /// Every user or platform action the kernel understands.
 ///
 /// Dispatch is fire-and-forget (`dispatch(action)` returns `()`; Non-Negotiable #3).
@@ -1261,5 +1288,25 @@ pub enum KernelEvent {
         success: bool,
         /// Raw error message on failure; empty on success. D1.
         error: String,
+    },
+
+    // ── Phase 7 additions (append-only) ─────────────────────────────────────
+    /// A NIP-22 kind:1111 comment was ingested by the `CommentObserver`
+    /// (wrapping `CommentThreadProjection`). Carries the full thread snapshot
+    /// for the affected root, ready to be stored in `AppState::comment_threads`.
+    ///
+    /// Produced by `CommentObserver::on_kernel_event` after delegating ingest
+    /// to the projection and calling `snapshot_for(root_tag_value)`. Also
+    /// injectable directly from tests via `Cmd::Event` (no live NmpApp needed).
+    ///
+    /// D1: `CommentThreadSnapshot` is raw protocol data only — no formatted
+    /// strings. Swift formats all display labels (timestamps, author bylines).
+    /// Keyed by `root_tag_value` (the UPPERCASE root scope value from the
+    /// NIP-22 `E`/`A`/`I` tag) in `AppState::comment_threads`.
+    CommentThreadUpdated {
+        /// Root scope tag value (the `E`/`A`/`I` tag value from NIP-22).
+        root_tag_value: String,
+        /// Latest comment thread snapshot for this root (all comments + tree).
+        snapshot: nmp_nip22::CommentThreadSnapshot,
     },
 }
