@@ -26954,6 +26954,14 @@ public struct KernelArticleReaderSnapshot {
      * `nmp_content::wire::decode_content_tree`.
      */
     public var contentTreeBytes: Data
+    /**
+     * Overlay highlights anchored to this article (kind:9802 tagged `#a ==
+     * address`), newest-first, deduped by event id. Carries the SAME enriched
+     * NIP-84/NIP-73 fields as the highlight feed (decoded via the shared
+     * `decode_highlight_row`). Empty in the brief window between OpenView and
+     * the first highlight-feed page (Phase 7).
+     */
+    public var highlights: [HighlightRow]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -26992,7 +27000,14 @@ public struct KernelArticleReaderSnapshot {
          * Opaque `ContentTreeWire` bytes for the article body.
          * Empty until the full document arrives. Swift / platform decodes via
          * `nmp_content::wire::decode_content_tree`.
-         */contentTreeBytes: Data) {
+         */contentTreeBytes: Data,
+        /**
+         * Overlay highlights anchored to this article (kind:9802 tagged `#a ==
+         * address`), newest-first, deduped by event id. Carries the SAME enriched
+         * NIP-84/NIP-73 fields as the highlight feed (decoded via the shared
+         * `decode_highlight_row`). Empty in the brief window between OpenView and
+         * the first highlight-feed page (Phase 7).
+         */highlights: [HighlightRow]) {
         self.address = address
         self.id = id
         self.authorPubkey = authorPubkey
@@ -27004,6 +27019,7 @@ public struct KernelArticleReaderSnapshot {
         self.dTag = dTag
         self.createdAt = createdAt
         self.contentTreeBytes = contentTreeBytes
+        self.highlights = highlights
     }
 }
 
@@ -27047,6 +27063,9 @@ extension KernelArticleReaderSnapshot: Equatable, Hashable {
         if lhs.contentTreeBytes != rhs.contentTreeBytes {
             return false
         }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
         return true
     }
 
@@ -27062,6 +27081,7 @@ extension KernelArticleReaderSnapshot: Equatable, Hashable {
         hasher.combine(dTag)
         hasher.combine(createdAt)
         hasher.combine(contentTreeBytes)
+        hasher.combine(highlights)
     }
 }
 
@@ -27084,7 +27104,8 @@ public struct FfiConverterTypeKernelArticleReaderSnapshot: FfiConverterRustBuffe
                 heroImageUrl: FfiConverterOptionString.read(from: &buf),
                 dTag: FfiConverterString.read(from: &buf),
                 createdAt: FfiConverterUInt64.read(from: &buf),
-                contentTreeBytes: FfiConverterData.read(from: &buf)
+                contentTreeBytes: FfiConverterData.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHighlightRow.read(from: &buf)
         )
     }
 
@@ -27100,6 +27121,7 @@ public struct FfiConverterTypeKernelArticleReaderSnapshot: FfiConverterRustBuffe
         FfiConverterString.write(value.dTag, into: &buf)
         FfiConverterUInt64.write(value.createdAt, into: &buf)
         FfiConverterData.write(value.contentTreeBytes, into: &buf)
+        FfiConverterSequenceTypeHighlightRow.write(value.highlights, into: &buf)
     }
 }
 

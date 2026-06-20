@@ -414,6 +414,7 @@ pub(crate) fn clear_feed_state_on_identity_lost(state: &mut AppState) {
     state.article_feed = crate::kernel::domains::feed::FeedState::default();
     state.highlight_feed = crate::kernel::domains::feed::FeedState::default();
     state.room_lanes.clear();
+    state.article_highlight_feeds.clear();
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────

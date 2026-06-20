@@ -179,6 +179,24 @@ pub fn highlight_feed_scope() -> PullScope {
     PullScope::InterestShape(shape)
 }
 
+/// Build a `PullScope` for an article's highlight feed (kind:9802 tagged with
+/// `#a` == the article's addressable coordinate).
+///
+/// Phase 7: the article reader overlay needs the highlights anchored to the
+/// article being read. Mirrors the bespoke `highlights::query_for_article`
+/// NdbFilter (`kinds([9802]).tags([address], 'a')`) — but expressed as an
+/// `InterestShape` so it flows through the same feed-pull engine the room-lane
+/// (4I) and home (4G/4H) feeds use. `address` is the `"<kind>:<pubkey>:<d>"`
+/// coordinate (D3: opaque from the caller, never constructed by the kernel).
+pub fn article_highlight_feed_scope(address: &str) -> PullScope {
+    let mut shape = InterestShape::default();
+    shape.kinds = [9802].into_iter().collect();
+    shape
+        .tags
+        .insert("a".to_string(), [address.to_string()].into_iter().collect());
+    PullScope::InterestShape(shape)
+}
+
 /// Build a `PullScope` for a room-lane feed (kind:9 and kind:11 tagged with `#h`).
 ///
 /// Used by Phase 4I. `group_id` is the NIP-29 local group id (the `#h` tag value).

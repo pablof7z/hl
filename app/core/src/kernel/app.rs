@@ -269,6 +269,14 @@ pub struct AppState {
     /// Cleared on `Logout` / `IdentityChanged(None)`.
     pub room_lanes: HashMap<String, crate::kernel::domains::feed::FeedState>,
 
+    /// Pull-cursor state per article-highlight feed, keyed by article address.
+    ///
+    /// Each entry is registered (Phase 7) when a `ViewId::ArticleReader{address}`
+    /// opens — kind:9802 events tagged `#a == <address>`. Key is
+    /// `"hl.feed.article_highlights.<address>"`. Bounded by open reader views;
+    /// released on close. Cleared on `Logout` / `IdentityChanged(None)`.
+    pub article_highlight_feeds: HashMap<String, crate::kernel::domains::feed::FeedState>,
+
     // ── Phase 5A additions ────────────────────────────────────────────────────
     /// What's New seen-state — device-local, never published to Nostr.
     ///
@@ -454,6 +462,7 @@ impl Default for AppState {
             article_feed: crate::kernel::domains::feed::FeedState::default(),
             highlight_feed: crate::kernel::domains::feed::FeedState::default(),
             room_lanes: HashMap::new(),
+            article_highlight_feeds: HashMap::new(),
             // ── Phase 5A additions ────────────────────────────────────────────
             whats_new: crate::kernel::domains::whats_new::WhatsNewState::default(),
             // ── Phase 5C additions ────────────────────────────────────────────
