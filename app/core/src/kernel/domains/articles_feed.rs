@@ -206,9 +206,8 @@ mod tests {
     use crate::kernel::actor::{reduce, Cmd};
     use crate::kernel::app::AppState;
     use crate::kernel::clock::{Clock, ManualClock};
-    use crate::kernel::domains::feed::{apply_feed_page, FeedState};
     use crate::kernel::effect::Effect;
-    use crate::kernel::view::{ViewId, ViewRoute};
+    use crate::kernel::view::ViewId;
 
     fn make_state() -> AppState {
         AppState::default()
