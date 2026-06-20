@@ -157,6 +157,17 @@ pub enum ViewSnapshot {
     /// Sorted newest-first; bounded by accumulated pull pages (Non-Negotiable #7).
     /// D1: no byline formatting, no avatar assembly, no source-kind labels — Swift.
     HighlightFeed(HighlightFeedSnapshot),
+
+    // ── Phase 4J additions (append-only) ─────────────────────────────────────
+    /// Home feed — merged view of kind:9802 highlights + kind:30023 article reads.
+    /// Highlights are grouped by source reference; reads are suppressed when the
+    /// article they reference is highlighted. Sorted by latest activity.
+    /// Raw rows only (D1: no bylines, no "min read", no "Untitled" fallback).
+    ///
+    /// Named `KernelHomeFeedSnapshot` to avoid collision with the legacy
+    /// `HomeFeedSnapshot` in `home_feed.rs` (bespoke live lane — Phase 4J
+    /// coexists with the live lane until the iOS cutover, Non-Negotiable #6).
+    HomeFeed(KernelHomeFeedSnapshot),
 }
 
 // ── Phase 4B additions (append-only) ─────────────────────────────────────────
@@ -698,4 +709,116 @@ pub struct HighlightFeedSnapshot {
     /// `true` when the pull cursor is caught up (`has_more == false` on last drain).
     /// Swift uses this to hide the "load more" affordance.
     pub exhausted: bool,
+}
+
+// ── Phase 4J additions (append-only) ─────────────────────────────────────────
+
+/// Discriminant for a row in the merged home feed.
+///
+/// D1: no user-visible label — Swift maps this to display strings.
+/// `Highlight` rows carry one or more highlight event ids grouped by source;
+/// `Article` rows carry the article coordinate for a standalone (non-highlighted) read.
+///
+/// Named `KernelHomeFeedRowKind` to avoid collision with any legacy type in the
+/// bespoke live lane (Non-Negotiable #6 coexistence).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum KernelHomeFeedRowKind {
+    /// One or more highlights grouped by the same source reference (article/URL).
+    Highlight,
+    /// A standalone article read (not suppressed by any highlight).
+    Article,
+}
+
+/// One row in the merged home feed.
+///
+/// For `KernelHomeFeedRowKind::Highlight`: carries the grouped highlight event ids and
+/// the common source_reference (if any).
+/// For `KernelHomeFeedRowKind::Article`: carries the article address, event id, and author.
+///
+/// D1: raw structural fields only — no bylines, no "min read", no "Untitled"
+/// fallback, no avatar URLs. Swift owns all presentation.
+/// D3: opaque source_reference and article_address strings from the protocol —
+/// the kernel never constructs them.
+///
+/// Named `KernelHomeFeedRow` to avoid collision with any legacy type in the
+/// bespoke live lane (Non-Negotiable #6 coexistence).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelHomeFeedRow {
+    /// Deterministic structural key for stable SwiftUI list identity.
+    /// - `"h:src:<source_reference>"` for highlight groups with a source reference.
+    /// - `"h:evt:<event_id>"` for solo highlights without a source reference.
+    /// - `"r:<article_address>"` for standalone article rows.
+    ///
+    /// D1: this is a structural identity key, not a user-visible label.
+    pub stable_id: String,
+
+    /// Timestamp used for inter-row sort order (descending: newest first).
+    /// For highlight rows: the maximum `created_at` of all highlights in the group.
+    /// For article rows: the article's `created_at`.
+    pub sort_key: u64,
+
+    /// Row type discriminant. Swift switches on this to decide which cell
+    /// template to render.
+    pub kind: KernelHomeFeedRowKind,
+
+    // ── Highlight-row fields (populated when kind == Highlight) ───────────────
+    /// 64-char hex event ids of the highlights in this group, sorted by
+    /// `created_at` ascending (oldest first within the group — matches live lane).
+    /// Empty for `KernelHomeFeedRowKind::Article` rows.
+    pub highlight_event_ids: Vec<String>,
+
+    /// Author pubkeys of the highlights in this group (parallel to
+    /// `highlight_event_ids`). D1: Swift formats bech32 `npub` / display name.
+    /// Empty for `KernelHomeFeedRowKind::Article` rows.
+    pub highlight_author_pubkeys: Vec<String>,
+
+    /// NIP-84 source reference common to all highlights in this group, if
+    /// present. `None` for solo highlights not anchored to a resource.
+    /// `a`-tag form: `"kind:pubkey:d_tag"` (addressable).
+    /// `e`-tag form: raw 64-char hex event id.
+    /// D3: opaque from the protocol.
+    pub source_reference: Option<String>,
+
+    // ── Article-row fields (populated when kind == Article) ───────────────────
+    /// Addressable coordinate `"kind:author_hex:d_tag"` of the article.
+    /// `None` for `KernelHomeFeedRowKind::Highlight` rows.
+    pub article_address: Option<String>,
+
+    /// 64-char hex event id of the kind:30023 article event.
+    /// `None` for `KernelHomeFeedRowKind::Highlight` rows.
+    pub article_id: Option<String>,
+
+    /// 64-char hex author pubkey of the article.
+    /// D1: Swift formats bech32 `npub` / display name.
+    /// `None` for `KernelHomeFeedRowKind::Highlight` rows.
+    pub article_author_pubkey: Option<String>,
+
+    /// Unix-second `created_at` of the article event.
+    /// D1: Swift formats the display date.
+    /// `None` for `KernelHomeFeedRowKind::Highlight` rows.
+    pub article_created_at: Option<u64>,
+}
+
+/// Snapshot for `ViewId::HomeFeed` — the merged home feed.
+///
+/// Carries the merged, suppressed, grouped, and sorted list of home-feed rows
+/// derived from `AppState::article_feed` (Phase 4G) and
+/// `AppState::highlight_feed` (Phase 4H).
+///
+/// Raw-data doctrine (D1 / ADR-0032): Swift formats ALL display strings from
+/// these raw fields. No `"Highlighted by {name}"`, no `"{n} min read"`, no
+/// `"#{tag}"` formatting, no `"Untitled"` fallback — those are Swift-side
+/// presentation decisions.
+///
+/// Bounded by the underlying feed pages (`FEED_PAGE_SIZE` × drain calls per
+/// feed — Non-Negotiable #7). The number of output rows ≤ sum of both feed
+/// page sizes (suppression only reduces the count).
+///
+/// Named `KernelHomeFeedSnapshot` to avoid collision with the legacy
+/// `HomeFeedSnapshot` in `home_feed.rs` (bespoke live lane — Phase 4J
+/// coexists with the live lane until the iOS cutover, Non-Negotiable #6).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelHomeFeedSnapshot {
+    /// Merged rows sorted by `sort_key` descending. Raw structural fields only (D1).
+    pub rows: Vec<KernelHomeFeedRow>,
 }

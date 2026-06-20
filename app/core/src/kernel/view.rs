@@ -104,6 +104,13 @@ pub enum ViewId {
     /// On close: emits `ReleaseFeedCursor`. The snapshot is
     /// `ViewSnapshot::HighlightFeed(HighlightFeedSnapshot)`.
     HighlightFeed,
+
+    // ── Phase 4J additions (append-only) ─────────────────────────────────────
+    /// Merged home feed — composition of the article feed (Phase 4G, kind:30023)
+    /// and highlight feed (Phase 4H, kind:9802). On open: emits lifecycle effects
+    /// for both underlying feeds. On close: releases both cursors. The snapshot
+    /// is `ViewSnapshot::HomeFeed(HomeFeedSnapshot)`.
+    HomeFeed,
 }
 
 /// Which projection to compute for a registered view.
@@ -170,6 +177,12 @@ pub enum ViewRoute {
     /// Home/own highlights feed projection — `HighlightFeedSnapshot` (kind:9802
     /// rows from the pull cursor, sorted newest-first). D1: no byline formatting.
     HighlightFeed,
+
+    // ── Phase 4J additions (append-only) ─────────────────────────────────────
+    /// Merged home feed projection — `HomeFeedSnapshot` (merged, suppressed,
+    /// grouped, sorted rows from the article + highlight feeds). D1: raw rows
+    /// only — no bylines, no "min read", no "Untitled" fallback.
+    HomeFeed,
 }
 
 /// Tracks open views and their last-emitted snapshots.

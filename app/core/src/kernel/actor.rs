@@ -38,7 +38,8 @@ use nmp_defaults::{NmpAppBuilder, RunConfig};
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
 use crate::kernel::domains::{
     articles, articles_feed, auth, bookmarks, communities, discovery, feed, follows,
-    highlight_feed, profiles, projections, reactions, relays, room_home, route, search, session,
+    highlight_feed, home_feed, profiles, projections, reactions, relays, room_home, route, search,
+    session,
 };
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
@@ -594,6 +595,9 @@ pub(crate) fn project_snapshot(
         // ── Phase 4H additions (append-only) ─────────────────────────────────
         ViewId::HighlightFeed => highlight_feed::project_highlight_feed_snapshot(state),
 
+        // ── Phase 4J additions (append-only) ─────────────────────────────────
+        ViewId::HomeFeed => home_feed::project_home_feed_snapshot(state),
+
         _ => route::project_snapshot(state, id, clock_now),
     }
 }
@@ -894,6 +898,8 @@ pub(crate) async fn actor_task(
                     .extend(articles_feed::lifecycle_effects_for_view_open(id, &state));
                 // ── Phase 4H: highlight feed — register cursor + initial drain ──
                 lifecycle_effects.extend(highlight_feed::lifecycle_effects_for_view_open(id));
+                // ── Phase 4J: home feed — compose both underlying feed lifecycles ──
+                lifecycle_effects.extend(home_feed::lifecycle_effects_for_view_open(id, &state));
             }
             Cmd::CloseView(id) => {
                 // ── Phase 3D: release the profile subscription before removing from registry ──
@@ -917,6 +923,8 @@ pub(crate) async fn actor_task(
                 // (it needs cursor_id from AppState). The lifecycle fn emits the
                 // Effect::ReleaseFeedCursor data; the inline handler executes it.
                 lifecycle_effects.extend(highlight_feed::lifecycle_effects_for_view_close(id));
+                // ── Phase 4J: home feed — release both underlying cursors ───────
+                lifecycle_effects.extend(home_feed::lifecycle_effects_for_view_close(id));
                 registry.close(id);
             }
             Cmd::Resume => {
