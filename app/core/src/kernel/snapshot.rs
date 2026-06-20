@@ -168,6 +168,12 @@ pub enum ViewSnapshot {
     /// `HomeFeedSnapshot` in `home_feed.rs` (bespoke live lane — Phase 4J
     /// coexists with the live lane until the iOS cutover, Non-Negotiable #6).
     HomeFeed(KernelHomeFeedSnapshot),
+
+    // ── Phase 5A additions (append-only) ─────────────────────────────────────
+    /// What's New sheet — device-local seen-state projection.
+    /// `should_present` drives the sheet; `entries` lists the unseen items.
+    /// D1: no "N new features" count label — raw rows only.
+    WhatsNew(WhatsNewSnapshot),
 }
 
 // ── Phase 4B additions (append-only) ─────────────────────────────────────────
@@ -821,4 +827,43 @@ pub struct KernelHomeFeedRow {
 pub struct KernelHomeFeedSnapshot {
     /// Merged rows sorted by `sort_key` descending. Raw structural fields only (D1).
     pub rows: Vec<KernelHomeFeedRow>,
+}
+
+// ── Phase 5A additions (append-only) ─────────────────────────────────────────
+
+/// One What's New changelog entry from the bundled `resources/whats-new.json`.
+///
+/// Raw protocol data only (D1): Swift formats all display strings from these
+/// raw fields. No bullet formatting, no "New!" badge, no date labels —
+/// those are Swift-side presentation decisions.
+///
+/// Used both in `KernelEvent::WhatsNewLoaded` and in `WhatsNewSnapshot`.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct WhatsNewEntryRow {
+    /// ISO-8601 UTC timestamp string as it appears in the bundled JSON
+    /// (e.g. `"2026-05-14T21:45:00Z"`). D1: Swift formats the display date.
+    pub shipped_at_iso: String,
+    /// UNIX seconds parsed from `shipped_at_iso`. D1: no "X ago" label.
+    pub shipped_at_unix: u64,
+    /// Changelog bullet lines for this release. Raw strings — no `"• "` prefix
+    /// or markdown formatting added by the kernel (D1: Swift owns presentation).
+    pub lines: Vec<String>,
+}
+
+/// Snapshot for `ViewId::WhatsNew` — the What's New sheet.
+///
+/// Device-local: never derived from or published to Nostr events.
+/// Raw-data doctrine (D1): Swift formats all display strings from these raw
+/// fields. No `"N new features"` count label, no badge formatting.
+///
+/// Bounded by the number of entries in the bundled JSON (typically < 20;
+/// Non-Negotiable #7 — does not grow with the event store).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct WhatsNewSnapshot {
+    /// Unseen What's New entries (filtered: `shipped_at_unix > last_seen_marker`).
+    /// Sorted newest-first. Empty when no unseen entries exist.
+    pub entries: Vec<WhatsNewEntryRow>,
+    /// `true` when `entries` is non-empty and the sheet should be presented.
+    /// Swift uses this flag to trigger the sheet presentation.
+    pub should_present: bool,
 }

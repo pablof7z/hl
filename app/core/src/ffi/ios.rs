@@ -69,7 +69,9 @@ impl HighlighterApp {
 
         // Build the relay/follow policy from relay_policy.json seed defaults.
         // D3: relay URLs live in relay_policy.json, not in kernel logic.
-        let policy = Arc::new(build_kernel_policy());
+        // Phase 5A: pass data_dir so the whats-new effect runner can read/write
+        // the seen-marker file at {data_dir}/whats-new-state-v1.json.
+        let policy = Arc::new(build_kernel_policy(&config.data_dir));
 
         let shared_clone = shared.clone();
         let tx_clone = tx.clone();
@@ -176,7 +178,7 @@ impl HighlighterApp {
 ///
 /// `initial_follows` is empty — ADR-0059 §5: no kind:3 published for a
 /// fresh account until the user explicitly chooses follows.
-fn build_kernel_policy() -> KernelPolicy {
+fn build_kernel_policy(data_dir: &str) -> KernelPolicy {
     let seed = crate::relays::seed_defaults();
     let seed_relays: Vec<SeedRelay> = seed
         .into_iter()
@@ -208,6 +210,8 @@ fn build_kernel_policy() -> KernelPolicy {
             discovery_relay: crate::relays::room_explorer_curator_relay().to_string(),
             ..Default::default()
         },
+        // Phase 5A: data_dir for whats-new seen-marker file I/O.
+        data_dir: data_dir.to_string(),
     }
 }
 

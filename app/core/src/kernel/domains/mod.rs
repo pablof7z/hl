@@ -40,3 +40,6 @@ pub(crate) mod highlight_feed;
 
 // ── Phase 4J additions (append-only) ─────────────────────────────────────────
 pub(crate) mod home_feed;
+
+// ── Phase 5A additions (append-only) ─────────────────────────────────────────
+pub(crate) mod whats_new;
