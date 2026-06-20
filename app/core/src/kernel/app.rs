@@ -379,6 +379,17 @@ pub struct AppState {
     /// Bounded by open room views: one entry per concurrently-open chat room,
     /// each capped at `CHAT_MAX_MESSAGES` (1000) rows (Non-Negotiable #7).
     pub chat_rooms: HashMap<String, crate::kernel::domains::chat::ChatRoomState>,
+    // ── Phase 7 discussions additions (append-only) ──────────────────────────
+    /// Per-room kind:11 discussion rows, keyed by NIP-29 local group id.
+    ///
+    /// Updated by `KernelEvent::RoomDiscussionsUpdated` — produced when the
+    /// `DiscussionObserver` (wrapping `GroupEventsProjection`) filters a new
+    /// kind:11+discussion event for a watched room. Cleared on Logout so stale
+    /// rows from a prior session do not surface under a new account.
+    ///
+    /// Bounded: each room's rows are capped at `ROOM_DISCUSSIONS_CAP` (64)
+    /// newest-first before storing (Non-Negotiable #7).
+    pub room_discussions: HashMap<String, Vec<crate::kernel::snapshot::DiscussionRow>>,
 }
 
 impl Default for AppState {
@@ -432,6 +443,8 @@ impl Default for AppState {
             comment_threads: HashMap::new(),
             // ── Phase 7 chat additions ────────────────────────────────────────
             chat_rooms: HashMap::new(),
+            // ── Phase 7 discussions additions ─────────────────────────────────
+            room_discussions: HashMap::new(),
         }
     }
 }

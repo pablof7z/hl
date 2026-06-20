@@ -259,18 +259,41 @@ pub(crate) fn compute_comment_thread_snapshot(
         .map(|s| {
             s.records
                 .iter()
-                .map(|r| CommentRecordRow {
-                    event_id: r.event_id.clone(),
-                    author_pubkey: r.author_pubkey.clone(),
-                    body: r.body.clone(),
-                    root_tag_name: r.root_tag_name.clone(),
-                    root_tag_value: r.root_tag_value.clone(),
-                    root_kind: r.root_kind.clone(),
-                    parent_tag_name: r.parent_tag_name.clone(),
-                    parent_tag_value: r.parent_tag_value.clone(),
-                    parent_kind: r.parent_kind.clone(),
-                    created_at: r.created_at,
-                    is_top_level: r.is_top_level(),
+                .map(|r| {
+                    // Surface the per-comment interaction state that already
+                    // exists in AppState (reuse the existing projections, NOT a
+                    // new one):
+                    //   • reaction_state — the global ReactionProjection
+                    //     accumulator keyed by target event id (kind:7 `+`).
+                    //   • bookmarks — the active account's kind:10003 list.
+                    // Presentation (icons, count labels, optimistic toggling)
+                    // stays in Swift; the kernel emits raw values only (D1).
+                    let reaction = state.reaction_state.get(&r.event_id);
+                    let like_count = reaction.map(|x| x.count).unwrap_or(0);
+                    let viewer_reacted = reaction.map(|x| x.viewer_reacted).unwrap_or(false);
+                    let bookmarked = state.bookmarks.iter().any(|b| {
+                        matches!(
+                            b,
+                            crate::kernel::snapshot::BookmarkRow::Event { event_id, .. }
+                                if event_id == &r.event_id
+                        )
+                    });
+                    CommentRecordRow {
+                        event_id: r.event_id.clone(),
+                        author_pubkey: r.author_pubkey.clone(),
+                        body: r.body.clone(),
+                        root_tag_name: r.root_tag_name.clone(),
+                        root_tag_value: r.root_tag_value.clone(),
+                        root_kind: r.root_kind.clone(),
+                        parent_tag_name: r.parent_tag_name.clone(),
+                        parent_tag_value: r.parent_tag_value.clone(),
+                        parent_kind: r.parent_kind.clone(),
+                        created_at: r.created_at,
+                        is_top_level: r.is_top_level(),
+                        like_count,
+                        viewer_reacted,
+                        bookmarked,
+                    }
                 })
                 .collect::<Vec<_>>()
         })
@@ -481,6 +504,85 @@ mod tests {
         let kernel_snapshot = compute_comment_thread_snapshot(&state, root);
         assert_eq!(kernel_snapshot.comment_count, 2, "comment_count must be 2");
         assert_eq!(kernel_snapshot.records.len(), 2, "two records in flat list");
+    }
+
+    // 7-T6: comment_rows_surface_reaction_and_bookmark_state
+    //
+    // compute_comment_thread_snapshot must populate each row's interaction
+    // fields by REUSING the existing AppState accumulators: reaction_state
+    // (like_count + viewer_reacted) and bookmarks (bookmarked). No new
+    // projection — just surfacing existing raw state into the row (D1).
+    #[test]
+    fn comment_rows_surface_reaction_and_bookmark_state() {
+        use crate::kernel::snapshot::{BookmarkRow, ReactionRow};
+
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        let root = "deadbeef00000000000000000000000000000000000000000000000000000004";
+        let liked = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let bookmarked = "bbbb000000000000000000000000000000000000000000000000000000000002";
+        let plain = "cccc000000000000000000000000000000000000000000000000000000000003";
+
+        let snapshot = make_snapshot(
+            root,
+            vec![
+                make_record(liked, root, root),
+                make_record(bookmarked, root, root),
+                make_record(plain, root, root),
+            ],
+        );
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::CommentThreadUpdated {
+                root_tag_value: root.to_string(),
+                snapshot,
+            }),
+        );
+
+        // Existing accumulators populated independently of the comment thread:
+        // a like on the first comment, a bookmark of the second.
+        state.reaction_state.insert(
+            liked.to_string(),
+            ReactionRow {
+                target_event_id: liked.to_string(),
+                count: 3,
+                viewer_reacted: true,
+            },
+        );
+        state.bookmarks.push(BookmarkRow::Event {
+            event_id: bookmarked.to_string(),
+            relay: None,
+        });
+
+        let snap = compute_comment_thread_snapshot(&state, root);
+        let row = |id: &str| {
+            snap.records
+                .iter()
+                .find(|r| r.event_id == id)
+                .expect("row present")
+        };
+
+        let liked_row = row(liked);
+        assert_eq!(
+            liked_row.like_count, 3,
+            "like_count surfaced from reaction_state"
+        );
+        assert!(liked_row.viewer_reacted, "viewer_reacted surfaced");
+        assert!(!liked_row.bookmarked, "liked comment is not bookmarked");
+
+        let bookmarked_row = row(bookmarked);
+        assert!(
+            bookmarked_row.bookmarked,
+            "bookmarked surfaced from bookmarks list"
+        );
+        assert_eq!(bookmarked_row.like_count, 0, "no reactions → 0");
+        assert!(!bookmarked_row.viewer_reacted);
+
+        let plain_row = row(plain);
+        assert_eq!(plain_row.like_count, 0);
+        assert!(!plain_row.viewer_reacted);
+        assert!(!plain_row.bookmarked, "no interaction state → all false/0");
     }
 
     // 7-T4: reply_sets_correct_parent_scope

@@ -632,4 +632,20 @@ pub enum Effect {
         /// Correlation id to thread through nmp for action_results routing.
         correlation_id: String,
     },
+
+    // ── Phase 7 discussions additions (append-only) ──────────────────────────
+    /// Publish a kind:11 discussion thread via `ActorCommand::PublishRawEvent`.
+    ///
+    /// There is no dedicated nmp action namespace for kind:11 discussions at
+    /// pinned nmp d16aea60 — the kernel uses the same raw publish path as Phase 4H
+    /// highlights and Phase 5F captures. The `json` field is a serde_json-serialised
+    /// event template `{ kind: 11, content, tags }` without `id`, `sig`, or `pubkey`
+    /// — nmp fills those before broadcasting. Built with `serde_json::json!` (never
+    /// `format!` — D-rule: serde, not format). Fire-and-forget (D6).
+    ///
+    /// The kernel is the sole kind:11 discussion writer for ported screens.
+    PublishDiscussionEvent {
+        /// serde_json-serialised event template: `{ kind: 11, content, tags }`.
+        json: String,
+    },
 }

@@ -197,6 +197,17 @@ pub enum ViewId {
         /// NIP-29 local group id.
         group_id: String,
     },
+    // ── Phase 7 discussions additions (append-only) ──────────────────────────
+    /// Per-room discussions tab view for a specific NIP-29 group.
+    ///
+    /// The snapshot is `ViewSnapshot::RoomDiscussions(RoomDiscussionsSnapshot)` —
+    /// raw kind:11+discussion rows filtered from `AppState::room_discussions`,
+    /// bounded at 64, newest-first (D1: no formatted strings; Swift formats all
+    /// title fallbacks, timestamps, and attachment chips).
+    RoomDiscussions {
+        /// NIP-29 local group id.
+        group_id: String,
+    },
 }
 
 /// Which projection to compute for a registered view.
@@ -321,6 +332,14 @@ pub enum ViewRoute {
     /// NIP-29 group chat projection — `RoomChatSnapshot` (bounded raw kind:9
     /// message rows, oldest-first in the visible window). D1: no formatted strings.
     RoomChat {
+        /// NIP-29 local group id.
+        group_id: String,
+    },
+    // ── Phase 7 discussions additions (append-only) ──────────────────────────
+    /// Per-room discussions tab projection — `RoomDiscussionsSnapshot` (raw
+    /// kind:11+discussion rows, bounded at 64, newest-first). D1: no formatted
+    /// strings, no title fallbacks — Swift owns all display formatting.
+    RoomDiscussions {
         /// NIP-29 local group id.
         group_id: String,
     },

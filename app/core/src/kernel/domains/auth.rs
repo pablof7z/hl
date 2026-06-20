@@ -139,6 +139,10 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     // message rows don't survive into the next session. Re-wiring happens when
     // hl.chat.open is dispatched for the new session.
     super::chat::clear_on_identity_lost(state);
+    // ── Phase 7 discussions: clear room discussions on logout ──────────────────
+    // kind:11 discussion rows are identity-scoped (the viewer's relays serve
+    // them). Clear on logout so stale rows do not surface under a new account.
+    super::discussions::clear_on_logout(state);
     // RemoveActiveAccount fires nmp.remove_account; ClearSession
     // emits a CapabilityRequest to native for its keychain.
     vec![Effect::RemoveActiveAccount, Effect::ClearSession]

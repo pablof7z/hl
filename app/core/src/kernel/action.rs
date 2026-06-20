@@ -334,6 +334,29 @@ pub(crate) struct BlossomUploadPayload {
 
 // ── Phase 7 payload structs (append-only) ────────────────────────────────────
 
+/// `hl.discussion.post` envelope payload — publish a kind:11 discussion thread
+/// into a NIP-29 room. Fire-and-forget (D6, Non-Negotiable #3).
+///
+/// Tag shape (mirroring live `discussions.rs::build_event`):
+///   `["h", group_id]`     — NIP-29 h-tag routing
+///   `["t", "discussion"]` — discussion marker
+///   `["title", title]`    — discussion title (required, non-empty)
+///   `["r", attachment_url]`  — optional URL attachment
+///
+/// `body` is the event `content` field (may be empty). `attachment_url` adds
+/// an `["r", url]` tag only when non-empty.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct PostDiscussionPayload {
+    /// NIP-29 local group id (the `["h", _]` routing tag value). Non-empty.
+    pub group_id: String,
+    /// Discussion title — required, non-empty (D6: empty → no-op).
+    pub title: String,
+    /// Discussion body (event `content`). May be empty.
+    pub body: String,
+    /// Optional URL attachment. When non-empty, adds `["r", url]` tag.
+    pub attachment_url: Option<String>,
+}
+
 /// `hl.comment.post` envelope payload — post a NIP-22 kind:1111 comment.
 ///
 /// The kernel routes `root_tag_name`/`root_tag_value`/`root_kind` to the
@@ -1326,5 +1349,24 @@ pub enum KernelEvent {
         root_tag_value: String,
         /// Latest comment thread snapshot for this root (all comments + tree).
         snapshot: nmp_nip22::CommentThreadSnapshot,
+    },
+
+    // ── Phase 7 discussions additions (append-only) ───────────────────────────
+    /// kind:11 discussion rows for a room changed.
+    ///
+    /// Produced by `DiscussionObserver::on_kernel_event` when it filters a
+    /// kind:11+discussion event from the `GroupEventsProjection` for the room
+    /// and rebuilds the bounded snapshot. Also injectable directly from tests
+    /// via `Cmd::Event` (no live NmpApp needed — same pattern as
+    /// `KernelEvent::CommentThreadUpdated`).
+    ///
+    /// D1: `rows` carry raw protocol data only — no formatted strings.
+    /// Keyed by `group_id` in `AppState::room_discussions`.
+    RoomDiscussionsUpdated {
+        /// NIP-29 local group id (the `["h", _]` tag value).
+        group_id: String,
+        /// Fresh bounded snapshot of kind:11+discussion rows for this room,
+        /// newest-first, at most `ROOM_DISCUSSIONS_CAP` (64) items.
+        rows: Vec<crate::kernel::snapshot::DiscussionRow>,
     },
 }
