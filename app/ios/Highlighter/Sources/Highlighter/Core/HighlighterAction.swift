@@ -94,6 +94,17 @@ enum HighlighterAction {
     /// Explicitly persist the current resume position (call on app resign-active).
     case audioSetResume(seconds: Double)
 
+    // ── Capture draft (Phase 5F) ──────────────────────────────────────────────────
+    case captureSetQuote(quote: String)
+    case captureSetContext(context: String)
+    case captureSetNote(note: String)
+    case captureSelectWord(wordIndex: UInt64)
+    case captureClearSelection
+    case captureSetTargetGroup(groupId: String)
+    case captureClearTargetGroup
+    case capturePublish
+    case captureReset
+
     // MARK: - Envelope serialization
 
     /// Encodes this action as an `AppActionEnvelope` ready for `dispatchAction`.
@@ -262,6 +273,31 @@ enum HighlighterAction {
         case .audioSetResume(let seconds):
             return AppActionEnvelope(namespace: "hl.audio.set_resume",
                                      json: jsonAny(["seconds": seconds]))
+
+        // ── Capture draft (Phase 5F) ──────────────────────────────────────────────────
+        case .captureSetQuote(let quote):
+            return AppActionEnvelope(namespace: "hl.capture.set_quote",
+                                     json: jsonObject(["quote": quote]))
+        case .captureSetContext(let context):
+            return AppActionEnvelope(namespace: "hl.capture.set_context",
+                                     json: jsonObject(["context": context]))
+        case .captureSetNote(let note):
+            return AppActionEnvelope(namespace: "hl.capture.set_note",
+                                     json: jsonObject(["note": note]))
+        case .captureSelectWord(let wordIndex):
+            return AppActionEnvelope(namespace: "hl.capture.select_word",
+                                     json: jsonAny(["word_index": wordIndex]))
+        case .captureClearSelection:
+            return AppActionEnvelope(namespace: "hl.capture.clear_selection", json: "{}")
+        case .captureSetTargetGroup(let groupId):
+            return AppActionEnvelope(namespace: "hl.capture.set_target_group",
+                                     json: jsonObject(["group_id": groupId]))
+        case .captureClearTargetGroup:
+            return AppActionEnvelope(namespace: "hl.capture.clear_target_group", json: "{}")
+        case .capturePublish:
+            return AppActionEnvelope(namespace: "hl.capture.publish", json: "{}")
+        case .captureReset:
+            return AppActionEnvelope(namespace: "hl.capture.reset", json: "{}")
         }
     }
 }
