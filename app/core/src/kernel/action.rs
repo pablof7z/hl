@@ -229,6 +229,10 @@ pub(crate) struct PublishHighlightPayload {
     pub content: String,
     pub source_reference: String,
     pub relay_hint: Option<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+    #[serde(default)]
+    pub context: Option<String>,
 }
 
 // ── Phase 5H payload structs ─────────────────────────────────────────────────
@@ -805,6 +809,12 @@ pub enum AppAction {
         source_reference: String,
         /// Optional relay URL hint for the `a`/`e` tag (D3: opaque from caller).
         relay_hint: Option<String>,
+        /// Optional user note → NIP-84 `comment` tag. Empty/absent = no tag.
+        /// Phase 7 (article-reader publish); mirrors build_highlight_event.
+        note: Option<String>,
+        /// Optional surrounding context → `context` tag. Emitted only when
+        /// non-empty AND different from `content` (build_highlight_event fidelity).
+        context: Option<String>,
     },
 
     // ── Phase 5C additions (append-only) ─────────────────────────────────────
