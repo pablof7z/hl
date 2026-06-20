@@ -340,6 +340,20 @@ pub struct AppState {
     /// camera bridge. NOT cleared on `Logout` — camera state is per-device.
     /// Bounded: fixed-size struct, no list growth (Non-Negotiable #7).
     pub camera: crate::kernel::domains::camera::CameraState,
+
+    // ── Phase 7 additions (append-only) ─────────────────────────────────────
+    /// NIP-22 kind:1111 comment threads, keyed by `root_tag_value`.
+    ///
+    /// Updated by `KernelEvent::CommentThreadUpdated` — produced when the hl-owned
+    /// `CommentObserver` (wrapping `CommentThreadProjection`) ingests a kind:1111
+    /// event and re-snapshots the affected root. Empty until the first comment
+    /// arrives. D1: values are raw `CommentThreadSnapshot` from nmp-nip22 (no
+    /// formatted strings). NOT cleared on `Logout` — comment content is
+    /// content-addressed by root anchor (not per-account).
+    ///
+    /// Bounded by `MAX_PROJECTION_MESSAGES` from nmp-core — the projection caps
+    /// the total entry count across all threads (Non-Negotiable #7).
+    pub comment_threads: HashMap<String, nmp_nip22::CommentThreadSnapshot>,
 }
 
 impl Default for AppState {
@@ -387,6 +401,8 @@ impl Default for AppState {
             capture_draft: crate::kernel::domains::capture_draft::CaptureDraftState::default(),
             // ── Phase 5E additions ────────────────────────────────────────────
             camera: crate::kernel::domains::camera::CameraState::default(),
+            // ── Phase 7 additions ─────────────────────────────────────────────
+            comment_threads: HashMap::new(),
         }
     }
 }

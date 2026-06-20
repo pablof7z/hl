@@ -198,6 +198,12 @@ pub enum ViewSnapshot {
     /// OCR capture state — reconstructed markdown + selectable words + raw lines.
     /// Device-local. D1: raw fields only.
     Capture(KernelCaptureSnapshot),
+
+    // ── Phase 7 additions (append-only) ─────────────────────────────────────
+    /// NIP-22 comment thread — flat raw record list for `root_tag_value`.
+    /// D1: no formatted timestamps, no tree nesting, no byline strings.
+    /// Swift builds the display tree from `parent_tag_value` relationships.
+    CommentThread(CommentThreadKernelSnapshot),
 }
 
 // ── Phase 4B additions (append-only) ─────────────────────────────────────────
@@ -1054,6 +1060,60 @@ pub struct KernelCaptureSnapshot {
     pub can_publish: bool,
     /// Raw publish error message when `publish_phase == Error`, else empty. D1.
     pub publish_error: String,
+}
+
+// ── Phase 7 additions (append-only) ─────────────────────────────────────────
+
+/// A single NIP-22 kind:1111 comment record row — raw protocol data only (D1).
+///
+/// No formatted timestamps (Swift formats), no tree nesting (Swift builds tree
+/// from `parent_tag_value`), no byline strings. `is_top_level` is a pure
+/// boolean: `parent_tag_value == root_tag_value` (NIP-22: top-level comment's
+/// parent is the root). `comment_count` is derived as `records.len() as u32`.
+///
+/// Swift reads this flat list and reconstructs the display tree using
+/// `parent_tag_value` links without needing a recursive Rust type.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct CommentRecordRow {
+    /// kind:1111 event id (raw 64-char hex). D1.
+    pub event_id: String,
+    /// Comment author pubkey (raw 64-char hex). D1.
+    pub author_pubkey: String,
+    /// Raw comment body text (`event.content`), untouched. D1.
+    pub body: String,
+    /// Root scope tag name — uppercase `A`, `E`, or `I`. D1.
+    pub root_tag_name: String,
+    /// Root scope tag value (address / event-id / external-id). D1.
+    pub root_tag_value: String,
+    /// Root kind string from the uppercase `K` tag (empty if absent). D1.
+    pub root_kind: String,
+    /// Parent scope tag name — lowercase `a`, `e`, or `i`. D1.
+    pub parent_tag_name: String,
+    /// Parent scope tag value. Equals `root_tag_value` for top-level comments. D1.
+    pub parent_tag_value: String,
+    /// Parent kind string from the lowercase `k` tag (empty if absent). D1.
+    pub parent_kind: String,
+    /// Event `created_at` unix seconds. D1: no formatting.
+    pub created_at: u64,
+    /// `true` when `parent_tag_value == root_tag_value` (top-level comment,
+    /// per NIP-22 §3). Swift may use this to efficiently partition
+    /// root comments from replies without re-computing the comparison.
+    pub is_top_level: bool,
+}
+
+/// Snapshot for `ViewId::CommentThread` — flat raw comment list for one root.
+///
+/// D1: no formatted strings, no tree nesting in the snapshot. Swift builds the
+/// display tree from `parent_tag_value` links. `comment_count` = `records.len()`.
+/// Bounded by `MAX_PROJECTION_MESSAGES` from nmp-core (Non-Negotiable #7).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct CommentThreadKernelSnapshot {
+    /// Root scope tag value this snapshot is for.
+    pub root_tag_value: String,
+    /// Flat list of comment records for this root, newest-first. D1.
+    pub records: Vec<CommentRecordRow>,
+    /// Total comment count (`records.len() as u32`). Raw — no `"N comments"` label.
+    pub comment_count: u32,
 }
 
 // ── Phase 5F additions (append-only) ─────────────────────────────────────────

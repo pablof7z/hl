@@ -67,3 +67,6 @@ pub(crate) mod podcast_transcript;
 
 // ── Phase 5E additions (append-only) ─────────────────────────────────────────
 pub(crate) mod camera;
+
+// ── Phase 7 additions (append-only) ─────────────────────────────────────────
+pub(crate) mod comments;
