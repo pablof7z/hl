@@ -326,15 +326,12 @@ pub struct ProfileSnapshot {
 
 /// Snapshot for `ViewId::RoomHome{group_id}` — the per-room home shell.
 ///
-/// Ships the room header (metadata) + membership state + an empty lanes
-/// structure. Lane bodies (kind:11/kind:9 content feeds) are deferred to Phase 4.
+/// Ships the room header (metadata) + membership state + lane bodies.
+/// Phase 3F shipped an empty lanes structure; Phase 4I fills lane bodies via
+/// the feed-pull engine (ADR-0058).
 ///
 /// Raw-data doctrine (D3 / ADR-0032): Swift formats ALL display strings from
 /// these raw fields. Kernel emits no formatted strings (`"{n} members"`, etc.).
-///
-/// `lanes` is empty in Phase 3F. The `GroupEventsProjection` is already wired
-/// (via `Effect::WireGroupEvents` on view open) so Phase 4 can decode feed
-/// bodies from the already-flowing events without re-opening a subscription.
 ///
 /// `invite_link_base` is supplied from `AppState::room_policy.invite_link_base`
 /// (D3: injected at construction, never hardcoded). Swift composes the full
@@ -360,13 +357,45 @@ pub struct KernelRoomHomeSnapshot {
     /// `true` iff the active account holds admin rights for this group.
     pub is_admin: bool,
     /// Lane identifiers for this room (e.g. `"general"`, `"notes"`).
-    /// Empty in Phase 3F — lane bodies deferred to Phase 4.
+    /// Phase 4I fills these via the feed-pull engine (ADR-0058).
+    /// Empty when no feed rows have arrived yet.
     /// Bounded by the number of lanes configured for the room (non-negotiable #7).
     pub lane_ids: Vec<String>,
     /// Base URL for invite links (e.g. `"https://highlighter.com/r"`).
     /// Swift composes the full invite URL: `"{invite_link_base}/{code}"`.
     /// Sourced from `AppState::room_policy.invite_link_base` (D3 — never hardcoded).
     pub invite_link_base: String,
+
+    // ── Phase 4I additions (append-only) ─────────────────────────────────────
+    /// Raw event rows from the room-lane feed (kind:9 or kind:11 with `#h` tag).
+    /// Populated by the ADR-0058 pull engine when `ViewId::RoomHome` is open.
+    /// Bounded at `ROOM_LANE_ROW_CAP` rows per group in `room_home.rs`.
+    /// Empty until the first feed page arrives.
+    pub lanes: Vec<RoomLaneRow>,
+}
+
+// ── Phase 4I additions (append-only) ─────────────────────────────────────────
+
+/// One raw event row from the room-lane feed (kind:9 or kind:11 with `#h` tag).
+///
+/// Raw protocol data only (D1): no formatted strings, no labels, no presenter
+/// logic. Swift formats author names, timestamps, content previews, etc.
+/// Bounded: rows are capped at `ROOM_LANE_ROW_CAP` per group in `room_home.rs`.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct RoomLaneRow {
+    /// Raw 64-char hex event id.
+    pub event_id: String,
+    /// Raw 64-char hex author pubkey.
+    pub author_pubkey: String,
+    /// Nostr event kind (9 = chat message, 11 = share/artifact).
+    pub kind: u32,
+    /// Event content field (raw text — no formatting, no HTML; D1).
+    pub content: String,
+    /// UNIX seconds `created_at` field (integer, no "X ago" format; D1).
+    pub created_at: u64,
+    /// Raw tag list as delivered by the nmp kernel.
+    /// Swift extracts `#h`, `#e`, `#a` tag values for display/routing.
+    pub tags: Vec<Vec<String>>,
 }
 
 // ── Phase 4C additions (append-only) ─────────────────────────────────────────

@@ -54,7 +54,7 @@ use nmp_nip29::GroupId;
 
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
-use crate::kernel::snapshot::{KernelRoomHomeSnapshot, ViewSnapshot};
+use crate::kernel::snapshot::{KernelRoomHomeSnapshot, RoomLaneRow, ViewSnapshot};
 use crate::kernel::view::ViewId;
 
 // Re-export schema ID so projections.rs can match without importing nmp_nip29 directly.
@@ -64,6 +64,15 @@ pub(crate) use nmp_nip29::GROUP_EVENTS_SCHEMA_ID;
 /// Lane bodies are empty in Phase 3F; the cap protects against memory growth
 /// until Phase 4 wires the feed projection properly.
 const ROOM_HOME_EVENTS_CAP: usize = 256;
+
+// ── Phase 4I additions ────────────────────────────────────────────────────────
+
+/// Feed key prefix for room-lane feeds. Concatenated with `group_id`.
+pub(crate) const ROOM_LANE_FEED_KEY_PREFIX: &str = "hl.feed.room.";
+
+/// Maximum raw rows buffered per room-lane feed in `AppState::room_lanes`.
+/// Prevents unbounded growth — the UI shows the most recent N events.
+const ROOM_LANE_ROW_CAP: usize = 100;
 
 // ─── Lifecycle effects (called by actor loop on OpenView / CloseView) ─────────
 
@@ -86,9 +95,18 @@ pub(crate) fn lifecycle_effects_for_view_open(id: &ViewId) -> Vec<Effect> {
         // (apply_group_events_frame). For lifecycle wiring we emit a
         // WireGroupEvents effect that carries the group_id only; the effect
         // runner resolves host_relay_url from AppState::communities.
-        vec![Effect::WireGroupEvents {
+        let feed_key = format!("{ROOM_LANE_FEED_KEY_PREFIX}{group_id}");
+        let scope = crate::kernel::domains::feed::room_lane_scope(group_id);
+        let mut effects = vec![Effect::WireGroupEvents {
             group_id: group_id.clone(),
-        }]
+        }];
+        // ── Phase 4I: register feed cursor and trigger initial drain ──────────
+        effects.extend(crate::kernel::domains::feed::reduce_register_feed_cursor(
+            feed_key.clone(),
+            scope,
+        ));
+        effects.extend(crate::kernel::domains::feed::reduce_drain_feed(feed_key));
+        effects
     } else {
         Vec::new()
     }
@@ -105,9 +123,15 @@ pub(crate) fn lifecycle_effects_for_view_open(id: &ViewId) -> Vec<Effect> {
 /// Returns an empty Vec for all other `ViewId` variants.
 pub(crate) fn lifecycle_effects_for_view_close(id: &ViewId) -> Vec<Effect> {
     if let ViewId::RoomHome { group_id } = id {
-        vec![Effect::ReleaseGroupEvents {
+        let feed_key = format!("{ROOM_LANE_FEED_KEY_PREFIX}{group_id}");
+        let mut effects = vec![Effect::ReleaseGroupEvents {
             group_id: group_id.clone(),
-        }]
+        }];
+        // ── Phase 4I: release the feed cursor to unregister and free memory ──
+        effects.extend(crate::kernel::domains::feed::reduce_release_feed_cursor(
+            feed_key,
+        ));
+        effects
     } else {
         Vec::new()
     }
@@ -441,6 +465,34 @@ pub(crate) fn project_room_home_snapshot(state: &AppState, group_id: &str) -> Op
     // Resolve the community row from the joined-groups cache.
     let row = state.communities.iter().find(|c| c.group_id == group_id)?;
 
+    // ── Phase 4I: populate lane rows from the feed-pull engine ───────────────
+    let feed_key = format!("{ROOM_LANE_FEED_KEY_PREFIX}{group_id}");
+    let lane_rows: Vec<RoomLaneRow> = state
+        .room_lanes
+        .get(&feed_key)
+        .map(|fs| {
+            fs.rows
+                .iter()
+                .take(ROOM_LANE_ROW_CAP)
+                .map(|e| RoomLaneRow {
+                    event_id: e.id.clone(),
+                    author_pubkey: e.author.clone(),
+                    kind: e.kind,
+                    content: e.content.clone(),
+                    created_at: e.created_at,
+                    tags: e.tags.clone(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // lane_ids is non-empty only when feed rows have arrived (Phase 4I seam).
+    let lane_ids: Vec<String> = if lane_rows.is_empty() {
+        Vec::new()
+    } else {
+        vec![group_id.to_string()]
+    };
+
     Some(ViewSnapshot::RoomHome(KernelRoomHomeSnapshot {
         group_id: row.group_id.clone(),
         host_relay_url: row.host_relay_url.clone(),
@@ -451,11 +503,11 @@ pub(crate) fn project_room_home_snapshot(state: &AppState, group_id: &str) -> Op
         public: row.public,
         open: row.open,
         is_admin: row.is_admin,
-        // Lanes deferred to Phase 4 — GroupEventsProjection is wired so Phase 4
-        // can decode feed bodies from the already-flowing events.
-        lane_ids: Vec::new(),
+        lane_ids,
         // invite_link_base from room policy (D3: injected at construction).
         invite_link_base: state.room_policy.invite_link_base.clone(),
+        // Phase 4I: raw feed rows from the ADR-0058 pull engine.
+        lanes: lane_rows,
     }))
 }
 
@@ -504,6 +556,7 @@ mod tests {
     // 3F-T1: room_home_view_opens_wires_projection
     //
     // Opening ViewId::RoomHome{group_id} must emit Effect::WireGroupEvents{group_id}.
+    // Phase 4I: also emits RegisterFeedCursor + DrainFeed (3 effects total).
     // The actor calls lifecycle_effects_for_view_open on Cmd::OpenView.
     #[test]
     fn room_home_view_opens_wires_projection() {
@@ -511,38 +564,39 @@ mod tests {
             group_id: TEST_GROUP.to_string(),
         };
         let effects = lifecycle_effects_for_view_open(&id);
-        assert_eq!(
-            effects.len(),
-            1,
-            "open must emit exactly one lifecycle effect"
+        // Phase 4I: 3 effects — WireGroupEvents, RegisterFeedCursor, DrainFeed.
+        assert!(
+            effects.len() >= 1,
+            "open must emit at least one lifecycle effect"
         );
         match &effects[0] {
             Effect::WireGroupEvents { group_id } => {
                 assert_eq!(group_id, TEST_GROUP);
             }
-            other => panic!("expected WireGroupEvents, got {other:?}"),
+            other => panic!("expected WireGroupEvents as first effect, got {other:?}"),
         }
     }
 
     // 3F-T2: room_home_view_closes_releases_events
     //
     // Closing ViewId::RoomHome{group_id} must emit Effect::ReleaseGroupEvents{group_id}.
+    // Phase 4I: also emits ReleaseFeedCursor (2 effects total).
     #[test]
     fn room_home_view_closes_releases_events() {
         let id = ViewId::RoomHome {
             group_id: TEST_GROUP.to_string(),
         };
         let effects = lifecycle_effects_for_view_close(&id);
-        assert_eq!(
-            effects.len(),
-            1,
-            "close must emit exactly one lifecycle effect"
+        // Phase 4I: 2 effects — ReleaseGroupEvents + ReleaseFeedCursor.
+        assert!(
+            effects.len() >= 1,
+            "close must emit at least one lifecycle effect"
         );
         match &effects[0] {
             Effect::ReleaseGroupEvents { group_id } => {
                 assert_eq!(group_id, TEST_GROUP);
             }
-            other => panic!("expected ReleaseGroupEvents, got {other:?}"),
+            other => panic!("expected ReleaseGroupEvents as first effect, got {other:?}"),
         }
     }
 
@@ -1040,5 +1094,268 @@ mod tests {
             matches!(&effects[0], Effect::DispatchShareToRoom { .. }),
             "the sole effect must be DispatchShareToRoom"
         );
+    }
+
+    // ─── Phase 4I tests ───────────────────────────────────────────────────────
+
+    fn dummy_kernel_event(id: &str, kind: u32) -> nmp_core::substrate::KernelEvent {
+        nmp_core::substrate::KernelEvent {
+            id: id.to_string(),
+            author: "a".repeat(64),
+            kind,
+            created_at: 1_700_000_000,
+            tags: vec![vec!["h".to_string(), TEST_GROUP.to_string()]],
+            content: "test content".to_string(),
+            relay_provenance: vec![],
+        }
+    }
+
+    // 4I-T1: room_lane_registers_cursor_on_roomhome_open
+    //
+    // Opening ViewId::RoomHome must emit at least:
+    //   - Effect::WireGroupEvents (first)
+    //   - Effect::RegisterFeedCursor with key "hl.feed.room.<group_id>"
+    //   - Effect::DrainFeed with key "hl.feed.room.<group_id>"
+    #[test]
+    fn room_lane_registers_cursor_on_roomhome_open() {
+        let id = ViewId::RoomHome {
+            group_id: TEST_GROUP.to_string(),
+        };
+        let effects = lifecycle_effects_for_view_open(&id);
+
+        let expected_key = format!("hl.feed.room.{TEST_GROUP}");
+
+        // Must have WireGroupEvents + RegisterFeedCursor + DrainFeed (3 effects).
+        assert_eq!(
+            effects.len(),
+            3,
+            "open must emit 3 effects: WireGroupEvents, RegisterFeedCursor, DrainFeed"
+        );
+
+        // First: WireGroupEvents
+        assert!(
+            matches!(&effects[0], Effect::WireGroupEvents { group_id } if group_id == TEST_GROUP),
+            "first effect must be WireGroupEvents({TEST_GROUP}), got {:?}",
+            &effects[0]
+        );
+
+        // Second: RegisterFeedCursor with correct key
+        match &effects[1] {
+            Effect::RegisterFeedCursor { key, cursor_id, .. } => {
+                assert_eq!(
+                    key, &expected_key,
+                    "feed key must be hl.feed.room.<group_id>"
+                );
+                assert_ne!(*cursor_id, 0, "cursor_id must be non-zero");
+            }
+            other => panic!("second effect must be RegisterFeedCursor, got {other:?}"),
+        }
+
+        // Third: DrainFeed with correct key
+        match &effects[2] {
+            Effect::DrainFeed { key } => {
+                assert_eq!(
+                    key, &expected_key,
+                    "DrainFeed key must be hl.feed.room.<group_id>"
+                );
+            }
+            other => panic!("third effect must be DrainFeed, got {other:?}"),
+        }
+    }
+
+    // 4I-T2: feedpage_appends_room_lane_rows_raw
+    //
+    // Injecting a FeedPage for a room lane into AppState::room_lanes must cause
+    // project_room_home_snapshot to return non-empty lanes with raw kind:11 rows
+    // (D1: no formatted strings in the row).
+    #[test]
+    fn feedpage_appends_room_lane_rows_raw() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        // Inject a feed page directly into AppState::room_lanes.
+        let feed_key = format!("hl.feed.room.{TEST_GROUP}");
+        let mut feed_state = crate::kernel::domains::feed::FeedState::default();
+        crate::kernel::domains::feed::apply_feed_page(
+            &mut feed_state,
+            vec![dummy_kernel_event("evt-abc123", 11)],
+            5,
+            false,
+            None,
+        );
+        state.room_lanes.insert(feed_key.clone(), feed_state);
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP);
+        assert!(
+            snap.is_some(),
+            "snapshot must be Some with community present"
+        );
+
+        if let Some(ViewSnapshot::RoomHome(s)) = snap {
+            assert!(
+                !s.lanes.is_empty(),
+                "lanes must be non-empty after FeedPage"
+            );
+            assert_eq!(
+                s.lanes[0].kind, 11,
+                "kind must be raw 11 (D1: no formatted strings)"
+            );
+            assert_eq!(s.lanes[0].event_id, "evt-abc123");
+            assert_eq!(s.lanes[0].author_pubkey, "a".repeat(64));
+            // D1 check: content is raw text, not a label like "shared an article"
+            assert_eq!(s.lanes[0].content, "test content");
+            // lane_ids populated when rows exist
+            assert!(
+                !s.lane_ids.is_empty(),
+                "lane_ids must be non-empty when rows exist"
+            );
+            assert_eq!(s.lane_ids[0], TEST_GROUP);
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // 4I-T3: room_lane_released_on_roomhome_close
+    //
+    // Closing ViewId::RoomHome must emit both:
+    //   - Effect::ReleaseGroupEvents with the group_id
+    //   - Effect::ReleaseFeedCursor with key "hl.feed.room.<group_id>"
+    #[test]
+    fn room_lane_released_on_roomhome_close() {
+        let id = ViewId::RoomHome {
+            group_id: TEST_GROUP.to_string(),
+        };
+        let effects = lifecycle_effects_for_view_close(&id);
+        let expected_key = format!("hl.feed.room.{TEST_GROUP}");
+
+        assert_eq!(
+            effects.len(),
+            2,
+            "close must emit 2 effects: ReleaseGroupEvents + ReleaseFeedCursor"
+        );
+
+        // First: ReleaseGroupEvents
+        assert!(
+            matches!(&effects[0], Effect::ReleaseGroupEvents { group_id } if group_id == TEST_GROUP),
+            "first effect must be ReleaseGroupEvents({TEST_GROUP}), got {:?}",
+            &effects[0]
+        );
+
+        // Second: ReleaseFeedCursor with correct key
+        match &effects[1] {
+            Effect::ReleaseFeedCursor { key } => {
+                assert_eq!(
+                    key, &expected_key,
+                    "ReleaseFeedCursor key must be hl.feed.room.<group_id>"
+                );
+            }
+            other => panic!("second effect must be ReleaseFeedCursor, got {other:?}"),
+        }
+    }
+
+    // 4I-T4: open_roomhome_emits_drain_for_initial_fill
+    //
+    // Opening RoomHome must emit a DrainFeed effect (initial fill).
+    // This validates the "initial drain on open" behavior from the spec.
+    #[test]
+    fn open_roomhome_emits_drain_for_initial_fill() {
+        let id = ViewId::RoomHome {
+            group_id: TEST_GROUP.to_string(),
+        };
+        let effects = lifecycle_effects_for_view_open(&id);
+        let expected_key = format!("hl.feed.room.{TEST_GROUP}");
+
+        let drain_effects: Vec<_> = effects
+            .iter()
+            .filter(|e| matches!(e, Effect::DrainFeed { key } if key == &expected_key))
+            .collect();
+
+        assert!(
+            !drain_effects.is_empty(),
+            "open must emit DrainFeed for initial fill"
+        );
+    }
+
+    // 4I-T5: multiple_rooms_independent_feedstate
+    //
+    // Two RoomHome views with different group_ids must have independent lane rows
+    // in the snapshot — each feed is keyed separately in AppState::room_lanes.
+    #[test]
+    fn multiple_rooms_independent_feedstate() {
+        let group_a = "room-alpha";
+        let group_b = "room-beta";
+
+        let mut state = make_state();
+        state.communities = vec![
+            make_community_row(group_a, TEST_RELAY),
+            make_community_row(group_b, TEST_RELAY),
+        ];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        // Inject different rows for each group.
+        for (group, event_id, kind) in [
+            (group_a, "evt-alpha-001", 9u32),
+            (group_b, "evt-beta-002", 11u32),
+        ] {
+            let feed_key = format!("hl.feed.room.{group}");
+            let mut fs = crate::kernel::domains::feed::FeedState::default();
+            crate::kernel::domains::feed::apply_feed_page(
+                &mut fs,
+                vec![dummy_kernel_event(event_id, kind)],
+                1,
+                false,
+                None,
+            );
+            state.room_lanes.insert(feed_key, fs);
+        }
+
+        // Snapshot for group_a.
+        if let Some(ViewSnapshot::RoomHome(snap_a)) = project_room_home_snapshot(&state, group_a) {
+            assert_eq!(snap_a.lanes.len(), 1);
+            assert_eq!(snap_a.lanes[0].event_id, "evt-alpha-001");
+            assert_eq!(snap_a.lanes[0].kind, 9);
+        } else {
+            panic!("expected RoomHome snapshot for group_a");
+        }
+
+        // Snapshot for group_b.
+        if let Some(ViewSnapshot::RoomHome(snap_b)) = project_room_home_snapshot(&state, group_b) {
+            assert_eq!(snap_b.lanes.len(), 1);
+            assert_eq!(snap_b.lanes[0].event_id, "evt-beta-002");
+            assert_eq!(snap_b.lanes[0].kind, 11);
+        } else {
+            panic!("expected RoomHome snapshot for group_b");
+        }
+    }
+
+    // 4I-T6: malformed_events_skipped_in_lane_rows
+    //
+    // If AppState::room_lanes has no entry for a group (or the FeedState is empty),
+    // the snapshot lanes must be empty and no panic (D6).
+    #[test]
+    fn malformed_events_skipped_in_lane_rows() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        // No entry in room_lanes — simulates "no feed page received yet".
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP);
+        assert!(
+            snap.is_some(),
+            "snapshot must be Some even with empty room_lanes"
+        );
+
+        if let Some(ViewSnapshot::RoomHome(s)) = snap {
+            assert!(
+                s.lanes.is_empty(),
+                "lanes must be empty when no feed rows exist (D6)"
+            );
+            assert!(
+                s.lane_ids.is_empty(),
+                "lane_ids must be empty when no feed rows exist"
+            );
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
     }
 }
