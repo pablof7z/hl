@@ -99,6 +99,13 @@ final class HighlighterAppKernel {
     /// skeleton while pending.
     private(set) var homeFeed: KernelHomeFeedSnapshot?
 
+    /// Per-article reader snapshots, keyed by article address (`30023:pubkey:d`).
+    /// Populated while a `ViewId.articleReader(address:)` view is open. Carries
+    /// the article fields + content_tree_bytes + the enriched overlay
+    /// `highlights` (Phase 7). The article-reader store reads its overlay from
+    /// here; the body render path is Swift-side.
+    private(set) var articleReader: [String: KernelArticleReaderSnapshot] = [:]
+
     // MARK: - Kernel handle
 
     /// The Rust-side kernel object. Callers may dispatch actions and manage
@@ -223,6 +230,23 @@ final class HighlighterAppKernel {
     func closeHomeFeed() {
         app.closeView(viewId: .homeFeed)
         homeFeed = nil
+    }
+
+    // MARK: - Phase 7: article reader lifecycle
+
+    /// Open the article-reader view for `address` (`30023:pubkey:d`). The kernel
+    /// projects the article body + registers the per-article highlight feed, then
+    /// pushes `KernelArticleReaderSnapshot` (with the enriched overlay
+    /// `highlights`) into `articleReader[address]`. Call from `ArticleReaderView.task`.
+    func openArticleReader(address: String) {
+        app.openView(viewId: .articleReader(address: address), route: .articleReader(address: address))
+    }
+
+    /// Close the article-reader view (releases the per-article highlight feed)
+    /// and drop its cached snapshot.
+    func closeArticleReader(address: String) {
+        app.closeView(viewId: .articleReader(address: address))
+        articleReader.removeValue(forKey: address)
     }
 
     /// Open the Search view so the actor projects + pushes `ViewId.search`
@@ -374,11 +398,16 @@ final class HighlighterAppKernel {
         case .networkSettings, .relayDiagnostics:
             break
 
+        // Phase 7 cutover: article reader (ArticleReaderStore reads its overlay
+        // highlights from here; the body render path is Swift-side).
+        case .articleReader(let s):
+            articleReader[s.address] = s
+
         // Phase 4+ snapshots — managed by their owning views / stores via
         // `current_snapshot`; the observer push is handled by those stores
         // directly. No-op here (the actor still pushes; non-resident views
         // are closed before they can receive stale data — D5).
-        case .bookmarks, .articleReader, .search, .articleFeed,
+        case .bookmarks, .search, .articleFeed,
              .highlightFeed, .whatsNew, .bookPicker, .shareComposer:
             break
 

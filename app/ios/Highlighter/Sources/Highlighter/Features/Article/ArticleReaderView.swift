@@ -9,6 +9,7 @@ struct ArticleReaderView: View {
     let target: ArticleReaderTarget
 
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var store: ArticleReaderStore?
     @State private var pendingHighlight: PendingHighlight?
     @State private var highlightDetail: HighlightRecord?
@@ -67,14 +68,19 @@ struct ArticleReaderView: View {
                 let s = ArticleReaderStore(
                     target: target,
                     safeCore: app.safeCore,
-                    eventBridge: app.eventBridge
+                    eventBridge: app.eventBridge,
+                    kernel: kernel
                 )
                 store = s
                 await s.start()
+                s.applyKernelSnapshot()
             }
         }
         .task(id: target.pubkey) {
             await app.requestProfile(pubkeyHex: target.pubkey)
+        }
+        .onChange(of: kernel.articleReader[target.address]) { _, _ in
+            store?.applyKernelSnapshot()
         }
         .onDisappear {
             store?.stop()
@@ -164,7 +170,7 @@ struct ArticleReaderView: View {
         let result = app.safeCore.projectArticleHighlightPublish(
             input: ArticleHighlightPublishProjectionInput(
                 note: request.submitNote,
-                error: outcome.error
+                error: outcome ?? ""
             )
         )
         if result.isSuccess {
