@@ -44,9 +44,11 @@ use crate::capabilities::{AudioOp, AudioResult, CapabilityRequest};
 use crate::clock::Clock;
 use crate::errors::CoreError;
 use crate::kernel::app::AppState;
+use crate::kernel::domains::capture_draft::new_correlation_id;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::{
-    KernelTranscriptAvailability, KernelTranscriptSegment, PodcastListeningSnapshot, ViewSnapshot,
+    KernelClipPublishPhase, KernelTranscriptAvailability, KernelTranscriptSegment,
+    PodcastListeningSnapshot, ViewSnapshot,
 };
 use crate::models::{ArtifactRecord, PodcastPositionRecord};
 
@@ -72,6 +74,17 @@ pub(crate) const POSITION_FILE_NAME: &str = "podcast-position-v1.json";
 pub struct PodcastState {
     /// The episode currently loaded in the native player, if any.
     pub current: Option<LoadedEpisode>,
+    // ── Phase 5J additions (append-only) ─────────────────────────────────────
+    /// FSM phase for the current clip-publish round-trip.
+    ///
+    /// DEVICE-LOCAL — only the published kind:9802 is a nostr fact.
+    /// Reset to `Idle` when `clip_clear` is dispatched or a new episode loads.
+    pub clip_publish_phase: KernelClipPublishPhase,
+    /// Correlation id tracked so `apply_action_result_row` in `blossom.rs`
+    /// can route the `action_results` verdict to `ClipPublishActionResult`.
+    ///
+    /// `None` when no publish is in flight.
+    pub pending_clip_publish_correlation_id: Option<String>,
 }
 
 /// Transcript segment — a time-bounded utterance within an episode.
@@ -569,6 +582,8 @@ pub(crate) fn project_podcast_listening_snapshot(state: &AppState) -> Option<Vie
             .as_ref()
             .map(|s| s.selected_segment_ids.clone())
             .unwrap_or_default(),
+        // ── Phase 5J additions (append-only) ─────────────────────────────────
+        clip_publish_phase: state.podcast.clip_publish_phase.clone(),
     }))
 }
 
@@ -745,11 +760,211 @@ pub(crate) fn reduce_action_clip_set_end(
     vec![]
 }
 
-/// Reduce `hl.audio.clip_clear` — reset the clip selection.
+/// Reduce `hl.audio.clip_clear` — reset the clip selection and clip-publish FSM.
 pub(crate) fn reduce_action_clip_clear(state: &mut AppState) -> Vec<Effect> {
     if let Some(ep) = state.podcast.current.as_mut() {
         ep.clip_selection = None;
     }
+    // Reset clip-publish FSM so a fresh selection starts from Idle.
+    state.podcast.clip_publish_phase = KernelClipPublishPhase::Idle;
+    state.podcast.pending_clip_publish_correlation_id = None;
+    vec![]
+}
+
+// ─── Phase 5J: clip publish ────────────────────────────────────────────────────
+
+/// Build the kind:9802 clip event content from the current clip selection.
+///
+/// When transcript segments cover the clip, their concatenated text becomes
+/// the highlight content. When there are no segments (time-only clip), a
+/// fallback content string `"{start:.3}s – {end:.3}s"` is produced using
+/// `serde_json::json!` formatting (serde-safe, never `format!` for the JSON
+/// template — D-rule).
+fn clip_content(clip: &ClipSelection, segments: &[TranscriptSegment]) -> String {
+    // Collect selected segments in chronological order (mirrors live clip_highlight_draft).
+    let mut selected: Vec<&TranscriptSegment> = segments
+        .iter()
+        .filter(|s| clip.selected_segment_ids.iter().any(|id| id == &s.id))
+        .collect();
+    selected.sort_by(|a, b| {
+        a.start
+            .partial_cmp(&b.start)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.id.cmp(&b.id))
+    });
+
+    let text = selected
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    if !text.trim().is_empty() {
+        return text;
+    }
+
+    // Time-only fallback — no transcript text available.
+    // Format mirrors `build_clip_fallback_quote` in highlights.rs.
+    let start = clip.clip_start_seconds.unwrap_or(0.0);
+    let end = clip.clip_end_seconds.unwrap_or(0.0);
+    format!("{:.3}s \u{2013} {:.3}s", start, end)
+}
+
+/// Reduce `hl.podcast.publish_clip` — build a kind:9802 event template from
+/// the current `ClipSelection` + the playing episode's `ArtifactRecord`, and
+/// emit `Effect::PublishClipWithCorrelation`.
+///
+/// ## Tag structure (port-exact from live `highlights.rs::build_highlight_event`)
+///
+/// ```text
+/// ["i",        "podcast:item:guid:<guid>"]   ← NIP-73 external reference (mandatory)
+/// ["start",    "<start:.3>"]                 ← clip start in seconds (3 d.p.)
+/// ["end",      "<end:.3>"]                   ← clip end in seconds (3 d.p.)
+/// ["speaker",  "<speaker>"]                  ← omitted if empty
+/// ["segment",  "<seg_id>"]                   ← one tag per selected segment id
+/// ["comment",  "<note>"]                     ← omitted if note is empty/blank
+/// ```
+///
+/// ## No-op conditions (D6 — all malformed inputs are silent no-ops)
+///
+/// * No episode loaded (`AppState::podcast.current` is `None`).
+/// * `clip_selection` is `None` on the loaded episode.
+/// * Either `clip_start_seconds` or `clip_end_seconds` is `None`.
+/// * `artifact.preview.podcast_item_guid` is empty (can't build i-tag).
+/// * `clip_publish_phase` is already `Publishing` or `Done` (guard against
+///   double-tap; caller should reset via `clip_clear` before re-publish).
+///
+/// ## Correlation id
+///
+/// A fresh id is minted here (never `None`), stored in
+/// `AppState::podcast.pending_clip_publish_correlation_id`, and threaded
+/// through to `ActorCommand::PublishRawEvent` via the 5G effect runner so
+/// the `action_results` projection can route the verdict.
+pub(crate) fn reduce_action_publish_clip(
+    state: &mut AppState,
+    artifact: ArtifactRecord,
+    note: Option<String>,
+) -> Vec<Effect> {
+    // Guard: only Idle or Error are entry points for a fresh publish.
+    match &state.podcast.clip_publish_phase {
+        KernelClipPublishPhase::Publishing | KernelClipPublishPhase::Done => {
+            tracing::warn!(
+                "publish_clip: clip_publish_phase is {:?} — no-op (D6)",
+                state.podcast.clip_publish_phase
+            );
+            return vec![];
+        }
+        _ => {}
+    }
+
+    let Some(ep) = state.podcast.current.as_ref() else {
+        tracing::warn!("publish_clip: no episode loaded — no-op (D6)");
+        return vec![];
+    };
+
+    let Some(clip) = ep.clip_selection.as_ref() else {
+        tracing::warn!("publish_clip: no clip selection — no-op (D6)");
+        return vec![];
+    };
+
+    let (Some(start), Some(end)) = (clip.clip_start_seconds, clip.clip_end_seconds) else {
+        tracing::warn!("publish_clip: clip missing start or end — no-op (D6)");
+        return vec![];
+    };
+
+    // Build NIP-73 i-tag value: "podcast:item:guid:<guid>".
+    // Mirrors live `podcast_clip_reference` in podcast_transcript.rs:621-631.
+    let guid = artifact.preview.podcast_item_guid.trim();
+    if guid.is_empty() {
+        tracing::warn!("publish_clip: empty podcast_item_guid — no-op (D6)");
+        return vec![];
+    }
+    let i_tag_value = format!("podcast:item:guid:{guid}");
+
+    // Build event content from selected transcript segments.
+    let content = clip_content(clip, &ep.transcript_segments);
+
+    // Build tags with serde_json::json! (D-rule: serde, not format! for JSON).
+    let mut tags: Vec<serde_json::Value> = Vec::new();
+
+    // Mandatory NIP-73 external reference tag.
+    tags.push(serde_json::json!(["i", i_tag_value]));
+
+    // Clip time tags — always present together (both Some was checked above).
+    tags.push(serde_json::json!(["start", format!("{:.3}", start)]));
+    tags.push(serde_json::json!(["end", format!("{:.3}", end)]));
+
+    // Speaker tag — omit when empty (mirrors highlights.rs:1623-1629).
+    let speaker = clip.speaker.trim();
+    if !speaker.is_empty() {
+        tags.push(serde_json::json!(["speaker", speaker]));
+    }
+
+    // One segment tag per selected transcript segment id (mirrors highlights.rs:1631-1640).
+    for seg_id in &clip.selected_segment_ids {
+        let seg_id = seg_id.trim();
+        if !seg_id.is_empty() {
+            tags.push(serde_json::json!(["segment", seg_id]));
+        }
+    }
+
+    // Optional comment / note tag.
+    let note_str = note.as_deref().unwrap_or("").trim().to_string();
+    if !note_str.is_empty() {
+        tags.push(serde_json::json!(["comment", note_str]));
+    }
+
+    let event_template = serde_json::json!({
+        "kind": 9802,
+        "content": content,
+        "tags": tags,
+    });
+
+    let json = match serde_json::to_string(&event_template) {
+        Ok(s) => s,
+        Err(e) => {
+            // Serialization failure must not panic (D6).
+            tracing::warn!("publish_clip: serde_json::to_string failed: {e} — no-op");
+            return vec![];
+        }
+    };
+
+    // Mint correlation id and store it so apply_action_result_row can route.
+    let correlation_id = new_correlation_id();
+    state.podcast.pending_clip_publish_correlation_id = Some(correlation_id.clone());
+    state.podcast.clip_publish_phase = KernelClipPublishPhase::Publishing;
+
+    vec![Effect::PublishClipWithCorrelation {
+        json,
+        correlation_id,
+    }]
+}
+
+/// Handle `KernelEvent::ClipPublishActionResult` — advance FSM to Done or Error.
+///
+/// Called when the `action_results` projection delivers a verdict for the
+/// in-flight clip publish (matched by `pending_clip_publish_correlation_id`
+/// in `apply_action_result_row` in `blossom.rs`). Clears the correlation id
+/// to prevent stale re-delivery.
+pub(crate) fn reduce_event_clip_publish_action_result(
+    state: &mut AppState,
+    success: bool,
+    error: String,
+) -> Vec<Effect> {
+    // Clear the pending id whether success or failure (D6: stale re-delivery no-op).
+    state.podcast.pending_clip_publish_correlation_id = None;
+
+    state.podcast.clip_publish_phase = if success {
+        KernelClipPublishPhase::Done
+    } else {
+        KernelClipPublishPhase::Error {
+            message: if error.is_empty() {
+                "publish failed".to_string()
+            } else {
+                error
+            },
+        }
+    };
     vec![]
 }
 
@@ -1315,6 +1530,408 @@ mod tests {
         assert!(
             reopened.current().is_none(),
             "stale position must be discarded"
+        );
+    }
+
+    // ─── Phase 5J tests ───────────────────────────────────────────────────────
+
+    use crate::kernel::action::AppActionEnvelope;
+    use crate::kernel::snapshot::KernelClipPublishPhase;
+
+    fn envelope(ns: &str, json: &str) -> Cmd {
+        Cmd::ActionEnvelope(AppActionEnvelope {
+            namespace: ns.to_string(),
+            json: json.to_string(),
+        })
+    }
+
+    /// Load an episode and mark a time-only clip.
+    fn setup_loaded_episode_with_clip(state: &mut AppState, clk: &ManualClock) {
+        step(
+            state,
+            clk,
+            Cmd::Action(AppAction::AudioPlay {
+                url: "https://cdn.example/ep.mp3".into(),
+                guid: "ep-guid".into(),
+                artifact_json: serde_json::to_string(&sample_artifact(
+                    "https://cdn.example/ep.mp3",
+                ))
+                .unwrap(),
+            }),
+        );
+        // Mark clip start at 10 s, end at 40 s.
+        step(
+            state,
+            clk,
+            envelope("hl.audio.clip_mark_in", r#"{"current_time":10.0}"#),
+        );
+        step(
+            state,
+            clk,
+            envelope("hl.audio.clip_mark_out", r#"{"current_time":40.0}"#),
+        );
+    }
+
+    // 5J-T1: publish_clip_builds_kind9802_with_nip73_itag
+    //
+    // `hl.podcast.publish_clip` must emit Effect::PublishClipWithCorrelation
+    // whose JSON template is kind:9802 containing an ["i", "podcast:item:guid:ep-guid"]
+    // tag, plus ["start", "10.000"], ["end", "40.000"] tags.
+    #[test]
+    fn publish_clip_builds_kind9802_with_nip73_itag() {
+        let mut state = make_state();
+        let clk = clock(1_000);
+
+        setup_loaded_episode_with_clip(&mut state, &clk);
+
+        let artifact_json =
+            serde_json::to_string(&sample_artifact("https://cdn.example/ep.mp3")).unwrap();
+        let payload = serde_json::json!({ "artifact_json": artifact_json }).to_string();
+
+        let effects = step(
+            &mut state,
+            &clk,
+            envelope("hl.podcast.publish_clip", &payload),
+        );
+
+        let clip_effect = effects
+            .iter()
+            .find(|e| matches!(e, Effect::PublishClipWithCorrelation { .. }))
+            .expect("must emit PublishClipWithCorrelation");
+
+        let (json, _cid) = if let Effect::PublishClipWithCorrelation {
+            json,
+            correlation_id,
+        } = clip_effect
+        {
+            (json.clone(), correlation_id.clone())
+        } else {
+            panic!("wrong effect variant");
+        };
+
+        let template: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(template["kind"], 9802, "must be kind:9802");
+
+        let tags = template["tags"].as_array().unwrap();
+
+        // NIP-73 i-tag must be present and correct.
+        let i_tag = tags.iter().find(|t| t[0] == "i").expect("must have i-tag");
+        assert_eq!(
+            i_tag[1].as_str().unwrap(),
+            "podcast:item:guid:ep-guid",
+            "i-tag value must match artifact podcast_item_guid"
+        );
+
+        // Start/end tags must be present with 3 decimal places.
+        let start_tag = tags
+            .iter()
+            .find(|t| t[0] == "start")
+            .expect("must have start tag");
+        assert_eq!(start_tag[1].as_str().unwrap(), "10.000");
+
+        let end_tag = tags
+            .iter()
+            .find(|t| t[0] == "end")
+            .expect("must have end tag");
+        assert_eq!(end_tag[1].as_str().unwrap(), "40.000");
+    }
+
+    // 5J-T2: publish_clip_uses_correlation_id
+    //
+    // The correlation_id in the emitted effect must be non-empty and must match
+    // the one stored in AppState::podcast.pending_clip_publish_correlation_id.
+    #[test]
+    fn publish_clip_uses_correlation_id() {
+        let mut state = make_state();
+        let clk = clock(1_000);
+
+        setup_loaded_episode_with_clip(&mut state, &clk);
+
+        let artifact_json =
+            serde_json::to_string(&sample_artifact("https://cdn.example/ep.mp3")).unwrap();
+        let payload = serde_json::json!({ "artifact_json": artifact_json }).to_string();
+
+        let effects = step(
+            &mut state,
+            &clk,
+            envelope("hl.podcast.publish_clip", &payload),
+        );
+
+        let cid = if let Some(Effect::PublishClipWithCorrelation { correlation_id, .. }) = effects
+            .iter()
+            .find(|e| matches!(e, Effect::PublishClipWithCorrelation { .. }))
+        {
+            correlation_id.clone()
+        } else {
+            panic!("no PublishClipWithCorrelation effect");
+        };
+
+        assert!(!cid.is_empty(), "correlation_id must be non-empty");
+
+        // Must be stored in state so apply_action_result_row can route the verdict.
+        assert_eq!(
+            state.podcast.pending_clip_publish_correlation_id.as_deref(),
+            Some(cid.as_str()),
+            "pending_clip_publish_correlation_id must match effect correlation_id"
+        );
+
+        // Phase must advance to Publishing.
+        assert_eq!(
+            state.podcast.clip_publish_phase,
+            KernelClipPublishPhase::Publishing,
+        );
+    }
+
+    // 5J-T3: clip_publish_advances_to_done_on_published_result
+    //
+    // Injecting KernelEvent::ClipPublishActionResult { success:true } must
+    // drive clip_publish_phase → Done and clear pending_clip_publish_correlation_id.
+    #[test]
+    fn clip_publish_advances_to_done_on_published_result() {
+        let mut state = make_state();
+        let clk = clock(1_000);
+
+        // Plant the correlation_id directly (no live nmp in tests).
+        state.podcast.pending_clip_publish_correlation_id = Some("test-cid-done".to_string());
+        state.podcast.clip_publish_phase = KernelClipPublishPhase::Publishing;
+
+        step(
+            &mut state,
+            &clk,
+            Cmd::Event(KernelEvent::ClipPublishActionResult {
+                success: true,
+                error: String::new(),
+            }),
+        );
+
+        assert_eq!(
+            state.podcast.clip_publish_phase,
+            KernelClipPublishPhase::Done,
+            "FSM must reach Done on success"
+        );
+        assert!(
+            state.podcast.pending_clip_publish_correlation_id.is_none(),
+            "correlation_id must be cleared on Done"
+        );
+    }
+
+    // 5J-T4: clip_publish_error_on_failed_result
+    //
+    // A failed action result must drive clip_publish_phase → Error{message}.
+    #[test]
+    fn clip_publish_error_on_failed_result() {
+        let mut state = make_state();
+        let clk = clock(1_000);
+
+        state.podcast.pending_clip_publish_correlation_id = Some("test-cid-err".to_string());
+        state.podcast.clip_publish_phase = KernelClipPublishPhase::Publishing;
+
+        step(
+            &mut state,
+            &clk,
+            Cmd::Event(KernelEvent::ClipPublishActionResult {
+                success: false,
+                error: "relay rejected event".to_string(),
+            }),
+        );
+
+        assert!(
+            matches!(
+                &state.podcast.clip_publish_phase,
+                KernelClipPublishPhase::Error { message }
+                    if message == "relay rejected event"
+            ),
+            "FSM must be Error with relay message: {:?}",
+            state.podcast.clip_publish_phase
+        );
+        assert!(state.podcast.pending_clip_publish_correlation_id.is_none());
+    }
+
+    // 5J-T5: publish_clip_tag_fidelity_vs_live
+    //
+    // Verify tag structure matches live `build_highlight_event` in highlights.rs:
+    //   - start / end use "{:.3}" (3 decimal places, rounded)
+    //   - speaker tag is omitted when empty
+    //   - speaker tag is present when non-empty
+    //   - segment tags are emitted one per selected segment id
+    //   - comment tag present only when note is non-empty
+    #[test]
+    fn publish_clip_tag_fidelity_vs_live() {
+        let mut state = make_state();
+        let clk = clock(1_000);
+
+        setup_loaded_episode_with_clip(&mut state, &clk);
+
+        // Add segments and extend clip to include them.
+        step(
+            &mut state,
+            &clk,
+            Cmd::Event(KernelEvent::TranscriptReady {
+                segments: vec![
+                    TranscriptSegment {
+                        id: "seg-1".into(),
+                        start: 10.0,
+                        end: 25.0,
+                        speaker: "Alice".into(),
+                        text: "Hello world".into(),
+                    },
+                    TranscriptSegment {
+                        id: "seg-2".into(),
+                        start: 25.0,
+                        end: 40.0,
+                        speaker: "Alice".into(),
+                        text: "Continued speech".into(),
+                    },
+                ],
+            }),
+        );
+        step(
+            &mut state,
+            &clk,
+            envelope("hl.audio.clip_extend_segment", r#"{"segment_id":"seg-1"}"#),
+        );
+        step(
+            &mut state,
+            &clk,
+            envelope("hl.audio.clip_extend_segment", r#"{"segment_id":"seg-2"}"#),
+        );
+
+        let artifact_json =
+            serde_json::to_string(&sample_artifact("https://cdn.example/ep.mp3")).unwrap();
+        let payload =
+            serde_json::json!({ "artifact_json": artifact_json, "note": "Great insight" })
+                .to_string();
+
+        let effects = step(
+            &mut state,
+            &clk,
+            envelope("hl.podcast.publish_clip", &payload),
+        );
+
+        let json = if let Some(Effect::PublishClipWithCorrelation { json, .. }) = effects
+            .iter()
+            .find(|e| matches!(e, Effect::PublishClipWithCorrelation { .. }))
+        {
+            json.clone()
+        } else {
+            panic!("no PublishClipWithCorrelation effect");
+        };
+
+        let template: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let tags = template["tags"].as_array().unwrap();
+
+        // i-tag.
+        let i_tag = tags.iter().find(|t| t[0] == "i").unwrap();
+        assert_eq!(i_tag[1].as_str().unwrap(), "podcast:item:guid:ep-guid");
+
+        // start/end with 3 decimal places (live uses format!("{:.3}", start)).
+        let start = tags.iter().find(|t| t[0] == "start").unwrap();
+        assert_eq!(start[1].as_str().unwrap(), "10.000");
+        let end = tags.iter().find(|t| t[0] == "end").unwrap();
+        assert_eq!(end[1].as_str().unwrap(), "40.000");
+
+        // speaker tag — present when segments carry a speaker.
+        let speaker = tags.iter().find(|t| t[0] == "speaker").unwrap();
+        assert_eq!(speaker[1].as_str().unwrap(), "Alice");
+
+        // segment tags — one per selected segment id.
+        let segments: Vec<_> = tags
+            .iter()
+            .filter(|t| t[0] == "segment")
+            .map(|t| t[1].as_str().unwrap())
+            .collect();
+        assert!(
+            segments.contains(&"seg-1") && segments.contains(&"seg-2"),
+            "both segment ids must appear as segment tags: {segments:?}"
+        );
+
+        // comment tag.
+        let comment = tags.iter().find(|t| t[0] == "comment").unwrap();
+        assert_eq!(comment[1].as_str().unwrap(), "Great insight");
+    }
+
+    // 5J-T6: malformed_or_no_selection_noop
+    //
+    // Dispatching hl.podcast.publish_clip when no episode is loaded OR no
+    // clip selection is set must be a silent no-op (D6): no effect emitted,
+    // phase stays Idle.
+    #[test]
+    fn malformed_or_no_selection_noop() {
+        let mut state = make_state();
+        let clk = clock(1_000);
+
+        let artifact_json =
+            serde_json::to_string(&sample_artifact("https://cdn.example/ep.mp3")).unwrap();
+        let payload = serde_json::json!({ "artifact_json": artifact_json }).to_string();
+
+        // No episode loaded.
+        let effects = step(
+            &mut state,
+            &clk,
+            envelope("hl.podcast.publish_clip", &payload),
+        );
+        let has_publish = effects
+            .iter()
+            .any(|e| matches!(e, Effect::PublishClipWithCorrelation { .. }));
+        assert!(!has_publish, "must be no-op when no episode loaded");
+        assert_eq!(
+            state.podcast.clip_publish_phase,
+            KernelClipPublishPhase::Idle
+        );
+
+        // Episode loaded but no clip selection.
+        step(
+            &mut state,
+            &clk,
+            Cmd::Action(AppAction::AudioPlay {
+                url: "https://cdn.example/ep.mp3".into(),
+                guid: "ep-guid".into(),
+                artifact_json: serde_json::to_string(&sample_artifact(
+                    "https://cdn.example/ep.mp3",
+                ))
+                .unwrap(),
+            }),
+        );
+
+        let effects = step(
+            &mut state,
+            &clk,
+            envelope("hl.podcast.publish_clip", &payload),
+        );
+        let has_publish = effects
+            .iter()
+            .any(|e| matches!(e, Effect::PublishClipWithCorrelation { .. }));
+        assert!(!has_publish, "must be no-op when no clip selection");
+        assert_eq!(
+            state.podcast.clip_publish_phase,
+            KernelClipPublishPhase::Idle
+        );
+    }
+
+    // 5J-T7: clip_clear_resets_publish_phase
+    //
+    // `hl.audio.clip_clear` must reset clip_publish_phase → Idle and
+    // clear pending_clip_publish_correlation_id so a fresh clip can start
+    // from Idle without the previous publish FSM polluting state.
+    #[test]
+    fn clip_clear_resets_publish_phase() {
+        let mut state = make_state();
+        let clk = clock(1_000);
+
+        // Plant a Done phase as if a prior publish completed.
+        state.podcast.clip_publish_phase = KernelClipPublishPhase::Done;
+        state.podcast.pending_clip_publish_correlation_id = Some("old-cid".to_string());
+
+        step(&mut state, &clk, envelope("hl.audio.clip_clear", "{}"));
+
+        assert_eq!(
+            state.podcast.clip_publish_phase,
+            KernelClipPublishPhase::Idle,
+            "clip_clear must reset phase to Idle"
+        );
+        assert!(
+            state.podcast.pending_clip_publish_correlation_id.is_none(),
+            "clip_clear must clear pending_clip_publish_correlation_id"
         );
     }
 }

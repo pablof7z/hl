@@ -484,10 +484,11 @@ fn reduce_action_envelope(
         ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload, ClipSetStartPayload,
         CreateAccountPayload, CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload,
         JoinRoomPayload, LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload,
-        PairBunkerPayload, PresentSheetPayload, PublishHighlightPayload, ReactPayload,
-        ReleaseProfilePayload, RemoveBookmarkPayload, RemoveRelayPayload, RunSearchPayload,
-        SelectRootTabPayload, SetRelayRolePayload, SetRoomsRelayListPayload, ShareToRoomPayload,
-        SignInNsecPayload, StartRoomDiscoveryPayload, UnfollowPayload, UnreactPayload,
+        PairBunkerPayload, PresentSheetPayload, PublishClipPayload, PublishHighlightPayload,
+        ReactPayload, ReleaseProfilePayload, RemoveBookmarkPayload, RemoveRelayPayload,
+        RunSearchPayload, SelectRootTabPayload, SetRelayRolePayload, SetRoomsRelayListPayload,
+        ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload, UnfollowPayload,
+        UnreactPayload,
     };
 
     match envelope.namespace.as_str() {
@@ -727,6 +728,24 @@ fn reduce_action_envelope(
             podcast::reduce_action_clip_set_end(state, p.value, p.duration_seconds)
         }
         "hl.audio.clip_clear" => podcast::reduce_action_clip_clear(state),
+
+        // ── Phase 5J additions (append-only) ──────────────────────────────────
+        "hl.podcast.publish_clip" => {
+            let p = parse!(PublishClipPayload);
+            let artifact =
+                match serde_json::from_str::<crate::models::ArtifactRecord>(&p.artifact_json) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        tracing::warn!("hl.podcast.publish_clip: bad artifact_json: {e}");
+                        return emit_invalid_action_toast(
+                            state,
+                            format!("hl.podcast.publish_clip: bad artifact_json: {e}"),
+                            now,
+                        );
+                    }
+                };
+            podcast::reduce_action_publish_clip(state, artifact, p.note)
+        }
 
         // ── OCR ───────────────────────────────────────────────────────────────
         "hl.ocr.recognize" => {
@@ -1109,6 +1128,11 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             podcast::reduce_event_transcript_ready(state, segments)
         }
         KernelEvent::TranscriptFetchFailed => podcast::reduce_event_transcript_failed(state),
+
+        // ── Phase 5J additions (append-only) ─────────────────────────────────
+        KernelEvent::ClipPublishActionResult { success, error } => {
+            podcast::reduce_event_clip_publish_action_result(state, success, error)
+        }
 
         // ── Phase 5E additions (append-only) ─────────────────────────────────
         KernelEvent::CameraCapabilityResult(_) => {
@@ -1499,6 +1523,21 @@ pub(crate) async fn run_effect(
             tokio::spawn(async move {
                 run_effect_fetch_transcript(url, &tx_clone).await;
             });
+        }
+
+        // ── Phase 5J additions (append-only) ─────────────────────────────────
+        Effect::PublishClipWithCorrelation {
+            json,
+            correlation_id,
+        } => {
+            // Dispatch via ActorCommand::PublishRawEvent WITH a correlation_id
+            // so the action_results projection can route the outcome to
+            // KernelEvent::ClipPublishActionResult, driving the FSM → Done/Error.
+            // Reuses `run_effect_publish_capture_with_correlation` because both
+            // are identical: deserialise the template + send PublishRawEvent with
+            // the given correlation_id. No-op when nmp is None (test mode injects
+            // KernelEvent::ClipPublishActionResult directly).
+            blossom::run_effect_publish_capture_with_correlation(json, correlation_id, nmp, tx);
         }
     }
 

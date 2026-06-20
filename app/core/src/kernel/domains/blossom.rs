@@ -219,7 +219,22 @@ fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow) {
         return;
     }
 
-    // 3. Unknown correlation_id — silent no-op (D6).
+    // 3. Podcast clip publish correlation_id? (Phase 5J)
+    if state.podcast.pending_clip_publish_correlation_id.as_deref() == Some(cid.as_str()) {
+        let error = row.error.clone().unwrap_or_default();
+        tracing::debug!(
+            %cid,
+            %success,
+            error = %error,
+            "apply_action_result_row: clip publish result"
+        );
+        crate::kernel::domains::podcast::reduce_event_clip_publish_action_result(
+            state, success, error,
+        );
+        return;
+    }
+
+    // 4. Unknown correlation_id — silent no-op (D6).
     tracing::trace!(
         %cid,
         status = %row.status,
