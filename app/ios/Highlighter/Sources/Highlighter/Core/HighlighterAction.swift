@@ -65,6 +65,10 @@ enum HighlighterAction {
     // ── Reactions ─────────────────────────────────────────────────────────────
     case react(targetEventId: String, reaction: String, targetAuthorPubkey: String?)
     case unreact(reactionEventId: String)
+    /// Like-or-unlike a target by event id. The kernel decides react vs unreact
+    /// from its own viewer-reaction tracking (the reaction event id stays
+    /// kernel-internal). Reused by every like-button.
+    case toggleReaction(targetEventId: String, targetAuthorPubkey: String?)
 
     // ── Search ────────────────────────────────────────────────────────────────
     case runSearch(query: String, scope: HLSearchScope)
@@ -258,6 +262,10 @@ enum HighlighterAction {
         case .unreact(let reactionEventId):
             return AppActionEnvelope(namespace: "hl.reaction.unreact",
                                      json: jsonObject(["reaction_event_id": reactionEventId]))
+        case .toggleReaction(let targetEventId, let targetAuthorPubkey):
+            var dict: [String: Any] = ["target_event_id": targetEventId]
+            if let author = targetAuthorPubkey { dict["target_author_pubkey"] = author }
+            return AppActionEnvelope(namespace: "hl.reaction.toggle", json: jsonAny(dict))
 
         // ── Search ────────────────────────────────────────────────────────────
         case .runSearch(let query, let scope):

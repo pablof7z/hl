@@ -501,8 +501,8 @@ fn reduce_action_envelope(
         ReactPayload, ReleaseProfilePayload, RemoveBookmarkPayload, RemoveRelayPayload,
         RunOmniboxPayload, RunSearchPayload, SelectRootTabPayload, SetRelayRolePayload,
         SetRoomsRelayListPayload,
-        ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload, UnfollowPayload,
-        UnreactPayload,
+        ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload, ToggleReactionPayload,
+        UnfollowPayload, UnreactPayload,
     };
 
     match envelope.namespace.as_str() {
@@ -642,6 +642,14 @@ fn reduce_action_envelope(
         "hl.reaction.unreact" => {
             let p = parse!(UnreactPayload);
             reactions::reduce_action_unreact(p.reaction_event_id)
+        }
+        "hl.reaction.toggle" => {
+            let p = parse!(ToggleReactionPayload);
+            reactions::reduce_action_toggle_reaction(
+                state,
+                p.target_event_id,
+                p.target_author_pubkey,
+            )
         }
 
         // ── Search ────────────────────────────────────────────────────────────
@@ -1064,9 +1072,22 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             target_event_id,
             count,
             viewer_reacted,
+            viewer_reaction_event_id,
         } => {
             // Upsert raw reaction state for the target event. No optimistic
             // delta applied here — D1: Swift owns optimistic UI state.
+            // Track the viewer's own reaction event id separately (kernel-only,
+            // never FFI) so hl.reaction.toggle can unreact.
+            match viewer_reaction_event_id {
+                Some(id) => {
+                    state
+                        .viewer_reaction_ids
+                        .insert(target_event_id.clone(), id);
+                }
+                None => {
+                    state.viewer_reaction_ids.remove(&target_event_id);
+                }
+            }
             state.reaction_state.insert(
                 target_event_id.clone(),
                 crate::kernel::snapshot::ReactionRow {
