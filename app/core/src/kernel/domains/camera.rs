@@ -164,19 +164,12 @@ pub(crate) fn reduce_capability_camera(state: &mut AppState, result: CameraResul
         }
 
         CameraResult::Barcode { raw_string } => {
-            // Normalize raw barcode → 13-digit ISBN string, then route to 5C lookup.
-            // Normalization strips hyphens and spaces; an empty or non-numeric
-            // result is a no-op (D6).
-            let isbn13 = normalize_isbn(&raw_string);
-            if isbn13.is_empty() {
-                tracing::warn!(
-                    raw = %raw_string,
-                    "camera.barcode: could not normalize to 13-digit ISBN — no-op (D6)"
-                );
-                return vec![];
-            }
-            // Delegate to the 5C ISBN lookup reducer which handles cache + HTTP.
-            crate::kernel::domains::isbn::reduce_action_lookup_isbn(state, isbn13)
+            // Route the raw barcode string directly to the 5C ISBN lookup reducer.
+            // isbn::reduce_action_lookup_isbn calls isbn::normalize_isbn which
+            // validates the EAN-13 checksum and rejects non-book barcodes (D6).
+            // No local normalizer needed — single ISBN normalizer with checksum
+            // validation lives in isbn.rs (DRY).
+            crate::kernel::domains::isbn::reduce_action_lookup_isbn(state, raw_string)
         }
 
         CameraResult::Denied => {
@@ -196,65 +189,6 @@ pub(crate) fn reduce_capability_camera(state: &mut AppState, result: CameraResul
             vec![]
         }
     }
-}
-
-// ─── ISBN normalization helper ────────────────────────────────────────────────
-
-/// Normalize a raw barcode string to a 13-digit ISBN.
-///
-/// Accepts:
-/// - 13-digit Bookland EAN (ISBN-13): `"9780134685991"` → `"9780134685991"`
-/// - 10-digit legacy ISBN with optional hyphens: `"0-13-468599-0"` → convert to
-///   ISBN-13 via the 978 prefix (EAN-10 → EAN-13 mapping).
-/// - Any non-ISBN barcode: returns empty string (no-op signal for the caller).
-///
-/// The barcode string is stripped of hyphens and spaces before classification.
-/// This mirrors the normalization logic in the live bespoke
-/// `BookScannerModel.swift` (`normalizeISBN` method) without depending on Swift.
-pub(crate) fn normalize_isbn(raw: &str) -> String {
-    // Strip hyphens and spaces (common in printed ISBN formatting).
-    let digits: String = raw
-        .chars()
-        .filter(|c| c.is_ascii_digit() || *c == 'X' || *c == 'x')
-        .collect();
-
-    match digits.len() {
-        13 => {
-            // ISBN-13 / EAN-13: must start with 978 or 979 for books.
-            if digits.starts_with("978") || digits.starts_with("979") {
-                digits
-            } else {
-                // Non-book EAN-13 barcode — not an ISBN.
-                String::new()
-            }
-        }
-        10 => {
-            // ISBN-10: convert to ISBN-13 by prepending "978" and recomputing
-            // the check digit. The live lane uses the same transform.
-            let base9 = &digits[..9];
-            if !base9.chars().all(|c| c.is_ascii_digit()) {
-                return String::new();
-            }
-            let isbn13_base = format!("978{base9}");
-            let check = isbn13_check_digit(&isbn13_base);
-            format!("{isbn13_base}{check}")
-        }
-        _ => String::new(),
-    }
-}
-
-/// Compute the ISBN-13 / EAN-13 check digit for a 12-digit base string.
-///
-/// The check digit is `(10 - (sum_of_weighted_digits % 10)) % 10` where
-/// odd-position digits have weight 1 and even-position digits have weight 3
-/// (1-based indexing, i.e. first digit is odd = weight 1).
-fn isbn13_check_digit(base12: &str) -> u8 {
-    let sum: u32 = base12
-        .chars()
-        .enumerate()
-        .filter_map(|(i, c)| c.to_digit(10).map(|d| if i % 2 == 0 { d } else { d * 3 }))
-        .sum();
-    ((10 - (sum % 10)) % 10) as u8
 }
 
 // ─── Unit tests ───────────────────────────────────────────────────────────────
@@ -658,23 +592,52 @@ mod tests {
         );
     }
 
-    // 5E-T10: normalize_isbn unit tests.
+    // 5E-T10: camera_barcode_invalid_checksum_rejected
+    //
+    // A 978/979-prefix 13-digit barcode with a WRONG check digit must be
+    // rejected by isbn::normalize_isbn (EAN-13 checksum validation) and produce
+    // no LookupIsbn effect — no-op (D6). This guards against mis-scans.
     #[test]
-    fn normalize_isbn_unit_tests() {
-        // Valid ISBN-13 (978 prefix).
-        assert_eq!(normalize_isbn("9780134685991"), "9780134685991");
-        // Valid ISBN-13 (979 prefix).
-        assert_eq!(normalize_isbn("9791032305959"), "9791032305959");
-        // ISBN-13 with hyphens.
-        assert_eq!(normalize_isbn("978-0-13-468599-1"), "9780134685991");
-        // Non-book EAN-13 (not 978/979 prefix).
-        assert_eq!(normalize_isbn("0123456789012"), "");
-        // 12 digits — UPC-A, not ISBN.
-        assert_eq!(normalize_isbn("012345678901"), "");
-        // Empty string.
-        assert_eq!(normalize_isbn(""), "");
-        // Non-numeric noise.
-        assert_eq!(normalize_isbn("not-a-barcode"), "");
+    fn camera_barcode_invalid_checksum_rejected() {
+        let clock = ManualClock::default();
+
+        // "9780134685990" — correct digits are "9780134685991" (last digit wrong).
+        let mut state = make_state();
+        state.camera.pending = true;
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::ProvideCapabilityResult(CapabilityResult::Camera(CameraResult::Barcode {
+                raw_string: "9780134685990".to_string(),
+            })),
+        );
+        let isbn_effects: Vec<_> = effects
+            .iter()
+            .filter(|e| matches!(e, Effect::LookupIsbn { .. }))
+            .collect();
+        assert!(
+            isbn_effects.is_empty(),
+            "ISBN-13 with wrong check digit must be rejected (no LookupIsbn); got: {effects:?}"
+        );
+
+        // "9790000000008" — a 979-prefix string with an invalid check digit.
+        let mut state2 = make_state();
+        state2.camera.pending = true;
+        let effects2 = step(
+            &mut state2,
+            &clock,
+            Cmd::ProvideCapabilityResult(CapabilityResult::Camera(CameraResult::Barcode {
+                raw_string: "9790000000008".to_string(),
+            })),
+        );
+        let isbn_effects2: Vec<_> = effects2
+            .iter()
+            .filter(|e| matches!(e, Effect::LookupIsbn { .. }))
+            .collect();
+        assert!(
+            isbn_effects2.is_empty(),
+            "979-prefix ISBN-13 with wrong check digit must be rejected; got: {effects2:?}"
+        );
     }
 
     // 5E-T11: camera barcode result does NOT emit any publish effect (device-local).
