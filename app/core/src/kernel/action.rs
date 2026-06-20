@@ -425,6 +425,14 @@ pub enum AppAction {
         /// Which NIP-50 scope to search in.
         scope: SearchScope,
     },
+
+    // ── Phase 5A additions (append-only) ─────────────────────────────────────
+    /// Prepare the What's New sheet — load entries and seen marker from disk.
+    /// Device-local (never published to nostr — `hl-app-state-vs-nostr-facts`).
+    PrepareWhatsNew,
+    /// Advance the seen marker to `shipped_at_unix`. Monotonic — never moves backward.
+    /// Device-local: persists to `{data_dir}/whats-new-state-v1.json`.
+    MarkWhatsNewSeen { shipped_at_unix: u64 },
 }
 
 /// NIP-50 search scope — which event kinds the relay-search targets.
@@ -672,5 +680,12 @@ pub enum KernelEvent {
         exhausted: bool,
         /// `Some(seq)` on a Gap — the reducer must clear rows and rebase to seq.
         gap_rebased_to: Option<u64>,
+    },
+
+    // ── Phase 5A additions (append-only) ─────────────────────────────────────
+    /// What's New entries and presentation flag loaded from bundled JSON + state file.
+    WhatsNewLoaded {
+        entries: Vec<crate::kernel::snapshot::WhatsNewEntryRow>,
+        should_present: bool,
     },
 }

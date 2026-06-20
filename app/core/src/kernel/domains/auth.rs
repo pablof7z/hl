@@ -1014,6 +1014,7 @@ mod tests {
             },
             relay: Default::default(),
             room: Default::default(),
+            data_dir: String::new(),
         };
         assert_eq!(
             policy_with_follows.create_account.initial_follows, follows,

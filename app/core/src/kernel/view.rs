@@ -111,6 +111,10 @@ pub enum ViewId {
     /// for both underlying feeds. On close: releases both cursors. The snapshot
     /// is `ViewSnapshot::HomeFeed(HomeFeedSnapshot)`.
     HomeFeed,
+
+    // ── Phase 5A additions (append-only) ─────────────────────────────────────
+    /// What's New sheet — device-local seen-state (no nostr publish).
+    WhatsNew,
 }
 
 /// Which projection to compute for a registered view.
@@ -183,6 +187,10 @@ pub enum ViewRoute {
     /// grouped, sorted rows from the article + highlight feeds). D1: raw rows
     /// only — no bylines, no "min read", no "Untitled" fallback.
     HomeFeed,
+
+    // ── Phase 5A additions (append-only) ─────────────────────────────────────
+    /// What's New sheet projection — `WhatsNewSnapshot` (unseen entries, should_present flag).
+    WhatsNew,
 }
 
 /// Tracks open views and their last-emitted snapshots.

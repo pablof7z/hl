@@ -261,6 +261,19 @@ pub struct AppState {
     /// opens. Key is `"hl.feed.room.<group_id>"`. Bounded by open room views.
     /// Cleared on `Logout` / `IdentityChanged(None)`.
     pub room_lanes: HashMap<String, crate::kernel::domains::feed::FeedState>,
+
+    // ── Phase 5A additions ────────────────────────────────────────────────────
+    /// What's New seen-state — device-local, never published to Nostr.
+    ///
+    /// Populated by `KernelEvent::WhatsNewLoaded` after `Effect::LoadWhatsNewState`
+    /// resolves the bundled JSON + seen-marker file. `should_present` drives the
+    /// sheet presentation; `entries` is filtered to unseen items only.
+    ///
+    /// The seen marker is monotonic: `MarkWhatsNewSeen` never moves it backward.
+    /// NOT cleared on `Logout` — the marker is per-device, not per-account.
+    /// Bounded: entries come from the bundled JSON (typically < 20 items;
+    /// Non-Negotiable #7 — never grows with the event store).
+    pub whats_new: crate::kernel::domains::whats_new::WhatsNewState,
 }
 
 impl Default for AppState {
@@ -293,6 +306,8 @@ impl Default for AppState {
             article_feed: crate::kernel::domains::feed::FeedState::default(),
             highlight_feed: crate::kernel::domains::feed::FeedState::default(),
             room_lanes: HashMap::new(),
+            // ── Phase 5A additions ────────────────────────────────────────────
+            whats_new: crate::kernel::domains::whats_new::WhatsNewState::default(),
         }
     }
 }
@@ -376,6 +391,13 @@ pub struct KernelPolicy {
     /// Copied into `AppState::room_policy` at actor boot so the kernel can
     /// auto-start discovery when `ViewId::RoomExplorer` is opened.
     pub room: RoomPolicy,
+
+    // ── Phase 5A additions ────────────────────────────────────────────────────
+    /// Application data directory — same value as `AppConfig::data_dir`.
+    /// Used by `Effect::LoadWhatsNewState` and `Effect::PersistWhatsNewSeen`
+    /// to locate `{data_dir}/whats-new-state-v1.json`. Empty string = no-op
+    /// (test mode; tests inject `KernelEvent::WhatsNewLoaded` directly).
+    pub data_dir: String,
 }
 
 /// UNIX seconds after dispatch of `RestoreSession` before the kernel

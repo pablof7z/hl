@@ -39,7 +39,7 @@ use nmp_defaults::{NmpAppBuilder, RunConfig};
 use crate::kernel::domains::{
     articles, articles_feed, auth, bookmarks, communities, discovery, feed, follows,
     highlight_feed, home_feed, profiles, projections, reactions, relays, room_home, route, search,
-    session,
+    session, whats_new,
 };
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
@@ -341,6 +341,13 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         // ── Phase 4D additions (append-only) ─────────────────────────────────
         AppAction::RunSearch { query, scope } => search::reduce_action_run_search(query, scope),
 
+        // ── Phase 5A additions (append-only) ─────────────────────────────────
+        AppAction::PrepareWhatsNew => whats_new::reduce_action_prepare_whats_new(),
+
+        AppAction::MarkWhatsNewSeen { shipped_at_unix } => {
+            whats_new::reduce_action_mark_whats_new_seen(state, shipped_at_unix)
+        }
+
         // ── Phase 4G additions (append-only) ─────────────────────────────────
         AppAction::LoadMoreArticles => articles_feed::reduce_action_load_more_articles(state),
 
@@ -505,6 +512,12 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             vec![]
         }
 
+        // ── Phase 5A additions (append-only) ─────────────────────────────────
+        KernelEvent::WhatsNewLoaded {
+            entries,
+            should_present,
+        } => whats_new::reduce_event_whats_new_loaded(state, entries, should_present),
+
         // ── Phase 4F additions (append-only) ─────────────────────────────────
         KernelEvent::FeedPage {
             key,
@@ -597,6 +610,9 @@ pub(crate) fn project_snapshot(
 
         // ── Phase 4J additions (append-only) ─────────────────────────────────
         ViewId::HomeFeed => home_feed::project_home_feed_snapshot(state),
+
+        // ── Phase 5A additions (append-only) ─────────────────────────────────
+        ViewId::WhatsNew => whats_new::project_whats_new_snapshot(state),
 
         _ => route::project_snapshot(state, id, clock_now),
     }
@@ -803,9 +819,175 @@ pub(crate) async fn run_effect(
                 "RegisterFeedCursor/DrainFeed/ReleaseFeedCursor reached run_effect — no-op (handled inline by actor_task)"
             );
         }
+
+        // ── Phase 5A additions (append-only) ─────────────────────────────────
+        Effect::LoadWhatsNewState => {
+            // Parse the bundled JSON and read the seen-marker file from disk.
+            // Sends KernelEvent::WhatsNewLoaded with filtered (unseen) entries
+            // and the should_present flag.
+            //
+            // No-op when data_dir is empty (test mode — tests inject
+            // KernelEvent::WhatsNewLoaded directly to drive the reducer).
+            let data_dir = policy.data_dir.clone();
+            let tx_clone = tx.clone();
+            tokio::spawn(async move {
+                run_effect_load_whats_new_state(&data_dir, &tx_clone).await;
+            });
+        }
+
+        Effect::PersistWhatsNewSeen { shipped_at_unix } => {
+            // Write the seen-marker file to disk. Fire-and-forget (D6).
+            // No-op when data_dir is empty (test mode).
+            let data_dir = policy.data_dir.clone();
+            tokio::spawn(async move {
+                run_effect_persist_whats_new_seen(&data_dir, shipped_at_unix).await;
+            });
+        }
     }
 
     let _ = session_epoch; // carried for future epoch-keyed effect cancellation
+}
+
+// ─── Phase 5A helpers ────────────────────────────────────────────────────────
+
+/// Execute `Effect::LoadWhatsNewState`:
+///   1. Decode the bundled What's New JSON (compile-time `include_str!`).
+///   2. Read `{data_dir}/whats-new-state-v1.json` for the last-seen marker.
+///   3. Filter entries to those with `shipped_at_unix > last_seen_marker`.
+///   4. On first launch (no state file): seed the marker to the newest entry
+///      and send `should_present: false` (first-launch logic mirrors the live
+///      `WhatsNewStore::prepare` behaviour).
+///   5. Send `KernelEvent::WhatsNewLoaded { entries, should_present }`.
+///
+/// No-op when `data_dir` is empty (test mode). D6: any I/O error is logged
+/// and results in an empty/false response so the UI remains stable.
+async fn run_effect_load_whats_new_state(data_dir: &str, tx: &mpsc::UnboundedSender<Cmd>) {
+    if data_dir.is_empty() {
+        // Test mode — tests inject KernelEvent::WhatsNewLoaded directly.
+        return;
+    }
+
+    // Decode bundled JSON.
+    let all_entries = match whats_new::decode_bundled_entries() {
+        Some(e) => e,
+        None => {
+            tracing::warn!(
+                "run_effect_load_whats_new_state: bundled JSON decode failed — sending empty (D6)"
+            );
+            let _ = tx.send(Cmd::Event(
+                crate::kernel::action::KernelEvent::WhatsNewLoaded {
+                    entries: Vec::new(),
+                    should_present: false,
+                },
+            ));
+            return;
+        }
+    };
+
+    // Read the state file.
+    let state_path = std::path::Path::new(data_dir).join(whats_new::STATE_FILE_NAME);
+
+    let last_seen = read_whats_new_state(&state_path).await;
+
+    let (entries, should_present) = match last_seen {
+        Some(marker) => {
+            // Filter to entries newer than the marker.
+            let unseen: Vec<_> = all_entries
+                .into_iter()
+                .filter(|e| e.shipped_at_unix > marker)
+                .collect();
+            let present = !unseen.is_empty();
+            (unseen, present)
+        }
+        None => {
+            // First launch: seed the marker to the newest entry. No sheet on first launch.
+            if let Some(newest) = all_entries.first() {
+                persist_whats_new_seen_inner(&state_path, newest.shipped_at_unix).await;
+            }
+            (Vec::new(), false)
+        }
+    };
+
+    let _ = tx.send(Cmd::Event(
+        crate::kernel::action::KernelEvent::WhatsNewLoaded {
+            entries,
+            should_present,
+        },
+    ));
+}
+
+/// Execute `Effect::PersistWhatsNewSeen { shipped_at_unix }`:
+/// Write the monotonic seen marker to `{data_dir}/whats-new-state-v1.json`.
+/// Fire-and-forget (D6). No-op when `data_dir` is empty (test mode).
+async fn run_effect_persist_whats_new_seen(data_dir: &str, shipped_at_unix: u64) {
+    if data_dir.is_empty() {
+        return;
+    }
+    let state_path = std::path::Path::new(data_dir).join(whats_new::STATE_FILE_NAME);
+    persist_whats_new_seen_inner(&state_path, shipped_at_unix).await;
+}
+
+/// Read the last-seen marker from the state file. Returns `None` when the file
+/// does not exist (first launch) or cannot be parsed (D6: silent no-op).
+async fn read_whats_new_state(path: &std::path::Path) -> Option<u64> {
+    #[derive(serde::Deserialize)]
+    struct State {
+        last_seen_at_unix_seconds: u64,
+    }
+    match tokio::fs::read(path).await {
+        Ok(bytes) => match serde_json::from_slice::<State>(&bytes) {
+            Ok(s) => Some(s.last_seen_at_unix_seconds),
+            Err(e) => {
+                tracing::warn!(
+                    path = %path.display(),
+                    error = %e,
+                    "read_whats_new_state: parse error — treating as first-launch (D6)"
+                );
+                None
+            }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            tracing::warn!(
+                path = %path.display(),
+                error = %e,
+                "read_whats_new_state: I/O error — treating as first-launch (D6)"
+            );
+            None
+        }
+    }
+}
+
+/// Write the seen marker to disk using an atomic rename (tmp → final).
+/// D6: logs and returns on any error — never panics.
+async fn persist_whats_new_seen_inner(path: &std::path::Path, shipped_at_unix: u64) {
+    #[derive(serde::Serialize)]
+    struct State {
+        last_seen_at_unix_seconds: u64,
+    }
+    let bytes = match serde_json::to_vec(&State {
+        last_seen_at_unix_seconds: shipped_at_unix,
+    }) {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!(error = %e, "persist_whats_new_seen: JSON encode error — no-op (D6)");
+            return;
+        }
+    };
+    if let Some(parent) = path.parent() {
+        if let Err(e) = tokio::fs::create_dir_all(parent).await {
+            tracing::warn!(path = %path.display(), error = %e, "persist_whats_new_seen: mkdir error — no-op (D6)");
+            return;
+        }
+    }
+    let tmp = path.with_extension("json.tmp");
+    if let Err(e) = tokio::fs::write(&tmp, &bytes).await {
+        tracing::warn!(path = %tmp.display(), error = %e, "persist_whats_new_seen: write error — no-op (D6)");
+        return;
+    }
+    if let Err(e) = tokio::fs::rename(&tmp, path).await {
+        tracing::warn!(path = %path.display(), error = %e, "persist_whats_new_seen: rename error — no-op (D6)");
+    }
 }
 
 // ─── Phase 4F helpers ────────────────────────────────────────────────────────
@@ -2116,6 +2298,7 @@ mod tests {
             },
             relay: Default::default(),
             room: Default::default(),
+            data_dir: String::new(),
         };
         assert_eq!(
             policy_with_follows.create_account.initial_follows, follows,

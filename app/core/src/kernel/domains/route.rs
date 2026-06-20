@@ -163,6 +163,11 @@ pub(crate) fn project_snapshot(
         // ViewId::HomeFeed is handled upstream in actor::project_snapshot.
         // This arm is unreachable in practice but required for exhaustive match.
         ViewId::HomeFeed => None,
+
+        // ── Phase 5A additions (append-only) ─────────────────────────────────
+        // ViewId::WhatsNew is handled upstream in actor::project_snapshot.
+        // This arm is unreachable in practice but required for exhaustive match.
+        ViewId::WhatsNew => None,
     }
 }
 

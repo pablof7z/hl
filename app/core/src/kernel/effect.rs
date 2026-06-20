@@ -387,4 +387,10 @@ pub enum Effect {
         /// Feed key identifying the cursor to unregister.
         key: String,
     },
+
+    // ── Phase 5A additions (append-only) ─────────────────────────────────────
+    /// Load What's New entries from bundled JSON + seen-marker file, send KernelEvent::WhatsNewLoaded.
+    LoadWhatsNewState,
+    /// Persist the What's New seen marker. Monotonic (never moves backward). Fire-and-forget.
+    PersistWhatsNewSeen { shipped_at_unix: u64 },
 }
