@@ -1,8 +1,11 @@
 import Foundation
 import Observation
 
-/// View-scoped reactive state for the shake-to-share feedback list. Rust owns
-/// the bounded thread snapshot; Swift keeps only loading/subscription flags.
+/// View-scoped reactive state for the shake-to-share feedback list. Phase 7:
+/// the kernel owns the bounded thread snapshot (`ViewId.feedbackThreads`); this
+/// store opens the kernel view and mirrors `kernel.feedbackThreads` into the
+/// `FeedbackThreadRecord` rows the list renders (built Swift-side from the raw
+/// kernel rows). Posting goes through `hl.feedback.post_root`.
 @MainActor
 @Observable
 final class FeedbackStore {
@@ -10,72 +13,52 @@ final class FeedbackStore {
     private(set) var isLoading: Bool = true
     private(set) var loadError: String?
 
-    @ObservationIgnored private var coordinate: String?
-    @ObservationIgnored private var core: SafeHighlighterCore?
-    @ObservationIgnored private weak var bridge: EventBridge?
-    @ObservationIgnored private var subscriptionHandle: UInt64?
+    @ObservationIgnored private weak var kernel: HighlighterAppKernel?
 
-    func start(coordinate: String, core: SafeHighlighterCore, bridge: EventBridge?) async {
-        if self.coordinate != nil, self.coordinate != coordinate {
-            stop()
-        }
-        self.coordinate = coordinate
-        self.core = core
-        self.bridge = bridge
+    func start(kernel: HighlighterAppKernel) async {
+        self.kernel = kernel
         isLoading = true
         loadError = nil
-
-        let snapshot = await core.getFeedbackThreadsSnapshot(coordinate: coordinate)
-        let applyProjection = core.projectFeedbackSnapshotApply(
-            input: FeedbackSnapshotApplyInput(error: snapshot.error)
-        )
-        if applyProjection.shouldApplySnapshot {
-            apply(snapshot: snapshot)
-        } else {
-            loadError = applyProjection.loadError
-        }
+        kernel.openFeedbackThreads()
+        applyKernelSnapshot()
         isLoading = false
-
-        guard subscriptionHandle == nil else { return }
-        let outcome = await core.subscribeFeedbackThreads(coordinate: coordinate)
-        let projection = core.projectViewSubscriptionStart(
-            input: ViewSubscriptionStartProjectionInput(start: outcome)
-        )
-        guard projection.shouldRegister else {
-            // Subscription failure leaves cache-only rendering working.
-            return
-        }
-        subscriptionHandle = projection.handle
-        bridge?.registerFeedbackThreads(self, handle: projection.handle)
     }
 
     func stop() {
-        if let handle = subscriptionHandle, let core {
-            Task { await core.unsubscribe(handle) }
-            bridge?.unregister(handle: handle)
-        }
-        subscriptionHandle = nil
+        kernel?.closeFeedbackThreads()
+        kernel = nil
     }
 
-    /// Re-query the Rust snapshot from nostrdb. Called by the bridge when a
-    /// new kind:1 root or kind:513 metadata event lands.
+    /// Re-apply the latest kernel snapshot. Called by the owning view's
+    /// `onChange(of: kernel.feedbackThreads)`.
     func refreshThreads() async {
-        guard let core, let coordinate else { return }
-        let snapshot = await core.getFeedbackThreadsSnapshot(coordinate: coordinate)
-        let applyProjection = core.projectFeedbackSnapshotApply(
-            input: FeedbackSnapshotApplyInput(error: snapshot.error)
-        )
-        if applyProjection.shouldApplySnapshot {
-            apply(snapshot: snapshot)
+        applyKernelSnapshot()
+    }
+
+    /// Publish a new feedback root note via the kernel (sole writer). The new
+    /// thread streams back into `kernel.feedbackThreads`.
+    func postRoot(content: String) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        kernel?.app.dispatch(.feedbackPostRoot(content: trimmed))
+    }
+
+    /// Mirror `kernel.feedbackThreads` into the rendered view model, mapping each
+    /// raw kernel `FeedbackThreadRow` into the bespoke `FeedbackThreadRecord`.
+    func applyKernelSnapshot() {
+        guard let snapshot = kernel?.feedbackThreads else { return }
+        threads = snapshot.threads.map { row in
+            FeedbackThreadRecord(
+                rootEventId: row.rootEventId,
+                authorPubkey: row.authorPubkey,
+                createdAt: row.createdAt,
+                lastActivityAt: row.lastActivityAt,
+                title: row.title,
+                summary: row.summary,
+                statusLabel: row.statusLabel,
+                preview: row.preview
+            )
         }
+        loadError = snapshot.error
     }
-
-    func apply(snapshot: FeedbackThreadsSnapshot) {
-        let applyProjection = core?.projectFeedbackSnapshotApply(
-            input: FeedbackSnapshotApplyInput(error: snapshot.error)
-        )
-        threads = snapshot.threads
-        loadError = applyProjection?.loadError
-    }
-
 }
