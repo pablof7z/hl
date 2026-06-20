@@ -4,6 +4,7 @@ import SwiftUI
 /// user has started, with a "New thread" entry point.
 struct FeedbackThreadsView: View {
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @Environment(\.dismiss) private var dismiss
     @State private var feedbackStore = FeedbackStore()
     @State private var composerPresented = false
@@ -27,11 +28,10 @@ struct FeedbackThreadsView: View {
                 }
         }
         .task {
-            await feedbackStore.start(
-                coordinate: FeedbackProject.coordinate,
-                core: app.safeCore,
-                bridge: app.eventBridge
-            )
+            await feedbackStore.start(kernel: kernel)
+        }
+        .onChange(of: kernel.feedbackThreads) { _, _ in
+            feedbackStore.applyKernelSnapshot()
         }
         .onDisappear { feedbackStore.stop() }
         .sheet(isPresented: $composerPresented) {

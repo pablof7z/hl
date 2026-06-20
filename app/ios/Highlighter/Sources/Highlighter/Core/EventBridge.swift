@@ -28,8 +28,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         var profiles: [UInt64: WeakBox<ProfileStore>] = [:]
         var articles: [UInt64: WeakBox<ArticleReaderStore>] = [:]
         var homeFeeds: [UInt64: WeakBox<HomeFeedStore>] = [:]
-        var feedbackThreads: [UInt64: WeakBox<FeedbackStore>] = [:]
-        var feedbackThreadDetails: [UInt64: WeakBox<FeedbackThreadStore>] = [:]
         var searches: [UInt64: WeakBox<SearchStore>] = [:]
         var bookmarks: [UInt64: WeakBox<BookmarkStore>] = [:]
         var nostrEntities: [UInt64: WeakBox<NostrEntityCardStore>] = [:]
@@ -44,8 +42,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             profiles = profiles.filter { $0.value.value != nil }
             articles = articles.filter { $0.value.value != nil }
             homeFeeds = homeFeeds.filter { $0.value.value != nil }
-            feedbackThreads = feedbackThreads.filter { $0.value.value != nil }
-            feedbackThreadDetails = feedbackThreadDetails.filter { $0.value.value != nil }
             searches = searches.filter { $0.value.value != nil }
             bookmarks = bookmarks.filter { $0.value.value != nil }
             nostrEntities = nostrEntities.filter { $0.value.value != nil }
@@ -83,20 +79,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     func registerHomeFeed(_ store: HomeFeedStore, handle: UInt64) {
         registry.withLock { reg in
             reg.homeFeeds[handle] = WeakBox(store)
-            reg.prune()
-        }
-    }
-
-    func registerFeedbackThreads(_ store: FeedbackStore, handle: UInt64) {
-        registry.withLock { reg in
-            reg.feedbackThreads[handle] = WeakBox(store)
-            reg.prune()
-        }
-    }
-
-    func registerFeedbackThread(_ store: FeedbackThreadStore, handle: UInt64) {
-        registry.withLock { reg in
-            reg.feedbackThreadDetails[handle] = WeakBox(store)
             reg.prune()
         }
     }
@@ -141,8 +123,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             _ = reg.profiles.removeValue(forKey: handle)
             _ = reg.articles.removeValue(forKey: handle)
             _ = reg.homeFeeds.removeValue(forKey: handle)
-            _ = reg.feedbackThreads.removeValue(forKey: handle)
-            _ = reg.feedbackThreadDetails.removeValue(forKey: handle)
             _ = reg.searches.removeValue(forKey: handle)
             _ = reg.bookmarks.removeValue(forKey: handle)
             _ = reg.nostrEntities.removeValue(forKey: handle)
@@ -168,8 +148,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                     profile: reg.profiles[id]?.value,
                     article: reg.articles[id]?.value,
                     homeFeed: reg.homeFeeds[id]?.value,
-                    feedback: reg.feedbackThreads[id]?.value,
-                    feedbackThread: reg.feedbackThreadDetails[id]?.value,
                     search: reg.searches[id]?.value,
                     bookmark: reg.bookmarks[id]?.value,
                     nostrEntity: reg.nostrEntities[id]?.value,
@@ -185,10 +163,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 self.dispatchArticle(change, store: store)
             } else if let store = routed.homeFeed {
                 self.dispatchHomeFeed(change, store: store)
-            } else if let store = routed.feedback {
-                self.dispatchFeedbackThreads(change, store: store)
-            } else if let store = routed.feedbackThread {
-                self.dispatchFeedbackThread(change, store: store)
             } else if let store = routed.search {
                 self.dispatchSearch(change, store: store)
             } else if let store = routed.bookmark {
@@ -209,26 +183,10 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         let profile: ProfileStore?
         let article: ArticleReaderStore?
         let homeFeed: HomeFeedStore?
-        let feedback: FeedbackStore?
-        let feedbackThread: FeedbackThreadStore?
         let search: SearchStore?
         let bookmark: BookmarkStore?
         let nostrEntity: NostrEntityCardStore?
         let profileSnapshotPubkey: String?
-    }
-
-    @MainActor
-    private func dispatchFeedbackThreads(_ change: DataChangeType, store: FeedbackStore) {
-        if case .feedbackThreadsUpdated = change {
-            Task { await store.refreshThreads() }
-        }
-    }
-
-    @MainActor
-    private func dispatchFeedbackThread(_ change: DataChangeType, store: FeedbackThreadStore) {
-        if case .feedbackThreadUpdated = change {
-            Task { await store.refreshThread() }
-        }
     }
 
     @MainActor

@@ -8,6 +8,7 @@ struct FeedbackThreadDetailView: View {
     let listStore: FeedbackStore
 
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var detailStore = FeedbackThreadStore()
     @State private var draft: String = ""
     @State private var sendError: String?
@@ -21,12 +22,10 @@ struct FeedbackThreadDetailView: View {
         .navigationTitle(threadPresentation.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            await detailStore.start(
-                rootEventId: thread.rootEventId,
-                coordinate: FeedbackProject.coordinate,
-                core: app.safeCore,
-                bridge: app.eventBridge
-            )
+            await detailStore.start(rootEventId: thread.rootEventId, kernel: kernel)
+        }
+        .onChange(of: kernel.feedbackThread[thread.rootEventId]) { _, _ in
+            detailStore.applyKernelSnapshot()
         }
         .onDisappear { detailStore.stop() }
     }
@@ -119,18 +118,13 @@ struct FeedbackThreadDetailView: View {
         let projection = composerProjection
         guard projection.canSend else { return }
 
+        // Kernel is the sole writer: dispatch hl.feedback.post_reply
+        // fire-and-forget. The reply streams back into
+        // kernel.feedbackThread[rootEventId] (and bumps the list's activity),
+        // which the views re-apply. Clear the draft optimistically.
         sendError = nil
-        let outcome = await detailStore.sendReply(body: projection.submitBody)
-        guard let outcome else { return }
-        let result = app.safeCore.projectFeedbackPublishResult(
-            input: FeedbackPublishResultInput(error: outcome.error)
-        )
-        if result.didPublish {
-            draft = ""
-            await listStore.refreshThreads()
-        } else {
-            sendError = result.errorMessage
-        }
+        await detailStore.sendReply(body: projection.submitBody)
+        draft = ""
     }
 
     private func messagePresentation(
