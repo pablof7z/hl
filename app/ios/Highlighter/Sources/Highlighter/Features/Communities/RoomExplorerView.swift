@@ -5,10 +5,10 @@ import SwiftUI
 /// shelves, then a Browse-all entry point at the bottom. No segmented
 /// toggles — "Your rooms" is just the first shelf among many.
 ///
-/// Phase 3G cutover: reads joined-groups and discovery data from the
-/// `HighlighterAppKernel` typed snapshots (`CommunitiesSnapshot` and
-/// `KernelRoomExplorerSnapshot`) rather than from the live lane's
-/// `HighlighterStore`/`RoomExplorerStore`. The kernel view is opened on
+/// Phase 3G/7 cutover: reads joined-groups and discovery data exclusively from
+/// the `HighlighterAppKernel` typed snapshots (`CommunitiesSnapshot` and
+/// `KernelRoomExplorerSnapshot`). The bespoke `RoomExplorerStore` was removed in
+/// Phase 7 — the kernel owns discovery end-to-end. The kernel view is opened on
 /// `.task` and closed on `.onDisappear`; the actor's lifecycle hook
 /// auto-starts room discovery (via `RoomPolicy.discoveryRelay`) when the
 /// view opens — no explicit relay URL needed from Swift.
