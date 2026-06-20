@@ -894,6 +894,32 @@ pub struct WhatsNewSnapshot {
 
 // ── Phase 5H additions (append-only) ─────────────────────────────────────────
 
+/// Transcript segment snapshot — raw time-bounded utterance.
+///
+/// D1: Swift formats timestamps from `start`/`end`. No "X:XX" labels here.
+/// DEVICE-LOCAL — fetched per session, never a nostr fact.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelTranscriptSegment {
+    pub id: String,
+    pub start: f64,
+    pub end: f64,
+    pub speaker: String,
+    pub text: String,
+}
+
+/// Availability state for the transcript of the current episode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum KernelTranscriptAvailability {
+    /// No `hl.transcript.load` action dispatched yet.
+    NotRequested,
+    /// `Effect::FetchTranscript` in flight.
+    Loading,
+    /// Segments parsed and stored.
+    Available,
+    /// Fetch failed or no transcript URL. UI should hide the transcript panel.
+    Unavailable,
+}
+
 /// Snapshot for `ViewId::PodcastListening` — the full-screen podcast player.
 ///
 /// All playback facts are **device-local** (resume position NEVER published to
@@ -928,11 +954,21 @@ pub struct PodcastListeningSnapshot {
     /// buffering, or stopped.  Updated by `AudioResult::Progress`.
     pub is_playing: bool,
     /// Clip start position in seconds for an in-progress clip selection.
-    /// `None` in Phase 5H — populated by Phase 5I/5J.
+    /// `None` when no clip is being assembled.
     pub clip_start_seconds: Option<f64>,
     /// Clip end position in seconds for an in-progress clip selection.
-    /// `None` in Phase 5H — populated by Phase 5I/5J.
+    /// `None` when no clip is being assembled.
     pub clip_end_seconds: Option<f64>,
+    /// Transcript segments for the current episode. Raw segments — Swift formats
+    /// timestamps and display text (D1). Empty until `hl.transcript.load` completes.
+    /// DEVICE-LOCAL — never a nostr fact.
+    pub transcript_segments: Vec<KernelTranscriptSegment>,
+    /// Transcript availability for the current episode.
+    pub transcript_availability: KernelTranscriptAvailability,
+    /// Speaker label from the in-progress clip selection (empty when no clip).
+    pub clip_speaker: String,
+    /// Segment IDs selected for the in-progress clip. Empty when no clip.
+    pub clip_selected_segment_ids: Vec<String>,
 }
 
 // ── Phase 5D additions (append-only) ─────────────────────────────────────────

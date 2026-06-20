@@ -476,4 +476,16 @@ pub enum Effect {
         /// serde_json-serialised event template: `{ kind: 11, content, tags }`.
         json: String,
     },
+
+    // ── Phase 5I additions (append-only) ─────────────────────────────────────
+    /// Fetch and parse a transcript from `url` (HTTP GET, 8 MiB cap, 20 s timeout).
+    ///
+    /// Detects format (VTT/SRT/JSON) from Content-Type / extension / content sniff.
+    /// On success: emits `KernelEvent::TranscriptReady(segments)`.
+    /// On failure: emits `KernelEvent::TranscriptFetchFailed`. D6 — never panics.
+    /// DEVICE-LOCAL — transcript content is never published to nostr.
+    FetchTranscript {
+        /// Transcript URL (HTTP or HTTPS). Validated before fetch.
+        url: String,
+    },
 }
