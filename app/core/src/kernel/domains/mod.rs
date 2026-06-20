@@ -70,3 +70,6 @@ pub(crate) mod camera;
 
 // ── Phase 7 additions (append-only) ─────────────────────────────────────────
 pub(crate) mod comments;
+
+// ── Phase 7 feedback additions (append-only) ─────────────────────────────────
+pub(crate) mod feedback;

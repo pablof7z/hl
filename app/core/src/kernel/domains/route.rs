@@ -193,6 +193,13 @@ pub(crate) fn project_snapshot(
         // ViewId::CommentThread is handled upstream in actor::project_snapshot.
         // This arm is unreachable in practice but required for exhaustive match.
         ViewId::CommentThread { .. } => None,
+
+        // ── Phase 7 feedback additions (append-only) ──────────────────────────
+        // ViewId::FeedbackThreads and ViewId::FeedbackThread are handled upstream
+        // in actor::project_snapshot. These arms are unreachable in practice but
+        // required for exhaustive match coverage.
+        ViewId::FeedbackThreads => None,
+        ViewId::FeedbackThread { .. } => None,
     }
 }
 

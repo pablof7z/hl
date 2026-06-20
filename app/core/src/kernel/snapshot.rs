@@ -204,6 +204,17 @@ pub enum ViewSnapshot {
     /// D1: no formatted timestamps, no tree nesting, no byline strings.
     /// Swift builds the display tree from `parent_tag_value` relationships.
     CommentThread(CommentThreadKernelSnapshot),
+
+    // ── Phase 7 feedback additions (append-only) ──────────────────────────────
+    /// Feedback thread list — top-level NIP-22 roots under the Highlighter
+    /// project root, filtered to the active account. Sorted by `last_activity_at`
+    /// descending; capped at 256. D1: no formatted strings; `title`, `summary`,
+    /// `status_label` are `None` without an explicit HL metadata source.
+    FeedbackThreads(KernelFeedbackThreadsSnapshot),
+    /// Feedback thread detail — root record + descendant replies for one thread,
+    /// sorted oldest-first. `show_header` follows the 300s/author grouping rule.
+    /// D1: raw fields only; no bylines, no relative-time labels.
+    FeedbackThread(KernelFeedbackThreadSnapshot),
 }
 
 // ── Phase 4B additions (append-only) ─────────────────────────────────────────
@@ -1114,6 +1125,102 @@ pub struct CommentThreadKernelSnapshot {
     pub records: Vec<CommentRecordRow>,
     /// Total comment count (`records.len() as u32`). Raw — no `"N comments"` label.
     pub comment_count: u32,
+}
+
+// ── Phase 7 feedback additions (append-only) ─────────────────────────────────
+
+/// One feedback thread root visible in the feedback thread list.
+///
+/// Derived from top-level NIP-22 kind:1111 records in
+/// `AppState::comment_threads[HIGHLIGHTER_PROJECT_COORDINATE]` whose
+/// `author_pubkey` matches the active viewer.
+///
+/// D1: no formatted strings. `title`, `summary`, `status_label` are `None` until
+/// an explicit HL metadata source is wired. `preview` is whitespace-collapsed
+/// raw body text (≤140 chars). `last_activity_at` = max `created_at` over root
+/// + direct replies.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct FeedbackThreadRow {
+    /// Event id of the top-level root kind:1111 comment (raw 64-char hex). D1.
+    pub root_event_id: String,
+    /// Author pubkey of the root comment (raw 64-char hex). D1.
+    pub author_pubkey: String,
+    /// `created_at` of the root comment (unix seconds). D1.
+    pub created_at: u64,
+    /// Max `created_at` of root + all direct replies (unix seconds). D1.
+    pub last_activity_at: u64,
+    /// Optional thread title — `None` without an HL metadata source. D1.
+    pub title: Option<String>,
+    /// Optional thread summary — `None` without an HL metadata source. D1.
+    pub summary: Option<String>,
+    /// Optional status label — `None` without an HL metadata source. D1.
+    pub status_label: Option<String>,
+    /// Whitespace-collapsed preview of the root body, capped at 140 chars. D1.
+    pub preview: String,
+    /// Count of direct replies under this root. Raw u32 — no label. D1.
+    pub reply_count: u32,
+}
+
+/// Snapshot for `ViewId::FeedbackThreads` — the feedback thread list.
+///
+/// Bounded at 256 entries (Non-Negotiable #7). Sorted newest activity first.
+/// D1: no formatted strings; `is_publishing` and `error` carry publish-FSM state
+/// for the composer only (native owns all display formatting).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelFeedbackThreadsSnapshot {
+    /// The NIP-22 root scope value (`HIGHLIGHTER_PROJECT_COORDINATE`). D1.
+    pub root_tag_value: String,
+    /// Thread rows for the active viewer, sorted by `last_activity_at` desc. D1.
+    pub threads: Vec<FeedbackThreadRow>,
+    /// `true` while a `hl.feedback.post_root` action is in flight.
+    pub is_publishing: bool,
+    /// Last publish error, if any. `None` when clean. D1: raw error string.
+    pub error: Option<String>,
+}
+
+/// One message row in a feedback thread detail view.
+///
+/// Includes the root comment and all descendant replies. Sorted oldest-first.
+///
+/// D1: no formatted timestamps, no byline strings, no `is_from_me` flag (native
+/// computes those from the active session and profile snapshots).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct FeedbackMessageRow {
+    /// kind:1111 event id (raw 64-char hex). D1.
+    pub event_id: String,
+    /// Event id of the thread root comment this row belongs to. D1.
+    pub root_event_id: String,
+    /// Author pubkey (raw 64-char hex). D1.
+    pub author_pubkey: String,
+    /// `created_at` unix seconds. D1: no formatting.
+    pub created_at: u64,
+    /// Raw comment body text. D1.
+    pub content: String,
+    /// Event id of the parent comment, if this is a nested reply. `None` for
+    /// direct replies to the root (parent_tag_value == root_event_id). D1.
+    pub parent_event_id: Option<String>,
+    /// `true` on first row, author change, or gap > 300 seconds.
+    /// Swift uses this to show the author/timestamp header cell. D1: boolean only.
+    pub show_header: bool,
+}
+
+/// Snapshot for `ViewId::FeedbackThread { root_event_id }` — thread detail.
+///
+/// Contains the root record + all descendant replies (ancestor-chain traversal),
+/// sorted oldest-first. Bounded by the NMP `CommentThreadProjection` cap
+/// (Non-Negotiable #7).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelFeedbackThreadSnapshot {
+    /// The NIP-22 root scope value (`HIGHLIGHTER_PROJECT_COORDINATE`). D1.
+    pub root_tag_value: String,
+    /// Event id of the thread root comment. D1.
+    pub root_event_id: String,
+    /// Thread message rows, sorted oldest-first. D1.
+    pub rows: Vec<FeedbackMessageRow>,
+    /// `true` while a `hl.feedback.post_reply` action is in flight.
+    pub is_publishing: bool,
+    /// Last publish error, if any. `None` when clean. D1.
+    pub error: Option<String>,
 }
 
 // ── Phase 5F additions (append-only) ─────────────────────────────────────────

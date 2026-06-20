@@ -52,6 +52,8 @@ use crate::kernel::domains::{
     communities,
     discovery,
     feed,
+    // ── Phase 7 feedback additions (append-only) ─────────────────────────────
+    feedback,
     follows,
     highlight_feed,
     home_feed,
@@ -803,6 +805,31 @@ fn reduce_action_envelope(
             comments::reduce_action_post_comment(p)
         }
 
+        // ── Phase 7 feedback additions (append-only) ───────────────────────────
+        // `hl.feedback.*` — NIP-22 kind:1111 comments scoped to the Highlighter
+        // project root (`HIGHLIGHTER_PROJECT_COORDINATE`). Reuses `CommentObserver`
+        // infrastructure; feedback.rs wraps it with feedback-root scoping.
+        "hl.feedback.open_list" => feedback::reduce_action_open_list(state),
+        "hl.feedback.close_list" => feedback::reduce_action_close_list(state),
+        "hl.feedback.open_thread" => {
+            let p = parse!(feedback::FeedbackOpenThreadPayload);
+            feedback::reduce_action_open_thread(state, p.root_event_id)
+        }
+        "hl.feedback.close_thread" => feedback::reduce_action_close_thread(state),
+        "hl.feedback.post_root" => {
+            let p = parse!(feedback::FeedbackPostRootPayload);
+            feedback::reduce_action_post_root(state, p.content)
+        }
+        "hl.feedback.post_reply" => {
+            let p = parse!(feedback::FeedbackPostReplyPayload);
+            feedback::reduce_action_post_reply(
+                state,
+                p.root_event_id,
+                p.content,
+                p.parent_author_pubkey,
+            )
+        }
+
         // ── Unknown namespace ─────────────────────────────────────────────────
         _ => emit_invalid_action_toast(
             state,
@@ -1241,6 +1268,20 @@ pub(crate) fn project_snapshot(
             ))
         }
 
+        // ── Phase 7 feedback additions (append-only) ─────────────────────────
+        ViewId::FeedbackThreads => {
+            let snapshot = feedback::compute_feedback_threads_snapshot(state);
+            Some(crate::kernel::snapshot::ViewSnapshot::FeedbackThreads(
+                snapshot,
+            ))
+        }
+        ViewId::FeedbackThread { root_event_id } => {
+            let snapshot = feedback::compute_feedback_thread_snapshot(state, root_event_id);
+            Some(crate::kernel::snapshot::ViewSnapshot::FeedbackThread(
+                snapshot,
+            ))
+        }
+
         _ => route::project_snapshot(state, id, clock_now),
     }
 }
@@ -1581,6 +1622,17 @@ pub(crate) async fn run_effect(
             // No-op when nmp is None (test mode — tests inject
             // KernelEvent::CommentThreadUpdated directly).
             comments::run_effect_dispatch_comment_action(json, nmp);
+        }
+
+        // ── Phase 7 feedback additions (append-only) ─────────────────────────
+        Effect::DispatchFeedbackCommentAction { json } => {
+            // Call nmp_app_dispatch_action with "nmp.nip22.post_comment" scoped
+            // to the Highlighter feedback project root. Delegates to
+            // comments::run_effect_dispatch_comment_action for the C-ABI call so
+            // the dispatch path is not duplicated. Fire-and-forget (D6).
+            // The authoritative update arrives back via CommentThreadUpdated for
+            // root_tag_value = HIGHLIGHTER_PROJECT_COORDINATE.
+            feedback::run_effect_dispatch_feedback_comment_action(json, nmp);
         }
     }
 

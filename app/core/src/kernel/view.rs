@@ -164,6 +164,25 @@ pub enum ViewId {
         /// Root scope tag value that anchors this thread (opaque from caller — D3).
         root_tag_value: String,
     },
+
+    // ── Phase 7 feedback additions (append-only) ──────────────────────────────
+    /// Feedback thread list — top-level NIP-22 kind:1111 roots under the
+    /// Highlighter project coordinate, filtered to the active account.
+    ///
+    /// On open: no extra observer wiring — the global `CommentObserver` already
+    /// routes all kind:1111 events. `hl.feedback.open_list` dispatches this view.
+    /// On close: UI flags in `AppState::feedback` are cleared; the underlying
+    /// `comment_threads` entry is not cleared (content-addressed).
+    FeedbackThreads,
+
+    /// Feedback thread detail for one root comment and its descendants.
+    ///
+    /// `root_event_id` identifies the top-level kind:1111 comment whose ancestor
+    /// chain to project. Snapshot: `ViewSnapshot::FeedbackThread(FeedbackThreadSnapshot)`.
+    FeedbackThread {
+        /// Event id of the feedback thread's root comment (raw 64-char hex). D3.
+        root_event_id: String,
+    },
 }
 
 /// Which projection to compute for a registered view.
@@ -270,6 +289,19 @@ pub enum ViewRoute {
     CommentThread {
         /// Root scope tag value that anchors this thread.
         root_tag_value: String,
+    },
+
+    // ── Phase 7 feedback additions (append-only) ──────────────────────────────
+    /// Feedback thread list projection — `FeedbackThreadsSnapshot` (top-level
+    /// NIP-22 roots under the Highlighter project coordinate, filtered to the
+    /// active viewer). D1: no formatted strings, `None` metadata fields.
+    FeedbackThreads,
+
+    /// Feedback thread detail projection — `FeedbackThreadSnapshot` (root +
+    /// descendants for `root_event_id`, oldest-first). D1: raw fields only.
+    FeedbackThread {
+        /// Event id of the feedback thread's root comment.
+        root_event_id: String,
     },
 }
 

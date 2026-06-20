@@ -341,6 +341,17 @@ pub struct AppState {
     /// Bounded: fixed-size struct, no list growth (Non-Negotiable #7).
     pub camera: crate::kernel::domains::camera::CameraState,
 
+    // ── Phase 7 feedback additions (append-only) ─────────────────────────────
+    /// Feedback domain view-lifecycle and publishing-FSM state.
+    ///
+    /// The raw comment data lives in `comment_threads[HIGHLIGHTER_PROJECT_COORDINATE]`
+    /// (D4 — no duplication). This field holds only view-lifecycle flags:
+    /// `open_thread_root_event_id`, `is_publishing`, `last_error`. Cleared on
+    /// `Logout` and `IdentityChanged(None)` so stale UI state never leaks
+    /// between sessions. The underlying comment threads are NOT cleared (they are
+    /// content-addressed and bounded by NMP, not per-account).
+    pub feedback: crate::kernel::domains::feedback::FeedbackState,
+
     // ── Phase 7 additions (append-only) ─────────────────────────────────────
     /// NIP-22 kind:1111 comment threads, keyed by `root_tag_value`.
     ///
@@ -401,6 +412,8 @@ impl Default for AppState {
             capture_draft: crate::kernel::domains::capture_draft::CaptureDraftState::default(),
             // ── Phase 5E additions ────────────────────────────────────────────
             camera: crate::kernel::domains::camera::CameraState::default(),
+            // ── Phase 7 feedback additions ────────────────────────────────────
+            feedback: crate::kernel::domains::feedback::FeedbackState::with_root(),
             // ── Phase 7 additions ─────────────────────────────────────────────
             comment_threads: HashMap::new(),
         }

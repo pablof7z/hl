@@ -551,6 +551,22 @@ pub enum Effect {
         json: String,
     },
 
+    // ── Phase 7 feedback additions (append-only) ──────────────────────────────
+    /// Call `nmp_app_dispatch_action` with `"nmp.nip22.post_comment"` namespace
+    /// for a feedback-project-scoped NIP-22 comment.
+    ///
+    /// Identical C-ABI call as `DispatchCommentAction` but kept separate for
+    /// audit clarity (feedback root is always `HIGHLIGHTER_PROJECT_COORDINATE`).
+    /// `json` is a serde_json-serialised `PostCommentAction` object.
+    ///
+    /// Fire-and-forget (D6, Non-Negotiable #3). The authoritative thread arrives
+    /// back via `KernelEvent::CommentThreadUpdated` on the next `CommentObserver`
+    /// tick for `root_tag_value = HIGHLIGHTER_PROJECT_COORDINATE`.
+    DispatchFeedbackCommentAction {
+        /// Serialised `PostCommentAction` JSON — `serde_json::to_string` (not `format!`).
+        json: String,
+    },
+
     // ── Phase 5J additions (append-only) ─────────────────────────────────────
     /// Publish a podcast clip as a kind:9802 highlight via `ActorCommand::PublishRawEvent`,
     /// carrying a `correlation_id` so the `action_results` projection can route
