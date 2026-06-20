@@ -77,3 +77,6 @@ pub(crate) mod feedback;
 pub(crate) mod chat;
 // ── Phase 7 discussions additions (append-only) ──────────────────────────────
 pub(crate) mod discussions;
+
+// ── Phase 7 artifact-preview additions (append-only) ─────────────────────────
+pub(crate) mod artifact_preview;

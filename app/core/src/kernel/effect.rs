@@ -648,4 +648,27 @@ pub enum Effect {
         /// serde_json-serialised event template: `{ kind: 11, content, tags }`.
         json: String,
     },
+
+    // ── Phase 7 artifact-preview additions (append-only) ─────────────────────
+    /// Resolve an artifact coordinate that is not yet in `AppState::artifact_previews`.
+    ///
+    /// The effect runner lowers this to the appropriate nmp interest or operation
+    /// depending on the coordinate prefix:
+    ///
+    /// - `a:<kind:pk:d>` (kind ≠ 30023) → NMP article-address interest (if nmp is present).
+    /// - `e:<hex>` → NMP event-id interest (fetch the single event by id).
+    /// - `i:podcast:…` → NMP tagged-event interest (NIP-73 i-tag lookup).
+    /// - Any other coordinate → logged warning; no-op (D6).
+    ///
+    /// For `i:isbn:…` coordinates the ISBN domain emits `Effect::LookupIsbn` instead
+    /// (D4: no duplication). For `r:<url>` coordinates a minimal non-pending row is
+    /// built inline in the reducer (no effect needed).
+    ///
+    /// Fire-and-forget (D6). No-op when nmp is `None` (test mode — tests inject
+    /// `KernelEvent::ArtifactPreviewFilled` directly).
+    ResolveArtifactCoordinate {
+        /// Canonical coordinate key (e.g. `"e:<hex>"`, `"a:30023:pk:d"`,
+        /// `"i:podcast:item:guid:<guid>"`). Never empty.
+        coordinate: String,
+    },
 }

@@ -227,6 +227,57 @@ pub enum ViewSnapshot {
     RoomDiscussions(RoomDiscussionsSnapshot),
 }
 
+// ── Phase 7 artifact-preview additions (append-only) ─────────────────────────
+
+/// Content type of an artifact-preview coordinate.
+///
+/// Variants are raw protocol-level kinds — no display labels (D1). Swift formats
+/// all human-readable strings ("Article", "Book", etc.).
+///
+/// Append-only: new variants at the bottom keep rebases mechanical.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum ArtifactPreviewKind {
+    Article,
+    Book,
+    Podcast,
+    Video,
+    Paper,
+    Web,
+    Unknown,
+}
+
+/// Lightweight preview row for a content coordinate.
+///
+/// Keyed by canonical coordinate string in `AppState::artifact_previews`.
+/// Raw protocol fields only (D1): Swift formats all display strings, source
+/// labels, author bylines, etc. `pending = true` means the resolution is in
+/// flight; the UI may show a placeholder until it becomes `false`.
+///
+/// `display_url` carries the raw URL for `r:` web coordinates. For all other
+/// coordinate types it is `None`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArtifactPreviewRow {
+    /// Canonical coordinate key (e.g. `"a:30023:pk:d"`, `"e:<hex>"`,
+    /// `"i:isbn:9780735211292"`, `"r:https://…"`).
+    pub coordinate: String,
+    /// Title from the protocol source. `None` when not yet resolved (pending).
+    pub title: Option<String>,
+    /// Cover / thumbnail URL. `None` when absent or not yet resolved.
+    pub image_url: Option<String>,
+    /// Author's hex pubkey (kind:30023 `pubkey` field). `None` for non-nostr
+    /// content (ISBN, web URL) or when not yet resolved.
+    pub author_pubkey: Option<String>,
+    /// Short summary / description. `None` when absent or not yet resolved.
+    pub summary: Option<String>,
+    /// Inferred content type from the coordinate scheme.
+    pub kind: ArtifactPreviewKind,
+    /// `true` while resolution is in flight; `false` when the row is final
+    /// (even if some optional fields remain `None`).
+    pub pending: bool,
+    /// Raw URL for `r:` web coordinates; `None` for all other kinds.
+    pub display_url: Option<String>,
+}
+
 // ── Phase 4B additions (append-only) ─────────────────────────────────────────
 
 /// Reaction state for a single target event — raw counts only (D1: no labels).

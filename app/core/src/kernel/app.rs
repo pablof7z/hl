@@ -4,7 +4,7 @@
 //! The state is split into sub-models by concern; all live as fields on
 //! `AppState` so the reducer can read and write the full picture atomically.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 
 use crate::kernel::action::{SignInMethod, SignerKind};
@@ -390,6 +390,30 @@ pub struct AppState {
     /// Bounded: each room's rows are capped at `ROOM_DISCUSSIONS_CAP` (64)
     /// newest-first before storing (Non-Negotiable #7).
     pub room_discussions: HashMap<String, Vec<crate::kernel::snapshot::DiscussionRow>>,
+
+    // ── Phase 7 artifact-preview additions (append-only) ─────────────────────
+    /// Coordinate-keyed lightweight preview rows for content references.
+    ///
+    /// Keyed by canonical coordinate string (e.g. `"a:30023:pk:d"`,
+    /// `"e:<hex>"`, `"i:isbn:<isbn13>"`, `"r:<url>"`). Populated by
+    /// `artifact_preview::ensure_artifact_preview` and filled when the
+    /// underlying source resolves (`ArticlesUpdated`, `IsbnPreviewReady`,
+    /// `ArtifactPreviewFilled`).
+    ///
+    /// Raw fields only (D1 — no formatted strings). Cleared on Logout /
+    /// `IdentityChanged(None)` to prevent stale previews from a prior account
+    /// surfacing under a new identity (Non-Negotiable #7).
+    pub artifact_previews: BTreeMap<String, crate::kernel::snapshot::ArtifactPreviewRow>,
+
+    /// Coordinates whose resolution effect has been emitted but whose preview
+    /// row is still pending. Used to deduplicate `Effect::ResolveArtifactCoordinate`
+    /// so a second `ensure_artifact_preview` call for the same coordinate does
+    /// not emit a second effect (D8: one effect per missing coordinate, no polling).
+    ///
+    /// Cleared on resolve (when the row becomes non-pending) and on Logout /
+    /// `IdentityChanged(None)`. Bounded by open-view demand — never grows with
+    /// the unbounded event store (Non-Negotiable #7).
+    pub artifact_preview_requests: HashSet<String>,
 }
 
 impl Default for AppState {
@@ -445,6 +469,9 @@ impl Default for AppState {
             chat_rooms: HashMap::new(),
             // ── Phase 7 discussions additions ─────────────────────────────────
             room_discussions: HashMap::new(),
+            // ── Phase 7 artifact-preview additions ────────────────────────────
+            artifact_previews: BTreeMap::new(),
+            artifact_preview_requests: HashSet::new(),
         }
     }
 }

@@ -382,6 +382,17 @@ pub(crate) struct PostCommentPayload {
     pub content: String,
 }
 
+/// `hl.artifact_preview.ensure` envelope payload — ensure a preview row exists
+/// for the given coordinate. Idempotent. The reducer calls
+/// `artifact_preview::ensure_artifact_preview` and emits the appropriate effect
+/// if the coordinate is not yet resolved.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct EnsureArtifactPreviewPayload {
+    /// Canonical coordinate key (e.g. `"a:30023:pk:d"`, `"e:<hex>"`,
+    /// `"i:isbn:<isbn13>"`, `"r:<url>"`). Must be non-empty (D6: empty → no-op).
+    pub coordinate: String,
+}
+
 /// Every user or platform action the kernel understands.
 ///
 /// Dispatch is fire-and-forget (`dispatch(action)` returns `()`; Non-Negotiable #3).
@@ -1368,5 +1379,35 @@ pub enum KernelEvent {
         /// Fresh bounded snapshot of kind:11+discussion rows for this room,
         /// newest-first, at most `ROOM_DISCUSSIONS_CAP` (64) items.
         rows: Vec<crate::kernel::snapshot::DiscussionRow>,
+    },
+
+    // ── Phase 7 artifact-preview additions (append-only) ─────────────────────
+    /// A coordinate's artifact-preview row was resolved and is ready to fill.
+    ///
+    /// Produced by the `ResolveArtifactCoordinate` effect runner after it fetches
+    /// the underlying event (article-address interest, event-id fetch, or NIP-73
+    /// tagged-event interest) and extracts the relevant metadata fields.
+    ///
+    /// Also injectable directly from tests via `Cmd::Event` (no live NmpApp needed).
+    ///
+    /// D1: all fields are raw protocol data — no formatted strings, no presentation
+    /// fallbacks. The reducer routes to
+    /// `artifact_preview::fill_from_artifact_event` which upserts the row and
+    /// wires the `e:` alias.
+    ArtifactPreviewFilled {
+        /// Canonical coordinate key that was resolved (e.g. `"e:<hex>"`,
+        /// `"a:30023:pk:d"`, `"i:podcast:item:guid:<guid>"`).
+        coordinate: String,
+        /// 64-char hex event id of the source event (if available). Used to
+        /// install an `e:` alias in `AppState::artifact_previews`.
+        event_id: String,
+        /// Title tag value from the source event. `None` when absent.
+        title: Option<String>,
+        /// Cover image URL. `None` when absent.
+        image_url: Option<String>,
+        /// Author hex pubkey. `None` for non-nostr content.
+        author_pubkey: Option<String>,
+        /// Summary / description. `None` when absent.
+        summary: Option<String>,
     },
 }

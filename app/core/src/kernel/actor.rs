@@ -39,6 +39,8 @@ use nmp_defaults::{NmpAppBuilder, RunConfig};
 use crate::kernel::domains::{
     articles,
     articles_feed,
+    // ── Phase 7 artifact-preview additions (append-only) ─────────────────────
+    artifact_preview,
     auth,
     // ── Phase 5G additions (append-only) ─────────────────────────────────────
     blossom,
@@ -868,6 +870,16 @@ fn reduce_action_envelope(
             discussions::reduce_action_post_discussion(p)
         }
 
+        // ── Phase 7 artifact-preview additions (append-only) ─────────────────
+        // `hl.artifact_preview.ensure` — ensure a preview row exists for the
+        // given coordinate. Idempotent. Emits ResolveArtifactCoordinate (or
+        // LookupIsbn for isbn) if the coordinate is not yet resolved.
+        "hl.artifact_preview.ensure" => {
+            use crate::kernel::action::EnsureArtifactPreviewPayload;
+            let p = parse!(EnsureArtifactPreviewPayload);
+            artifact_preview::ensure_artifact_preview(state, p.coordinate)
+        }
+
         // ── Unknown namespace ─────────────────────────────────────────────────
         _ => emit_invalid_action_toast(
             state,
@@ -1030,7 +1042,11 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // via Cmd::Event (no live NmpApp needed — reducer path is identical).
             // D1: rows carry raw protocol data only (no formatted strings).
             state.articles = rows.into_iter().map(|r| (r.address.clone(), r)).collect();
-            vec![]
+            // ── Phase 7 artifact-preview: fill pending a: rows ────────────────
+            // When the articles projection updates, any pending a:30023:pk:d rows
+            // in artifact_previews can be filled immediately from the new data.
+            let articles_clone = state.articles.clone();
+            artifact_preview::on_articles_updated(state, &articles_clone)
         }
 
         // ── Phase 4B additions (append-only) ─────────────────────────────────
@@ -1073,7 +1089,13 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             isbn13,
             preview,
             error,
-        } => isbn::reduce_event_isbn_preview_ready(state, isbn13, preview, error),
+        } => {
+            // ── Phase 7 artifact-preview: fill i:isbn: row ────────────────────
+            // If an artifact-preview row is pending for this isbn, fill it now
+            // (reuses the ISBN domain result — D4: no duplication).
+            artifact_preview::fill_from_isbn_result(state, &isbn13, preview.as_ref());
+            isbn::reduce_event_isbn_preview_ready(state, isbn13, preview, error)
+        }
         KernelEvent::IsbnCacheLoaded { entries } => {
             isbn::reduce_event_isbn_cache_loaded(state, entries)
         }
@@ -1249,6 +1271,30 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // keyed by group_id. Produced by DiscussionObserver (per open room)
             // or injected directly from tests via Cmd::Event. D1: raw rows only.
             discussions::reduce_event_room_discussions_updated(state, group_id, rows)
+        }
+
+        // ── Phase 7 artifact-preview additions (append-only) ─────────────────
+        KernelEvent::ArtifactPreviewFilled {
+            coordinate,
+            event_id,
+            title,
+            image_url,
+            author_pubkey,
+            summary,
+        } => {
+            // Upsert the resolved preview row and wire the e: alias.
+            // Produced by the ResolveArtifactCoordinate effect runner or
+            // injected directly from tests via Cmd::Event (no live NmpApp needed).
+            // D1: raw fields only — no formatted strings.
+            artifact_preview::fill_from_artifact_event(
+                state,
+                coordinate,
+                event_id,
+                title,
+                image_url,
+                author_pubkey,
+                summary,
+            )
         }
     }
 }
@@ -1740,6 +1786,40 @@ pub(crate) async fn run_effect(
             // DiscussionObserver once the relay echoes the published event.
             // No-op when nmp is None (test mode — tests inspect Effect directly).
             discussions::run_effect_publish_discussion(json, nmp);
+        }
+
+        // ── Phase 7 artifact-preview additions (append-only) ─────────────────
+        Effect::ResolveArtifactCoordinate { coordinate } => {
+            // Lower the coordinate to the appropriate nmp interest:
+            //   a:<kind:pk:d> (non-30023) → article-address fetch (future)
+            //   e:<hex>  → event-id fetch interest (future)
+            //   i:podcast:… → NIP-73 tagged-event interest (future)
+            //   anything else → logged warning, no-op (D6)
+            //
+            // At pinned nmp d16aea60, the generic per-coordinate interest APIs
+            // (arbitrary event-id fetch, NIP-73 i-tag interest) are not yet
+            // exposed in nmp-ffi beyond what the existing domains use. Until a
+            // nmp-side generic resolution API lands, this runner is a best-effort
+            // no-op: it logs the miss and the pending row stays pending.
+            //
+            // Tests inject KernelEvent::ArtifactPreviewFilled directly (no live
+            // NmpApp needed — standard pattern per comments/chat domains).
+            //
+            // D6: never panics; D8: no polling; D3: no URLs constructed here.
+            if nmp.is_none() {
+                tracing::trace!(
+                    coordinate = %coordinate,
+                    "ResolveArtifactCoordinate: no-op in test mode (inject ArtifactPreviewFilled)"
+                );
+            } else {
+                tracing::debug!(
+                    coordinate = %coordinate,
+                    "ResolveArtifactCoordinate: nmp resolution pending (generic interest API not yet landed in d16aea60)"
+                );
+                // Future: match coordinate prefix and call the relevant nmp interest
+                // registration. For now, log and leave the row pending — the consumer
+                // screens tolerate pending rows with placeholder UI.
+            }
         }
     }
 
