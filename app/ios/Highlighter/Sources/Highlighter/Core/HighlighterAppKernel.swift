@@ -79,6 +79,14 @@ final class HighlighterAppKernel {
     /// strings (title fallback, date, attachment chip).
     private(set) var roomDiscussions: [String: RoomDiscussionsSnapshot] = [:]
 
+    /// Feedback thread-list snapshot (shake-to-share). `nil` until the
+    /// `ViewId.feedbackThreads` view is open. Single resident list.
+    private(set) var feedbackThreads: KernelFeedbackThreadsSnapshot?
+
+    /// Per-root feedback thread-detail snapshots, keyed by root comment event id.
+    /// Populated while a `ViewId.feedbackThread(rootEventId:)` view is open.
+    private(set) var feedbackThread: [String: KernelFeedbackThreadSnapshot] = [:]
+
     // MARK: - Kernel handle
 
     /// The Rust-side kernel object. Callers may dispatch actions and manage
@@ -242,6 +250,38 @@ final class HighlighterAppKernel {
         roomDiscussions.removeValue(forKey: groupId)
     }
 
+    // MARK: - Phase 7: feedback (shake-to-share) lifecycle
+
+    /// Open the feedback thread-list view. Dispatches `hl.feedback.open_list`
+    /// (sets the UI flags) and opens the kernel view so snapshots stream into
+    /// `feedbackThreads`. Call from `FeedbackThreadsView.task`.
+    func openFeedbackThreads() {
+        app.openView(viewId: .feedbackThreads, route: .feedbackThreads)
+        app.dispatch(.feedbackOpenList)
+    }
+
+    /// Close the feedback thread-list view. Call from `.onDisappear`.
+    func closeFeedbackThreads() {
+        app.dispatch(.feedbackCloseList)
+        app.closeView(viewId: .feedbackThreads)
+        feedbackThreads = nil
+    }
+
+    /// Open a feedback thread-detail view for `rootEventId`. Dispatches
+    /// `hl.feedback.open_thread` and opens the kernel view.
+    func openFeedbackThread(rootEventId: String) {
+        app.openView(viewId: .feedbackThread(rootEventId: rootEventId),
+                     route: .feedbackThread(rootEventId: rootEventId))
+        app.dispatch(.feedbackOpenThread(rootEventId: rootEventId))
+    }
+
+    /// Close a feedback thread-detail view for `rootEventId`.
+    func closeFeedbackThread(rootEventId: String) {
+        app.dispatch(.feedbackCloseThread)
+        app.closeView(viewId: .feedbackThread(rootEventId: rootEventId))
+        feedbackThread.removeValue(forKey: rootEventId)
+    }
+
     // MARK: - Snapshot ingestion (called on main actor by KernelObserver)
 
     fileprivate func receive(viewId: ViewId, snapshot: ViewSnapshot) {
@@ -273,6 +313,12 @@ final class HighlighterAppKernel {
         case .roomDiscussions(let s):
             roomDiscussions[s.groupId] = s
 
+        // Phase 7 cutover: feedback list + thread (FeedbackStore / FeedbackThreadStore).
+        case .feedbackThreads(let s):
+            feedbackThreads = s
+        case .feedbackThread(let s):
+            feedbackThread[s.rootEventId] = s
+
         // Phase 2E (network settings / relay diagnostics) — handled elsewhere.
         case .networkSettings, .relayDiagnostics:
             break
@@ -282,10 +328,7 @@ final class HighlighterAppKernel {
         // directly. No-op here (the actor still pushes; non-resident views
         // are closed before they can receive stale data — D5).
         case .bookmarks, .articleReader, .search, .articleFeed,
-             .highlightFeed, .homeFeed, .whatsNew, .bookPicker, .shareComposer,
-             // Phase 7 cutovers (Batch 1) — managed by their owning stores via
-             // `current_snapshot` when those screens are cut; no-op push here.
-             .feedbackThreads, .feedbackThread:
+             .highlightFeed, .homeFeed, .whatsNew, .bookPicker, .shareComposer:
             break
 
         // Phase 5+ snapshots (podcast, OCR capture) — managed by their owning

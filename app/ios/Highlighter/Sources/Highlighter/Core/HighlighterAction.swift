@@ -136,6 +136,16 @@ enum HighlighterAction {
     /// Publish a kind:11 discussion thread into a NIP-29 room.
     case postDiscussion(groupId: String, title: String, body: String, attachmentUrl: String?)
 
+    // ── Feedback / shake-to-share (Phase 7 cutover) ─────────────────────────────
+    case feedbackOpenList
+    case feedbackCloseList
+    case feedbackOpenThread(rootEventId: String)
+    case feedbackCloseThread
+    /// Publish a new feedback root note (NIP-22 kind:1111 under the project root).
+    case feedbackPostRoot(content: String)
+    /// Reply into an open feedback thread.
+    case feedbackPostReply(rootEventId: String, content: String, parentAuthorPubkey: String?)
+
     // MARK: - Envelope serialization
 
     /// Encodes this action as an `AppActionEnvelope` ready for `dispatchAction`.
@@ -373,6 +383,24 @@ enum HighlighterAction {
             var dict: [String: Any] = ["group_id": groupId, "title": title, "body": body]
             if let url = attachmentUrl, !url.isEmpty { dict["attachment_url"] = url }
             return AppActionEnvelope(namespace: "hl.discussion.post", json: jsonAny(dict))
+
+        // ── Feedback (Phase 7 cutover) ──────────────────────────────────────
+        case .feedbackOpenList:
+            return AppActionEnvelope(namespace: "hl.feedback.open_list", json: "{}")
+        case .feedbackCloseList:
+            return AppActionEnvelope(namespace: "hl.feedback.close_list", json: "{}")
+        case .feedbackOpenThread(let rootEventId):
+            return AppActionEnvelope(namespace: "hl.feedback.open_thread",
+                                     json: jsonObject(["root_event_id": rootEventId]))
+        case .feedbackCloseThread:
+            return AppActionEnvelope(namespace: "hl.feedback.close_thread", json: "{}")
+        case .feedbackPostRoot(let content):
+            return AppActionEnvelope(namespace: "hl.feedback.post_root",
+                                     json: jsonObject(["content": content]))
+        case .feedbackPostReply(let rootEventId, let content, let parentAuthorPubkey):
+            var dict: [String: Any] = ["root_event_id": rootEventId, "content": content]
+            if let author = parentAuthorPubkey { dict["parent_author_pubkey"] = author }
+            return AppActionEnvelope(namespace: "hl.feedback.post_reply", json: jsonAny(dict))
         }
     }
 }
