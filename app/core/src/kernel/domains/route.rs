@@ -153,6 +153,11 @@ pub(crate) fn project_snapshot(
         // ViewId::ArticleFeed is handled upstream in actor::project_snapshot.
         // This arm is unreachable in practice but required for exhaustive match.
         ViewId::ArticleFeed => None,
+
+        // ── Phase 4H additions (append-only) ─────────────────────────────────
+        // ViewId::HighlightFeed is handled upstream in actor::project_snapshot.
+        // This arm is unreachable in practice but required for exhaustive match.
+        ViewId::HighlightFeed => None,
     }
 }
 

@@ -319,6 +319,23 @@ pub enum Effect {
         interest_id: u64,
     },
 
+    // ── Phase 4H additions (append-only) ─────────────────────────────────────
+    /// Publish a NIP-84 kind:9802 highlight event via `ActorCommand::PublishRawEvent`.
+    ///
+    /// There is no dedicated nmp action namespace for kind:9802 at pinned nmp
+    /// b4404159 — the kernel uses the same raw publish path as Phase 2D's rooms
+    /// relay list. The `json` field is a serde_json-serialised event template
+    /// (kind, content, tags) without `id`, `sig`, or `pubkey` — nmp's signer fills
+    /// those before broadcasting. Built with `serde_json::json!` (never `format!`
+    /// — D-rule: serde, not format). Fire-and-forget (D6): nmp handles relay routing
+    /// via `PublishTarget::Auto` (NIP-65 outbox; D3).
+    ///
+    /// The kernel is the sole kind:9802 writer for ported screens.
+    PublishHighlightEvent {
+        /// serde_json-serialised event template: `{ kind: 9802, content, tags }`.
+        json: String,
+    },
+
     // ── Phase 4F additions (append-only) ─────────────────────────────────────
     /// Register a pull cursor with the nmp kernel for the named feed.
     ///
