@@ -28845,11 +28845,13 @@ public func FfiConverterTypeKernelRoomHomeSnapshot_lower(_ value: KernelRoomHome
 
 
 /**
- * uniffi-compatible search hit row for FFI (uniffi::Record requires simple types).
+ * uniffi-compatible search hit row for FFI.
  *
- * Mirrors `SearchHitRow` with `tags` flattened to `Vec<String>` (uniffi
- * does not support `Vec<Vec<String>>`). The Rust-internal `SearchHitRow`
- * uses the native 2D Vec; this struct is for the snapshot FFI boundary only.
+ * Mirrors the Rust-internal `SearchHitRow`. `tags` is the raw NIP-01 tag array
+ * (`Vec<Vec<String>>`, which uniffi DOES support — see `KernelEventRow`/
+ * `ArtifactPreview` precedents), so Swift can bucket hits by `kind` and extract
+ * the fields each result card needs (article title/summary/image/d, highlight
+ * a/e/context, etc.) — D1: raw protocol data only, Swift owns all formatting.
  */
 public struct KernelSearchHitRow {
     /**
@@ -28872,6 +28874,11 @@ public struct KernelSearchHitRow {
      * Raw event `content` field.
      */
     public var content: String
+    /**
+     * Raw NIP-01 tags (`[[name, value, ...], ...]`). Swift extracts per-kind
+     * fields from these to hydrate the result-bucket cards.
+     */
+    public var tags: [[String]]
     /**
      * Relay URLs this event was observed on.
      */
@@ -28896,6 +28903,10 @@ public struct KernelSearchHitRow {
          * Raw event `content` field.
          */content: String,
         /**
+         * Raw NIP-01 tags (`[[name, value, ...], ...]`). Swift extracts per-kind
+         * fields from these to hydrate the result-bucket cards.
+         */tags: [[String]],
+        /**
          * Relay URLs this event was observed on.
          */relayProvenance: [String]) {
         self.id = id
@@ -28903,6 +28914,7 @@ public struct KernelSearchHitRow {
         self.kind = kind
         self.createdAt = createdAt
         self.content = content
+        self.tags = tags
         self.relayProvenance = relayProvenance
     }
 }
@@ -28929,6 +28941,9 @@ extension KernelSearchHitRow: Equatable, Hashable {
         if lhs.content != rhs.content {
             return false
         }
+        if lhs.tags != rhs.tags {
+            return false
+        }
         if lhs.relayProvenance != rhs.relayProvenance {
             return false
         }
@@ -28941,6 +28956,7 @@ extension KernelSearchHitRow: Equatable, Hashable {
         hasher.combine(kind)
         hasher.combine(createdAt)
         hasher.combine(content)
+        hasher.combine(tags)
         hasher.combine(relayProvenance)
     }
 }
@@ -28959,6 +28975,7 @@ public struct FfiConverterTypeKernelSearchHitRow: FfiConverterRustBuffer {
                 kind: FfiConverterUInt32.read(from: &buf),
                 createdAt: FfiConverterUInt64.read(from: &buf),
                 content: FfiConverterString.read(from: &buf),
+                tags: FfiConverterSequenceSequenceString.read(from: &buf),
                 relayProvenance: FfiConverterSequenceString.read(from: &buf)
         )
     }
@@ -28969,6 +28986,7 @@ public struct FfiConverterTypeKernelSearchHitRow: FfiConverterRustBuffer {
         FfiConverterUInt32.write(value.kind, into: &buf)
         FfiConverterUInt64.write(value.createdAt, into: &buf)
         FfiConverterString.write(value.content, into: &buf)
+        FfiConverterSequenceSequenceString.write(value.tags, into: &buf)
         FfiConverterSequenceString.write(value.relayProvenance, into: &buf)
     }
 }
