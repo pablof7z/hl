@@ -26955,6 +26955,13 @@ public struct KernelArticleReaderSnapshot {
      */
     public var contentTreeBytes: Data
     /**
+     * The article body content tree as serde-JSON (Phase 7, option β). Swift's
+     * vendored nmp `ContentTreeWire.swift` is JSON-`Decodable` and feeds
+     * `NostrContentRenderer` — this is the body render path (replacing raw
+     * markdown). Empty string until the document arrives / on decode failure.
+     */
+    public var contentTreeJson: String
+    /**
      * Overlay highlights anchored to this article (kind:9802 tagged `#a ==
      * address`), newest-first, deduped by event id. Carries the SAME enriched
      * NIP-84/NIP-73 fields as the highlight feed (decoded via the shared
@@ -27002,6 +27009,12 @@ public struct KernelArticleReaderSnapshot {
          * `nmp_content::wire::decode_content_tree`.
          */contentTreeBytes: Data,
         /**
+         * The article body content tree as serde-JSON (Phase 7, option β). Swift's
+         * vendored nmp `ContentTreeWire.swift` is JSON-`Decodable` and feeds
+         * `NostrContentRenderer` — this is the body render path (replacing raw
+         * markdown). Empty string until the document arrives / on decode failure.
+         */contentTreeJson: String,
+        /**
          * Overlay highlights anchored to this article (kind:9802 tagged `#a ==
          * address`), newest-first, deduped by event id. Carries the SAME enriched
          * NIP-84/NIP-73 fields as the highlight feed (decoded via the shared
@@ -27019,6 +27032,7 @@ public struct KernelArticleReaderSnapshot {
         self.dTag = dTag
         self.createdAt = createdAt
         self.contentTreeBytes = contentTreeBytes
+        self.contentTreeJson = contentTreeJson
         self.highlights = highlights
     }
 }
@@ -27063,6 +27077,9 @@ extension KernelArticleReaderSnapshot: Equatable, Hashable {
         if lhs.contentTreeBytes != rhs.contentTreeBytes {
             return false
         }
+        if lhs.contentTreeJson != rhs.contentTreeJson {
+            return false
+        }
         if lhs.highlights != rhs.highlights {
             return false
         }
@@ -27081,6 +27098,7 @@ extension KernelArticleReaderSnapshot: Equatable, Hashable {
         hasher.combine(dTag)
         hasher.combine(createdAt)
         hasher.combine(contentTreeBytes)
+        hasher.combine(contentTreeJson)
         hasher.combine(highlights)
     }
 }
@@ -27105,6 +27123,7 @@ public struct FfiConverterTypeKernelArticleReaderSnapshot: FfiConverterRustBuffe
                 dTag: FfiConverterString.read(from: &buf),
                 createdAt: FfiConverterUInt64.read(from: &buf),
                 contentTreeBytes: FfiConverterData.read(from: &buf),
+                contentTreeJson: FfiConverterString.read(from: &buf),
                 highlights: FfiConverterSequenceTypeHighlightRow.read(from: &buf)
         )
     }
@@ -27121,6 +27140,7 @@ public struct FfiConverterTypeKernelArticleReaderSnapshot: FfiConverterRustBuffe
         FfiConverterString.write(value.dTag, into: &buf)
         FfiConverterUInt64.write(value.createdAt, into: &buf)
         FfiConverterData.write(value.contentTreeBytes, into: &buf)
+        FfiConverterString.write(value.contentTreeJson, into: &buf)
         FfiConverterSequenceTypeHighlightRow.write(value.highlights, into: &buf)
     }
 }
