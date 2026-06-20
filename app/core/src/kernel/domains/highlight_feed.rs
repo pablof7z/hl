@@ -100,11 +100,22 @@ fn decode_highlight_row(event: &NmpKernelEvent) -> Option<HighlightRow> {
         }
     };
 
+    // Optional user note from the NIP-84 `comment` tag (mirrors the live lane's
+    // `first_tag_value(event, "comment")`). Empty/absent → None (D1).
+    let note: Option<String> = event
+        .tags
+        .iter()
+        .find(|t| t.first().map(|s| s == "comment").unwrap_or(false))
+        .and_then(|t| t.get(1))
+        .filter(|s| !s.is_empty())
+        .cloned();
+
     Some(HighlightRow {
         event_id: event.id.clone(),
         author_pubkey: event.author.clone(),
         content: event.content.clone(),
         source_reference,
+        note,
         created_at: event.created_at,
     })
 }
@@ -322,6 +333,45 @@ mod tests {
             content: content.to_string(),
             relay_provenance: vec![],
         }
+    }
+
+    // 7-HD: decode_highlight_row extracts the NIP-84 `comment` tag into `note`
+    // (parity with the live lane's `first_tag_value(event, "comment")`), and
+    // leaves `note = None` when absent or empty.
+    #[test]
+    fn highlight_row_extracts_note_from_comment_tag() {
+        let mut ev = highlight_event(
+            "aa00000000000000000000000000000000000000000000000000000000000001",
+            "bb00000000000000000000000000000000000000000000000000000000000002",
+            "the highlighted text",
+            "30023:author:slug",
+            1_000_000,
+        );
+        ev.tags
+            .push(vec!["comment".to_string(), "my note".to_string()]);
+        let row = decode_highlight_row(&ev).expect("kind:9802 decodes");
+        assert_eq!(row.note.as_deref(), Some("my note"));
+
+        // Absent comment tag → None.
+        let no_comment = highlight_event(
+            "aa00000000000000000000000000000000000000000000000000000000000003",
+            "bb00000000000000000000000000000000000000000000000000000000000002",
+            "text",
+            "30023:author:slug",
+            1_000_001,
+        );
+        assert_eq!(decode_highlight_row(&no_comment).unwrap().note, None);
+
+        // Empty comment value → None (D1).
+        let mut empty = highlight_event(
+            "aa00000000000000000000000000000000000000000000000000000000000004",
+            "bb00000000000000000000000000000000000000000000000000000000000002",
+            "text",
+            "30023:author:slug",
+            1_000_002,
+        );
+        empty.tags.push(vec!["comment".to_string(), "".to_string()]);
+        assert_eq!(decode_highlight_row(&empty).unwrap().note, None);
     }
 
     // 4H-T1: highlight_feed_registers_cursor

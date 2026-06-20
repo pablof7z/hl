@@ -794,6 +794,10 @@ pub struct HighlightRow {
     ///
     /// D3: opaque string from the protocol — kernel never constructs references.
     pub source_reference: Option<String>,
+    /// Optional user note attached to the highlight, from the NIP-84 `comment`
+    /// tag of the kind:9802 event. `None` when absent or empty. Raw UTF-8 (D1:
+    /// Swift owns blank-note display rules). Mirrors the live lane's `note`.
+    pub note: Option<String>,
     /// Event creation time as Unix seconds. D1: Swift formats the display date.
     pub created_at: u64,
 }
