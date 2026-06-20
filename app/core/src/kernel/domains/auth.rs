@@ -143,6 +143,11 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     // kind:11 discussion rows are identity-scoped (the viewer's relays serve
     // them). Clear on logout so stale rows do not surface under a new account.
     super::discussions::clear_on_logout(state);
+    // ── Phase 7 artifact-preview: clear preview rows on logout ────────────────
+    // Artifact previews are keyed to the active account's subscription set.
+    // Wipe both artifact_previews and artifact_preview_requests so stale
+    // coordinate rows from a prior account never surface under a new identity.
+    super::artifact_preview::clear_on_identity_lost(state);
     // RemoveActiveAccount fires nmp.remove_account; ClearSession
     // emits a CapabilityRequest to native for its keychain.
     vec![Effect::RemoveActiveAccount, Effect::ClearSession]
@@ -216,6 +221,11 @@ pub(crate) fn reduce_event_identity_changed(
             // Chat room buffers are open-view working sets. Clear on identity
             // loss so stale message rows don't outlive the account session.
             super::chat::clear_on_identity_lost(state);
+            // ── Phase 7 artifact-preview: clear preview rows on identity loss ──
+            // Artifact previews are keyed to the active account's subscriptions.
+            // Wipe on account removal so stale rows don't surface under a new
+            // identity.
+            super::artifact_preview::clear_on_identity_lost(state);
         }
     }
     vec![]
