@@ -83,6 +83,20 @@ pub enum ViewId {
     /// dispatched. On close: `AppState::search_results` is cleared to bound
     /// memory. The snapshot is `ViewSnapshot::Search(SearchSnapshot)`.
     Search,
+
+    // ── Phase 4G additions (append-only) ─────────────────────────────────────
+    /// "Following reads" article feed — kind:30023 events over the active
+    /// account's follow authors, pulled via the Phase 4F feed-pull engine.
+    ///
+    /// On open: `articles_feed::lifecycle_effects_for_view_open` registers the
+    /// `"hl.feed.articles"` pull cursor (fail-closed when follows is empty) and
+    /// emits an initial `DrainFeed` for the first page.
+    /// On close: `articles_feed::lifecycle_effects_for_view_close` releases the
+    /// cursor. The snapshot is `ViewSnapshot::ArticleFeed(ArticleFeedSnapshot)`.
+    ///
+    /// Pagination: the UI dispatches `AppAction::LoadMoreArticles` on
+    /// scroll-to-end; the reducer emits `DrainFeed` (D8: no polling).
+    ArticleFeed,
 }
 
 /// Which projection to compute for a registered view.
@@ -138,6 +152,12 @@ pub enum ViewRoute {
     /// NIP-50 relay search results projection — `SearchSnapshot` (bounded raw
     /// hit rows). D1: no "X results" label, no formatted kind/author strings.
     Search,
+
+    // ── Phase 4G additions (append-only) ─────────────────────────────────────
+    /// "Following reads" article feed projection — `ArticleFeedSnapshot`
+    /// (raw kind:30023 rows from the 4F feed-pull engine). D1: no formatted
+    /// strings, no "Untitled" fallback, no "min read" labels.
+    ArticleFeed,
 }
 
 /// Tracks open views and their last-emitted snapshots.

@@ -37,8 +37,8 @@ use nmp_defaults::{NmpAppBuilder, RunConfig};
 
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
 use crate::kernel::domains::{
-    articles, auth, bookmarks, communities, discovery, feed, follows, profiles, projections,
-    reactions, relays, room_home, route, search, session,
+    articles, articles_feed, auth, bookmarks, communities, discovery, feed, follows, profiles,
+    projections, reactions, relays, room_home, route, search, session,
 };
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
@@ -339,6 +339,9 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
 
         // ── Phase 4D additions (append-only) ─────────────────────────────────
         AppAction::RunSearch { query, scope } => search::reduce_action_run_search(query, scope),
+
+        // ── Phase 4G additions (append-only) ─────────────────────────────────
+        AppAction::LoadMoreArticles => articles_feed::reduce_action_load_more_articles(state),
     }
 }
 
@@ -554,6 +557,9 @@ pub(crate) fn project_snapshot(
 
         // ── Phase 4D additions (append-only) ─────────────────────────────────
         ViewId::Search => search::project_search_snapshot(state),
+
+        // ── Phase 4G additions (append-only) ─────────────────────────────────
+        ViewId::ArticleFeed => articles_feed::project_article_feed_snapshot(state),
 
         _ => route::project_snapshot(state, id, clock_now),
     }
@@ -841,6 +847,9 @@ pub(crate) async fn actor_task(
                 // ── Phase 4D: search view lifecycle (no-op on open — projection
                 //    wired by RunSearch dispatch, not by view open) ───────────────
                 lifecycle_effects.extend(search::lifecycle_effects_for_view_open(id));
+                // ── Phase 4G: article feed lifecycle — register cursor + drain ──
+                lifecycle_effects
+                    .extend(articles_feed::lifecycle_effects_for_view_open(id, &state));
             }
             Cmd::CloseView(id) => {
                 // ── Phase 3D: release the profile subscription before removing from registry ──
@@ -857,6 +866,8 @@ pub(crate) async fn actor_task(
                     state.search_results.clear();
                 }
                 lifecycle_effects.extend(search::lifecycle_effects_for_view_close(id));
+                // ── Phase 4G: article feed lifecycle — release cursor ────────────
+                lifecycle_effects.extend(articles_feed::lifecycle_effects_for_view_close(id));
                 registry.close(id);
             }
             Cmd::Resume => {

@@ -144,6 +144,13 @@ pub enum ViewSnapshot {
     /// NIP-50 relay search results — bounded raw hit rows.
     /// D1: no "X results" count label, no formatted kind/author strings.
     Search(SearchSnapshot),
+
+    // ── Phase 4G additions (append-only) ─────────────────────────────────────
+    /// "Following reads" article feed — kind:30023 events over follow authors,
+    /// pulled via the Phase 4F feed-pull engine. Raw rows only (D1: no
+    /// formatted strings, no "Untitled" fallback, no "min read" labels).
+    /// Bounded by the accumulated feed pages (D5: `FEED_PAGE_SIZE` per drain).
+    ArticleFeed(ArticleFeedSnapshot),
 }
 
 // ── Phase 4B additions (append-only) ─────────────────────────────────────────
@@ -528,6 +535,57 @@ pub struct SearchSnapshot {
     /// Ordered (by `created_at` descending, then `id` ascending) search hit rows.
     /// Raw fields only — no "X results" count label, no formatted strings (D1).
     pub hits: Vec<KernelSearchHitRow>,
+}
+
+// ── Phase 4G additions (append-only) ─────────────────────────────────────────
+
+/// One kind:30023 article row from the "Following reads" feed.
+///
+/// Decoded from a raw `KernelEvent` emitted by the Phase 4F feed-pull engine.
+/// Raw protocol data only (D1 / ADR-0032): Swift formats ALL display strings
+/// from these raw fields. No `"Untitled"` title fallback, no `"{n} min read"`
+/// label, no `"#{tag}"` hashtag formatting — those are Swift-side concerns.
+///
+/// Distinct from `ArticleRow` (Phase 4A): `ArticleRow` is keyed by addressable
+/// coordinate in `AppState::articles` and carries `content_tree_bytes` for the
+/// full article body. `ArticleFeedRow` is lighter (no body bytes) and is used
+/// for feed list display only.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ArticleFeedRow {
+    /// Addressable coordinate `kind:author_hex:d_tag` (built from the raw event).
+    pub address: String,
+    /// 64-character hex event id of the kind:30023 event.
+    pub id: String,
+    /// 64-character hex author pubkey. Swift formats bech32 `npub`.
+    pub author_pubkey: String,
+    /// `["title", _]` tag value, or `None` when absent.
+    /// D1: no "Untitled" fallback — `None` means genuinely absent.
+    pub title: Option<String>,
+    /// `["summary", _]` tag value, or `None` when absent.
+    pub summary: Option<String>,
+    /// `["image", _]` tag value as a URL, or `None` when absent.
+    pub hero_image_url: Option<String>,
+    /// Addressable `d` tag value.
+    pub d_tag: String,
+    /// Event creation time as Unix seconds. Swift formats the display date.
+    pub created_at: u64,
+}
+
+/// Snapshot for `ViewId::ArticleFeed` — the "Following reads" article feed.
+///
+/// Raw protocol rows only (D1): Swift formats all list-cell display strings
+/// (title fallback, author name, date label, read-time estimate, hero image).
+/// Bounded by accumulated feed pages (`FEED_PAGE_SIZE` × number of drains,
+/// D5 / Non-Negotiable #7).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ArticleFeedSnapshot {
+    /// Decoded kind:30023 article rows in ingest-seq order (newest first from
+    /// the network, but stored in the order drained from the pager). Raw fields
+    /// only — no labels, no formatted strings (D1).
+    pub rows: Vec<ArticleFeedRow>,
+    /// `true` when `has_more == false` from the last drain (fully caught up).
+    /// Swift uses this to decide whether to show a "load more" affordance.
+    pub exhausted: bool,
 }
 
 /// uniffi-compatible search hit row for FFI (uniffi::Record requires simple types).
