@@ -1154,4 +1154,18 @@ pub enum KernelEvent {
     },
     /// Transcript fetch or parse failed. D6 — availability set to Unavailable.
     TranscriptFetchFailed,
+
+    // ── Phase 5E additions (append-only) ─────────────────────────────────────
+    /// A raw `CameraResult` arrived via `CapabilityResult::Camera`.
+    ///
+    /// This variant exists for test injection (bypasses the capability round-trip).
+    /// In the live path, `CapabilityResult::Camera(_)` is handled by
+    /// `session::reduce_event_capability_result` which calls
+    /// `camera::reduce_capability_camera` directly. The `KernelEvent::CameraCapabilityResult`
+    /// arm in `reduce_event` is therefore a test-only path (same pattern as
+    /// `KernelEvent::OcrRecognitionComplete` and `KernelEvent::ShareQueueDrained`).
+    ///
+    /// DEVICE-LOCAL — PageImage routes image_handle into the 5D OCR pipeline;
+    /// Barcode routes to the 5C ISBN lookup. Neither publishes to nostr here.
+    CameraCapabilityResult(crate::capabilities::CameraResult),
 }

@@ -15,7 +15,11 @@ pub mod audio;
 // ── Phase 5D additions (append-only) ─────────────────────────────────────────
 pub mod ocr;
 
+// ── Phase 5E additions (append-only) ─────────────────────────────────────────
+pub mod camera;
+
 pub use audio::{AudioOp, AudioResult};
+pub use camera::{CameraOp, CameraResult};
 pub use keychain::{KeychainOp, KeychainResult};
 pub use ocr::{OcrLine, OcrOp, OcrRect, OcrResult, OcrWord};
 pub use share::{RawSharePayload, ShareOp, ShareResult};
@@ -40,6 +44,16 @@ pub enum CapabilityRequest {
     /// returns raw line observations (text + bbox + words + confidence).
     /// Large images stay on disk (image_handle = data_dir temp path, D5).
     Ocr(OcrOp),
+
+    // ── Phase 5E additions (append-only) ─────────────────────────────────────
+    /// Camera capture / barcode scan request.
+    ///
+    /// `CapturePage` → native runs `VNDocumentCameraViewController`, writes
+    /// perspective-flattened JPEG to `data_dir`, returns `CameraResult::PageImage`.
+    /// `ScanBarcode` → native runs `AVCaptureMetadataOutput` for EAN-13/ISBN-13,
+    /// returns `CameraResult::Barcode { raw_string }`. Large images stay on disk
+    /// (image_handle = temp path, D5).
+    Camera(CameraOp),
 }
 
 /// The native shell's response to a prior `CapabilityRequest`. Delivered via
@@ -60,4 +74,13 @@ pub enum CapabilityResult {
     // ── Phase 5D additions (append-only) ─────────────────────────────────────
     /// Response to a `CapabilityRequest::Ocr`.
     Ocr(OcrResult),
+
+    // ── Phase 5E additions (append-only) ─────────────────────────────────────
+    /// Response to a `CapabilityRequest::Camera`.
+    ///
+    /// `PageImage` → page scan completed; kernel routes image_handle into the 5D
+    /// OCR pipeline and stores dimensions in capture state.
+    /// `Barcode` → barcode scanned; kernel normalizes and routes to 5C ISBN lookup.
+    /// `Denied` / `Cancelled` / `Error` surface as typed state (D6: errors are data).
+    Camera(CameraResult),
 }

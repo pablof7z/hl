@@ -41,6 +41,8 @@ use crate::kernel::domains::{
     articles_feed,
     auth,
     bookmarks,
+    // ── Phase 5E additions (append-only) ─────────────────────────────────────
+    camera,
     // ── Phase 5F additions (append-only) ─────────────────────────────────────
     capture_draft,
     communities,
@@ -730,6 +732,11 @@ fn reduce_action_envelope(
             ocr::reduce_action_ocr_recognize(state, p.image_handle)
         }
 
+        // ── Camera (Phase 5E) ─────────────────────────────────────────────────
+        "hl.camera.capture_page" => camera::reduce_action_capture_page(state),
+        "hl.camera.scan_barcode" => camera::reduce_action_scan_barcode(state),
+        "hl.camera.cancel" => camera::reduce_action_cancel(state),
+
         // ── Capture draft (Phase 5F) ───────────────────────────────────────────
         "hl.capture.set_quote" => {
             let p = parse!(CaptureSetQuotePayload);
@@ -1073,6 +1080,18 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             podcast::reduce_event_transcript_ready(state, segments)
         }
         KernelEvent::TranscriptFetchFailed => podcast::reduce_event_transcript_failed(state),
+
+        // ── Phase 5E additions (append-only) ─────────────────────────────────
+        KernelEvent::CameraCapabilityResult(_) => {
+            // Test-only injection path (same pattern as KernelEvent::OcrRecognitionComplete
+            // and KernelEvent::ShareQueueDrained). In the live path,
+            // CapabilityResult::Camera(_) is handled by
+            // session::reduce_event_capability_result → camera::reduce_capability_camera
+            // directly — the state was already written there.
+            // This arm is a no-op so tests can inject via Cmd::Event without
+            // going through the capability round-trip.
+            vec![]
+        }
     }
 }
 
