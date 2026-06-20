@@ -460,7 +460,7 @@ pub enum Effect {
         /// Full `ArtifactRecord` snapshot (needed to reconstruct
         /// `PodcastPositionRecord` for cold-launch rehydration).
         /// Boxed to keep the `Effect` enum variant size manageable.
-        artifact: Box<crate::models::ArtifactRecord>,
+        artifact: Box<crate::kernel::models::ArtifactRecord>,
     },
 
     // ── Phase 5F additions (append-only) ─────────────────────────────────────

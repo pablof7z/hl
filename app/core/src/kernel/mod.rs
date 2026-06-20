@@ -10,6 +10,7 @@ pub mod app;
 pub mod clock;
 pub(crate) mod domains;
 pub mod effect;
+pub mod models;
 pub mod snapshot;
 pub mod view;
 
