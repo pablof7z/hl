@@ -6,6 +6,7 @@ struct DiscussionListView: View {
     @Binding var composerPresented: Bool
 
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var store = DiscussionStore()
 
     var body: some View {
@@ -38,7 +39,10 @@ struct DiscussionListView: View {
             }
         }
         .task {
-            await store.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
+            await store.start(groupId: groupId, kernel: kernel)
+        }
+        .onChange(of: kernel.roomDiscussions[groupId]) { _, _ in
+            store.applyKernelSnapshot()
         }
         .onDisappear { store.stop() }
         .sheet(isPresented: $composerPresented) {

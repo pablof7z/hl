@@ -79,6 +79,12 @@ final class HighlighterAppKernel {
     /// fields); Swift builds the display tree (`CommentTreeBuilder`).
     private(set) var commentThreads: [String: CommentThreadKernelSnapshot] = [:]
 
+    /// Per-group-id room discussions snapshots, keyed by NIP-29 local group id.
+    /// Populated while a `ViewId.roomDiscussions(groupId:)` view is open. The
+    /// kernel emits raw kind:11+discussion rows; Swift formats all display
+    /// strings (title fallback, date, attachment chip).
+    private(set) var roomDiscussions: [String: RoomDiscussionsSnapshot] = [:]
+
     // MARK: - Kernel handle
 
     /// The Rust-side kernel object. Callers may dispatch actions and manage
@@ -240,6 +246,22 @@ final class HighlighterAppKernel {
         commentThreads.removeValue(forKey: rootTagValue)
     }
 
+    // MARK: - Phase 7: room discussions lifecycle
+
+    /// Open the discussions tab view for `groupId`. The kernel filters the
+    /// room's kind:11+discussion events into `roomDiscussions[groupId]`.
+    /// Call from `DiscussionListView.task`.
+    func openRoomDiscussions(groupId: String) {
+        app.openView(viewId: .roomDiscussions(groupId: groupId),
+                     route: .roomDiscussions(groupId: groupId))
+    }
+
+    /// Close the discussions tab view for `groupId`. Call from `.onDisappear`.
+    func closeRoomDiscussions(groupId: String) {
+        app.closeView(viewId: .roomDiscussions(groupId: groupId))
+        roomDiscussions.removeValue(forKey: groupId)
+    }
+
     // MARK: - Snapshot ingestion (called on main actor by KernelObserver)
 
     fileprivate func receive(viewId: ViewId, snapshot: ViewSnapshot) {
@@ -273,6 +295,10 @@ final class HighlighterAppKernel {
         case .commentThread(let s):
             commentThreads[s.rootTagValue] = s
 
+        // Phase 7 cutover: room discussions (DiscussionStore reads this dict).
+        case .roomDiscussions(let s):
+            roomDiscussions[s.groupId] = s
+
         // Phase 2E (network settings / relay diagnostics) — handled elsewhere.
         case .networkSettings, .relayDiagnostics:
             break
@@ -285,7 +311,7 @@ final class HighlighterAppKernel {
              .highlightFeed, .homeFeed, .whatsNew, .bookPicker, .shareComposer,
              // Phase 7 cutovers (Batch 1) — managed by their owning stores via
              // `current_snapshot` when those screens are cut; no-op push here.
-             .roomDiscussions, .feedbackThreads, .feedbackThread:
+             .feedbackThreads, .feedbackThread:
             break
 
         // Phase 5+ snapshots (podcast, OCR capture) — managed by their owning

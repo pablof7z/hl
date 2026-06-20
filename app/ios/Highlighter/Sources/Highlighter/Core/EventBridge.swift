@@ -25,7 +25,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     /// it's nil or eventually nil'd by ARC.
     fileprivate struct Registry: @unchecked Sendable {
         var rooms: [UInt64: WeakBox<RoomStore>] = [:]
-        var discussions: [UInt64: WeakBox<DiscussionStore>] = [:]
         var profiles: [UInt64: WeakBox<ProfileStore>] = [:]
         var articles: [UInt64: WeakBox<ArticleReaderStore>] = [:]
         var homeFeeds: [UInt64: WeakBox<HomeFeedStore>] = [:]
@@ -42,7 +41,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
 
         mutating func prune() {
             rooms = rooms.filter { $0.value.value != nil }
-            discussions = discussions.filter { $0.value.value != nil }
             profiles = profiles.filter { $0.value.value != nil }
             articles = articles.filter { $0.value.value != nil }
             homeFeeds = homeFeeds.filter { $0.value.value != nil }
@@ -67,14 +65,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             reg.prune()
         }
     }
-
-    func registerDiscussions(_ store: DiscussionStore, handle: UInt64) {
-        registry.withLock { reg in
-            reg.discussions[handle] = WeakBox(store)
-            reg.prune()
-        }
-    }
-
 
     func registerProfile(_ store: ProfileStore, handle: UInt64) {
         registry.withLock { reg in
@@ -148,7 +138,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     func unregister(handle: UInt64) {
         registry.withLock { reg in
             _ = reg.rooms.removeValue(forKey: handle)
-            _ = reg.discussions.removeValue(forKey: handle)
             _ = reg.profiles.removeValue(forKey: handle)
             _ = reg.articles.removeValue(forKey: handle)
             _ = reg.homeFeeds.removeValue(forKey: handle)
@@ -176,7 +165,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             let routed = self.registry.withLock { reg -> RoutedStores in
                 RoutedStores(
                     room: reg.rooms[id]?.value,
-                    discussion: reg.discussions[id]?.value,
                     profile: reg.profiles[id]?.value,
                     article: reg.articles[id]?.value,
                     homeFeed: reg.homeFeeds[id]?.value,
@@ -191,8 +179,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
 
             if let store = routed.room {
                 self.dispatchRoom(change, store: store)
-            } else if let store = routed.discussion {
-                self.dispatchDiscussions(change, store: store)
             } else if let store = routed.profile {
                 self.dispatchProfile(change, store: store)
             } else if let store = routed.article {
@@ -220,7 +206,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     /// ever registered to one store at a time.
     private struct RoutedStores {
         let room: RoomStore?
-        let discussion: DiscussionStore?
         let profile: ProfileStore?
         let article: ArticleReaderStore?
         let homeFeed: HomeFeedStore?
@@ -317,15 +302,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         }
     }
 
-    @MainActor
-    private func dispatchDiscussions(_ change: DataChangeType, store: DiscussionStore) {
-        switch change {
-        case .discussionUpserted:
-            Task { await store.reloadFromCache() }
-        default:
-            break
-        }
-    }
 
     @MainActor
     private func dispatchHomeFeed(_ change: DataChangeType, store: HomeFeedStore) {
