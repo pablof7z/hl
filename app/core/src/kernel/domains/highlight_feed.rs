@@ -289,10 +289,25 @@ pub(crate) fn lifecycle_effects_for_view_close(id: &ViewId) -> Vec<Effect> {
 /// so content with quotes or backslashes is safe (D-rule: serde, not format).
 /// The `kind`, `tags`, and `created_at` fields are kernel responsibility; the
 /// `id`, `sig`, and `pubkey` are filled by nmp's signer on publish.
+/// Trim an optional note/context string; return `Some(trimmed)` only when the
+/// result is non-empty (mirrors build_highlight_event's `.trim()` + `is_empty()`
+/// gates so empty/whitespace-only values never produce a tag — gotcha #7 edge
+/// fidelity).
+fn note_context_trimmed(value: Option<&str>) -> Option<String> {
+    let trimmed = value?.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
 pub(crate) fn reduce_action_publish_highlight(
     content: String,
     source_reference: String,
     relay_hint: Option<String>,
+    note: Option<String>,
+    context: Option<String>,
 ) -> Vec<Effect> {
     // Build the NIP-84 tags: ["a", "<coordinate>", "<relay_hint>"] or
     // ["e", "<event_id>", "<relay_hint>"] depending on whether the source_reference
@@ -300,7 +315,7 @@ pub(crate) fn reduce_action_publish_highlight(
     let is_address = source_reference.contains(':');
     let tag_name = if is_address { "a" } else { "e" };
 
-    let tag: serde_json::Value = match relay_hint.as_deref() {
+    let source_tag: serde_json::Value = match relay_hint.as_deref() {
         Some(hint) if !hint.is_empty() => {
             serde_json::json!([tag_name, source_reference, hint])
         }
@@ -309,10 +324,26 @@ pub(crate) fn reduce_action_publish_highlight(
         }
     };
 
+    let mut tags: Vec<serde_json::Value> = vec![source_tag];
+
+    // `context` tag — emitted only when non-empty AND different from `content`
+    // (parity with the bespoke build_highlight_event: a context equal to the
+    // quote is redundant and never published).
+    if let Some(ctx) = note_context_trimmed(context.as_deref()) {
+        if ctx != content.trim() {
+            tags.push(serde_json::json!(["context", ctx]));
+        }
+    }
+
+    // `comment` tag (the user note) — emitted only when non-empty.
+    if let Some(n) = note_context_trimmed(note.as_deref()) {
+        tags.push(serde_json::json!(["comment", n]));
+    }
+
     let event_json = serde_json::json!({
         "kind": 9802,
         "content": content,
-        "tags": [tag],
+        "tags": tags,
     });
 
     let Ok(json) = serde_json::to_string(&event_json) else {
@@ -724,5 +755,99 @@ mod tests {
             }
             other => panic!("expected HighlightFeed, got {:?}", other),
         }
+    }
+
+    // Helper: pull the emitted kind:9802 event JSON out of the publish effect.
+    fn publish_event_value(effects: &[Effect]) -> serde_json::Value {
+        let Some(Effect::PublishHighlightEvent { json }) = effects.first() else {
+            panic!("expected PublishHighlightEvent effect, got {:?}", effects);
+        };
+        serde_json::from_str(json).expect("event json")
+    }
+
+    fn tag_values<'a>(event: &'a serde_json::Value, name: &str) -> Vec<&'a str> {
+        event["tags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|t| {
+                let arr = t.as_array()?;
+                if arr.first()?.as_str()? == name {
+                    arr.get(1)?.as_str()
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    // Phase 7: publishing a highlight with a note + context emits the `comment`
+    // and `context` tags (the article-reader publish surface). The round-trip
+    // (publish → record_from_cached_event) is the parity check — no hardcoded
+    // tag positions, and it proves the kernel emits what the bespoke parser reads.
+    #[test]
+    fn publish_highlight_emits_comment_and_context_tags() {
+        let effects = reduce_action_publish_highlight(
+            "the quoted text".to_string(),
+            "30023:aabbcc:my-article".to_string(),
+            None,
+            Some("  my note  ".to_string()), // trims to "my note"
+            Some("surrounding paragraph".to_string()),
+        );
+        let event = publish_event_value(&effects);
+        assert_eq!(event["kind"], 9802);
+        assert_eq!(
+            tag_values(&event, "comment"),
+            vec!["my note"],
+            "trimmed comment"
+        );
+        assert_eq!(
+            tag_values(&event, "context"),
+            vec!["surrounding paragraph"],
+            "context tag"
+        );
+        assert_eq!(
+            tag_values(&event, "a"),
+            vec!["30023:aabbcc:my-article"],
+            "source a-tag preserved"
+        );
+    }
+
+    // Edge fidelity (gotcha #7), mirroring build_highlight_event:
+    // - empty/whitespace note or context emits NO tag;
+    // - a context equal to the content is redundant → skipped.
+    #[test]
+    fn publish_highlight_skips_empty_and_redundant_tags() {
+        // Empty note, whitespace context → neither tag.
+        let e1 = reduce_action_publish_highlight(
+            "quote".to_string(),
+            "evt".to_string(),
+            None,
+            Some("".to_string()),
+            Some("   ".to_string()),
+        );
+        let v1 = publish_event_value(&e1);
+        assert!(
+            tag_values(&v1, "comment").is_empty(),
+            "empty note → no comment tag"
+        );
+        assert!(
+            tag_values(&v1, "context").is_empty(),
+            "whitespace context → no context tag"
+        );
+
+        // Context equal to content → skipped (redundant).
+        let e2 = reduce_action_publish_highlight(
+            "same text".to_string(),
+            "evt".to_string(),
+            None,
+            None,
+            Some("same text".to_string()),
+        );
+        let v2 = publish_event_value(&e2);
+        assert!(
+            tag_values(&v2, "context").is_empty(),
+            "context == content → skipped (build_highlight_event parity)"
+        );
     }
 }

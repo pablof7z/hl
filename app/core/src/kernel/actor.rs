@@ -418,6 +418,8 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
             content,
             source_reference,
             relay_hint,
+            note,
+            context,
         } => {
             // Empty content is a no-op (D6: invalid highlight not published).
             if content.is_empty() {
@@ -427,6 +429,8 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
                     content,
                     source_reference,
                     relay_hint,
+                    note,
+                    context,
                 )
             }
         }
@@ -683,6 +687,8 @@ fn reduce_action_envelope(
                     p.content,
                     p.source_reference,
                     p.relay_hint,
+                    p.note,
+                    p.context,
                 )
             }
         }
