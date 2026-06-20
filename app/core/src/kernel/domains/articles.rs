@@ -174,8 +174,25 @@ pub(crate) fn project_article_reader_snapshot(
         d_tag: row.d_tag.clone(),
         created_at: row.created_at,
         content_tree_bytes: row.content_tree_bytes.clone(),
+        content_tree_json: content_tree_json(&row.content_tree_bytes),
         highlights: article_highlight_rows(state, address),
     }))
+}
+
+/// Decode the FlatBuffers `content_tree_bytes` into the serde-JSON representation
+/// of `ContentTreeWire` (Phase 7, option β). Swift's vendored nmp content renderer
+/// (`NostrContentRenderer` + `ContentTreeWire.swift`) is JSON-`Decodable`, so the
+/// kernel ships the tree as JSON for the body render path. Empty string when the
+/// body has not arrived yet or decode/serialize fails (D6 — Swift shows nothing
+/// until the document loads, same as the bespoke empty-body window).
+fn content_tree_json(bytes: &[u8]) -> String {
+    if bytes.is_empty() {
+        return String::new();
+    }
+    match nmp_content::wire::decode_content_tree(bytes) {
+        Ok(tree) => serde_json::to_string(&tree).unwrap_or_default(),
+        Err(_) => String::new(),
+    }
 }
 
 /// Build the overlay highlight rows for an article from its per-article feed
@@ -639,5 +656,41 @@ mod tests {
             row.source_reference_key, bespoke.source_reference_key,
             "source_reference_key"
         );
+    }
+
+    // Phase 7 (β): the article-reader snapshot exposes the body content tree as
+    // serde-JSON (content_tree_json) so Swift's vendored nmp ContentTreeWire
+    // decoder + NostrContentRenderer can render it. Round-trip: encode a tree to
+    // FB bytes → content_tree_json → decode the JSON → must equal the original.
+    #[test]
+    fn content_tree_json_round_trips_from_fb_bytes() {
+        use nmp_content::wire::{ContentTreeWire, WireNode};
+        use nmp_content::RenderMode;
+
+        let tree = ContentTreeWire {
+            nodes: vec![WireNode::Text {
+                text: "Hello, article body.".to_string(),
+            }],
+            roots: vec![0],
+            mode: RenderMode::Markdown,
+        };
+        let fb_bytes = nmp_content::wire::encode_content_tree(&tree);
+        assert!(!fb_bytes.is_empty(), "encoded FB bytes non-empty");
+
+        let json = content_tree_json(&fb_bytes);
+        assert!(
+            !json.is_empty(),
+            "content_tree_json must be non-empty for a real tree"
+        );
+
+        let decoded: ContentTreeWire = serde_json::from_str(&json)
+            .expect("content_tree_json must be valid ContentTreeWire JSON");
+        assert_eq!(
+            decoded, tree,
+            "JSON must round-trip back to the original tree"
+        );
+
+        // Empty bytes → empty string (cold-start window, D6).
+        assert_eq!(content_tree_json(&[]), "", "empty bytes → empty json");
     }
 }

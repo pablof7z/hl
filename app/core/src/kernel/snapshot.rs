@@ -651,6 +651,11 @@ pub struct KernelArticleReaderSnapshot {
     /// Empty until the full document arrives. Swift / platform decodes via
     /// `nmp_content::wire::decode_content_tree`.
     pub content_tree_bytes: Vec<u8>,
+    /// The article body content tree as serde-JSON (Phase 7, option β). Swift's
+    /// vendored nmp `ContentTreeWire.swift` is JSON-`Decodable` and feeds
+    /// `NostrContentRenderer` — this is the body render path (replacing raw
+    /// markdown). Empty string until the document arrives / on decode failure.
+    pub content_tree_json: String,
     /// Overlay highlights anchored to this article (kind:9802 tagged `#a ==
     /// address`), newest-first, deduped by event id. Carries the SAME enriched
     /// NIP-84/NIP-73 fields as the highlight feed (decoded via the shared
