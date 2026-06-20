@@ -275,6 +275,11 @@ pub struct AppState {
     /// Non-Negotiable #7 — never grows with the event store).
     pub whats_new: crate::kernel::domains::whats_new::WhatsNewState,
 
+    // ── Phase 5C additions ────────────────────────────────────────────────────
+    /// ISBN preview cache and lookup state. Device-local — never published.
+    /// Cache file: `{data_dir}/isbn-preview-cache-v1.json`.
+    pub isbn: crate::kernel::domains::isbn::IsbnState,
+
     // ── Phase 5K additions ────────────────────────────────────────────────────
     /// Transient share-queue state drained from the iOS App Group.
     ///
@@ -317,6 +322,8 @@ impl Default for AppState {
             room_lanes: HashMap::new(),
             // ── Phase 5A additions ────────────────────────────────────────────
             whats_new: crate::kernel::domains::whats_new::WhatsNewState::default(),
+            // ── Phase 5C additions ────────────────────────────────────────────
+            isbn: crate::kernel::domains::isbn::IsbnState::default(),
             // ── Phase 5K additions ────────────────────────────────────────────
             share_queue: crate::kernel::domains::share::ShareQueueState::default(),
         }

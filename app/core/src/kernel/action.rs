@@ -434,6 +434,13 @@ pub enum AppAction {
         relay_hint: Option<String>,
     },
 
+    // ── Phase 5C additions (append-only) ─────────────────────────────────────
+    // Doc comment intentionally omitted — AppAction uniffi metadata is near BUF_SIZE
+    // limit (5A + 5K pushed it close). Full doc is in kernel/domains/isbn.rs.
+    LookupIsbn {
+        isbn: String,
+    },
+
     // ── Phase 4D additions (append-only) ─────────────────────────────────────
     /// Run a NIP-50 relay search for `query` with the given `scope`.
     ///
@@ -537,6 +544,10 @@ impl RelayRole {
 /// results, fed back into the actor's command channel. Never crosses FFI.
 ///
 /// Append-only: new variants at the bottom keep rebases mechanical.
+// Phase 5C adds `KernelArtifactPreview` to `IsbnPreviewReady` which carries
+// 12 String fields. ProfileCardUpdated (Phase 3D) was already the large variant;
+// this allow was not needed until 5C pushed the size gap above threshold.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum KernelEvent {
     /// A session-restore capability round-trip completed.
@@ -726,6 +737,31 @@ pub enum KernelEvent {
     WhatsNewLoaded {
         entries: Vec<crate::kernel::snapshot::WhatsNewEntryRow>,
         should_present: bool,
+    },
+
+    // ── Phase 5C additions (append-only) ─────────────────────────────────────
+    /// The Open Library HTTP lookup for `isbn13` completed (or was served from
+    /// the in-memory cache). `preview` is `Some` on success; `error` is non-empty
+    /// on failure. The reducer stores the result in `AppState::isbn` and emits
+    /// `Effect::PersistIsbnCache` when a new entry was fetched (not from cache).
+    ///
+    /// Device-local — never triggers a nostr publish (memory hl-app-state-vs-nostr-facts).
+    IsbnPreviewReady {
+        /// Normalized 13-digit Bookland ISBN.
+        isbn13: String,
+        /// Fetched or cached preview. `None` only if normalization was impossible.
+        preview: Option<crate::kernel::domains::isbn::KernelArtifactPreview>,
+        /// Non-empty if the HTTP fetch failed; empty on success/cache-hit.
+        error: String,
+    },
+    /// The in-memory ISBN cache was loaded from `isbn-preview-cache-v1.json`.
+    ///
+    /// Produced by `run_effect_load_isbn_cache` on first lookup after the cache
+    /// file is available. Carries the raw deserialized entries so the reducer can
+    /// populate `AppState::isbn.cache` and set `cache_loaded = true`.
+    IsbnCacheLoaded {
+        /// Deserialized (isbn13, entry) pairs from the JSON cache file.
+        entries: Vec<(String, crate::kernel::domains::isbn::CachedIsbnEntry)>,
     },
 
     // ── Phase 5K additions (append-only) ─────────────────────────────────────

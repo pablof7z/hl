@@ -175,6 +175,11 @@ pub enum ViewSnapshot {
     /// D1: no "N new features" count label — raw rows only.
     WhatsNew(WhatsNewSnapshot),
 
+    // ── Phase 5C additions (append-only) ─────────────────────────────────────
+    /// Book picker — ISBN lookup state (pending + last result + cache size).
+    /// Device-local (no nostr facts). Raw fields only (D1).
+    BookPicker(crate::kernel::domains::isbn::BookPickerKernelSnapshot),
+
     // ── Phase 5K additions (append-only) ─────────────────────────────────────
     /// Share-extension intake composer — pending share item + community picker.
     /// Raw fields only (D1: no formatted strings, no community name fallbacks).
