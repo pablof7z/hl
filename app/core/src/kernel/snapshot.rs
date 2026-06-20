@@ -800,11 +800,13 @@ pub struct ArticleFeedSnapshot {
     pub exhausted: bool,
 }
 
-/// uniffi-compatible search hit row for FFI (uniffi::Record requires simple types).
+/// uniffi-compatible search hit row for FFI.
 ///
-/// Mirrors `SearchHitRow` with `tags` flattened to `Vec<String>` (uniffi
-/// does not support `Vec<Vec<String>>`). The Rust-internal `SearchHitRow`
-/// uses the native 2D Vec; this struct is for the snapshot FFI boundary only.
+/// Mirrors the Rust-internal `SearchHitRow`. `tags` is the raw NIP-01 tag array
+/// (`Vec<Vec<String>>`, which uniffi DOES support — see `KernelEventRow`/
+/// `ArtifactPreview` precedents), so Swift can bucket hits by `kind` and extract
+/// the fields each result card needs (article title/summary/image/d, highlight
+/// a/e/context, etc.) — D1: raw protocol data only, Swift owns all formatting.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct KernelSearchHitRow {
     /// 64-character hex event id.
@@ -817,6 +819,9 @@ pub struct KernelSearchHitRow {
     pub created_at: u64,
     /// Raw event `content` field.
     pub content: String,
+    /// Raw NIP-01 tags (`[[name, value, ...], ...]`). Swift extracts per-kind
+    /// fields from these to hydrate the result-bucket cards.
+    pub tags: Vec<Vec<String>>,
     /// Relay URLs this event was observed on.
     pub relay_provenance: Vec<String>,
 }

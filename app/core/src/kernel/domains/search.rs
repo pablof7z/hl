@@ -244,9 +244,10 @@ pub(crate) fn run_effect_run_search(
 
 /// Project the `ViewId::Search` snapshot from `AppState::search_results`.
 ///
-/// Converts internal `SearchHitRow` (with `tags: Vec<Vec<String>>`) to the
-/// FFI-compatible `KernelSearchHitRow` (tags omitted — uniffi does not support
-/// `Vec<Vec<String>>`). D1: no count labels, no formatted strings.
+/// Converts internal `SearchHitRow` to the FFI `KernelSearchHitRow`, carrying the
+/// raw NIP-01 `tags` (uniffi supports `Vec<Vec<String>>`) so Swift can bucket hits
+/// by `kind` and hydrate per-kind result cards. D1: no count labels, no formatted
+/// strings — raw protocol data only.
 pub(crate) fn project_search_snapshot(
     state: &AppState,
 ) -> Option<crate::kernel::snapshot::ViewSnapshot> {
@@ -259,6 +260,7 @@ pub(crate) fn project_search_snapshot(
             kind: r.kind,
             created_at: r.created_at,
             content: r.content.clone(),
+            tags: r.tags.clone(),
             relay_provenance: r.relay_provenance.clone(),
         })
         .collect();
@@ -585,6 +587,41 @@ mod tests {
         assert!(
             state.search_results.is_empty(),
             "search_results must be empty after IdentityChanged(None)"
+        );
+    }
+
+    // Phase 7: project_search_snapshot must carry the raw NIP-01 tags verbatim
+    // onto KernelSearchHitRow so Swift can bucket hits by kind + extract per-kind
+    // card fields (article title/summary/image/d, highlight a/e/context, etc.).
+    #[test]
+    fn search_snapshot_carries_raw_tags() {
+        let mut state = make_state();
+        let tags = vec![
+            vec!["d".to_string(), "my-article".to_string()],
+            vec!["title".to_string(), "My Article".to_string()],
+            vec![
+                "image".to_string(),
+                "https://example.com/hero.jpg".to_string(),
+            ],
+        ];
+        state.search_results = vec![SearchHitRow {
+            id: "aa".to_string(),
+            author: "dead000000000000000000000000000000000000000000000000000000000001".to_string(),
+            kind: 30023,
+            created_at: 1,
+            content: "body".to_string(),
+            tags: tags.clone(),
+            relay_provenance: vec![],
+        }];
+
+        let snap = project_search_snapshot(&state).expect("snapshot");
+        let crate::kernel::snapshot::ViewSnapshot::Search(s) = snap else {
+            panic!("expected Search snapshot");
+        };
+        assert_eq!(s.hits.len(), 1);
+        assert_eq!(
+            s.hits[0].tags, tags,
+            "raw NIP-01 tags must flow through to KernelSearchHitRow verbatim"
         );
     }
 }
