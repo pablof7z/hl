@@ -31,3 +31,6 @@ pub(crate) mod search;
 ///
 /// `pub` so `AppState` in `app.rs` can name `feed::FeedState` without an alias.
 pub mod feed;
+
+// ── Phase 4G additions (append-only) ─────────────────────────────────────────
+pub(crate) mod articles_feed;

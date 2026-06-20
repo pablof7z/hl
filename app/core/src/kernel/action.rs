@@ -348,6 +348,18 @@ pub enum AppAction {
         reaction_event_id: String,
     },
 
+    // ── Phase 4G additions (append-only) ─────────────────────────────────────
+    /// Pull the next page of the "Following reads" article feed.
+    ///
+    /// Dispatched by the UI on scroll-to-end of the `ViewId::ArticleFeed`
+    /// view. The reducer emits `Effect::DrainFeed { key: "hl.feed.articles" }`
+    /// which calls `nmp_app_pull_page` once and feeds the result back as
+    /// `KernelEvent::FeedPage` (D8: no polling — one pull per action).
+    ///
+    /// No-op when `AppState::article_feed.exhausted == true` (fully caught up).
+    /// Fire-and-forget (D6, Non-Negotiable #3).
+    LoadMoreArticles,
+
     // ── Phase 4D additions (append-only) ─────────────────────────────────────
     /// Run a NIP-50 relay search for `query` with the given `scope`.
     ///
