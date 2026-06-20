@@ -16473,6 +16473,229 @@ public func FfiConverterTypeCommentRecord_lower(_ value: CommentRecord) -> RustB
 }
 
 
+/**
+ * A single NIP-22 kind:1111 comment record row — raw protocol data only (D1).
+ *
+ * No formatted timestamps (Swift formats), no tree nesting (Swift builds tree
+ * from `parent_tag_value`), no byline strings. `is_top_level` is a pure
+ * boolean: `parent_tag_value == root_tag_value` (NIP-22: top-level comment's
+ * parent is the root). `comment_count` is derived as `records.len() as u32`.
+ *
+ * Swift reads this flat list and reconstructs the display tree using
+ * `parent_tag_value` links without needing a recursive Rust type.
+ */
+public struct CommentRecordRow {
+    /**
+     * kind:1111 event id (raw 64-char hex). D1.
+     */
+    public var eventId: String
+    /**
+     * Comment author pubkey (raw 64-char hex). D1.
+     */
+    public var authorPubkey: String
+    /**
+     * Raw comment body text (`event.content`), untouched. D1.
+     */
+    public var body: String
+    /**
+     * Root scope tag name — uppercase `A`, `E`, or `I`. D1.
+     */
+    public var rootTagName: String
+    /**
+     * Root scope tag value (address / event-id / external-id). D1.
+     */
+    public var rootTagValue: String
+    /**
+     * Root kind string from the uppercase `K` tag (empty if absent). D1.
+     */
+    public var rootKind: String
+    /**
+     * Parent scope tag name — lowercase `a`, `e`, or `i`. D1.
+     */
+    public var parentTagName: String
+    /**
+     * Parent scope tag value. Equals `root_tag_value` for top-level comments. D1.
+     */
+    public var parentTagValue: String
+    /**
+     * Parent kind string from the lowercase `k` tag (empty if absent). D1.
+     */
+    public var parentKind: String
+    /**
+     * Event `created_at` unix seconds. D1: no formatting.
+     */
+    public var createdAt: UInt64
+    /**
+     * `true` when `parent_tag_value == root_tag_value` (top-level comment,
+     * per NIP-22 §3). Swift may use this to efficiently partition
+     * root comments from replies without re-computing the comparison.
+     */
+    public var isTopLevel: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * kind:1111 event id (raw 64-char hex). D1.
+         */eventId: String,
+        /**
+         * Comment author pubkey (raw 64-char hex). D1.
+         */authorPubkey: String,
+        /**
+         * Raw comment body text (`event.content`), untouched. D1.
+         */body: String,
+        /**
+         * Root scope tag name — uppercase `A`, `E`, or `I`. D1.
+         */rootTagName: String,
+        /**
+         * Root scope tag value (address / event-id / external-id). D1.
+         */rootTagValue: String,
+        /**
+         * Root kind string from the uppercase `K` tag (empty if absent). D1.
+         */rootKind: String,
+        /**
+         * Parent scope tag name — lowercase `a`, `e`, or `i`. D1.
+         */parentTagName: String,
+        /**
+         * Parent scope tag value. Equals `root_tag_value` for top-level comments. D1.
+         */parentTagValue: String,
+        /**
+         * Parent kind string from the lowercase `k` tag (empty if absent). D1.
+         */parentKind: String,
+        /**
+         * Event `created_at` unix seconds. D1: no formatting.
+         */createdAt: UInt64,
+        /**
+         * `true` when `parent_tag_value == root_tag_value` (top-level comment,
+         * per NIP-22 §3). Swift may use this to efficiently partition
+         * root comments from replies without re-computing the comparison.
+         */isTopLevel: Bool) {
+        self.eventId = eventId
+        self.authorPubkey = authorPubkey
+        self.body = body
+        self.rootTagName = rootTagName
+        self.rootTagValue = rootTagValue
+        self.rootKind = rootKind
+        self.parentTagName = parentTagName
+        self.parentTagValue = parentTagValue
+        self.parentKind = parentKind
+        self.createdAt = createdAt
+        self.isTopLevel = isTopLevel
+    }
+}
+
+#if compiler(>=6)
+extension CommentRecordRow: Sendable {}
+#endif
+
+
+extension CommentRecordRow: Equatable, Hashable {
+    public static func ==(lhs: CommentRecordRow, rhs: CommentRecordRow) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.authorPubkey != rhs.authorPubkey {
+            return false
+        }
+        if lhs.body != rhs.body {
+            return false
+        }
+        if lhs.rootTagName != rhs.rootTagName {
+            return false
+        }
+        if lhs.rootTagValue != rhs.rootTagValue {
+            return false
+        }
+        if lhs.rootKind != rhs.rootKind {
+            return false
+        }
+        if lhs.parentTagName != rhs.parentTagName {
+            return false
+        }
+        if lhs.parentTagValue != rhs.parentTagValue {
+            return false
+        }
+        if lhs.parentKind != rhs.parentKind {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.isTopLevel != rhs.isTopLevel {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(authorPubkey)
+        hasher.combine(body)
+        hasher.combine(rootTagName)
+        hasher.combine(rootTagValue)
+        hasher.combine(rootKind)
+        hasher.combine(parentTagName)
+        hasher.combine(parentTagValue)
+        hasher.combine(parentKind)
+        hasher.combine(createdAt)
+        hasher.combine(isTopLevel)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentRecordRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentRecordRow {
+        return
+            try CommentRecordRow(
+                eventId: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                body: FfiConverterString.read(from: &buf),
+                rootTagName: FfiConverterString.read(from: &buf),
+                rootTagValue: FfiConverterString.read(from: &buf),
+                rootKind: FfiConverterString.read(from: &buf),
+                parentTagName: FfiConverterString.read(from: &buf),
+                parentTagValue: FfiConverterString.read(from: &buf),
+                parentKind: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
+                isTopLevel: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentRecordRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.authorPubkey, into: &buf)
+        FfiConverterString.write(value.body, into: &buf)
+        FfiConverterString.write(value.rootTagName, into: &buf)
+        FfiConverterString.write(value.rootTagValue, into: &buf)
+        FfiConverterString.write(value.rootKind, into: &buf)
+        FfiConverterString.write(value.parentTagName, into: &buf)
+        FfiConverterString.write(value.parentTagValue, into: &buf)
+        FfiConverterString.write(value.parentKind, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+        FfiConverterBool.write(value.isTopLevel, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentRecordRow_lift(_ buf: RustBuffer) throws -> CommentRecordRow {
+    return try FfiConverterTypeCommentRecordRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentRecordRow_lower(_ value: CommentRecordRow) -> RustBuffer {
+    return FfiConverterTypeCommentRecordRow.lower(value)
+}
+
+
 public struct CommentReferenceBucket {
     public var commentKey: String
     public var comments: [CommentRecord]
@@ -16832,6 +17055,109 @@ public func FfiConverterTypeCommentSnapshotApplyProjection_lift(_ buf: RustBuffe
 #endif
 public func FfiConverterTypeCommentSnapshotApplyProjection_lower(_ value: CommentSnapshotApplyProjection) -> RustBuffer {
     return FfiConverterTypeCommentSnapshotApplyProjection.lower(value)
+}
+
+
+/**
+ * Snapshot for `ViewId::CommentThread` — flat raw comment list for one root.
+ *
+ * D1: no formatted strings, no tree nesting in the snapshot. Swift builds the
+ * display tree from `parent_tag_value` links. `comment_count` = `records.len()`.
+ * Bounded by `MAX_PROJECTION_MESSAGES` from nmp-core (Non-Negotiable #7).
+ */
+public struct CommentThreadKernelSnapshot {
+    /**
+     * Root scope tag value this snapshot is for.
+     */
+    public var rootTagValue: String
+    /**
+     * Flat list of comment records for this root, newest-first. D1.
+     */
+    public var records: [CommentRecordRow]
+    /**
+     * Total comment count (`records.len() as u32`). Raw — no `"N comments"` label.
+     */
+    public var commentCount: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Root scope tag value this snapshot is for.
+         */rootTagValue: String,
+        /**
+         * Flat list of comment records for this root, newest-first. D1.
+         */records: [CommentRecordRow],
+        /**
+         * Total comment count (`records.len() as u32`). Raw — no `"N comments"` label.
+         */commentCount: UInt32) {
+        self.rootTagValue = rootTagValue
+        self.records = records
+        self.commentCount = commentCount
+    }
+}
+
+#if compiler(>=6)
+extension CommentThreadKernelSnapshot: Sendable {}
+#endif
+
+
+extension CommentThreadKernelSnapshot: Equatable, Hashable {
+    public static func ==(lhs: CommentThreadKernelSnapshot, rhs: CommentThreadKernelSnapshot) -> Bool {
+        if lhs.rootTagValue != rhs.rootTagValue {
+            return false
+        }
+        if lhs.records != rhs.records {
+            return false
+        }
+        if lhs.commentCount != rhs.commentCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rootTagValue)
+        hasher.combine(records)
+        hasher.combine(commentCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentThreadKernelSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentThreadKernelSnapshot {
+        return
+            try CommentThreadKernelSnapshot(
+                rootTagValue: FfiConverterString.read(from: &buf),
+                records: FfiConverterSequenceTypeCommentRecordRow.read(from: &buf),
+                commentCount: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentThreadKernelSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.rootTagValue, into: &buf)
+        FfiConverterSequenceTypeCommentRecordRow.write(value.records, into: &buf)
+        FfiConverterUInt32.write(value.commentCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentThreadKernelSnapshot_lift(_ buf: RustBuffer) throws -> CommentThreadKernelSnapshot {
+    return try FfiConverterTypeCommentThreadKernelSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentThreadKernelSnapshot_lower(_ value: CommentThreadKernelSnapshot) -> RustBuffer {
+    return FfiConverterTypeCommentThreadKernelSnapshot.lower(value)
 }
 
 
@@ -29165,6 +29491,11 @@ public func FfiConverterTypeNostrEntityResolutionSnapshot_lower(_ value: NostrEn
 }
 
 
+/**
+ * A recognized line of text with its bounding box, confidence, and the words
+ * it contains. The native Vision bridge produces these; the kernel domain
+ * reconstructs structure from them.
+ */
 public struct OcrLine {
     public var text: String
     public var bbox: OcrRect
@@ -29321,6 +29652,10 @@ public func FfiConverterTypeOcrPageDetection_lower(_ value: OcrPageDetection) ->
 }
 
 
+/**
+ * Normalized bounding rect for an OCR observation. Coordinates are in Vision's
+ * normalized image space (origin bottom-left, `[0, 1]`).
+ */
 public struct OcrRect {
     public var x: Double
     public var y: Double
@@ -29407,6 +29742,9 @@ public func FfiConverterTypeOcrRect_lower(_ value: OcrRect) -> RustBuffer {
 }
 
 
+/**
+ * A single recognized word with its bounding box and confidence.
+ */
 public struct OcrWord {
     public var text: String
     public var bbox: OcrRect
@@ -52869,6 +53207,25 @@ public enum ViewId {
      * are available once the OCR round-trip completes.
      */
     case capture
+    /**
+     * NIP-22 comment thread view for a specific root anchor.
+     *
+     * `root_tag_value` is the UPPERCASE root scope value from the NIP-22 `E`/`A`/`I`
+     * tag (e.g. a 64-char hex event id for `E`, an addressable coord for `A`,
+     * or an external URI for `I`). The snapshot is
+     * `ViewSnapshot::CommentThread(CommentThreadKernelSnapshot)` — flat raw record
+     * list + `comment_count` (D1: no formatted strings; Swift builds display tree).
+     *
+     * On open: no lifecycle wiring is needed — the `CommentObserver` registered at
+     * boot automatically routes all kind:1111 events to `AppState::comment_threads`.
+     * On close: the `comment_threads` entry is NOT cleared (content is session-scoped
+     * and bounded by the NMP projection's `MAX_PROJECTION_MESSAGES` cap).
+     */
+    case commentThread(
+        /**
+         * Root scope tag value that anchors this thread (opaque from caller — D3).
+         */rootTagValue: String
+    )
 }
 
 
@@ -52926,6 +53283,9 @@ public struct FfiConverterTypeViewId: FfiConverterRustBuffer {
         case 18: return .podcastListening
 
         case 19: return .capture
+
+        case 20: return .commentThread(rootTagValue: try FfiConverterString.read(from: &buf)
+        )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -53012,6 +53372,11 @@ public struct FfiConverterTypeViewId: FfiConverterRustBuffer {
 
         case .capture:
             writeInt(&buf, Int32(19))
+
+
+        case let .commentThread(rootTagValue):
+            writeInt(&buf, Int32(20))
+            FfiConverterString.write(rootTagValue, into: &buf)
 
         }
     }
@@ -53143,6 +53508,17 @@ public enum ViewRoute {
      * (reconstructed markdown + selectable words + raw lines + pending flag). D1.
      */
     case capture
+    /**
+     * NIP-22 comment thread projection — `CommentThreadKernelSnapshot` (flat
+     * raw record list keyed by `root_tag_value`). D1: no formatted strings,
+     * no tree nesting in snapshot — Swift builds the display tree from
+     * `parent_tag_value` relationships.
+     */
+    case commentThread(
+        /**
+         * Root scope tag value that anchors this thread.
+         */rootTagValue: String
+    )
 }
 
 
@@ -53200,6 +53576,9 @@ public struct FfiConverterTypeViewRoute: FfiConverterRustBuffer {
         case 18: return .podcastListening
 
         case 19: return .capture
+
+        case 20: return .commentThread(rootTagValue: try FfiConverterString.read(from: &buf)
+        )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -53286,6 +53665,11 @@ public struct FfiConverterTypeViewRoute: FfiConverterRustBuffer {
 
         case .capture:
             writeInt(&buf, Int32(19))
+
+
+        case let .commentThread(rootTagValue):
+            writeInt(&buf, Int32(20))
+            FfiConverterString.write(rootTagValue, into: &buf)
 
         }
     }
@@ -53448,6 +53832,13 @@ public enum ViewSnapshot {
      */
     case capture(KernelCaptureSnapshot
     )
+    /**
+     * NIP-22 comment thread — flat raw record list for `root_tag_value`.
+     * D1: no formatted timestamps, no tree nesting, no byline strings.
+     * Swift builds the display tree from `parent_tag_value` relationships.
+     */
+    case commentThread(CommentThreadKernelSnapshot
+    )
 }
 
 
@@ -53520,6 +53911,9 @@ public struct FfiConverterTypeViewSnapshot: FfiConverterRustBuffer {
         )
 
         case 19: return .capture(try FfiConverterTypeKernelCaptureSnapshot.read(from: &buf)
+        )
+
+        case 20: return .commentThread(try FfiConverterTypeCommentThreadKernelSnapshot.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -53623,6 +54017,11 @@ public struct FfiConverterTypeViewSnapshot: FfiConverterRustBuffer {
         case let .capture(v1):
             writeInt(&buf, Int32(19))
             FfiConverterTypeKernelCaptureSnapshot.write(v1, into: &buf)
+
+
+        case let .commentThread(v1):
+            writeInt(&buf, Int32(20))
+            FfiConverterTypeCommentThreadKernelSnapshot.write(v1, into: &buf)
 
         }
     }
@@ -54985,6 +55384,31 @@ fileprivate struct FfiConverterSequenceTypeCommentRecord: FfiConverterRustBuffer
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeCommentRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCommentRecordRow: FfiConverterRustBuffer {
+    typealias SwiftType = [CommentRecordRow]
+
+    public static func write(_ value: [CommentRecordRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCommentRecordRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CommentRecordRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CommentRecordRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCommentRecordRow.read(from: &buf))
         }
         return seq
     }
