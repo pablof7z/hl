@@ -166,9 +166,9 @@ final class ProfileStore {
         // Coexistence keeps the live lane for READS only; writes must come
         // from exactly one writer (the kernel) to avoid double kind:3 publishes.
         if mutation.requestedFollowState {
-            kernel?.app.dispatch(action: .follow(pubkey: pubkey))
+            kernel?.app.dispatch(.follow(pubkey: pubkey))
         } else {
-            kernel?.app.dispatch(action: .unfollow(pubkey: pubkey))
+            kernel?.app.dispatch(.unfollow(pubkey: pubkey))
         }
 
         // isMutatingFollow is cleared when the kernel's FollowListUpdated event

@@ -39,13 +39,186 @@ pub enum SignerKind {
     Nip55,
 }
 
+/// Thin envelope that carries actions across the UniFFI boundary.
+///
+/// Replaces the direct `#[uniffi::Enum] AppAction` export. The `namespace`
+/// keys a typed serde payload in `json`; the kernel router decodes each
+/// namespace to the correct domain reducer. Unknown namespaces produce an
+/// invalid-action toast (D6 — never a panic).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct AppActionEnvelope {
+    pub namespace: String,
+    pub json: String,
+}
+
+// ── Typed serde payload structs for the envelope router ──────────────────────
+//
+// One struct per namespace that carries >0 fields. Zero-field actions use
+// `serde_json::Value::Null` and need no struct.
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct SelectRootTabPayload {
+    pub tab: u8,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct PresentSheetPayload {
+    pub sheet_id: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct SignInNsecPayload {
+    pub nsec: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct PairBunkerPayload {
+    pub uri: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CreateAccountPayload {
+    pub profile_name: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct AddRelayPayload {
+    pub url: String,
+    pub role: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct RemoveRelayPayload {
+    pub url: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct SetRelayRolePayload {
+    pub url: String,
+    pub role: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct SetRoomsRelayListPayload {
+    pub relay_urls: Vec<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct FollowPayload {
+    pub pubkey: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct UnfollowPayload {
+    pub pubkey: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct StartRoomDiscoveryPayload {
+    pub relay_url: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ClaimProfilePayload {
+    pub pubkey: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ReleaseProfilePayload {
+    pub pubkey: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct JoinRoomPayload {
+    pub group_id: String,
+    pub host_relay_url: String,
+    pub invite_code: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CreateRoomPayload {
+    pub group_id: String,
+    pub host_relay_url: String,
+    pub name: String,
+    pub about: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct AddRoomMemberPayload {
+    pub group_id: String,
+    pub host_relay_url: String,
+    pub pubkey: String,
+    pub role: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CreateRoomInvitesPayload {
+    pub group_id: String,
+    pub host_relay_url: String,
+    pub codes: Vec<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ShareToRoomPayload {
+    pub group_id: String,
+    pub host_relay_url: String,
+    pub target_event_id: String,
+    pub target_author_pubkey: Option<String>,
+    pub repost: bool,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct AddBookmarkPayload {
+    pub item: crate::kernel::snapshot::BookmarkRow,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct RemoveBookmarkPayload {
+    pub item: crate::kernel::snapshot::BookmarkRow,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ReactPayload {
+    pub target_event_id: String,
+    pub reaction: String,
+    pub target_author_pubkey: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct UnreactPayload {
+    pub reaction_event_id: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct RunSearchPayload {
+    pub query: String,
+    pub scope: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct MarkWhatsNewSeenPayload {
+    pub shipped_at_unix: u64,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct LookupIsbnPayload {
+    pub isbn: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct PublishHighlightPayload {
+    pub content: String,
+    pub source_reference: String,
+    pub relay_hint: Option<String>,
+}
+
 /// Every user or platform action the kernel understands.
 ///
 /// Dispatch is fire-and-forget (`dispatch(action)` returns `()`; Non-Negotiable #3).
 /// Errors never propagate back as `Result` — they surface as typed `ViewSnapshot` state.
 ///
 /// Append-only: new variants at the bottom keep rebases mechanical.
-#[derive(Debug, Clone, uniffi::Enum)]
+#[derive(Debug, Clone)]
 pub enum AppAction {
     /// Attempt to restore a prior session from the native keychain.
     RestoreSession,

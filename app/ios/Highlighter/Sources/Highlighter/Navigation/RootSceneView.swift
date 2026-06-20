@@ -43,12 +43,12 @@ struct RootSceneView: View {
         // into the kernel so both lanes agree during Phase 1 coexistence.
         .onChange(of: store.isLoggedIn) { _, isLoggedIn in
             if !isLoggedIn {
-                kernel.app.dispatch(action: .logout)
+                kernel.app.dispatch(.logout)
             }
         }
         .onChange(of: store.isOnboardingComplete) { _, complete in
             if complete {
-                kernel.app.dispatch(action: .completeOnboarding)
+                kernel.app.dispatch(.completeOnboarding)
             }
         }
         // Kernel-owned toast: auto-dismissed by the Rust clock, no Swift Timer.
