@@ -138,6 +138,14 @@ pub enum ViewId {
     /// `ViewSnapshot::PodcastListening(PodcastListeningSnapshot)` — raw position,
     /// duration, is_playing, and clip range fields (D1: Swift formats timestamps).
     PodcastListening,
+
+    // ── Phase 5D additions (append-only) ─────────────────────────────────────
+    /// OCR capture view. Snapshot: `ViewSnapshot::Capture(KernelCaptureSnapshot)`.
+    ///
+    /// Device-local: `pending` drives a progress indicator while
+    /// `VNRecognizeTextRequest` is in flight; `markdown` and `selectable_words`
+    /// are available once the OCR round-trip completes.
+    Capture,
 }
 
 /// Which projection to compute for a registered view.
@@ -230,6 +238,11 @@ pub enum ViewRoute {
     /// position/duration/is_playing + clip range). D1: raw f64 seconds, no
     /// "X:XX" formatted strings.
     PodcastListening,
+
+    // ── Phase 5D additions (append-only) ─────────────────────────────────────
+    /// OCR capture projection — `KernelCaptureSnapshot`
+    /// (reconstructed markdown + selectable words + raw lines + pending flag). D1.
+    Capture,
 }
 
 /// Tracks open views and their last-emitted snapshots.

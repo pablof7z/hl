@@ -87,6 +87,11 @@ pub(crate) fn reduce_event_capability_result(
         CapabilityResult::Audio(ar) => {
             crate::kernel::domains::podcast::reduce_capability_audio(state, ar)
         }
+
+        // ── Phase 5D additions (append-only) ─────────────────────────────────
+        CapabilityResult::Ocr(or) => {
+            crate::kernel::domains::ocr::reduce_event_ocr_result(state, or)
+        }
     }
 }
 

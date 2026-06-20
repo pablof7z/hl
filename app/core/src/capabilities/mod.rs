@@ -12,8 +12,12 @@ pub mod share;
 // ── Phase 5H additions (append-only) ─────────────────────────────────────────
 pub mod audio;
 
+// ── Phase 5D additions (append-only) ─────────────────────────────────────────
+pub mod ocr;
+
 pub use audio::{AudioOp, AudioResult};
 pub use keychain::{KeychainOp, KeychainResult};
+pub use ocr::{OcrLine, OcrOp, OcrRect, OcrResult, OcrWord};
 pub use share::{RawSharePayload, ShareOp, ShareResult};
 
 /// A request from the Rust kernel to the native shell to execute an OS
@@ -30,6 +34,12 @@ pub enum CapabilityRequest {
     // ── Phase 5H additions (append-only) ─────────────────────────────────────
     /// Audio player transport request (load/play/pause/seek/stop/waveform).
     Audio(AudioOp),
+
+    // ── Phase 5D additions (append-only) ─────────────────────────────────────
+    /// Vision text-recognition request. Native runs VNRecognizeTextRequest,
+    /// returns raw line observations (text + bbox + words + confidence).
+    /// Large images stay on disk (image_handle = data_dir temp path, D5).
+    Ocr(OcrOp),
 }
 
 /// The native shell's response to a prior `CapabilityRequest`. Delivered via
@@ -46,4 +56,8 @@ pub enum CapabilityResult {
     // ── Phase 5H additions (append-only) ─────────────────────────────────────
     /// Response to a `CapabilityRequest::Audio` — progress, loaded, peaks, or error.
     Audio(AudioResult),
+
+    // ── Phase 5D additions (append-only) ─────────────────────────────────────
+    /// Response to a `CapabilityRequest::Ocr`.
+    Ocr(OcrResult),
 }

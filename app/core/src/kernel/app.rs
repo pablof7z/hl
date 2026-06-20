@@ -313,6 +313,15 @@ pub struct AppState {
     ///
     /// Bounded: one entry per guid encountered this session (cleared on logout).
     pub podcast_resume_cache: std::collections::HashMap<String, f64>,
+
+    // ── Phase 5D additions (append-only) ─────────────────────────────────────
+    /// OCR capture state — device-local, never published to Nostr.
+    ///
+    /// Holds the last-captured image handle, reconstructed markdown,
+    /// selectable words, and raw Vision lines from the most recent OCR pass.
+    /// NOT cleared on Logout — the last capture is per-device, not per-account.
+    /// Bounded by the image's text content (Non-Negotiable #7).
+    pub ocr: crate::kernel::domains::ocr::OcrState,
 }
 
 impl Default for AppState {
@@ -354,6 +363,8 @@ impl Default for AppState {
             // ── Phase 5H additions ────────────────────────────────────────────
             podcast: crate::kernel::domains::podcast::PodcastState::default(),
             podcast_resume_cache: std::collections::HashMap::new(),
+            // ── Phase 5D additions ────────────────────────────────────────────
+            ocr: crate::kernel::domains::ocr::OcrState::default(),
         }
     }
 }

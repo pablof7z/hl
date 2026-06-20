@@ -52,3 +52,6 @@ pub(crate) mod share;
 
 // ── Phase 5H additions (append-only) ─────────────────────────────────────────
 pub(crate) mod podcast;
+
+// ── Phase 5D additions (append-only) ─────────────────────────────────────────
+pub(crate) mod ocr;

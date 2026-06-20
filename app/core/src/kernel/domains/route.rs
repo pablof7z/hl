@@ -183,6 +183,11 @@ pub(crate) fn project_snapshot(
         // ViewId::PodcastListening is handled upstream in actor::project_snapshot.
         // This arm is unreachable in practice but required for exhaustive match.
         ViewId::PodcastListening => None,
+
+        // ── Phase 5D additions (append-only) ─────────────────────────────────
+        // ViewId::Capture is handled upstream in actor::project_snapshot.
+        // This arm is unreachable in practice but required for exhaustive match.
+        ViewId::Capture => None,
     }
 }
 
