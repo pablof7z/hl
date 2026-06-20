@@ -4,6 +4,7 @@ struct ChatView: View {
     let groupId: String
 
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var store = ChatStore()
     @State private var draft: String = ""
     @FocusState private var inputFocused: Bool
@@ -31,9 +32,13 @@ struct ChatView: View {
         }
         .background(Color.highlighterPaper.ignoresSafeArea())
         .task {
-            await store.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
+            let hostRelayUrl = kernel.roomHomeSnapshots[groupId]?.hostRelayUrl ?? ""
+            await store.start(groupId: groupId, hostRelayUrl: hostRelayUrl, kernel: kernel)
         }
         .onDisappear { store.stop() }
+        .onChange(of: kernel.roomChatSnapshots[groupId]) { _, _ in
+            store.applyKernelSnapshot()
+        }
         .onChange(of: store.activityRevision) { _, _ in
             let added = max(1, store.activityDelta)
             if isAtBottom {
@@ -91,7 +96,7 @@ struct ChatView: View {
                         ForEach(Array(store.rows.enumerated()), id: \.element.message.eventId) { index, row in
                             let message = row.message
 
-                            ChatMessageRow(
+                            ChatMessageRowView(
                                 message: message,
                                 authorDisplay: profileDisplay(for: message.authorPubkey),
                                 showHeader: row.showHeader,
@@ -289,9 +294,9 @@ struct ChatView: View {
 
 }
 
-// MARK: - ChatMessageRow
+// MARK: - ChatMessageRowView
 
-private struct ChatMessageRow: View {
+private struct ChatMessageRowView: View {
     let message: ChatMessageRecord
     let authorDisplay: ProfileDisplayProjection
     let showHeader: Bool

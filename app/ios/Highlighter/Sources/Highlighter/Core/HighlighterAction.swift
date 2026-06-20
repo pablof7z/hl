@@ -105,6 +105,16 @@ enum HighlighterAction {
     case capturePublish
     case captureReset
 
+    // ── Chat (Phase 7 cutover) ──────────────────────────────────────────────────
+    /// Open a room's chat: wires the per-room ChatObserver (kernel is sole writer).
+    case chatOpen(groupId: String, hostRelayUrl: String)
+    /// Close a room's chat: releases the room buffer.
+    case chatClose(groupId: String)
+    /// Expand the loaded chat window by one page (bounded by the kernel).
+    case chatLoadMore(groupId: String)
+    /// Publish a kind:9 chat message into the room (optional reply parent).
+    case postChat(groupId: String, hostRelayUrl: String, content: String, replyToEventId: String?)
+
     // MARK: - Envelope serialization
 
     /// Encodes this action as an `AppActionEnvelope` ready for `dispatchAction`.
@@ -298,6 +308,25 @@ enum HighlighterAction {
             return AppActionEnvelope(namespace: "hl.capture.publish", json: "{}")
         case .captureReset:
             return AppActionEnvelope(namespace: "hl.capture.reset", json: "{}")
+
+        // ── Chat (Phase 7 cutover) ──────────────────────────────────────────
+        case .chatOpen(let groupId, let hostRelayUrl):
+            return AppActionEnvelope(namespace: "hl.chat.open",
+                                     json: jsonObject(["group_id": groupId, "host_relay_url": hostRelayUrl]))
+        case .chatClose(let groupId):
+            return AppActionEnvelope(namespace: "hl.chat.close",
+                                     json: jsonObject(["group_id": groupId]))
+        case .chatLoadMore(let groupId):
+            return AppActionEnvelope(namespace: "hl.chat.load_more",
+                                     json: jsonObject(["group_id": groupId]))
+        case .postChat(let groupId, let hostRelayUrl, let content, let replyToEventId):
+            var dict: [String: Any] = [
+                "group_id": groupId,
+                "host_relay_url": hostRelayUrl,
+                "content": content,
+            ]
+            if let replyTo = replyToEventId { dict["reply_to_event_id"] = replyTo }
+            return AppActionEnvelope(namespace: "hl.chat.post", json: jsonAny(dict))
         }
     }
 }
