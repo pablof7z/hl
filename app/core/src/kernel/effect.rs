@@ -393,4 +393,38 @@ pub enum Effect {
     LoadWhatsNewState,
     /// Persist the What's New seen marker. Monotonic (never moves backward). Fire-and-forget.
     PersistWhatsNewSeen { shipped_at_unix: u64 },
+
+    // ── Phase 5C additions (append-only) ─────────────────────────────────────
+    /// Fetch book metadata from `https://openlibrary.org/isbn/{isbn13}.json`
+    /// (5 s timeout) and emit `KernelEvent::IsbnPreviewReady`.
+    ///
+    /// HTTP fetch is Rust-owned inline — no native capability (openlibrary.org is
+    /// an audited, product-controlled host; D3 policy note in spec §3).
+    /// On any network/parse failure the runner emits a partial preview with an
+    /// error string rather than panicking (D6).
+    ///
+    /// Device-local result — the kernel caches it in
+    /// `AppState::isbn` and persists it to `{data_dir}/isbn-preview-cache-v1.json`.
+    LookupIsbn {
+        /// Normalized 13-digit Bookland ISBN (normalization done in reducer).
+        isbn13: String,
+    },
+
+    /// Load the ISBN preview cache from disk into `AppState::isbn.cache`.
+    ///
+    /// Emitted on the first `LookupIsbn` effect when `AppState::isbn.cache_loaded`
+    /// is false. The file read is asynchronous; the result arrives as
+    /// `KernelEvent::IsbnCacheLoaded`. Fire-and-forget (D6).
+    LoadIsbnCache,
+
+    /// Atomically persist the updated ISBN cache to
+    /// `{data_dir}/isbn-preview-cache-v1.json` (write-to-tmp then rename).
+    ///
+    /// Emitted after a successful network fetch (cache miss path). Fire-and-forget
+    /// (D6): cache persistence failure is logged but does not surface as an error
+    /// to the caller (the in-memory cache is already updated).
+    PersistIsbnCache {
+        /// Snapshot of all (isbn13, entry) pairs at the time of the cache update.
+        entries: Vec<(String, crate::kernel::domains::isbn::CachedIsbnEntry)>,
+    },
 }

@@ -44,5 +44,8 @@ pub(crate) mod home_feed;
 // ── Phase 5A additions (append-only) ─────────────────────────────────────────
 pub(crate) mod whats_new;
 
+// ── Phase 5C additions (append-only) ─────────────────────────────────────────
+pub(crate) mod isbn;
+
 // ── Phase 5K additions (append-only) ─────────────────────────────────────────
 pub(crate) mod share;

@@ -47,6 +47,8 @@ use crate::kernel::domains::{
     follows,
     highlight_feed,
     home_feed,
+    // ── Phase 5C additions (append-only) ─────────────────────────────────────
+    isbn,
     profiles,
     projections,
     reactions,
@@ -141,6 +143,10 @@ impl Drop for NmpHandle {
 // ─── Command channel ────────────────────────────────────────────────────────
 
 /// Everything the actor can receive.
+// Phase 5C: `KernelEvent` grew when `IsbnPreviewReady` was added (12-field
+// KernelArtifactPreview). `Cmd::Event(KernelEvent)` inherits the size; the
+// allow is narrowly scoped here (Cmd) so it does not suppress warnings elsewhere.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum Cmd {
     Action(AppAction),
     Event(KernelEvent),
@@ -399,6 +405,9 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
             }
         }
 
+        // ── Phase 5C additions (append-only) ─────────────────────────────────
+        AppAction::LookupIsbn { isbn } => isbn::reduce_action_lookup_isbn(state, isbn),
+
         // ── Phase 5K additions (append-only) ─────────────────────────────────
         AppAction::DrainShareQueue => share::reduce_action_drain_share_queue(),
     }
@@ -539,6 +548,16 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             should_present,
         } => whats_new::reduce_event_whats_new_loaded(state, entries, should_present),
 
+        // ── Phase 5C additions (append-only) ─────────────────────────────────
+        KernelEvent::IsbnPreviewReady {
+            isbn13,
+            preview,
+            error,
+        } => isbn::reduce_event_isbn_preview_ready(state, isbn13, preview, error),
+        KernelEvent::IsbnCacheLoaded { entries } => {
+            isbn::reduce_event_isbn_cache_loaded(state, entries)
+        }
+
         // ── Phase 4F additions (append-only) ─────────────────────────────────
         KernelEvent::FeedPage {
             key,
@@ -651,6 +670,9 @@ pub(crate) fn project_snapshot(
         // ── Phase 5A additions (append-only) ─────────────────────────────────
         ViewId::WhatsNew => whats_new::project_whats_new_snapshot(state),
 
+        // ── Phase 5C additions (append-only) ─────────────────────────────────
+        ViewId::BookPicker => isbn::project_book_picker_snapshot(state),
+
         // ── Phase 5K additions (append-only) ─────────────────────────────────
         ViewId::ShareComposer => share::project_share_composer_snapshot(state)
             .map(crate::kernel::snapshot::ViewSnapshot::ShareComposer),
@@ -668,6 +690,7 @@ pub(crate) fn project_snapshot(
 /// `nmp` is `None` only in unit tests that do not boot a live `NmpApp`; the
 /// nmp-call effects are no-ops in that case (tests inject `KernelEvent`s
 /// directly instead).
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_effect(
     effect: Effect,
     session_epoch: u64,
@@ -841,6 +864,22 @@ pub(crate) async fn run_effect(
             // b4404159 — this is the same raw publish path Phase 2D uses for
             // the rooms relay list. Fire-and-forget (D6).
             highlight_feed::run_effect_publish_highlight(json, nmp);
+        }
+
+        // ── Phase 5C additions (append-only) ─────────────────────────────────
+        // No-op when data_dir is empty (test mode — tests inject KernelEvent::IsbnPreviewReady
+        // directly). data_dir is read from policy (same pattern as 5A whats_new effects).
+        Effect::LookupIsbn { isbn13 } => {
+            let data_dir = policy.data_dir.clone();
+            isbn::run_effect_lookup_isbn(isbn13, data_dir, tx).await;
+        }
+        Effect::LoadIsbnCache => {
+            let data_dir = policy.data_dir.clone();
+            isbn::run_effect_load_isbn_cache(data_dir, tx).await;
+        }
+        Effect::PersistIsbnCache { entries } => {
+            let data_dir = policy.data_dir.clone();
+            isbn::run_effect_persist_isbn_cache(entries, data_dir).await;
         }
 
         // ── Phase 4F additions (append-only) ─────────────────────────────────

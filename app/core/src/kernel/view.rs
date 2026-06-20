@@ -116,6 +116,11 @@ pub enum ViewId {
     /// What's New sheet — device-local seen-state (no nostr publish).
     WhatsNew,
 
+    // ── Phase 5C additions (append-only) ─────────────────────────────────────
+    /// Book picker / ISBN preview — shows pending lookup + last result.
+    /// Snapshot: `ViewSnapshot::BookPicker(BookPickerKernelSnapshot)`.
+    BookPicker,
+
     // ── Phase 5K additions (append-only) ─────────────────────────────────────
     /// Share-extension intake composer.
     ///
@@ -201,6 +206,10 @@ pub enum ViewRoute {
     // ── Phase 5A additions (append-only) ─────────────────────────────────────
     /// What's New sheet projection — `WhatsNewSnapshot` (unseen entries, should_present flag).
     WhatsNew,
+
+    // ── Phase 5C additions (append-only) ─────────────────────────────────────
+    /// Book picker projection — pending isbn, last result, cache size.
+    BookPicker,
 
     // ── Phase 5K additions (append-only) ─────────────────────────────────────
     /// Share-extension intake composer projection — `ShareComposerSnapshot`
