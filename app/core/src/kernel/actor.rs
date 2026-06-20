@@ -49,6 +49,8 @@ use crate::kernel::domains::{
     home_feed,
     // ── Phase 5C additions (append-only) ─────────────────────────────────────
     isbn,
+    // ── Phase 5D additions (append-only) ─────────────────────────────────────
+    ocr,
     // ── Phase 5H additions (append-only) ─────────────────────────────────────
     podcast,
     profiles,
@@ -470,11 +472,11 @@ fn reduce_action_envelope(
         AddBookmarkPayload, AddRelayPayload, AddRoomMemberPayload, AudioPlayPayload,
         AudioSeekPayload, AudioSetResumePayload, ClaimProfilePayload, CreateAccountPayload,
         CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload, JoinRoomPayload,
-        LookupIsbnPayload, MarkWhatsNewSeenPayload, PairBunkerPayload, PresentSheetPayload,
-        PublishHighlightPayload, ReactPayload, ReleaseProfilePayload, RemoveBookmarkPayload,
-        RemoveRelayPayload, RunSearchPayload, SelectRootTabPayload, SetRelayRolePayload,
-        SetRoomsRelayListPayload, ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload,
-        UnfollowPayload, UnreactPayload,
+        LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload, PairBunkerPayload,
+        PresentSheetPayload, PublishHighlightPayload, ReactPayload, ReleaseProfilePayload,
+        RemoveBookmarkPayload, RemoveRelayPayload, RunSearchPayload, SelectRootTabPayload,
+        SetRelayRolePayload, SetRoomsRelayListPayload, ShareToRoomPayload, SignInNsecPayload,
+        StartRoomDiscoveryPayload, UnfollowPayload, UnreactPayload,
     };
 
     match envelope.namespace.as_str() {
@@ -689,6 +691,12 @@ fn reduce_action_envelope(
         "hl.audio.set_resume" => {
             let p = parse!(AudioSetResumePayload);
             podcast::reduce_action_set_resume(state, p.seconds)
+        }
+
+        // ── OCR ───────────────────────────────────────────────────────────────
+        "hl.ocr.recognize" => {
+            let p = parse!(OcrRecognizePayload);
+            ocr::reduce_action_ocr_recognize(state, p.image_handle)
         }
 
         // ── Unknown namespace ─────────────────────────────────────────────────
@@ -981,6 +989,20 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             state.podcast_resume_cache.insert(guid, position_seconds);
             vec![]
         }
+
+        // ── Phase 5D additions (append-only) ─────────────────────────────────
+        KernelEvent::OcrRecognitionComplete {
+            image_handle,
+            markdown,
+            selectable_words,
+            raw_lines,
+        } => ocr::reduce_event_ocr_recognition_complete(
+            state,
+            image_handle,
+            markdown,
+            selectable_words,
+            raw_lines,
+        ),
     }
 }
 
@@ -1040,6 +1062,9 @@ pub(crate) fn project_snapshot(
 
         // ── Phase 5H additions (append-only) ─────────────────────────────────
         ViewId::PodcastListening => podcast::project_podcast_listening_snapshot(state),
+
+        // ── Phase 5D additions (append-only) ─────────────────────────────────
+        ViewId::Capture => ocr::project_capture_snapshot(state),
 
         _ => route::project_snapshot(state, id, clock_now),
     }

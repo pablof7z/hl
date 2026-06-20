@@ -193,6 +193,11 @@ pub enum ViewSnapshot {
     /// Device-local (resume position NEVER published to nostr). Raw f64 fields
     /// only (D1: Swift formats "X:XX" timestamps and progress percentage).
     PodcastListening(PodcastListeningSnapshot),
+
+    // ── Phase 5D additions (append-only) ─────────────────────────────────────
+    /// OCR capture state — reconstructed markdown + selectable words + raw lines.
+    /// Device-local. D1: raw fields only.
+    Capture(KernelCaptureSnapshot),
 }
 
 // ── Phase 4B additions (append-only) ─────────────────────────────────────────
@@ -928,4 +933,35 @@ pub struct PodcastListeningSnapshot {
     /// Clip end position in seconds for an in-progress clip selection.
     /// `None` in Phase 5H — populated by Phase 5I/5J.
     pub clip_end_seconds: Option<f64>,
+}
+
+// ── Phase 5D additions (append-only) ─────────────────────────────────────────
+
+/// Snapshot for `ViewId::Capture` — OCR capture state.
+///
+/// Device-local: never derived from or published to Nostr events.
+/// Raw-data doctrine (D1): Swift formats all display strings from these raw
+/// fields. No formatted markdown preview label, no "Scanning…" copy — those
+/// are Swift-side presentation decisions.
+///
+/// Bounded by the image's text content — `selectable_words` and `raw_lines`
+/// are the output of one Vision scan; they do not grow with the event store
+/// (Non-Negotiable #7).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelCaptureSnapshot {
+    /// Temp-file path of the last captured image, or `None` before first capture.
+    pub image_handle: Option<String>,
+    /// Reconstructed markdown from the last completed OCR pass. Empty until the
+    /// first successful `CapabilityResult::Ocr(OcrResult::Lines)` arrives.
+    /// D1: no truncation, no preview label.
+    pub markdown: String,
+    /// Selectable word projections for drag-selection UI. Empty until OCR completes.
+    /// D1: raw `OcrWord` values — Swift owns drag-select geometry rendering.
+    pub selectable_words: Vec<crate::capabilities::ocr::OcrWord>,
+    /// Raw OCR line observations from the last completed scan. Empty until OCR completes.
+    /// D1: raw `OcrLine` values with Vision bounding boxes.
+    pub raw_lines: Vec<crate::capabilities::ocr::OcrLine>,
+    /// `true` while a `VNRecognizeTextRequest` is in flight. Swift shows a
+    /// progress indicator when this is `true`.
+    pub pending: bool,
 }

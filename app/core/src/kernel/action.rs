@@ -231,6 +231,13 @@ pub(crate) struct AudioSetResumePayload {
     pub seconds: f64,
 }
 
+// ── Phase 5D additions (append-only) ─────────────────────────────────────────
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct OcrRecognizePayload {
+    pub image_handle: String,
+}
+
 /// Every user or platform action the kernel understands.
 ///
 /// Dispatch is fire-and-forget (`dispatch(action)` returns `()`; Non-Negotiable #3).
@@ -1039,5 +1046,22 @@ pub enum KernelEvent {
         guid: String,
         /// Saved position in seconds.
         position_seconds: f64,
+    },
+
+    // ── Phase 5D additions (append-only) ─────────────────────────────────────
+    /// OCR capability result processed: raw lines reconstructed into markdown.
+    /// Device-local — never a nostr fact.
+    ///
+    /// This variant exists for test injection (bypasses the capability round-trip).
+    /// In the live path, `CapabilityResult::Ocr(OcrResult::Lines(_))` is handled
+    /// by `session::reduce_event_capability_result` which calls
+    /// `ocr::reduce_event_ocr_result` directly. The `KernelEvent::OcrRecognitionComplete`
+    /// arm in `reduce_event` is therefore a test-only path (same pattern as
+    /// `KernelEvent::ShareQueueDrained`).
+    OcrRecognitionComplete {
+        image_handle: String,
+        markdown: String,
+        selectable_words: Vec<crate::capabilities::ocr::OcrWord>,
+        raw_lines: Vec<crate::capabilities::ocr::OcrLine>,
     },
 }
