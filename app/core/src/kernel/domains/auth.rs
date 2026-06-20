@@ -278,13 +278,14 @@ pub(crate) async fn run_effect_mint_nostrconnect_uri(
     nmp: Option<&NmpHandle>,
     tx: &mpsc::UnboundedSender<Cmd>,
 ) {
-    // Call nmp_app_nostrconnect_uri(app_ptr, null, null) — relay and
-    // callback are resolved by nmp from its internal bootstrap relay slot
-    // (V-65). Returns an owned `nostrconnect://` C string or null if no
+    // Call nmp_app_nostrconnect_uri(app_ptr, null) — relay is chosen by nmp
+    // from its internal bootstrap relay slot (V-65, D3: no caller relay
+    // override since d16aea60). Null callback_scheme means no custom URI
+    // scheme. Returns an owned `nostrconnect://` C string or null if no
     // relay is configured. Feed the result back as NostrConnectUriReady.
     if let Some(handle) = nmp {
         let raw_ptr = handle.ptr.as_ptr();
-        let uri_ptr = nmp_app_nostrconnect_uri(raw_ptr, std::ptr::null(), std::ptr::null());
+        let uri_ptr = nmp_app_nostrconnect_uri(raw_ptr, std::ptr::null());
         if !uri_ptr.is_null() {
             // SAFETY: uri_ptr is a CString::into_raw pointer owned by
             // nmp-ffi. We take ownership here and free it with from_raw.

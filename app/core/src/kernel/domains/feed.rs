@@ -45,8 +45,8 @@
 
 use std::num::NonZeroUsize;
 
-use nmp_core::planner::InterestShape;
 use nmp_core::{PullCursorMode, PullScope};
+use nmp_planner::InterestShape;
 
 use crate::kernel::action::KernelEvent;
 use crate::kernel::actor::NmpHandle;
