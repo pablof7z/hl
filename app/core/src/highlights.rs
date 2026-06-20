@@ -1428,7 +1428,7 @@ pub fn query_following_highlights(
 /// Pure: build a `HighlightRecord` from an already-cached kind:9802 event.
 /// Separate from `record_from_event` above, which relies on the draft for
 /// clip fields known up front.
-fn record_from_cached_event(event: &Event) -> Option<HighlightRecord> {
+pub(crate) fn record_from_cached_event(event: &Event) -> Option<HighlightRecord> {
     if event.kind.as_u16() != KIND_HIGHLIGHT {
         return None;
     }
@@ -3253,5 +3253,98 @@ mod tests {
         let records = query_for_group(&ndb, "alpha", 32).expect("query");
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].highlight.quote, "alpha hl");
+    }
+
+    // Phase 7 parity (gotcha #7): the kernel `decode_highlight_row` must extract
+    // the SAME NIP-84/NIP-73 source/clip/image fields as the bespoke
+    // `record_from_cached_event`. Build ONE kind:9802 event, parse it BOTH ways
+    // from the same tags, assert field-by-field equality (no hardcoded expected
+    // values — both impls are exercised against the real fixture).
+    #[test]
+    fn kernel_highlight_row_matches_bespoke_record_parse() {
+        let keys = Keys::generate();
+        let context = "The surrounding paragraph.";
+        let comment = "my note";
+        let artifact = "30023:aaaa:my-article";
+        let isbn = "isbn:9780735211292";
+        let segment_a = "seg-1";
+        let segment_b = "seg-2";
+        let image = "https://example.com/scan.jpg";
+
+        let event = EventBuilder::new(Kind::Custom(KIND_HIGHLIGHT), "the quoted text")
+            .tags(vec![
+                Tag::parse(vec!["a".to_string(), artifact.to_string()]).unwrap(),
+                Tag::parse(vec!["i".to_string(), isbn.to_string()]).unwrap(),
+                Tag::parse(vec!["context".to_string(), context.to_string()]).unwrap(),
+                Tag::parse(vec!["comment".to_string(), comment.to_string()]).unwrap(),
+                Tag::parse(vec!["start".to_string(), "12.5".to_string()]).unwrap(),
+                Tag::parse(vec!["end".to_string(), "30.0".to_string()]).unwrap(),
+                Tag::parse(vec!["speaker".to_string(), "Alice".to_string()]).unwrap(),
+                Tag::parse(vec!["segment".to_string(), segment_a.to_string()]).unwrap(),
+                Tag::parse(vec!["segment".to_string(), segment_b.to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "imeta".to_string(),
+                    format!("url {image}"),
+                    "m image/jpeg".to_string(),
+                ])
+                .unwrap(),
+            ])
+            .sign_with_keys(&keys)
+            .expect("sign");
+
+        // Bespoke parse.
+        let bespoke = record_from_cached_event(&event).expect("bespoke record");
+
+        // Equivalent raw kernel event from the SAME tags.
+        let kernel_event = nmp_core::substrate::KernelEvent {
+            id: event.id.to_hex(),
+            author: event.pubkey.to_hex(),
+            kind: KIND_HIGHLIGHT as u32,
+            created_at: event.created_at.as_secs(),
+            content: event.content.clone(),
+            tags: event.tags.iter().map(|t| t.as_slice().to_vec()).collect(),
+            relay_provenance: vec![],
+        };
+        let kernel = crate::kernel::domains::highlight_feed::decode_highlight_row(&kernel_event)
+            .expect("kernel row");
+
+        assert_eq!(kernel.content, bespoke.quote, "quote/content");
+        assert_eq!(kernel.context, bespoke.context, "context");
+        assert_eq!(
+            kernel.note.unwrap_or_default(),
+            bespoke.note,
+            "note/comment"
+        );
+        assert_eq!(
+            kernel.artifact_address, bespoke.artifact_address,
+            "artifact_address (a)"
+        );
+        assert_eq!(
+            kernel.event_reference, bespoke.event_reference,
+            "event_reference (e)"
+        );
+        assert_eq!(
+            kernel.external_reference, bespoke.external_reference,
+            "external_reference (i)"
+        );
+        assert_eq!(kernel.source_url, bespoke.source_url, "source_url (r)");
+        assert_eq!(
+            kernel.source_reference_key, bespoke.source_reference_key,
+            "source_reference_key"
+        );
+        assert_eq!(
+            kernel.clip_start_seconds, bespoke.clip_start_seconds,
+            "clip_start_seconds"
+        );
+        assert_eq!(
+            kernel.clip_end_seconds, bespoke.clip_end_seconds,
+            "clip_end_seconds"
+        );
+        assert_eq!(kernel.clip_speaker, bespoke.clip_speaker, "clip_speaker");
+        assert_eq!(
+            kernel.clip_transcript_segment_ids, bespoke.clip_transcript_segment_ids,
+            "clip_transcript_segment_ids"
+        );
+        assert_eq!(kernel.image_url, bespoke.image_url, "image_url (imeta)");
     }
 }

@@ -24765,6 +24765,51 @@ public struct HighlightRow {
      * Event creation time as Unix seconds. D1: Swift formats the display date.
      */
     public var createdAt: UInt64
+    /**
+     * `context` tag — the paragraph the quote was lifted from.
+     */
+    public var context: String
+    /**
+     * `a` tag — addressable artifact coordinate `kind:pubkey:d` (NIP-23 etc).
+     */
+    public var artifactAddress: String
+    /**
+     * `e` tag — non-addressable source event id.
+     */
+    public var eventReference: String
+    /**
+     * `i` tag — NIP-73 external content id (`podcast:item:guid:…`, `isbn:…`).
+     */
+    public var externalReference: String
+    /**
+     * `r` tag — source URL (web highlight).
+     */
+    public var sourceUrl: String
+    /**
+     * Canonical source key: `a:…` / `e:…` / `i:…` / `r:…` in priority order,
+     * or empty when no source tag is present (mirrors the live lane).
+     */
+    public var sourceReferenceKey: String
+    /**
+     * `start` tag — podcast-clip start in seconds. `None` when absent.
+     */
+    public var clipStartSeconds: Double?
+    /**
+     * `end` tag — podcast-clip end in seconds. `None` when absent.
+     */
+    public var clipEndSeconds: Double?
+    /**
+     * `speaker` tag — podcast-clip speaker. Empty when absent.
+     */
+    public var clipSpeaker: String
+    /**
+     * All `segment` tag values — transcript segment ids for a podcast clip.
+     */
+    public var clipTranscriptSegmentIds: [String]
+    /**
+     * NIP-92 `imeta` image URL — the page-scan photo. Empty when absent.
+     */
+    public var imageUrl: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -24797,13 +24842,58 @@ public struct HighlightRow {
          */note: String?,
         /**
          * Event creation time as Unix seconds. D1: Swift formats the display date.
-         */createdAt: UInt64) {
+         */createdAt: UInt64,
+        /**
+         * `context` tag — the paragraph the quote was lifted from.
+         */context: String,
+        /**
+         * `a` tag — addressable artifact coordinate `kind:pubkey:d` (NIP-23 etc).
+         */artifactAddress: String,
+        /**
+         * `e` tag — non-addressable source event id.
+         */eventReference: String,
+        /**
+         * `i` tag — NIP-73 external content id (`podcast:item:guid:…`, `isbn:…`).
+         */externalReference: String,
+        /**
+         * `r` tag — source URL (web highlight).
+         */sourceUrl: String,
+        /**
+         * Canonical source key: `a:…` / `e:…` / `i:…` / `r:…` in priority order,
+         * or empty when no source tag is present (mirrors the live lane).
+         */sourceReferenceKey: String,
+        /**
+         * `start` tag — podcast-clip start in seconds. `None` when absent.
+         */clipStartSeconds: Double?,
+        /**
+         * `end` tag — podcast-clip end in seconds. `None` when absent.
+         */clipEndSeconds: Double?,
+        /**
+         * `speaker` tag — podcast-clip speaker. Empty when absent.
+         */clipSpeaker: String,
+        /**
+         * All `segment` tag values — transcript segment ids for a podcast clip.
+         */clipTranscriptSegmentIds: [String],
+        /**
+         * NIP-92 `imeta` image URL — the page-scan photo. Empty when absent.
+         */imageUrl: String) {
         self.eventId = eventId
         self.authorPubkey = authorPubkey
         self.content = content
         self.sourceReference = sourceReference
         self.note = note
         self.createdAt = createdAt
+        self.context = context
+        self.artifactAddress = artifactAddress
+        self.eventReference = eventReference
+        self.externalReference = externalReference
+        self.sourceUrl = sourceUrl
+        self.sourceReferenceKey = sourceReferenceKey
+        self.clipStartSeconds = clipStartSeconds
+        self.clipEndSeconds = clipEndSeconds
+        self.clipSpeaker = clipSpeaker
+        self.clipTranscriptSegmentIds = clipTranscriptSegmentIds
+        self.imageUrl = imageUrl
     }
 }
 
@@ -24832,6 +24922,39 @@ extension HighlightRow: Equatable, Hashable {
         if lhs.createdAt != rhs.createdAt {
             return false
         }
+        if lhs.context != rhs.context {
+            return false
+        }
+        if lhs.artifactAddress != rhs.artifactAddress {
+            return false
+        }
+        if lhs.eventReference != rhs.eventReference {
+            return false
+        }
+        if lhs.externalReference != rhs.externalReference {
+            return false
+        }
+        if lhs.sourceUrl != rhs.sourceUrl {
+            return false
+        }
+        if lhs.sourceReferenceKey != rhs.sourceReferenceKey {
+            return false
+        }
+        if lhs.clipStartSeconds != rhs.clipStartSeconds {
+            return false
+        }
+        if lhs.clipEndSeconds != rhs.clipEndSeconds {
+            return false
+        }
+        if lhs.clipSpeaker != rhs.clipSpeaker {
+            return false
+        }
+        if lhs.clipTranscriptSegmentIds != rhs.clipTranscriptSegmentIds {
+            return false
+        }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
         return true
     }
 
@@ -24842,6 +24965,17 @@ extension HighlightRow: Equatable, Hashable {
         hasher.combine(sourceReference)
         hasher.combine(note)
         hasher.combine(createdAt)
+        hasher.combine(context)
+        hasher.combine(artifactAddress)
+        hasher.combine(eventReference)
+        hasher.combine(externalReference)
+        hasher.combine(sourceUrl)
+        hasher.combine(sourceReferenceKey)
+        hasher.combine(clipStartSeconds)
+        hasher.combine(clipEndSeconds)
+        hasher.combine(clipSpeaker)
+        hasher.combine(clipTranscriptSegmentIds)
+        hasher.combine(imageUrl)
     }
 }
 
@@ -24859,7 +24993,18 @@ public struct FfiConverterTypeHighlightRow: FfiConverterRustBuffer {
                 content: FfiConverterString.read(from: &buf),
                 sourceReference: FfiConverterOptionString.read(from: &buf),
                 note: FfiConverterOptionString.read(from: &buf),
-                createdAt: FfiConverterUInt64.read(from: &buf)
+                createdAt: FfiConverterUInt64.read(from: &buf),
+                context: FfiConverterString.read(from: &buf),
+                artifactAddress: FfiConverterString.read(from: &buf),
+                eventReference: FfiConverterString.read(from: &buf),
+                externalReference: FfiConverterString.read(from: &buf),
+                sourceUrl: FfiConverterString.read(from: &buf),
+                sourceReferenceKey: FfiConverterString.read(from: &buf),
+                clipStartSeconds: FfiConverterOptionDouble.read(from: &buf),
+                clipEndSeconds: FfiConverterOptionDouble.read(from: &buf),
+                clipSpeaker: FfiConverterString.read(from: &buf),
+                clipTranscriptSegmentIds: FfiConverterSequenceString.read(from: &buf),
+                imageUrl: FfiConverterString.read(from: &buf)
         )
     }
 
@@ -24870,6 +25015,17 @@ public struct FfiConverterTypeHighlightRow: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.sourceReference, into: &buf)
         FfiConverterOptionString.write(value.note, into: &buf)
         FfiConverterUInt64.write(value.createdAt, into: &buf)
+        FfiConverterString.write(value.context, into: &buf)
+        FfiConverterString.write(value.artifactAddress, into: &buf)
+        FfiConverterString.write(value.eventReference, into: &buf)
+        FfiConverterString.write(value.externalReference, into: &buf)
+        FfiConverterString.write(value.sourceUrl, into: &buf)
+        FfiConverterString.write(value.sourceReferenceKey, into: &buf)
+        FfiConverterOptionDouble.write(value.clipStartSeconds, into: &buf)
+        FfiConverterOptionDouble.write(value.clipEndSeconds, into: &buf)
+        FfiConverterString.write(value.clipSpeaker, into: &buf)
+        FfiConverterSequenceString.write(value.clipTranscriptSegmentIds, into: &buf)
+        FfiConverterString.write(value.imageUrl, into: &buf)
     }
 }
 

@@ -65,7 +65,7 @@ pub const HIGHLIGHT_FEED_KEY: &str = "hl.feed.highlights";
 /// D1: extracts raw protocol fields only — no byline formatting, no "Highlighted
 /// by {name}" string, no avatar URL composition, no source-kind label. Swift owns
 /// all presentation.
-fn decode_highlight_row(event: &NmpKernelEvent) -> Option<HighlightRow> {
+pub(crate) fn decode_highlight_row(event: &NmpKernelEvent) -> Option<HighlightRow> {
     // Only kind:9802 events belong in the highlight feed.
     if event.kind != 9802 {
         return None;
@@ -110,6 +110,51 @@ fn decode_highlight_row(event: &NmpKernelEvent) -> Option<HighlightRow> {
         .filter(|s| !s.is_empty())
         .cloned();
 
+    // ── Phase 7 enrichment: mirror highlights.rs::record_from_cached_event ────
+    // Raw NIP-84/NIP-73 source + clip + image fields so the highlight card can
+    // render the resource header, podcast-clip chrome, and page-scan image.
+    let tag = |name: &str| -> String {
+        event
+            .tags
+            .iter()
+            .find(|t| t.first().map(|s| s == name).unwrap_or(false))
+            .and_then(|t| t.get(1))
+            .cloned()
+            .unwrap_or_default()
+    };
+    let artifact_address = tag("a");
+    let event_reference = tag("e");
+    let external_reference = tag("i");
+    let source_url = tag("r");
+    let context = tag("context");
+    let source_reference_key = if !artifact_address.is_empty() {
+        format!("a:{artifact_address}")
+    } else if !event_reference.is_empty() {
+        format!("e:{event_reference}")
+    } else if !external_reference.is_empty() {
+        format!("i:{external_reference}")
+    } else if !source_url.is_empty() {
+        format!("r:{source_url}")
+    } else {
+        String::new()
+    };
+    let clip_start_seconds = {
+        let s = tag("start");
+        s.trim().parse().ok()
+    };
+    let clip_end_seconds = {
+        let s = tag("end");
+        s.trim().parse().ok()
+    };
+    let clip_speaker = tag("speaker");
+    let clip_transcript_segment_ids: Vec<String> = event
+        .tags
+        .iter()
+        .filter(|t| t.first().map(|s| s == "segment").unwrap_or(false))
+        .filter_map(|t| t.get(1).cloned())
+        .collect();
+    let image_url = imeta_image_url(event);
+
     Some(HighlightRow {
         event_id: event.id.clone(),
         author_pubkey: event.author.clone(),
@@ -117,7 +162,38 @@ fn decode_highlight_row(event: &NmpKernelEvent) -> Option<HighlightRow> {
         source_reference,
         note,
         created_at: event.created_at,
+        context,
+        artifact_address,
+        event_reference,
+        external_reference,
+        source_url,
+        source_reference_key,
+        clip_start_seconds,
+        clip_end_seconds,
+        clip_speaker,
+        clip_transcript_segment_ids,
+        image_url,
     })
+}
+
+/// Extract the NIP-92 `imeta` image URL from a raw kernel event's tags.
+/// Tag shape: `["imeta", "url <url>", "m <mime>", …]`. Mirrors the live lane's
+/// `highlights.rs::imeta_image_url`. Empty when no imeta tag carries a url.
+fn imeta_image_url(event: &NmpKernelEvent) -> String {
+    for tag in event.tags.iter() {
+        if tag.first().map(|s| s != "imeta").unwrap_or(true) {
+            continue;
+        }
+        for part in tag.iter().skip(1) {
+            if let Some(rest) = part.strip_prefix("url ") {
+                let url = rest.trim();
+                if !url.is_empty() {
+                    return url.to_string();
+                }
+            }
+        }
+    }
+    String::new()
 }
 
 // ─── Snapshot projection ─────────────────────────────────────────────────────
