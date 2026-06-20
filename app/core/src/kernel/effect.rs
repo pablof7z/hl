@@ -530,4 +530,25 @@ pub enum Effect {
         /// Correlation id to thread through nmp for action_results routing.
         correlation_id: String,
     },
+
+    // ── Phase 5J additions (append-only) ─────────────────────────────────────
+    /// Publish a podcast clip as a kind:9802 highlight via `ActorCommand::PublishRawEvent`,
+    /// carrying a `correlation_id` so the `action_results` projection can route
+    /// the publish outcome to `KernelEvent::ClipPublishActionResult`.
+    ///
+    /// Reuses the 5G correlation-aware publish path (same mechanism as
+    /// `PublishCaptureWithCorrelation`). The `json` field is a serde_json-serialised
+    /// event template: `{ kind: 9802, content, tags }` with NIP-73 i-tag +
+    /// start/end/speaker/segment tags. nmp fills `id`/`sig`/`pubkey`/`created_at`.
+    ///
+    /// The correlation_id is stored in
+    /// `AppState::podcast.pending_clip_publish_correlation_id` so
+    /// `apply_action_result_row` in `blossom.rs` can route the verdict.
+    /// NOT fire-and-forget — uses the 5G completion seam for real Done/Error.
+    PublishClipWithCorrelation {
+        /// serde_json-serialised kind:9802 event template.
+        json: String,
+        /// Correlation id to thread through nmp for action_results routing.
+        correlation_id: String,
+    },
 }

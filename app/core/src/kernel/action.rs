@@ -270,6 +270,20 @@ pub(crate) struct ClipSetEndPayload {
     pub duration_seconds: f64,
 }
 
+// ── Phase 5J payload structs ─────────────────────────────────────────────────
+
+/// `hl.podcast.publish_clip` envelope payload.
+///
+/// Swift sends this after the user confirms the clip on the composer screen.
+/// The `artifact_json` carries the full `ArtifactRecord` so the kernel can
+/// build the NIP-73 i-tag without a separate round-trip. `note` is the
+/// optional comment to attach to the kind:9802.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct PublishClipPayload {
+    pub artifact_json: String,
+    pub note: Option<String>,
+}
+
 // ── Phase 5D additions (append-only) ─────────────────────────────────────────
 
 #[derive(Debug, serde::Deserialize)]
@@ -1231,4 +1245,21 @@ pub enum KernelEvent {
     /// DEVICE-LOCAL — PageImage routes image_handle into the 5D OCR pipeline;
     /// Barcode routes to the 5C ISBN lookup. Neither publishes to nostr here.
     CameraCapabilityResult(crate::capabilities::CameraResult),
+
+    // ── Phase 5J additions (append-only) ─────────────────────────────────────
+    /// A podcast-clip PUBLISH action result arrived via the `"action_results"`
+    /// typed projection. Routed by matching `correlation_id` against
+    /// `AppState::podcast.pending_clip_publish_correlation_id`.
+    ///
+    /// Drives `PodcastClipPublishPhase::Publishing → Done | Error` for REAL,
+    /// closing the loop with the 5G correlation-aware path. Injectable from
+    /// tests via `Cmd::Event` (no live NmpApp needed).
+    ///
+    /// DEVICE-LOCAL — only the published kind:9802 is the nostr fact.
+    ClipPublishActionResult {
+        /// `true` when nmp reports a `"published"` status.
+        success: bool,
+        /// Raw error message on failure; empty on success. D1.
+        error: String,
+    },
 }

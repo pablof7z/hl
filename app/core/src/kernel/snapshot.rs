@@ -969,6 +969,38 @@ pub struct PodcastListeningSnapshot {
     pub clip_speaker: String,
     /// Segment IDs selected for the in-progress clip. Empty when no clip.
     pub clip_selected_segment_ids: Vec<String>,
+    // ── Phase 5J additions (append-only) ─────────────────────────────────────
+    /// Current clip-publish phase (Idle → Publishing → Done | Error).
+    /// Device-local — only the published kind:9802 is a nostr fact.
+    pub clip_publish_phase: KernelClipPublishPhase,
+}
+
+// ── Phase 5J additions (append-only) ─────────────────────────────────────────
+
+/// FSM phase for a podcast-clip publish round-trip.
+///
+/// `Idle` before the user triggers publish; `Publishing` once the
+/// `Effect::PublishClipWithCorrelation` is in flight; `Done` when the
+/// `action_results` projection confirms publish; `Error` on any failure.
+///
+/// DEVICE-LOCAL — the published kind:9802 is the nostr fact, not this FSM.
+///
+/// Append-only: new variants at the bottom keep rebases mechanical.
+#[derive(Debug, Clone, PartialEq, Eq, Default, uniffi::Enum)]
+pub enum KernelClipPublishPhase {
+    /// No publish in flight.
+    #[default]
+    Idle,
+    /// `Effect::PublishClipWithCorrelation` is in flight; awaiting
+    /// the `action_results` verdict keyed by `correlation_id`.
+    Publishing,
+    /// The kind:9802 event was accepted by at least one relay. D1: raw.
+    Done,
+    /// The publish was rejected or the correlation_id never arrived. D1: raw.
+    Error {
+        /// Raw error message. D1 — Swift formats.
+        message: String,
+    },
 }
 
 // ── Phase 5D additions (append-only) ─────────────────────────────────────────
