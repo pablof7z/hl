@@ -488,4 +488,46 @@ pub enum Effect {
         /// Transcript URL (HTTP or HTTPS). Validated before fetch.
         url: String,
     },
+
+    // ── Phase 5G additions (append-only) ─────────────────────────────────────
+    /// Dispatch `nmp.blossom.upload` via `nmp_app_dispatch_action`, recording
+    /// the returned `correlation_id` so the `action_results` projection can
+    /// route the blob descriptor back to the capture draft.
+    ///
+    /// Fire-and-dispatch: the effect runner calls `nmp_app_dispatch_action`,
+    /// stores the correlation_id in AppState, and returns immediately.
+    /// The upload settles asynchronously; the result arrives via
+    /// `KernelEvent::BlossomUploadResult` when the `"action_results"` typed
+    /// projection fires (next NmpSnapshotFrame tick).
+    ///
+    /// `image_handle` is the local disk path written by the iOS camera/OCR
+    /// pipeline (5E). Never carries raw image bytes across FFI (D5 /
+    /// Non-Negotiable #7). `servers` is the ordered BUD-02 server list; must
+    /// be non-empty.
+    BlossomUpload {
+        /// Correlation id to thread through nmp so action_results can route
+        /// the descriptor back. Generated in the action reducer (uuid v4 hex).
+        correlation_id: String,
+        /// Local disk path of the JPEG written by iOS capture/camera.
+        image_handle: String,
+        /// Ordered BUD-02 upload server URLs. Non-empty (validated in reducer).
+        servers: Vec<String>,
+    },
+
+    /// Dispatch a capture-draft publish via `ActorCommand::PublishRawEvent`,
+    /// carrying a `correlation_id` so the `action_results` projection can
+    /// route the publish outcome to `KernelEvent::CaptureDraftPublishResult`.
+    ///
+    /// 5G replaces the fire-and-forget `PublishHighlightEvent` /
+    /// `PublishCaptureEvent` effects for the CAPTURE path only (non-capture
+    /// highlight publish remains fire-and-forget per Phase 4H). The correlation
+    /// id is generated in `capture_draft::reduce_action_publish` and stored in
+    /// `AppState::capture_draft.pending_publish_correlation_id` so the
+    /// action_results routing can look it up by id.
+    PublishCaptureWithCorrelation {
+        /// serde_json-serialised event template: `{ kind, content, tags }`.
+        json: String,
+        /// Correlation id to thread through nmp for action_results routing.
+        correlation_id: String,
+    },
 }

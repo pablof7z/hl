@@ -300,6 +300,24 @@ pub(crate) struct CaptureSetTargetGroupPayload {
     pub group_id: String,
 }
 
+// ── Phase 5G payload structs ─────────────────────────────────────────────────
+
+/// `hl.blossom.upload { image_handle, servers }` — upload a locally-written
+/// JPEG to the configured Blossom server(s).
+///
+/// `image_handle` is the temp-file path on disk. `servers` is the ordered
+/// BUD-02 server list; if empty the kernel falls back to a hard-coded default
+/// (`DEFAULT_BLOSSOM_SERVER`). The payload is validated in the reducer (no raw
+/// image bytes cross FFI — D5 / Non-Negotiable #7).
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct BlossomUploadPayload {
+    /// Local disk path of the image written by the iOS capture/camera pipeline.
+    pub image_handle: String,
+    /// BUD-02 upload server URLs. Empty list falls back to the kernel default.
+    #[serde(default)]
+    pub servers: Vec<String>,
+}
+
 /// Every user or platform action the kernel understands.
 ///
 /// Dispatch is fire-and-forget (`dispatch(action)` returns `()`; Non-Negotiable #3).
@@ -1140,6 +1158,49 @@ pub enum KernelEvent {
         /// Raw event id of the published event (empty on failure). D1.
         event_id: String,
         /// Raw error message (empty on success). D1.
+        error: String,
+    },
+
+    // ── Phase 5G additions (append-only) ─────────────────────────────────────
+    /// nmp returned a dispatch correlation_id for a Blossom upload that differs
+    /// from the placeholder the reducer minted. Sent by `run_effect_blossom_upload`
+    /// after `nmp_app_dispatch_action` returns. The actor overwrites
+    /// `AppState::capture_draft.pending_upload_correlation_id` with this id so
+    /// `route_action_result` can match the arriving `action_results` row.
+    NmpBlossomCorrelationMinted {
+        /// The real id nmp assigned to the upload (from the dispatch return JSON).
+        nmp_correlation_id: String,
+    },
+
+    /// A Blossom upload action result arrived via the `"action_results"` typed
+    /// projection. Routed from `projections::dispatch_typed_frame` by matching
+    /// `correlation_id` against
+    /// `AppState::capture_draft.pending_upload_correlation_id`.
+    ///
+    /// On success: sets `has_upload = true` + stores `blob_url` on the capture
+    /// draft, unlocking the kind:11 publish path. On failure: clears the pending
+    /// upload state so a retry is possible. DEVICE-LOCAL — never a nostr fact.
+    BlossomUploadResult {
+        /// `true` when nmp reports a `"success"` status.
+        success: bool,
+        /// The canonical Blossom blob URL on success; empty on failure. D1.
+        blob_url: String,
+        /// Raw error message on failure; empty on success. D1.
+        error: String,
+    },
+
+    /// A capture-draft PUBLISH action result arrived via `"action_results"`.
+    /// Routed by matching `correlation_id` against
+    /// `AppState::capture_draft.pending_publish_correlation_id`.
+    ///
+    /// Drives `CaptureDraftPhase::Publishing → Done | Error` for REAL (closing
+    /// the loop that 5F left open with a clock-timeout fallback). The
+    /// `KernelEvent::CaptureDraftPublishResult` variant remains available for
+    /// direct test injection; this new variant is the live-lane path.
+    CapturePublishActionResult {
+        /// `true` when nmp reports a success status.
+        success: bool,
+        /// Raw error message on failure; empty on success. D1.
         error: String,
     },
 

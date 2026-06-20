@@ -59,6 +59,9 @@ pub(crate) mod ocr;
 // ── Phase 5F additions (append-only) ─────────────────────────────────────────
 pub(crate) mod capture_draft;
 
+// ── Phase 5G additions (append-only) ─────────────────────────────────────────
+pub(crate) mod blossom;
+
 // ── Phase 5I additions (append-only) ─────────────────────────────────────────
 pub(crate) mod podcast_transcript;
 
