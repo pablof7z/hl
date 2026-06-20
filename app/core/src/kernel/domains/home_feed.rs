@@ -57,7 +57,8 @@ use std::collections::{HashMap, HashSet};
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::{
-    KernelHomeFeedRow, KernelHomeFeedRowKind, KernelHomeFeedSnapshot, ViewSnapshot,
+    ArtifactPreviewRow, KernelHomeFeedRow, KernelHomeFeedRowKind, KernelHomeFeedSnapshot,
+    ViewSnapshot,
 };
 use crate::kernel::view::ViewId;
 
@@ -119,7 +120,41 @@ pub(crate) fn lifecycle_effects_for_view_close(id: &ViewId) -> Vec<Effect> {
 /// Structural keys (`stable_id`) are deterministic identifiers, not labels.
 pub(crate) fn project_home_feed_snapshot(state: &AppState) -> Option<ViewSnapshot> {
     let rows = build_home_feed_rows(state);
-    Some(ViewSnapshot::HomeFeed(KernelHomeFeedSnapshot { rows }))
+    // Attach the artifact-preview rows for the coordinates these rows reference,
+    // filtered to only the present `artifact_coordinate` values (Phase 7
+    // artifact-preview consumer). Previews are populated in `AppState` by the
+    // &mut ensure-hook (`ensure_artifact_previews`, run on feed-page apply) and
+    // by the article/isbn/artifact fill hooks; here we just read + filter (D1).
+    let mut seen = std::collections::BTreeSet::new();
+    let artifact_previews: Vec<ArtifactPreviewRow> = rows
+        .iter()
+        .filter_map(|r| r.artifact_coordinate.as_deref())
+        .filter(|coord| seen.insert(coord.to_string()))
+        .filter_map(|coord| state.artifact_previews.get(coord).cloned())
+        .collect();
+    Some(ViewSnapshot::HomeFeed(KernelHomeFeedSnapshot {
+        rows,
+        artifact_previews,
+    }))
+}
+
+/// Ensure an `artifact_previews` entry exists (pending or resolved) for every
+/// coordinate the current home-feed rows reference. Idempotent. Run from the
+/// &mut feed-page apply path so the next `project_home_feed_snapshot` can attach
+/// resolved/pending previews; resolution is filled by the article/isbn/artifact
+/// hooks. Returns effects (currently none — fills are synchronous from cache).
+pub(crate) fn ensure_artifact_previews(state: &mut AppState) -> Vec<Effect> {
+    let coords: Vec<String> = build_home_feed_rows(state)
+        .into_iter()
+        .filter_map(|r| r.artifact_coordinate)
+        .collect();
+    let mut effects = Vec::new();
+    for coord in coords {
+        effects.extend(super::artifact_preview::ensure_artifact_preview(
+            state, coord,
+        ));
+    }
+    effects
 }
 
 /// Build the merged, sorted, suppressed list of `HomeFeedRow`s.
@@ -219,6 +254,13 @@ pub(crate) fn build_home_feed_rows(state: &AppState) -> Vec<KernelHomeFeedRow> {
         let highlight_author_pubkeys: Vec<String> =
             group.iter().map(|h| h.author_pubkey.clone()).collect();
         let source_reference = group.first().and_then(|h| h.source_reference.clone());
+        // Canonical artifact coordinate for the resource card. The NIP-84 source
+        // reference is an `a` addressable coord (contains `:`) or an `e` event id
+        // — same heuristic as `highlight_stable_id` / the live lane (D3: opaque).
+        let artifact_coordinate = source_reference.as_deref().and_then(|src| {
+            let tag = if src.contains(':') { "a" } else { "e" };
+            super::artifact_preview::coordinate_key(tag, src)
+        });
 
         rows.push(KernelHomeFeedRow {
             stable_id,
@@ -231,6 +273,7 @@ pub(crate) fn build_home_feed_rows(state: &AppState) -> Vec<KernelHomeFeedRow> {
             article_id: None,
             article_author_pubkey: None,
             article_created_at: None,
+            artifact_coordinate,
         });
     }
 
@@ -255,6 +298,8 @@ pub(crate) fn build_home_feed_rows(state: &AppState) -> Vec<KernelHomeFeedRow> {
             continue;
         }
 
+        let artifact_coordinate = super::artifact_preview::coordinate_key("a", &address);
+
         rows.push(KernelHomeFeedRow {
             stable_id: format!("r:{}", address),
             sort_key: ev.created_at,
@@ -266,6 +311,7 @@ pub(crate) fn build_home_feed_rows(state: &AppState) -> Vec<KernelHomeFeedRow> {
             article_id: Some(ev.id.clone()),
             article_author_pubkey: Some(ev.author.clone()),
             article_created_at: Some(ev.created_at),
+            artifact_coordinate,
         });
     }
 
@@ -929,6 +975,71 @@ mod tests {
                     KernelHomeFeedRowKind::Article,
                     "article must be present — i-tag highlights don't suppress articles"
                 );
+            }
+            other => panic!("expected HomeFeed snapshot, got {:?}", other),
+        }
+    }
+
+    // Phase 7 artifact-preview consumer: a standalone article row carries an
+    // `a:` artifact_coordinate, and after ensure_artifact_previews the snapshot
+    // attaches the resolved (non-pending, titled) preview keyed by that coord.
+    #[test]
+    fn home_feed_attaches_resolved_article_preview() {
+        let mut state = make_state();
+        let pubkey = "cccc".repeat(16);
+        let d_tag = "preview-article";
+        let address = format!("30023:{pubkey}:{d_tag}");
+        let coordinate = format!("a:{address}");
+
+        // Standalone article (no highlight → not suppressed).
+        let art = article_ev(
+            "art000000000000000000000000000000000000000000000000000000000000009",
+            &pubkey,
+            d_tag,
+            1_700_000_005,
+        );
+        apply_feed_page(&mut state.article_feed, vec![art], 10, false, None);
+
+        // Resolution source: the article is in AppState::articles.
+        state.articles.insert(
+            address.clone(),
+            crate::kernel::snapshot::ArticleRow {
+                address: address.clone(),
+                id: "dddd".repeat(16),
+                author_pubkey: pubkey.clone(),
+                author_display_name: None,
+                author_picture_url: None,
+                title: Some("Preview Title".to_string()),
+                summary: Some("Preview summary.".to_string()),
+                hero_image_url: Some("https://example.com/p.jpg".to_string()),
+                d_tag: d_tag.to_string(),
+                created_at: 1_700_000_005,
+                content_tree_bytes: vec![],
+            },
+        );
+
+        // &mut hook (as run on feed-page apply) then immutable projection.
+        ensure_artifact_previews(&mut state);
+        let snap = project_home_feed_snapshot(&state).unwrap();
+        match snap {
+            ViewSnapshot::HomeFeed(s) => {
+                let row = s
+                    .rows
+                    .iter()
+                    .find(|r| r.kind == KernelHomeFeedRowKind::Article)
+                    .expect("article row present");
+                assert_eq!(
+                    row.artifact_coordinate.as_deref(),
+                    Some(coordinate.as_str()),
+                    "article row carries its a: coordinate"
+                );
+                let preview = s
+                    .artifact_previews
+                    .iter()
+                    .find(|p| p.coordinate == coordinate)
+                    .expect("preview attached for the referenced coordinate");
+                assert!(!preview.pending, "resolved from AppState::articles");
+                assert_eq!(preview.title.as_deref(), Some("Preview Title"));
             }
             other => panic!("expected HomeFeed snapshot, got {:?}", other),
         }
