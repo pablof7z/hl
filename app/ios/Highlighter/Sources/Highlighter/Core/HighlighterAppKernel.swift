@@ -198,7 +198,8 @@ final class HighlighterAppKernel {
         // directly. No-op here (the actor still pushes; non-resident views
         // are closed before they can receive stale data — D5).
         case .bookmarks, .articleReader, .search, .articleFeed,
-             .highlightFeed, .homeFeed, .whatsNew, .bookPicker, .shareComposer:
+             .highlightFeed, .homeFeed, .whatsNew, .bookPicker, .shareComposer,
+             .commentThread:
             break
 
         // Phase 5+ snapshots (podcast, OCR capture) — managed by their owning
