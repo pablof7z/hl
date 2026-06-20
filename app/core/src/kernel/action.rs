@@ -238,6 +238,29 @@ pub(crate) struct OcrRecognizePayload {
     pub image_handle: String,
 }
 
+// ── Phase 5F payload structs ─────────────────────────────────────────────────
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CaptureSetQuotePayload {
+    pub quote: String,
+}
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CaptureSetContextPayload {
+    pub context: String,
+}
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CaptureSetNotePayload {
+    pub note: String,
+}
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CaptureSelectWordPayload {
+    pub word_index: u64,
+}
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CaptureSetTargetGroupPayload {
+    pub group_id: String,
+}
+
 /// Every user or platform action the kernel understands.
 ///
 /// Dispatch is fire-and-forget (`dispatch(action)` returns `()`; Non-Negotiable #3).
@@ -1063,5 +1086,21 @@ pub enum KernelEvent {
         markdown: String,
         selectable_words: Vec<crate::capabilities::ocr::OcrWord>,
         raw_lines: Vec<crate::capabilities::ocr::OcrLine>,
+    },
+
+    // ── Phase 5F additions (append-only) ─────────────────────────────────────
+    /// A capture-draft publish round-trip completed.
+    ///
+    /// Produced by the publish runner after `Effect::PublishHighlightEvent`
+    /// (kind:9802) or `Effect::PublishCaptureEvent` (kind:11) is broadcast.
+    /// `success` → phase `Done`; otherwise phase `Error { message: error }`.
+    /// Injectable directly from tests via `Cmd::Event` (no live NmpApp needed).
+    CaptureDraftPublishResult {
+        /// `true` when the event was accepted by the relay(s).
+        success: bool,
+        /// Raw event id of the published event (empty on failure). D1.
+        event_id: String,
+        /// Raw error message (empty on success). D1.
+        error: String,
     },
 }

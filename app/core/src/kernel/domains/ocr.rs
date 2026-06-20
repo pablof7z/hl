@@ -121,9 +121,16 @@ pub(crate) fn reduce_event_ocr_recognition_complete(
 
 // ─── Snapshot projection ─────────────────────────────────────────────────────
 
-/// Project `ViewId::Capture` from `AppState::ocr`.
+/// Project the OCR fields of `ViewId::Capture` from `AppState::ocr`.
 ///
 /// D1: raw fields only — no formatted strings, no labels.
+///
+/// Phase 5F note: the actor routes `ViewId::Capture` to
+/// `capture_draft::project_capture_snapshot`, which calls THIS helper to fill the
+/// OCR fields and then layers on the draft fields. The Phase 5F draft fields are
+/// defaulted here so this OCR-only projector still constructs a valid
+/// `KernelCaptureSnapshot` (used by the 5D tests and as the draft projector's
+/// OCR source). This function is intentionally kept intact (Non-Negotiable #6).
 pub(crate) fn project_capture_snapshot(state: &AppState) -> Option<ViewSnapshot> {
     Some(ViewSnapshot::Capture(KernelCaptureSnapshot {
         image_handle: state.ocr.image_handle.clone(),
@@ -131,6 +138,15 @@ pub(crate) fn project_capture_snapshot(state: &AppState) -> Option<ViewSnapshot>
         selectable_words: state.ocr.selectable_words.clone(),
         raw_lines: state.ocr.raw_lines.clone(),
         pending: state.ocr.pending,
+        // ── Phase 5F draft fields (defaulted — filled by capture_draft) ──────────
+        draft_quote: String::new(),
+        draft_context: String::new(),
+        draft_note: String::new(),
+        selected_word_indices: Vec::new(),
+        target_group_id: None,
+        publish_phase: crate::kernel::snapshot::KernelCaptureDraftPhase::Idle,
+        can_publish: false,
+        publish_error: String::new(),
     }))
 }
 

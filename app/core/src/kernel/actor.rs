@@ -41,6 +41,8 @@ use crate::kernel::domains::{
     articles_feed,
     auth,
     bookmarks,
+    // ── Phase 5F additions (append-only) ─────────────────────────────────────
+    capture_draft,
     communities,
     discovery,
     feed,
@@ -237,6 +239,8 @@ fn clock_checks(state: &mut AppState, now: u64) -> Vec<Effect> {
     route::clock_check_toast_dismiss(state, now);
     session::clock_check_restore_timeout(state, now);
     auth::clock_check_sign_in_timeout(state, now);
+    // ── Phase 5F additions ─────────────────────────────────────────────────────
+    capture_draft::clock_check_publish_timeout(state, now);
 
     effects
 }
@@ -470,7 +474,9 @@ fn reduce_action_envelope(
 
     use crate::kernel::action::{
         AddBookmarkPayload, AddRelayPayload, AddRoomMemberPayload, AudioPlayPayload,
-        AudioSeekPayload, AudioSetResumePayload, ClaimProfilePayload, CreateAccountPayload,
+        AudioSeekPayload, AudioSetResumePayload, CaptureSelectWordPayload,
+        CaptureSetContextPayload, CaptureSetNotePayload, CaptureSetQuotePayload,
+        CaptureSetTargetGroupPayload, ClaimProfilePayload, CreateAccountPayload,
         CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload, JoinRoomPayload,
         LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload, PairBunkerPayload,
         PresentSheetPayload, PublishHighlightPayload, ReactPayload, ReleaseProfilePayload,
@@ -698,6 +704,32 @@ fn reduce_action_envelope(
             let p = parse!(OcrRecognizePayload);
             ocr::reduce_action_ocr_recognize(state, p.image_handle)
         }
+
+        // ── Capture draft (Phase 5F) ───────────────────────────────────────────
+        "hl.capture.set_quote" => {
+            let p = parse!(CaptureSetQuotePayload);
+            capture_draft::reduce_action_set_quote(state, p.quote, now)
+        }
+        "hl.capture.set_context" => {
+            let p = parse!(CaptureSetContextPayload);
+            capture_draft::reduce_action_set_context(state, p.context)
+        }
+        "hl.capture.set_note" => {
+            let p = parse!(CaptureSetNotePayload);
+            capture_draft::reduce_action_set_note(state, p.note)
+        }
+        "hl.capture.select_word" => {
+            let p = parse!(CaptureSelectWordPayload);
+            capture_draft::reduce_action_select_word(state, p.word_index)
+        }
+        "hl.capture.clear_selection" => capture_draft::reduce_action_clear_selection(state),
+        "hl.capture.set_target_group" => {
+            let p = parse!(CaptureSetTargetGroupPayload);
+            capture_draft::reduce_action_set_target_group(state, p.group_id, now)
+        }
+        "hl.capture.clear_target_group" => capture_draft::reduce_action_clear_target_group(state),
+        "hl.capture.publish" => capture_draft::reduce_action_publish(state, now),
+        "hl.capture.reset" => capture_draft::reduce_action_reset(state),
 
         // ── Unknown namespace ─────────────────────────────────────────────────
         _ => emit_invalid_action_toast(
@@ -1003,6 +1035,13 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             selectable_words,
             raw_lines,
         ),
+
+        // ── Phase 5F additions (append-only) ─────────────────────────────────
+        KernelEvent::CaptureDraftPublishResult {
+            success,
+            event_id,
+            error,
+        } => capture_draft::reduce_event_publish_result(state, success, event_id, error),
     }
 }
 
@@ -1064,7 +1103,9 @@ pub(crate) fn project_snapshot(
         ViewId::PodcastListening => podcast::project_podcast_listening_snapshot(state),
 
         // ── Phase 5D additions (append-only) ─────────────────────────────────
-        ViewId::Capture => ocr::project_capture_snapshot(state),
+        // ── Phase 5F: capture_draft is now the authoritative Capture projector;
+        //    it layers draft fields on top of the 5D OCR fields.
+        ViewId::Capture => capture_draft::project_capture_snapshot(state),
 
         _ => route::project_snapshot(state, id, clock_now),
     }
@@ -1339,6 +1380,15 @@ pub(crate) async fn run_effect(
                 run_effect_save_podcast_position(&data_dir, guid, position_seconds, *artifact)
                     .await;
             });
+        }
+
+        // ── Phase 5F additions (append-only) ─────────────────────────────────
+        Effect::PublishCaptureEvent { json } => {
+            // Raw publish via ActorCommand::PublishRawEvent — same path as Phase 4H
+            // highlight (kind:11 plain capture). No dedicated nmp.capture namespace
+            // at pinned b4404159; reuse the highlight publish runner since both are
+            // just PublishRawEvent. Fire-and-forget (D6). No-op when nmp is None.
+            highlight_feed::run_effect_publish_highlight(json, nmp);
         }
     }
 

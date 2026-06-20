@@ -55,3 +55,6 @@ pub(crate) mod podcast;
 
 // ── Phase 5D additions (append-only) ─────────────────────────────────────────
 pub(crate) mod ocr;
+
+// ── Phase 5F additions (append-only) ─────────────────────────────────────────
+pub(crate) mod capture_draft;

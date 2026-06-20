@@ -322,6 +322,15 @@ pub struct AppState {
     /// NOT cleared on Logout — the last capture is per-device, not per-account.
     /// Bounded by the image's text content (Non-Negotiable #7).
     pub ocr: crate::kernel::domains::ocr::OcrState,
+
+    // ── Phase 5F additions (append-only) ─────────────────────────────────────
+    /// Capture draft state — quote/context/note + target community + publish FSM.
+    ///
+    /// Device-local scratch state until publish (`hl-app-state-vs-nostr-facts`):
+    /// only `capture_draft::reduce_action_publish` turns the draft into a real
+    /// nostr event (kind:9802 or kind:11) via the raw publish path. Bounded
+    /// fixed-overhead struct (Non-Negotiable #7).
+    pub capture_draft: crate::kernel::domains::capture_draft::CaptureDraftState,
 }
 
 impl Default for AppState {
@@ -365,6 +374,8 @@ impl Default for AppState {
             podcast_resume_cache: std::collections::HashMap::new(),
             // ── Phase 5D additions ────────────────────────────────────────────
             ocr: crate::kernel::domains::ocr::OcrState::default(),
+            // ── Phase 5F additions ────────────────────────────────────────────
+            capture_draft: crate::kernel::domains::capture_draft::CaptureDraftState::default(),
         }
     }
 }

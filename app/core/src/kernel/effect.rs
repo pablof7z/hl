@@ -462,4 +462,18 @@ pub enum Effect {
         /// Boxed to keep the `Effect` enum variant size manageable.
         artifact: Box<crate::models::ArtifactRecord>,
     },
+
+    // ── Phase 5F additions (append-only) ─────────────────────────────────────
+    /// Publish a kind:11 plain capture event via `ActorCommand::PublishRawEvent`.
+    ///
+    /// kind:11 plain capture via raw publish, no nmp.publish namespace needed for
+    /// non-group captures. Same pattern as `Effect::PublishHighlightEvent`
+    /// (Phase 4H): the kernel builds the event template (`kind`, `content`,
+    /// `tags`) with `serde_json::json!`; nmp's signer fills `id`/`sig`/`pubkey`/
+    /// `created_at` on publish. Fire-and-forget (D6); routed through the same
+    /// `run_effect_publish_highlight` runner since both are just `PublishRawEvent`.
+    PublishCaptureEvent {
+        /// serde_json-serialised event template: `{ kind: 11, content, tags }`.
+        json: String,
+    },
 }

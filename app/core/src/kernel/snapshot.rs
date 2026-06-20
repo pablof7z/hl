@@ -964,4 +964,43 @@ pub struct KernelCaptureSnapshot {
     /// `true` while a `VNRecognizeTextRequest` is in flight. Swift shows a
     /// progress indicator when this is `true`.
     pub pending: bool,
+
+    // ── Phase 5F additions (append-only) ─────────────────────────────────────────
+    /// Draft quote text (the highlighted/selected passage). Raw — D1.
+    pub draft_quote: String,
+    /// Draft source context (the paragraph the quote was lifted from). Raw — D1.
+    pub draft_context: String,
+    /// Draft user-authored note. Raw — D1.
+    pub draft_note: String,
+    /// Indices into `selectable_words` for the current drag selection.
+    /// `u64` for uniffi compat (kernel stores `usize`).
+    pub selected_word_indices: Vec<u64>,
+    /// The validated NIP-29 target community id, or `None` for a standalone
+    /// capture. D1: raw id only — Swift resolves the display name from the
+    /// communities list (no "Optional" fallback here).
+    pub target_group_id: Option<String>,
+    /// Publish-phase FSM state.
+    pub publish_phase: KernelCaptureDraftPhase,
+    /// `true` when the draft is publishable (Reviewing + quote, or
+    /// Reviewing + markdown + target group). Swift gates the publish button.
+    pub can_publish: bool,
+    /// Raw publish error message when `publish_phase == Error`, else empty. D1.
+    pub publish_error: String,
+}
+
+// ── Phase 5F additions (append-only) ─────────────────────────────────────────
+
+/// Publish-phase FSM exposed in `KernelCaptureSnapshot`.
+///
+/// Mirrors the kernel-internal `CaptureDraftPhase` (in
+/// `kernel/domains/capture_draft.rs`); the internal `Error { message }` variant's
+/// payload is surfaced via the snapshot's `publish_error` field (uniffi enums
+/// stay payload-free here for FFI simplicity).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum KernelCaptureDraftPhase {
+    Idle,
+    Reviewing,
+    Publishing,
+    Done,
+    Error,
 }
