@@ -119,6 +119,21 @@ enum HighlighterAction {
     case capturePublish
     case captureReset
 
+    // ── Capture capability triggers (Phase 7 cutover) ─────────────────────────────
+    /// Start a document-scan capture (kernel emits the camera CapabilityRequest →
+    /// CapturePresenter presents the scanner → provide_capability_result).
+    case cameraCapturePage
+    /// Start a barcode scan (→ ISBN lookup).
+    case cameraScanBarcode
+    /// Cancel an in-flight camera capability.
+    case cameraCancel
+    /// Run OCR on a native-written page image handle (kernel emits the OCR
+    /// CapabilityRequest → Vision via the bridge → KernelCaptureSnapshot).
+    case ocrRecognize(imageHandle: String)
+    /// Upload a (native-rendered) image handle via Blossom; descriptor returns
+    /// via the action-results projection.
+    case blossomUpload(imageHandle: String, servers: [String])
+
     // ── Chat (Phase 7 cutover) ──────────────────────────────────────────────────
     /// Open a room's chat: wires the per-room ChatObserver (kernel is sole writer).
     case chatOpen(groupId: String, hostRelayUrl: String)
@@ -358,6 +373,22 @@ enum HighlighterAction {
             return AppActionEnvelope(namespace: "hl.capture.publish", json: "{}")
         case .captureReset:
             return AppActionEnvelope(namespace: "hl.capture.reset", json: "{}")
+        case .cameraCapturePage:
+            return AppActionEnvelope(namespace: "hl.camera.capture_page", json: "{}")
+        case .cameraScanBarcode:
+            return AppActionEnvelope(namespace: "hl.camera.scan_barcode", json: "{}")
+        case .cameraCancel:
+            return AppActionEnvelope(namespace: "hl.camera.cancel", json: "{}")
+        case .ocrRecognize(let imageHandle):
+            return AppActionEnvelope(
+                namespace: "hl.ocr.recognize",
+                json: jsonAny(["image_handle": imageHandle])
+            )
+        case .blossomUpload(let imageHandle, let servers):
+            return AppActionEnvelope(
+                namespace: "hl.blossom.upload",
+                json: jsonAny(["image_handle": imageHandle, "servers": servers])
+            )
 
         // ── Chat (Phase 7 cutover) ──────────────────────────────────────────
         case .chatOpen(let groupId, let hostRelayUrl):
