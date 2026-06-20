@@ -1,10 +1,8 @@
-#[derive(Debug, Clone, Copy, PartialEq, uniffi::Record)]
-pub struct OcrRect {
-    pub x: f64,
-    pub y: f64,
-    pub w: f64,
-    pub h: f64,
-}
+// Phase 7 — Part-C prep: the canonical OCR observation types now live in the
+// kernel lane (`crate::capabilities::ocr`) so the kernel no longer depends on
+// this bespoke module. This module re-imports them and keeps the geometry
+// `impl OcrRect` helpers it uses internally (same-crate impl, allowed).
+pub use crate::capabilities::ocr::{OcrLine, OcrRect, OcrWord};
 
 impl OcrRect {
     fn is_usable(self) -> bool {
@@ -92,21 +90,6 @@ impl OcrRect {
             h: self.h - 2.0 * dy,
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, uniffi::Record)]
-pub struct OcrWord {
-    pub text: String,
-    pub bbox: OcrRect,
-    pub confidence: f32,
-}
-
-#[derive(Debug, Clone, PartialEq, uniffi::Record)]
-pub struct OcrLine {
-    pub text: String,
-    pub bbox: OcrRect,
-    pub confidence: f32,
-    pub words: Vec<OcrWord>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
