@@ -132,6 +132,10 @@ enum HighlighterAction {
         content: String
     )
 
+    // ── Discussions (Phase 7 cutover) ───────────────────────────────────────────
+    /// Publish a kind:11 discussion thread into a NIP-29 room.
+    case postDiscussion(groupId: String, title: String, body: String, attachmentUrl: String?)
+
     // MARK: - Envelope serialization
 
     /// Encodes this action as an `AppActionEnvelope` ready for `dispatchAction`.
@@ -363,6 +367,12 @@ enum HighlighterAction {
             if let rootAuthor = rootAuthorPubkey { dict["root_author_pubkey"] = rootAuthor }
             if let parentAuthor = parentAuthorPubkey { dict["parent_author_pubkey"] = parentAuthor }
             return AppActionEnvelope(namespace: "hl.comment.post", json: jsonAny(dict))
+
+        // ── Discussions (Phase 7 cutover) ───────────────────────────────────
+        case .postDiscussion(let groupId, let title, let body, let attachmentUrl):
+            var dict: [String: Any] = ["group_id": groupId, "title": title, "body": body]
+            if let url = attachmentUrl, !url.isEmpty { dict["attachment_url"] = url }
+            return AppActionEnvelope(namespace: "hl.discussion.post", json: jsonAny(dict))
         }
     }
 }
