@@ -93,6 +93,11 @@ final class HighlighterAppKernel {
     /// skeleton while pending.
     private(set) var homeFeed: KernelHomeFeedSnapshot?
 
+    /// Capture (book/page scan → OCR → draft → publish) snapshot. `nil` until the
+    /// `ViewId.capture` view is open. The kernel owns the OCR reconstruction,
+    /// draft state, and publish FSM; native owns all pixel work (Q1).
+    private(set) var captureSnapshot: KernelCaptureSnapshot?
+
     // MARK: - Kernel handle
 
     /// The Rust-side kernel object. Callers may dispatch actions and manage
@@ -123,6 +128,10 @@ final class HighlighterAppKernel {
         // can return results via `provideCapabilityResult` (Phase 7 — Part A).
         let bridge = KernelCapabilityBridge()
         bridge.app = kernelApp
+        // Phase 7 Capture: the camera capability is a UI-presentation capability —
+        // route it to native SwiftUI camera/barcode presentation over the key
+        // window (native owns the pixels; the kernel drives the flow).
+        bridge.cameraPresenter = { op in await CapturePresenter.present(op) }
         self.capabilityBridge = bridge
 
         // Register the observer BEFORE opening views so no initial snapshot
@@ -303,6 +312,22 @@ final class HighlighterAppKernel {
         feedbackThread.removeValue(forKey: rootEventId)
     }
 
+    // MARK: - Phase 7: capture lifecycle
+
+    /// Open the capture view (book/page scan → OCR → draft → publish).
+    /// Snapshots stream into `captureSnapshot`. Call from the capture screen's
+    /// `.task`. Camera/OCR/blossom run as native capability round-trips.
+    func openCapture() {
+        app.openView(viewId: .capture, route: .capture)
+    }
+
+    /// Close the capture view and reset the draft (hl.capture.reset).
+    func closeCapture() {
+        app.dispatch(.captureReset)
+        app.closeView(viewId: .capture)
+        captureSnapshot = nil
+    }
+
     // MARK: - Snapshot ingestion (called on main actor by KernelObserver)
 
     fileprivate func receive(viewId: ViewId, snapshot: ViewSnapshot) {
@@ -344,6 +369,10 @@ final class HighlighterAppKernel {
         case .homeFeed(let s):
             homeFeed = s
 
+        // Phase 7 cutover: capture (CaptureStore reads this).
+        case .capture(let s):
+            captureSnapshot = s
+
         // Phase 2E (network settings / relay diagnostics) — handled elsewhere.
         case .networkSettings, .relayDiagnostics:
             break
@@ -356,9 +385,9 @@ final class HighlighterAppKernel {
              .highlightFeed, .whatsNew, .bookPicker, .shareComposer:
             break
 
-        // Phase 5+ snapshots (podcast, OCR capture) — managed by their owning
-        // views / stores; no-op here (same pattern as Phase 4+ above).
-        case .podcastListening, .capture:
+        // Phase 5+ snapshots (podcast) — managed by their owning views / stores;
+        // no-op here (same pattern as Phase 4+ above).
+        case .podcastListening:
             break
         }
     }
