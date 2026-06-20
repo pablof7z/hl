@@ -83,7 +83,13 @@ enum HighlighterAction {
 
     // ── Highlight feed ────────────────────────────────────────────────────────
     case drainHighlightFeed
-    case publishHighlight(content: String, sourceReference: String, relayHint: String?)
+    case publishHighlight(
+        content: String,
+        sourceReference: String,
+        relayHint: String?,
+        note: String?,
+        context: String?
+    )
 
     // ── ISBN ──────────────────────────────────────────────────────────────────
     case lookupIsbn(isbn: String)
@@ -299,9 +305,11 @@ enum HighlighterAction {
         // ── Highlight feed ────────────────────────────────────────────────────
         case .drainHighlightFeed:
             return AppActionEnvelope(namespace: "hl.highlight.drain_feed", json: "{}")
-        case .publishHighlight(let content, let sourceReference, let relayHint):
+        case .publishHighlight(let content, let sourceReference, let relayHint, let note, let context):
             var dict: [String: Any] = ["content": content, "source_reference": sourceReference]
             if let hint = relayHint { dict["relay_hint"] = hint }
+            if let note { dict["note"] = note }
+            if let context { dict["context"] = context }
             return AppActionEnvelope(namespace: "hl.highlight.publish", json: jsonAny(dict))
 
         // ── ISBN ──────────────────────────────────────────────────────────────
