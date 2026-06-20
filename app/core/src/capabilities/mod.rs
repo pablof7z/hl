@@ -1,4 +1,4 @@
-//! Capability bridge types — Phase 1: Keychain; Phase 5K: Share-extension.
+//! Capability bridge types — Phase 1: Keychain; Phase 5H: Audio; Phase 5K: Share-extension.
 //!
 //! Native shells execute raw OS capabilities and report results back via
 //! `HighlighterApp::provide_capability_result`. Rust decides what the result
@@ -9,6 +9,10 @@ pub mod keychain;
 // ── Phase 5K additions (append-only) ─────────────────────────────────────────
 pub mod share;
 
+// ── Phase 5H additions (append-only) ─────────────────────────────────────────
+pub mod audio;
+
+pub use audio::{AudioOp, AudioResult};
 pub use keychain::{KeychainOp, KeychainResult};
 pub use share::{RawSharePayload, ShareOp, ShareResult};
 
@@ -22,6 +26,10 @@ pub enum CapabilityRequest {
     // ── Phase 5K additions (append-only) ─────────────────────────────────────
     /// Share-extension App Group read/write request.
     Share(ShareOp),
+
+    // ── Phase 5H additions (append-only) ─────────────────────────────────────
+    /// Audio player transport request (load/play/pause/seek/stop/waveform).
+    Audio(AudioOp),
 }
 
 /// The native shell's response to a prior `CapabilityRequest`. Delivered via
@@ -34,4 +42,8 @@ pub enum CapabilityResult {
     // ── Phase 5K additions (append-only) ─────────────────────────────────────
     /// Response to a `CapabilityRequest::Share`.
     Share(ShareResult),
+
+    // ── Phase 5H additions (append-only) ─────────────────────────────────────
+    /// Response to a `CapabilityRequest::Audio` — progress, loaded, peaks, or error.
+    Audio(AudioResult),
 }

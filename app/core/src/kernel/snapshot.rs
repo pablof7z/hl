@@ -186,6 +186,13 @@ pub enum ViewSnapshot {
     /// Swift formats display labels and handles the share flow after reading the
     /// raw snapshot.
     ShareComposer(crate::kernel::domains::share::ShareComposerSnapshot),
+
+    // ── Phase 5H additions (append-only) ─────────────────────────────────────
+    /// Full-screen podcast player — now-playing fields + position/duration/
+    /// is_playing + clip range (empty for 5H; populated by Phase 5I/5J).
+    /// Device-local (resume position NEVER published to nostr). Raw f64 fields
+    /// only (D1: Swift formats "X:XX" timestamps and progress percentage).
+    PodcastListening(PodcastListeningSnapshot),
 }
 
 // ── Phase 4B additions (append-only) ─────────────────────────────────────────
@@ -878,4 +885,47 @@ pub struct WhatsNewSnapshot {
     /// `true` when `entries` is non-empty and the sheet should be presented.
     /// Swift uses this flag to trigger the sheet presentation.
     pub should_present: bool,
+}
+
+// ── Phase 5H additions (append-only) ─────────────────────────────────────────
+
+/// Snapshot for `ViewId::PodcastListening` — the full-screen podcast player.
+///
+/// All playback facts are **device-local** (resume position NEVER published to
+/// nostr — `hl-app-state-vs-nostr-facts`).
+///
+/// Raw-data doctrine (D1): Swift formats all display strings from these raw
+/// fields — "X:XX" timestamps, progress percentage, chapter titles.  The kernel
+/// does NOT produce formatted duration strings.
+///
+/// Bounded: fixed-size record (no lists that grow with the event store —
+/// Non-Negotiable #7).  Clip ranges (`clip_start_seconds` / `clip_end_seconds`)
+/// are empty in Phase 5H and are populated by Phase 5I/5J.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct PodcastListeningSnapshot {
+    /// Podcast item GUID — the stable episode identifier.
+    pub guid: String,
+    /// HTTP(S) audio URL of the loaded episode.  Opaque from the kernel (D3).
+    pub audio_url: String,
+    /// Episode title.  Raw string — no truncation or ellipsis (D1).
+    pub title: String,
+    /// Episode author / host.  Raw string (D1).
+    pub author: String,
+    /// Episode artwork URL.  Raw string — Swift handles loading/caching (D1).
+    pub image_url: String,
+    /// Total duration in seconds as reported by `AudioResult::Loaded`.
+    /// `0.0` until the native player has fully loaded the item.
+    pub duration_seconds: f64,
+    /// Current playback position in seconds.  Updated at most once per second
+    /// (bounded cadence, D8).  `0.0` at start.
+    pub position_seconds: f64,
+    /// `true` when the native player is actively playing.  `false` when paused,
+    /// buffering, or stopped.  Updated by `AudioResult::Progress`.
+    pub is_playing: bool,
+    /// Clip start position in seconds for an in-progress clip selection.
+    /// `None` in Phase 5H — populated by Phase 5I/5J.
+    pub clip_start_seconds: Option<f64>,
+    /// Clip end position in seconds for an in-progress clip selection.
+    /// `None` in Phase 5H — populated by Phase 5I/5J.
+    pub clip_end_seconds: Option<f64>,
 }

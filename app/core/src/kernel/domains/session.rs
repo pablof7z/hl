@@ -82,6 +82,11 @@ pub(crate) fn reduce_event_capability_result(
                 crate::kernel::domains::share::reduce_event_share_capability_error(msg)
             }
         },
+
+        // ── Phase 5H additions (append-only) ─────────────────────────────────
+        CapabilityResult::Audio(ar) => {
+            crate::kernel::domains::podcast::reduce_capability_audio(state, ar)
+        }
     }
 }
 

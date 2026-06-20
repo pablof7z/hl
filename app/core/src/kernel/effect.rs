@@ -427,4 +427,39 @@ pub enum Effect {
         /// Snapshot of all (isbn13, entry) pairs at the time of the cache update.
         entries: Vec<(String, crate::kernel::domains::isbn::CachedIsbnEntry)>,
     },
+
+    // ── Phase 5H additions (append-only) ─────────────────────────────────────
+    /// Load the saved resume position for `guid` from the
+    /// `{data_dir}/podcast-position-v1.json` store and emit
+    /// `KernelEvent::PodcastPositionLoaded`.
+    ///
+    /// Emitted by `reduce_action_play` BEFORE the `Load` capability request so
+    /// the runner can inject the saved position back into state for the
+    /// immediate `AudioOp::Load` call.  In the actor the position is already in
+    /// memory from a prior load, so this effect is a cheap synchronous read from
+    /// `AppState::podcast_position_cache` (keyed by guid) in the effect runner.
+    /// Fire-and-forget (D6). DEVICE-LOCAL — never published to nostr.
+    LoadPodcastPosition {
+        /// Podcast item GUID to look up.
+        guid: String,
+    },
+    /// Atomically persist a podcast resume position to
+    /// `{data_dir}/podcast-position-v1.json` (write-to-tmp then rename).
+    ///
+    /// Emitted by `reduce_capability_audio` on each 5 s `tick_projection` tick
+    /// (while playing), and by `reduce_action_set_resume` on explicit app-
+    /// background notification. Fire-and-forget (D6): I/O failure is logged
+    /// but never surfaced as an error to the caller.
+    ///
+    /// DEVICE-LOCAL — NEVER a nostr event (`hl-app-state-vs-nostr-facts`).
+    SavePodcastPosition {
+        /// Podcast item GUID.
+        guid: String,
+        /// Current playback position in seconds (finite, ≥ 0).
+        position_seconds: f64,
+        /// Full `ArtifactRecord` snapshot (needed to reconstruct
+        /// `PodcastPositionRecord` for cold-launch rehydration).
+        /// Boxed to keep the `Effect` enum variant size manageable.
+        artifact: Box<crate::models::ArtifactRecord>,
+    },
 }

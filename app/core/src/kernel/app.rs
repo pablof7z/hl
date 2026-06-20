@@ -288,6 +288,31 @@ pub struct AppState {
     /// leak into the next session. The App Group file is the durable handoff
     /// store; this field is the in-kernel working set for the current session.
     pub share_queue: crate::kernel::domains::share::ShareQueueState,
+
+    // ── Phase 5H additions ────────────────────────────────────────────────────
+    /// Podcast playback state — transient, DEVICE-LOCAL.
+    ///
+    /// Holds the currently loaded episode (guid, artifact, position, duration,
+    /// is_playing) and waveform cache key. Updated by `AudioResult::Progress` /
+    /// `Loaded` / `Ended` events from the native capability bridge.
+    ///
+    /// NOT cleared on `Logout` / `IdentityChanged(None)` — podcast playback
+    /// is per-device, not per-account. The resume position file is also
+    /// device-local (never published to nostr).
+    ///
+    /// Bounded: fixed-size `Option<LoadedEpisode>` — never grows with the
+    /// event store (Non-Negotiable #7).
+    pub podcast: crate::kernel::domains::podcast::PodcastState,
+
+    /// In-memory saved resume position cache keyed by guid.
+    ///
+    /// Populated by `KernelEvent::PodcastPositionLoaded` (which is emitted by
+    /// `run_effect_load_podcast_position` when `AudioPlay` is dispatched).
+    /// This cache lets `reduce_action_play` include `resume_at_seconds` in the
+    /// `AudioOp::Load` without blocking the reducer on an I/O read.
+    ///
+    /// Bounded: one entry per guid encountered this session (cleared on logout).
+    pub podcast_resume_cache: std::collections::HashMap<String, f64>,
 }
 
 impl Default for AppState {
@@ -326,6 +351,9 @@ impl Default for AppState {
             isbn: crate::kernel::domains::isbn::IsbnState::default(),
             // ── Phase 5K additions ────────────────────────────────────────────
             share_queue: crate::kernel::domains::share::ShareQueueState::default(),
+            // ── Phase 5H additions ────────────────────────────────────────────
+            podcast: crate::kernel::domains::podcast::PodcastState::default(),
+            podcast_resume_cache: std::collections::HashMap::new(),
         }
     }
 }

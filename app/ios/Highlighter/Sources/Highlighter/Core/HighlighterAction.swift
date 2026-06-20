@@ -83,6 +83,17 @@ enum HighlighterAction {
     // ── Share queue ───────────────────────────────────────────────────────────
     case drainShareQueue
 
+    // ── Audio / podcast (Phase 5H) ────────────────────────────────────────────
+    /// Load and play the episode identified by `guid`.  Kernel looks up the
+    /// saved resume position and emits `CapabilityRequest::Audio(.load)`.
+    case audioPlay(url: String, guid: String, artifactJson: String)
+    /// Pause the currently-loaded player.
+    case audioPause
+    /// Seek to an absolute position (kernel clamps to `[0, duration]`).
+    case audioSeek(seconds: Double)
+    /// Explicitly persist the current resume position (call on app resign-active).
+    case audioSetResume(seconds: Double)
+
     // MARK: - Envelope serialization
 
     /// Encodes this action as an `AppActionEnvelope` ready for `dispatchAction`.
@@ -238,6 +249,19 @@ enum HighlighterAction {
         // ── Share queue ───────────────────────────────────────────────────────
         case .drainShareQueue:
             return AppActionEnvelope(namespace: "hl.share.drain_queue", json: "{}")
+
+        // ── Audio / podcast (Phase 5H) ────────────────────────────────────────
+        case .audioPlay(let url, let guid, let artifactJson):
+            return AppActionEnvelope(namespace: "hl.audio.play",
+                                     json: jsonObject(["url": url, "guid": guid, "artifact_json": artifactJson]))
+        case .audioPause:
+            return AppActionEnvelope(namespace: "hl.audio.pause", json: "{}")
+        case .audioSeek(let seconds):
+            return AppActionEnvelope(namespace: "hl.audio.seek",
+                                     json: jsonAny(["seconds": seconds]))
+        case .audioSetResume(let seconds):
+            return AppActionEnvelope(namespace: "hl.audio.set_resume",
+                                     json: jsonAny(["seconds": seconds]))
         }
     }
 }

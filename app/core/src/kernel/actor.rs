@@ -49,6 +49,8 @@ use crate::kernel::domains::{
     home_feed,
     // ── Phase 5C additions (append-only) ─────────────────────────────────────
     isbn,
+    // ── Phase 5H additions (append-only) ─────────────────────────────────────
+    podcast,
     profiles,
     projections,
     reactions,
@@ -414,6 +416,28 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
 
         // ── Phase 5K additions (append-only) ─────────────────────────────────
         AppAction::DrainShareQueue => share::reduce_action_drain_share_queue(),
+
+        // ── Phase 5H additions (append-only) ─────────────────────────────────
+        AppAction::AudioPlay {
+            url,
+            guid,
+            artifact_json,
+        } => {
+            let artifact = match serde_json::from_str::<crate::models::ArtifactRecord>(
+                &artifact_json,
+            ) {
+                Ok(a) => a,
+                Err(e) => {
+                    tracing::warn!(error = %e, "AudioPlay: failed to parse artifact_json (D6 — no-op)");
+                    return vec![];
+                }
+            };
+            let saved = state.podcast_resume_cache.get(&guid).copied();
+            podcast::reduce_action_play(state, url, guid, artifact, saved)
+        }
+        AppAction::AudioPause => podcast::reduce_action_pause(state),
+        AppAction::AudioSeek { seconds } => podcast::reduce_action_seek(state, seconds),
+        AppAction::AudioSetResume { seconds } => podcast::reduce_action_set_resume(state, seconds),
     }
 }
 
@@ -443,13 +467,14 @@ fn reduce_action_envelope(
     }
 
     use crate::kernel::action::{
-        AddBookmarkPayload, AddRelayPayload, AddRoomMemberPayload, ClaimProfilePayload,
-        CreateAccountPayload, CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload,
-        JoinRoomPayload, LookupIsbnPayload, MarkWhatsNewSeenPayload, PairBunkerPayload,
-        PresentSheetPayload, PublishHighlightPayload, ReactPayload, ReleaseProfilePayload,
-        RemoveBookmarkPayload, RemoveRelayPayload, RunSearchPayload, SelectRootTabPayload,
-        SetRelayRolePayload, SetRoomsRelayListPayload, ShareToRoomPayload, SignInNsecPayload,
-        StartRoomDiscoveryPayload, UnfollowPayload, UnreactPayload,
+        AddBookmarkPayload, AddRelayPayload, AddRoomMemberPayload, AudioPlayPayload,
+        AudioSeekPayload, AudioSetResumePayload, ClaimProfilePayload, CreateAccountPayload,
+        CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload, JoinRoomPayload,
+        LookupIsbnPayload, MarkWhatsNewSeenPayload, PairBunkerPayload, PresentSheetPayload,
+        PublishHighlightPayload, ReactPayload, ReleaseProfilePayload, RemoveBookmarkPayload,
+        RemoveRelayPayload, RunSearchPayload, SelectRootTabPayload, SetRelayRolePayload,
+        SetRoomsRelayListPayload, ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload,
+        UnfollowPayload, UnreactPayload,
     };
 
     match envelope.namespace.as_str() {
@@ -638,6 +663,33 @@ fn reduce_action_envelope(
 
         // ── Share queue ───────────────────────────────────────────────────────
         "hl.share.drain_queue" => share::reduce_action_drain_share_queue(),
+
+        // ── Audio / podcast ───────────────────────────────────────────────────
+        "hl.audio.play" => {
+            let p = parse!(AudioPlayPayload);
+            let artifact =
+                match serde_json::from_str::<crate::models::ArtifactRecord>(&p.artifact_json) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        return emit_invalid_action_toast(
+                            state,
+                            format!("hl.audio.play: bad artifact_json: {e}"),
+                            now,
+                        );
+                    }
+                };
+            let saved = state.podcast_resume_cache.get(&p.guid).copied();
+            podcast::reduce_action_play(state, p.url, p.guid, artifact, saved)
+        }
+        "hl.audio.pause" => podcast::reduce_action_pause(state),
+        "hl.audio.seek" => {
+            let p = parse!(AudioSeekPayload);
+            podcast::reduce_action_seek(state, p.seconds)
+        }
+        "hl.audio.set_resume" => {
+            let p = parse!(AudioSetResumePayload);
+            podcast::reduce_action_set_resume(state, p.seconds)
+        }
 
         // ── Unknown namespace ─────────────────────────────────────────────────
         _ => emit_invalid_action_toast(
@@ -911,6 +963,24 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // independently of a live NmpApp.
             share::reduce_event_share_queue_drained(state, payloads)
         }
+
+        // ── Phase 5H additions (append-only) ─────────────────────────────────
+        KernelEvent::AudioCapabilityResult(result) => {
+            // Route the raw `AudioResult` from the native AVPlayer to the podcast
+            // domain reducer. Bounded cadence is enforced inside
+            // `podcast::reduce_capability_audio` via `tick_projection` (D8).
+            podcast::reduce_capability_audio(state, result)
+        }
+        KernelEvent::PodcastPositionLoaded {
+            guid,
+            position_seconds,
+        } => {
+            // Cache the loaded resume position so `reduce_action_play` can include
+            // it in the next `AudioOp::Load` without a blocking I/O read.
+            // DEVICE-LOCAL — never published to nostr.
+            state.podcast_resume_cache.insert(guid, position_seconds);
+            vec![]
+        }
     }
 }
 
@@ -967,6 +1037,9 @@ pub(crate) fn project_snapshot(
         // ── Phase 5K additions (append-only) ─────────────────────────────────
         ViewId::ShareComposer => share::project_share_composer_snapshot(state)
             .map(crate::kernel::snapshot::ViewSnapshot::ShareComposer),
+
+        // ── Phase 5H additions (append-only) ─────────────────────────────────
+        ViewId::PodcastListening => podcast::project_podcast_listening_snapshot(state),
 
         _ => route::project_snapshot(state, id, clock_now),
     }
@@ -1214,6 +1287,34 @@ pub(crate) async fn run_effect(
                 run_effect_persist_whats_new_seen(&data_dir, shipped_at_unix).await;
             });
         }
+
+        // ── Phase 5H additions (append-only) ─────────────────────────────────
+        Effect::LoadPodcastPosition { guid } => {
+            // Look up the saved resume position for `guid` from disk and send
+            // KernelEvent::PodcastPositionLoaded. Fire-and-forget (D6).
+            // No-op when data_dir is empty (test mode — tests inject
+            // KernelEvent::PodcastPositionLoaded directly).
+            let data_dir = policy.data_dir.clone();
+            let tx_clone = tx.clone();
+            tokio::spawn(async move {
+                run_effect_load_podcast_position(&data_dir, guid, &tx_clone).await;
+            });
+        }
+
+        Effect::SavePodcastPosition {
+            guid,
+            position_seconds,
+            artifact,
+        } => {
+            // Atomically persist the resume position. Fire-and-forget (D6).
+            // DEVICE-LOCAL — NEVER a nostr event.
+            // No-op when data_dir is empty (test mode).
+            let data_dir = policy.data_dir.clone();
+            tokio::spawn(async move {
+                run_effect_save_podcast_position(&data_dir, guid, position_seconds, *artifact)
+                    .await;
+            });
+        }
     }
 
     let _ = session_epoch; // carried for future epoch-keyed effect cancellation
@@ -1358,6 +1459,103 @@ async fn persist_whats_new_seen_inner(path: &std::path::Path, shipped_at_unix: u
     }
     if let Err(e) = tokio::fs::rename(&tmp, path).await {
         tracing::warn!(path = %path.display(), error = %e, "persist_whats_new_seen: rename error — no-op (D6)");
+    }
+}
+
+// ─── Phase 5H helpers ────────────────────────────────────────────────────────
+
+/// Execute `Effect::LoadPodcastPosition { guid }`:
+///   1. Read `{data_dir}/podcast-position-v1.json` from disk.
+///   2. If the record's `guid` matches, send `KernelEvent::PodcastPositionLoaded`.
+///   3. If the file does not exist, or the guid does not match, send nothing.
+///
+/// No-op when `data_dir` is empty (test mode — tests inject
+/// `KernelEvent::PodcastPositionLoaded` directly).  D6: I/O errors are logged.
+async fn run_effect_load_podcast_position(
+    data_dir: &str,
+    guid: String,
+    tx: &mpsc::UnboundedSender<Cmd>,
+) {
+    if data_dir.is_empty() {
+        return;
+    }
+    use crate::models::PodcastPositionRecord;
+
+    let path =
+        std::path::Path::new(data_dir).join(crate::kernel::domains::podcast::POSITION_FILE_NAME);
+    let bytes = match tokio::fs::read(&path).await {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
+        Err(e) => {
+            tracing::warn!(path = %path.display(), error = %e, "load_podcast_position: read error (D6)");
+            return;
+        }
+    };
+    let record: PodcastPositionRecord = match serde_json::from_slice(&bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(path = %path.display(), error = %e, "load_podcast_position: parse error (D6)");
+            return;
+        }
+    };
+    if record.guid == guid {
+        let _ = tx.send(Cmd::Event(
+            crate::kernel::action::KernelEvent::PodcastPositionLoaded {
+                guid,
+                position_seconds: record.position_seconds,
+            },
+        ));
+    }
+}
+
+/// Execute `Effect::SavePodcastPosition { guid, position_seconds, artifact }`:
+///   Atomically write to `{data_dir}/podcast-position-v1.json`.
+///
+/// DEVICE-LOCAL — NEVER a nostr event (`hl-app-state-vs-nostr-facts`).
+/// No-op when `data_dir` is empty (test mode). D6: I/O failure is logged.
+async fn run_effect_save_podcast_position(
+    data_dir: &str,
+    guid: String,
+    position_seconds: f64,
+    artifact: crate::models::ArtifactRecord,
+) {
+    if data_dir.is_empty() {
+        return;
+    }
+    use crate::models::PodcastPositionRecord;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let record = PodcastPositionRecord {
+        guid,
+        position_seconds,
+        last_played_at_unix_seconds: now,
+        artifact,
+    };
+    let bytes = match serde_json::to_vec(&record) {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!(error = %e, "save_podcast_position: encode error (D6)");
+            return;
+        }
+    };
+    let path =
+        std::path::Path::new(data_dir).join(crate::kernel::domains::podcast::POSITION_FILE_NAME);
+    if let Some(parent) = path.parent() {
+        if let Err(e) = tokio::fs::create_dir_all(parent).await {
+            tracing::warn!(path = %parent.display(), error = %e, "save_podcast_position: mkdir error (D6)");
+            return;
+        }
+    }
+    let tmp = path.with_extension("json.tmp");
+    if let Err(e) = tokio::fs::write(&tmp, bytes).await {
+        tracing::warn!(path = %tmp.display(), error = %e, "save_podcast_position: write error (D6)");
+        return;
+    }
+    if let Err(e) = tokio::fs::rename(&tmp, &path).await {
+        tracing::warn!(path = %path.display(), error = %e, "save_podcast_position: rename error (D6)");
     }
 }
 

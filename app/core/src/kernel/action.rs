@@ -212,6 +212,25 @@ pub(crate) struct PublishHighlightPayload {
     pub relay_hint: Option<String>,
 }
 
+// ── Phase 5H payload structs ─────────────────────────────────────────────────
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct AudioPlayPayload {
+    pub url: String,
+    pub guid: String,
+    pub artifact_json: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct AudioSeekPayload {
+    pub seconds: f64,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct AudioSetResumePayload {
+    pub seconds: f64,
+}
+
 /// Every user or platform action the kernel understands.
 ///
 /// Dispatch is fire-and-forget (`dispatch(action)` returns `()`; Non-Negotiable #3).
@@ -652,6 +671,52 @@ pub enum AppAction {
 
     // ── Phase 5K additions (append-only) ─────────────────────────────────────
     DrainShareQueue,
+
+    // ── Phase 5H additions (append-only) ─────────────────────────────────────
+    /// Load and play a podcast episode.
+    ///
+    /// The kernel looks up the saved resume position from its in-memory
+    /// `PodcastPositionStore` cache (DEVICE-LOCAL — never published to nostr),
+    /// emits `CapabilityRequest::Audio(AudioOp::Load { url, resume_at_seconds })`
+    /// to the native AVPlayer, and updates `AppState::podcast.current`.
+    ///
+    /// `artifact_json` is the serde-JSON of `ArtifactRecord` (avoids a nested
+    /// uniffi::Record in the envelope shape). The kernel decodes it; on any
+    /// parse error the action is a silent no-op (D6).
+    ///
+    /// Fire-and-forget (D6, Non-Negotiable #3).
+    AudioPlay {
+        /// HTTP(S) audio URL. Opaque from the caller (D3).
+        url: String,
+        /// Podcast item GUID — used as the resume-position key.
+        guid: String,
+        /// serde-JSON of the `ArtifactRecord` for position persistence.
+        artifact_json: String,
+    },
+    /// Pause the native audio player.
+    ///
+    /// Emits `CapabilityRequest::Audio(AudioOp::Pause)` and updates
+    /// `AppState::podcast.current.is_playing = false`.
+    /// No-op when no episode is loaded. Fire-and-forget (D6).
+    AudioPause,
+    /// Seek the native audio player to `seconds`.
+    ///
+    /// The reducer clamps `seconds` to `[0, duration]` via `seek_projection`
+    /// before emitting `CapabilityRequest::Audio(AudioOp::Seek { seconds })`.
+    /// No-op when no episode is loaded. Fire-and-forget (D6).
+    AudioSeek {
+        /// Requested seek position (seconds; may be out of bounds — clamped).
+        seconds: f64,
+    },
+    /// Persist the current resume position immediately (e.g. on app-background).
+    ///
+    /// Emits `Effect::SavePodcastPosition`. No capability request.
+    /// No-op when no episode is loaded or the position is invalid.
+    /// DEVICE-LOCAL — never a nostr event (`hl-app-state-vs-nostr-facts`).
+    AudioSetResume {
+        /// Resume position in seconds (finite, ≥ 0).
+        seconds: f64,
+    },
 }
 
 /// NIP-50 search scope — which event kinds the relay-search targets.
@@ -949,4 +1014,30 @@ pub enum KernelEvent {
     /// The reducer deduplicates by `(group_id, url)` and appends new items to
     /// `AppState::share_queue.pending`. Device-local — NOT a nostr fact.
     ShareQueueDrained(Vec<crate::capabilities::share::RawSharePayload>),
+
+    // ── Phase 5H additions (append-only) ─────────────────────────────────────
+    /// A raw `AudioResult` arrived via `CapabilityResult::Audio`.
+    ///
+    /// Produced by `reduce_event` when it decodes a `CapabilityResult::Audio`
+    /// result and routes it to `podcast::reduce_capability_audio`. Carried as
+    /// a typed enum rather than raw bytes so the podcast reducer can match
+    /// without additional parsing.
+    ///
+    /// `AudioResult::Progress` is coalesced inside `reduce_capability_audio`
+    /// to at most one kernel state update per second (D8 — not per 0.25 s).
+    AudioCapabilityResult(crate::capabilities::AudioResult),
+    /// A saved resume position was loaded from `PodcastPositionStore`.
+    ///
+    /// Injected by the effect runner (`Effect::LoadPodcastPosition`) when
+    /// `AppAction::AudioPlay` is dispatched and the position store has an entry
+    /// for the guid. The reducer caches the position in `AppState::podcast`
+    /// so `reduce_action_play` can include it in the `Load` op.
+    ///
+    /// DEVICE-LOCAL — never published to nostr.
+    PodcastPositionLoaded {
+        /// Podcast item GUID.
+        guid: String,
+        /// Saved position in seconds.
+        position_seconds: f64,
+    },
 }
