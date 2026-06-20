@@ -37,9 +37,27 @@ use nmp_defaults::{NmpAppBuilder, RunConfig};
 
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
 use crate::kernel::domains::{
-    articles, articles_feed, auth, bookmarks, communities, discovery, feed, follows,
-    highlight_feed, home_feed, profiles, projections, reactions, relays, room_home, route, search,
-    session, whats_new,
+    articles,
+    articles_feed,
+    auth,
+    bookmarks,
+    communities,
+    discovery,
+    feed,
+    follows,
+    highlight_feed,
+    home_feed,
+    profiles,
+    projections,
+    reactions,
+    relays,
+    room_home,
+    route,
+    search,
+    session,
+    // ── Phase 5K additions (append-only) ─────────────────────────────────────
+    share,
+    whats_new,
 };
 
 // ─── NMP update-callback C ABI ──────────────────────────────────────────────
@@ -380,6 +398,9 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
                 )
             }
         }
+
+        // ── Phase 5K additions (append-only) ─────────────────────────────────
+        AppAction::DrainShareQueue => share::reduce_action_drain_share_queue(),
     }
 }
 
@@ -564,6 +585,22 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // feed::advance_feed_cursor after the FeedPage event is processed.
             vec![]
         }
+
+        // ── Phase 5K additions (append-only) ─────────────────────────────────
+        KernelEvent::ShareQueueDrained(payloads) => {
+            // Route incoming share payloads into the share-queue domain handler
+            // which deduplicates and appends to AppState::share_queue.pending.
+            //
+            // Note: in the live path, `CapabilityResult::Share(ShareResult::Pending)`
+            // is handled by `session::reduce_event_capability_result`, which calls
+            // `share::reduce_event_share_queue_drained` directly — it does NOT emit
+            // this `KernelEvent::ShareQueueDrained` variant. This arm is therefore
+            // ONLY reachable via `Cmd::Event` test injection (where tests bypass the
+            // capability round-trip and inject share payloads directly). This matches
+            // the pattern of `KernelEvent::FeedPage` etc. — each can be tested
+            // independently of a live NmpApp.
+            share::reduce_event_share_queue_drained(state, payloads)
+        }
     }
 }
 
@@ -613,6 +650,10 @@ pub(crate) fn project_snapshot(
 
         // ── Phase 5A additions (append-only) ─────────────────────────────────
         ViewId::WhatsNew => whats_new::project_whats_new_snapshot(state),
+
+        // ── Phase 5K additions (append-only) ─────────────────────────────────
+        ViewId::ShareComposer => share::project_share_composer_snapshot(state)
+            .map(crate::kernel::snapshot::ViewSnapshot::ShareComposer),
 
         _ => route::project_snapshot(state, id, clock_now),
     }

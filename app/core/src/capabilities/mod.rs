@@ -1,4 +1,4 @@
-//! Capability bridge types — Phase 1: Keychain only.
+//! Capability bridge types — Phase 1: Keychain; Phase 5K: Share-extension.
 //!
 //! Native shells execute raw OS capabilities and report results back via
 //! `HighlighterApp::provide_capability_result`. Rust decides what the result
@@ -6,7 +6,11 @@
 
 pub mod keychain;
 
+// ── Phase 5K additions (append-only) ─────────────────────────────────────────
+pub mod share;
+
 pub use keychain::{KeychainOp, KeychainResult};
+pub use share::{RawSharePayload, ShareOp, ShareResult};
 
 /// A request from the Rust kernel to the native shell to execute an OS
 /// capability. Emitted via `HighlighterObserver::on_capability_request`.
@@ -14,6 +18,10 @@ pub use keychain::{KeychainOp, KeychainResult};
 pub enum CapabilityRequest {
     /// Keychain load/clear request.
     Keychain(KeychainOp),
+
+    // ── Phase 5K additions (append-only) ─────────────────────────────────────
+    /// Share-extension App Group read/write request.
+    Share(ShareOp),
 }
 
 /// The native shell's response to a prior `CapabilityRequest`. Delivered via
@@ -22,4 +30,8 @@ pub enum CapabilityRequest {
 pub enum CapabilityResult {
     /// Response to a `CapabilityRequest::Keychain`.
     Keychain(KeychainResult),
+
+    // ── Phase 5K additions (append-only) ─────────────────────────────────────
+    /// Response to a `CapabilityRequest::Share`.
+    Share(ShareResult),
 }

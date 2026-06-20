@@ -58,9 +58,13 @@ pub enum AppAction {
     /// Mark onboarding as complete in the durable `OnboardingStore`.
     CompleteOnboarding,
     /// Switch the active root tab.
-    SelectRootTab { tab: RootTab },
+    SelectRootTab {
+        tab: RootTab,
+    },
     /// Present a named sheet over the root shell.
-    PresentSheet { sheet_id: String },
+    PresentSheet {
+        sheet_id: String,
+    },
     /// Dismiss the topmost sheet.
     DismissSheet,
 
@@ -71,7 +75,9 @@ pub enum AppAction {
     /// `Effect::AddNsecSigner`. Success is signalled by the identity-change
     /// observer firing `KernelEvent::IdentityChanged(Some(pubkey))`. Failure
     /// surfaces as `SessionState::SignInFailed` (D6 — never a `Result`).
-    SignInNsec { nsec: String },
+    SignInNsec {
+        nsec: String,
+    },
 
     // ── Phase 2B additions (append-only) ─────────────────────────────────────
     /// Sign in via NIP-46 bunker URI (e.g. `bunker://pubkey?relay=…`).
@@ -80,7 +86,9 @@ pub enum AppAction {
     /// reducer transitions to `SessionState::SigningIn{Bunker}` and emits
     /// `Effect::AddBunkerSigner`. The broker completes the NIP-46 handshake
     /// async; success arrives as `KernelEvent::IdentityChanged(Some(pubkey))`.
-    PairBunker { uri: String },
+    PairBunker {
+        uri: String,
+    },
     /// Request a NostrConnect URI so the user can scan it on a remote signer.
     ///
     /// Requires `nmp_signer_broker_init` to have been called at boot. The
@@ -111,7 +119,9 @@ pub enum AppAction {
     /// emits `Effect::CreateAccount`. Success arrives via the existing
     /// `IdentityChanged(Some(pubkey))` observer → `SessionState::Present`.
     /// The 2A clock timeout (SIGN_IN_TIMEOUT_SECS) covers the SigningIn period.
-    CreateAccount { profile_name: String },
+    CreateAccount {
+        profile_name: String,
+    },
 
     // ── Phase 2D additions (append-only) ─────────────────────────────────────
     /// Add a relay to the active account's NIP-65 relay list.
@@ -120,17 +130,25 @@ pub enum AppAction {
     /// constructs URLs; D3). `role` is the NIP-65 / kind:10002 role for the
     /// relay; the kernel normalises it via `RelayRole::normalize` before
     /// forwarding to nmp. Fire-and-forget: emits `Effect::AddRelay`.
-    AddRelay { url: String, role: RelayRole },
+    AddRelay {
+        url: String,
+        role: RelayRole,
+    },
     /// Remove a relay from the active account's NIP-65 relay list.
     ///
     /// Fire-and-forget: emits `Effect::RemoveRelay`. No-op if the relay is
     /// not present (nmp is idempotent here; D6).
-    RemoveRelay { url: String },
+    RemoveRelay {
+        url: String,
+    },
     /// Change the role of an already-configured relay.
     ///
     /// Semantically equivalent to `RemoveRelay` + `AddRelay` in nmp's relay
     /// edit model (T66a). Fire-and-forget: emits `Effect::SetRelayRole`.
-    SetRelayRole { url: String, role: RelayRole },
+    SetRelayRole {
+        url: String,
+        role: RelayRole,
+    },
     /// Persist the rooms relay list (relays that host NIP-29 rooms) as a
     /// kind:30078 app-data event with d-tag `"com.highlighter.relays"`.
     ///
@@ -140,7 +158,9 @@ pub enum AppAction {
     /// the hl-owned d-tag string `"com.highlighter.relays"` is the only
     /// constant (it is product-controlled, not a relay URL).
     /// Fire-and-forget: emits `Effect::PublishRoomsRelayList`.
-    SetRoomsRelayList { relay_urls: Vec<String> },
+    SetRoomsRelayList {
+        relay_urls: Vec<String>,
+    },
 
     // ── Phase 3C additions (append-only) ─────────────────────────────────────
     /// Follow a pubkey — appends it to the active account's kind:3 follow set
@@ -150,11 +170,15 @@ pub enum AppAction {
     /// `pubkey` is a raw 64-char lowercase hex pubkey. Hex-shape validation
     /// lives in the nmp-nip02 action module; semantic errors surface as NMP
     /// toasts rather than crossing the dispatch boundary.
-    Follow { pubkey: String },
+    Follow {
+        pubkey: String,
+    },
 
     /// Unfollow a pubkey — removes it from the active account's kind:3 follow
     /// set and republishes. Symmetric with `Follow`; fire-and-forget (D6).
-    Unfollow { pubkey: String },
+    Unfollow {
+        pubkey: String,
+    },
 
     // ── Phase 3E additions (append-only) ─────────────────────────────────────
     /// Start room discovery on a relay — dispatches `"nmp.nip29.discover"` action
@@ -162,7 +186,9 @@ pub enum AppAction {
     /// `relay_url` is the WebSocket relay URL to discover rooms on (opaque string;
     /// kernel never constructs relay URLs — D3). Fire-and-forget: the discovered
     /// groups catalog arrives via the `DiscoveredGroupsUpdated` projection event.
-    StartRoomDiscovery { relay_url: String },
+    StartRoomDiscovery {
+        relay_url: String,
+    },
 
     // ── Phase 3D additions (append-only) ─────────────────────────────────────
     /// Open a profile view for `pubkey` — triggers `nmp_app_claim_profile` via
@@ -173,12 +199,16 @@ pub enum AppAction {
     /// `pubkey` is a raw 64-char lowercase hex pubkey. The kernel uses a stable
     /// consumer-id (`"hl.profile.<pubkey>"`) so the refcount is scoped to this
     /// view instance. Fire-and-forget (D6, Non-Negotiable #3).
-    ClaimProfile { pubkey: String },
+    ClaimProfile {
+        pubkey: String,
+    },
 
     /// Close a profile view — triggers `nmp_app_release_profile`. Decrements the
     /// per-consumer refcount; when it reaches zero NMP cancels the kind:0
     /// subscription. Fire-and-forget (D6).
-    ReleaseProfile { pubkey: String },
+    ReleaseProfile {
+        pubkey: String,
+    },
 
     // ── Phase 3F additions (append-only) ─────────────────────────────────────
     /// Join a NIP-29 group by publishing a kind:9021 join-request via
@@ -309,11 +339,15 @@ pub enum AppAction {
     /// and emits a snapshot once the article is present in `AppState::articles`
     /// (populated by the nmp.nip23.articles typed projection). No NMP action is
     /// dispatched — the longform projection populates the state automatically.
-    OpenArticle { address: String },
+    OpenArticle {
+        address: String,
+    },
 
     /// Close an article reader view — deregisters `ViewId::ArticleReader{address}`.
     /// Fire-and-forget. No NMP release is needed (longform projection is session-scoped).
-    CloseArticle { address: String },
+    CloseArticle {
+        address: String,
+    },
 
     // ── Phase 4B additions (append-only) ─────────────────────────────────────
     /// React to an event with a NIP-25 kind:7 reaction.
@@ -432,7 +466,12 @@ pub enum AppAction {
     PrepareWhatsNew,
     /// Advance the seen marker to `shipped_at_unix`. Monotonic — never moves backward.
     /// Device-local: persists to `{data_dir}/whats-new-state-v1.json`.
-    MarkWhatsNewSeen { shipped_at_unix: u64 },
+    MarkWhatsNewSeen {
+        shipped_at_unix: u64,
+    },
+
+    // ── Phase 5K additions (append-only) ─────────────────────────────────────
+    DrainShareQueue,
 }
 
 /// NIP-50 search scope — which event kinds the relay-search targets.
@@ -688,4 +727,17 @@ pub enum KernelEvent {
         entries: Vec<crate::kernel::snapshot::WhatsNewEntryRow>,
         should_present: bool,
     },
+
+    // ── Phase 5K additions (append-only) ─────────────────────────────────────
+    /// The App Group share queue was drained by the native capability bridge.
+    ///
+    /// Produced when `CapabilityResult::Share(ShareResult::Pending(payloads))`
+    /// arrives via `provide_capability_result` in response to a
+    /// `CapabilityRequest::Share(ShareOp::DrainQueue)`. Carries the raw payloads
+    /// the iOS share extension wrote to `pending-shares-v1.json` before the
+    /// native bridge deleted the file.
+    ///
+    /// The reducer deduplicates by `(group_id, url)` and appends new items to
+    /// `AppState::share_queue.pending`. Device-local — NOT a nostr fact.
+    ShareQueueDrained(Vec<crate::capabilities::share::RawSharePayload>),
 }
