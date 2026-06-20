@@ -274,6 +274,15 @@ pub struct AppState {
     /// Bounded: entries come from the bundled JSON (typically < 20 items;
     /// Non-Negotiable #7 — never grows with the event store).
     pub whats_new: crate::kernel::domains::whats_new::WhatsNewState,
+
+    // ── Phase 5K additions ────────────────────────────────────────────────────
+    /// Transient share-queue state drained from the iOS App Group.
+    ///
+    /// DEVICE-LOCAL — never a nostr fact. Cleared on `Logout` /
+    /// `IdentityChanged(None)` so a stale queue from a prior account cannot
+    /// leak into the next session. The App Group file is the durable handoff
+    /// store; this field is the in-kernel working set for the current session.
+    pub share_queue: crate::kernel::domains::share::ShareQueueState,
 }
 
 impl Default for AppState {
@@ -308,6 +317,8 @@ impl Default for AppState {
             room_lanes: HashMap::new(),
             // ── Phase 5A additions ────────────────────────────────────────────
             whats_new: crate::kernel::domains::whats_new::WhatsNewState::default(),
+            // ── Phase 5K additions ────────────────────────────────────────────
+            share_queue: crate::kernel::domains::share::ShareQueueState::default(),
         }
     }
 }

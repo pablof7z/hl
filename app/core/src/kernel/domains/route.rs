@@ -168,6 +168,11 @@ pub(crate) fn project_snapshot(
         // ViewId::WhatsNew is handled upstream in actor::project_snapshot.
         // This arm is unreachable in practice but required for exhaustive match.
         ViewId::WhatsNew => None,
+
+        // ── Phase 5K additions (append-only) ─────────────────────────────────
+        // ViewId::ShareComposer is handled upstream in actor::project_snapshot.
+        // This arm is unreachable in practice but required for exhaustive match.
+        ViewId::ShareComposer => None,
     }
 }
 

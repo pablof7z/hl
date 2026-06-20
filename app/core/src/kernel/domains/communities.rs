@@ -90,12 +90,18 @@ pub(crate) fn apply_joined_groups(state: &mut AppState, payload: &[u8]) {
 /// Called from `reduce_event(KernelEvent::JoinedGroupsUpdated(groups))` on the
 /// actor thread. Replaces the full slice on every update (bounded replacement —
 /// the list is only as large as the number of groups the account has joined).
+///
+/// Phase 5K: also refreshes the App Group communities handoff snapshot so the
+/// share extension always has a current community picker list.
 pub(crate) fn reduce_event_joined_groups_updated(
     state: &mut AppState,
     groups: Vec<CommunityRow>,
 ) -> Vec<Effect> {
     state.communities = groups;
-    vec![]
+    // ── Phase 5K additions (append-only) ─────────────────────────────────────
+    // Refresh the App Group handoff JSON on every community-list update so the
+    // share extension picker is always current. No-op when communities is empty.
+    crate::kernel::domains::share::on_communities_updated(&state.communities)
 }
 
 // ─── Snapshot projection ─────────────────────────────────────────────────────
@@ -138,10 +144,18 @@ mod tests {
         let mut state = AppState::default();
         let rows = vec![make_row("g1"), make_row("g2")];
         let effects = reduce_event_joined_groups_updated(&mut state, rows.clone());
-        assert!(effects.is_empty());
+        // Phase 5K: a WriteCommunitiesSnapshot capability request is emitted so
+        // the share extension always has a current community picker. Verify state
+        // is correctly updated regardless.
         assert_eq!(state.communities.len(), 2);
         assert_eq!(state.communities[0].group_id, "g1");
         assert_eq!(state.communities[1].group_id, "g2");
+        // Exactly one effect (WriteCommunitiesSnapshot) when communities are non-empty.
+        assert_eq!(
+            effects.len(),
+            1,
+            "expected WriteCommunitiesSnapshot effect; got {effects:?}"
+        );
     }
 
     // 3B-T2: communities_snapshot_has_raw_fields_not_labels

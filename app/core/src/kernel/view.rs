@@ -115,6 +115,16 @@ pub enum ViewId {
     // ── Phase 5A additions (append-only) ─────────────────────────────────────
     /// What's New sheet — device-local seen-state (no nostr publish).
     WhatsNew,
+
+    // ── Phase 5K additions (append-only) ─────────────────────────────────────
+    /// Share-extension intake composer.
+    ///
+    /// Opened by the main app when it receives a `highlighter://process-share`
+    /// URL open (after the share extension wrote `pending-shares-v1.json` to the
+    /// App Group and dispatched `AppAction::DrainShareQueue`). The snapshot
+    /// is `ViewSnapshot::ShareComposer(ShareComposerSnapshot)` — raw fields
+    /// for the pending share item and the available community picker rows (D1).
+    ShareComposer,
 }
 
 /// Which projection to compute for a registered view.
@@ -191,6 +201,12 @@ pub enum ViewRoute {
     // ── Phase 5A additions (append-only) ─────────────────────────────────────
     /// What's New sheet projection — `WhatsNewSnapshot` (unseen entries, should_present flag).
     WhatsNew,
+
+    // ── Phase 5K additions (append-only) ─────────────────────────────────────
+    /// Share-extension intake composer projection — `ShareComposerSnapshot`
+    /// (raw pending share item fields + community picker rows). D1: no formatted
+    /// strings, no community name fallbacks, no URL validation strings.
+    ShareComposer,
 }
 
 /// Tracks open views and their last-emitted snapshots.

@@ -6,7 +6,9 @@
 
 use tokio::sync::mpsc;
 
-use crate::capabilities::{CapabilityRequest, CapabilityResult, KeychainOp, KeychainResult};
+use crate::capabilities::{
+    CapabilityRequest, CapabilityResult, KeychainOp, KeychainResult, ShareResult,
+};
 use crate::kernel::action::KernelEvent;
 use crate::kernel::action::SignerKind;
 use crate::kernel::actor::{Cmd, SharedState};
@@ -65,6 +67,19 @@ pub(crate) fn reduce_event_capability_result(
             KeychainResult::Error(e) => {
                 state.session = SessionState::RestoreFailed { error: e };
                 vec![]
+            }
+        },
+
+        // ── Phase 5K additions (append-only) ─────────────────────────────────
+        CapabilityResult::Share(sr) => match sr {
+            ShareResult::Pending(payloads) => {
+                crate::kernel::domains::share::reduce_event_share_queue_drained(state, payloads)
+            }
+            ShareResult::CommunitiesWritten => {
+                crate::kernel::domains::share::reduce_event_communities_written()
+            }
+            ShareResult::Error(msg) => {
+                crate::kernel::domains::share::reduce_event_share_capability_error(msg)
             }
         },
     }

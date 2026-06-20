@@ -174,6 +174,13 @@ pub enum ViewSnapshot {
     /// `should_present` drives the sheet; `entries` lists the unseen items.
     /// D1: no "N new features" count label — raw rows only.
     WhatsNew(WhatsNewSnapshot),
+
+    // ── Phase 5K additions (append-only) ─────────────────────────────────────
+    /// Share-extension intake composer — pending share item + community picker.
+    /// Raw fields only (D1: no formatted strings, no community name fallbacks).
+    /// Swift formats display labels and handles the share flow after reading the
+    /// raw snapshot.
+    ShareComposer(crate::kernel::domains::share::ShareComposerSnapshot),
 }
 
 // ── Phase 4B additions (append-only) ─────────────────────────────────────────
