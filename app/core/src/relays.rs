@@ -1277,7 +1277,10 @@ struct AppDataEntry {
 
 /// JSON content for the kind:30078 event. Skips rows with neither flag — no
 /// point persisting empty entries.
-fn app_data_content(rows: &[RelayConfig]) -> String {
+///
+/// `pub(crate)` so the kernel relay-app-data parity test can assert the kernel's
+/// `relay_app_data_content` matches this bespoke format byte-for-byte (gotcha #7).
+pub(crate) fn app_data_content(rows: &[RelayConfig]) -> String {
     let entries: Vec<AppDataEntry> = rows
         .iter()
         .filter(|r| r.rooms || r.indexer)

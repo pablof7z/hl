@@ -298,8 +298,8 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         AppAction::SetRelayRole { url, role } => {
             relays::reduce_action_set_relay_role(state, url, role)
         }
-        AppAction::SetRoomsRelayList { relay_urls } => {
-            relays::reduce_action_set_rooms_relay_list(state, relay_urls)
+        AppAction::SetRoomsRelayList { entries } => {
+            relays::reduce_action_set_rooms_relay_list(state, entries)
         }
 
         // ── Phase 3C additions ────────────────────────────────────────────────
@@ -563,7 +563,7 @@ fn reduce_action_envelope(
         }
         "hl.relay.set_rooms_relay_list" => {
             let p = parse!(SetRoomsRelayListPayload);
-            relays::reduce_action_set_rooms_relay_list(state, p.relay_urls)
+            relays::reduce_action_set_rooms_relay_list(state, p.entries)
         }
 
         // ── Follows ───────────────────────────────────────────────────────────

@@ -98,9 +98,22 @@ pub(crate) struct SetRelayRolePayload {
     pub role: String,
 }
 
+/// One relay's NIP-78 app-data flags (Phase 7). Mirrors the bespoke
+/// `relays.rs::AppDataEntry` so the kernel publishes the kind:30078
+/// `com.highlighter.relays` event in the SAME content shape — rooms AND indexer
+/// are per-relay flags in ONE replaceable event, not separate lists.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, uniffi::Record)]
+pub struct RelayAppDataEntry {
+    pub url: String,
+    pub rooms: bool,
+    pub indexer: bool,
+}
+
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct SetRoomsRelayListPayload {
-    pub relay_urls: Vec<String>,
+    /// Full relay set's {url, rooms, indexer} flags (the kind:30078 app-data is a
+    /// single replaceable event, so the caller passes the COMPLETE list).
+    pub entries: Vec<RelayAppDataEntry>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -527,8 +540,12 @@ pub enum AppAction {
     /// the hl-owned d-tag string `"com.highlighter.relays"` is the only
     /// constant (it is product-controlled, not a relay URL).
     /// Fire-and-forget: emits `Effect::PublishRoomsRelayList`.
+    ///
+    /// Phase 7: carries the FULL relay set's `{url, rooms, indexer}` flags (the
+    /// kind:30078 `com.highlighter.relays` app-data is a single replaceable event;
+    /// rooms AND indexer are per-relay flags within it — not separate lists/d-tags).
     SetRoomsRelayList {
-        relay_urls: Vec<String>,
+        entries: Vec<RelayAppDataEntry>,
     },
 
     // ── Phase 3C additions (append-only) ─────────────────────────────────────

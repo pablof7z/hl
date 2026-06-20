@@ -84,13 +84,16 @@ pub(crate) fn reduce_action_set_relay_role(
 /// event through the active signer via `ActorCommand::PublishRawEvent`.
 pub(crate) fn reduce_action_set_rooms_relay_list(
     _state: &mut AppState,
-    relay_urls: Vec<String>,
+    entries: Vec<crate::kernel::action::RelayAppDataEntry>,
 ) -> Vec<Effect> {
-    // Serialize the relay list to a JSON array (content of the kind:30078
-    // event). The kernel builds the JSON here so the effect runner stays thin.
-    // serde_json::to_string is infallible for Vec<String> (no custom Serialize
-    // impls that can fail). We use an explicit match anyway for D6 compliance.
-    let content = match serde_json::to_string(&relay_urls) {
+    // Build the kind:30078 `com.highlighter.relays` content in the SAME shape the
+    // bespoke lane uses (relays.rs::app_data_content): a JSON array of
+    // {url, rooms, indexer} for relays that have EITHER flag set. Rooms AND
+    // indexer are per-relay flags in ONE replaceable event — the caller passes
+    // the full relay set so this single publish carries both. (Phase 7: replaces
+    // the prior buggy `Vec<String>` content that wiped flags for every reader —
+    // guarded by the parity test below.)
+    let content = match relay_app_data_content(&entries) {
         Ok(json) => json,
         Err(e) => {
             // D6: never a panic / Result across FFI. Log and silently no-op.
@@ -99,6 +102,16 @@ pub(crate) fn reduce_action_set_rooms_relay_list(
         }
     };
     vec![Effect::PublishRoomsRelayList { content }]
+}
+
+/// Serialize relay app-data entries to the kind:30078 content JSON, dropping
+/// rows with neither flag (mirrors bespoke `relays.rs::app_data_content`).
+pub(crate) fn relay_app_data_content(
+    entries: &[crate::kernel::action::RelayAppDataEntry],
+) -> Result<String, serde_json::Error> {
+    let kept: Vec<&crate::kernel::action::RelayAppDataEntry> =
+        entries.iter().filter(|e| e.rooms || e.indexer).collect();
+    serde_json::to_string(&kept)
 }
 
 // ─── Effect runners ──────────────────────────────────────────────────────────
@@ -322,19 +335,34 @@ mod tests {
     // (no live NmpApp in unit tests).
     #[test]
     fn rooms_role_publishes_nip78_app_data_with_correct_d_tag() {
+        use crate::kernel::action::RelayAppDataEntry;
         let mut state = make_state();
         let clock = ManualClock::new(0);
 
-        let relay_urls = vec![
-            "wss://rooms.relay.one".to_owned(),
-            "wss://rooms.relay.two".to_owned(),
+        let entries = vec![
+            RelayAppDataEntry {
+                url: "wss://rooms.relay.one".to_owned(),
+                rooms: true,
+                indexer: false,
+            },
+            RelayAppDataEntry {
+                url: "wss://idx.relay.two".to_owned(),
+                rooms: false,
+                indexer: true,
+            },
+            // neither flag → must be dropped from the content (parity w/ bespoke).
+            RelayAppDataEntry {
+                url: "wss://plain.relay.three".to_owned(),
+                rooms: false,
+                indexer: false,
+            },
         ];
 
         let effects = step(
             &mut state,
             &clock,
             AppAction::SetRoomsRelayList {
-                relay_urls: relay_urls.clone(),
+                entries: entries.clone(),
             },
         );
 
@@ -345,11 +373,20 @@ mod tests {
         );
         match &effects[0] {
             Effect::PublishRoomsRelayList { content } => {
-                // Verify content is valid JSON encoding the URL list.
-                let parsed: Vec<String> = serde_json::from_str(content)
-                    .expect("content must be valid JSON array of strings");
-                assert_eq!(parsed, relay_urls, "content must round-trip the relay URLs");
-                // Verify the d-tag constant is correct.
+                // Content is the {url,rooms,indexer}[] app-data shape (NOT a bare
+                // URL array), dropping the neither-flag row.
+                #[derive(serde::Deserialize, PartialEq, Debug)]
+                struct E {
+                    url: String,
+                    rooms: bool,
+                    indexer: bool,
+                }
+                let parsed: Vec<E> =
+                    serde_json::from_str(content).expect("content must be valid app-data JSON");
+                assert_eq!(parsed.len(), 2, "neither-flag row must be dropped");
+                assert_eq!(parsed[0].url, "wss://rooms.relay.one");
+                assert!(parsed[0].rooms && !parsed[0].indexer);
+                assert!(!parsed[1].rooms && parsed[1].indexer);
                 assert_eq!(
                     ROOMS_RELAY_D_TAG, "com.highlighter.relays",
                     "rooms relay d-tag must be the hl-owned constant"
@@ -357,6 +394,77 @@ mod tests {
             }
             other => panic!("expected Effect::PublishRoomsRelayList, got {:?}", other),
         }
+    }
+
+    // Phase 7 parity (gotcha #7): the kernel's kind:30078 app-data content must be
+    // byte-identical to the bespoke relays.rs::app_data_content — guards both the
+    // format AND the fix for the prior Vec<String> bug. No hardcoded expectation:
+    // build the SAME {url,rooms,indexer} set as kernel entries AND bespoke
+    // RelayConfigs, serialize both, assert_eq.
+    #[test]
+    fn relay_app_data_content_matches_bespoke() {
+        use crate::kernel::action::RelayAppDataEntry;
+        use crate::relays::RelayConfig;
+
+        let kernel_entries = vec![
+            RelayAppDataEntry {
+                url: "wss://a".into(),
+                rooms: true,
+                indexer: false,
+            },
+            RelayAppDataEntry {
+                url: "wss://b".into(),
+                rooms: true,
+                indexer: true,
+            },
+            RelayAppDataEntry {
+                url: "wss://c".into(),
+                rooms: false,
+                indexer: true,
+            },
+            RelayAppDataEntry {
+                url: "wss://d".into(),
+                rooms: false,
+                indexer: false,
+            },
+        ];
+        let bespoke_rows = vec![
+            RelayConfig {
+                url: "wss://a".into(),
+                read: true,
+                write: true,
+                rooms: true,
+                indexer: false,
+            },
+            RelayConfig {
+                url: "wss://b".into(),
+                read: true,
+                write: false,
+                rooms: true,
+                indexer: true,
+            },
+            RelayConfig {
+                url: "wss://c".into(),
+                read: false,
+                write: true,
+                rooms: false,
+                indexer: true,
+            },
+            RelayConfig {
+                url: "wss://d".into(),
+                read: true,
+                write: true,
+                rooms: false,
+                indexer: false,
+            },
+        ];
+
+        let kernel_content = relay_app_data_content(&kernel_entries).expect("kernel content");
+        let bespoke_content = crate::relays::app_data_content(&bespoke_rows);
+        assert_eq!(
+            kernel_content, bespoke_content,
+            "kernel kind:30078 app-data content must match bespoke app_data_content exactly"
+        );
     }
 
     // ── 2D-T5: no_hardcoded_relay_literals_in_kernel ─────────────────────────
@@ -430,7 +538,7 @@ mod tests {
         let _: Vec<Effect> = step(
             &mut state,
             &clock,
-            AppAction::SetRoomsRelayList { relay_urls: vec![] },
+            AppAction::SetRoomsRelayList { entries: vec![] },
         );
     }
 

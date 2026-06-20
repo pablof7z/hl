@@ -38127,6 +38127,90 @@ public func FfiConverterTypeRelativeTimeLabelProjection_lower(_ value: RelativeT
 }
 
 
+/**
+ * One relay's NIP-78 app-data flags (Phase 7). Mirrors the bespoke
+ * `relays.rs::AppDataEntry` so the kernel publishes the kind:30078
+ * `com.highlighter.relays` event in the SAME content shape — rooms AND indexer
+ * are per-relay flags in ONE replaceable event, not separate lists.
+ */
+public struct RelayAppDataEntry {
+    public var url: String
+    public var rooms: Bool
+    public var indexer: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(url: String, rooms: Bool, indexer: Bool) {
+        self.url = url
+        self.rooms = rooms
+        self.indexer = indexer
+    }
+}
+
+#if compiler(>=6)
+extension RelayAppDataEntry: Sendable {}
+#endif
+
+
+extension RelayAppDataEntry: Equatable, Hashable {
+    public static func ==(lhs: RelayAppDataEntry, rhs: RelayAppDataEntry) -> Bool {
+        if lhs.url != rhs.url {
+            return false
+        }
+        if lhs.rooms != rhs.rooms {
+            return false
+        }
+        if lhs.indexer != rhs.indexer {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(url)
+        hasher.combine(rooms)
+        hasher.combine(indexer)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRelayAppDataEntry: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayAppDataEntry {
+        return
+            try RelayAppDataEntry(
+                url: FfiConverterString.read(from: &buf),
+                rooms: FfiConverterBool.read(from: &buf),
+                indexer: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RelayAppDataEntry, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterBool.write(value.rooms, into: &buf)
+        FfiConverterBool.write(value.indexer, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayAppDataEntry_lift(_ buf: RustBuffer) throws -> RelayAppDataEntry {
+    return try FfiConverterTypeRelayAppDataEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRelayAppDataEntry_lower(_ value: RelayAppDataEntry) -> RustBuffer {
+    return FfiConverterTypeRelayAppDataEntry.lower(value)
+}
+
+
 public struct RelayAvatarProjection {
     public var iconUrl: String?
     public var initial: String
