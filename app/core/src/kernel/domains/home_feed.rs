@@ -143,13 +143,23 @@ pub(crate) fn project_home_feed_snapshot(state: &AppState) -> Option<ViewSnapsho
 pub(crate) fn build_home_feed_rows(state: &AppState) -> Vec<KernelHomeFeedRow> {
     // ── Step 1: decode highlights from highlight_feed.rows ───────────────────
     //
-    // Each kind:9802 row contributes: source_reference (from `a`/`e` tag),
+    // Each kind:9802 row contributes: source_reference (from `a`/`e`/`r` tag),
     // event_id, author_pubkey, created_at. We group by source_reference.
+    //
+    // We also separately track `a`-tag values as `highlighted_addresses` for
+    // suppression (Step 2). Only `a` tags produce nostr addressable coordinates
+    // that can match article addresses — `e` tags are event ids and `r` tags are
+    // URLs, neither of which will collide with a `kind:pubkey:d_tag` coordinate.
+    // This mirrors the live `home_feed.rs::build_items` which builds
+    // `highlighted_addresses` from `highlight.highlight.artifact_address` (the
+    // `a` tag value only), NOT from the full `source_reference_key`.
 
-    // group_key → vec of (event_id, author_pubkey, created_at, source_reference)
+    // group_key → vec of highlights within the group
     let mut group_map: HashMap<String, Vec<RawHighlight>> = HashMap::new();
     // Preserve insertion order of group keys (first encounter of each source).
     let mut group_order: Vec<String> = Vec::new();
+    // Only `a`-tag source references — used for article suppression (Step 2).
+    let mut highlighted_addresses: HashSet<String> = HashSet::new();
 
     for ev in &state.highlight_feed.rows {
         if ev.kind != 9802 || ev.content.is_empty() {
@@ -157,6 +167,18 @@ pub(crate) fn build_home_feed_rows(state: &AppState) -> Vec<KernelHomeFeedRow> {
         }
 
         let source_reference = extract_source_reference(&ev.tags);
+
+        // Track the `a` tag value separately for suppression — only an `a` tag
+        // (addressable coordinate) can match a kind:30023 article address.
+        if let Some(a_val) = ev
+            .tags
+            .iter()
+            .find(|t| t.first().map(|s| s == "a").unwrap_or(false))
+            .and_then(|t| t.get(1))
+        {
+            highlighted_addresses.insert(a_val.clone());
+        }
+
         let key = source_reference
             .clone()
             .unwrap_or_else(|| format!("solo:{}", ev.id));
@@ -175,19 +197,6 @@ pub(crate) fn build_home_feed_rows(state: &AppState) -> Vec<KernelHomeFeedRow> {
                 source_reference: source_reference.clone(),
             });
     }
-
-    // ── Step 2: collect highlighted addresses (for suppression) ──────────────
-    //
-    // A source_reference is an "address" when it contains `:` (the NIP-19
-    // addressable coordinate format `kind:pubkey:d_tag`). Non-address references
-    // (plain event ids, URLs) are excluded from the suppression set because
-    // they cannot match article addresses.
-
-    let highlighted_addresses: HashSet<String> = group_map
-        .keys()
-        .filter(|k| k.contains(':') && !k.starts_with("solo:"))
-        .cloned()
-        .collect();
 
     // ── Step 3: build output rows ────────────────────────────────────────────
 
@@ -298,11 +307,19 @@ fn highlight_stable_id(group: &[RawHighlight]) -> String {
 
 /// Extract the NIP-84 source reference from a tag list.
 ///
-/// Prefers the `a` tag (addressable coordinate `kind:pubkey:d`), falls back to
-/// the `e` tag (non-addressable event id). Returns `None` when neither is present.
+/// Priority order mirrors the live `highlights.rs::record_from_cached_event`
+/// `source_reference_key` logic:
+///   1. `a` tag — addressable coordinate `"kind:pubkey:d_tag"` (NIP-23 articles).
+///   2. `e` tag — plain hex event id (non-addressable events).
+///   3. `r` tag — URL string for web-page highlights (the bespoke lane stores
+///      this as `HighlightRecord.source_url`; live `home_feed.rs::group_key`
+///      returns it via `source_reference_key`; `highlight_stable_id` emits
+///      `"h:src:<url>"`). Without this fallback, URL-anchored highlights would
+///      lose their group identity and fall through to `"h:evt:<id>"`.
 ///
-/// Matches the logic in `highlight_feed.rs::decode_highlight_row`.
+/// Returns `None` when none of the three tags is present (solo highlight).
 fn extract_source_reference(tags: &[Vec<String>]) -> Option<String> {
+    // 1. Prefer `a` tag (addressable — NIP-23 articles are the primary target).
     let a_tag = tags
         .iter()
         .find(|t| t.first().map(|s| s == "a").unwrap_or(false))
@@ -311,8 +328,20 @@ fn extract_source_reference(tags: &[Vec<String>]) -> Option<String> {
     if a_tag.is_some() {
         return a_tag;
     }
-    tags.iter()
+    // 2. Fall back to `e` tag (non-addressable event reference).
+    let e_tag = tags
+        .iter()
         .find(|t| t.first().map(|s| s == "e").unwrap_or(false))
+        .and_then(|t| t.get(1))
+        .cloned();
+    if e_tag.is_some() {
+        return e_tag;
+    }
+    // 3. Fall back to `r` tag (URL anchor — web-page highlights).
+    //    The bespoke lane reads this as `HighlightRecord.source_url` and uses it
+    //    as the group key when no nostr-event reference is present.
+    tags.iter()
+        .find(|t| t.first().map(|s| s == "r").unwrap_or(false))
         .and_then(|t| t.get(1))
         .cloned()
 }
