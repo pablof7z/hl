@@ -129,6 +129,11 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     // Wipe so stale feed rows don't surface for the next account. cursor_id is
     // reset to 0 (the unregistered sentinel) so the next open re-registers.
     clear_feed_state_on_identity_lost(state);
+    // ── Phase 7 feedback: clear UI-lifecycle state on logout ──────────────────
+    // FeedbackState holds open_thread_root_event_id, is_publishing, last_error —
+    // all view-lifecycle flags that must not leak across sessions. The underlying
+    // comment_threads entry is NOT cleared (content-addressed, not per-account).
+    super::feedback::reduce_event_clear_on_logout(state);
     // RemoveActiveAccount fires nmp.remove_account; ClearSession
     // emits a CapabilityRequest to native for its keychain.
     vec![Effect::RemoveActiveAccount, Effect::ClearSession]
@@ -196,6 +201,8 @@ pub(crate) fn reduce_event_identity_changed(
             state.search_results.clear();
             // ── Phase 4F: clear feed-pull state on account removal ────────────
             clear_feed_state_on_identity_lost(state);
+            // ── Phase 7 feedback: clear UI-lifecycle state on identity loss ───
+            super::feedback::reduce_event_clear_on_logout(state);
         }
     }
     vec![]
