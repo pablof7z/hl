@@ -770,38 +770,147 @@ mod tests {
         );
     }
 
-    // 5D-T3: reconstruct_markdown output matches live lane fixtures
+    // 5D-T3: reconstruct_markdown output matches live lane EXACTLY
+    //
+    // Since `crate::capabilities::ocr::OcrLine` is a re-export of
+    // `crate::ocr::OcrLine` (same type), we can feed the same `&[OcrLine]`
+    // slice to BOTH the live impl (`crate::ocr::reconstruct_markdown`) and
+    // the kernel's ported impl (`super::reconstruct_markdown`) and assert
+    // their outputs are identical. Any future drift in either direction will
+    // fail this test.
+    //
+    // Fixtures mirror the live `ocr.rs` test suite:
+    //   • reconstruct_markdown_soft_wraps_body_lines
+    //   • reconstruct_markdown_fuses_soft_hyphenated_words
+    //   • reconstruct_markdown_emits_heading_and_list_items
+    //   • reconstruct_markdown_reads_two_columns_left_then_right
+    // Plus two additional geometry cases for coverage.
     #[test]
     fn reconstruct_markdown_matches_live() {
-        // Fixture 1: soft-wrapping body lines (same fixture as live ocr.rs)
-        let md = reconstruct_markdown(&[
-            line(
-                "This is a paragraph with enough words to stay body",
-                0.1,
-                0.80,
-                0.7,
-                0.03,
-            ),
-            line(
-                "and it wraps across the next recognized line.",
-                0.1,
-                0.765,
-                0.65,
-                0.03,
-            ),
-        ]);
-        assert_eq!(
-            md,
-            "This is a paragraph with enough words to stay body and it wraps across the next recognized line.\n"
+        // Helper: assert kernel output == live output (and both == expected).
+        let assert_parity = |fixtures: &[OcrLine], expected: &str| {
+            let live = crate::ocr::reconstruct_markdown(fixtures);
+            let kernel = reconstruct_markdown(fixtures);
+            assert_eq!(
+                kernel, live,
+                "kernel and live reconstruct_markdown diverged on fixture: {fixtures:?}"
+            );
+            assert_eq!(
+                kernel, expected,
+                "kernel output did not match expected on fixture: {fixtures:?}"
+            );
+        };
+
+        // Fixture 1 — soft-wrap body lines
+        // Mirrors: `reconstruct_markdown_soft_wraps_body_lines` in ocr.rs
+        assert_parity(
+            &[
+                line(
+                    "This is a paragraph with enough words to stay body",
+                    0.1,
+                    0.80,
+                    0.7,
+                    0.03,
+                ),
+                line(
+                    "and it wraps across the next recognized line.",
+                    0.1,
+                    0.765,
+                    0.65,
+                    0.03,
+                ),
+            ],
+            "This is a paragraph with enough words to stay body and it wraps across the next recognized line.\n",
         );
 
-        // Fixture 2: heading + ordered list (same fixture as live ocr.rs)
-        let md2 = reconstruct_markdown(&[
-            line("CHAPTER ONE", 0.33, 0.86, 0.34, 0.05),
-            line("1. First point", 0.1, 0.74, 0.5, 0.03),
-            line("2. Second point", 0.1, 0.68, 0.5, 0.03),
-        ]);
-        assert_eq!(md2, "# CHAPTER ONE\n\n1. First point\n1. Second point\n");
+        // Fixture 2 — soft hyphen fusion
+        // Mirrors: `reconstruct_markdown_fuses_soft_hyphenated_words` in ocr.rs
+        assert_parity(
+            &[
+                line(
+                    "A quietly written paragraph with enough ordinary words before a hyphen-",
+                    0.1,
+                    0.80,
+                    0.7,
+                    0.03,
+                ),
+                line("ated sentence.", 0.1, 0.765, 0.65, 0.03),
+            ],
+            "A quietly written paragraph with enough ordinary words before a hyphenated sentence.\n",
+        );
+
+        // Fixture 3 — heading + ordered list
+        // Mirrors: `reconstruct_markdown_emits_heading_and_list_items` in ocr.rs
+        assert_parity(
+            &[
+                line("CHAPTER ONE", 0.33, 0.86, 0.34, 0.05),
+                line("1. First point", 0.1, 0.74, 0.5, 0.03),
+                line("2. Second point", 0.1, 0.68, 0.5, 0.03),
+            ],
+            "# CHAPTER ONE\n\n1. First point\n1. Second point\n",
+        );
+
+        // Fixture 4 — two-column left-then-right reading order
+        // Mirrors: `reconstruct_markdown_reads_two_columns_left_then_right` in ocr.rs
+        assert_parity(
+            &[
+                line(
+                    "right column first body line with enough words",
+                    0.58,
+                    0.82,
+                    0.3,
+                    0.03,
+                ),
+                line(
+                    "left column first body line with enough words",
+                    0.10,
+                    0.82,
+                    0.3,
+                    0.03,
+                ),
+                line(
+                    "right column second body line with enough words",
+                    0.58,
+                    0.78,
+                    0.3,
+                    0.03,
+                ),
+                line(
+                    "left column second body line with enough words",
+                    0.10,
+                    0.78,
+                    0.3,
+                    0.03,
+                ),
+            ],
+            "left column first body line with enough words left column second body line with enough words right column first body line with enough words right column second body line with enough words\n",
+        );
+
+        // Fixture 5 — ligature normalisation + zero-width space stripped in body paragraph
+        // Mirrors `reconstruct_markdown_strips_common_ocr_artifacts` in ocr.rs (which
+        // tests `normalize()` directly; here we test it end-to-end via reconstruct_markdown).
+        // ﬁ (U+FB01) → "fi", ﬀ (U+FB00) → "ff", ​ (U+200B) → ""
+        // Two body lines so the classifier sees a paragraph rather than a lone heading.
+        assert_parity(
+            &[
+                line(
+                    "The o\u{FB01}ce was stu\u{FB00}ed with books and papers scattered",
+                    0.1,
+                    0.80,
+                    0.7,
+                    0.03,
+                ),
+                line(
+                    "across every available surface\u{200B}.",
+                    0.1,
+                    0.765,
+                    0.65,
+                    0.03,
+                ),
+            ],
+            // ﬁ→fi gives "ofice", ﬀ→ff gives "stuffed", ​→"" stripped from "surface​."
+            "The ofice was stuffed with books and papers scattered across every available surface.\n",
+        );
     }
 
     // 5D-T4: ocr_snapshot_raw — ViewId::Capture projections
