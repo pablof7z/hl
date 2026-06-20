@@ -10215,6 +10215,189 @@ public func FfiConverterTypeArtifactPreview_lower(_ value: ArtifactPreview) -> R
 }
 
 
+/**
+ * Lightweight preview row for a content coordinate.
+ *
+ * Keyed by canonical coordinate string in `AppState::artifact_previews`.
+ * Raw protocol fields only (D1): Swift formats all display strings, source
+ * labels, author bylines, etc. `pending = true` means the resolution is in
+ * flight; the UI may show a placeholder until it becomes `false`.
+ *
+ * `display_url` carries the raw URL for `r:` web coordinates. For all other
+ * coordinate types it is `None`.
+ */
+public struct ArtifactPreviewRow {
+    /**
+     * Canonical coordinate key (e.g. `"a:30023:pk:d"`, `"e:<hex>"`,
+     * `"i:isbn:9780735211292"`, `"r:https://…"`).
+     */
+    public var coordinate: String
+    /**
+     * Title from the protocol source. `None` when not yet resolved (pending).
+     */
+    public var title: String?
+    /**
+     * Cover / thumbnail URL. `None` when absent or not yet resolved.
+     */
+    public var imageUrl: String?
+    /**
+     * Author's hex pubkey (kind:30023 `pubkey` field). `None` for non-nostr
+     * content (ISBN, web URL) or when not yet resolved.
+     */
+    public var authorPubkey: String?
+    /**
+     * Short summary / description. `None` when absent or not yet resolved.
+     */
+    public var summary: String?
+    /**
+     * Inferred content type from the coordinate scheme.
+     */
+    public var kind: ArtifactPreviewKind
+    /**
+     * `true` while resolution is in flight; `false` when the row is final
+     * (even if some optional fields remain `None`).
+     */
+    public var pending: Bool
+    /**
+     * Raw URL for `r:` web coordinates; `None` for all other kinds.
+     */
+    public var displayUrl: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Canonical coordinate key (e.g. `"a:30023:pk:d"`, `"e:<hex>"`,
+         * `"i:isbn:9780735211292"`, `"r:https://…"`).
+         */coordinate: String,
+        /**
+         * Title from the protocol source. `None` when not yet resolved (pending).
+         */title: String?,
+        /**
+         * Cover / thumbnail URL. `None` when absent or not yet resolved.
+         */imageUrl: String?,
+        /**
+         * Author's hex pubkey (kind:30023 `pubkey` field). `None` for non-nostr
+         * content (ISBN, web URL) or when not yet resolved.
+         */authorPubkey: String?,
+        /**
+         * Short summary / description. `None` when absent or not yet resolved.
+         */summary: String?,
+        /**
+         * Inferred content type from the coordinate scheme.
+         */kind: ArtifactPreviewKind,
+        /**
+         * `true` while resolution is in flight; `false` when the row is final
+         * (even if some optional fields remain `None`).
+         */pending: Bool,
+        /**
+         * Raw URL for `r:` web coordinates; `None` for all other kinds.
+         */displayUrl: String?) {
+        self.coordinate = coordinate
+        self.title = title
+        self.imageUrl = imageUrl
+        self.authorPubkey = authorPubkey
+        self.summary = summary
+        self.kind = kind
+        self.pending = pending
+        self.displayUrl = displayUrl
+    }
+}
+
+#if compiler(>=6)
+extension ArtifactPreviewRow: Sendable {}
+#endif
+
+
+extension ArtifactPreviewRow: Equatable, Hashable {
+    public static func ==(lhs: ArtifactPreviewRow, rhs: ArtifactPreviewRow) -> Bool {
+        if lhs.coordinate != rhs.coordinate {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
+        if lhs.authorPubkey != rhs.authorPubkey {
+            return false
+        }
+        if lhs.summary != rhs.summary {
+            return false
+        }
+        if lhs.kind != rhs.kind {
+            return false
+        }
+        if lhs.pending != rhs.pending {
+            return false
+        }
+        if lhs.displayUrl != rhs.displayUrl {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(coordinate)
+        hasher.combine(title)
+        hasher.combine(imageUrl)
+        hasher.combine(authorPubkey)
+        hasher.combine(summary)
+        hasher.combine(kind)
+        hasher.combine(pending)
+        hasher.combine(displayUrl)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArtifactPreviewRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactPreviewRow {
+        return
+            try ArtifactPreviewRow(
+                coordinate: FfiConverterString.read(from: &buf),
+                title: FfiConverterOptionString.read(from: &buf),
+                imageUrl: FfiConverterOptionString.read(from: &buf),
+                authorPubkey: FfiConverterOptionString.read(from: &buf),
+                summary: FfiConverterOptionString.read(from: &buf),
+                kind: FfiConverterTypeArtifactPreviewKind.read(from: &buf),
+                pending: FfiConverterBool.read(from: &buf),
+                displayUrl: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ArtifactPreviewRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.coordinate, into: &buf)
+        FfiConverterOptionString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.imageUrl, into: &buf)
+        FfiConverterOptionString.write(value.authorPubkey, into: &buf)
+        FfiConverterOptionString.write(value.summary, into: &buf)
+        FfiConverterTypeArtifactPreviewKind.write(value.kind, into: &buf)
+        FfiConverterBool.write(value.pending, into: &buf)
+        FfiConverterOptionString.write(value.displayUrl, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactPreviewRow_lift(_ buf: RustBuffer) throws -> ArtifactPreviewRow {
+    return try FfiConverterTypeArtifactPreviewRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactPreviewRow_lower(_ value: ArtifactPreviewRow) -> RustBuffer {
+    return FfiConverterTypeArtifactPreviewRow.lower(value)
+}
+
+
 public struct ArtifactPublishSnapshot {
     public var artifact: ArtifactRecord?
     public var error: String
@@ -27721,6 +27904,15 @@ public struct KernelHomeFeedRow {
      * `None` for `KernelHomeFeedRowKind::Highlight` rows.
      */
     public var articleCreatedAt: UInt64?
+    /**
+     * Canonical artifact-preview coordinate key this row references, if any
+     * (Phase 7 artifact-preview consumer). For Article rows: the `a:` article
+     * coordinate. For Highlight rows: the canonicalized `source_reference`
+     * (`a:`/`e:`/`i:`/`r:`), or `None` for free-standing highlights with no
+     * source. Swift looks this up in `KernelHomeFeedSnapshot.artifact_previews`
+     * to render the resource card (skeleton while the preview is pending). D3.
+     */
+    public var artifactCoordinate: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -27776,7 +27968,15 @@ public struct KernelHomeFeedRow {
          * Unix-second `created_at` of the article event.
          * D1: Swift formats the display date.
          * `None` for `KernelHomeFeedRowKind::Highlight` rows.
-         */articleCreatedAt: UInt64?) {
+         */articleCreatedAt: UInt64?,
+        /**
+         * Canonical artifact-preview coordinate key this row references, if any
+         * (Phase 7 artifact-preview consumer). For Article rows: the `a:` article
+         * coordinate. For Highlight rows: the canonicalized `source_reference`
+         * (`a:`/`e:`/`i:`/`r:`), or `None` for free-standing highlights with no
+         * source. Swift looks this up in `KernelHomeFeedSnapshot.artifact_previews`
+         * to render the resource card (skeleton while the preview is pending). D3.
+         */artifactCoordinate: String?) {
         self.stableId = stableId
         self.sortKey = sortKey
         self.kind = kind
@@ -27787,6 +27987,7 @@ public struct KernelHomeFeedRow {
         self.articleId = articleId
         self.articleAuthorPubkey = articleAuthorPubkey
         self.articleCreatedAt = articleCreatedAt
+        self.artifactCoordinate = artifactCoordinate
     }
 }
 
@@ -27827,6 +28028,9 @@ extension KernelHomeFeedRow: Equatable, Hashable {
         if lhs.articleCreatedAt != rhs.articleCreatedAt {
             return false
         }
+        if lhs.artifactCoordinate != rhs.artifactCoordinate {
+            return false
+        }
         return true
     }
 
@@ -27841,6 +28045,7 @@ extension KernelHomeFeedRow: Equatable, Hashable {
         hasher.combine(articleId)
         hasher.combine(articleAuthorPubkey)
         hasher.combine(articleCreatedAt)
+        hasher.combine(artifactCoordinate)
     }
 }
 
@@ -27862,7 +28067,8 @@ public struct FfiConverterTypeKernelHomeFeedRow: FfiConverterRustBuffer {
                 articleAddress: FfiConverterOptionString.read(from: &buf),
                 articleId: FfiConverterOptionString.read(from: &buf),
                 articleAuthorPubkey: FfiConverterOptionString.read(from: &buf),
-                articleCreatedAt: FfiConverterOptionUInt64.read(from: &buf)
+                articleCreatedAt: FfiConverterOptionUInt64.read(from: &buf),
+                artifactCoordinate: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -27877,6 +28083,7 @@ public struct FfiConverterTypeKernelHomeFeedRow: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.articleId, into: &buf)
         FfiConverterOptionString.write(value.articleAuthorPubkey, into: &buf)
         FfiConverterOptionUInt64.write(value.articleCreatedAt, into: &buf)
+        FfiConverterOptionString.write(value.artifactCoordinate, into: &buf)
     }
 }
 
@@ -27921,14 +28128,30 @@ public struct KernelHomeFeedSnapshot {
      * Merged rows sorted by `sort_key` descending. Raw structural fields only (D1).
      */
     public var rows: [KernelHomeFeedRow]
+    /**
+     * Artifact-preview rows for the coordinates these feed rows reference
+     * (Phase 7 artifact-preview consumer). Filtered to only the
+     * `artifact_coordinate` values present in `rows`. Swift keys by
+     * `coordinate` to render each row's resource card; a `pending` row (or a
+     * missing coordinate) renders as a skeleton. D1: raw preview fields only.
+     */
+    public var artifactPreviews: [ArtifactPreviewRow]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
     public init(
         /**
          * Merged rows sorted by `sort_key` descending. Raw structural fields only (D1).
-         */rows: [KernelHomeFeedRow]) {
+         */rows: [KernelHomeFeedRow],
+        /**
+         * Artifact-preview rows for the coordinates these feed rows reference
+         * (Phase 7 artifact-preview consumer). Filtered to only the
+         * `artifact_coordinate` values present in `rows`. Swift keys by
+         * `coordinate` to render each row's resource card; a `pending` row (or a
+         * missing coordinate) renders as a skeleton. D1: raw preview fields only.
+         */artifactPreviews: [ArtifactPreviewRow]) {
         self.rows = rows
+        self.artifactPreviews = artifactPreviews
     }
 }
 
@@ -27942,11 +28165,15 @@ extension KernelHomeFeedSnapshot: Equatable, Hashable {
         if lhs.rows != rhs.rows {
             return false
         }
+        if lhs.artifactPreviews != rhs.artifactPreviews {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(rows)
+        hasher.combine(artifactPreviews)
     }
 }
 
@@ -27959,12 +28186,14 @@ public struct FfiConverterTypeKernelHomeFeedSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelHomeFeedSnapshot {
         return
             try KernelHomeFeedSnapshot(
-                rows: FfiConverterSequenceTypeKernelHomeFeedRow.read(from: &buf)
+                rows: FfiConverterSequenceTypeKernelHomeFeedRow.read(from: &buf),
+                artifactPreviews: FfiConverterSequenceTypeArtifactPreviewRow.read(from: &buf)
         )
     }
 
     public static func write(_ value: KernelHomeFeedSnapshot, into buf: inout [UInt8]) {
         FfiConverterSequenceTypeKernelHomeFeedRow.write(value.rows, into: &buf)
+        FfiConverterSequenceTypeArtifactPreviewRow.write(value.artifactPreviews, into: &buf)
     }
 }
 
@@ -49198,6 +49427,119 @@ extension ArtifactDetailTarget: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * Content type of an artifact-preview coordinate.
+ *
+ * Variants are raw protocol-level kinds — no display labels (D1). Swift formats
+ * all human-readable strings ("Article", "Book", etc.).
+ *
+ * Append-only: new variants at the bottom keep rebases mechanical.
+ */
+
+public enum ArtifactPreviewKind {
+
+    case article
+    case book
+    case podcast
+    case video
+    case paper
+    case web
+    case unknown
+}
+
+
+#if compiler(>=6)
+extension ArtifactPreviewKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArtifactPreviewKind: FfiConverterRustBuffer {
+    typealias SwiftType = ArtifactPreviewKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactPreviewKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .article
+
+        case 2: return .book
+
+        case 3: return .podcast
+
+        case 4: return .video
+
+        case 5: return .paper
+
+        case 6: return .web
+
+        case 7: return .unknown
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ArtifactPreviewKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .article:
+            writeInt(&buf, Int32(1))
+
+
+        case .book:
+            writeInt(&buf, Int32(2))
+
+
+        case .podcast:
+            writeInt(&buf, Int32(3))
+
+
+        case .video:
+            writeInt(&buf, Int32(4))
+
+
+        case .paper:
+            writeInt(&buf, Int32(5))
+
+
+        case .web:
+            writeInt(&buf, Int32(6))
+
+
+        case .unknown:
+            writeInt(&buf, Int32(7))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactPreviewKind_lift(_ buf: RustBuffer) throws -> ArtifactPreviewKind {
+    return try FfiConverterTypeArtifactPreviewKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactPreviewKind_lower(_ value: ArtifactPreviewKind) -> RustBuffer {
+    return FfiConverterTypeArtifactPreviewKind.lower(value)
+}
+
+
+extension ArtifactPreviewKind: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * What the kernel is asking the native audio player to do.
  *
  * Append-only: new ops extend the transport surface without breaking
@@ -56883,6 +57225,31 @@ fileprivate struct FfiConverterSequenceTypeArticleRecord: FfiConverterRustBuffer
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeArticleRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeArtifactPreviewRow: FfiConverterRustBuffer {
+    typealias SwiftType = [ArtifactPreviewRow]
+
+    public static func write(_ value: [ArtifactPreviewRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeArtifactPreviewRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ArtifactPreviewRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ArtifactPreviewRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeArtifactPreviewRow.read(from: &buf))
         }
         return seq
     }

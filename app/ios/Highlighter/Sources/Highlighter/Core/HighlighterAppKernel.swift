@@ -87,6 +87,12 @@ final class HighlighterAppKernel {
     /// Populated while a `ViewId.feedbackThread(rootEventId:)` view is open.
     private(set) var feedbackThread: [String: KernelFeedbackThreadSnapshot] = [:]
 
+    /// Merged home feed snapshot (highlights + reads). `nil` until the
+    /// `ViewId.homeFeed` view is open. Carries the rows + the artifact-preview
+    /// slice (Phase 7); Swift renders cards from `artifactPreviews[coordinate]`,
+    /// skeleton while pending.
+    private(set) var homeFeed: KernelHomeFeedSnapshot?
+
     // MARK: - Kernel handle
 
     /// The Rust-side kernel object. Callers may dispatch actions and manage
@@ -196,6 +202,21 @@ final class HighlighterAppKernel {
     func closeRoomHome(groupId: String) {
         app.closeView(viewId: .roomHome(groupId: groupId))
         roomHomeSnapshots.removeValue(forKey: groupId)
+    }
+
+    // MARK: - Phase 7: home feed lifecycle
+
+    /// Open the merged home feed view (highlights + reads). The kernel opens both
+    /// underlying feed cursors and pushes `KernelHomeFeedSnapshot` (with its
+    /// artifact-preview slice) into `homeFeed`. Call from `HighlightsTabView.task`.
+    func openHomeFeed() {
+        app.openView(viewId: .homeFeed, route: .homeFeed)
+    }
+
+    /// Close the home feed view (releases both feed cursors).
+    func closeHomeFeed() {
+        app.closeView(viewId: .homeFeed)
+        homeFeed = nil
     }
 
     // MARK: - Phase 7: room chat lifecycle
@@ -319,6 +340,10 @@ final class HighlighterAppKernel {
         case .feedbackThread(let s):
             feedbackThread[s.rootEventId] = s
 
+        // Phase 7 cutover: merged home feed (HomeFeedStore reads this).
+        case .homeFeed(let s):
+            homeFeed = s
+
         // Phase 2E (network settings / relay diagnostics) — handled elsewhere.
         case .networkSettings, .relayDiagnostics:
             break
@@ -328,7 +353,7 @@ final class HighlighterAppKernel {
         // directly. No-op here (the actor still pushes; non-resident views
         // are closed before they can receive stale data — D5).
         case .bookmarks, .articleReader, .search, .articleFeed,
-             .highlightFeed, .homeFeed, .whatsNew, .bookPicker, .shareComposer:
+             .highlightFeed, .whatsNew, .bookPicker, .shareComposer:
             break
 
         // Phase 5+ snapshots (podcast, OCR capture) — managed by their owning

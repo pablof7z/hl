@@ -255,7 +255,7 @@ pub enum ArtifactPreviewKind {
 ///
 /// `display_url` carries the raw URL for `r:` web coordinates. For all other
 /// coordinate types it is `None`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct ArtifactPreviewRow {
     /// Canonical coordinate key (e.g. `"a:30023:pk:d"`, `"e:<hex>"`,
     /// `"i:isbn:9780735211292"`, `"r:https://…"`).
@@ -909,6 +909,14 @@ pub struct KernelHomeFeedRow {
     /// D1: Swift formats the display date.
     /// `None` for `KernelHomeFeedRowKind::Highlight` rows.
     pub article_created_at: Option<u64>,
+
+    /// Canonical artifact-preview coordinate key this row references, if any
+    /// (Phase 7 artifact-preview consumer). For Article rows: the `a:` article
+    /// coordinate. For Highlight rows: the canonicalized `source_reference`
+    /// (`a:`/`e:`/`i:`/`r:`), or `None` for free-standing highlights with no
+    /// source. Swift looks this up in `KernelHomeFeedSnapshot.artifact_previews`
+    /// to render the resource card (skeleton while the preview is pending). D3.
+    pub artifact_coordinate: Option<String>,
 }
 
 /// Snapshot for `ViewId::HomeFeed` — the merged home feed.
@@ -933,6 +941,12 @@ pub struct KernelHomeFeedRow {
 pub struct KernelHomeFeedSnapshot {
     /// Merged rows sorted by `sort_key` descending. Raw structural fields only (D1).
     pub rows: Vec<KernelHomeFeedRow>,
+    /// Artifact-preview rows for the coordinates these feed rows reference
+    /// (Phase 7 artifact-preview consumer). Filtered to only the
+    /// `artifact_coordinate` values present in `rows`. Swift keys by
+    /// `coordinate` to render each row's resource card; a `pending` row (or a
+    /// missing coordinate) renders as a skeleton. D1: raw preview fields only.
+    pub artifact_previews: Vec<ArtifactPreviewRow>,
 }
 
 // ── Phase 5A additions (append-only) ─────────────────────────────────────────

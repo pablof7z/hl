@@ -1162,6 +1162,15 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
                 feed::apply_feed_page(fs, rows, next_after_seq, exhausted, gap_rebased_to);
             }
 
+            // Phase 7 artifact-preview consumer: the home feed merges the
+            // article + highlight feeds, so a new page may introduce coordinates
+            // whose preview isn't cached yet. Ensure a (pending-or-resolved) row
+            // exists for each so the next HomeFeed snapshot can attach it
+            // (skeleton while pending). Idempotent; only for the home-feed sources.
+            if key == "hl.feed.articles" || key == "hl.feed.highlights" {
+                home_feed::ensure_artifact_previews(state);
+            }
+
             // Note: AdvancePullCursor is sent from the inline effect handler in
             // actor_task (after run_effect for DrainFeed) rather than here,
             // because we need the NmpHandle which is not available in reduce_event
