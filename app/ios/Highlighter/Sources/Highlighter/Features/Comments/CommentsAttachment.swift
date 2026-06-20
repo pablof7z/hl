@@ -10,6 +10,7 @@ struct CommentsAttachment: ViewModifier {
     let artifactHeader: AnyView?
 
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var store = CommentsStore()
     @State private var showComments = false
     @State private var didStart = false
@@ -37,11 +38,12 @@ struct CommentsAttachment: ViewModifier {
             .task(id: scope) {
                 guard !didStart else { return }
                 didStart = true
-                await store.start(
-                    scope: scope,
-                    core: app.safeCore
-                )
+                await store.start(scope: scope, kernel: kernel)
             }
+            .onChange(of: kernel.commentThreads[scope.rootTagValue]) { _, _ in
+                store.applyKernelSnapshot()
+            }
+            .onDisappear { store.stop() }
     }
 
     private func commentsLabel(_ projection: CommentToolbarProjection) -> some View {

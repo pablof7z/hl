@@ -4,6 +4,7 @@ struct DiscussionDetailView: View {
     let discussion: DiscussionRecord
 
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var store = CommentsStore()
     @State private var focusedNode: CommentNode? = nil
 
@@ -42,11 +43,12 @@ struct DiscussionDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             guard let commentScope else { return }
-            await store.start(
-                scope: commentScope,
-                core: app.safeCore
-            )
+            await store.start(scope: commentScope, kernel: kernel)
         }
+        .onChange(of: commentScope.map { kernel.commentThreads[$0.rootTagValue] }) { _, _ in
+            store.applyKernelSnapshot()
+        }
+        .onDisappear { store.stop() }
         .navigationDestination(item: $focusedNode) { node in
             if let commentScope {
                 ThreadView(

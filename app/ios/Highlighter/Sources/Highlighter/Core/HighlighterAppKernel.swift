@@ -67,6 +67,12 @@ final class HighlighterAppKernel {
     /// window; Swift renders rows and formats display strings (D1).
     private(set) var roomChatSnapshots: [String: RoomChatSnapshot] = [:]
 
+    /// Per-root NIP-22 comment-thread snapshots, keyed by `root_tag_value`.
+    /// Populated while a `ViewId.commentThread(rootTagValue:)` view is open. The
+    /// kernel emits a flat `[CommentRecordRow]` (+ per-comment interaction
+    /// fields); Swift builds the display tree (`CommentTreeBuilder`).
+    private(set) var commentThreads: [String: CommentThreadKernelSnapshot] = [:]
+
     // MARK: - Kernel handle
 
     /// The Rust-side kernel object. Callers may dispatch actions and manage
@@ -196,6 +202,24 @@ final class HighlighterAppKernel {
         roomChatSnapshots.removeValue(forKey: groupId)
     }
 
+    // MARK: - Phase 7: comment thread lifecycle
+
+    /// Open a NIP-22 comment thread view for `rootTagValue`. The global
+    /// `CommentObserver` already routes all kind:1111 events, so opening the
+    /// view just registers the projection so snapshots stream into
+    /// `commentThreads[rootTagValue]`. Call from the comments view's `.task`.
+    func openCommentThread(rootTagValue: String) {
+        app.openView(viewId: .commentThread(rootTagValue: rootTagValue),
+                     route: .commentThread(rootTagValue: rootTagValue))
+    }
+
+    /// Close a comment thread view for `rootTagValue`. The kernel keeps the
+    /// content-addressed thread in `AppState`; this just stops snapshot pushes.
+    func closeCommentThread(rootTagValue: String) {
+        app.closeView(viewId: .commentThread(rootTagValue: rootTagValue))
+        commentThreads.removeValue(forKey: rootTagValue)
+    }
+
     // MARK: - Snapshot ingestion (called on main actor by KernelObserver)
 
     fileprivate func receive(viewId: ViewId, snapshot: ViewSnapshot) {
@@ -219,6 +243,10 @@ final class HighlighterAppKernel {
         case .roomChat(let s):
             roomChatSnapshots[s.groupId] = s
 
+        // Phase 7 cutover: NIP-22 comment thread (CommentsStore reads this dict).
+        case .commentThread(let s):
+            commentThreads[s.rootTagValue] = s
+
         // Phase 2E (network settings / relay diagnostics) — handled elsewhere.
         case .networkSettings, .relayDiagnostics:
             break
@@ -229,7 +257,6 @@ final class HighlighterAppKernel {
         // are closed before they can receive stale data — D5).
         case .bookmarks, .articleReader, .search, .articleFeed,
              .highlightFeed, .homeFeed, .whatsNew, .bookPicker, .shareComposer,
-             .commentThread,
              // Phase 7 cutovers (Batch 1) — managed by their owning stores via
              // `current_snapshot` when those screens are cut; no-op push here.
              .roomDiscussions, .feedbackThreads, .feedbackThread:

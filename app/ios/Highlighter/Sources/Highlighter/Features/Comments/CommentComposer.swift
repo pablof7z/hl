@@ -108,30 +108,17 @@ struct CommentComposer: View {
         isPublishing = true
         errorMessage = nil
         Task {
-            let outcome = await store.publish(
+            // Kernel is the sole writer: the post is fire-and-forget and the
+            // rebuilt thread streams back via kernel.commentThreads. Dismiss
+            // optimistically on dispatch (publish-errors surface as kernel
+            // toasts, same as other kernel actions).
+            let didDispatch = await store.publish(
                 content: projection.submitBody,
                 parentEventId: parentEventId
             )
-            guard let outcome else {
-                isPublishing = false
-                return
-            }
-            let result = app.safeCore.projectCommentPublishResult(
-                input: CommentPublishResultInput(error: outcome.error)
-            )
-            if result.didPublish {
-                isPublishing = false
+            isPublishing = false
+            if didDispatch {
                 focused = false
-            } else {
-                isPublishing = false
-                withAnimation(.easeOut(duration: 0.18)) {
-                    errorMessage = "Couldn't publish — \(result.errorMessage)"
-                }
-                errorResetTimer.schedule(after: 2.4) {
-                    withAnimation(.easeIn(duration: 0.18)) {
-                        errorMessage = nil
-                    }
-                }
             }
         }
     }

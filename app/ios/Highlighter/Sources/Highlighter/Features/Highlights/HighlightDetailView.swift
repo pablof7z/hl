@@ -21,6 +21,7 @@ struct HighlightDetailTarget: Hashable {
 ///   - add to room (kind:16 repost into one of the user's NIP-29 rooms)
 struct HighlightDetailView: View {
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
 
     let item: HydratedHighlight
 
@@ -70,11 +71,12 @@ struct HighlightDetailView: View {
         .task {
             guard !commentsStarted, let commentsScope else { return }
             commentsStarted = true
-            await commentsStore.start(
-                scope: commentsScope,
-                core: app.safeCore
-            )
+            await commentsStore.start(scope: commentsScope, kernel: kernel)
         }
+        .onChange(of: commentsScope.map { kernel.commentThreads[$0.rootTagValue] }) { _, _ in
+            commentsStore.applyKernelSnapshot()
+        }
+        .onDisappear { commentsStore.stop() }
         .task(id: highlight.eventId) {
             await refreshShareURL()
         }
