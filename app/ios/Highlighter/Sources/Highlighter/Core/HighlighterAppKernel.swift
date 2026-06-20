@@ -65,6 +65,12 @@ final class HighlighterAppKernel {
     /// the lifecycle (resume/suspend/shutdown) via this handle.
     let app: HighlighterApp
 
+    /// Native capability executor (Phase 7 — Part A) for the non-keychain
+    /// capabilities: OCR (Vision), Audio (AVPlayer), Share (App Group), and
+    /// Camera (presentation, via a registered presenter). Keychain stays inline
+    /// in this class (Phase 1).
+    let capabilityBridge: KernelCapabilityBridge
+
     // MARK: - Init
 
     init() {
@@ -78,6 +84,12 @@ final class HighlighterAppKernel {
 
         let kernelApp = HighlighterApp(config: AppConfig(dataDir: dataDir))
         self.app = kernelApp
+
+        // Native capability executor. Holds a weak ref back to the kernel so it
+        // can return results via `provideCapabilityResult` (Phase 7 — Part A).
+        let bridge = KernelCapabilityBridge()
+        bridge.app = kernelApp
+        self.capabilityBridge = bridge
 
         // Register the observer BEFORE opening views so no initial snapshot
         // is dropped. The observer holds a weak back-reference which breaks
@@ -202,16 +214,11 @@ final class HighlighterAppKernel {
         switch request {
         case .keychain(let op):
             fulfillKeychain(op)
-        // Phase 5K: share-extension App Group capability — handled by
-        // the share capability bridge registered at startup; the observer
-        // here is a fallback no-op so the switch remains exhaustive (D6).
-        case .share:
-            break
-        // Phase 5+ native capabilities (audio, OCR, camera) — handled by
-        // their respective capability bridges registered at startup; the
-        // observer here is a fallback no-op so the switch remains exhaustive (D6).
-        case .audio, .ocr, .camera:
-            break
+        // Phase 7 — Part A: OCR / Audio / Share / Camera capabilities are
+        // executed by the native `KernelCapabilityBridge`, which runs the raw
+        // OS capability and returns the result via `provideCapabilityResult`.
+        case .ocr, .audio, .share, .camera:
+            capabilityBridge.fulfill(request)
         }
     }
 

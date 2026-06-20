@@ -90,6 +90,7 @@
 		8E55527FD2F5EE5437741CB8 /* SafeHighlighterCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFB98694B90B62FBE7A589BF /* SafeHighlighterCore.swift */; };
 		369D59FABF88495ABCCA52BB /* HighlighterAppKernel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29494DBABA2C4A1DA0114C0D /* HighlighterAppKernel.swift */; };
 		A1B2C3D4E5F6A7B8C9D0E1F2 /* HighlighterAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E1F2A3 /* HighlighterAction.swift */; };
+		C3D4E5F6A7B8C9D0E1F2A3B4 /* KernelCapabilityBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F6A7B8C9D0E1F2A3B4C5 /* KernelCapabilityBridge.swift */; };
 		8F6908A202D345A1466979AB /* RelayDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57BF148BE9C1A047A0CD85F8 /* RelayDetailView.swift */; };
 		8FC33599A4E6E16E66A9180B /* ShakeDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B11E53320CF44FAE9BD3F4E /* ShakeDetector.swift */; };
 		900670F354A8AC8355BC2783 /* SearchSeeAllView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1317F935DAA15D7884CE312A /* SearchSeeAllView.swift */; };
@@ -190,6 +191,7 @@
 		0B11E53320CF44FAE9BD3F4E /* ShakeDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShakeDetector.swift; sourceTree = "<group>"; };
 		29494DBABA2C4A1DA0114C0D /* HighlighterAppKernel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HighlighterAppKernel.swift; sourceTree = "<group>"; };
 		B2C3D4E5F6A7B8C9D0E1F2A3 /* HighlighterAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HighlighterAction.swift; sourceTree = "<group>"; };
+		D4E5F6A7B8C9D0E1F2A3B4C5 /* KernelCapabilityBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KernelCapabilityBridge.swift; sourceTree = "<group>"; };
 		0CB09B540F31A3C8F0F5A6E7 /* CapturePageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturePageView.swift; sourceTree = "<group>"; };
 		0E519F24BE51C364A469AB6E /* TranscriptRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptRow.swift; sourceTree = "<group>"; };
 		0EC0CD636BB36729BEBEE23B /* HighlighterShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = HighlighterShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -555,6 +557,7 @@
 				93C2998FA6F33E28DFCFAE50 /* EventBridge.swift */,
 				29494DBABA2C4A1DA0114C0D /* HighlighterAppKernel.swift */,
 				B2C3D4E5F6A7B8C9D0E1F2A3 /* HighlighterAction.swift */,
+				D4E5F6A7B8C9D0E1F2A3B4C5 /* KernelCapabilityBridge.swift */,
 				C68126D4A3083806ED488835 /* HighlighterStore.swift */,
 				FFB98694B90B62FBE7A589BF /* SafeHighlighterCore.swift */,
 				0B11E53320CF44FAE9BD3F4E /* ShakeDetector.swift */,
@@ -1028,6 +1031,7 @@
 				8E55527FD2F5EE5437741CB8 /* SafeHighlighterCore.swift in Sources */,
 				369D59FABF88495ABCCA52BB /* HighlighterAppKernel.swift in Sources */,
 				A1B2C3D4E5F6A7B8C9D0E1F2 /* HighlighterAction.swift in Sources */,
+				C3D4E5F6A7B8C9D0E1F2A3B4 /* KernelCapabilityBridge.swift in Sources */,
 				900670F354A8AC8355BC2783 /* SearchSeeAllView.swift in Sources */,
 				CDB701F801F34D6355758A0D /* SearchStore.swift in Sources */,
 				71D808188C73CE2BFB1816DF /* SearchView.swift in Sources */,

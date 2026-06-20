@@ -75,6 +75,15 @@ enum WaveformExtractor {
         return peaks
     }
 
+    /// Raw, uncached waveform extraction for the kernel audio capability bridge
+    /// (Phase 7). Bypasses the bespoke `SafeHighlighterCore` planning/caching
+    /// path — the kernel owns waveform caching policy. Returns normalized peaks
+    /// in `[0, 1]`, or an empty array on failure (the kernel tolerates absent
+    /// peaks; D6: errors are data).
+    static func rawPeaks(forAudioURL url: URL, bucketCount: Int) async -> [Float] {
+        await extractPeaks(from: url, bucketCount: bucketCount) ?? []
+    }
+
     private static func extractPeaks(from url: URL, bucketCount: Int) async -> [Float]? {
         let asset = AVURLAsset(url: url)
 
