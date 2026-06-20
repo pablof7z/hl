@@ -365,6 +365,20 @@ pub struct AppState {
     /// Bounded by `MAX_PROJECTION_MESSAGES` from nmp-core — the projection caps
     /// the total entry count across all threads (Non-Negotiable #7).
     pub comment_threads: HashMap<String, nmp_nip22::CommentThreadSnapshot>,
+
+    // ── Phase 7 chat additions (append-only) ─────────────────────────────────
+    /// Per-room chat message buffers, keyed by NIP-29 local `group_id`.
+    ///
+    /// Updated by `KernelEvent::ChatRoomUpdated` — produced when the hl-owned
+    /// `ChatObserver` (wrapping `GroupChatProjection`) ingests a kind:9 event for
+    /// an open room. Empty until `hl.chat.open` is dispatched and the first
+    /// kind:9 event arrives. D1: values are raw `ChatMessageRawRow` fields only
+    /// (no formatted strings). Cleared on `hl.chat.close`, `Logout`, and
+    /// `IdentityChanged(None)` — the buffer is an open-view working set.
+    ///
+    /// Bounded by open room views: one entry per concurrently-open chat room,
+    /// each capped at `CHAT_MAX_MESSAGES` (1000) rows (Non-Negotiable #7).
+    pub chat_rooms: HashMap<String, crate::kernel::domains::chat::ChatRoomState>,
 }
 
 impl Default for AppState {
@@ -416,6 +430,8 @@ impl Default for AppState {
             feedback: crate::kernel::domains::feedback::FeedbackState::with_root(),
             // ── Phase 7 additions ─────────────────────────────────────────────
             comment_threads: HashMap::new(),
+            // ── Phase 7 chat additions ────────────────────────────────────────
+            chat_rooms: HashMap::new(),
         }
     }
 }

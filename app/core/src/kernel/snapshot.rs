@@ -215,6 +215,11 @@ pub enum ViewSnapshot {
     /// sorted oldest-first. `show_header` follows the 300s/author grouping rule.
     /// D1: raw fields only; no bylines, no relative-time labels.
     FeedbackThread(KernelFeedbackThreadSnapshot),
+    // ── Phase 7 chat additions (append-only) ─────────────────────────────────
+    /// NIP-29 kind:9 group chat — bounded raw message rows for one room.
+    /// D1: no formatted timestamps, no byline strings, no `is_from_me`.
+    /// Swift owns all display formatting and optimistic affordances.
+    RoomChat(RoomChatSnapshot),
 }
 
 // ── Phase 4B additions (append-only) ─────────────────────────────────────────
@@ -1221,6 +1226,89 @@ pub struct KernelFeedbackThreadSnapshot {
     pub is_publishing: bool,
     /// Last publish error, if any. `None` when clean. D1.
     pub error: Option<String>,
+}
+// ── Phase 7 chat additions (append-only) ─────────────────────────────────────
+
+/// One raw message row in the authoritative chat buffer and in `ChatMessageRow`.
+///
+/// D1: raw protocol fields only — no formatted timestamps, no byline strings,
+/// no `is_from_me` flag. Swift computes all display labels from raw fields.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ChatMessageRawRow {
+    /// Event id (raw 64-char hex). Dedupe key.
+    pub event_id: String,
+    /// Author pubkey (raw 64-char hex).
+    pub author_pubkey: String,
+    /// Event `content`, verbatim.
+    pub content: String,
+    /// Event `created_at` (Unix seconds).
+    pub created_at: u64,
+    /// The event id this message is replying to, if any.
+    /// Recovered from `["e", id, "", "reply"]` (preferred) or first `e` tag.
+    pub reply_to_event_id: Option<String>,
+}
+
+/// One display row in `RoomChatSnapshot` — raw fields + computed `show_header`
+/// and resolved `reply_to` preview (only when the parent is in the visible window).
+///
+/// D1: no formatted strings, no `is_from_me`. Swift formats timestamps, bylines,
+/// and profile pictures.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ChatMessageRow {
+    /// Event id (raw 64-char hex).
+    pub event_id: String,
+    /// Author pubkey (raw 64-char hex).
+    pub author_pubkey: String,
+    /// Event `content`, verbatim.
+    pub content: String,
+    /// Event `created_at` (Unix seconds).
+    pub created_at: u64,
+    /// The event id this message is replying to, if any (raw hex).
+    pub reply_to_event_id: Option<String>,
+    /// Resolved reply preview — `Some` only when the parent event is inside the
+    /// bounded visible window. `None` when not a reply or parent is older than
+    /// the window.
+    pub reply_to: Option<ChatReplyPreview>,
+    /// `true` for the first row, on author change, or when `created_at` gap with
+    /// the prior row exceeds 300 seconds.
+    pub show_header: bool,
+}
+
+/// Compact preview of a replied-to message. Only present when the parent event
+/// is within the bounded visible window (D5: bounded by open chat window).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ChatReplyPreview {
+    /// Event id of the replied-to message.
+    pub event_id: String,
+    /// Author pubkey of the replied-to message.
+    pub author_pubkey: String,
+    /// Content of the replied-to message (verbatim, D1).
+    pub content: String,
+    /// `created_at` (Unix seconds) of the replied-to message.
+    pub created_at: u64,
+}
+
+/// Snapshot for `ViewId::RoomChat { group_id }` — bounded raw chat rows for one
+/// NIP-29 room.
+///
+/// Rows are projected oldest-first for the visible window so the chat scrolls
+/// downward naturally. Window size is `page_count * 50`, hard-capped at 1000.
+///
+/// D1: no formatted strings. D5: bounded window. D6: empty when room not open.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct RoomChatSnapshot {
+    /// NIP-29 local group id.
+    pub group_id: String,
+    /// Oldest-first display rows for the visible window.
+    pub rows: Vec<ChatMessageRow>,
+    /// `true` when more messages exist beyond the visible window.
+    pub has_more: bool,
+    /// Current page count (1–20). Incremented by `hl.chat.load_more`.
+    pub page_count: u32,
+    /// `true` when at least one message has been received for this room.
+    pub has_activity: bool,
+    /// Monotonic revision bumped on every `ChatRoomUpdated` for change detection.
+    pub activity_revision: u64,
 }
 
 // ── Phase 5F additions (append-only) ─────────────────────────────────────────

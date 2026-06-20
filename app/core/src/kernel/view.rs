@@ -183,6 +183,20 @@ pub enum ViewId {
         /// Event id of the feedback thread's root comment (raw 64-char hex). D3.
         root_event_id: String,
     },
+    // ── Phase 7 chat additions (append-only) ─────────────────────────────────
+    /// NIP-29 group chat view for a specific room.
+    ///
+    /// `group_id` is the NIP-29 local group id. The snapshot is
+    /// `ViewSnapshot::RoomChat(RoomChatSnapshot)` — bounded raw kind:9 message
+    /// rows, oldest-first in the visible window (D1: no formatted strings).
+    ///
+    /// On open: `hl.chat.open` dispatches `Effect::WireGroupChat` which registers
+    /// a `ChatObserver` per room. On close: `hl.chat.close` dispatches
+    /// `Effect::ReleaseChatRoom` which removes the room buffer.
+    RoomChat {
+        /// NIP-29 local group id.
+        group_id: String,
+    },
 }
 
 /// Which projection to compute for a registered view.
@@ -302,6 +316,13 @@ pub enum ViewRoute {
     FeedbackThread {
         /// Event id of the feedback thread's root comment.
         root_event_id: String,
+    },
+    // ── Phase 7 chat additions (append-only) ─────────────────────────────────
+    /// NIP-29 group chat projection — `RoomChatSnapshot` (bounded raw kind:9
+    /// message rows, oldest-first in the visible window). D1: no formatted strings.
+    RoomChat {
+        /// NIP-29 local group id.
+        group_id: String,
     },
 }
 

@@ -1290,6 +1290,24 @@ pub enum KernelEvent {
         error: String,
     },
 
+    // ── Phase 7 chat additions (append-only) ─────────────────────────────────
+    /// A NIP-29 kind:9 chat message was ingested by the `ChatObserver`
+    /// (wrapping `GroupChatProjection`) for an open room. Carries the updated
+    /// message list (newest-first, bounded) for the affected `group_id`.
+    ///
+    /// Produced by `ChatObserver::on_kernel_event` after delegating ingest to the
+    /// projection, recovering `reply_to_event_id` from raw tags, and snapshotting.
+    /// Also injectable directly from tests via `Cmd::Event` (no live NmpApp needed).
+    ///
+    /// D1: `ChatMessageRawRow` carries raw protocol data only — no formatted strings.
+    /// Keyed by `group_id` (NIP-29 local id) in `AppState::chat_rooms`.
+    ChatRoomUpdated {
+        /// NIP-29 local group id.
+        group_id: String,
+        /// Updated message list (newest-first, bounded by `MAX_PROJECTION_MESSAGES`).
+        messages: Vec<crate::kernel::snapshot::ChatMessageRawRow>,
+    },
+
     // ── Phase 7 additions (append-only) ─────────────────────────────────────
     /// A NIP-22 kind:1111 comment was ingested by the `CommentObserver`
     /// (wrapping `CommentThreadProjection`). Carries the full thread snapshot

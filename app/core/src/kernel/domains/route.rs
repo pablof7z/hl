@@ -200,6 +200,10 @@ pub(crate) fn project_snapshot(
         // required for exhaustive match coverage.
         ViewId::FeedbackThreads => None,
         ViewId::FeedbackThread { .. } => None,
+        // ── Phase 7 chat additions (append-only) ─────────────────────────────
+        // ViewId::RoomChat is handled upstream in actor::project_snapshot.
+        // This arm is unreachable in practice but required for exhaustive match.
+        ViewId::RoomChat { .. } => None,
     }
 }
 

@@ -134,6 +134,11 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     // all view-lifecycle flags that must not leak across sessions. The underlying
     // comment_threads entry is NOT cleared (content-addressed, not per-account).
     super::feedback::reduce_event_clear_on_logout(state);
+    // ── Phase 7 chat: clear chat room buffers on logout ───────────────────────
+    // Chat room buffers are open-view working sets. Clear on logout so stale
+    // message rows don't survive into the next session. Re-wiring happens when
+    // hl.chat.open is dispatched for the new session.
+    super::chat::clear_on_identity_lost(state);
     // RemoveActiveAccount fires nmp.remove_account; ClearSession
     // emits a CapabilityRequest to native for its keychain.
     vec![Effect::RemoveActiveAccount, Effect::ClearSession]
@@ -203,6 +208,10 @@ pub(crate) fn reduce_event_identity_changed(
             clear_feed_state_on_identity_lost(state);
             // ── Phase 7 feedback: clear UI-lifecycle state on identity loss ───
             super::feedback::reduce_event_clear_on_logout(state);
+            // ── Phase 7 chat: clear chat room buffers on account removal ───────
+            // Chat room buffers are open-view working sets. Clear on identity
+            // loss so stale message rows don't outlive the account session.
+            super::chat::clear_on_identity_lost(state);
         }
     }
     vec![]
