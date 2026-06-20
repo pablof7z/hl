@@ -279,4 +279,43 @@ pub enum Effect {
         /// `format!`). `ReactAction` or `UnreactAction` depending on `namespace`.
         json: String,
     },
+
+    // ── Phase 4D additions (append-only) ─────────────────────────────────────
+    /// Submit a NIP-50 relay search.
+    ///
+    /// The effect runner:
+    ///   1. Calls `NmpApp::push_interest(LogicalInterest{ shape: interest_shape,
+    ///      lifecycle: OneShot, scope: ActiveAccount, id: InterestId(search_id), .. })`
+    ///      to cause the planner to issue NIP-50 REQ frames on connected
+    ///      search-capable relays. nmp-nip50 has NO action namespace —
+    ///      submission is via `push_interest` (confirmed b4404159
+    ///      `crates/nmp-ffi/src/lib.rs:1828`).
+    ///   2. Replaces the hl-owned `SearchResultsProjection` registered under
+    ///      typed snapshot key `"hl.search"` with a fresh instance seeded from
+    ///      `SearchRequest { query, scope, targets: UserPreferred, max_hits:
+    ///      DEFAULT_MAX_SEARCH_HITS }`, clearing stale results from the previous
+    ///      query. The closure registered with `register_typed_snapshot_projection`
+    ///      captures the new projection Arc and serialises its `snapshot()` to
+    ///      serde JSON on each tick.
+    ///
+    /// `interest_shape_json` is the serde-JSON of `InterestShape` built from
+    /// `SearchRequest::interest_shape()`. The effect runner deserialises it to
+    /// reconstruct the `InterestShape` without depending on nmp-nip50 types
+    /// in the pure reducer. Alternatively the effect runner builds the
+    /// `InterestShape` directly from `query`+`scope` — either approach is
+    /// valid; we pass both to avoid a lossy round-trip.
+    ///
+    /// No-op if `nmp` is `None` (test mode — tests inject
+    /// `KernelEvent::SearchResultsUpdated` directly).
+    RunSearch {
+        /// Plain-text search query (already trimmed by reducer; non-empty
+        /// because the reducer no-ops empty strings).
+        query: String,
+        /// Serialised `nmp_nip50::SearchScope` (serde JSON). The effect runner
+        /// deserialises this to build the `SearchRequest` → `InterestShape`.
+        scope_json: String,
+        /// Stable `InterestId` u64 for this search session; allows the planner
+        /// to dedup or replace the prior search interest on re-query.
+        interest_id: u64,
+    },
 }

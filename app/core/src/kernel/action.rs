@@ -347,6 +347,46 @@ pub enum AppAction {
         /// The kind:7 reaction event id to delete (raw 64-char hex).
         reaction_event_id: String,
     },
+
+    // ── Phase 4D additions (append-only) ─────────────────────────────────────
+    /// Run a NIP-50 relay search for `query` with the given `scope`.
+    ///
+    /// The reducer emits `Effect::RunSearch` which:
+    ///   1. Pushes a `LogicalInterest` with `InterestShape.search = Some(query)`
+    ///      via `NmpApp::push_interest`, causing the planner to issue NIP-50 REQs
+    ///      on all connected search-capable relays.
+    ///   2. Replaces the hl-owned `SearchResultsProjection` (registered under
+    ///      the typed snapshot key `"hl.search"`) with a fresh instance seeded
+    ///      from the new `SearchRequest`, clearing stale results.
+    ///
+    /// `query` is a trimmed plain-text search term (empty / whitespace-only is
+    /// a no-op at the effect-runner level via `SearchRequest::new`). `scope`
+    /// selects which event kinds to search (e.g. `LongForm`, `Users`).
+    ///
+    /// nmp-nip50 has NO action namespace — submission is via `push_interest`
+    /// (confirmed on pinned nmp b4404159, `crates/nmp-ffi/src/lib.rs:1828`).
+    /// Fire-and-forget (D6, Non-Negotiable #3): search hits arrive as
+    /// `KernelEvent::SearchResultsUpdated` via the typed snapshot pipeline.
+    RunSearch {
+        /// Plain-text search query. Empty string / whitespace → no-op (D6).
+        query: String,
+        /// Which NIP-50 scope to search in.
+        scope: SearchScope,
+    },
+}
+
+/// NIP-50 search scope — which event kinds the relay-search targets.
+///
+/// Serialised into the `LogicalInterest`'s `InterestShape.kinds` field via
+/// `nmp_nip50::SearchScope::interest_shape()`. Append-only.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum SearchScope {
+    /// kind:0 profile metadata — search for users.
+    Users,
+    /// kind:30023 long-form articles — search for articles.
+    LongForm,
+    /// kind:1 short text notes — search for notes.
+    Notes,
 }
 
 /// NIP-65 / kind:10002 role for a configured relay.
@@ -531,4 +571,18 @@ pub enum KernelEvent {
         /// `true` if the active viewer has reacted.
         viewer_reacted: bool,
     },
+
+    // ── Phase 4D additions (append-only) ─────────────────────────────────────
+    /// The `"hl.search"` typed sidecar was decoded from an NMP snapshot frame.
+    ///
+    /// Produced by `projections::dispatch_typed_frame` when the hl-owned
+    /// `"hl.search"` JSON-serde sidecar arrives (registered and replaced by
+    /// `search::register_search_projection` / `search::replace_search_projection`
+    /// on each `RunSearch` dispatch). Carries raw `SearchHitRow` items from the
+    /// active NIP-50 search. The reducer stores them in `AppState::search_results`.
+    ///
+    /// Bounded by `DEFAULT_MAX_SEARCH_HITS` (200) from nmp-nip50 — never
+    /// unbounded (Non-Negotiable #7). No labels or formatted strings — Swift
+    /// formats all search result UI (D1).
+    SearchResultsUpdated(Vec<crate::kernel::snapshot::SearchHitRow>),
 }

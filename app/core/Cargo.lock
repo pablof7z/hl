@@ -694,7 +694,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1087,6 +1087,7 @@ dependencies = [
  "nmp-nip11",
  "nmp-nip25",
  "nmp-nip29",
+ "nmp-nip50",
  "nmp-nip51",
  "nmp-nip78",
  "nmp-signers",
@@ -1933,6 +1934,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "nmp-nip50"
+version = "0.8.0"
+source = "git+https://github.com/pablof7z/nostr-multi-platform.git?rev=b4404159d0d87325f8c65574f7ba46981fc0098f#b4404159d0d87325f8c65574f7ba46981fc0098f"
+dependencies = [
+ "nmp-core",
+ "nmp-kinds",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "nmp-nip51"
 version = "0.8.0"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?rev=b4404159d0d87325f8c65574f7ba46981fc0098f#b4404159d0d87325f8c65574f7ba46981fc0098f"
@@ -2259,7 +2271,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2833,7 +2845,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3159,7 +3171,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3292,7 +3304,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

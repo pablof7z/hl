@@ -120,6 +120,10 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     // a new identity. The ReactionProjection viewer_pubkey is updated on
     // re-registration; wipe the hl-side cache here immediately.
     super::reactions::clear_on_identity_lost(state);
+    // ── Phase 4D: clear search results on logout ─────────────────────────────
+    // AppState::search_results holds NIP-50 hits for the departing account's
+    // query. Wipe so stale search results don't survive into the next session.
+    state.search_results.clear();
     // RemoveActiveAccount fires nmp.remove_account; ClearSession
     // emits a CapabilityRequest to native for its keychain.
     vec![Effect::RemoveActiveAccount, Effect::ClearSession]
@@ -183,6 +187,8 @@ pub(crate) fn reduce_event_identity_changed(
             state.articles.clear();
             // ── Phase 4B: clear reaction state on account removal ─────────────
             super::reactions::clear_on_identity_lost(state);
+            // ── Phase 4D: clear search results on account removal ─────────────
+            state.search_results.clear();
         }
     }
     vec![]
