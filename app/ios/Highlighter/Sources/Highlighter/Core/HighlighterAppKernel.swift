@@ -188,6 +188,11 @@ final class HighlighterAppKernel {
         case .bookmarks, .articleReader, .search, .articleFeed,
              .highlightFeed, .homeFeed, .whatsNew, .bookPicker, .shareComposer:
             break
+
+        // Phase 5+ snapshots (podcast, OCR capture) — managed by their owning
+        // views / stores; no-op here (same pattern as Phase 4+ above).
+        case .podcastListening, .capture:
+            break
         }
     }
 
@@ -201,6 +206,11 @@ final class HighlighterAppKernel {
         // the share capability bridge registered at startup; the observer
         // here is a fallback no-op so the switch remains exhaustive (D6).
         case .share:
+            break
+        // Phase 5+ native capabilities (audio, OCR, camera) — handled by
+        // their respective capability bridges registered at startup; the
+        // observer here is a fallback no-op so the switch remains exhaustive (D6).
+        case .audio, .ocr, .camera:
             break
         }
     }

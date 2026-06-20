@@ -25819,6 +25819,272 @@ public func FfiConverterTypeKernelArtifactPreviewResult_lower(_ value: KernelArt
 
 
 /**
+ * Snapshot for `ViewId::Capture` — OCR capture state.
+ *
+ * Device-local: never derived from or published to Nostr events.
+ * Raw-data doctrine (D1): Swift formats all display strings from these raw
+ * fields. No formatted markdown preview label, no "Scanning…" copy — those
+ * are Swift-side presentation decisions.
+ *
+ * Bounded by the image's text content — `selectable_words` and `raw_lines`
+ * are the output of one Vision scan; they do not grow with the event store
+ * (Non-Negotiable #7).
+ */
+public struct KernelCaptureSnapshot {
+    /**
+     * Temp-file path of the last captured image, or `None` before first capture.
+     */
+    public var imageHandle: String?
+    /**
+     * Reconstructed markdown from the last completed OCR pass. Empty until the
+     * first successful `CapabilityResult::Ocr(OcrResult::Lines)` arrives.
+     * D1: no truncation, no preview label.
+     */
+    public var markdown: String
+    /**
+     * Selectable word projections for drag-selection UI. Empty until OCR completes.
+     * D1: raw `OcrWord` values — Swift owns drag-select geometry rendering.
+     */
+    public var selectableWords: [OcrWord]
+    /**
+     * Raw OCR line observations from the last completed scan. Empty until OCR completes.
+     * D1: raw `OcrLine` values with Vision bounding boxes.
+     */
+    public var rawLines: [OcrLine]
+    /**
+     * `true` while a `VNRecognizeTextRequest` is in flight. Swift shows a
+     * progress indicator when this is `true`.
+     */
+    public var pending: Bool
+    /**
+     * Draft quote text (the highlighted/selected passage). Raw — D1.
+     */
+    public var draftQuote: String
+    /**
+     * Draft source context (the paragraph the quote was lifted from). Raw — D1.
+     */
+    public var draftContext: String
+    /**
+     * Draft user-authored note. Raw — D1.
+     */
+    public var draftNote: String
+    /**
+     * Indices into `selectable_words` for the current drag selection.
+     * `u64` for uniffi compat (kernel stores `usize`).
+     */
+    public var selectedWordIndices: [UInt64]
+    /**
+     * The validated NIP-29 target community id, or `None` for a standalone
+     * capture. D1: raw id only — Swift resolves the display name from the
+     * communities list (no "Optional" fallback here).
+     */
+    public var targetGroupId: String?
+    /**
+     * Publish-phase FSM state.
+     */
+    public var publishPhase: KernelCaptureDraftPhase
+    /**
+     * `true` when the draft is publishable (Reviewing + quote, or
+     * Reviewing + markdown + target group). Swift gates the publish button.
+     */
+    public var canPublish: Bool
+    /**
+     * Raw publish error message when `publish_phase == Error`, else empty. D1.
+     */
+    public var publishError: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Temp-file path of the last captured image, or `None` before first capture.
+         */imageHandle: String?,
+        /**
+         * Reconstructed markdown from the last completed OCR pass. Empty until the
+         * first successful `CapabilityResult::Ocr(OcrResult::Lines)` arrives.
+         * D1: no truncation, no preview label.
+         */markdown: String,
+        /**
+         * Selectable word projections for drag-selection UI. Empty until OCR completes.
+         * D1: raw `OcrWord` values — Swift owns drag-select geometry rendering.
+         */selectableWords: [OcrWord],
+        /**
+         * Raw OCR line observations from the last completed scan. Empty until OCR completes.
+         * D1: raw `OcrLine` values with Vision bounding boxes.
+         */rawLines: [OcrLine],
+        /**
+         * `true` while a `VNRecognizeTextRequest` is in flight. Swift shows a
+         * progress indicator when this is `true`.
+         */pending: Bool,
+        /**
+         * Draft quote text (the highlighted/selected passage). Raw — D1.
+         */draftQuote: String,
+        /**
+         * Draft source context (the paragraph the quote was lifted from). Raw — D1.
+         */draftContext: String,
+        /**
+         * Draft user-authored note. Raw — D1.
+         */draftNote: String,
+        /**
+         * Indices into `selectable_words` for the current drag selection.
+         * `u64` for uniffi compat (kernel stores `usize`).
+         */selectedWordIndices: [UInt64],
+        /**
+         * The validated NIP-29 target community id, or `None` for a standalone
+         * capture. D1: raw id only — Swift resolves the display name from the
+         * communities list (no "Optional" fallback here).
+         */targetGroupId: String?,
+        /**
+         * Publish-phase FSM state.
+         */publishPhase: KernelCaptureDraftPhase,
+        /**
+         * `true` when the draft is publishable (Reviewing + quote, or
+         * Reviewing + markdown + target group). Swift gates the publish button.
+         */canPublish: Bool,
+        /**
+         * Raw publish error message when `publish_phase == Error`, else empty. D1.
+         */publishError: String) {
+        self.imageHandle = imageHandle
+        self.markdown = markdown
+        self.selectableWords = selectableWords
+        self.rawLines = rawLines
+        self.pending = pending
+        self.draftQuote = draftQuote
+        self.draftContext = draftContext
+        self.draftNote = draftNote
+        self.selectedWordIndices = selectedWordIndices
+        self.targetGroupId = targetGroupId
+        self.publishPhase = publishPhase
+        self.canPublish = canPublish
+        self.publishError = publishError
+    }
+}
+
+#if compiler(>=6)
+extension KernelCaptureSnapshot: Sendable {}
+#endif
+
+
+extension KernelCaptureSnapshot: Equatable, Hashable {
+    public static func ==(lhs: KernelCaptureSnapshot, rhs: KernelCaptureSnapshot) -> Bool {
+        if lhs.imageHandle != rhs.imageHandle {
+            return false
+        }
+        if lhs.markdown != rhs.markdown {
+            return false
+        }
+        if lhs.selectableWords != rhs.selectableWords {
+            return false
+        }
+        if lhs.rawLines != rhs.rawLines {
+            return false
+        }
+        if lhs.pending != rhs.pending {
+            return false
+        }
+        if lhs.draftQuote != rhs.draftQuote {
+            return false
+        }
+        if lhs.draftContext != rhs.draftContext {
+            return false
+        }
+        if lhs.draftNote != rhs.draftNote {
+            return false
+        }
+        if lhs.selectedWordIndices != rhs.selectedWordIndices {
+            return false
+        }
+        if lhs.targetGroupId != rhs.targetGroupId {
+            return false
+        }
+        if lhs.publishPhase != rhs.publishPhase {
+            return false
+        }
+        if lhs.canPublish != rhs.canPublish {
+            return false
+        }
+        if lhs.publishError != rhs.publishError {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(imageHandle)
+        hasher.combine(markdown)
+        hasher.combine(selectableWords)
+        hasher.combine(rawLines)
+        hasher.combine(pending)
+        hasher.combine(draftQuote)
+        hasher.combine(draftContext)
+        hasher.combine(draftNote)
+        hasher.combine(selectedWordIndices)
+        hasher.combine(targetGroupId)
+        hasher.combine(publishPhase)
+        hasher.combine(canPublish)
+        hasher.combine(publishError)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelCaptureSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelCaptureSnapshot {
+        return
+            try KernelCaptureSnapshot(
+                imageHandle: FfiConverterOptionString.read(from: &buf),
+                markdown: FfiConverterString.read(from: &buf),
+                selectableWords: FfiConverterSequenceTypeOcrWord.read(from: &buf),
+                rawLines: FfiConverterSequenceTypeOcrLine.read(from: &buf),
+                pending: FfiConverterBool.read(from: &buf),
+                draftQuote: FfiConverterString.read(from: &buf),
+                draftContext: FfiConverterString.read(from: &buf),
+                draftNote: FfiConverterString.read(from: &buf),
+                selectedWordIndices: FfiConverterSequenceUInt64.read(from: &buf),
+                targetGroupId: FfiConverterOptionString.read(from: &buf),
+                publishPhase: FfiConverterTypeKernelCaptureDraftPhase.read(from: &buf),
+                canPublish: FfiConverterBool.read(from: &buf),
+                publishError: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelCaptureSnapshot, into buf: inout [UInt8]) {
+        FfiConverterOptionString.write(value.imageHandle, into: &buf)
+        FfiConverterString.write(value.markdown, into: &buf)
+        FfiConverterSequenceTypeOcrWord.write(value.selectableWords, into: &buf)
+        FfiConverterSequenceTypeOcrLine.write(value.rawLines, into: &buf)
+        FfiConverterBool.write(value.pending, into: &buf)
+        FfiConverterString.write(value.draftQuote, into: &buf)
+        FfiConverterString.write(value.draftContext, into: &buf)
+        FfiConverterString.write(value.draftNote, into: &buf)
+        FfiConverterSequenceUInt64.write(value.selectedWordIndices, into: &buf)
+        FfiConverterOptionString.write(value.targetGroupId, into: &buf)
+        FfiConverterTypeKernelCaptureDraftPhase.write(value.publishPhase, into: &buf)
+        FfiConverterBool.write(value.canPublish, into: &buf)
+        FfiConverterString.write(value.publishError, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelCaptureSnapshot_lift(_ buf: RustBuffer) throws -> KernelCaptureSnapshot {
+    return try FfiConverterTypeKernelCaptureSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelCaptureSnapshot_lower(_ value: KernelCaptureSnapshot) -> RustBuffer {
+    return FfiConverterTypeKernelCaptureSnapshot.lower(value)
+}
+
+
+/**
  * One row in the merged home feed.
  *
  * For `KernelHomeFeedRowKind::Highlight`: carries the grouped highlight event ids and
@@ -26754,6 +27020,106 @@ public func FfiConverterTypeKernelSearchHitRow_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeKernelSearchHitRow_lower(_ value: KernelSearchHitRow) -> RustBuffer {
     return FfiConverterTypeKernelSearchHitRow.lower(value)
+}
+
+
+/**
+ * Transcript segment snapshot — raw time-bounded utterance.
+ *
+ * D1: Swift formats timestamps from `start`/`end`. No "X:XX" labels here.
+ * DEVICE-LOCAL — fetched per session, never a nostr fact.
+ */
+public struct KernelTranscriptSegment {
+    public var id: String
+    public var start: Double
+    public var end: Double
+    public var speaker: String
+    public var text: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, start: Double, end: Double, speaker: String, text: String) {
+        self.id = id
+        self.start = start
+        self.end = end
+        self.speaker = speaker
+        self.text = text
+    }
+}
+
+#if compiler(>=6)
+extension KernelTranscriptSegment: Sendable {}
+#endif
+
+
+extension KernelTranscriptSegment: Equatable, Hashable {
+    public static func ==(lhs: KernelTranscriptSegment, rhs: KernelTranscriptSegment) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.start != rhs.start {
+            return false
+        }
+        if lhs.end != rhs.end {
+            return false
+        }
+        if lhs.speaker != rhs.speaker {
+            return false
+        }
+        if lhs.text != rhs.text {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(start)
+        hasher.combine(end)
+        hasher.combine(speaker)
+        hasher.combine(text)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelTranscriptSegment: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelTranscriptSegment {
+        return
+            try KernelTranscriptSegment(
+                id: FfiConverterString.read(from: &buf),
+                start: FfiConverterDouble.read(from: &buf),
+                end: FfiConverterDouble.read(from: &buf),
+                speaker: FfiConverterString.read(from: &buf),
+                text: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelTranscriptSegment, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterDouble.write(value.start, into: &buf)
+        FfiConverterDouble.write(value.end, into: &buf)
+        FfiConverterString.write(value.speaker, into: &buf)
+        FfiConverterString.write(value.text, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelTranscriptSegment_lift(_ buf: RustBuffer) throws -> KernelTranscriptSegment {
+    return try FfiConverterTypeKernelTranscriptSegment.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelTranscriptSegment_lower(_ value: KernelTranscriptSegment) -> RustBuffer {
+    return FfiConverterTypeKernelTranscriptSegment.lower(value)
 }
 
 
@@ -30832,6 +31198,300 @@ public func FfiConverterTypePodcastListeningProjectionInput_lift(_ buf: RustBuff
 #endif
 public func FfiConverterTypePodcastListeningProjectionInput_lower(_ value: PodcastListeningProjectionInput) -> RustBuffer {
     return FfiConverterTypePodcastListeningProjectionInput.lower(value)
+}
+
+
+/**
+ * Snapshot for `ViewId::PodcastListening` — the full-screen podcast player.
+ *
+ * All playback facts are **device-local** (resume position NEVER published to
+ * nostr — `hl-app-state-vs-nostr-facts`).
+ *
+ * Raw-data doctrine (D1): Swift formats all display strings from these raw
+ * fields — "X:XX" timestamps, progress percentage, chapter titles.  The kernel
+ * does NOT produce formatted duration strings.
+ *
+ * Bounded: fixed-size record (no lists that grow with the event store —
+ * Non-Negotiable #7).  Clip ranges (`clip_start_seconds` / `clip_end_seconds`)
+ * are empty in Phase 5H and are populated by Phase 5I/5J.
+ */
+public struct PodcastListeningSnapshot {
+    /**
+     * Podcast item GUID — the stable episode identifier.
+     */
+    public var guid: String
+    /**
+     * HTTP(S) audio URL of the loaded episode.  Opaque from the kernel (D3).
+     */
+    public var audioUrl: String
+    /**
+     * Episode title.  Raw string — no truncation or ellipsis (D1).
+     */
+    public var title: String
+    /**
+     * Episode author / host.  Raw string (D1).
+     */
+    public var author: String
+    /**
+     * Episode artwork URL.  Raw string — Swift handles loading/caching (D1).
+     */
+    public var imageUrl: String
+    /**
+     * Total duration in seconds as reported by `AudioResult::Loaded`.
+     * `0.0` until the native player has fully loaded the item.
+     */
+    public var durationSeconds: Double
+    /**
+     * Current playback position in seconds.  Updated at most once per second
+     * (bounded cadence, D8).  `0.0` at start.
+     */
+    public var positionSeconds: Double
+    /**
+     * `true` when the native player is actively playing.  `false` when paused,
+     * buffering, or stopped.  Updated by `AudioResult::Progress`.
+     */
+    public var isPlaying: Bool
+    /**
+     * Clip start position in seconds for an in-progress clip selection.
+     * `None` when no clip is being assembled.
+     */
+    public var clipStartSeconds: Double?
+    /**
+     * Clip end position in seconds for an in-progress clip selection.
+     * `None` when no clip is being assembled.
+     */
+    public var clipEndSeconds: Double?
+    /**
+     * Transcript segments for the current episode. Raw segments — Swift formats
+     * timestamps and display text (D1). Empty until `hl.transcript.load` completes.
+     * DEVICE-LOCAL — never a nostr fact.
+     */
+    public var transcriptSegments: [KernelTranscriptSegment]
+    /**
+     * Transcript availability for the current episode.
+     */
+    public var transcriptAvailability: KernelTranscriptAvailability
+    /**
+     * Speaker label from the in-progress clip selection (empty when no clip).
+     */
+    public var clipSpeaker: String
+    /**
+     * Segment IDs selected for the in-progress clip. Empty when no clip.
+     */
+    public var clipSelectedSegmentIds: [String]
+    /**
+     * Current clip-publish phase (Idle → Publishing → Done | Error).
+     * Device-local — only the published kind:9802 is a nostr fact.
+     */
+    public var clipPublishPhase: KernelClipPublishPhase
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Podcast item GUID — the stable episode identifier.
+         */guid: String,
+        /**
+         * HTTP(S) audio URL of the loaded episode.  Opaque from the kernel (D3).
+         */audioUrl: String,
+        /**
+         * Episode title.  Raw string — no truncation or ellipsis (D1).
+         */title: String,
+        /**
+         * Episode author / host.  Raw string (D1).
+         */author: String,
+        /**
+         * Episode artwork URL.  Raw string — Swift handles loading/caching (D1).
+         */imageUrl: String,
+        /**
+         * Total duration in seconds as reported by `AudioResult::Loaded`.
+         * `0.0` until the native player has fully loaded the item.
+         */durationSeconds: Double,
+        /**
+         * Current playback position in seconds.  Updated at most once per second
+         * (bounded cadence, D8).  `0.0` at start.
+         */positionSeconds: Double,
+        /**
+         * `true` when the native player is actively playing.  `false` when paused,
+         * buffering, or stopped.  Updated by `AudioResult::Progress`.
+         */isPlaying: Bool,
+        /**
+         * Clip start position in seconds for an in-progress clip selection.
+         * `None` when no clip is being assembled.
+         */clipStartSeconds: Double?,
+        /**
+         * Clip end position in seconds for an in-progress clip selection.
+         * `None` when no clip is being assembled.
+         */clipEndSeconds: Double?,
+        /**
+         * Transcript segments for the current episode. Raw segments — Swift formats
+         * timestamps and display text (D1). Empty until `hl.transcript.load` completes.
+         * DEVICE-LOCAL — never a nostr fact.
+         */transcriptSegments: [KernelTranscriptSegment],
+        /**
+         * Transcript availability for the current episode.
+         */transcriptAvailability: KernelTranscriptAvailability,
+        /**
+         * Speaker label from the in-progress clip selection (empty when no clip).
+         */clipSpeaker: String,
+        /**
+         * Segment IDs selected for the in-progress clip. Empty when no clip.
+         */clipSelectedSegmentIds: [String],
+        /**
+         * Current clip-publish phase (Idle → Publishing → Done | Error).
+         * Device-local — only the published kind:9802 is a nostr fact.
+         */clipPublishPhase: KernelClipPublishPhase) {
+        self.guid = guid
+        self.audioUrl = audioUrl
+        self.title = title
+        self.author = author
+        self.imageUrl = imageUrl
+        self.durationSeconds = durationSeconds
+        self.positionSeconds = positionSeconds
+        self.isPlaying = isPlaying
+        self.clipStartSeconds = clipStartSeconds
+        self.clipEndSeconds = clipEndSeconds
+        self.transcriptSegments = transcriptSegments
+        self.transcriptAvailability = transcriptAvailability
+        self.clipSpeaker = clipSpeaker
+        self.clipSelectedSegmentIds = clipSelectedSegmentIds
+        self.clipPublishPhase = clipPublishPhase
+    }
+}
+
+#if compiler(>=6)
+extension PodcastListeningSnapshot: Sendable {}
+#endif
+
+
+extension PodcastListeningSnapshot: Equatable, Hashable {
+    public static func ==(lhs: PodcastListeningSnapshot, rhs: PodcastListeningSnapshot) -> Bool {
+        if lhs.guid != rhs.guid {
+            return false
+        }
+        if lhs.audioUrl != rhs.audioUrl {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.author != rhs.author {
+            return false
+        }
+        if lhs.imageUrl != rhs.imageUrl {
+            return false
+        }
+        if lhs.durationSeconds != rhs.durationSeconds {
+            return false
+        }
+        if lhs.positionSeconds != rhs.positionSeconds {
+            return false
+        }
+        if lhs.isPlaying != rhs.isPlaying {
+            return false
+        }
+        if lhs.clipStartSeconds != rhs.clipStartSeconds {
+            return false
+        }
+        if lhs.clipEndSeconds != rhs.clipEndSeconds {
+            return false
+        }
+        if lhs.transcriptSegments != rhs.transcriptSegments {
+            return false
+        }
+        if lhs.transcriptAvailability != rhs.transcriptAvailability {
+            return false
+        }
+        if lhs.clipSpeaker != rhs.clipSpeaker {
+            return false
+        }
+        if lhs.clipSelectedSegmentIds != rhs.clipSelectedSegmentIds {
+            return false
+        }
+        if lhs.clipPublishPhase != rhs.clipPublishPhase {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(guid)
+        hasher.combine(audioUrl)
+        hasher.combine(title)
+        hasher.combine(author)
+        hasher.combine(imageUrl)
+        hasher.combine(durationSeconds)
+        hasher.combine(positionSeconds)
+        hasher.combine(isPlaying)
+        hasher.combine(clipStartSeconds)
+        hasher.combine(clipEndSeconds)
+        hasher.combine(transcriptSegments)
+        hasher.combine(transcriptAvailability)
+        hasher.combine(clipSpeaker)
+        hasher.combine(clipSelectedSegmentIds)
+        hasher.combine(clipPublishPhase)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePodcastListeningSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastListeningSnapshot {
+        return
+            try PodcastListeningSnapshot(
+                guid: FfiConverterString.read(from: &buf),
+                audioUrl: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                author: FfiConverterString.read(from: &buf),
+                imageUrl: FfiConverterString.read(from: &buf),
+                durationSeconds: FfiConverterDouble.read(from: &buf),
+                positionSeconds: FfiConverterDouble.read(from: &buf),
+                isPlaying: FfiConverterBool.read(from: &buf),
+                clipStartSeconds: FfiConverterOptionDouble.read(from: &buf),
+                clipEndSeconds: FfiConverterOptionDouble.read(from: &buf),
+                transcriptSegments: FfiConverterSequenceTypeKernelTranscriptSegment.read(from: &buf),
+                transcriptAvailability: FfiConverterTypeKernelTranscriptAvailability.read(from: &buf),
+                clipSpeaker: FfiConverterString.read(from: &buf),
+                clipSelectedSegmentIds: FfiConverterSequenceString.read(from: &buf),
+                clipPublishPhase: FfiConverterTypeKernelClipPublishPhase.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PodcastListeningSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.guid, into: &buf)
+        FfiConverterString.write(value.audioUrl, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.author, into: &buf)
+        FfiConverterString.write(value.imageUrl, into: &buf)
+        FfiConverterDouble.write(value.durationSeconds, into: &buf)
+        FfiConverterDouble.write(value.positionSeconds, into: &buf)
+        FfiConverterBool.write(value.isPlaying, into: &buf)
+        FfiConverterOptionDouble.write(value.clipStartSeconds, into: &buf)
+        FfiConverterOptionDouble.write(value.clipEndSeconds, into: &buf)
+        FfiConverterSequenceTypeKernelTranscriptSegment.write(value.transcriptSegments, into: &buf)
+        FfiConverterTypeKernelTranscriptAvailability.write(value.transcriptAvailability, into: &buf)
+        FfiConverterString.write(value.clipSpeaker, into: &buf)
+        FfiConverterSequenceString.write(value.clipSelectedSegmentIds, into: &buf)
+        FfiConverterTypeKernelClipPublishPhase.write(value.clipPublishPhase, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastListeningSnapshot_lift(_ buf: RustBuffer) throws -> PodcastListeningSnapshot {
+    return try FfiConverterTypePodcastListeningSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePodcastListeningSnapshot_lower(_ value: PodcastListeningSnapshot) -> RustBuffer {
+    return FfiConverterTypePodcastListeningSnapshot.lower(value)
 }
 
 
@@ -46729,6 +47389,307 @@ extension ArtifactDetailTarget: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * What the kernel is asking the native audio player to do.
+ *
+ * Append-only: new ops extend the transport surface without breaking
+ * existing native handlers.
+ */
+
+public enum AudioOp {
+
+    /**
+     * Load and optionally seek the player to `resume_at_seconds` before
+     * starting.  When `resume_at_seconds` is `None` the player starts from
+     * the beginning. After loading the player must report back a
+     * `AudioResult::Loaded { duration_seconds }` result.
+     */
+    case load(
+        /**
+         * HTTP(S) audio URL. Opaque from the kernel (D3: no URL construction).
+         */url: String,
+        /**
+         * Optional resume position in seconds (≥ 0, finite).  `None` → start
+         * from beginning.
+         */resumeAtSeconds: Double?
+    )
+    /**
+     * Begin / resume playback of the already-loaded item.
+     */
+    case play
+    /**
+     * Pause playback without unloading the item.
+     */
+    case pause
+    /**
+     * Seek to `seconds` (clamped to `[0, duration]` by the kernel before
+     * this op is emitted, but native should also clamp defensively).
+     */
+    case seek(
+        /**
+         * Target position in seconds (finite, ≥ 0).
+         */seconds: Double
+    )
+    /**
+     * Stop playback and unload the item.  A new `Load` is required before
+     * playing again.
+     */
+    case stop
+    /**
+     * Extract waveform peaks from the audio at `url` (may be different from
+     * the currently loaded item — e.g. pre-fetching a clip).  Native decodes
+     * the audio and returns `bucket_count` normalized amplitude buckets in
+     * `AudioResult::WaveformPeaks`.  Should run off the main thread.
+     */
+    case extractWaveform(
+        /**
+         * Audio URL to extract from (opaque from kernel).
+         */url: String,
+        /**
+         * Number of amplitude buckets to return (typically 100–200).
+         */bucketCount: UInt32
+    )
+}
+
+
+#if compiler(>=6)
+extension AudioOp: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAudioOp: FfiConverterRustBuffer {
+    typealias SwiftType = AudioOp
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AudioOp {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .load(url: try FfiConverterString.read(from: &buf), resumeAtSeconds: try FfiConverterOptionDouble.read(from: &buf)
+        )
+
+        case 2: return .play
+
+        case 3: return .pause
+
+        case 4: return .seek(seconds: try FfiConverterDouble.read(from: &buf)
+        )
+
+        case 5: return .stop
+
+        case 6: return .extractWaveform(url: try FfiConverterString.read(from: &buf), bucketCount: try FfiConverterUInt32.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AudioOp, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .load(url,resumeAtSeconds):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(url, into: &buf)
+            FfiConverterOptionDouble.write(resumeAtSeconds, into: &buf)
+
+
+        case .play:
+            writeInt(&buf, Int32(2))
+
+
+        case .pause:
+            writeInt(&buf, Int32(3))
+
+
+        case let .seek(seconds):
+            writeInt(&buf, Int32(4))
+            FfiConverterDouble.write(seconds, into: &buf)
+
+
+        case .stop:
+            writeInt(&buf, Int32(5))
+
+
+        case let .extractWaveform(url,bucketCount):
+            writeInt(&buf, Int32(6))
+            FfiConverterString.write(url, into: &buf)
+            FfiConverterUInt32.write(bucketCount, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAudioOp_lift(_ buf: RustBuffer) throws -> AudioOp {
+    return try FfiConverterTypeAudioOp.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAudioOp_lower(_ value: AudioOp) -> RustBuffer {
+    return FfiConverterTypeAudioOp.lower(value)
+}
+
+
+extension AudioOp: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Raw result from the native audio player, reported via
+ * `provide_capability_result`. Errors are data (D6) — never panics.
+ */
+
+public enum AudioResult {
+
+    /**
+     * Periodic progress update.  Native reports at most once per ~1 second
+     * (bounded cadence, D8 — not 0.25 s raw `addPeriodicTimeObserver` ticks).
+     * The kernel coalesces via the injected clock if native sends more often.
+     */
+    case progress(
+        /**
+         * Current playback position in seconds (finite, ≥ 0).
+         */currentSeconds: Double,
+        /**
+         * `true` when the player is actively playing.
+         */isPlaying: Bool
+    )
+    /**
+     * The `Load` op completed successfully.  Sent once after item loads.
+     */
+    case loaded(
+        /**
+         * Total duration of the loaded item in seconds (> 0).
+         */durationSeconds: Double
+    )
+    /**
+     * Waveform extraction finished.  One bucket per normalized amplitude
+     * value in `[0.0, 1.0]`. Empty if extraction failed (D6).
+     */
+    case waveformPeaks(
+        /**
+         * URL this waveform corresponds to (echoed from the `ExtractWaveform`
+         * op so the kernel can key the cache by URL).
+         */url: String,
+        /**
+         * Normalized amplitude buckets in `[0.0, 1.0]`.
+         */buckets: [Float]
+    )
+    /**
+     * Playback reached the end of the item naturally.
+     */
+    case ended
+    /**
+     * A transport or loading error occurred.  The kernel surfaces this as
+     * typed state (D6 — never a `Result`).
+     */
+    case error(String
+    )
+}
+
+
+#if compiler(>=6)
+extension AudioResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAudioResult: FfiConverterRustBuffer {
+    typealias SwiftType = AudioResult
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AudioResult {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .progress(currentSeconds: try FfiConverterDouble.read(from: &buf), isPlaying: try FfiConverterBool.read(from: &buf)
+        )
+
+        case 2: return .loaded(durationSeconds: try FfiConverterDouble.read(from: &buf)
+        )
+
+        case 3: return .waveformPeaks(url: try FfiConverterString.read(from: &buf), buckets: try FfiConverterSequenceFloat.read(from: &buf)
+        )
+
+        case 4: return .ended
+
+        case 5: return .error(try FfiConverterString.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AudioResult, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .progress(currentSeconds,isPlaying):
+            writeInt(&buf, Int32(1))
+            FfiConverterDouble.write(currentSeconds, into: &buf)
+            FfiConverterBool.write(isPlaying, into: &buf)
+
+
+        case let .loaded(durationSeconds):
+            writeInt(&buf, Int32(2))
+            FfiConverterDouble.write(durationSeconds, into: &buf)
+
+
+        case let .waveformPeaks(url,buckets):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(url, into: &buf)
+            FfiConverterSequenceFloat.write(buckets, into: &buf)
+
+
+        case .ended:
+            writeInt(&buf, Int32(4))
+
+
+        case let .error(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAudioResult_lift(_ buf: RustBuffer) throws -> AudioResult {
+    return try FfiConverterTypeAudioResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAudioResult_lower(_ value: AudioResult) -> RustBuffer {
+    return FfiConverterTypeAudioResult.lower(value)
+}
+
+
+extension AudioResult: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum BookmarkLibraryFilter {
 
@@ -47099,6 +48060,236 @@ extension BookmarkRow: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * What the kernel is asking the native camera bridge to do.
+ */
+
+public enum CameraOp {
+
+    /**
+     * Capture a perspective-flattened page image using
+     * `VNDocumentCameraViewController` (book / document scan flow).
+     *
+     * Native writes the JPEG to `{data_dir}/camera-<uuid>.jpg` and returns an
+     * opaque `image_handle` (temp-file path). Large images stay on disk; the
+     * capability boundary carries a path, not raw bytes (D5).
+     */
+    case capturePage
+    /**
+     * Scan EAN-13 / ISBN-13 barcodes via `AVCaptureMetadataOutput`.
+     *
+     * Native runs an `AVCaptureSession` targeting `EAN13` and `ISBN13` metadata
+     * types. The first decoded barcode string is returned as
+     * `CameraResult::Barcode { raw_string }` without normalization — the kernel
+     * normalizes and routes to the 5C ISBN lookup (D7: Rust owns logic).
+     */
+    case scanBarcode
+}
+
+
+#if compiler(>=6)
+extension CameraOp: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCameraOp: FfiConverterRustBuffer {
+    typealias SwiftType = CameraOp
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CameraOp {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .capturePage
+
+        case 2: return .scanBarcode
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CameraOp, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .capturePage:
+            writeInt(&buf, Int32(1))
+
+
+        case .scanBarcode:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCameraOp_lift(_ buf: RustBuffer) throws -> CameraOp {
+    return try FfiConverterTypeCameraOp.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCameraOp_lower(_ value: CameraOp) -> RustBuffer {
+    return FfiConverterTypeCameraOp.lower(value)
+}
+
+
+extension CameraOp: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Raw result from the native camera capability bridge, reported via
+ * `provide_capability_result`. Errors and cancellations are data (D6).
+ */
+
+public enum CameraResult {
+
+    /**
+     * `CapturePage` completed. `image_handle` is the `data_dir` temp-file path
+     * of the written JPEG. `width` and `height` are the pixel dimensions of the
+     * written file (needed by the capture screen before the OCR result arrives).
+     *
+     * The kernel routes `image_handle` into the 5D OCR flow by dispatching
+     * `CapabilityRequest::Ocr(OcrOp::RecognizeText { image_handle })`.
+     */
+    case pageImage(
+        /**
+         * Opaque temp-file path within `data_dir`.
+         */imageHandle: String,
+        /**
+         * Pixel width of the written JPEG.
+         */width: UInt32,
+        /**
+         * Pixel height of the written JPEG.
+         */height: UInt32
+    )
+    /**
+     * `ScanBarcode` completed. `raw_string` is the raw barcode value as decoded
+     * by `AVCaptureMetadataOutput` (e.g. `"9780134685991"` for an EAN-13 barcode).
+     * The kernel normalizes the value and routes it to the 5C ISBN lookup.
+     */
+    case barcode(
+        /**
+         * Raw barcode string as decoded by AVFoundation. Not yet normalized.
+         */rawString: String
+    )
+    /**
+     * Camera permission was denied or restricted by the OS. Surfaces as state
+     * (D6: errors are data — the capture screen shows a permission prompt).
+     */
+    case denied
+    /**
+     * The user cancelled the camera session without capturing. No-op (D6).
+     */
+    case cancelled
+    /**
+     * A native AVFoundation / Vision error occurred. Surfaces as state (D6).
+     */
+    case error(String
+    )
+}
+
+
+#if compiler(>=6)
+extension CameraResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCameraResult: FfiConverterRustBuffer {
+    typealias SwiftType = CameraResult
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CameraResult {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .pageImage(imageHandle: try FfiConverterString.read(from: &buf), width: try FfiConverterUInt32.read(from: &buf), height: try FfiConverterUInt32.read(from: &buf)
+        )
+
+        case 2: return .barcode(rawString: try FfiConverterString.read(from: &buf)
+        )
+
+        case 3: return .denied
+
+        case 4: return .cancelled
+
+        case 5: return .error(try FfiConverterString.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: CameraResult, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .pageImage(imageHandle,width,height):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(imageHandle, into: &buf)
+            FfiConverterUInt32.write(width, into: &buf)
+            FfiConverterUInt32.write(height, into: &buf)
+
+
+        case let .barcode(rawString):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(rawString, into: &buf)
+
+
+        case .denied:
+            writeInt(&buf, Int32(3))
+
+
+        case .cancelled:
+            writeInt(&buf, Int32(4))
+
+
+        case let .error(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCameraResult_lift(_ buf: RustBuffer) throws -> CameraResult {
+    return try FfiConverterTypeCameraResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCameraResult_lower(_ value: CameraResult) -> RustBuffer {
+    return FfiConverterTypeCameraResult.lower(value)
+}
+
+
+extension CameraResult: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * A request from the Rust kernel to the native shell to execute an OS
  * capability. Emitted via `HighlighterObserver::on_capability_request`.
  */
@@ -47114,6 +48305,29 @@ public enum CapabilityRequest {
      * Share-extension App Group read/write request.
      */
     case share(ShareOp
+    )
+    /**
+     * Audio player transport request (load/play/pause/seek/stop/waveform).
+     */
+    case audio(AudioOp
+    )
+    /**
+     * Vision text-recognition request. Native runs VNRecognizeTextRequest,
+     * returns raw line observations (text + bbox + words + confidence).
+     * Large images stay on disk (image_handle = data_dir temp path, D5).
+     */
+    case ocr(OcrOp
+    )
+    /**
+     * Camera capture / barcode scan request.
+     *
+     * `CapturePage` → native runs `VNDocumentCameraViewController`, writes
+     * perspective-flattened JPEG to `data_dir`, returns `CameraResult::PageImage`.
+     * `ScanBarcode` → native runs `AVCaptureMetadataOutput` for EAN-13/ISBN-13,
+     * returns `CameraResult::Barcode { raw_string }`. Large images stay on disk
+     * (image_handle = temp path, D5).
+     */
+    case camera(CameraOp
     )
 }
 
@@ -47138,6 +48352,15 @@ public struct FfiConverterTypeCapabilityRequest: FfiConverterRustBuffer {
         case 2: return .share(try FfiConverterTypeShareOp.read(from: &buf)
         )
 
+        case 3: return .audio(try FfiConverterTypeAudioOp.read(from: &buf)
+        )
+
+        case 4: return .ocr(try FfiConverterTypeOcrOp.read(from: &buf)
+        )
+
+        case 5: return .camera(try FfiConverterTypeCameraOp.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -47154,6 +48377,21 @@ public struct FfiConverterTypeCapabilityRequest: FfiConverterRustBuffer {
         case let .share(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeShareOp.write(v1, into: &buf)
+
+
+        case let .audio(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeAudioOp.write(v1, into: &buf)
+
+
+        case let .ocr(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeOcrOp.write(v1, into: &buf)
+
+
+        case let .camera(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeCameraOp.write(v1, into: &buf)
 
         }
     }
@@ -47201,6 +48439,26 @@ public enum CapabilityResult {
      */
     case share(ShareResult
     )
+    /**
+     * Response to a `CapabilityRequest::Audio` — progress, loaded, peaks, or error.
+     */
+    case audio(AudioResult
+    )
+    /**
+     * Response to a `CapabilityRequest::Ocr`.
+     */
+    case ocr(OcrResult
+    )
+    /**
+     * Response to a `CapabilityRequest::Camera`.
+     *
+     * `PageImage` → page scan completed; kernel routes image_handle into the 5D
+     * OCR pipeline and stores dimensions in capture state.
+     * `Barcode` → barcode scanned; kernel normalizes and routes to 5C ISBN lookup.
+     * `Denied` / `Cancelled` / `Error` surface as typed state (D6: errors are data).
+     */
+    case camera(CameraResult
+    )
 }
 
 
@@ -47224,6 +48482,15 @@ public struct FfiConverterTypeCapabilityResult: FfiConverterRustBuffer {
         case 2: return .share(try FfiConverterTypeShareResult.read(from: &buf)
         )
 
+        case 3: return .audio(try FfiConverterTypeAudioResult.read(from: &buf)
+        )
+
+        case 4: return .ocr(try FfiConverterTypeOcrResult.read(from: &buf)
+        )
+
+        case 5: return .camera(try FfiConverterTypeCameraResult.read(from: &buf)
+        )
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -47240,6 +48507,21 @@ public struct FfiConverterTypeCapabilityResult: FfiConverterRustBuffer {
         case let .share(v1):
             writeInt(&buf, Int32(2))
             FfiConverterTypeShareResult.write(v1, into: &buf)
+
+
+        case let .audio(v1):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeAudioResult.write(v1, into: &buf)
+
+
+        case let .ocr(v1):
+            writeInt(&buf, Int32(4))
+            FfiConverterTypeOcrResult.write(v1, into: &buf)
+
+
+        case let .camera(v1):
+            writeInt(&buf, Int32(5))
+            FfiConverterTypeCameraResult.write(v1, into: &buf)
 
         }
     }
@@ -47995,6 +49277,219 @@ extension HighlightSourceKind: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * Publish-phase FSM exposed in `KernelCaptureSnapshot`.
+ *
+ * Mirrors the kernel-internal `CaptureDraftPhase` (in
+ * `kernel/domains/capture_draft.rs`); the internal `Error { message }` variant's
+ * payload is surfaced via the snapshot's `publish_error` field (uniffi enums
+ * stay payload-free here for FFI simplicity).
+ */
+
+public enum KernelCaptureDraftPhase {
+
+    case idle
+    case reviewing
+    case publishing
+    case done
+    case error
+}
+
+
+#if compiler(>=6)
+extension KernelCaptureDraftPhase: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelCaptureDraftPhase: FfiConverterRustBuffer {
+    typealias SwiftType = KernelCaptureDraftPhase
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelCaptureDraftPhase {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .idle
+
+        case 2: return .reviewing
+
+        case 3: return .publishing
+
+        case 4: return .done
+
+        case 5: return .error
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: KernelCaptureDraftPhase, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .idle:
+            writeInt(&buf, Int32(1))
+
+
+        case .reviewing:
+            writeInt(&buf, Int32(2))
+
+
+        case .publishing:
+            writeInt(&buf, Int32(3))
+
+
+        case .done:
+            writeInt(&buf, Int32(4))
+
+
+        case .error:
+            writeInt(&buf, Int32(5))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelCaptureDraftPhase_lift(_ buf: RustBuffer) throws -> KernelCaptureDraftPhase {
+    return try FfiConverterTypeKernelCaptureDraftPhase.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelCaptureDraftPhase_lower(_ value: KernelCaptureDraftPhase) -> RustBuffer {
+    return FfiConverterTypeKernelCaptureDraftPhase.lower(value)
+}
+
+
+extension KernelCaptureDraftPhase: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * FSM phase for a podcast-clip publish round-trip.
+ *
+ * `Idle` before the user triggers publish; `Publishing` once the
+ * `Effect::PublishClipWithCorrelation` is in flight; `Done` when the
+ * `action_results` projection confirms publish; `Error` on any failure.
+ *
+ * DEVICE-LOCAL — the published kind:9802 is the nostr fact, not this FSM.
+ *
+ * Append-only: new variants at the bottom keep rebases mechanical.
+ */
+
+public enum KernelClipPublishPhase {
+
+    /**
+     * No publish in flight.
+     */
+    case idle
+    /**
+     * `Effect::PublishClipWithCorrelation` is in flight; awaiting
+     * the `action_results` verdict keyed by `correlation_id`.
+     */
+    case publishing
+    /**
+     * The kind:9802 event was accepted by at least one relay. D1: raw.
+     */
+    case done
+    /**
+     * The publish was rejected or the correlation_id never arrived. D1: raw.
+     */
+    case error(
+        /**
+         * Raw error message. D1 — Swift formats.
+         */message: String
+    )
+}
+
+
+#if compiler(>=6)
+extension KernelClipPublishPhase: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelClipPublishPhase: FfiConverterRustBuffer {
+    typealias SwiftType = KernelClipPublishPhase
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelClipPublishPhase {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .idle
+
+        case 2: return .publishing
+
+        case 3: return .done
+
+        case 4: return .error(message: try FfiConverterString.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: KernelClipPublishPhase, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .idle:
+            writeInt(&buf, Int32(1))
+
+
+        case .publishing:
+            writeInt(&buf, Int32(2))
+
+
+        case .done:
+            writeInt(&buf, Int32(3))
+
+
+        case let .error(message):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(message, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelClipPublishPhase_lift(_ buf: RustBuffer) throws -> KernelClipPublishPhase {
+    return try FfiConverterTypeKernelClipPublishPhase.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelClipPublishPhase_lower(_ value: KernelClipPublishPhase) -> RustBuffer {
+    return FfiConverterTypeKernelClipPublishPhase.lower(value)
+}
+
+
+extension KernelClipPublishPhase: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * Discriminant for a row in the merged home feed.
  *
  * D1: no user-visible label — Swift maps this to display strings.
@@ -48072,6 +49567,105 @@ public func FfiConverterTypeKernelHomeFeedRowKind_lower(_ value: KernelHomeFeedR
 
 
 extension KernelHomeFeedRowKind: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Availability state for the transcript of the current episode.
+ */
+
+public enum KernelTranscriptAvailability {
+
+    /**
+     * No `hl.transcript.load` action dispatched yet.
+     */
+    case notRequested
+    /**
+     * `Effect::FetchTranscript` in flight.
+     */
+    case loading
+    /**
+     * Segments parsed and stored.
+     */
+    case available
+    /**
+     * Fetch failed or no transcript URL. UI should hide the transcript panel.
+     */
+    case unavailable
+}
+
+
+#if compiler(>=6)
+extension KernelTranscriptAvailability: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelTranscriptAvailability: FfiConverterRustBuffer {
+    typealias SwiftType = KernelTranscriptAvailability
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelTranscriptAvailability {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .notRequested
+
+        case 2: return .loading
+
+        case 3: return .available
+
+        case 4: return .unavailable
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: KernelTranscriptAvailability, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .notRequested:
+            writeInt(&buf, Int32(1))
+
+
+        case .loading:
+            writeInt(&buf, Int32(2))
+
+
+        case .available:
+            writeInt(&buf, Int32(3))
+
+
+        case .unavailable:
+            writeInt(&buf, Int32(4))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelTranscriptAvailability_lift(_ buf: RustBuffer) throws -> KernelTranscriptAvailability {
+    return try FfiConverterTypeKernelTranscriptAvailability.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelTranscriptAvailability_lower(_ value: KernelTranscriptAvailability) -> RustBuffer {
+    return FfiConverterTypeKernelTranscriptAvailability.lower(value)
+}
+
+
+extension KernelTranscriptAvailability: Equatable, Hashable {}
 
 
 
@@ -48878,6 +50472,87 @@ extension NostrEntityRenderKind: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * What the kernel is asking the native OCR bridge to do.
+ */
+
+public enum OcrOp {
+
+    /**
+     * Run `VNRecognizeTextRequest` on the image at `image_handle`.
+     *
+     * `image_handle` is a `data_dir` temp-file path. Large images stay on
+     * disk; the capability boundary carries a path, not raw bytes (D5).
+     * The native bridge loads the image, runs Vision, and returns the raw
+     * `VNRecognizedTextObservation` data as `OcrResult::Lines`.
+     */
+    case recognizeText(
+        /**
+         * Temp-file path within `data_dir` (opaque — D3: kernel never
+         * constructs file paths beyond what it receives here).
+         */imageHandle: String
+    )
+}
+
+
+#if compiler(>=6)
+extension OcrOp: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOcrOp: FfiConverterRustBuffer {
+    typealias SwiftType = OcrOp
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OcrOp {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .recognizeText(imageHandle: try FfiConverterString.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: OcrOp, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .recognizeText(imageHandle):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(imageHandle, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOcrOp_lift(_ buf: RustBuffer) throws -> OcrOp {
+    return try FfiConverterTypeOcrOp.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOcrOp_lower(_ value: OcrOp) -> RustBuffer {
+    return FfiConverterTypeOcrOp.lower(value)
+}
+
+
+extension OcrOp: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum OcrPageSide {
 
@@ -48940,6 +50615,96 @@ public func FfiConverterTypeOcrPageSide_lower(_ value: OcrPageSide) -> RustBuffe
 
 
 extension OcrPageSide: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Raw result from the native OCR capability bridge, reported via
+ * `provide_capability_result`. Errors are data (D6).
+ */
+
+public enum OcrResult {
+
+    /**
+     * `RecognizeText` completed. Contains the raw `VNRecognizedTextObservation`
+     * data as line observations (possibly empty when the image has no text).
+     * The kernel reconstructs markdown and projects selectable words from these.
+     */
+    case lines([OcrLine]
+    )
+    /**
+     * A native Vision error occurred (e.g. image load failure, OS permission
+     * denied). Errors are data (D6) — the kernel surfaces them as typed state
+     * and never panics on bad input.
+     */
+    case error(String
+    )
+}
+
+
+#if compiler(>=6)
+extension OcrResult: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOcrResult: FfiConverterRustBuffer {
+    typealias SwiftType = OcrResult
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OcrResult {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .lines(try FfiConverterSequenceTypeOcrLine.read(from: &buf)
+        )
+
+        case 2: return .error(try FfiConverterString.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: OcrResult, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .lines(v1):
+            writeInt(&buf, Int32(1))
+            FfiConverterSequenceTypeOcrLine.write(v1, into: &buf)
+
+
+        case let .error(v1):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(v1, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOcrResult_lift(_ buf: RustBuffer) throws -> OcrResult {
+    return try FfiConverterTypeOcrResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOcrResult_lower(_ value: OcrResult) -> RustBuffer {
+    return FfiConverterTypeOcrResult.lower(value)
+}
+
+
+extension OcrResult: Equatable, Hashable {}
 
 
 
@@ -51088,6 +52853,22 @@ public enum ViewId {
      * for the pending share item and the available community picker rows (D1).
      */
     case shareComposer
+    /**
+     * Full-screen podcast player view.
+     *
+     * Opened when the user taps a podcast episode to play. Snapshot:
+     * `ViewSnapshot::PodcastListening(PodcastListeningSnapshot)` — raw position,
+     * duration, is_playing, and clip range fields (D1: Swift formats timestamps).
+     */
+    case podcastListening
+    /**
+     * OCR capture view. Snapshot: `ViewSnapshot::Capture(KernelCaptureSnapshot)`.
+     *
+     * Device-local: `pending` drives a progress indicator while
+     * `VNRecognizeTextRequest` is in flight; `markdown` and `selectable_words`
+     * are available once the OCR round-trip completes.
+     */
+    case capture
 }
 
 
@@ -51141,6 +52922,10 @@ public struct FfiConverterTypeViewId: FfiConverterRustBuffer {
         case 16: return .bookPicker
 
         case 17: return .shareComposer
+
+        case 18: return .podcastListening
+
+        case 19: return .capture
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -51219,6 +53004,14 @@ public struct FfiConverterTypeViewId: FfiConverterRustBuffer {
 
         case .shareComposer:
             writeInt(&buf, Int32(17))
+
+
+        case .podcastListening:
+            writeInt(&buf, Int32(18))
+
+
+        case .capture:
+            writeInt(&buf, Int32(19))
 
         }
     }
@@ -51339,6 +53132,17 @@ public enum ViewRoute {
      * strings, no community name fallbacks, no URL validation strings.
      */
     case shareComposer
+    /**
+     * Podcast player projection — `PodcastListeningSnapshot` (now-playing +
+     * position/duration/is_playing + clip range). D1: raw f64 seconds, no
+     * "X:XX" formatted strings.
+     */
+    case podcastListening
+    /**
+     * OCR capture projection — `KernelCaptureSnapshot`
+     * (reconstructed markdown + selectable words + raw lines + pending flag). D1.
+     */
+    case capture
 }
 
 
@@ -51392,6 +53196,10 @@ public struct FfiConverterTypeViewRoute: FfiConverterRustBuffer {
         case 16: return .bookPicker
 
         case 17: return .shareComposer
+
+        case 18: return .podcastListening
+
+        case 19: return .capture
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -51470,6 +53278,14 @@ public struct FfiConverterTypeViewRoute: FfiConverterRustBuffer {
 
         case .shareComposer:
             writeInt(&buf, Int32(17))
+
+
+        case .podcastListening:
+            writeInt(&buf, Int32(18))
+
+
+        case .capture:
+            writeInt(&buf, Int32(19))
 
         }
     }
@@ -51618,6 +53434,20 @@ public enum ViewSnapshot {
      */
     case shareComposer(ShareComposerSnapshot
     )
+    /**
+     * Full-screen podcast player — now-playing fields + position/duration/
+     * is_playing + clip range (empty for 5H; populated by Phase 5I/5J).
+     * Device-local (resume position NEVER published to nostr). Raw f64 fields
+     * only (D1: Swift formats "X:XX" timestamps and progress percentage).
+     */
+    case podcastListening(PodcastListeningSnapshot
+    )
+    /**
+     * OCR capture state — reconstructed markdown + selectable words + raw lines.
+     * Device-local. D1: raw fields only.
+     */
+    case capture(KernelCaptureSnapshot
+    )
 }
 
 
@@ -51684,6 +53514,12 @@ public struct FfiConverterTypeViewSnapshot: FfiConverterRustBuffer {
         )
 
         case 17: return .shareComposer(try FfiConverterTypeShareComposerSnapshot.read(from: &buf)
+        )
+
+        case 18: return .podcastListening(try FfiConverterTypePodcastListeningSnapshot.read(from: &buf)
+        )
+
+        case 19: return .capture(try FfiConverterTypeKernelCaptureSnapshot.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -51777,6 +53613,16 @@ public struct FfiConverterTypeViewSnapshot: FfiConverterRustBuffer {
         case let .shareComposer(v1):
             writeInt(&buf, Int32(17))
             FfiConverterTypeShareComposerSnapshot.write(v1, into: &buf)
+
+
+        case let .podcastListening(v1):
+            writeInt(&buf, Int32(18))
+            FfiConverterTypePodcastListeningSnapshot.write(v1, into: &buf)
+
+
+        case let .capture(v1):
+            writeInt(&buf, Int32(19))
+            FfiConverterTypeKernelCaptureSnapshot.write(v1, into: &buf)
 
         }
     }
@@ -52847,6 +54693,31 @@ fileprivate struct FfiConverterSequenceUInt64: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceFloat: FfiConverterRustBuffer {
+    typealias SwiftType = [Float]
+
+    public static func write(_ value: [Float], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterFloat.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Float] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Float]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterFloat.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
@@ -53664,6 +55535,31 @@ fileprivate struct FfiConverterSequenceTypeKernelSearchHitRow: FfiConverterRustB
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeKernelSearchHitRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeKernelTranscriptSegment: FfiConverterRustBuffer {
+    typealias SwiftType = [KernelTranscriptSegment]
+
+    public static func write(_ value: [KernelTranscriptSegment], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeKernelTranscriptSegment.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [KernelTranscriptSegment] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [KernelTranscriptSegment]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeKernelTranscriptSegment.read(from: &buf))
         }
         return seq
     }

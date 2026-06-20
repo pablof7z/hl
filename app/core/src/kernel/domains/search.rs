@@ -65,7 +65,6 @@
 
 use std::sync::{Arc, Mutex};
 
-use nmp_core::planner::{InterestId, InterestLifecycle, InterestScope, LogicalInterest};
 use nmp_core::substrate::KernelEvent as NmpKernelEvent;
 use nmp_core::KernelEventObserver;
 use nmp_ffi::NmpApp;
@@ -73,6 +72,7 @@ use nmp_nip50::{
     SearchRequest, SearchResultsProjection, SearchResultsSnapshot, SearchScope as NmpSearchScope,
     SearchTargets, DEFAULT_MAX_SEARCH_HITS,
 };
+use nmp_planner::{InterestId, InterestLifecycle, InterestScope, LogicalInterest};
 
 use crate::kernel::action::SearchScope;
 use crate::kernel::app::AppState;
