@@ -39,9 +39,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         /// App-scoped Network Settings store (subscription_id == 0). Weak
         /// so it goes away when the screen is dismissed.
         var networkStore: WeakBox<NetworkSettingsStore>? = nil
-        /// Explorer store — notified on CommunityUpserted so new rooms appear
-        /// without requiring a pull-to-refresh.
-        var explorerStore: WeakBox<RoomExplorerStore>? = nil
         /// Maps subscription handles to app-scoped profile projection pubkeys.
         var profileSnapshotHandles: [UInt64: String] = [:]
 
@@ -162,12 +159,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     func registerNetworkStore(_ store: NetworkSettingsStore) {
         registry.withLock { reg in
             reg.networkStore = WeakBox(store)
-        }
-    }
-
-    func registerExplorer(_ store: RoomExplorerStore) {
-        registry.withLock { reg in
-            reg.explorerStore = WeakBox(store)
         }
     }
 
@@ -326,8 +317,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                     await appStore.refreshJoinedCommunities()
                 }
             }
-            let explorer = registry.withLock { reg in reg.explorerStore?.value }
-            if let explorer { Task { await explorer.reloadFromCache() } }
         case .communityUpserted:
             // Any group-related event arrived — re-query nostrdb for the
             // authoritative joined set. A single refresh path eliminates the
@@ -336,10 +325,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             // other. The query is now membership-driven so missing metadata
             // never wipes the list.
             if let appStore { Task { await appStore.refreshJoinedCommunities() } }
-            // Also notify the explorer so newly-discovered rooms appear
-            // without requiring a pull-to-refresh.
-            let explorer = registry.withLock { reg in reg.explorerStore?.value }
-            if let explorer { Task { await explorer.reloadFromCache() } }
         case .bookmarksUpdated:
             if let appStore { Task { await appStore.refreshBookmarks() } }
         case .bunkerSignRequest:
