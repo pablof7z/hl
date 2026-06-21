@@ -768,7 +768,8 @@ fn build_artifact_share_event_json(
 /// Build a kind:16 generic-repost event JSON for sharing a highlight into a
 /// NIP-29 group. Mirrors `highlights::build_repost_event` (highlights.rs:1674)
 /// but omits the `e` tag: the highlight event_id is not returned through the
-/// nmp action_results mechanism (known architectural limit — nmp rev d16aea60).
+/// nmp action_results mechanism (known architectural limit — nmp rev d16aea60;
+/// tracked at https://github.com/pablof7z/nostr-multi-platform/issues/1702).
 /// Carries h, k (9802), p (author_pubkey_hex) tags. Fire-and-forget via
 /// `Effect::PublishCaptureEvent`.
 fn build_group_repost_event_json(
@@ -1767,6 +1768,68 @@ mod tests {
         tags
     }
 
+    /// Fixture: a podcast episode `ArtifactPreview` with ALL optional fields
+    /// populated. Used by PP-T4 to exercise every optional tag in
+    /// `build_artifact_share_event_json` / `build_share_event`:
+    /// image, summary, podcast_guid, podcast_show_title, audio, audio_preview,
+    /// transcript, feed, published_at, duration, and the secondary podcast i-tag
+    /// (emitted because `reference_tag_value` starts with "podcast:item:guid:"
+    /// and `podcast_guid` is non-empty).
+    fn fixture_podcast_preview() -> crate::kernel::models::ArtifactPreview {
+        crate::kernel::models::ArtifactPreview {
+            id: "podcast-preview-ep1".into(),
+            url: "https://example.com/episodes/ep1".into(),
+            title: "Episode 1: Systems Thinking".into(),
+            author: "Jane Host".into(),
+            image: "https://cdn.example/ep1-art.jpg".into(),
+            description: "A deep dive into systems thinking.".into(),
+            source: "podcast-episode".into(),
+            domain: "example.com".into(),
+            catalog_id: "podcast:item:guid:abc-123-guid".into(),
+            catalog_kind: "podcast:item:guid".into(),
+            podcast_guid: "show-guid-xyz".into(),
+            podcast_item_guid: "abc-123-guid".into(),
+            podcast_show_title: "The Tech Show".into(),
+            audio_url: "https://cdn.example/ep1.mp3".into(),
+            audio_preview_url: "https://cdn.example/ep1-preview.mp3".into(),
+            transcript_url: "https://cdn.example/ep1-transcript.vtt".into(),
+            feed_url: "https://feeds.example/tech-show.rss".into(),
+            published_at: "2024-01-15T10:00:00Z".into(),
+            duration_seconds: Some(3600),
+            reference_tag_name: "i".into(),
+            reference_tag_value: "podcast:item:guid:abc-123-guid".into(),
+            reference_kind: "podcast:item:guid".into(),
+            highlight_tag_name: "i".into(),
+            highlight_tag_value: "podcast:item:guid:abc-123-guid".into(),
+            highlight_reference_key: "i:podcast:item:guid:abc-123-guid".into(),
+            chapters: Vec::new(),
+        }
+    }
+
+    /// Build expected kind:16 repost tags from the bespoke
+    /// `highlights::build_repost_event`, then drop the `e` tag (omitted in the
+    /// kernel path — nmp rev d16aea60 does not surface the published event_id
+    /// through `ActionResultRow`, so the kernel cannot include the `e` reference).
+    /// Returns sorted tags for order-independent comparison.
+    fn expected_repost_tags_minus_e(group_id: &str, author_pubkey_hex: &str) -> Vec<Vec<String>> {
+        // Sign a dummy event to obtain a valid EventId for the helper call.
+        // The id value is irrelevant; we immediately drop the `e` tag before
+        // comparing with the kernel output.
+        let dummy = bespoke_event(nostr_sdk::EventBuilder::new(
+            nostr_sdk::Kind::TextNote,
+            "dummy",
+        ));
+        let repost = bespoke_event(
+            crate::highlights::build_repost_event(dummy.id, author_pubkey_hex, group_id, "")
+                .expect("build_repost_event for test fixture"),
+        );
+        let mut tags = bespoke_tags(&repost);
+        // Drop the `e` tag — the kernel omits it (see build_group_repost_event_json
+        // and the nmp architectural limit comment there).
+        tags.retain(|t| t.first().map(|s| s.as_str()) != Some("e"));
+        sorted(tags)
+    }
+
     /// PP-T1 — Path 1: highlight + EXISTING artifact → kind:9802. Real parity:
     /// the expected event is built by the bespoke `highlights::build_highlight_event`,
     /// signed, and its tags compared against the kernel JSON. Also asserts the
@@ -1795,6 +1858,13 @@ mod tests {
 
         // Drive the kernel path.
         let mut state = make_state();
+        // A real session pubkey so the kind:16 repost carries a valid `p` tag.
+        let author_keys = nostr_sdk::Keys::generate();
+        let author_pubkey_hex = author_keys.public_key().to_hex();
+        state.session = crate::kernel::app::SessionState::Present {
+            pubkey: author_pubkey_hex.clone(),
+            signer_kind: crate::kernel::action::SignerKind::LocalNsec,
+        };
         state.communities = vec![community("group-a", "Group A")];
         state.capture_draft.publish_phase = CaptureDraftPhase::Reviewing;
         state.capture_draft.quote = "A profound insight from the book.".into();
@@ -1848,14 +1918,21 @@ mod tests {
         };
         let rv: serde_json::Value = serde_json::from_str(repost_json).expect("valid repost json");
         assert_eq!(rv["kind"], 16, "group repost must be kind:16");
-        let rtags = rv["tags"].as_array().expect("repost tags");
+        // Field-for-field tag comparison against the bespoke builder (minus the `e` tag
+        // which is omitted because nmp rev d16aea60 does not return the published event_id).
+        let actual_repost_tags = sorted(kernel_tags(repost_json));
         assert!(
-            rtags.iter().any(|t| t[0] == "h" && t[1] == "group-a"),
-            "repost must carry h-tag for the group; tags: {rtags:?}"
+            !actual_repost_tags
+                .iter()
+                .any(|t| t.first().map(|s| s.as_str()) == Some("e")),
+            "kind:16 repost must NOT carry an e-tag \
+             (nmp rev d16aea60 does not return event_id through ActionResultRow); \
+             tags: {actual_repost_tags:?}"
         );
-        assert!(
-            rtags.iter().any(|t| t[0] == "k" && t[1] == "9802"),
-            "repost must carry k-tag 9802; tags: {rtags:?}"
+        assert_eq!(
+            actual_repost_tags,
+            expected_repost_tags_minus_e("group-a", &author_pubkey_hex),
+            "kind:16 repost tags (h/k/p) must match bespoke build_repost_event minus e-tag"
         );
         assert_eq!(
             state.capture_draft.publish_phase,
@@ -1963,6 +2040,13 @@ mod tests {
         // Drive the kernel pending-book path.
         let mut state = make_state();
         let clock = ManualClock::default();
+        // A real session pubkey so the kind:16 repost carries a valid `p` tag.
+        let author_keys = nostr_sdk::Keys::generate();
+        let author_pubkey_hex = author_keys.public_key().to_hex();
+        state.session = crate::kernel::app::SessionState::Present {
+            pubkey: author_pubkey_hex.clone(),
+            signer_kind: crate::kernel::action::SignerKind::LocalNsec,
+        };
         state.communities = vec![community("group-a", "Group A")];
         state.capture_draft.publish_phase = CaptureDraftPhase::Reviewing;
         state.capture_draft.quote = "Key insight from unpublished book.".into();
@@ -2062,13 +2146,97 @@ mod tests {
                 error: String::new(),
             }),
         );
+        let Effect::PublishCaptureEvent {
+            json: final_repost_json,
+        } = final_effects
+            .iter()
+            .find(|e| matches!(e, Effect::PublishCaptureEvent { .. }))
+            .expect("highlight success must emit the kind:16 group repost")
+        else {
+            unreachable!()
+        };
+        let final_actual_tags = sorted(kernel_tags(final_repost_json));
+        // e-tag must be absent (same nmp d16aea60 limit as in PP-T1).
         assert!(
-            final_effects
+            !final_actual_tags
                 .iter()
-                .any(|e| matches!(e, Effect::PublishCaptureEvent { .. })),
-            "highlight success must emit the kind:16 group repost; got: {final_effects:?}"
+                .any(|t| t.first().map(|s| s.as_str()) == Some("e")),
+            "kind:16 group repost must NOT carry an e-tag (nmp rev d16aea60 limit); \
+             tags: {final_actual_tags:?}"
+        );
+        assert_eq!(
+            final_actual_tags,
+            expected_repost_tags_minus_e("group-a", &author_pubkey_hex),
+            "kind:16 repost tags (h/k/p) must match bespoke build_repost_event minus e-tag"
         );
         assert_eq!(state.capture_draft.publish_phase, CaptureDraftPhase::Done);
+    }
+
+    /// PP-T4 — Podcast artifact: all optional tags present. Exercises every
+    /// optional field in `build_artifact_share_event_json` / `build_share_event`:
+    /// image, summary, podcast_guid, podcast_show_title, audio, audio_preview,
+    /// transcript, feed, published_at, duration, AND the secondary podcast i-tag
+    /// (emitted when the primary reference is a podcast:item:guid and the show-level
+    /// podcast:guid is also present). Uses `fixture_podcast_preview()` which
+    /// populates all of these. If any optional tag is dropped from the kernel builder,
+    /// this test fails.
+    #[test]
+    fn parity_podcast_artifact_all_optional_tags() {
+        let preview = fixture_podcast_preview();
+        let blossom = fixture_blossom();
+
+        // Bespoke expected artifact-share event (kind:11) with ALL optional tags.
+        let expected_artifact = bespoke_event(
+            crate::artifacts::build_share_event("group-a", &preview, None)
+                .expect("bespoke build_share_event"),
+        );
+        let expected_artifact_tags = sorted(bespoke_tags(&expected_artifact));
+
+        // Drive the kernel pending-book path with the podcast preview.
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        state.communities = vec![community("group-a", "Group A")];
+        state.capture_draft.publish_phase = CaptureDraftPhase::Reviewing;
+        state.capture_draft.quote = "Key insight from the podcast episode.".into();
+        state.capture_draft.target_group_id = Some("group-a".into());
+        state.capture_draft.has_upload = true;
+        state.capture_draft.blossom_upload = Some(blossom.clone());
+        state.capture_draft.blossom_image_url = blossom.url.clone();
+        // Pending podcast episode: preview present, no artifact_record.
+        state.capture_draft.artifact_preview = Some(preview.clone());
+        state.capture_draft.artifact_record = None;
+
+        // Publish → kernel emits the artifact (kind:11) as the correlated primary.
+        let effects = step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
+        let correlated: Vec<_> = effects
+            .iter()
+            .filter(|e| matches!(e, Effect::PublishCaptureWithCorrelation { .. }))
+            .collect();
+        assert_eq!(
+            correlated.len(),
+            1,
+            "pending podcast publish must emit exactly one correlated artifact; got: {effects:?}"
+        );
+        let Effect::PublishCaptureWithCorrelation {
+            json: artifact_json,
+            ..
+        } = correlated[0]
+        else {
+            unreachable!()
+        };
+
+        let av: serde_json::Value =
+            serde_json::from_str(artifact_json).expect("valid artifact json");
+        assert_eq!(av["kind"], 11, "podcast artifact must be kind:11");
+        // Full tag-set comparison including all optional tags and secondary
+        // podcast i-tag. This assertion fails if any optional tag is dropped.
+        assert_eq!(
+            sorted(kernel_tags(artifact_json)),
+            expected_artifact_tags,
+            "podcast artifact tags must match bespoke build_share_event \
+             (including image/summary/podcast_guid/show_title/audio/audio_preview/\
+             transcript/feed/published_at/duration + secondary podcast i-tag)"
+        );
     }
 
     // Phase 7 E2E: full capability round-trip stitched into one chain —
