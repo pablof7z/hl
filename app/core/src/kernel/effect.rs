@@ -732,4 +732,39 @@ pub enum Effect {
     /// via the boot-registered controller. Fire-and-forget (D6). No-op when `nmp`
     /// is `None`.
     WithdrawBookmarkSetsInterest,
+
+    // ── #21 share-flow additions (append-only) ───────────────────────────────
+    /// Publish an in-group share/repost/invite event via
+    /// `ActorCommand::PublishRawEvent`, host-pinned to the group's host relay
+    /// (`PublishTarget::Explicit`), threaded with a `correlation_id` so the
+    /// publish verdict routes back to `KernelEvent::SharePublishActionResult`
+    /// and drives the share FSM → Done / Error (D6).
+    ///
+    /// Replaces the bespoke `artifacts::publish` (kind:11 artifact share),
+    /// `highlights::share_to_community` (kind:16 highlight repost), and
+    /// `groups::create_invite_codes` (kind:9009 invite mint) publish paths.
+    /// The kernel is the sole writer for these events on ported screens — no
+    /// double-publish with the bespoke lane.
+    ///
+    /// At pinned nmp d16aea60 the NIP-29 typed actions
+    /// (`nmp.nip29.share_event_in_group`, `repost_in_group`) cannot reproduce
+    /// these events field-completely: `share_event_in_group` mandates an `e`
+    /// target tag (the standalone kind:11 artifact has none) and offers no slot
+    /// for the rich `d`/`title`/`source`/`i`/`k`/`r`/`author`/`image`/`summary`/
+    /// podcast tags; `repost_in_group` drops the `e`-tag relay hint. The generic
+    /// `nmp.publish` / `ActorCommand::PublishRawEvent` path signs an arbitrary
+    /// `{kind, tags, content}` for the active account and accepts an explicit
+    /// relay set — the field-complete door for all three.
+    ///
+    /// The `json` field is a serde_json-serialised template
+    /// `{ kind, content, tags, host_relay_url }`; nmp fills
+    /// `id`/`sig`/`pubkey`/`created_at`. Built with `serde_json::json!` (never
+    /// `format!` — D-rule). No-op when nmp is `None` (test mode inspects the
+    /// emitted `Effect` directly).
+    PublishShareEvent {
+        /// serde_json template: `{ kind, content, tags, host_relay_url }`.
+        json: String,
+        /// Correlation id threaded through nmp for action_results routing.
+        correlation_id: String,
+    },
 }

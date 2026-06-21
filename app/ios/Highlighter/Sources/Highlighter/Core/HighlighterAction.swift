@@ -56,6 +56,18 @@ enum HighlighterAction {
     case createRoomInvites(groupId: String, hostRelayUrl: String, codes: [String])
     case shareToRoom(groupId: String, hostRelayUrl: String, targetEventId: String, targetAuthorPubkey: String?, repost: Bool)
 
+    // ── Share flow (#21) ────────────────────────────────────────────────────────
+    /// Publish a kind:11 artifact/article/podcast share into a room. `previewJson`
+    /// is the serde-JSON of an `ArtifactPreview` (via `captureArtifactPreviewJson`).
+    case shareArtifactToRoom(groupId: String, hostRelayUrl: String, previewJson: String, note: String)
+    /// Publish a kind:16 generic repost of an existing highlight into a room.
+    case shareHighlightToRoom(groupId: String, hostRelayUrl: String, highlightEventId: String, highlightAuthorPubkey: String, relayHint: String)
+    /// Mint `count` invite codes + publish kind:9009; read codes from the
+    /// SharePublish snapshot.
+    case shareMintInvite(groupId: String, hostRelayUrl: String, count: UInt32)
+    /// Clear a terminal share-publish state (sheet dismissed / reopened).
+    case shareResetPublish
+
     // ── Bookmarks ─────────────────────────────────────────────────────────────
     case addBookmark(item: BookmarkRow)
     case removeBookmark(item: BookmarkRow)
@@ -291,6 +303,33 @@ enum HighlighterAction {
             ]
             if let author = targetAuthorPubkey { dict["target_author_pubkey"] = author }
             return AppActionEnvelope(namespace: "hl.room.share_to_room", json: jsonAny(dict))
+
+        // ── Share flow (#21) ────────────────────────────────────────────────────
+        case .shareArtifactToRoom(let groupId, let hostRelayUrl, let previewJson, let note):
+            // preview_json is the serde-JSON of an ArtifactPreview; embed it as a
+            // nested object so the kernel deserializes `preview` directly.
+            let json = """
+            {"group_id":\(jsonString(groupId)),"host_relay_url":\(jsonString(hostRelayUrl)),"preview":\(previewJson),"note":\(jsonString(note))}
+            """
+            return AppActionEnvelope(namespace: "hl.share.artifact_to_room", json: json)
+        case .shareHighlightToRoom(let groupId, let hostRelayUrl, let eventId, let author, let relayHint):
+            let dict: [String: Any] = [
+                "group_id": groupId,
+                "host_relay_url": hostRelayUrl,
+                "highlight_event_id": eventId,
+                "highlight_author_pubkey": author,
+                "relay_hint": relayHint,
+            ]
+            return AppActionEnvelope(namespace: "hl.share.highlight_to_room", json: jsonAny(dict))
+        case .shareMintInvite(let groupId, let hostRelayUrl, let count):
+            let dict: [String: Any] = [
+                "group_id": groupId,
+                "host_relay_url": hostRelayUrl,
+                "count": count,
+            ]
+            return AppActionEnvelope(namespace: "hl.share.mint_invite", json: jsonAny(dict))
+        case .shareResetPublish:
+            return AppActionEnvelope(namespace: "hl.share.reset_publish", json: "{}")
 
         // ── Bookmarks ─────────────────────────────────────────────────────────
         case .addBookmark(let item):
@@ -565,6 +604,18 @@ private func jsonAny(_ dict: [String: Any]) -> String {
         return "{}"
     }
     return str
+}
+
+/// Encode a Swift `String` as a JSON string literal (with proper escaping).
+/// Used when hand-building JSON that embeds a pre-serialized nested object
+/// (e.g. `preview` in `hl.share.artifact_to_room`).
+private func jsonString(_ value: String) -> String {
+    guard let data = try? JSONSerialization.data(withJSONObject: [value], options: []),
+          let arr = String(data: data, encoding: .utf8) else {
+        return "\"\""
+    }
+    // arr is `["escaped"]`; strip the surrounding brackets to get the bare string.
+    return String(arr.dropFirst().dropLast())
 }
 
 /// Encode a `BookmarkRow` as `{ "item": <serde-tagged-variant> }` JSON.

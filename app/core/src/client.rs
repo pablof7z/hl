@@ -2639,30 +2639,10 @@ impl HighlighterCore {
         crate::ocr::alt_text_from_markdown(&markdown)
     }
 
-    /// Publish a queued iOS share-extension handoff. Rust owns URL preview
-    /// construction, note normalization, and success/failure classification;
-    /// Swift only moves items through native App Group storage.
-    pub async fn publish_share_queue_item(
-        &self,
-        item: crate::share_extension::ShareQueueItem,
-    ) -> crate::share_extension::ShareQueueAttempt {
-        let result: Result<(), CoreError> = async {
-            let _ = self.require_user_pubkey()?;
-            let preview = crate::artifacts::build_preview(&item.url)?;
-            let trimmed_note = item.note.trim();
-            let normalized_note = (!trimmed_note.is_empty()).then(|| trimmed_note.to_string());
-            crate::artifacts::publish(
-                &self.runtime,
-                preview,
-                &item.group_id,
-                normalized_note.as_deref(),
-            )
-            .await?;
-            Ok(())
-        }
-        .await;
-        crate::share_extension::share_queue_attempt(item, result)
-    }
+    // #21: `publish_share_queue_item` DELETED — the iOS Share Extension drain
+    // now publishes via the kernel `hl.share.drain_queue_publish` action
+    // (kernel sole writer; no bespoke per-item publish). The queue-state path
+    // (`share_extension::*` projections) is retained and still consumed.
 
     /// Project native web metadata request state. Rust owns URL validity,
     /// canonical fetch URL, and mirror cache keys.
@@ -2795,30 +2775,10 @@ impl HighlighterCore {
 
     // -- Writes --
 
-    pub async fn publish_artifact(
-        &self,
-        preview: ArtifactPreview,
-        group_id: String,
-        note: Option<String>,
-    ) -> crate::artifacts::ArtifactPublishSnapshot {
-        let result: Result<ArtifactRecord, CoreError> = async {
-            let _ = self.require_user_pubkey()?;
-            let normalized_note = note
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(str::to_string);
-            crate::artifacts::publish(
-                &self.runtime,
-                preview,
-                &group_id,
-                normalized_note.as_deref(),
-            )
-            .await
-        }
-        .await;
-        crate::artifacts::publish_snapshot(result)
-    }
+    // #21: `publish_artifact` DELETED — share-to-room artifact (kind:11) now
+    // publishes via the kernel `hl.share.artifact_to_room` action (kernel sole
+    // writer). The pure builder `artifacts::build_share_event` is retained as
+    // the parity oracle only.
 
     pub async fn publish_discussion(
         &self,
@@ -3049,34 +3009,10 @@ impl HighlighterCore {
         podcast_transcript::clip_publish_snapshot(result)
     }
 
-    /// Re-share an existing kind:9802 highlight into a NIP-29 room as a
-    /// kind:16 generic repost. Used to surface a friend's highlight (or
-    /// your own old one) into a community without re-publishing the
-    /// underlying highlight event. The repost carries `["e", id]`,
-    /// `["k", "9802"]`, `["p", author]`, and `["h", target_group_id]`
-    /// per NIP-18 + NIP-29 conventions. Empty `relay_url` falls back
-    /// to the Highlighter relay as the e-tag relay hint.
-    pub async fn share_highlight_to_room(
-        &self,
-        highlight_id: String,
-        highlight_author_pubkey_hex: String,
-        highlight_relay_url: String,
-        target_group_id: String,
-    ) -> MutationSnapshot {
-        let result: Result<(), CoreError> = async {
-            let _ = self.require_user_pubkey()?;
-            crate::highlights::share_to_community(
-                &self.runtime,
-                highlight_id.trim(),
-                highlight_author_pubkey_hex.trim(),
-                highlight_relay_url.trim(),
-                target_group_id.trim(),
-            )
-            .await
-        }
-        .await;
-        mutation_snapshot(result)
-    }
+    // #21: `share_highlight_to_room` DELETED — share-to-room highlight repost
+    // (kind:16) now publishes via the kernel `hl.share.highlight_to_room`
+    // action (kernel sole writer). The pure builder
+    // `highlights::build_repost_event` is retained as the parity oracle only.
 
     /// Publish a solo NIP-84 highlight from an article reader selection and
     /// return the refreshed reader snapshot. Rust owns article artifact
@@ -3406,21 +3342,11 @@ impl HighlighterCore {
         groups::create_room_publish_snapshot(result)
     }
 
-    /// Mint one invite code and project the public room share link. Rust owns
-    /// the URL format and failure labels; native shells render/copy/share the
-    /// returned snapshot.
-    pub async fn get_room_share_link_snapshot(
-        &self,
-        group_id: String,
-    ) -> crate::room_invites::RoomShareLinkSnapshot {
-        let group_id = group_id.trim().to_string();
-        let result: Result<Vec<String>, CoreError> = async {
-            let _ = self.require_user_pubkey()?;
-            groups::create_invite_codes(&self.runtime, &group_id, 1).await
-        }
-        .await;
-        crate::room_invites::share_link_snapshot(&group_id, result)
-    }
+    // #21: `get_room_share_link_snapshot` DELETED — RoomShareCard now mints the
+    // invite code + publishes kind:9009 via the kernel `hl.share.mint_invite`
+    // action (kernel sole writer; reuses the field-complete nmp
+    // `nmp.nip29.create_invite` path). The minted code is read from the
+    // `SharePublishSnapshot.invite_codes` and Swift composes the share link.
 
     pub async fn get_room_invite_snapshot(
         &self,

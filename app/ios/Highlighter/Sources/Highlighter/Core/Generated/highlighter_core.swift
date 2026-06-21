@@ -1402,13 +1402,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getRoomInviteSnapshot(input: RoomInviteSnapshotInput) async  -> RoomInviteSnapshot
 
     /**
-     * Mint one invite code and project the public room share link. Rust owns
-     * the URL format and failure labels; native shells render/copy/share the
-     * returned snapshot.
-     */
-    func getRoomShareLinkSnapshot(groupId: String) async  -> RoomShareLinkSnapshot
-
-    /**
      * Article-only refresh for relay search deltas. Used after NIP-50 events
      * ingest into nostrdb so the native shell can repaint the Articles bucket
      * without re-running unrelated sections.
@@ -1952,8 +1945,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func publishArticleReaderHighlightSnapshot(pubkeyHex: String, dTag: String, article: ArticleRecord?, quote: String, note: String, context: String) async  -> ArticleReaderHighlightPublishSnapshot
 
-    func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?) async  -> ArtifactPublishSnapshot
-
     func publishCapture(input: CapturePublishInput) async  -> CapturePublishSnapshot
 
     /**
@@ -2000,13 +1991,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * into a NIP-29 room.
      */
     func publishPodcastComposerClip(input: PodcastClipComposerPublishInput) async  -> PodcastClipPublishSnapshot
-
-    /**
-     * Publish a queued iOS share-extension handoff. Rust owns URL preview
-     * construction, note normalization, and success/failure classification;
-     * Swift only moves items through native App Group storage.
-     */
-    func publishShareQueueItem(item: ShareQueueItem) async  -> ShareQueueAttempt
 
     /**
      * Nudge the relay pool to attempt a reconnect on every disconnected
@@ -2079,17 +2063,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func setWifiOnlyEnabled(enabled: Bool) async  -> NetworkWifiOnlyPreferenceSnapshot
 
     func shareExtensionCommunitiesSnapshot(communities: [CommunitySummary])  -> Data
-
-    /**
-     * Re-share an existing kind:9802 highlight into a NIP-29 room as a
-     * kind:16 generic repost. Used to surface a friend's highlight (or
-     * your own old one) into a community without re-publishing the
-     * underlying highlight event. The repost carries `["e", id]`,
-     * `["k", "9802"]`, `["p", author]`, and `["h", target_group_id]`
-     * per NIP-18 + NIP-29 conventions. Empty `relay_url` falls back
-     * to the Highlighter relay as the e-tag relay hint.
-     */
-    func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String) async  -> MutationSnapshot
 
     func standaloneNostrEntity(content: String)  -> NostrEntityRef?
 
@@ -3488,29 +3461,6 @@ open func getRoomInviteSnapshot(input: RoomInviteSnapshotInput)async  -> RoomInv
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRoomInviteSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Mint one invite code and project the public room share link. Rust owns
-     * the URL format and failure labels; native shells render/copy/share the
-     * returned snapshot.
-     */
-open func getRoomShareLinkSnapshot(groupId: String)async  -> RoomShareLinkSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_room_share_link_snapshot(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRoomShareLinkSnapshot_lift,
             errorHandler: nil
 
         )
@@ -5192,24 +5142,6 @@ open func publishArticleReaderHighlightSnapshot(pubkeyHex: String, dTag: String,
         )
 }
 
-open func publishArtifact(preview: ArtifactPreview, groupId: String, note: String?)async  -> ArtifactPublishSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_artifact(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeArtifactPreview_lower(preview),FfiConverterString.lower(groupId),FfiConverterOptionString.lower(note)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeArtifactPublishSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
 open func publishCapture(input: CapturePublishInput)async  -> CapturePublishSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -5396,29 +5328,6 @@ open func publishPodcastComposerClip(input: PodcastClipComposerPublishInput)asyn
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypePodcastClipPublishSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Publish a queued iOS share-extension handoff. Rust owns URL preview
-     * construction, note normalization, and success/failure classification;
-     * Swift only moves items through native App Group storage.
-     */
-open func publishShareQueueItem(item: ShareQueueItem)async  -> ShareQueueAttempt  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_publish_share_queue_item(
-                    self.uniffiClonePointer(),
-                    FfiConverterTypeShareQueueItem_lower(item)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeShareQueueAttempt_lift,
             errorHandler: nil
 
         )
@@ -5711,33 +5620,6 @@ open func shareExtensionCommunitiesSnapshot(communities: [CommunitySummary]) -> 
         FfiConverterSequenceTypeCommunitySummary.lower(communities),$0
     )
 })
-}
-
-    /**
-     * Re-share an existing kind:9802 highlight into a NIP-29 room as a
-     * kind:16 generic repost. Used to surface a friend's highlight (or
-     * your own old one) into a community without re-publishing the
-     * underlying highlight event. The repost carries `["e", id]`,
-     * `["k", "9802"]`, `["p", author]`, and `["h", target_group_id]`
-     * per NIP-18 + NIP-29 conventions. Empty `relay_url` falls back
-     * to the Highlighter relay as the e-tag relay hint.
-     */
-open func shareHighlightToRoom(highlightId: String, highlightAuthorPubkeyHex: String, highlightRelayUrl: String, targetGroupId: String)async  -> MutationSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_share_highlight_to_room(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(highlightId),FfiConverterString.lower(highlightAuthorPubkeyHex),FfiConverterString.lower(highlightRelayUrl),FfiConverterString.lower(targetGroupId)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeMutationSnapshot_lift,
-            errorHandler: nil
-
-        )
 }
 
 open func standaloneNostrEntity(content: String) -> NostrEntityRef?  {
@@ -45440,84 +45322,6 @@ public func FfiConverterTypeRoomRecommendationReasonProfile_lower(_ value: RoomR
 }
 
 
-public struct RoomShareLinkSnapshot {
-    public var shareUrl: String?
-    public var linkLabel: String
-    public var errorMessage: String?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(shareUrl: String?, linkLabel: String, errorMessage: String?) {
-        self.shareUrl = shareUrl
-        self.linkLabel = linkLabel
-        self.errorMessage = errorMessage
-    }
-}
-
-#if compiler(>=6)
-extension RoomShareLinkSnapshot: Sendable {}
-#endif
-
-
-extension RoomShareLinkSnapshot: Equatable, Hashable {
-    public static func ==(lhs: RoomShareLinkSnapshot, rhs: RoomShareLinkSnapshot) -> Bool {
-        if lhs.shareUrl != rhs.shareUrl {
-            return false
-        }
-        if lhs.linkLabel != rhs.linkLabel {
-            return false
-        }
-        if lhs.errorMessage != rhs.errorMessage {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(shareUrl)
-        hasher.combine(linkLabel)
-        hasher.combine(errorMessage)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomShareLinkSnapshot: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomShareLinkSnapshot {
-        return
-            try RoomShareLinkSnapshot(
-                shareUrl: FfiConverterOptionString.read(from: &buf),
-                linkLabel: FfiConverterString.read(from: &buf),
-                errorMessage: FfiConverterOptionString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomShareLinkSnapshot, into buf: inout [UInt8]) {
-        FfiConverterOptionString.write(value.shareUrl, into: &buf)
-        FfiConverterString.write(value.linkLabel, into: &buf)
-        FfiConverterOptionString.write(value.errorMessage, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomShareLinkSnapshot_lift(_ buf: RustBuffer) throws -> RoomShareLinkSnapshot {
-    return try FfiConverterTypeRoomShareLinkSnapshot.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomShareLinkSnapshot_lower(_ value: RoomShareLinkSnapshot) -> RustBuffer {
-    return FfiConverterTypeRoomShareLinkSnapshot.lower(value)
-}
-
-
 /**
  * Snapshot for the `ViewId::RootShell` projection.
  */
@@ -48745,6 +48549,121 @@ public func FfiConverterTypeShareHighlightTargetProjectionInput_lift(_ buf: Rust
 #endif
 public func FfiConverterTypeShareHighlightTargetProjectionInput_lower(_ value: ShareHighlightTargetProjectionInput) -> RustBuffer {
     return FfiConverterTypeShareHighlightTargetProjectionInput.lower(value)
+}
+
+
+/**
+ * Snapshot for the iOS share sheet — raw fields only (D1).
+ */
+public struct SharePublishSnapshot {
+    /**
+     * `true` while a publish is awaiting its relay verdict.
+     */
+    public var publishing: Bool
+    /**
+     * `true` once the most recent publish succeeded.
+     */
+    public var didPublish: Bool
+    /**
+     * Raw publish error when the last attempt failed, else `None`. D1: Swift formats.
+     */
+    public var errorMessage: String?
+    /**
+     * Raw invite codes minted by the most recent `mint_invite`. Swift composes
+     * the share link (D1/D3: no URL literal in kernel logic). Empty otherwise.
+     */
+    public var inviteCodes: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * `true` while a publish is awaiting its relay verdict.
+         */publishing: Bool,
+        /**
+         * `true` once the most recent publish succeeded.
+         */didPublish: Bool,
+        /**
+         * Raw publish error when the last attempt failed, else `None`. D1: Swift formats.
+         */errorMessage: String?,
+        /**
+         * Raw invite codes minted by the most recent `mint_invite`. Swift composes
+         * the share link (D1/D3: no URL literal in kernel logic). Empty otherwise.
+         */inviteCodes: [String]) {
+        self.publishing = publishing
+        self.didPublish = didPublish
+        self.errorMessage = errorMessage
+        self.inviteCodes = inviteCodes
+    }
+}
+
+#if compiler(>=6)
+extension SharePublishSnapshot: Sendable {}
+#endif
+
+
+extension SharePublishSnapshot: Equatable, Hashable {
+    public static func ==(lhs: SharePublishSnapshot, rhs: SharePublishSnapshot) -> Bool {
+        if lhs.publishing != rhs.publishing {
+            return false
+        }
+        if lhs.didPublish != rhs.didPublish {
+            return false
+        }
+        if lhs.errorMessage != rhs.errorMessage {
+            return false
+        }
+        if lhs.inviteCodes != rhs.inviteCodes {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(publishing)
+        hasher.combine(didPublish)
+        hasher.combine(errorMessage)
+        hasher.combine(inviteCodes)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSharePublishSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SharePublishSnapshot {
+        return
+            try SharePublishSnapshot(
+                publishing: FfiConverterBool.read(from: &buf),
+                didPublish: FfiConverterBool.read(from: &buf),
+                errorMessage: FfiConverterOptionString.read(from: &buf),
+                inviteCodes: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SharePublishSnapshot, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.publishing, into: &buf)
+        FfiConverterBool.write(value.didPublish, into: &buf)
+        FfiConverterOptionString.write(value.errorMessage, into: &buf)
+        FfiConverterSequenceString.write(value.inviteCodes, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSharePublishSnapshot_lift(_ buf: RustBuffer) throws -> SharePublishSnapshot {
+    return try FfiConverterTypeSharePublishSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSharePublishSnapshot_lower(_ value: SharePublishSnapshot) -> RustBuffer {
+    return FfiConverterTypeSharePublishSnapshot.lower(value)
 }
 
 
@@ -56878,6 +56797,15 @@ public enum ViewId {
      */
     case shareComposer
     /**
+     * In-flight share-to-room / drain / invite publish status (#21).
+     *
+     * Snapshot: `ViewSnapshot::SharePublish(SharePublishSnapshot)` — the
+     * publishing / done / error phase the iOS share sheet renders, plus any
+     * invite codes minted by `hl.share.mint_invite` (D1: Swift composes the
+     * share link). Always present (never `None`).
+     */
+    case sharePublish
+    /**
      * Full-screen podcast player view.
      *
      * Opened when the user taps a podcast episode to play. Snapshot:
@@ -57016,22 +56944,24 @@ public struct FfiConverterTypeViewId: FfiConverterRustBuffer {
 
         case 17: return .shareComposer
 
-        case 18: return .podcastListening
+        case 18: return .sharePublish
 
-        case 19: return .capture
+        case 19: return .podcastListening
 
-        case 20: return .commentThread(rootTagValue: try FfiConverterString.read(from: &buf)
+        case 20: return .capture
+
+        case 21: return .commentThread(rootTagValue: try FfiConverterString.read(from: &buf)
         )
 
-        case 21: return .feedbackThreads
+        case 22: return .feedbackThreads
 
-        case 22: return .feedbackThread(rootEventId: try FfiConverterString.read(from: &buf)
+        case 23: return .feedbackThread(rootEventId: try FfiConverterString.read(from: &buf)
         )
 
-        case 23: return .roomChat(groupId: try FfiConverterString.read(from: &buf)
+        case 24: return .roomChat(groupId: try FfiConverterString.read(from: &buf)
         )
 
-        case 24: return .roomDiscussions(groupId: try FfiConverterString.read(from: &buf)
+        case 25: return .roomDiscussions(groupId: try FfiConverterString.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -57113,35 +57043,39 @@ public struct FfiConverterTypeViewId: FfiConverterRustBuffer {
             writeInt(&buf, Int32(17))
 
 
-        case .podcastListening:
+        case .sharePublish:
             writeInt(&buf, Int32(18))
 
 
-        case .capture:
+        case .podcastListening:
             writeInt(&buf, Int32(19))
 
 
-        case let .commentThread(rootTagValue):
+        case .capture:
             writeInt(&buf, Int32(20))
+
+
+        case let .commentThread(rootTagValue):
+            writeInt(&buf, Int32(21))
             FfiConverterString.write(rootTagValue, into: &buf)
 
 
         case .feedbackThreads:
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(22))
 
 
         case let .feedbackThread(rootEventId):
-            writeInt(&buf, Int32(22))
+            writeInt(&buf, Int32(23))
             FfiConverterString.write(rootEventId, into: &buf)
 
 
         case let .roomChat(groupId):
-            writeInt(&buf, Int32(23))
+            writeInt(&buf, Int32(24))
             FfiConverterString.write(groupId, into: &buf)
 
 
         case let .roomDiscussions(groupId):
-            writeInt(&buf, Int32(24))
+            writeInt(&buf, Int32(25))
             FfiConverterString.write(groupId, into: &buf)
 
         }
@@ -57264,6 +57198,11 @@ public enum ViewRoute {
      */
     case shareComposer
     /**
+     * In-flight share-to-room / drain / invite publish status route.
+     * Snapshot: `ViewSnapshot::SharePublish(SharePublishSnapshot)`.
+     */
+    case sharePublish
+    /**
      * Podcast player projection — `PodcastListeningSnapshot` (now-playing +
      * position/duration/is_playing + clip range). D1: raw f64 seconds, no
      * "X:XX" formatted strings.
@@ -57373,22 +57312,24 @@ public struct FfiConverterTypeViewRoute: FfiConverterRustBuffer {
 
         case 17: return .shareComposer
 
-        case 18: return .podcastListening
+        case 18: return .sharePublish
 
-        case 19: return .capture
+        case 19: return .podcastListening
 
-        case 20: return .commentThread(rootTagValue: try FfiConverterString.read(from: &buf)
+        case 20: return .capture
+
+        case 21: return .commentThread(rootTagValue: try FfiConverterString.read(from: &buf)
         )
 
-        case 21: return .feedbackThreads
+        case 22: return .feedbackThreads
 
-        case 22: return .feedbackThread(rootEventId: try FfiConverterString.read(from: &buf)
+        case 23: return .feedbackThread(rootEventId: try FfiConverterString.read(from: &buf)
         )
 
-        case 23: return .roomChat(groupId: try FfiConverterString.read(from: &buf)
+        case 24: return .roomChat(groupId: try FfiConverterString.read(from: &buf)
         )
 
-        case 24: return .roomDiscussions(groupId: try FfiConverterString.read(from: &buf)
+        case 25: return .roomDiscussions(groupId: try FfiConverterString.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -57470,35 +57411,39 @@ public struct FfiConverterTypeViewRoute: FfiConverterRustBuffer {
             writeInt(&buf, Int32(17))
 
 
-        case .podcastListening:
+        case .sharePublish:
             writeInt(&buf, Int32(18))
 
 
-        case .capture:
+        case .podcastListening:
             writeInt(&buf, Int32(19))
 
 
-        case let .commentThread(rootTagValue):
+        case .capture:
             writeInt(&buf, Int32(20))
+
+
+        case let .commentThread(rootTagValue):
+            writeInt(&buf, Int32(21))
             FfiConverterString.write(rootTagValue, into: &buf)
 
 
         case .feedbackThreads:
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(22))
 
 
         case let .feedbackThread(rootEventId):
-            writeInt(&buf, Int32(22))
+            writeInt(&buf, Int32(23))
             FfiConverterString.write(rootEventId, into: &buf)
 
 
         case let .roomChat(groupId):
-            writeInt(&buf, Int32(23))
+            writeInt(&buf, Int32(24))
             FfiConverterString.write(groupId, into: &buf)
 
 
         case let .roomDiscussions(groupId):
-            writeInt(&buf, Int32(24))
+            writeInt(&buf, Int32(25))
             FfiConverterString.write(groupId, into: &buf)
 
         }
@@ -57649,6 +57594,12 @@ public enum ViewSnapshot {
     case shareComposer(ShareComposerSnapshot
     )
     /**
+     * In-flight share-to-room / drain / invite publish status — publishing /
+     * done / error phase + minted invite codes (D1: Swift composes the link).
+     */
+    case sharePublish(SharePublishSnapshot
+    )
+    /**
      * Full-screen podcast player — now-playing fields + position/duration/
      * is_playing + clip range (empty for 5H; populated by Phase 5I/5J).
      * Device-local (resume position NEVER published to nostr). Raw f64 fields
@@ -57766,25 +57717,28 @@ public struct FfiConverterTypeViewSnapshot: FfiConverterRustBuffer {
         case 17: return .shareComposer(try FfiConverterTypeShareComposerSnapshot.read(from: &buf)
         )
 
-        case 18: return .podcastListening(try FfiConverterTypePodcastListeningSnapshot.read(from: &buf)
+        case 18: return .sharePublish(try FfiConverterTypeSharePublishSnapshot.read(from: &buf)
         )
 
-        case 19: return .capture(try FfiConverterTypeKernelCaptureSnapshot.read(from: &buf)
+        case 19: return .podcastListening(try FfiConverterTypePodcastListeningSnapshot.read(from: &buf)
         )
 
-        case 20: return .commentThread(try FfiConverterTypeCommentThreadKernelSnapshot.read(from: &buf)
+        case 20: return .capture(try FfiConverterTypeKernelCaptureSnapshot.read(from: &buf)
         )
 
-        case 21: return .feedbackThreads(try FfiConverterTypeKernelFeedbackThreadsSnapshot.read(from: &buf)
+        case 21: return .commentThread(try FfiConverterTypeCommentThreadKernelSnapshot.read(from: &buf)
         )
 
-        case 22: return .feedbackThread(try FfiConverterTypeKernelFeedbackThreadSnapshot.read(from: &buf)
+        case 22: return .feedbackThreads(try FfiConverterTypeKernelFeedbackThreadsSnapshot.read(from: &buf)
         )
 
-        case 23: return .roomChat(try FfiConverterTypeRoomChatSnapshot.read(from: &buf)
+        case 23: return .feedbackThread(try FfiConverterTypeKernelFeedbackThreadSnapshot.read(from: &buf)
         )
 
-        case 24: return .roomDiscussions(try FfiConverterTypeRoomDiscussionsSnapshot.read(from: &buf)
+        case 24: return .roomChat(try FfiConverterTypeRoomChatSnapshot.read(from: &buf)
+        )
+
+        case 25: return .roomDiscussions(try FfiConverterTypeRoomDiscussionsSnapshot.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -57880,38 +57834,43 @@ public struct FfiConverterTypeViewSnapshot: FfiConverterRustBuffer {
             FfiConverterTypeShareComposerSnapshot.write(v1, into: &buf)
 
 
-        case let .podcastListening(v1):
+        case let .sharePublish(v1):
             writeInt(&buf, Int32(18))
+            FfiConverterTypeSharePublishSnapshot.write(v1, into: &buf)
+
+
+        case let .podcastListening(v1):
+            writeInt(&buf, Int32(19))
             FfiConverterTypePodcastListeningSnapshot.write(v1, into: &buf)
 
 
         case let .capture(v1):
-            writeInt(&buf, Int32(19))
+            writeInt(&buf, Int32(20))
             FfiConverterTypeKernelCaptureSnapshot.write(v1, into: &buf)
 
 
         case let .commentThread(v1):
-            writeInt(&buf, Int32(20))
+            writeInt(&buf, Int32(21))
             FfiConverterTypeCommentThreadKernelSnapshot.write(v1, into: &buf)
 
 
         case let .feedbackThreads(v1):
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(22))
             FfiConverterTypeKernelFeedbackThreadsSnapshot.write(v1, into: &buf)
 
 
         case let .feedbackThread(v1):
-            writeInt(&buf, Int32(22))
+            writeInt(&buf, Int32(23))
             FfiConverterTypeKernelFeedbackThreadSnapshot.write(v1, into: &buf)
 
 
         case let .roomChat(v1):
-            writeInt(&buf, Int32(23))
+            writeInt(&buf, Int32(24))
             FfiConverterTypeRoomChatSnapshot.write(v1, into: &buf)
 
 
         case let .roomDiscussions(v1):
-            writeInt(&buf, Int32(24))
+            writeInt(&buf, Int32(25))
             FfiConverterTypeRoomDiscussionsSnapshot.write(v1, into: &buf)
 
         }
@@ -61467,9 +61426,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_snapshot() != 54503) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_share_link_snapshot() != 29701) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_article_results_snapshot() != 52032) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -61965,9 +61921,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_article_reader_highlight_snapshot() != 63466) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_artifact() != 32184) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_capture() != 12749) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -61993,9 +61946,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_podcast_composer_clip() != 13940) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_publish_share_queue_item() != 64561) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_reconnect_all() != 13020) {
@@ -62053,9 +62003,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_share_extension_communities_snapshot() != 38830) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_share_highlight_to_room() != 38928) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_standalone_nostr_entity() != 64485) {

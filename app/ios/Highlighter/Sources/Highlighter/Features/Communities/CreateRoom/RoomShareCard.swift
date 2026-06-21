@@ -12,15 +12,23 @@ import SwiftUI
 /// relay29 consumes codes on first use, so each card render produces a
 /// fresh code suitable for one new member. For batch sharing, admins use
 /// the web `/r/<id>/invite` page.
+///
+/// #21: the invite code is minted by the kernel `hl.share.mint_invite` action
+/// (kernel sole kind:9009 writer; reuses the field-complete nmp
+/// `nmp.nip29.create_invite` path). The minted code arrives in
+/// `kernel.sharePublish.inviteCodes`; Swift composes the share URL (D3: the
+/// kernel never hard-codes the product URL).
 struct RoomShareCard: View {
     let groupId: String
     let room: CommunitySummary?
 
     @Environment(HighlighterStore.self) private var appStore
+    @Environment(HighlighterAppKernel.self) private var kernel
 
     @State private var qrShown = false
     @State private var copied = false
-    @State private var linkSnapshot: RoomShareLinkSnapshot?
+    @State private var mintedCode: String?
+    @State private var mintRequested = false
     @State private var copiedResetTimer = OneShotUITimer()
 
     var body: some View {
@@ -118,25 +126,45 @@ struct RoomShareCard: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 18))
         .task(id: groupId) {
-            await loadShareLinkIfNeeded()
+            mintInviteIfNeeded()
+        }
+        .onChange(of: kernel.sharePublish) { _, snapshot in
+            // Adopt the freshly minted code (first of the batch) once the kernel
+            // publishes the kind:9009. Guard on `mintRequested` so we only react
+            // to our own mint, not another screen's share publish.
+            if mintRequested, let code = snapshot?.inviteCodes.first {
+                mintedCode = code
+            }
         }
     }
 
+    /// Compose the share URL in Swift from the minted code (D3: URL base is a
+    /// product/presentation concern, not a kernel literal).
     private var shareURL: String? {
-        linkSnapshot?.shareUrl
+        guard let code = mintedCode else { return nil }
+        return "https://highlighter.com/r/\(groupId)/join/\(code)"
     }
 
     private var linkLabel: String {
-        linkSnapshot?.linkLabel ?? "Creating invite link…"
+        shareURL ?? "Creating invite link…"
     }
 
     private var mintError: String? {
-        linkSnapshot?.errorMessage
+        // The kernel surfaces a publish error in the share-publish FSM.
+        guard mintRequested else { return nil }
+        return kernel.sharePublish?.errorMessage
     }
 
-    private func loadShareLinkIfNeeded() async {
-        let snapshot = await appStore.safeCore.getRoomShareLinkSnapshot(groupId: groupId)
-        await MainActor.run { linkSnapshot = snapshot }
+    private func mintInviteIfNeeded() {
+        guard !mintRequested else { return }
+        mintRequested = true
+        kernel.app.dispatch(
+            .shareMintInvite(
+                groupId: groupId,
+                hostRelayUrl: room?.relayUrl ?? "",
+                count: 1
+            )
+        )
     }
 
     private func copy() {

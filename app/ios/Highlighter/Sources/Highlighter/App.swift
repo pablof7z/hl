@@ -56,8 +56,8 @@ struct AppEntry: App {
                 }
                 .onOpenURL { url in
                     if ShareURLScheme.isProcessShare(url) {
-                        // Share Extension handoff — drain the App Group queue.
-                        Task { await ShareQueueProcessor.drain(app: store) }
+                        // Share Extension handoff — drain + publish via the kernel.
+                        ShareQueueProcessor.drain(app: store, kernel: kernel)
                         return
                     }
                     // highlighter://nip46 callback brings us back from a signer app.

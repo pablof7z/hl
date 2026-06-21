@@ -180,6 +180,38 @@ pub(crate) struct ShareToRoomPayload {
     pub repost: bool,
 }
 
+// ── #21 share-flow payloads ───────────────────────────────────────────────────
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ShareArtifactToRoomPayload {
+    pub group_id: String,
+    pub host_relay_url: String,
+    pub preview: crate::kernel::models::ArtifactPreview,
+    #[serde(default)]
+    pub note: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ShareHighlightToRoomPayload {
+    pub group_id: String,
+    pub host_relay_url: String,
+    pub highlight_event_id: String,
+    pub highlight_author_pubkey: String,
+    #[serde(default)]
+    pub relay_hint: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ShareMintInvitePayload {
+    pub group_id: String,
+    pub host_relay_url: String,
+    #[serde(default = "one")]
+    pub count: u32,
+}
+
+fn one() -> u32 {
+    1
+}
+
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct AddBookmarkPayload {
     pub item: crate::kernel::snapshot::BookmarkRow,

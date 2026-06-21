@@ -197,6 +197,11 @@ pub enum ViewSnapshot {
     /// raw snapshot.
     ShareComposer(crate::kernel::domains::share::ShareComposerSnapshot),
 
+    // ── #21 share-flow additions (append-only) ───────────────────────────────
+    /// In-flight share-to-room / drain / invite publish status — publishing /
+    /// done / error phase + minted invite codes (D1: Swift composes the link).
+    SharePublish(crate::kernel::domains::share::SharePublishSnapshot),
+
     // ── Phase 5H additions (append-only) ─────────────────────────────────────
     /// Full-screen podcast player — now-playing fields + position/duration/
     /// is_playing + clip range (empty for 5H; populated by Phase 5I/5J).

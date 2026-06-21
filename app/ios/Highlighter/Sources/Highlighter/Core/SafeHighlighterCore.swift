@@ -638,9 +638,9 @@ actor SafeHighlighterCore {
         await core.publishCapture(input: input)
     }
 
-    func publishShareQueueItem(_ item: ShareQueueItem) async -> ShareQueueAttempt {
-        await core.publishShareQueueItem(item: item)
-    }
+    // #21: publishShareQueueItem wrapper DELETED — the Share Extension drain
+    // dispatches the kernel `hl.share.drain_queue_publish` action (kernel sole
+    // writer). See ShareQueueProcessor.
 
     nonisolated func projectWebMetadataRequest(
         input: WebMetadataRequestProjectionInput
@@ -1366,9 +1366,9 @@ actor SafeHighlighterCore {
         core.projectRoomLibraryGenericCard(input: input)
     }
 
-    func getRoomShareLinkSnapshot(groupId: String) async -> RoomShareLinkSnapshot {
-        await core.getRoomShareLinkSnapshot(groupId: groupId)
-    }
+    // #21: getRoomShareLinkSnapshot wrapper DELETED — RoomShareCard dispatches
+    // the kernel `hl.share.mint_invite` action and reads the minted code from
+    // the SharePublish snapshot (kernel sole kind:9009 writer).
 
     func getRoomInviteSnapshot(
         input: RoomInviteSnapshotInput
@@ -1517,13 +1517,8 @@ actor SafeHighlighterCore {
 
     // MARK: - Writes
 
-    func publishArtifact(
-        preview: ArtifactPreview,
-        groupId: String,
-        note: String?
-    ) async -> ArtifactPublishSnapshot {
-        await core.publishArtifact(preview: preview, groupId: groupId, note: note)
-    }
+    // #21: publishArtifact wrapper DELETED — ShareToCommunitySheet dispatches
+    // the kernel `hl.share.artifact_to_room` action (kernel sole kind:11 writer).
 
     func publishDiscussion(
         groupId: String,
@@ -1581,22 +1576,9 @@ actor SafeHighlighterCore {
         )
     }
 
-    /// Re-share an existing highlight into a room as a kind:16 repost.
-    /// `relayHint` may be empty — the core falls back to the Highlighter
-    /// relay for the e-tag hint when so.
-    func shareHighlightToRoom(
-        highlightId: String,
-        highlightAuthorPubkeyHex: String,
-        highlightRelayUrl: String,
-        targetGroupId: String
-    ) async -> MutationSnapshot {
-        await core.shareHighlightToRoom(
-            highlightId: highlightId,
-            highlightAuthorPubkeyHex: highlightAuthorPubkeyHex,
-            highlightRelayUrl: highlightRelayUrl,
-            targetGroupId: targetGroupId
-        )
-    }
+    // #21: shareHighlightToRoom wrapper DELETED — ShareToCommunitySheet
+    // dispatches the kernel `hl.share.highlight_to_room` action (kernel sole
+    // kind:16 writer; preserves the e-tag relay hint).
 
     // MARK: - Blossom (BUD-03, kind:10063)
 

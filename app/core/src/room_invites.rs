@@ -64,12 +64,9 @@ pub struct RoomInviteSnapshot {
     pub error: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct RoomShareLinkSnapshot {
-    pub share_url: Option<String>,
-    pub link_label: String,
-    pub error_message: Option<String>,
-}
+// #21: RoomShareLinkSnapshot DELETED — RoomShareCard now dispatches the kernel
+// `hl.share.mint_invite` action and composes the share URL in Swift from the
+// minted code in `SharePublishSnapshot.invite_codes`.
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RoomInviteChip {
@@ -228,43 +225,8 @@ pub fn snapshot(
     }
 }
 
-pub fn share_link_snapshot(
-    group_id: &str,
-    codes_result: Result<Vec<String>, CoreError>,
-) -> RoomShareLinkSnapshot {
-    match codes_result {
-        Ok(codes) => {
-            let Some(code) = codes.first() else {
-                return RoomShareLinkSnapshot {
-                    share_url: None,
-                    link_label: "Couldn't create invite link".into(),
-                    error_message: Some("No code returned.".into()),
-                };
-            };
-            let group_id = group_id.trim();
-            if group_id.is_empty() {
-                return RoomShareLinkSnapshot {
-                    share_url: None,
-                    link_label: "Couldn't create invite link".into(),
-                    error_message: Some(
-                        "Couldn't mint invite link. Add people directly below.".into(),
-                    ),
-                };
-            }
-            let share_url = format!("https://highlighter.com/r/{group_id}/join/{code}");
-            RoomShareLinkSnapshot {
-                link_label: share_url.clone(),
-                share_url: Some(share_url),
-                error_message: None,
-            }
-        }
-        Err(_) => RoomShareLinkSnapshot {
-            share_url: None,
-            link_label: "Couldn't create invite link".into(),
-            error_message: Some("Couldn't mint invite link. Add people directly below.".into()),
-        },
-    }
-}
+// #21: share_link_snapshot DELETED alongside RoomShareLinkSnapshot — the kernel
+// owns invite minting (`hl.share.mint_invite`) and Swift owns URL composition.
 
 pub fn avatar_projection(input: RoomInviteAvatarProjectionInput) -> RoomInviteAvatarProjection {
     let picture_url = input
@@ -757,27 +719,7 @@ mod tests {
         assert!(snapshot.projection.show_empty_follow_message);
     }
 
-    #[test]
-    fn share_link_snapshot_projects_url_empty_and_error_states() {
-        let success = share_link_snapshot("room", Ok(vec!["code123".into()]));
-        let empty = share_link_snapshot("room", Ok(Vec::new()));
-        let failure = share_link_snapshot("room", Err(CoreError::Relay("nope".into())));
-
-        assert_eq!(
-            success.share_url.as_deref(),
-            Some("https://highlighter.com/r/room/join/code123")
-        );
-        assert_eq!(success.link_label, success.share_url.as_deref().unwrap());
-        assert_eq!(success.error_message, None);
-        assert_eq!(empty.share_url, None);
-        assert_eq!(empty.link_label, "Couldn't create invite link");
-        assert_eq!(empty.error_message.as_deref(), Some("No code returned."));
-        assert_eq!(failure.share_url, None);
-        assert_eq!(
-            failure.error_message.as_deref(),
-            Some("Couldn't mint invite link. Add people directly below.")
-        );
-    }
+    // #21: share_link_snapshot test DELETED with the fn (kernel owns invite mint).
 
     #[test]
     fn avatar_projection_prefers_profile_name_initial() {

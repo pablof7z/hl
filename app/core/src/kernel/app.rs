@@ -395,6 +395,13 @@ pub struct AppState {
     /// store; this field is the in-kernel working set for the current session.
     pub share_queue: crate::kernel::domains::share::ShareQueueState,
 
+    /// In-flight share-to-room / drain / invite publish FSM (#21).
+    ///
+    /// DEVICE-LOCAL — the publish itself produces a nostr fact, but the FSM
+    /// tracking its phase + pending correlation id is transient. Cleared on
+    /// `Logout` / `IdentityChanged(None)` alongside `share_queue`.
+    pub share_publish: crate::kernel::domains::share::SharePublishState,
+
     // ── Phase 5H additions ────────────────────────────────────────────────────
     /// Podcast playback state — transient, DEVICE-LOCAL.
     ///
@@ -571,6 +578,7 @@ impl Default for AppState {
             isbn: crate::kernel::domains::isbn::IsbnState::default(),
             // ── Phase 5K additions ────────────────────────────────────────────
             share_queue: crate::kernel::domains::share::ShareQueueState::default(),
+            share_publish: crate::kernel::domains::share::SharePublishState::default(),
             // ── Phase 5H additions ────────────────────────────────────────────
             podcast: crate::kernel::domains::podcast::PodcastState::default(),
             podcast_resume_cache: std::collections::HashMap::new(),

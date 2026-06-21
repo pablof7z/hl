@@ -179,6 +179,11 @@ pub(crate) fn project_snapshot(
         // This arm is unreachable in practice but required for exhaustive match.
         ViewId::ShareComposer => None,
 
+        // ── #21 share-flow additions (append-only) ───────────────────────────
+        // ViewId::SharePublish is handled upstream in actor::project_snapshot.
+        // This arm is unreachable in practice but required for exhaustive match.
+        ViewId::SharePublish => None,
+
         // ── Phase 5H additions (append-only) ─────────────────────────────────
         // ViewId::PodcastListening is handled upstream in actor::project_snapshot.
         // This arm is unreachable in practice but required for exhaustive match.

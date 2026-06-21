@@ -523,6 +523,7 @@ fn reduce_action_envelope(
         PresentSheetPayload, PublishClipPayload, PublishHighlightPayload, ReactPayload,
         ReleaseProfilePayload, RemoveBookmarkPayload, RemoveFromSetPayload, RemoveRelayPayload,
         RunSearchPayload, SelectRootTabPayload, SetRelayRolePayload, SetRoomsRelayListPayload,
+        ShareArtifactToRoomPayload, ShareHighlightToRoomPayload, ShareMintInvitePayload,
         ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload, ToggleReactionPayload,
         UnfollowPayload, UnreactPayload,
     };
@@ -641,6 +642,38 @@ fn reduce_action_envelope(
                 p.repost,
             )
         }
+
+        // ── Share flow (#21) ───────────────────────────────────────────────────
+        "hl.share.artifact_to_room" => {
+            let p = parse!(ShareArtifactToRoomPayload);
+            share::reduce_action_artifact_to_room(
+                state,
+                p.group_id,
+                p.host_relay_url,
+                p.preview,
+                p.note,
+            )
+        }
+        "hl.share.highlight_to_room" => {
+            let p = parse!(ShareHighlightToRoomPayload);
+            share::reduce_action_highlight_to_room(
+                state,
+                p.group_id,
+                p.host_relay_url,
+                p.highlight_event_id,
+                p.highlight_author_pubkey,
+                p.relay_hint,
+            )
+        }
+        "hl.share.mint_invite" => {
+            let p = parse!(ShareMintInvitePayload);
+            share::reduce_action_mint_invite(state, p.group_id, p.host_relay_url, p.count)
+        }
+        // Note: `drain_queue_publish` is NOT a dispatchable namespace — the
+        // publish runs automatically inside `reduce_event_share_queue_drained`
+        // when the App Group drain capability result lands (one atomic kernel
+        // step; no Swift-side ordering race). `hl.share.drain_queue` triggers it.
+        "hl.share.reset_publish" => share::reduce_action_reset_share_publish(state),
 
         // ── Bookmarks ─────────────────────────────────────────────────────────
         "hl.bookmark.add" => {
@@ -1583,6 +1616,11 @@ pub(crate) fn project_snapshot(
         ViewId::ShareComposer => share::project_share_composer_snapshot(state)
             .map(crate::kernel::snapshot::ViewSnapshot::ShareComposer),
 
+        // ── #21 share-flow additions (append-only) ───────────────────────────
+        ViewId::SharePublish => Some(crate::kernel::snapshot::ViewSnapshot::SharePublish(
+            share::project_share_publish_snapshot(state),
+        )),
+
         // ── Phase 5H additions (append-only) ─────────────────────────────────
         ViewId::PodcastListening => podcast::project_podcast_listening_snapshot(state),
 
@@ -2034,6 +2072,20 @@ pub(crate) async fn run_effect(
             // DiscussionObserver once the relay echoes the published event.
             // No-op when nmp is None (test mode — tests inspect Effect directly).
             discussions::run_effect_publish_discussion(json, nmp);
+        }
+
+        // ── Share flow (#21) ─────────────────────────────────────────────────
+        Effect::PublishShareEvent {
+            json,
+            correlation_id,
+        } => {
+            // Sign-and-publish a host-pinned in-group share/repost via
+            // ActorCommand::PublishRawEvent (the generic nmp.publish door). The
+            // correlation id threads the verdict back through the action_results
+            // projection → apply_action_result_row → SharePublishActionResult,
+            // driving the share FSM → Done/Error (D6). No-op when nmp is None
+            // (test mode inspects the emitted Effect directly).
+            share::run_effect_publish_share_event(json, correlation_id, nmp);
         }
 
         // ── Phase 7 artifact-preview additions (append-only) ─────────────────

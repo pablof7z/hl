@@ -131,6 +131,14 @@ pub enum ViewId {
     /// for the pending share item and the available community picker rows (D1).
     ShareComposer,
 
+    /// In-flight share-to-room / drain / invite publish status (#21).
+    ///
+    /// Snapshot: `ViewSnapshot::SharePublish(SharePublishSnapshot)` — the
+    /// publishing / done / error phase the iOS share sheet renders, plus any
+    /// invite codes minted by `hl.share.mint_invite` (D1: Swift composes the
+    /// share link). Always present (never `None`).
+    SharePublish,
+
     // ── Phase 5H additions (append-only) ─────────────────────────────────────
     /// Full-screen podcast player view.
     ///
@@ -294,6 +302,11 @@ pub enum ViewRoute {
     /// (raw pending share item fields + community picker rows). D1: no formatted
     /// strings, no community name fallbacks, no URL validation strings.
     ShareComposer,
+
+    // ── #21 share-flow additions (append-only) ───────────────────────────────
+    /// In-flight share-to-room / drain / invite publish status route.
+    /// Snapshot: `ViewSnapshot::SharePublish(SharePublishSnapshot)`.
+    SharePublish,
 
     // ── Phase 5H additions (append-only) ─────────────────────────────────────
     /// Podcast player projection — `PodcastListeningSnapshot` (now-playing +

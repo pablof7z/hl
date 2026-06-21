@@ -106,6 +106,12 @@ final class HighlighterAppKernel {
     /// draft state, and publish FSM; native owns all pixel work (Q1).
     private(set) var captureSnapshot: KernelCaptureSnapshot?
 
+    /// In-flight share-to-room / drain / invite publish status (#21).
+    /// `nil` until a share-publish action runs; carries publishing / done /
+    /// error phase + any minted invite codes (kernel sole writer for kind:11/16/
+    /// 9009 shares). ShareToCommunitySheet / RoomShareCard read this.
+    private(set) var sharePublish: SharePublishSnapshot?
+
     /// NIP-50 search snapshot. `nil` until the `ViewId.search` view is open.
     /// Carries the raw relay hits + the kernel-decoded highlight rows + the
     /// local communities bucket (Phase 7). SearchStore buckets `hits` by kind for
@@ -171,6 +177,10 @@ final class HighlighterAppKernel {
         // Phase 3G: open the Communities view immediately — it is always
         // resident in the background tab shell (no open/close lifecycle).
         kernelApp.openView(viewId: .communities, route: .communities)
+
+        // #21: SharePublish is a tiny always-resident status projection — the
+        // share sheet / room-share card read its phase + minted invite codes.
+        kernelApp.openView(viewId: .sharePublish, route: .sharePublish)
 
         // Note: RoomExplorer is NOT opened here. RoomExplorerView manages its
         // own open/close lifecycle (openRoomExplorer on .task, closeRoomExplorer
@@ -441,6 +451,10 @@ final class HighlighterAppKernel {
         // Phase 7 cutover: capture (CaptureStore reads this).
         case .capture(let s):
             captureSnapshot = s
+
+        // #21 share flow: in-flight share-to-room / drain / invite publish.
+        case .sharePublish(let s):
+            sharePublish = s
 
         // Phase 7 cutover: search (SearchStore reads this).
         case .search(let s):

@@ -295,7 +295,24 @@ fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow, now: u64
         return effects;
     }
 
-    // 4. Unknown correlation_id — silent no-op (D6).
+    // 4. Share-to-room / drain / invite publish correlation_id? (#21)
+    if state.share_publish.pending_correlation_id.as_deref() == Some(cid.as_str()) {
+        let error = row.error.clone().unwrap_or_default();
+        tracing::debug!(
+            %cid,
+            %success,
+            error = %error,
+            "apply_action_result_row: share publish result"
+        );
+        return crate::kernel::domains::share::reduce_event_share_publish_action_result(
+            state,
+            cid.clone(),
+            success,
+            error,
+        );
+    }
+
+    // 5. Unknown correlation_id — silent no-op (D6).
     tracing::trace!(
         %cid,
         status = %row.status,

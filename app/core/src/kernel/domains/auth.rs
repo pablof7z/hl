@@ -496,6 +496,9 @@ pub(crate) fn clear_account_scoped_state_on_switch(state: &mut AppState) -> Vec<
     // session — the App Group file is the durable handoff store; this is the
     // in-kernel working set. Clear on EVERY teardown (not just logout).
     state.share_queue = crate::kernel::domains::share::ShareQueueState::default();
+    // #21: clear the in-flight share publish FSM on teardown — a stale
+    // Publishing/Error from a prior account must not leak into the next session.
+    state.share_publish = crate::kernel::domains::share::SharePublishState::default();
     // #1653 codex r5: kind:11 discussion rows are identity-scoped (served by the
     // viewer's relays). Previously cleared only on logout; fold into the unified
     // teardown so a direct switch does not surface a prior account's rows.

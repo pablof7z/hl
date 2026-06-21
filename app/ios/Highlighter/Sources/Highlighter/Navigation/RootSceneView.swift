@@ -28,7 +28,7 @@ struct RootSceneView: View {
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
-                Task { await ShareQueueProcessor.drain(app: store) }
+                ShareQueueProcessor.drain(app: store, kernel: kernel)
                 // iOS suspends WebSockets while we're backgrounded; nostr-sdk's
                 // foreground refresh path forces a fresh socket/subscription
                 // cycle when Rust policy allows it. Without this the NIP-46

@@ -848,49 +848,10 @@ pub async fn publish_and_share(
     Ok(records)
 }
 
-/// Port of `shareHighlightToCommunity` (`highlights.ts:321-357`).
-/// Publishes a kind:16 repost referencing an existing highlight into another group.
-pub async fn share_to_community(
-    runtime: &NostrRuntime,
-    highlight_id: &str,
-    highlight_author_pubkey: &str,
-    highlight_relay_url: &str,
-    target_group_id: &str,
-) -> Result<(), CoreError> {
-    if target_group_id.trim().is_empty() {
-        return Err(CoreError::InvalidInput(
-            "target_group_id must not be empty".into(),
-        ));
-    }
-    let event_id = EventId::from_hex(highlight_id)
-        .map_err(|e| CoreError::InvalidInput(format!("invalid highlight id: {e}")))?;
-    // Validate (but don't retain) the author pubkey.
-    PublicKey::from_hex(highlight_author_pubkey)
-        .map_err(|e| CoreError::InvalidInput(format!("invalid author pubkey: {e}")))?;
-
-    let relay_hint = if highlight_relay_url.trim().is_empty() {
-        highlighter_relay()
-    } else {
-        highlight_relay_url
-    };
-
-    let client = runtime.client();
-    let builder = build_repost_event(
-        event_id,
-        highlight_author_pubkey,
-        target_group_id,
-        relay_hint,
-    )?;
-    let event = client
-        .sign_event_builder(builder)
-        .await
-        .map_err(|e| CoreError::Signer(format!("sign repost: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish repost: {e}")))?;
-    Ok(())
-}
+// #21: bespoke `share_to_community` (kind:16 highlight repost publish) DELETED —
+// the kernel `hl.share.highlight_to_room` action is now the sole writer. The
+// pure builder `build_repost_event` below is retained as the parity oracle and
+// the field-complete reference for the kernel port.
 
 /// Hydrate cached highlights with cached artifact share projections.
 /// The returned list preserves the input highlight order.

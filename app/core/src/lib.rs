@@ -271,7 +271,7 @@ pub use room_invites::{
     RoomInviteResolvedCandidate, RoomInviteSelectionAction, RoomInviteSelectionChromeInput,
     RoomInviteSelectionChromeProjection, RoomInviteSelectionInput, RoomInviteSelectionProjection,
     RoomInviteSendResultProjection, RoomInviteSnapshot, RoomInviteSnapshotInput,
-    RoomInviteSuggestion, RoomShareLinkSnapshot,
+    RoomInviteSuggestion,
 };
 pub use room_library::{
     RoomLibraryArticleCardProjection, RoomLibraryArticleCardProjectionInput,
