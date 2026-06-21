@@ -121,6 +121,7 @@ struct RoomExplorerView: View {
             .sheet(isPresented: $createSheetPresented) {
                 CreateRoomSheet()
                     .environment(appStore)
+                    .environment(kernel)
                     .presentationDetents([.large])
             }
         }

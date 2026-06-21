@@ -3454,33 +3454,19 @@ impl HighlighterCore {
         crate::room_invites::project_selection_chrome(input)
     }
 
-    pub async fn send_room_invites(
+    /// Pure projection of the post-send result toast/error for the room-invite
+    /// screen. The actual kind:9000 put-user writes are owned by the kernel
+    /// (`hl.room.add_member` → `nmp.nip29.put_user`), which is fire-and-forget
+    /// (D6) — no per-pubkey relay ack flows back. Swift dispatches one
+    /// `addRoomMember` per selected pubkey, then calls this with the set of
+    /// pubkeys it could NOT dispatch (e.g. invalid hex) to render the toast.
+    /// On the happy path `failed_pubkeys` is empty ⇒ all-success toast.
+    pub fn project_room_invite_send_result(
         &self,
-        group_id: String,
         selected: Vec<crate::room_invites::RoomInviteCandidate>,
+        failed_pubkeys: Vec<String>,
     ) -> crate::room_invites::RoomInviteSendResultProjection {
-        let result: Result<Vec<String>, CoreError> = async {
-            let _ = self.require_user_pubkey()?;
-            let group_id = group_id.trim().to_string();
-            let mut failed_pubkeys = Vec::new();
-            for candidate in &selected {
-                if groups::add_member(&self.runtime, &group_id, candidate.pubkey_hex.trim())
-                    .await
-                    .is_err()
-                {
-                    failed_pubkeys.push(candidate.pubkey_hex.clone());
-                }
-            }
-            Ok(failed_pubkeys)
-        }
-        .await;
-
-        match result {
-            Ok(failed_pubkeys) => {
-                crate::room_invites::project_send_result(&selected, &failed_pubkeys)
-            }
-            Err(error) => crate::room_invites::project_send_error(&selected, error),
-        }
+        crate::room_invites::project_send_result(&selected, &failed_pubkeys)
     }
 
     /// Classify a NIP-19 entity (`npub1…`, `nprofile1…`, `note1…`,

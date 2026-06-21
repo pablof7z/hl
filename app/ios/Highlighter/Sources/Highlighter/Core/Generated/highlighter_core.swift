@@ -1844,6 +1844,17 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectRoomInviteSelectionChrome(input: RoomInviteSelectionChromeInput)  -> RoomInviteSelectionChromeProjection
 
+    /**
+     * Pure projection of the post-send result toast/error for the room-invite
+     * screen. The actual kind:9000 put-user writes are owned by the kernel
+     * (`hl.room.add_member` → `nmp.nip29.put_user`), which is fire-and-forget
+     * (D6) — no per-pubkey relay ack flows back. Swift dispatches one
+     * `addRoomMember` per selected pubkey, then calls this with the set of
+     * pubkeys it could NOT dispatch (e.g. invalid hex) to render the toast.
+     * On the happy path `failed_pubkeys` is empty ⇒ all-success toast.
+     */
+    func projectRoomInviteSendResult(selected: [RoomInviteCandidate], failedPubkeys: [String])  -> RoomInviteSendResultProjection
+
     func projectRoomLibraryArticleCard(input: RoomLibraryArticleCardProjectionInput)  -> RoomLibraryArticleCardProjection
 
     func projectRoomLibraryBookCard(input: RoomLibraryBookCardProjectionInput)  -> RoomLibraryBookCardProjection
@@ -2044,8 +2055,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func sanitizeHighlightCropBox(cropBox: OcrRect, fallback: OcrRect?)  -> OcrRect
 
     func selectableOcrWords(lines: [OcrLine])  -> [OcrWord]
-
-    func sendRoomInvites(groupId: String, selected: [RoomInviteCandidate]) async  -> RoomInviteSendResultProjection
 
     /**
      * Replace the user's Blossom server list with the normalized ordered
@@ -4854,6 +4863,24 @@ open func projectRoomInviteSelectionChrome(input: RoomInviteSelectionChromeInput
 })
 }
 
+    /**
+     * Pure projection of the post-send result toast/error for the room-invite
+     * screen. The actual kind:9000 put-user writes are owned by the kernel
+     * (`hl.room.add_member` → `nmp.nip29.put_user`), which is fire-and-forget
+     * (D6) — no per-pubkey relay ack flows back. Swift dispatches one
+     * `addRoomMember` per selected pubkey, then calls this with the set of
+     * pubkeys it could NOT dispatch (e.g. invalid hex) to render the toast.
+     * On the happy path `failed_pubkeys` is empty ⇒ all-success toast.
+     */
+open func projectRoomInviteSendResult(selected: [RoomInviteCandidate], failedPubkeys: [String]) -> RoomInviteSendResultProjection  {
+    return try!  FfiConverterTypeRoomInviteSendResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_project_room_invite_send_result(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeRoomInviteCandidate.lower(selected),
+        FfiConverterSequenceString.lower(failedPubkeys),$0
+    )
+})
+}
+
 open func projectRoomLibraryArticleCard(input: RoomLibraryArticleCardProjectionInput) -> RoomLibraryArticleCardProjection  {
     return try!  FfiConverterTypeRoomLibraryArticleCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_library_article_card(self.uniffiClonePointer(),
@@ -5580,24 +5607,6 @@ open func selectableOcrWords(lines: [OcrLine]) -> [OcrWord]  {
         FfiConverterSequenceTypeOcrLine.lower(lines),$0
     )
 })
-}
-
-open func sendRoomInvites(groupId: String, selected: [RoomInviteCandidate])async  -> RoomInviteSendResultProjection  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_send_room_invites(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId),FfiConverterSequenceTypeRoomInviteCandidate.lower(selected)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRoomInviteSendResultProjection_lift,
-            errorHandler: nil
-
-        )
 }
 
     /**
@@ -61851,6 +61860,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_invite_selection_chrome() != 38192) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_invite_send_result() != 60512) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_article_card() != 56696) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -62017,9 +62029,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_selectable_ocr_words() != 2832) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_send_room_invites() != 44945) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_blossom_server_settings() != 6642) {

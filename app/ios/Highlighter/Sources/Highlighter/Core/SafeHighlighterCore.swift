@@ -1394,11 +1394,16 @@ actor SafeHighlighterCore {
         core.projectRoomInviteSelectionChrome(input: input)
     }
 
-    func sendRoomInvites(
-        groupId: String,
+    /// Pure projection of the post-send toast/error for the room-invite screen.
+    /// The kind:9000 put-user writes are owned by the kernel
+    /// (`hl.room.add_member` → `nmp.nip29.put_user`, fire-and-forget). Callers
+    /// dispatch one `addRoomMember` per selected pubkey, then call this with the
+    /// pubkeys they could NOT dispatch (empty on the happy path ⇒ all-success).
+    nonisolated func projectRoomInviteSendResult(
         selected: [RoomInviteCandidate],
-    ) async -> RoomInviteSendResultProjection {
-        await core.sendRoomInvites(groupId: groupId, selected: selected)
+        failedPubkeys: [String]
+    ) -> RoomInviteSendResultProjection {
+        core.projectRoomInviteSendResult(selected: selected, failedPubkeys: failedPubkeys)
     }
 
     // MARK: - Home Feed

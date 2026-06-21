@@ -747,35 +747,24 @@ pub async fn create_room(
     Ok(group_id)
 }
 
-/// Publish a NIP-29 kind:9000 put-user event adding `pubkey_hex` to
-/// `group_id`. Must be signed by an admin of the room — non-admin attempts
-/// are rejected by the relay. The relay republishes 39002 with the new
-/// member, which arrives as a `MembershipChanged` delta and updates UI.
-pub async fn add_member(
-    runtime: &NostrRuntime,
-    group_id: &str,
-    pubkey_hex: &str,
-) -> Result<String, CoreError> {
+/// Build the NIP-29 kind:9000 put-user event for adding `pubkey_hex` to
+/// `group_id` — the exact event the kernel's `nmp.nip29.put_user` action
+/// emits (kind:9000, empty content, tags `[["h", group_id], ["p", pubkey]]`).
+///
+/// The publish path is owned by the kernel (`hl.room.add_member` →
+/// `Effect::DispatchNip29Action { "nmp.nip29.put_user" }`); this builder
+/// exists ONLY so the parity test can prove the bespoke wire shape matches
+/// the kernel port field-for-field. There is no bespoke publisher anymore —
+/// the kernel is the sole writer (write-coexistence doctrine).
+#[cfg(test)]
+pub(crate) fn put_user_tags(group_id: &str, pubkey_hex: &str) -> Result<Vec<Tag>, CoreError> {
     let group_id = group_id.trim();
     if group_id.is_empty() {
         return Err(CoreError::InvalidInput("group_id must not be empty".into()));
     }
     let pubkey = PublicKey::from_hex(pubkey_hex)
         .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
-
-    let builder = EventBuilder::new(Kind::Custom(KIND_PUT_USER), "")
-        .tags(vec![h_tag(group_id)?, Tag::public_key(pubkey)]);
-
-    let client = runtime.client();
-    let event = client
-        .sign_event_builder(builder)
-        .await
-        .map_err(|e| CoreError::Signer(format!("sign put-user: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish put-user: {e}")))?;
-    Ok(event.id.to_hex())
+    Ok(vec![h_tag(group_id)?, Tag::public_key(pubkey)])
 }
 
 /// Mint `count` invite codes for `group_id` by publishing a kind:9009 event
@@ -1600,5 +1589,116 @@ mod tests {
         assert_eq!(summary.visibility, "public");
         assert_eq!(summary.admin_pubkeys, Vec::<String>::new());
         assert_eq!(summary.member_count, None, "no member event → None");
+    }
+
+    // ── Room-invite write-coexistence parity (issue #21) ──────────────────────
+    //
+    // The kernel is the sole writer for the kind:9000 put-user event used by
+    // the room-invite "add specific people" send. It dispatches
+    // `nmp.nip29.put_user`, whose nmp port (pinned d16aea60,
+    // `crates/nmp-nip29/src/action/admin.rs::put_user_plan`) builds:
+    //   kind   = 9000
+    //   content= ""
+    //   tags   = [["h", local_id], ["p", target_pubkey(, role)]]
+    //
+    // This test runs BOTH the bespoke event builder (`put_user_tags`, the wire
+    // shape the deleted `add_member` publisher used) AND a faithful
+    // reproduction of the kernel port (driven off the kernel reducer's actual
+    // dispatched JSON payload) on the SAME fixture, and asserts the produced
+    // event is field-identical: kind, content, and every tag (h + p). It then
+    // proves a guard bites by mutating one field.
+
+    /// Reproduce nmp's `put_user_plan` from the JSON the kernel reducer emits.
+    /// Mirrors `crates/nmp-nip29/src/action/admin.rs::put_user_plan` exactly.
+    fn kernel_put_user_event(reducer_json: &serde_json::Value, signer: &Keys) -> Event {
+        let local_id = reducer_json["group"]["local_id"].as_str().unwrap();
+        let target = reducer_json["target_pubkey"].as_str().unwrap();
+        let role = reducer_json["role"]
+            .as_str()
+            .filter(|s| !s.trim().is_empty());
+
+        let mut p_tag = vec!["p".to_string(), target.to_string()];
+        if let Some(role) = role {
+            p_tag.push(role.to_string());
+        }
+        let tags = vec![
+            Tag::parse(vec!["h".to_string(), local_id.to_string()]).unwrap(),
+            Tag::parse(p_tag).unwrap(),
+        ];
+        sign(signer, KIND_PUT_USER, tags, "")
+    }
+
+    #[test]
+    fn put_user_parity_bespoke_matches_kernel_port_field_for_field() {
+        let group_id = "abc123def456";
+        let target = "a".repeat(64);
+        let signer = Keys::generate();
+
+        // Bespoke wire shape (the event the deleted `add_member` published).
+        let bespoke_tags = put_user_tags(group_id, &target).expect("bespoke tags");
+        let bespoke = sign(&signer, KIND_PUT_USER, bespoke_tags, "");
+
+        // Kernel port: drive the real reducer, then build the event nmp emits.
+        let effects = crate::kernel::domains::room_home::reduce_action_add_room_member(
+            group_id.to_string(),
+            "wss://relay.example".to_string(),
+            target.clone(),
+            None,
+        );
+        let json = match &effects[..] {
+            [crate::kernel::effect::Effect::DispatchNip29Action { namespace, json }] => {
+                assert_eq!(namespace, "nmp.nip29.put_user");
+                serde_json::from_str::<serde_json::Value>(json).expect("valid payload")
+            }
+            other => panic!("expected one DispatchNip29Action, got {other:?}"),
+        };
+        let kernel = kernel_put_user_event(&json, &signer);
+
+        // Field-for-field parity: kind, content, and the full tag list.
+        let bespoke_tags = bespoke.tags.to_vec();
+        let kernel_tags = kernel.tags.to_vec();
+        assert_eq!(bespoke.kind, kernel.kind, "kind must match");
+        assert_eq!(bespoke.kind, Kind::Custom(9000));
+        assert_eq!(bespoke.content, kernel.content, "content must match");
+        assert_eq!(bespoke.content, "", "put-user content is empty");
+        assert_eq!(
+            bespoke_tags, kernel_tags,
+            "tag lists must be identical (h + p)"
+        );
+        // Explicit h/p assertions so the intent is legible.
+        assert_eq!(
+            bespoke_tags[0].as_slice(),
+            &["h".to_string(), group_id.to_string()]
+        );
+        assert_eq!(
+            bespoke_tags[1].as_slice(),
+            &["p".to_string(), target.clone()]
+        );
+    }
+
+    #[test]
+    fn put_user_parity_guard_bites_on_field_drift() {
+        // Prove the parity assertion is not vacuous: a port that drifts on the
+        // group id (h tag) must NOT match the bespoke wire shape.
+        let group_id = "abc123def456";
+        let target = "b".repeat(64);
+        let signer = Keys::generate();
+
+        let bespoke_tags = put_user_tags(group_id, &target).expect("bespoke tags");
+        let bespoke = sign(&signer, KIND_PUT_USER, bespoke_tags, "");
+
+        // Drifted port: wrong h tag value.
+        let drifted_json = serde_json::json!({
+            "group": { "host_relay_url": "wss://relay.example", "local_id": "WRONG-GROUP" },
+            "target_pubkey": target,
+            "role": serde_json::Value::Null,
+        });
+        let drifted = kernel_put_user_event(&drifted_json, &signer);
+
+        assert_ne!(
+            bespoke.tags.to_vec(),
+            drifted.tags.to_vec(),
+            "guard must bite: a drifted h tag must not pass parity",
+        );
     }
 }
