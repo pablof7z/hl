@@ -70,6 +70,8 @@ extension BookmarkSetRecord {
             image: row.image ?? "",
             articleAddresses: row.articleAddresses,
             noteIds: row.noteIds,
+            rRefs: row.rRefs,
+            topics: row.topics,
             createdAt: row.createdAt
         )
     }

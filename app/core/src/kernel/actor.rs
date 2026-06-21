@@ -2476,6 +2476,10 @@ pub(crate) async fn actor_task(
         // Detect FollowListUpdated before reduce so we can emit post-reduce
         // effects that need the registry (which is not available in reduce_event).
         let is_follow_list_updated = matches!(cmd, Cmd::Event(KernelEvent::FollowListUpdated(_)));
+        // #1653 BLOCKING #2: a follow change OR account switch must refresh the
+        // bookmarks interest authors while the view is open. IdentityChanged also
+        // changes the active account (and clears/replaces follows downstream).
+        let is_identity_changed = matches!(cmd, Cmd::Event(KernelEvent::IdentityChanged(_)));
 
         // Reduce (pure, sync).
         let mut effects = reduce(&mut state, cmd, now);
@@ -2486,6 +2490,14 @@ pub(crate) async fn actor_task(
         // effect-driven; no polling; no native close/reopen.
         if is_follow_list_updated && registry.is_open(&ViewId::HomeFeed) {
             effects.extend(home_feed::lifecycle_effects_for_follow_update(&state));
+        }
+
+        // #1653 BLOCKING #2: re-push the bookmarks interest with the refreshed
+        // author set (current user + follows) when a follow change or account
+        // switch arrives WHILE the Bookmarks view is open. Mirrors the HomeFeed
+        // follow-update hook above. The push is idempotent (stable InterestId).
+        if (is_follow_list_updated || is_identity_changed) && registry.is_open(&ViewId::Bookmarks) {
+            effects.extend(bookmark_sets::lifecycle_effects_for_follow_update(&state));
         }
 
         // Run lifecycle effects first (profile claim/release), then reducer effects.

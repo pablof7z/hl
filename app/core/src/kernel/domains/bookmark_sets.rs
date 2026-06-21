@@ -619,6 +619,38 @@ pub(crate) fn lifecycle_effects_for_view_open(id: &ViewId, state: &AppState) -> 
     vec![Effect::PushBookmarkSetsInterest { authors }]
 }
 
+/// Re-push the bookmark-sets subscription for an already-open `ViewId::Bookmarks`
+/// view with the refreshed author set (current user + current follows).
+///
+/// Called from the actor's post-reduce hook when a `FollowListUpdated` (follow
+/// change) or `IdentityChanged` (account switch) event arrives WHILE the
+/// Bookmarks view is open (#1653 codex BLOCKING #2). Without this, the interest
+/// stays pinned to the authors captured at open time, so curation sets from
+/// newly-followed authors are starved until the view is closed and reopened.
+///
+/// The push is idempotent: it reuses the stable `BOOKMARK_SETS_INTEREST_ID`, so
+/// re-pushing replaces the prior interest in the planner (withdraw-then-push is
+/// unnecessary — the planner keys on `InterestId`). Mirrors
+/// `home_feed::lifecycle_effects_for_follow_update`.
+///
+/// D8: effect-driven, not polling — triggered by the projection event. Does not
+/// ask Swift to close/reopen the view.
+pub(crate) fn lifecycle_effects_for_follow_update(state: &AppState) -> Vec<Effect> {
+    let mut authors: Vec<String> = Vec::new();
+    if let Some(pk) = active_pubkey(state) {
+        authors.push(pk.to_string());
+    }
+    authors.extend(state.follows.iter().cloned());
+    authors.sort();
+    authors.dedup();
+    // Same fail-closed guard as open: never push an unscoped (wildcard-author)
+    // interest that would fan out to every relay (D6).
+    if authors.is_empty() {
+        return vec![];
+    }
+    vec![Effect::PushBookmarkSetsInterest { authors }]
+}
+
 /// Lifecycle hook on `Cmd::CloseView` — withdraw the bookmark-sets subscription
 /// and clear the observers' accumulators (#1653 HIGH #7). No-op for other views.
 pub(crate) fn lifecycle_effects_for_view_close(id: &ViewId) -> Vec<Effect> {
@@ -1232,6 +1264,67 @@ mod tests {
         assert!(
             state.web_bookmarks.is_empty(),
             "web_bookmarks must clear on logout"
+        );
+    }
+
+    // 1653-BLOCKING-#2: a FollowListUpdated arriving WHILE Bookmarks is open must
+    // re-push the bookmarks interest with the refreshed author set (current user
+    // + current follows), so newly-followed curation-set authors are subscribed
+    // without a view close/reopen. This is the domain hook the actor invokes from
+    // its post-reduce gate (`registry.is_open(&ViewId::Bookmarks)`).
+    #[test]
+    fn follow_update_repushes_bookmarks_interest_with_new_authors() {
+        let my_pk = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let old_follow = "bbbb000000000000000000000000000000000000000000000000000000000002";
+        let new_follow = "cccc000000000000000000000000000000000000000000000000000000000003";
+        let mut state = make_state_with_session(my_pk);
+
+        // Bookmarks opened with only the original follow in scope.
+        state.follows = vec![old_follow.to_string()];
+        let open = lifecycle_effects_for_view_open(&ViewId::Bookmarks, &state);
+        match open.as_slice() {
+            [Effect::PushBookmarkSetsInterest { authors }] => {
+                assert!(authors.contains(&my_pk.to_string()));
+                assert!(authors.contains(&old_follow.to_string()));
+                assert!(
+                    !authors.contains(&new_follow.to_string()),
+                    "new follow not yet known at open time"
+                );
+            }
+            other => panic!("expected one PushBookmarkSetsInterest on open, got {other:?}"),
+        }
+
+        // A FollowListUpdated arrives while the view is open: follows now include
+        // the newly-followed author.
+        state.follows = vec![old_follow.to_string(), new_follow.to_string()];
+        let effects = lifecycle_effects_for_follow_update(&state);
+        match effects.as_slice() {
+            [Effect::PushBookmarkSetsInterest { authors }] => {
+                assert!(
+                    authors.contains(&new_follow.to_string()),
+                    "re-pushed interest must include the newly-followed author"
+                );
+                assert!(authors.contains(&old_follow.to_string()));
+                assert!(
+                    authors.contains(&my_pk.to_string()),
+                    "re-pushed interest must keep the current user"
+                );
+            }
+            other => {
+                panic!("expected one PushBookmarkSetsInterest on follow update, got {other:?}")
+            }
+        }
+    }
+
+    // 1653-BLOCKING-#2: the follow-update hook stays fail-closed — with no active
+    // account and no follows there is no author to scope, so it must NOT emit an
+    // unscoped (wildcard-author) interest that would fan out to every relay (D6).
+    #[test]
+    fn follow_update_emits_nothing_without_authors() {
+        let state = make_state();
+        assert!(
+            lifecycle_effects_for_follow_update(&state).is_empty(),
+            "follow update with no user + no follows must not push an unscoped interest"
         );
     }
 

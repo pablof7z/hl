@@ -281,8 +281,14 @@ pub fn query_user_sets(
         let Ok(event) = Event::from_json(&json) else {
             continue;
         };
-        let d = first_tag_value(&event, "d").unwrap_or("").to_string();
-        let entry = by_d.entry(d).or_insert_with(|| event.clone());
+        // Fail closed on empty `d` — a set with no usable identifier would
+        // produce an empty `id`. Mirrors the kernel parser
+        // (`parse_set_row_from_kernel`: "no empty-string identity") so this
+        // retained read lane can never admit an identity-less row (#1653 HIGH).
+        let Some(d) = first_tag_value(&event, "d").filter(|v| !v.is_empty()) else {
+            continue;
+        };
+        let entry = by_d.entry(d.to_string()).or_insert_with(|| event.clone());
         if event.created_at > entry.created_at {
             *entry = event;
         }
@@ -333,9 +339,14 @@ pub fn query_following_curation_sets(
         let Ok(event) = Event::from_json(&json) else {
             continue;
         };
-        let d = first_tag_value(&event, "d").unwrap_or("").to_string();
+        // Fail closed on empty `d` — mirrors the kernel parser's "no
+        // empty-string identity" so the explore lane never yields a set with an
+        // empty `id` (#1653 HIGH).
+        let Some(d) = first_tag_value(&event, "d").filter(|v| !v.is_empty()) else {
+            continue;
+        };
         let pk = event.pubkey.to_hex();
-        let key = (pk, d);
+        let key = (pk, d.to_string());
         let entry = by_key.entry(key).or_insert_with(|| event.clone());
         if event.created_at > entry.created_at {
             *entry = event;
@@ -394,8 +405,14 @@ pub fn query_user_web_bookmarks(
         let Ok(event) = Event::from_json(&json) else {
             continue;
         };
-        let d = first_tag_value(&event, "d").unwrap_or("").to_string();
-        let entry = by_d.entry(d).or_insert_with(|| event.clone());
+        // Fail closed on empty `d` — the `d` IS the URL-without-scheme; an empty
+        // one would produce `url=""`. Mirrors the kernel web parser
+        // (`parse_web_row_from_kernel`: "a web bookmark with no URL is
+        // meaningless and must not produce url=\"\"") (#1653 HIGH).
+        let Some(d) = first_tag_value(&event, "d").filter(|v| !v.is_empty()) else {
+            continue;
+        };
+        let entry = by_d.entry(d.to_string()).or_insert_with(|| event.clone());
         if event.created_at > entry.created_at {
             *entry = event;
         }
@@ -782,9 +799,10 @@ mod tests {
         curation_menu_items_for_address, curation_menu_snapshot_apply_projection,
         curation_menu_snapshot_for_address, curation_set_create_projection,
         filter_explorable_curation_sets, query_bookmark_library_snapshot,
-        query_bookmark_set_detail_snapshot, web_bookmark_row_projection, BookmarkLibraryFilter,
-        BookmarkLibraryFilterChipProjection, BookmarkLibraryPane, BookmarkLibraryProjectionInput,
-        BookmarkLibraryScope, BookmarkLibraryScopeOptionProjection, BookmarkSetRowProjectionInput,
+        query_bookmark_set_detail_snapshot, query_user_sets, query_user_web_bookmarks,
+        web_bookmark_row_projection, BookmarkLibraryFilter, BookmarkLibraryFilterChipProjection,
+        BookmarkLibraryPane, BookmarkLibraryProjectionInput, BookmarkLibraryScope,
+        BookmarkLibraryScopeOptionProjection, BookmarkSetRowProjectionInput,
         BookmarkedArticleRowProjectionInput, CurationMenuSnapshotApplyInput,
         CurationSetCreateProjectionInput, WebBookmarkRowProjectionInput, KIND_BOOKMARK_SETS,
         KIND_CURATION_SETS, KIND_WEB_BOOKMARK,
@@ -1089,6 +1107,54 @@ mod tests {
         assert_eq!(snapshot.my_web_bookmarks.len(), 1);
         assert_eq!(snapshot.my_web_bookmarks[0].title, "Example Page");
         assert!(snapshot.following_curation_sets.is_empty());
+    }
+
+    // #1653 HIGH: the retained read lane must fail closed on empty `d`, matching
+    // the kernel parser's "no empty-string identity." A set / web bookmark with
+    // an empty `d` tag previously produced an empty set `id` / empty `url`; it
+    // must now be skipped entirely.
+    #[test]
+    fn read_lane_fails_closed_on_empty_d() {
+        let (ndb, _tmp) = fresh_ndb();
+        let user = Keys::generate();
+
+        // Valid rows (kept).
+        let good_set = EventBuilder::new(Kind::Custom(KIND_BOOKMARK_SETS), "")
+            .tags([Tag::parse(vec!["d".to_string(), "saved".to_string()]).unwrap()])
+            .sign_with_keys(&user)
+            .unwrap();
+        let good_web = EventBuilder::new(Kind::Custom(KIND_WEB_BOOKMARK), "")
+            .tags([Tag::parse(vec!["d".to_string(), "example.com/ok".to_string()]).unwrap()])
+            .sign_with_keys(&user)
+            .unwrap();
+        // Empty-`d` rows (must be skipped — no empty id / no `url=""`).
+        let empty_d_set = EventBuilder::new(Kind::Custom(KIND_BOOKMARK_SETS), "")
+            .tags([Tag::parse(vec!["d".to_string(), "".to_string()]).unwrap()])
+            .sign_with_keys(&user)
+            .unwrap();
+        let empty_d_web = EventBuilder::new(Kind::Custom(KIND_WEB_BOOKMARK), "")
+            .tags([Tag::parse(vec!["d".to_string(), "".to_string()]).unwrap()])
+            .sign_with_keys(&user)
+            .unwrap();
+
+        for event in [&good_set, &good_web, &empty_d_set, &empty_d_web] {
+            process(&ndb, event);
+        }
+
+        let sets = query_user_sets(&ndb, &user.public_key().to_hex(), KIND_BOOKMARK_SETS).unwrap();
+        assert_eq!(sets.len(), 1, "empty-`d` set must be skipped");
+        assert_eq!(sets[0].id, "saved");
+        assert!(
+            sets.iter().all(|s| !s.id.is_empty()),
+            "no set with an empty id may surface"
+        );
+
+        let web = query_user_web_bookmarks(&ndb, &user.public_key().to_hex()).unwrap();
+        assert_eq!(web.len(), 1, "empty-`d` web bookmark must be skipped");
+        assert!(
+            web.iter().all(|w| !w.url.is_empty()),
+            "no web bookmark with an empty url may surface"
+        );
     }
 
     #[test]
