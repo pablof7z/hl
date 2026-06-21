@@ -9,7 +9,7 @@ import os
 /// a `Delta` carrying the `subscription_id` that installed the pump.
 /// `0` is reserved for app-scope deltas (signer state, joined-communities
 /// summary). Any non-zero id routes to the view-scoped store that asked
-/// for the subscription via `registerRoom` / `registerDiscussions`.
+/// for the subscription via `registerProfile` / `registerArticle` / etc.
 final class EventBridge: EventCallback, @unchecked Sendable {
     private weak var appStore: HighlighterStore?
 
@@ -24,7 +24,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     /// stores, so even if a reference survives into the wrong isolation
     /// it's nil or eventually nil'd by ARC.
     fileprivate struct Registry: @unchecked Sendable {
-        var rooms: [UInt64: WeakBox<RoomStore>] = [:]
         var profiles: [UInt64: WeakBox<ProfileStore>] = [:]
         var articles: [UInt64: WeakBox<ArticleReaderStore>] = [:]
         var bookmarks: [UInt64: WeakBox<BookmarkStore>] = [:]
@@ -36,7 +35,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         var profileSnapshotHandles: [UInt64: String] = [:]
 
         mutating func prune() {
-            rooms = rooms.filter { $0.value.value != nil }
             profiles = profiles.filter { $0.value.value != nil }
             articles = articles.filter { $0.value.value != nil }
             bookmarks = bookmarks.filter { $0.value.value != nil }
@@ -50,13 +48,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     }
 
     // MARK: - Registration (called by view stores when they subscribe)
-
-    func registerRoom(_ store: RoomStore, handle: UInt64) {
-        registry.withLock { reg in
-            reg.rooms[handle] = WeakBox(store)
-            reg.prune()
-        }
-    }
 
     func registerProfile(_ store: ProfileStore, handle: UInt64) {
         registry.withLock { reg in
@@ -101,7 +92,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
 
     func unregister(handle: UInt64) {
         registry.withLock { reg in
-            _ = reg.rooms.removeValue(forKey: handle)
             _ = reg.profiles.removeValue(forKey: handle)
             _ = reg.articles.removeValue(forKey: handle)
             _ = reg.bookmarks.removeValue(forKey: handle)
@@ -124,7 +114,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
 
             let routed = self.registry.withLock { reg -> RoutedStores in
                 RoutedStores(
-                    room: reg.rooms[id]?.value,
                     profile: reg.profiles[id]?.value,
                     article: reg.articles[id]?.value,
                     bookmark: reg.bookmarks[id]?.value,
@@ -133,9 +122,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 )
             }
 
-            if let store = routed.room {
-                self.dispatchRoom(change, store: store)
-            } else if let store = routed.profile {
+            if let store = routed.profile {
                 self.dispatchProfile(change, store: store)
             } else if let store = routed.article {
                 self.dispatchArticle(change, store: store)
@@ -153,7 +140,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     /// subscription handle. Routing is first-non-nil-wins; a handle is only
     /// ever registered to one store at a time.
     private struct RoutedStores {
-        let room: RoomStore?
         let profile: ProfileStore?
         let article: ArticleReaderStore?
         let bookmark: BookmarkStore?
@@ -221,17 +207,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             break
         }
     }
-
-    @MainActor
-    private func dispatchRoom(_ change: DataChangeType, store: RoomStore) {
-        switch change {
-        case .artifactUpserted, .highlightUpserted, .highlightShared:
-            Task { await store.reloadFromCache() }
-        default:
-            break
-        }
-    }
-
 
     @MainActor
     private func dispatchBookmarkStore(_ change: DataChangeType, store: BookmarkStore) {

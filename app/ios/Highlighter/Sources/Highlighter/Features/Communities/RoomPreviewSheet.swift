@@ -12,6 +12,7 @@ struct RoomPreviewSheet: View {
     var onOpenRoom: (() -> Void)? = nil
 
     @Environment(HighlighterStore.self) private var appStore
+    @Environment(HighlighterAppKernel.self) private var kernel
     @Environment(\.dismiss) private var dismiss
 
     @State private var detent: PresentationDetent = .medium
@@ -75,8 +76,16 @@ struct RoomPreviewSheet: View {
         .onChange(of: isExpanded) { _, expanded in
             if expanded { startRoomStoreIfNeeded() }
         }
+        .onChange(of: kernel.roomHomeSnapshots[room.id]) { _, _ in
+            roomStore?.applyKernelSnapshot()
+        }
         .onDisappear {
-            roomStore?.stop()
+            // Only release the kernel view if we actually opened it (the sheet
+            // opens room-home lazily on expand).
+            if roomStore != nil {
+                roomStore?.stop()
+                kernel.closeRoomHome(groupId: room.id)
+            }
         }
     }
 
@@ -280,15 +289,12 @@ struct RoomPreviewSheet: View {
 
     private func startRoomStoreIfNeeded() {
         guard roomStore == nil else { return }
+        // Open the kernel room-home view so the kernel pushes the aggregated
+        // snapshot, then mirror it into a fresh store.
+        kernel.openRoomHome(groupId: room.id)
         let store = RoomStore()
         roomStore = store
-        Task {
-            await store.start(
-                groupId: room.id,
-                core: appStore.safeCore,
-                bridge: appStore.eventBridge
-            )
-        }
+        store.start(groupId: room.id, kernel: kernel)
     }
 }
 

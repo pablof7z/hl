@@ -2,92 +2,93 @@ import Foundation
 import Observation
 
 /// View-scoped reactive state for a single community's room home.
-/// Lifetime is tied to the SwiftUI view that creates it — allocated on
-/// `.task { }`, deallocated on view disappear. Owns its subscription
-/// handle so granular Observation tracks only this room's data.
 ///
-/// Data comes from nostrdb via the Rust core; this class never fabricates
-/// or caches data that isn't also in nostrdb.
+/// Phase 7: kernel-backed. The kernel owns the room-home aggregation
+/// (`ViewId.roomHome`): artifact library, hydrated highlights, per-artifact
+/// comment buckets, and assembled lanes — all already computed in
+/// `project_room_home_snapshot`. This store mirrors
+/// `kernel.roomHomeSnapshots[groupId]` into the bespoke view-model types the
+/// existing views render (D1: kernel emits raw/assembled rows; Swift shapes the
+/// model). The owning `RoomHomeView` owns the kernel view lifecycle
+/// (`openRoomHome`/`closeRoomHome`); this store only reads the snapshot.
+///
+/// The rich `artifact_record` on each lane / library row (enriched in the
+/// kernel so podcast `audio_url`/GUIDs, book `catalog_id`, chapters, and
+/// reference tags survive) is the bespoke `ArtifactRecord` verbatim — so the
+/// presentation projections (`projectRoomLibraryCardKind`,
+/// `getArtifactDetailProjection`, …) consume it unchanged.
 @MainActor
 @Observable
 final class RoomStore {
     private(set) var artifacts: [ArtifactRecord] = []
     private(set) var highlights: [HydratedHighlight] = []
-    private(set) var highlightsByReference: [String: [HighlightRecord]] = [:]
-    private(set) var commentsByReference: [String: [CommentRecord]] = [:]
     private(set) var lanes: [RoomLane] = []
     private(set) var isLoading: Bool = true
 
     @ObservationIgnored private var groupId: String?
-    @ObservationIgnored private var core: SafeHighlighterCore?
-    @ObservationIgnored private weak var bridge: EventBridge?
-    @ObservationIgnored private var subscriptionHandle: UInt64?
+    @ObservationIgnored private weak var kernel: HighlighterAppKernel?
+    /// share_event_id → comment count, derived from the kernel assembled lanes.
+    @ObservationIgnored private var commentCountByShareId: [String: Int] = [:]
 
-    /// Called from the View's `.task { }`. Reads nostrdb immediately for
-    /// instant offline rendering, then installs a live subscription so
-    /// incoming events flow in as deltas routed by `EventBridge`.
-    func start(groupId: String, core: SafeHighlighterCore, bridge: EventBridge?) async {
-        if self.groupId != nil, self.groupId != groupId {
-            stop()
-        }
+    /// Called from the View's `.task { }` AFTER the view has opened the kernel
+    /// room-home view. Mirrors whatever snapshot is already cached; live updates
+    /// flow via the view's `onChange(of: kernel.roomHomeSnapshots[groupId])`.
+    func start(groupId: String, kernel: HighlighterAppKernel) {
         self.groupId = groupId
-        self.core = core
-        self.bridge = bridge
+        self.kernel = kernel
         isLoading = true
-        await reloadSnapshot()
-        isLoading = false
-
-        guard subscriptionHandle == nil else { return }
-        let outcome = await core.subscribeRoom(groupId: groupId)
-        let projection = core.projectViewSubscriptionStart(
-            input: ViewSubscriptionStartProjectionInput(start: outcome)
-        )
-        guard projection.shouldRegister else {
-            // Subscription failure leaves cache-only rendering working.
-            return
-        }
-        subscriptionHandle = projection.handle
-        bridge?.registerRoom(self, handle: projection.handle)
+        applyKernelSnapshot()
     }
 
     func stop() {
-        if let handle = subscriptionHandle, let core {
-            Task { await core.unsubscribe(handle) }
-            bridge?.unregister(handle: handle)
+        groupId = nil
+        kernel = nil
+    }
+
+    /// Mirror `kernel.roomHomeSnapshots[groupId]` into the rendered view models.
+    func applyKernelSnapshot() {
+        guard let groupId, let snapshot = kernel?.roomHomeSnapshots[groupId] else { return }
+
+        artifacts = snapshot.artifactLibrary.map(\.artifactRecord)
+
+        highlights = snapshot.highlights.map { row in
+            HydratedHighlight(
+                highlight: HighlightRecord(kernelRow: row),
+                artifact: nil,
+                sharedByEventId: nil,
+                sharedByPubkey: nil
+            )
         }
-        subscriptionHandle = nil
+
+        lanes = snapshot.assembledLanes.map { lane in
+            RoomLane(
+                id: lane.shareEventId,
+                artifact: lane.artifactRecord,
+                highlights: lane.highlights.map { row in
+                    HydratedHighlight(
+                        highlight: HighlightRecord(kernelRow: row),
+                        artifact: lane.artifactRecord,
+                        sharedByEventId: lane.shareEventId,
+                        sharedByPubkey: nil
+                    )
+                },
+                comments: lane.comments.map(CommentTreeBuilder.record(from:))
+            )
+        }
+
+        commentCountByShareId = Dictionary(
+            snapshot.assembledLanes.map { ($0.shareEventId, Int($0.comments.count)) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        isLoading = false
     }
 
-    // MARK: - Delta application (called by EventBridge)
-
-    func reloadFromCache() async {
-        await reloadSnapshot()
-    }
-
+    /// Resolve the count of NIP-22 comments anchored to an artifact. The kernel
+    /// already grouped comments per artifact into the assembled lane, so this is
+    /// a direct lookup by the share event id (dormant artifacts with no
+    /// highlights AND no comments are absent → count 0).
     func commentCount(for artifact: ArtifactRecord) -> Int {
-        guard let core else {
-            return 0
-        }
-        let buckets = commentsByReference.map { key, values in
-            CommentReferenceBucket(commentKey: key, comments: values)
-        }
-        return Int(core.countArtifactComments(
-            artifact: artifact,
-            commentsByReference: buckets
-        ))
-    }
-
-    private func reloadSnapshot() async {
-        guard let groupId, let core else { return }
-        let snapshot = await core.getRoomHomeSnapshot(groupId: groupId)
-        artifacts = snapshot.artifacts
-        highlights = snapshot.highlights
-        highlightsByReference = snapshot.highlightsByReference.reduce(into: [:]) { buckets, bucket in
-            buckets[bucket.lookupKey] = bucket.highlights
-        }
-        commentsByReference = snapshot.commentsByReference.reduce(into: [:]) { buckets, bucket in
-            buckets[bucket.commentKey] = bucket.comments
-        }
-        lanes = snapshot.lanes
+        commentCountByShareId[artifact.shareEventId] ?? 0
     }
 }
