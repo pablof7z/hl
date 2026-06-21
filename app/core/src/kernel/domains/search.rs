@@ -242,6 +242,14 @@ pub(crate) fn reduce_action_run_search(
         state.profile_search_cache.clear();
     }
 
+    // ── Generation token (D5 active-view bounding, race guard) ───────────────
+    // Every new RunSearch supersedes any in-flight async kind:0 scan from a
+    // prior query. Bumping the generation here means any ProfileSearchScanned
+    // event already in-flight (or arriving after a CloseView) will be dropped
+    // by the reducer's generation-check. The effect runner captures this value
+    // and includes it in the emitted KernelEvent::ProfileSearchScanned.
+    state.profile_search_generation = state.profile_search_generation.wrapping_add(1);
+
     // Store the trimmed query so project_search_snapshot can compute the
     // local community bucket from state (no second action required).
     state.search_query = trimmed.clone();
@@ -262,6 +270,7 @@ pub(crate) fn reduce_action_run_search(
         query: trimmed,
         scope_json,
         interest_id: SEARCH_INTEREST_ID,
+        generation: state.profile_search_generation,
     }];
 
     // D8 discovery warm-up: if we have no discovered groups yet and the
@@ -324,6 +333,7 @@ pub(crate) fn run_effect_run_search(
     query: String,
     scope_json: String,
     interest_id: u64,
+    generation: u64,
     nmp: Option<&crate::kernel::actor::NmpHandle>,
     tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
 ) {
@@ -414,7 +424,7 @@ pub(crate) fn run_effect_run_search(
     let rows = scan_local_profiles(nmp_ref, &query, PROFILE_SEARCH_CACHE_SCAN_LIMIT);
     if !rows.is_empty() {
         let _ = tx.send(crate::kernel::actor::Cmd::Event(
-            crate::kernel::action::KernelEvent::ProfileSearchScanned(rows),
+            crate::kernel::action::KernelEvent::ProfileSearchScanned { generation, rows },
         ));
     }
 }
@@ -990,6 +1000,7 @@ mod tests {
                 query,
                 scope_json,
                 interest_id,
+                ..
             } => {
                 assert_eq!(query, "nostr rust", "query must be trimmed");
                 let scope: NmpSearchScope =
@@ -2203,10 +2214,14 @@ mod tests {
             created_at: 2_000,
         };
 
+        // Pass generation 0 to match the default profile_search_generation.
         step(
             &mut state,
             &clock,
-            Cmd::Event(KernelEvent::ProfileSearchScanned(vec![older])),
+            Cmd::Event(KernelEvent::ProfileSearchScanned {
+                generation: 0,
+                rows: vec![older],
+            }),
         );
         assert_eq!(state.profile_search_cache.len(), 1);
         assert_eq!(state.profile_search_cache[0].name, "old-name");
@@ -2215,7 +2230,10 @@ mod tests {
         step(
             &mut state,
             &clock,
-            Cmd::Event(KernelEvent::ProfileSearchScanned(vec![newer])),
+            Cmd::Event(KernelEvent::ProfileSearchScanned {
+                generation: 0,
+                rows: vec![newer],
+            }),
         );
         assert_eq!(
             state.profile_search_cache.len(),
@@ -2226,6 +2244,178 @@ mod tests {
             state.profile_search_cache[0].name, "new-name",
             "newer created_at must win"
         );
+    }
+
+    // 7-SP-T-GEN-1: stale ProfileSearchScanned (from a superseded query) is
+    // dropped — not merged into the cache (D5 active-view bounding, race guard).
+    //
+    // Setup:
+    //   1. Dispatch RunSearch(A) → state.profile_search_generation becomes 1.
+    //   2. Deliver ProfileSearchScanned { generation: 1, rows: [alice] } (A's scan).
+    //      → accepted; cache = [alice].
+    //   3. Dispatch RunSearch(B) → generation becomes 2.
+    //   4. Deliver A's stale scan again (generation: 1, rows: [stale-bob]).
+    //      → DROPPED; cache must still reflect alice from step 2 (not stale-bob).
+    //
+    // Pre-fix this would unconditionally call merge_profile_search_rows and
+    // stale-bob would appear in the cache. The test PROVES it fails without the
+    // generation guard and passes with it.
+    #[test]
+    fn stale_profile_scan_after_query_change_is_dropped() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+
+        // Step 1: RunSearch(A) — generation bumps to 1.
+        let _ = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::RunSearch {
+                query: "alice".into(),
+                scope: SearchScope::Users,
+            }),
+        );
+        assert_eq!(
+            state.profile_search_generation, 1,
+            "RunSearch must bump profile_search_generation to 1"
+        );
+
+        // Step 2: deliver A's scan with generation 1 — should be accepted.
+        let k_alice = nostr_sdk::prelude::Keys::generate();
+        let alice = ProfileSearchRow {
+            pubkey: k_alice.public_key().to_hex(),
+            name: "alice".into(),
+            display_name: "Alice".into(),
+            nip05: String::new(),
+            picture: String::new(),
+            about: String::new(),
+            created_at: 1_000,
+        };
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::ProfileSearchScanned {
+                generation: 1,
+                rows: vec![alice.clone()],
+            }),
+        );
+        assert_eq!(
+            state.profile_search_cache.len(),
+            1,
+            "A's scan (generation 1) must be accepted"
+        );
+        assert_eq!(state.profile_search_cache[0].name, "alice");
+
+        // Step 3: RunSearch(B) — generation bumps to 2 (supersedes A's in-flight scan).
+        let _ = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::RunSearch {
+                query: "bob".into(),
+                scope: SearchScope::Users,
+            }),
+        );
+        assert_eq!(
+            state.profile_search_generation, 2,
+            "second RunSearch must bump generation to 2"
+        );
+        // Cache cleared because query changed (query A → query B).
+        assert!(
+            state.profile_search_cache.is_empty(),
+            "cache must be cleared when query changes"
+        );
+
+        // Step 4: deliver A's stale scan (generation 1 — must be DROPPED).
+        let k_stale = nostr_sdk::prelude::Keys::generate();
+        let stale_bob = ProfileSearchRow {
+            pubkey: k_stale.public_key().to_hex(),
+            name: "stale-bob".into(),
+            display_name: "Stale Bob".into(),
+            nip05: String::new(),
+            picture: String::new(),
+            about: String::new(),
+            created_at: 3_000,
+        };
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::ProfileSearchScanned {
+                generation: 1, // A's old generation — stale
+                rows: vec![stale_bob],
+            }),
+        );
+
+        // Stale scan must NOT populate the cache; B's query is active.
+        assert!(
+            state.profile_search_cache.is_empty(),
+            "stale ProfileSearchScanned (generation 1 < current 2) must be DROPPED (D5)"
+        );
+        // Generation must not have been changed by the dropped event.
+        assert_eq!(state.profile_search_generation, 2);
+    }
+
+    // 7-SP-T-GEN-2: ProfileSearchScanned arriving after CloseView(Search) is dropped.
+    //
+    // CloseView(Search) in the actor_task clears the cache AND bumps the
+    // generation (this is the inline state mutation that `reduce()` does NOT
+    // handle — it lives in actor_task). The test directly applies the same
+    // mutations to verify the reducer's generation guard produces the right
+    // result: any ProfileSearchScanned with the pre-close generation must be
+    // silently dropped.
+    #[test]
+    fn stale_profile_scan_after_close_view_is_dropped() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+
+        // RunSearch → generation becomes 1.
+        let _ = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::RunSearch {
+                query: "nostr".into(),
+                scope: SearchScope::Users,
+            }),
+        );
+        assert_eq!(state.profile_search_generation, 1);
+
+        // Simulate the inline CloseView(Search) logic from actor_task:
+        // clear search state and bump the generation.
+        // (actor_task handles CloseView inline; the `reduce` path is a no-op
+        //  for CloseView so we apply the mutation directly in this unit test.)
+        let pre_close_generation = state.profile_search_generation;
+        state.search_results.clear();
+        state.search_query.clear();
+        state.profile_search_cache.clear();
+        state.profile_search_generation = state.profile_search_generation.wrapping_add(1);
+        assert_eq!(
+            state.profile_search_generation, 2,
+            "simulated CloseView(Search) must bump profile_search_generation to 2"
+        );
+
+        // In-flight scan arrives with generation 1 (pre-close) — must be dropped.
+        let k = nostr_sdk::prelude::Keys::generate();
+        let row = ProfileSearchRow {
+            pubkey: k.public_key().to_hex(),
+            name: "ghost".into(),
+            display_name: String::new(),
+            nip05: String::new(),
+            picture: String::new(),
+            about: String::new(),
+            created_at: 999,
+        };
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::ProfileSearchScanned {
+                generation: pre_close_generation, // pre-close generation — stale
+                rows: vec![row],
+            }),
+        );
+
+        assert!(
+            state.profile_search_cache.is_empty(),
+            "post-close stale ProfileSearchScanned must be DROPPED (D5)"
+        );
+        assert_eq!(state.profile_search_generation, 2, "generation unchanged");
     }
 
     // 7-SP-T12: cache is bounded-by-active-query (D5/D8) — a RunSearch with a

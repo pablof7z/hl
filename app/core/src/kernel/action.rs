@@ -861,7 +861,7 @@ pub enum AppAction {
     /// selects which event kinds to search (e.g. `LongForm`, `Users`).
     ///
     /// nmp-nip50 has NO action namespace — submission is via `push_interest`
-    /// (confirmed on pinned nmp b4404159, `crates/nmp-ffi/src/lib.rs:1828`).
+    /// (confirmed on pinned nmp d16aea60, `crates/nmp-ffi/src/lib.rs:1852`).
     /// Fire-and-forget (D6, Non-Negotiable #3): search hits arrive as
     /// `KernelEvent::SearchResultsUpdated` via the typed snapshot pipeline.
     RunSearch {
@@ -1486,5 +1486,12 @@ pub enum KernelEvent {
     ///
     /// Raw protocol rows only (D1). Bounded by the scan limit
     /// (`PROFILE_SEARCH_CACHE_SCAN_LIMIT`) — never unbounded (Non-Negotiable #7).
-    ProfileSearchScanned(Vec<crate::kernel::snapshot::ProfileSearchRow>),
+    ///
+    /// `generation` is captured from `AppState::profile_search_generation` at
+    /// the moment `Effect::RunSearch` is dispatched. The reducer drops this event
+    /// when `generation != state.profile_search_generation` (stale scan — D5).
+    ProfileSearchScanned {
+        generation: u64,
+        rows: Vec<crate::kernel::snapshot::ProfileSearchRow>,
+    },
 }

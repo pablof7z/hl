@@ -281,6 +281,17 @@ pub struct AppState {
     /// snapshot result list stays capped at `PROFILE_SEARCH_CAP` (20).
     pub profile_search_cache: Vec<crate::kernel::snapshot::ProfileSearchRow>,
 
+    /// Monotonically-increasing generation counter for async kind:0 profile scans.
+    ///
+    /// Bumped on every `AppAction::RunSearch` (a new query supersedes any in-flight
+    /// scan from a prior query) and on `ViewId::Search` close / `Logout` /
+    /// `IdentityChanged(None)` (after these, no in-flight scan should populate the
+    /// cache). The effect runner captures the generation at dispatch time and includes
+    /// it in `KernelEvent::ProfileSearchScanned { generation, .. }`. The reducer arm
+    /// for that event drops the batch when `event.generation != state.profile_search_generation`
+    /// (stale scan from a superseded or closed query — D5 active-view bounding).
+    pub profile_search_generation: u64,
+
     // ── Phase 4F additions ────────────────────────────────────────────────────
     /// Pull-cursor state for the article feed (kind:30023 over follows).
     ///
@@ -518,6 +529,7 @@ impl Default for AppState {
             search_query: String::new(),
             // ── Phase 7 (#1697 gate) additions ───────────────────────────────
             profile_search_cache: Vec::new(),
+            profile_search_generation: 0,
             // ── Phase 4F additions ────────────────────────────────────────────
             article_feed: crate::kernel::domains::feed::FeedState::default(),
             highlight_feed: crate::kernel::domains::feed::FeedState::default(),

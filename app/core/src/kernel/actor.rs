@@ -1164,13 +1164,27 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
         }
 
         // ── Phase 7 (#1697 gate): local kind:0 store scan completed ───────────
-        KernelEvent::ProfileSearchScanned(rows) => {
+        KernelEvent::ProfileSearchScanned { generation, rows } => {
             // The RunSearch effect runner scanned the kernel-owned EventStore for
             // kind:0 and decoded ProfileSearchRow items. Upsert them into the
             // profile_search_cache (dedup by pubkey, newest wins). This is the
             // sole production driver of the search profiles bucket — relay NIP-50
             // search never returns kind:0 under the articles/highlights scope.
             // Also injectable directly from tests via Cmd::Event (no live NmpApp).
+            //
+            // ── Generation guard (D5 active-view bounding, race guard) ─────────
+            // A new RunSearch or a CloseView(Search) / Logout / IdentityChanged
+            // advances `state.profile_search_generation`, making this event stale.
+            // Drop silently — the current query's scan will arrive (or already has)
+            // in a separate event with the current generation.
+            if generation != state.profile_search_generation {
+                tracing::trace!(
+                    event_generation = generation,
+                    state_generation = state.profile_search_generation,
+                    "ProfileSearchScanned: stale generation — dropped (D5)"
+                );
+                return vec![];
+            }
             search::merge_profile_search_rows(state, rows);
             vec![]
         }
@@ -1722,12 +1736,13 @@ pub(crate) async fn run_effect(
             query,
             scope_json,
             interest_id,
+            generation,
         } => {
             // Push the NIP-50 search interest and replace the hl-owned
             // SearchResultsProjection. Fire-and-forget (D6): search hits
             // arrive back as KernelEvent::SearchResultsUpdated via the NMP
             // snapshot callback. No-op if nmp is None (test mode).
-            search::run_effect_run_search(query, scope_json, interest_id, nmp, tx);
+            search::run_effect_run_search(query, scope_json, interest_id, generation, nmp, tx);
         }
 
         // ── Phase 4H additions (append-only) ─────────────────────────────────
@@ -2390,6 +2405,11 @@ pub(crate) async fn actor_task(
                     // store scan on the next RunSearch; clearing on close means
                     // it never grows unbounded across sessions.
                     state.profile_search_cache.clear();
+                    // ── Generation token: advance on close so any in-flight ───
+                    // async kind:0 scan event that arrives after this close is
+                    // recognised as stale and dropped (D5).
+                    state.profile_search_generation =
+                        state.profile_search_generation.wrapping_add(1);
                 }
                 lifecycle_effects.extend(search::lifecycle_effects_for_view_close(id));
                 // ── Phase 4G: article feed lifecycle — release cursor ────────────

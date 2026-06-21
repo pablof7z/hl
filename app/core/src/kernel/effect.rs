@@ -317,6 +317,12 @@ pub enum Effect {
         /// Stable `InterestId` u64 for this search session; allows the planner
         /// to dedup or replace the prior search interest on re-query.
         interest_id: u64,
+        /// Generation token captured from `AppState::profile_search_generation`
+        /// at reduce time. Included in the emitted
+        /// `KernelEvent::ProfileSearchScanned { generation, .. }` so the reducer
+        /// can drop stale scan results that arrive after a newer RunSearch or a
+        /// CloseView has advanced the counter (D5 active-view bounding).
+        generation: u64,
     },
 
     // ── Phase 4H additions (append-only) ─────────────────────────────────────
