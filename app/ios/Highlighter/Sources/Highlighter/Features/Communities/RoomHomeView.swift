@@ -67,7 +67,7 @@ struct RoomHomeView: View {
                 // GroupEventsProjection and pushes KernelRoomHomeSnapshot.
                 kernel.openRoomHome(groupId: groupId)
 
-                await room.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
+                room.start(groupId: groupId, kernel: kernel)
                 await chatPresenceProbe.start(
                     groupId: groupId,
                     hostRelayUrl: kernelRoomSnapshot?.hostRelayUrl ?? "",
@@ -77,6 +77,11 @@ struct RoomHomeView: View {
                         if selectedTab != .chat { chatUnread = true }
                     }
                 )
+            }
+            .onChange(of: kernel.roomHomeSnapshots[groupId]) { _, _ in
+                // Kernel pushed a new room-home snapshot (lanes/library/highlights/
+                // resolved artifact previews) — re-mirror into the view models.
+                room.applyKernelSnapshot()
             }
             .onChange(of: kernel.roomChatSnapshots[groupId]) { _, _ in
                 // Kernel pushed a new chat snapshot — re-evaluate room activity

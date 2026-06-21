@@ -47,23 +47,14 @@ final class DiscussionStore {
     /// shape the list renders (D1: kernel emits raw rows; Swift shapes the model).
     func applyKernelSnapshot() {
         guard let groupId, let snapshot = kernel?.roomDiscussions[groupId] else { return }
+        // Resolved thin previews for the a/e/i artifact references in these rows
+        // (discussion-chip #1). Keyed by canonical coordinate.
+        let previewsByCoord = Dictionary(
+            snapshot.artifactPreviews.map { ($0.coordinate, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         discussions = snapshot.rows.map { row in
-            // The kernel row carries the `r` URL attachment only. Reconstruct a
-            // URL-kind DiscussionAttachment so the existing chip renders; richer
-            // a/e/i artifact references are not in the kernel row (see note).
-            let attachment: DiscussionAttachment? = row.attachmentUrl.map { url in
-                DiscussionAttachment(
-                    referenceTagName: "r",
-                    referenceTagValue: url,
-                    referenceKind: "",
-                    url: url,
-                    title: "",
-                    author: "",
-                    image: "",
-                    summary: ""
-                )
-            }
-            return DiscussionRecord(
+            DiscussionRecord(
                 id: row.eventId,
                 eventId: row.eventId,
                 groupId: groupId,
@@ -72,8 +63,57 @@ final class DiscussionStore {
                 body: row.body,
                 summary: "",
                 createdAt: row.createdAt,
-                attachment: attachment
+                attachment: Self.attachment(for: row, previews: previewsByCoord)
             )
         }
+    }
+
+    /// Build the discussion's attachment chip. Prefers a RESOLVED rich artifact
+    /// preview (title/image/author) keyed by the row's `a`/`e`/`i` coordinate;
+    /// falls back to the bare `r` URL attachment when no coordinate resolves
+    /// (preview pending or URL-only share). The chip projection
+    /// (`attachment_projection`) labels with `title` when present, else `url`.
+    private static func attachment(
+        for row: DiscussionRow,
+        previews: [String: ArtifactPreviewRow]
+    ) -> DiscussionAttachment? {
+        if let coordinate = row.artifactCoordinate,
+           let preview = previews[coordinate],
+           let title = preview.title, !title.isEmpty {
+            let (tagName, tagValue) = splitCoordinate(coordinate)
+            return DiscussionAttachment(
+                referenceTagName: tagName,
+                referenceTagValue: tagValue,
+                referenceKind: "",
+                url: preview.displayUrl ?? row.attachmentUrl ?? "",
+                title: title,
+                author: preview.authorPubkey ?? "",
+                image: preview.imageUrl ?? "",
+                summary: preview.summary ?? ""
+            )
+        }
+        // Fall back to the bare URL attachment.
+        return row.attachmentUrl.map { url in
+            DiscussionAttachment(
+                referenceTagName: "r",
+                referenceTagValue: url,
+                referenceKind: "",
+                url: url,
+                title: "",
+                author: "",
+                image: "",
+                summary: ""
+            )
+        }
+    }
+
+    /// Split a canonical coordinate (`"a:30023:pk:d"`, `"i:isbn:…"`, `"r:url"`)
+    /// into its tag name and value on the first `:`.
+    private static func splitCoordinate(_ coordinate: String) -> (String, String) {
+        guard let idx = coordinate.firstIndex(of: ":") else { return ("", coordinate) }
+        return (
+            String(coordinate[..<idx]),
+            String(coordinate[coordinate.index(after: idx)...])
+        )
     }
 }
