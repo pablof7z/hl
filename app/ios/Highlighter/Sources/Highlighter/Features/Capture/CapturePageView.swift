@@ -17,6 +17,10 @@ struct CapturePageView: View {
     let onDismiss: () -> Void
 
     @Environment(HighlighterStore.self) private var appStore
+    /// Phase 7: capture draft/OCR is kernel-owned; the canvas mirrors
+    /// `kernel.captureSnapshot.selectableWords` so word indices align with
+    /// `captureSelectWord`.
+    @Environment(HighlighterAppKernel.self) private var kernel
 
     private enum CropDragMode: Equatable {
         case move
@@ -82,7 +86,10 @@ struct CapturePageView: View {
         }
         .onAppear { setupLines() }
         .onAppear { triggerSpringIfReady() }
-        .onChange(of: store.ocrLines) { _, lines in rebuildSelectionTargets(from: lines) }
+        .onChange(of: kernel.captureSnapshot) { _, _ in
+            store.applyKernelSnapshot()
+            selectableWords = store.selectableWords
+        }
         .onChange(of: store.thumbnail) { old, new in
             guard new != nil else { return }
             if old == nil {
@@ -99,11 +106,9 @@ struct CapturePageView: View {
     }
 
     private func setupLines() {
-        rebuildSelectionTargets(from: store.ocrLines)
-    }
-
-    private func rebuildSelectionTargets(from lines: [OCRLine]) {
-        selectableWords = appStore.safeCore.selectableOcrWords(from: lines)
+        // Mirror the kernel's selectable words so selection indices align with
+        // `captureSelectWord` (the kernel is the OCR authority).
+        selectableWords = store.selectableWords
     }
 
     private func triggerSpringIfReady() {
@@ -512,10 +517,12 @@ struct CapturePageView: View {
             return
         }
         let selected = Array(selectableWords[range])
-        let quote = appStore.safeCore.joinOcrQuote(selected)
 
-        // Keep selectionRange so the yellow highlight stays visible.
-        store.stashHighlight(quote: quote, context: "", selectedBoxes: selected.map { $0.bbox.cgRect })
+        // Keep selectionRange so the yellow highlight stays visible. The kernel
+        // builds the draft quote from the selected word INDICES (the indices into
+        // the kernel's `selectableWords`, which this canvas mirrors); native
+        // crops/annotates the boxes for the uploaded image.
+        store.stashHighlight(wordIndices: Array(range), selectedBoxes: selected.map { $0.bbox.cgRect })
     }
 
     private func clearHighlightSelection() {

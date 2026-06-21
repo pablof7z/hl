@@ -22,13 +22,15 @@ private struct CaptureFlowModifier: ViewModifier {
     let preselectedGroupId: String?
 
     @Environment(HighlighterStore.self) private var appStore
+    /// Phase 7: capture is kernel-backed (OCR/draft/publish via the kernel).
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var store: CaptureStore?
 
     func body(content: Content) -> some View {
         content
             .task {
                 if store == nil {
-                    store = CaptureStore(safeCore: appStore.safeCore)
+                    store = CaptureStore(safeCore: appStore.safeCore, kernel: kernel)
                 }
             }
             .fullScreenCover(isPresented: cameraBinding) {
