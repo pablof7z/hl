@@ -59730,6 +59730,26 @@ fileprivate func uniffiFutureContinuationCallback(handle: UInt64, pollResult: In
     }
 }
 /**
+ * Serialize an `ArtifactPreview` for `hl.capture.set_artifact_preview`.
+ */
+public func captureArtifactPreviewJson(preview: ArtifactPreview) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_capture_artifact_preview_json(
+        FfiConverterTypeArtifactPreview_lower(preview),$0
+    )
+})
+}
+/**
+ * Serialize an `ArtifactRecord` for `hl.capture.set_artifact_record`.
+ */
+public func captureArtifactRecordJson(artifact: ArtifactRecord) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_capture_artifact_record_json(
+        FfiConverterTypeArtifactRecord_lower(artifact),$0
+    )
+})
+}
+/**
  * NIP-65 (kind:10002) role string for a relay's read/write flags, or `None` when
  * the relay must be OMITTED from kind:10002 (neither read nor write — a
  * rooms/indexer-only relay, which lives only in the kind:30078 app-data).
@@ -59763,6 +59783,12 @@ private let initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_highlighter_core_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_capture_artifact_preview_json() != 61435) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_capture_artifact_record_json() != 33914) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_func_nip65_relay_role() != 11383) {
         return InitializationResult.apiChecksumMismatch

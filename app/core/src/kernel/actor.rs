@@ -495,7 +495,8 @@ fn reduce_action_envelope(
     use crate::kernel::action::{
         AddBookmarkPayload, AddRelayPayload, AddRoomMemberPayload, AudioPlayPayload,
         AudioSeekPayload, AudioSetResumePayload, BlossomUploadPayload, CaptureSelectWordPayload,
-        CaptureSetContextPayload, CaptureSetNotePayload, CaptureSetQuotePayload,
+        CaptureSetArtifactPreviewPayload, CaptureSetArtifactRecordPayload, CaptureSetContextPayload,
+        CaptureSetNotePayload, CaptureSetQuotePayload,
         CaptureSetTargetGroupPayload, ClaimProfilePayload, ClipExtendSegmentPayload,
         ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload, ClipSetStartPayload,
         CreateAccountPayload, CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload,
@@ -809,6 +810,39 @@ fn reduce_action_envelope(
             capture_draft::reduce_action_set_target_group(state, p.group_id, now)
         }
         "hl.capture.clear_target_group" => capture_draft::reduce_action_clear_target_group(state),
+        "hl.capture.set_artifact_record" => {
+            let p = parse!(CaptureSetArtifactRecordPayload);
+            let artifact = match serde_json::from_str::<crate::kernel::models::ArtifactRecord>(
+                &p.artifact_json,
+            ) {
+                Ok(a) => a,
+                Err(e) => {
+                    return emit_invalid_action_toast(
+                        state,
+                        format!("hl.capture.set_artifact_record: bad artifact_json: {e}"),
+                        now,
+                    );
+                }
+            };
+            capture_draft::reduce_action_set_artifact_record(state, artifact)
+        }
+        "hl.capture.set_artifact_preview" => {
+            let p = parse!(CaptureSetArtifactPreviewPayload);
+            let preview = match serde_json::from_str::<crate::kernel::models::ArtifactPreview>(
+                &p.preview_json,
+            ) {
+                Ok(a) => a,
+                Err(e) => {
+                    return emit_invalid_action_toast(
+                        state,
+                        format!("hl.capture.set_artifact_preview: bad preview_json: {e}"),
+                        now,
+                    );
+                }
+            };
+            capture_draft::reduce_action_set_artifact_preview(state, preview)
+        }
+        "hl.capture.clear_artifact" => capture_draft::reduce_action_clear_artifact(state),
         "hl.capture.publish" => capture_draft::reduce_action_publish(state, now),
         "hl.capture.reset" => capture_draft::reduce_action_reset(state),
 

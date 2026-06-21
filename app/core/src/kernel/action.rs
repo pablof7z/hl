@@ -341,6 +341,18 @@ pub(crate) struct CaptureSelectWordPayload {
 pub(crate) struct CaptureSetTargetGroupPayload {
     pub group_id: String,
 }
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CaptureSetArtifactRecordPayload {
+    /// serde-JSON of an `ArtifactRecord` (an already-published kind:11 book the
+    /// highlight/picture references). Mirrors the audio/clip `artifact_json` pattern.
+    pub artifact_json: String,
+}
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CaptureSetArtifactPreviewPayload {
+    /// serde-JSON of an `ArtifactPreview` (a pending book — published kind:11-first
+    /// on the pending-book path).
+    pub preview_json: String,
+}
 
 // ── Phase 5G payload structs ─────────────────────────────────────────────────
 
