@@ -37034,6 +37034,172 @@ public func FfiConverterTypeProfileRelationshipProjectionInput_lower(_ value: Pr
 
 
 /**
+ * One kind:0 profile row for the Search screen profiles bucket.
+ *
+ * Derived from `AppState::profile_search_cache` via `project_profile_search_rows`
+ * (same local-scan algorithm as `crate::search::search_profiles`). Raw protocol
+ * fields only (D1 / ADR-0032): Swift formats all display strings, avatar
+ * initials, NIP-05 labels, etc. No `"npub"` encoding, no fallback strings.
+ *
+ * `created_at` is the kind:0 event's UNIX-second timestamp. Kernel uses it to
+ * deduplicate replaceable events (newest wins); Swift may render a "last active"
+ * label from the raw value.
+ *
+ * Append-only: new fields at the bottom keep rebases mechanical.
+ */
+public struct ProfileSearchRow {
+    /**
+     * 64-character hex pubkey. Swift formats bech32 `npub` for display.
+     */
+    public var pubkey: String
+    /**
+     * `name` field from kind:0 content JSON (trimmed). May be empty.
+     */
+    public var name: String
+    /**
+     * `display_name` / `displayName` / `displayname` from kind:0 content JSON (trimmed).
+     */
+    public var displayName: String
+    /**
+     * `nip05` verification address from kind:0 content JSON (trimmed).
+     */
+    public var nip05: String
+    /**
+     * `picture` or `image` URL from kind:0 content JSON (trimmed).
+     */
+    public var picture: String
+    /**
+     * `about` biography from kind:0 content JSON (trimmed).
+     */
+    public var about: String
+    /**
+     * Event creation timestamp as Unix seconds. D1: Swift formats dates.
+     */
+    public var createdAt: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * 64-character hex pubkey. Swift formats bech32 `npub` for display.
+         */pubkey: String,
+        /**
+         * `name` field from kind:0 content JSON (trimmed). May be empty.
+         */name: String,
+        /**
+         * `display_name` / `displayName` / `displayname` from kind:0 content JSON (trimmed).
+         */displayName: String,
+        /**
+         * `nip05` verification address from kind:0 content JSON (trimmed).
+         */nip05: String,
+        /**
+         * `picture` or `image` URL from kind:0 content JSON (trimmed).
+         */picture: String,
+        /**
+         * `about` biography from kind:0 content JSON (trimmed).
+         */about: String,
+        /**
+         * Event creation timestamp as Unix seconds. D1: Swift formats dates.
+         */createdAt: UInt64) {
+        self.pubkey = pubkey
+        self.name = name
+        self.displayName = displayName
+        self.nip05 = nip05
+        self.picture = picture
+        self.about = about
+        self.createdAt = createdAt
+    }
+}
+
+#if compiler(>=6)
+extension ProfileSearchRow: Sendable {}
+#endif
+
+
+extension ProfileSearchRow: Equatable, Hashable {
+    public static func ==(lhs: ProfileSearchRow, rhs: ProfileSearchRow) -> Bool {
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.displayName != rhs.displayName {
+            return false
+        }
+        if lhs.nip05 != rhs.nip05 {
+            return false
+        }
+        if lhs.picture != rhs.picture {
+            return false
+        }
+        if lhs.about != rhs.about {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(pubkey)
+        hasher.combine(name)
+        hasher.combine(displayName)
+        hasher.combine(nip05)
+        hasher.combine(picture)
+        hasher.combine(about)
+        hasher.combine(createdAt)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeProfileSearchRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfileSearchRow {
+        return
+            try ProfileSearchRow(
+                pubkey: FfiConverterString.read(from: &buf),
+                name: FfiConverterString.read(from: &buf),
+                displayName: FfiConverterString.read(from: &buf),
+                nip05: FfiConverterString.read(from: &buf),
+                picture: FfiConverterString.read(from: &buf),
+                about: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ProfileSearchRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterString.write(value.displayName, into: &buf)
+        FfiConverterString.write(value.nip05, into: &buf)
+        FfiConverterString.write(value.picture, into: &buf)
+        FfiConverterString.write(value.about, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileSearchRow_lift(_ buf: RustBuffer) throws -> ProfileSearchRow {
+    return try FfiConverterTypeProfileSearchRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeProfileSearchRow_lower(_ value: ProfileSearchRow) -> RustBuffer {
+    return FfiConverterTypeProfileSearchRow.lower(value)
+}
+
+
+/**
  * Snapshot for `ViewId::Profile{pubkey}` — the profile detail view.
  *
  * Raw `ProfileCardModel` fields + relationship + communities (Phase 3D scope).
@@ -46750,10 +46916,12 @@ public func FfiConverterTypeSearchScheduleProjection_lower(_ value: SearchSchedu
  * Raw protocol data only (D1): Swift formats all display strings.
  * Bounded by `SearchResultsProjection`'s `max_hits` cap
  * (default `DEFAULT_MAX_SEARCH_HITS = 200` from nmp-nip50 — Non-Negotiable #7)
- * for `hits`; `communities` is bounded at 20 (COMMUNITY_SEARCH_CAP in search.rs).
+ * for `hits`; `communities` is bounded at 20 (COMMUNITY_SEARCH_CAP in search.rs);
+ * `profiles` is bounded at 20 (PROFILE_SEARCH_CAP in search domain).
  *
- * Append-only: `communities` is the Phase 7 gate #4 addition.
- * Profile rows are deferred to nmp #1697.
+ * Append-only: `communities` is the Phase 7 gate #4 addition;
+ * `highlights` is the Phase 7 highlights-bucket addition;
+ * `profiles` is the Phase 7 (#1697 gate) profiles-bucket addition.
  */
 public struct SearchSnapshot {
     /**
@@ -46779,6 +46947,15 @@ public struct SearchSnapshot {
      * Empty when no kind:9802 hits are present.
      */
     public var highlights: [HighlightRow]
+    /**
+     * Local-scan kind:0 profile results from `AppState::profile_search_cache`.
+     * Substring-matched by name/display_name/nip05/about against `search_query`;
+     * ranked prefix-match first, then alphabetical by primary label; bounded at 20.
+     * Same algorithm as `crate::search::search_profiles` (bespoke live lane).
+     * Empty when the query is blank or no profiles match.
+     * D1: raw rows only — Swift renders all display strings.
+     */
+    public var profiles: [ProfileSearchRow]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -46802,10 +46979,19 @@ public struct SearchSnapshot {
          * refs/clip/image). Preserves the `hits` order (created_at desc). Lets Swift
          * render the Highlights search bucket without re-parsing kind:9802 tags.
          * Empty when no kind:9802 hits are present.
-         */highlights: [HighlightRow]) {
+         */highlights: [HighlightRow],
+        /**
+         * Local-scan kind:0 profile results from `AppState::profile_search_cache`.
+         * Substring-matched by name/display_name/nip05/about against `search_query`;
+         * ranked prefix-match first, then alphabetical by primary label; bounded at 20.
+         * Same algorithm as `crate::search::search_profiles` (bespoke live lane).
+         * Empty when the query is blank or no profiles match.
+         * D1: raw rows only — Swift renders all display strings.
+         */profiles: [ProfileSearchRow]) {
         self.hits = hits
         self.communities = communities
         self.highlights = highlights
+        self.profiles = profiles
     }
 }
 
@@ -46825,6 +47011,9 @@ extension SearchSnapshot: Equatable, Hashable {
         if lhs.highlights != rhs.highlights {
             return false
         }
+        if lhs.profiles != rhs.profiles {
+            return false
+        }
         return true
     }
 
@@ -46832,6 +47021,7 @@ extension SearchSnapshot: Equatable, Hashable {
         hasher.combine(hits)
         hasher.combine(communities)
         hasher.combine(highlights)
+        hasher.combine(profiles)
     }
 }
 
@@ -46846,7 +47036,8 @@ public struct FfiConverterTypeSearchSnapshot: FfiConverterRustBuffer {
             try SearchSnapshot(
                 hits: FfiConverterSequenceTypeKernelSearchHitRow.read(from: &buf),
                 communities: FfiConverterSequenceTypeCommunitySearchRow.read(from: &buf),
-                highlights: FfiConverterSequenceTypeHighlightRow.read(from: &buf)
+                highlights: FfiConverterSequenceTypeHighlightRow.read(from: &buf),
+                profiles: FfiConverterSequenceTypeProfileSearchRow.read(from: &buf)
         )
     }
 
@@ -46854,6 +47045,7 @@ public struct FfiConverterTypeSearchSnapshot: FfiConverterRustBuffer {
         FfiConverterSequenceTypeKernelSearchHitRow.write(value.hits, into: &buf)
         FfiConverterSequenceTypeCommunitySearchRow.write(value.communities, into: &buf)
         FfiConverterSequenceTypeHighlightRow.write(value.highlights, into: &buf)
+        FfiConverterSequenceTypeProfileSearchRow.write(value.profiles, into: &buf)
     }
 }
 
@@ -59685,6 +59877,31 @@ fileprivate struct FfiConverterSequenceTypeProfileMetadata: FfiConverterRustBuff
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeProfileMetadata.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeProfileSearchRow: FfiConverterRustBuffer {
+    typealias SwiftType = [ProfileSearchRow]
+
+    public static func write(_ value: [ProfileSearchRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeProfileSearchRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ProfileSearchRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ProfileSearchRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeProfileSearchRow.read(from: &buf))
         }
         return seq
     }

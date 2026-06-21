@@ -259,6 +259,39 @@ pub struct AppState {
     /// field is always a trimmed non-empty string or the empty string (default).
     pub search_query: String,
 
+    // ── Phase 7 (#1697 gate) additions ───────────────────────────────────────
+    /// Kind:0 profile rows scanned for the ACTIVE search query.
+    ///
+    /// Populated by `search::merge_profile_search_rows` from two sources that
+    /// share one dedup (D4): the local kind:0 store scan
+    /// (`KernelEvent::ProfileSearchScanned`, the production driver — relay NIP-50
+    /// search runs the articles/highlights scope and never returns kind:0) and
+    /// any kind:0 hits in `KernelEvent::SearchResultsUpdated`. Deduplicated by
+    /// pubkey (newest `created_at` wins, same as bespoke `search_profiles`).
+    ///
+    /// `project_profile_search_rows` scans this cache against `search_query` to
+    /// populate `SearchSnapshot::profiles`.
+    ///
+    /// Bounded-by-active-view (D5/D8): cleared on query replacement
+    /// (`reduce_action_run_search` when the query changes) and on `ViewId::Search`
+    /// close (inline in actor `Cmd::CloseView`), so it holds only the current
+    /// query's results and never grows unbounded across search sessions. Also
+    /// cleared on `Logout` / `IdentityChanged(None)` so stale profiles from the
+    /// departing account's searches do not surface under the next identity. The
+    /// snapshot result list stays capped at `PROFILE_SEARCH_CAP` (20).
+    pub profile_search_cache: Vec<crate::kernel::snapshot::ProfileSearchRow>,
+
+    /// Monotonically-increasing generation counter for async kind:0 profile scans.
+    ///
+    /// Bumped on every `AppAction::RunSearch` (a new query supersedes any in-flight
+    /// scan from a prior query) and on `ViewId::Search` close / `Logout` /
+    /// `IdentityChanged(None)` (after these, no in-flight scan should populate the
+    /// cache). The effect runner captures the generation at dispatch time and includes
+    /// it in `KernelEvent::ProfileSearchScanned { generation, .. }`. The reducer arm
+    /// for that event drops the batch when `event.generation != state.profile_search_generation`
+    /// (stale scan from a superseded or closed query — D5 active-view bounding).
+    pub profile_search_generation: u64,
+
     // ── Phase 4F additions ────────────────────────────────────────────────────
     /// Pull-cursor state for the article feed (kind:30023 over follows).
     ///
@@ -494,6 +527,9 @@ impl Default for AppState {
             // ── Phase 4D additions ────────────────────────────────────────────
             search_results: Vec::new(),
             search_query: String::new(),
+            // ── Phase 7 (#1697 gate) additions ───────────────────────────────
+            profile_search_cache: Vec::new(),
+            profile_search_generation: 0,
             // ── Phase 4F additions ────────────────────────────────────────────
             article_feed: crate::kernel::domains::feed::FeedState::default(),
             highlight_feed: crate::kernel::domains::feed::FeedState::default(),

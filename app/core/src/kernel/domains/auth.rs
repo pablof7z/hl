@@ -129,6 +129,14 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     // stale query text from the prior account does not survive into the next
     // session and produce phantom community results.
     state.search_query.clear();
+    // ── Phase 7 (#1697 gate): clear profile search cache on logout ───────────
+    // AppState::profile_search_cache holds kind:0 profiles seen during the
+    // departing account's search sessions. Wipe so stale profiles don't surface
+    // under the next identity.
+    state.profile_search_cache.clear();
+    // Advance the generation so any in-flight ProfileSearchScanned event from
+    // the departing session is dropped by the reducer's generation guard (D5).
+    state.profile_search_generation = state.profile_search_generation.wrapping_add(1);
     // ── Phase 4F: clear feed-pull state on logout ─────────────────────────────
     // FeedState rows and cursors belong to the departing account's subscriptions.
     // Wipe so stale feed rows don't surface for the next account. cursor_id is
@@ -220,6 +228,11 @@ pub(crate) fn reduce_event_identity_changed(
             state.search_results.clear();
             // ── Phase 7 (gate #4): clear search query on account removal ─────
             state.search_query.clear();
+            // ── Phase 7 (#1697 gate): clear profile search cache on identity loss
+            state.profile_search_cache.clear();
+            // Advance the generation so any in-flight ProfileSearchScanned event
+            // from the departing account's session is dropped (D5).
+            state.profile_search_generation = state.profile_search_generation.wrapping_add(1);
             // ── Phase 4F: clear feed-pull state on account removal ────────────
             clear_feed_state_on_identity_lost(state);
             // ── Phase 7 feedback: clear UI-lifecycle state on identity loss ───

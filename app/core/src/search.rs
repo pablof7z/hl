@@ -7,7 +7,11 @@
 //! - kind:9802 highlights — quote + note
 //! - kind:30023 articles — title + summary + hashtags
 //! - kind:39000 communities — name + about
-//! - kind:0 profiles — name + display_name + nip05
+//!
+//! The kind:0 profiles bucket is kernel-owned (#1697): the people results are
+//! driven by the kernel's local kind:0 `EventStore` scan
+//! (`crate::kernel::domains::search::scan_local_profiles`). The bespoke
+//! `search_profiles` below survives only as the `#[cfg(test)]` parity oracle.
 //!
 //! Relay-side search is a `SubscriptionKind::SearchArticles` in
 //! `subscriptions.rs`; this module only provides the local reads and the
@@ -25,6 +29,8 @@ use crate::groups::KIND_GROUP_METADATA;
 use crate::models::{
     ArticleReaderRoute, ArticleRecord, CommunitySummary, HighlightRecord, ProfileMetadata,
 };
+/// Test-only: used by the `search_profiles` parity oracle (#1697).
+#[cfg(test)]
 use crate::profile;
 use crate::relays::highlighter_relay;
 
@@ -32,7 +38,9 @@ use crate::relays::highlighter_relay;
 pub const KIND_SEARCH_RELAYS: u16 = 10007;
 /// kind:9802 NIP-84 highlight.
 const KIND_HIGHLIGHT: u16 = 9802;
-/// kind:0 NIP-01 profile metadata.
+/// kind:0 NIP-01 profile metadata. Test-only: the profiles bucket is kernel-
+/// owned (#1697); `search_profiles` survives only as the parity oracle.
+#[cfg(test)]
 const KIND_METADATA: u16 = 0;
 
 /// Main search screen section limits. Native shells render these buckets but
@@ -40,6 +48,9 @@ const KIND_METADATA: u16 = 0;
 pub const SEARCH_HIGHLIGHT_RESULTS_LIMIT: u32 = 30;
 pub const SEARCH_ARTICLE_RESULTS_LIMIT: u32 = 30;
 pub const SEARCH_COMMUNITY_RESULTS_LIMIT: u32 = 20;
+/// Test-only: the profiles bucket is kernel-owned (#1697); the bespoke
+/// `search_profiles` survives only as the `#[cfg(test)]` parity oracle.
+#[cfg(test)]
 pub const SEARCH_PROFILE_RESULTS_LIMIT: u32 = 20;
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -621,6 +632,15 @@ pub fn search_communities(
 
 // -- Profiles ----------------------------------------------------------------
 
+/// Local kind:0 profile scan over nostrdb.
+///
+/// Test-only parity ORACLE (#1697): the production profiles bucket is now
+/// kernel-owned — driven by the kernel's local kind:0 `EventStore` scan
+/// (`crate::kernel::domains::search::scan_local_profiles`). This bespoke scan is
+/// retained ONLY so `parity_profile_scan_matches_bespoke_algorithm` can prove
+/// the kernel port returns identical consumer fields on the same fixture (D4:
+/// one production source; this is not a second live read path).
+#[cfg(test)]
 pub fn search_profiles(
     ndb: &Ndb,
     query: &str,
@@ -707,10 +727,12 @@ pub fn search_results_snapshot(ndb: &Ndb, query: &str) -> SearchResultsSnapshot 
             "communities",
             search_communities(ndb, q, SEARCH_COMMUNITY_RESULTS_LIMIT),
         ),
-        profiles: search_section_or_empty(
-            "profiles",
-            search_profiles(ndb, q, SEARCH_PROFILE_RESULTS_LIMIT),
-        ),
+        // Profiles bucket is kernel-owned (#1697): the people results are driven
+        // by the kernel's local kind:0 store scan (`scan_local_profiles` →
+        // `SearchSnapshot::profiles`), NOT this bespoke nostrdb scan. There is
+        // exactly ONE production source (D4). The bespoke `search_profiles`
+        // survives only as the `#[cfg(test)]` parity oracle.
+        profiles: Vec::new(),
     }
 }
 
@@ -752,6 +774,7 @@ fn search_section_or_empty<T>(section: &'static str, result: Result<Vec<T>, Core
     }
 }
 
+#[cfg(test)]
 fn primary_label(p: &ProfileMetadata) -> &str {
     if !p.display_name.is_empty() {
         &p.display_name
@@ -1384,7 +1407,10 @@ mod tests {
         assert_eq!(snapshot.highlights.len(), 1);
         assert_eq!(snapshot.articles.len(), 1);
         assert_eq!(snapshot.communities.len(), 1);
-        assert_eq!(snapshot.profiles.len(), 1);
+        // Profiles bucket is kernel-owned (#1697): this bespoke snapshot no
+        // longer populates it (single production source = kernel local kind:0
+        // scan). The kind:0 fixture event above is intentionally ignored here.
+        assert!(snapshot.profiles.is_empty());
 
         let article_snapshot = search_article_results_snapshot(&ndb, "attention");
         assert_eq!(

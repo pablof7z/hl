@@ -109,8 +109,10 @@ final class HighlighterAppKernel {
     /// NIP-50 search snapshot. `nil` until the `ViewId.search` view is open.
     /// Carries the raw relay hits + the kernel-decoded highlight rows + the
     /// local communities bucket (Phase 7). SearchStore buckets `hits` by kind for
-    /// articles, reads `highlights` directly, and `communities` directly; the
-    /// profiles bucket stays on the live lane (nmp #1697).
+    /// articles, reads `highlights` directly, `communities` directly, and
+    /// `profiles` directly (all four buckets now come from `SearchSnapshot` —
+    /// the profiles bucket is driven by the local kind:0 store scan, not the
+    /// live lane; nmp #1697).
     private(set) var searchSnapshot: SearchSnapshot?
 
     /// NIP-51 kind:10003 bookmarks snapshot. `nil` until the `ViewId.bookmarks`

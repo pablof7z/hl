@@ -861,7 +861,7 @@ pub enum AppAction {
     /// selects which event kinds to search (e.g. `LongForm`, `Users`).
     ///
     /// nmp-nip50 has NO action namespace — submission is via `push_interest`
-    /// (confirmed on pinned nmp b4404159, `crates/nmp-ffi/src/lib.rs:1828`).
+    /// (confirmed on pinned nmp d16aea60, `crates/nmp-ffi/src/lib.rs:1852`).
     /// Fire-and-forget (D6, Non-Negotiable #3): search hits arrive as
     /// `KernelEvent::SearchResultsUpdated` via the typed snapshot pipeline.
     RunSearch {
@@ -1468,5 +1468,30 @@ pub enum KernelEvent {
         author_pubkey: Option<String>,
         /// Summary / description. `None` when absent.
         summary: Option<String>,
+    },
+
+    // ── Phase 7 (#1697 gate) additions (append-only) ─────────────────────────
+    /// A local kind:0 scan of the kernel-owned `EventStore` completed for the
+    /// active search query.
+    ///
+    /// Produced by the `Effect::RunSearch` runner (`run_effect_run_search`),
+    /// which scans the published `EventStore` for kind:0 events via
+    /// `EventStore::scan_by_kind_time(&[0], …)` and decodes each into a
+    /// `ProfileSearchRow`. The reducer upserts these into
+    /// `AppState::profile_search_cache` (dedup by pubkey, newest wins). This is
+    /// the SOLE production driver of the search profiles bucket — relay NIP-50
+    /// search runs the articles/highlights scope (no kind:0), so the local store
+    /// scan is what populates the people results (replacing the bespoke
+    /// `crate::search::search_profiles` nostrdb scan — D4 single source).
+    ///
+    /// Raw protocol rows only (D1). Bounded by the scan limit
+    /// (`PROFILE_SEARCH_CACHE_SCAN_LIMIT`) — never unbounded (Non-Negotiable #7).
+    ///
+    /// `generation` is captured from `AppState::profile_search_generation` at
+    /// the moment `Effect::RunSearch` is dispatched. The reducer drops this event
+    /// when `generation != state.profile_search_generation` (stale scan — D5).
+    ProfileSearchScanned {
+        generation: u64,
+        rows: Vec<crate::kernel::snapshot::ProfileSearchRow>,
     },
 }
