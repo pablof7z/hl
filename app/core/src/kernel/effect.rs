@@ -288,7 +288,7 @@ pub enum Effect {
     ///      lifecycle: OneShot, scope: ActiveAccount, id: InterestId(search_id), .. })`
     ///      to cause the planner to issue NIP-50 REQ frames on connected
     ///      search-capable relays. nmp-nip50 has NO action namespace —
-    ///      submission is via `push_interest` (confirmed b4404159
+    ///      submission is via `push_interest` (confirmed d16aea60
     ///      `crates/nmp-ffi/src/lib.rs:1828`).
     ///   2. Replaces the hl-owned `SearchResultsProjection` registered under
     ///      typed snapshot key `"hl.search"` with a fresh instance seeded from

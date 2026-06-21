@@ -439,7 +439,7 @@ pub(crate) const PROFILE_SEARCH_CACHE_SCAN_LIMIT: usize = 2048;
 
 /// Scan the kernel-owned `EventStore` for kind:0 profiles matching `query`.
 ///
-/// Reads the published `EventStore` via `scan_by_kind_time(&[0], …)` (newest-
+/// Reads the published `EventStore` via `query(StoreQuery::KindTime { kinds: [0], … })` (newest-
 /// first), decodes each into a `ProfileSearchRow`, and keeps only those whose
 /// name/display_name/nip05/about contains the query (case-insensitive). The
 /// store is newest-first, so the first row seen per pubkey is the freshest

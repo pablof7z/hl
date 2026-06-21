@@ -1476,7 +1476,7 @@ pub enum KernelEvent {
     ///
     /// Produced by the `Effect::RunSearch` runner (`run_effect_run_search`),
     /// which scans the published `EventStore` for kind:0 events via
-    /// `EventStore::scan_by_kind_time(&[0], …)` and decodes each into a
+    /// `EventStore::query(StoreQuery::KindTime { kinds: [0], … })` and decodes each into a
     /// `ProfileSearchRow`. The reducer upserts these into
     /// `AppState::profile_search_cache` (dedup by pubkey, newest wins). This is
     /// the SOLE production driver of the search profiles bucket — relay NIP-50
