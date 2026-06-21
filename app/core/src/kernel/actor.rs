@@ -1247,19 +1247,24 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
             }
 
             // Room-home aggregation: seed artifact_previews for kind:11 events
-            // in the room lane so the next snapshot can attach previews.
-            if key.starts_with(room_home::ROOM_LANE_FEED_KEY_PREFIX) {
-                let group_id = key.trim_start_matches(room_home::ROOM_LANE_FEED_KEY_PREFIX);
-                let group_id = group_id.to_string();
-                room_home::ensure_room_artifact_previews(state, &group_id);
-            }
+            // in the room lane. Propagate the ResolveArtifactCoordinate effects so
+            // unresolved previews actually fetch (they were previously discarded).
+            let room_lane_preview_effects: Vec<Effect> =
+                if key.starts_with(room_home::ROOM_LANE_FEED_KEY_PREFIX) {
+                    let group_id = key
+                        .trim_start_matches(room_home::ROOM_LANE_FEED_KEY_PREFIX)
+                        .to_string();
+                    room_home::ensure_room_artifact_previews(state, &group_id)
+                } else {
+                    vec![]
+                };
 
             // Note: AdvancePullCursor is sent from the inline effect handler in
             // actor_task (after run_effect for DrainFeed) rather than here,
             // because we need the NmpHandle which is not available in reduce_event
             // (a pure, synchronous function — D9). The inline handler calls
             // feed::advance_feed_cursor after the FeedPage event is processed.
-            vec![]
+            room_lane_preview_effects
         }
 
         // ── Phase 5K additions (append-only) ─────────────────────────────────
@@ -1385,7 +1390,16 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
             // Store bounded kind:11+discussion rows in AppState::room_discussions
             // keyed by group_id. Produced by DiscussionObserver (per open room)
             // or injected directly from tests via Cmd::Event. D1: raw rows only.
-            discussions::reduce_event_room_discussions_updated(state, group_id, rows)
+            let group_id_str = group_id.clone();
+            let mut e = discussions::reduce_event_room_discussions_updated(state, group_id, rows);
+            // Seed artifact_previews for a/e/i refs in discussion rows so the
+            // next snapshot can render the rich artifact chip. Propagate the
+            // ResolveArtifactCoordinate effects so previews actually fetch.
+            e.extend(room_home::ensure_room_artifact_previews(
+                state,
+                &group_id_str,
+            ));
+            e
         }
 
         // ── Phase 7 artifact-preview additions (append-only) ─────────────────
