@@ -165,83 +165,278 @@ private struct TreeWalker {
     private var monoSmall: UIFont { UIFont.monospacedSystemFont(ofSize: max(11, bodyPointSize - 6), weight: .semibold) }
 
     func walk() -> [MarkdownRenderer.BodySegment] {
+        // The emitter is the single recursive surface. Block containers
+        // (blockQuote / list-item / any future container) recurse through
+        // `emitBlock`, which is what makes the renderer fully block-aware at
+        // arbitrary depth (#22). Prose blocks accumulate into a running
+        // selectable `NSMutableAttributedString`; rich blocks (image / media /
+        // standalone event-ref card / placeholder) FLUSH the text and append
+        // their own segment in document order — they cannot live inside an
+        // `NSAttributedString`, so a depth-recursive append-into-text scheme
+        // would drop them (the original bug). Driving the recursion from the
+        // segment layer preserves document order across nested rich blocks.
+        var emitter = SegmentEmitter()
+        for root in tree.roots {
+            guard let node = tree.node(at: root) else { continue }
+            emitBlock(node, into: &emitter, indent: 0)
+        }
+        emitter.flush()
+        return emitter.segments
+    }
+
+    /// Running accumulator for the hybrid output: a selectable prose buffer plus
+    /// the flushed rich-block segments, kept in document order.
+    private struct SegmentEmitter {
         var segments: [MarkdownRenderer.BodySegment] = []
         var currentText = NSMutableAttributedString()
 
-        func flush() {
+        /// Append prose (heading / paragraph / code block / rule / list rows /
+        /// quote prose) to the running selectable buffer.
+        mutating func appendProse(_ attr: NSAttributedString) {
+            currentText.append(attr)
+        }
+
+        /// Flush the running prose buffer, then append a rich segment so it
+        /// interleaves in document order with the surrounding prose.
+        mutating func appendRich(_ segment: MarkdownRenderer.BodySegment) {
+            flush()
+            segments.append(segment)
+        }
+
+        mutating func flush() {
             if currentText.length > 0 {
                 segments.append(.text(currentText))
                 currentText = NSMutableAttributedString()
             }
         }
-
-        for root in tree.roots {
-            guard let node = tree.node(at: root) else { continue }
-            switch node {
-            case .image(let alt, _, let src):
-                // Standalone image block → its own segment (SwiftUI card).
-                if let src, let url = URL(string: src) {
-                    flush()
-                    segments.append(.image(url: url, alt: alt))
-                } else {
-                    currentText.append(renderBlock(node))
-                }
-            case .media(let urls, let kind):
-                switch kind {
-                case .image:
-                    // Emit EVERY image URL as its own segment (the prior path
-                    // dropped all but the first). Faithfully renders multi-image
-                    // media blocks.
-                    let parsed = urls.compactMap(URL.init(string:))
-                    if parsed.isEmpty {
-                        currentText.append(renderBlock(node))
-                    } else {
-                        flush()
-                        for url in parsed {
-                            segments.append(.image(url: url, alt: ""))
-                        }
-                    }
-                case .video, .audio:
-                    // Video / audio → rich media segment; the reader reuses the
-                    // `NostrContentView` player / audio affordance.
-                    flush()
-                    segments.append(.media(urls: urls, kind: kind))
-                }
-            case .eventRef(let uri):
-                // Standalone event ref → resolving entity card (note / nevent /
-                // naddr). Fall back to a visible inline chip if undecodable.
-                if let ref = resolveEntity?(uri.uri) {
-                    flush()
-                    segments.append(.nostrEntity(ref))
-                } else {
-                    currentText.append(renderInlineNode(nodeOrSelf: node))
-                    currentText.append(NSAttributedString(string: "\n\n", attributes: [.font: serif]))
-                }
-            case .placeholder(let reason):
-                flush()
-                segments.append(.placeholder(reason: reason))
-            case .paragraph(let children):
-                // A paragraph that is exactly one event ref reads as a
-                // standalone embed — promote it to an entity card. Otherwise
-                // it stays selectable prose.
-                if children.count == 1,
-                   let only = tree.node(at: children[0]),
-                   case .eventRef(let uri) = only,
-                   let ref = resolveEntity?(uri.uri) {
-                    flush()
-                    segments.append(.nostrEntity(ref))
-                } else {
-                    currentText.append(renderBlock(node))
-                }
-            default:
-                currentText.append(renderBlock(node))
-            }
-        }
-        flush()
-        return segments
     }
 
-    // MARK: - Block rendering
+    // MARK: - Recursive block emission
+
+    /// Recursively emit ANY block node into the segment stream. This is the
+    /// convergence point: every block variant renders at every depth, whether
+    /// it sits at a root, inside a block-quote, or inside a list item.
+    ///
+    /// `indent` is the nesting depth (in container levels) used to indent prose
+    /// produced beneath block-quotes / list items so nested structure reads
+    /// visually. Rich segments are depth-agnostic (the reader renders them as
+    /// full-width slices) but still flush in correct document order.
+    private func emitBlock(_ node: NostrWireNode, into emitter: inout SegmentEmitter, indent: CGFloat) {
+        switch node {
+        // — Containers: recurse into their block children. —
+        case .blockQuote(let children):
+            for child in children {
+                guard let childNode = tree.node(at: child) else { continue }
+                emitBlock(childNode, into: &emitter, indent: indent + 1, quote: true)
+            }
+        case .list(let orderedStart, let items):
+            for (offset, itemChildren) in items.enumerated() {
+                let bullet: String
+                if let orderedStart {
+                    bullet = "\(orderedStart + UInt64(offset)). "
+                } else {
+                    bullet = "•  "
+                }
+                emitListItem(bullet: bullet, children: itemChildren, into: &emitter, indent: indent + 1)
+            }
+
+        // — Rich blocks: their own segment (flushes prose first). —
+        case .image(let alt, _, let src):
+            if let src, let url = URL(string: src) {
+                emitter.appendRich(.image(url: url, alt: alt))
+            } else {
+                emitter.appendProse(indentProse(renderBlock(node), indent: indent))
+            }
+        case .media(let urls, let kind):
+            switch kind {
+            case .image:
+                // Emit EVERY image URL as its own segment (not just the first).
+                let parsed = urls.compactMap(URL.init(string:))
+                if parsed.isEmpty {
+                    emitter.appendProse(indentProse(renderBlock(node), indent: indent))
+                } else {
+                    for url in parsed { emitter.appendRich(.image(url: url, alt: "")) }
+                }
+            case .video, .audio:
+                emitter.appendRich(.media(urls: urls, kind: kind))
+            }
+        case .eventRef(let uri):
+            if let ref = resolveEntity?(uri.uri) {
+                emitter.appendRich(.nostrEntity(ref))
+            } else {
+                let s = NSMutableAttributedString(attributedString: renderInlineNode(nodeOrSelf: node))
+                s.append(NSAttributedString(string: "\n\n", attributes: [.font: serif]))
+                emitter.appendProse(indentProse(s, indent: indent))
+            }
+        case .placeholder(let reason):
+            emitter.appendRich(.placeholder(reason: reason))
+
+        // — Paragraph: a lone event-ref paragraph promotes to a card. —
+        case .paragraph(let children):
+            if children.count == 1,
+               let only = tree.node(at: children[0]),
+               case .eventRef(let uri) = only,
+               let ref = resolveEntity?(uri.uri) {
+                emitter.appendRich(.nostrEntity(ref))
+            } else {
+                emitter.appendProse(indentProse(renderBlock(node), indent: indent))
+            }
+
+        // — Prose blocks + inline-as-block: straight into the prose buffer. —
+        default:
+            emitter.appendProse(indentProse(renderBlock(node), indent: indent))
+        }
+    }
+
+    /// Block-quote-flavoured recursion. A quote's block children render with the
+    /// quote's muted-italic styling AND recurse (so a nested list / code block /
+    /// rule / image inside a quote is no longer dropped). Rich children still
+    /// flush as their own segments.
+    private func emitBlock(_ node: NostrWireNode, into emitter: inout SegmentEmitter, indent: CGFloat, quote: Bool) {
+        guard quote else { emitBlock(node, into: &emitter, indent: indent); return }
+        switch node {
+        case .blockQuote, .list, .image, .media, .eventRef, .placeholder:
+            // Containers / rich blocks: defer to the canonical emitter so
+            // nesting + rich-segment flushing behave identically inside quotes.
+            emitBlock(node, into: &emitter, indent: indent)
+        case .paragraph(let children):
+            if children.count == 1,
+               let only = tree.node(at: children[0]),
+               case .eventRef(let uri) = only,
+               let ref = resolveEntity?(uri.uri) {
+                emitter.appendRich(.nostrEntity(ref))
+            } else {
+                emitter.appendProse(quoteStyled(renderInlines(children), indent: indent))
+            }
+        case .heading(_, let children):
+            // A heading inside a quote keeps the quote's muted prose styling.
+            emitter.appendProse(quoteStyled(renderInlines(children), indent: indent))
+        default:
+            // Code block / rule / inline-as-block: render via the block path,
+            // indented to the quote depth.
+            emitter.appendProse(indentProse(renderBlock(node), indent: indent))
+        }
+    }
+
+    /// Emit one list item's block children. The item's leading text (raw inline
+    /// children, plus the inline content of a leading paragraph) renders as the
+    /// bullet row; any further BLOCK child (nested list / code block / rule /
+    /// block-quote / image / media / extra paragraphs) recurses through
+    /// `emitBlock`, indented one further level — so nested blocks inside a list
+    /// item are never dropped.
+    private func emitListItem(
+        bullet: String,
+        children: [UInt32],
+        into emitter: inout SegmentEmitter,
+        indent: CGFloat
+    ) {
+        // Split the item's children into a leading inline run (the bullet's own
+        // text) and trailing block children (which recurse). CommonMark list
+        // items are "loose" — children may be paragraphs or raw inlines.
+        var bulletInline: [UInt32] = []
+        var blocks: [NostrWireNode] = []
+        var sawBlock = false
+        for child in children {
+            guard let childNode = tree.node(at: child) else { continue }
+            if isBlockNode(childNode) {
+                // A leading paragraph (before any other block) folds its inline
+                // content into the bullet row so the bullet isn't empty above
+                // its own text. Anything after that recurses as a nested block.
+                if !sawBlock, case .paragraph(let pChildren) = childNode,
+                   !isStandaloneEventRefParagraph(pChildren) {
+                    bulletInline.append(contentsOf: pChildren)
+                } else {
+                    blocks.append(childNode)
+                    sawBlock = true
+                }
+            } else {
+                if sawBlock {
+                    // A stray inline after a block — wrap it so it isn't lost.
+                    blocks.append(.paragraph(children: [child]))
+                } else {
+                    bulletInline.append(child)
+                }
+            }
+        }
+
+        // The bullet row: bullet glyph + the item's inline content.
+        let itemBuf = NSMutableAttributedString(
+            string: bullet,
+            attributes: [.font: serifBold, .foregroundColor: accent]
+        )
+        itemBuf.append(renderInlines(bulletInline))
+        itemBuf.append(NSAttributedString(string: "\n"))
+        let p = NSMutableParagraphStyle()
+        p.headIndent = 24 + indent * 16
+        p.firstLineHeadIndent = max(0, (indent - 1) * 16)
+        p.paragraphSpacing = 6
+        p.lineHeightMultiple = 1.35
+        itemBuf.addAttribute(.paragraphStyle, value: p, range: NSRange(location: 0, length: itemBuf.length))
+        emitter.appendProse(itemBuf)
+
+        // Recurse into the item's remaining block children at one deeper indent.
+        for block in blocks {
+            emitBlock(block, into: &emitter, indent: indent)
+        }
+    }
+
+    /// True if a paragraph's children are exactly one resolvable event-ref —
+    /// such a paragraph promotes to a standalone card, not bullet text.
+    private func isStandaloneEventRefParagraph(_ children: [UInt32]) -> Bool {
+        guard children.count == 1, let only = tree.node(at: children[0]),
+              case .eventRef = only else { return false }
+        return true
+    }
+
+    /// True for any container/leaf BLOCK-level node (vs. an inline node).
+    private func isBlockNode(_ node: NostrWireNode) -> Bool {
+        switch node {
+        case .paragraph, .heading, .blockQuote, .codeBlock, .list, .rule,
+             .image, .media, .placeholder:
+            return true
+        case .eventRef:
+            // An event-ref is block-ish only when it can resolve to a card;
+            // otherwise it renders inline as a chip.
+            return false
+        case .text, .mention, .hashtag, .url, .emoji, .invoice, .emphasis,
+             .strong, .inlineCode, .link, .softBreak, .hardBreak:
+            return false
+        }
+    }
+
+    /// Indent prose produced beneath a container by `indent` levels.
+    private func indentProse(_ attr: NSAttributedString, indent: CGFloat) -> NSAttributedString {
+        guard indent > 0, attr.length > 0 else { return attr }
+        let out = NSMutableAttributedString(attributedString: attr)
+        out.enumerateAttribute(.paragraphStyle, in: NSRange(location: 0, length: out.length)) { value, range, _ in
+            let base = (value as? NSParagraphStyle).flatMap { $0.mutableCopy() as? NSMutableParagraphStyle }
+                ?? NSMutableParagraphStyle()
+            base.headIndent += indent * 16
+            base.firstLineHeadIndent += indent * 16
+            out.addAttribute(.paragraphStyle, value: base, range: range)
+        }
+        return out
+    }
+
+    /// Quote-styled prose (muted italic, indented) used for block-quote prose
+    /// children at any depth.
+    private func quoteStyled(_ inner: NSAttributedString, indent: CGFloat) -> NSAttributedString {
+        let out = NSMutableAttributedString(attributedString: inner)
+        let p = NSMutableParagraphStyle()
+        p.headIndent = 18 + indent * 16
+        p.firstLineHeadIndent = 18 + indent * 16
+        p.paragraphSpacingBefore = 8
+        p.paragraphSpacing = 10
+        p.lineHeightMultiple = 1.4
+        out.addAttributes(
+            [.foregroundColor: muted, .paragraphStyle: p, .font: serifItalic],
+            range: NSRange(location: 0, length: out.length)
+        )
+        out.append(NSAttributedString(string: "\n\n", attributes: [.font: serifItalic]))
+        return out
+    }
+
+    // MARK: - Block rendering (leaf / prose blocks)
 
     private func renderBlock(_ node: NostrWireNode) -> NSAttributedString {
         switch node {
@@ -253,12 +448,15 @@ private struct TreeWalker {
             s.addAttribute(.paragraphStyle, value: paragraphStyle(), range: NSRange(location: 0, length: s.length))
             s.append(NSAttributedString(string: "\n\n", attributes: [.font: serif]))
             return s
-        case .blockQuote(let children):
-            return renderBlockQuote(children)
+        case .blockQuote, .list:
+            // Containers are normally intercepted by `emitBlock` (which keeps
+            // rich nested children as their own segments). This path is only a
+            // defensive flatten for a container reached as a non-root block; it
+            // recurses through the SAME emitter so no nested block is dropped,
+            // then concatenates the result (rich segments become visible chips).
+            return flattenContainer(node)
         case .codeBlock(let info, let body):
             return renderCodeBlock(info: info, body: body)
-        case .list(let orderedStart, let items):
-            return renderList(orderedStart: orderedStart, items: items)
         case .rule:
             return NSAttributedString(
                 string: "\n———\n\n",
@@ -321,47 +519,43 @@ private struct TreeWalker {
         return out
     }
 
-    private func renderList(orderedStart: UInt64?, items: [[UInt32]]) -> NSAttributedString {
+    /// Flatten a container (block-quote / list) to an attributed string via the
+    /// SAME recursive emitter used at the top level, so nested blocks are never
+    /// dropped here either. Any rich child (image / media / card / placeholder)
+    /// that would normally be its own segment is rendered as a visible chip so
+    /// it survives the attributed-string-only context.
+    private func flattenContainer(_ node: NostrWireNode) -> NSAttributedString {
+        var emitter = SegmentEmitter()
+        emitBlock(node, into: &emitter, indent: 0)
+        emitter.flush()
         let out = NSMutableAttributedString()
-        for (offset, children) in items.enumerated() {
-            let bullet: String
-            if let orderedStart {
-                bullet = "\(orderedStart + UInt64(offset)). "
-            } else {
-                bullet = "•  "
+        for segment in emitter.segments {
+            switch segment {
+            case .text(let attr):
+                out.append(attr)
+            case .image(_, let alt):
+                out.append(NSAttributedString(
+                    string: (alt.isEmpty ? "[image]" : "[\(alt)]") + "\n",
+                    attributes: [.font: serifItalic, .foregroundColor: muted]
+                ))
+            case .media(let urls, let kind):
+                out.append(NSAttributedString(
+                    string: "[\(kind.rawValue.lowercased()): \(urls.first ?? "")]\n",
+                    attributes: [.font: serif, .foregroundColor: accent]
+                ))
+            case .nostrEntity:
+                out.append(NSAttributedString(
+                    string: "[embedded note]\n",
+                    attributes: [.font: mono, .foregroundColor: accent]
+                ))
+            case .placeholder:
+                out.append(NSAttributedString(
+                    string: "[content unavailable]\n",
+                    attributes: [.font: serifItalic, .foregroundColor: muted]
+                ))
             }
-            let itemBuf = NSMutableAttributedString(
-                string: bullet,
-                attributes: [.font: serifBold, .foregroundColor: accent]
-            )
-            itemBuf.append(renderInlines(children))
-            itemBuf.append(NSAttributedString(string: "\n"))
-            let p = NSMutableParagraphStyle()
-            p.headIndent = 24
-            p.firstLineHeadIndent = 0
-            p.paragraphSpacing = 6
-            p.lineHeightMultiple = 1.35
-            itemBuf.addAttribute(.paragraphStyle, value: p, range: NSRange(location: 0, length: itemBuf.length))
-            out.append(itemBuf)
         }
-        out.append(NSAttributedString(string: "\n", attributes: [.font: serif]))
         return out
-    }
-
-    private func renderBlockQuote(_ children: [UInt32]) -> NSAttributedString {
-        let inner = NSMutableAttributedString(attributedString: renderInlines(children))
-        let p = NSMutableParagraphStyle()
-        p.headIndent = 18
-        p.firstLineHeadIndent = 18
-        p.paragraphSpacingBefore = 8
-        p.paragraphSpacing = 10
-        p.lineHeightMultiple = 1.4
-        inner.addAttributes(
-            [.foregroundColor: muted, .paragraphStyle: p, .font: serifItalic],
-            range: NSRange(location: 0, length: inner.length)
-        )
-        inner.append(NSAttributedString(string: "\n\n", attributes: [.font: serifItalic]))
-        return inner
     }
 
     /// Code block stays selectable prose so users can copy code. The language
@@ -502,14 +696,35 @@ private struct TreeWalker {
                 string: "[content unavailable]",
                 attributes: [.font: serifItalic, .foregroundColor: muted]
             )
-        // Block-level nodes should not appear inside an inline reduce; render
-        // their flattened children to be safe rather than break concatenation.
+        // Block-level nodes should not appear inside an inline reduce (block
+        // children of containers go through the block path `emitBlock`). If one
+        // is ever reached inline, render a visible representation rather than
+        // collapsing to empty — no legal node silently disappears (#22).
         case .paragraph(let children),
              .heading(_, let children),
              .blockQuote(let children):
             return renderInlines(children)
-        case .list, .codeBlock, .rule, .media:
-            return NSAttributedString()
+        case .list(_, let items):
+            // Flatten nested-list items to comma-joined inline text.
+            let out = NSMutableAttributedString()
+            for (i, item) in items.enumerated() {
+                if i > 0 { out.append(NSAttributedString(string: "  •  ", attributes: [.font: serif, .foregroundColor: accent])) }
+                out.append(renderInlines(item))
+            }
+            return out
+        case .codeBlock(let info, let body):
+            let label = (info?.isEmpty == false) ? "\(info!): " : ""
+            return NSAttributedString(
+                string: label + body,
+                attributes: [.font: mono, .foregroundColor: ink, .backgroundColor: muted.withAlphaComponent(0.15)]
+            )
+        case .rule:
+            return NSAttributedString(string: " — ", attributes: [.font: serif, .foregroundColor: muted])
+        case .media(let urls, let kind):
+            return NSAttributedString(
+                string: "[\(kind.rawValue.lowercased()): \(urls.first ?? "")]",
+                attributes: [.font: serif, .foregroundColor: accent]
+            )
         }
     }
 
