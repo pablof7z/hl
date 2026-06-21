@@ -361,6 +361,52 @@ pub(crate) fn reduce_action_remove_from_set(
     build_set_publish_effect(row)
 }
 
+/// Create a brand-new kind:30004 curation set with `title` and immediately add
+/// `item_coordinate` as its first member. The `d_tag` is derived from `title` +
+/// the current unix timestamp (collision-resistant, human-readable).
+///
+/// Returns a single `Effect::PublishSetEvent` with the new event template, or an
+/// empty vec on serialisation failure (D6).
+pub(crate) fn reduce_action_create_and_add_to_set(
+    _state: &AppState,
+    title: String,
+    item_coordinate: String,
+    now: u64,
+) -> Vec<Effect> {
+    // Derive a URL-safe d_tag: lowercase, spaces→hyphens, strip non-alphanumeric
+    // non-hyphen chars, truncate to 40 chars, append timestamp.
+    let slug: String = title
+        .to_lowercase()
+        .chars()
+        .map(|c| if c == ' ' { '-' } else { c })
+        .filter(|c| c.is_alphanumeric() || *c == '-')
+        .take(40)
+        .collect();
+    let d_tag = format!("{slug}-{now}");
+
+    let tags = vec![
+        serde_json::json!(["d", d_tag]),
+        serde_json::json!(["title", &title]),
+        serde_json::json!(["a", &item_coordinate]),
+    ];
+
+    let template = serde_json::json!({
+        "kind": KIND_CURATION_SET,
+        "content": "",
+        "tags": tags,
+    });
+    match serde_json::to_string(&template) {
+        Ok(json) => vec![Effect::PublishSetEvent { json }],
+        Err(e) => {
+            tracing::trace!(
+                error = %e,
+                "bookmark_sets::create_and_add_to_set: serialisation failed — no-op (D6)"
+            );
+            vec![]
+        }
+    }
+}
+
 /// Find a curation set by its `"<kind>:<pubkey>:<d_tag>"` coordinate.
 ///
 /// Parses the coordinate into `(kind_str, pubkey, d_tag)` and looks up

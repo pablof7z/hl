@@ -383,6 +383,11 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
             item_coordinate,
         } => bookmark_sets::reduce_action_remove_from_set(state, set_coordinate, item_coordinate),
 
+        AppAction::CreateAndAddToSet {
+            title,
+            item_coordinate,
+        } => bookmark_sets::reduce_action_create_and_add_to_set(state, title, item_coordinate, now),
+
         // ── Phase 4A additions ────────────────────────────────────────────────
         // OpenArticle / CloseArticle are fire-and-forget signals from native to
         // coordinate article reader lifecycle. No NMP action is needed — the
@@ -507,16 +512,17 @@ fn reduce_action_envelope(
     }
 
     use crate::kernel::action::{
-        AddBookmarkPayload, AddRelayPayload, AddRoomMemberPayload, AudioPlayPayload,
-        AudioSeekPayload, AudioSetResumePayload, BlossomUploadPayload, CaptureSelectWordPayload,
-        CaptureSetArtifactPreviewPayload, CaptureSetArtifactRecordPayload,
-        CaptureSetContextPayload, CaptureSetNotePayload, CaptureSetQuotePayload,
-        CaptureSetTargetGroupPayload, ClaimProfilePayload, ClipExtendSegmentPayload,
-        ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload, ClipSetStartPayload,
-        CreateAccountPayload, CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload,
-        JoinRoomPayload, LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload,
-        PairBunkerPayload, PresentSheetPayload, PublishClipPayload, PublishHighlightPayload,
-        ReactPayload, ReleaseProfilePayload, RemoveBookmarkPayload, RemoveRelayPayload,
+        AddBookmarkPayload, AddRelayPayload, AddRoomMemberPayload, AddToSetPayload,
+        AudioPlayPayload, AudioSeekPayload, AudioSetResumePayload, BlossomUploadPayload,
+        CaptureSelectWordPayload, CaptureSetArtifactPreviewPayload,
+        CaptureSetArtifactRecordPayload, CaptureSetContextPayload, CaptureSetNotePayload,
+        CaptureSetQuotePayload, CaptureSetTargetGroupPayload, ClaimProfilePayload,
+        ClipExtendSegmentPayload, ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload,
+        ClipSetStartPayload, CreateAccountPayload, CreateAndAddToSetPayload,
+        CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload, JoinRoomPayload,
+        LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload, PairBunkerPayload,
+        PresentSheetPayload, PublishClipPayload, PublishHighlightPayload, ReactPayload,
+        ReleaseProfilePayload, RemoveBookmarkPayload, RemoveFromSetPayload, RemoveRelayPayload,
         RunOmniboxPayload, RunSearchPayload, SelectRootTabPayload, SetRelayRolePayload,
         SetRoomsRelayListPayload,
         ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload, ToggleReactionPayload,
@@ -646,6 +652,25 @@ fn reduce_action_envelope(
         "hl.bookmark.remove" => {
             let p = parse!(RemoveBookmarkPayload);
             bookmarks::reduce_action_remove_bookmark_for_state(state, p.item)
+        }
+
+        // ── Curation sets (#1653) ─────────────────────────────────────────────
+        "hl.curation.add_to_set" => {
+            let p = parse!(AddToSetPayload);
+            bookmark_sets::reduce_action_add_to_set(state, p.set_coordinate, p.item_coordinate)
+        }
+        "hl.curation.remove_from_set" => {
+            let p = parse!(RemoveFromSetPayload);
+            bookmark_sets::reduce_action_remove_from_set(state, p.set_coordinate, p.item_coordinate)
+        }
+        "hl.curation.create_and_add" => {
+            let p = parse!(CreateAndAddToSetPayload);
+            bookmark_sets::reduce_action_create_and_add_to_set(
+                state,
+                p.title,
+                p.item_coordinate,
+                now,
+            )
         }
 
         // ── Articles ──────────────────────────────────────────────────────────

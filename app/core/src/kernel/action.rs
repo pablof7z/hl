@@ -441,6 +441,29 @@ pub(crate) struct EnsureArtifactPreviewPayload {
     pub coordinate: String,
 }
 
+// ── #1653 payload structs ─────────────────────────────────────────────────────
+
+/// `hl.curation.add_to_set` payload.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct AddToSetPayload {
+    pub set_coordinate: String,
+    pub item_coordinate: String,
+}
+
+/// `hl.curation.remove_from_set` payload.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct RemoveFromSetPayload {
+    pub set_coordinate: String,
+    pub item_coordinate: String,
+}
+
+/// `hl.curation.create_and_add` payload.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CreateAndAddToSetPayload {
+    pub title: String,
+    pub item_coordinate: String,
+}
+
 /// Every user or platform action the kernel understands.
 ///
 /// Dispatch is fire-and-forget (`dispatch(action)` returns `()`; Non-Negotiable #3).
@@ -780,6 +803,19 @@ pub enum AppAction {
         /// NIP-33 address of the curation set to modify.
         set_coordinate: String,
         /// NIP-33 address of the article to remove.
+        item_coordinate: String,
+    },
+
+    /// Create a brand-new kind:30004 curation set with the given `title` and
+    /// immediately add `item_coordinate` as its first member. The `d_tag` is
+    /// derived from `title` + the current unix timestamp so it is unique but
+    /// human-readable. Kernel sole writer; fire-and-forget (D6). The new set
+    /// appears in `myCurationSets` after the NMP relay-echo loop closes and
+    /// `SetListProjection` re-snapshots.
+    CreateAndAddToSet {
+        /// Display title for the new set.
+        title: String,
+        /// NIP-33 address of the article to add as the first member.
         item_coordinate: String,
     },
 

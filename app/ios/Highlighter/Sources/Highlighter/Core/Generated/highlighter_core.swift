@@ -12900,6 +12900,196 @@ public func FfiConverterTypeBookmarkSetRecord_lower(_ value: BookmarkSetRecord) 
 }
 
 
+/**
+ * One NIP-51 Bookmark set (kind:30003) or Curation set (kind:30004) row
+ * projected by the kernel. Parameterized-replaceable — keyed by
+ * `(pubkey, d_tag)` with supersession (newest `created_at` wins).
+ *
+ * Raw protocol data only (D1): no "Untitled" fallback for absent titles,
+ * no count labels. Swift formats all display strings.
+ *
+ * `uniffi::Record` so Swift can decode snapshots across FFI.
+ */
+public struct BookmarkSetRow {
+    /**
+     * `d` tag — stable identifier within the author's sets.
+     */
+    public var dTag: String
+    /**
+     * Raw 64-char hex author pubkey.
+     */
+    public var pubkey: String
+    /**
+     * 30003 for bookmark sets, 30004 for curation sets.
+     */
+    public var kind: UInt32
+    /**
+     * `title` tag value, or `None` when absent (D1: no "Untitled" fallback).
+     */
+    public var title: String?
+    /**
+     * `description` tag value, or `None` when absent.
+     */
+    public var description: String?
+    /**
+     * `image` tag URL, or `None` when absent.
+     */
+    public var image: String?
+    /**
+     * `a`-tag values — NIP-33 article addresses like `"30023:<pubkey>:<d>"`.
+     */
+    public var articleAddresses: [String]
+    /**
+     * `e`-tag values — event ids of bookmarked kind:1 notes.
+     */
+    public var noteIds: [String]
+    /**
+     * Event creation time as Unix seconds (0 when unknown).
+     */
+    public var createdAt: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * `d` tag — stable identifier within the author's sets.
+         */dTag: String,
+        /**
+         * Raw 64-char hex author pubkey.
+         */pubkey: String,
+        /**
+         * 30003 for bookmark sets, 30004 for curation sets.
+         */kind: UInt32,
+        /**
+         * `title` tag value, or `None` when absent (D1: no "Untitled" fallback).
+         */title: String?,
+        /**
+         * `description` tag value, or `None` when absent.
+         */description: String?,
+        /**
+         * `image` tag URL, or `None` when absent.
+         */image: String?,
+        /**
+         * `a`-tag values — NIP-33 article addresses like `"30023:<pubkey>:<d>"`.
+         */articleAddresses: [String],
+        /**
+         * `e`-tag values — event ids of bookmarked kind:1 notes.
+         */noteIds: [String],
+        /**
+         * Event creation time as Unix seconds (0 when unknown).
+         */createdAt: UInt64) {
+        self.dTag = dTag
+        self.pubkey = pubkey
+        self.kind = kind
+        self.title = title
+        self.description = description
+        self.image = image
+        self.articleAddresses = articleAddresses
+        self.noteIds = noteIds
+        self.createdAt = createdAt
+    }
+}
+
+#if compiler(>=6)
+extension BookmarkSetRow: Sendable {}
+#endif
+
+
+extension BookmarkSetRow: Equatable, Hashable {
+    public static func ==(lhs: BookmarkSetRow, rhs: BookmarkSetRow) -> Bool {
+        if lhs.dTag != rhs.dTag {
+            return false
+        }
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.kind != rhs.kind {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.description != rhs.description {
+            return false
+        }
+        if lhs.image != rhs.image {
+            return false
+        }
+        if lhs.articleAddresses != rhs.articleAddresses {
+            return false
+        }
+        if lhs.noteIds != rhs.noteIds {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(dTag)
+        hasher.combine(pubkey)
+        hasher.combine(kind)
+        hasher.combine(title)
+        hasher.combine(description)
+        hasher.combine(image)
+        hasher.combine(articleAddresses)
+        hasher.combine(noteIds)
+        hasher.combine(createdAt)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBookmarkSetRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarkSetRow {
+        return
+            try BookmarkSetRow(
+                dTag: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                kind: FfiConverterUInt32.read(from: &buf),
+                title: FfiConverterOptionString.read(from: &buf),
+                description: FfiConverterOptionString.read(from: &buf),
+                image: FfiConverterOptionString.read(from: &buf),
+                articleAddresses: FfiConverterSequenceString.read(from: &buf),
+                noteIds: FfiConverterSequenceString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BookmarkSetRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.dTag, into: &buf)
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterUInt32.write(value.kind, into: &buf)
+        FfiConverterOptionString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.description, into: &buf)
+        FfiConverterOptionString.write(value.image, into: &buf)
+        FfiConverterSequenceString.write(value.articleAddresses, into: &buf)
+        FfiConverterSequenceString.write(value.noteIds, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkSetRow_lift(_ buf: RustBuffer) throws -> BookmarkSetRow {
+    return try FfiConverterTypeBookmarkSetRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBookmarkSetRow_lower(_ value: BookmarkSetRow) -> RustBuffer {
+    return FfiConverterTypeBookmarkSetRow.lower(value)
+}
+
+
 public struct BookmarkSetRowProjection {
     public var displayTitle: String
     public var kindLabel: String
@@ -13218,9 +13408,33 @@ public struct BookmarksSnapshot {
      * preview`): resolved immediately when the article is in `AppState::articles`,
      * otherwise `pending` with a `ResolveArtifactCoordinate` fetch in flight so
      * bookmarked-but-unloaded articles fill in over time. Backs the Bookmarks
-     * "Articles" pane; the collections/web panes stay on the live lane (nmp #1653).
+     * "Articles" pane.
      */
     public var articlePreviews: [ArtifactPreviewRow]
+    /**
+     * Active account's own NIP-51 kind:30003 bookmark sets.
+     * Projected from `AppState::all_bookmark_sets` filtered by active pubkey.
+     * Sorted by `created_at` descending (newest first). D1: raw fields.
+     */
+    public var myBookmarkSets: [BookmarkSetRow]
+    /**
+     * Active account's own NIP-51 kind:30004 curation sets.
+     * Projected from `AppState::all_curation_sets` filtered by active pubkey.
+     * Sorted by `created_at` descending. D1: raw fields.
+     */
+    public var myCurationSets: [BookmarkSetRow]
+    /**
+     * kind:30004 curation sets authored by accounts the active user follows.
+     * Projected from `AppState::all_curation_sets` filtered by `AppState::follows`.
+     * Sorted by `created_at` descending. D1: raw fields.
+     */
+    public var followingCurationSets: [BookmarkSetRow]
+    /**
+     * Active account's own NIP-B0 kind:39701 web bookmarks.
+     * Stored directly in `AppState::web_bookmarks`. Sorted by `created_at`
+     * descending. D1: raw fields.
+     */
+    public var myWebBookmarks: [WebBookmarkRow]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -13236,10 +13450,34 @@ public struct BookmarksSnapshot {
          * preview`): resolved immediately when the article is in `AppState::articles`,
          * otherwise `pending` with a `ResolveArtifactCoordinate` fetch in flight so
          * bookmarked-but-unloaded articles fill in over time. Backs the Bookmarks
-         * "Articles" pane; the collections/web panes stay on the live lane (nmp #1653).
-         */articlePreviews: [ArtifactPreviewRow]) {
+         * "Articles" pane.
+         */articlePreviews: [ArtifactPreviewRow],
+        /**
+         * Active account's own NIP-51 kind:30003 bookmark sets.
+         * Projected from `AppState::all_bookmark_sets` filtered by active pubkey.
+         * Sorted by `created_at` descending (newest first). D1: raw fields.
+         */myBookmarkSets: [BookmarkSetRow],
+        /**
+         * Active account's own NIP-51 kind:30004 curation sets.
+         * Projected from `AppState::all_curation_sets` filtered by active pubkey.
+         * Sorted by `created_at` descending. D1: raw fields.
+         */myCurationSets: [BookmarkSetRow],
+        /**
+         * kind:30004 curation sets authored by accounts the active user follows.
+         * Projected from `AppState::all_curation_sets` filtered by `AppState::follows`.
+         * Sorted by `created_at` descending. D1: raw fields.
+         */followingCurationSets: [BookmarkSetRow],
+        /**
+         * Active account's own NIP-B0 kind:39701 web bookmarks.
+         * Stored directly in `AppState::web_bookmarks`. Sorted by `created_at`
+         * descending. D1: raw fields.
+         */myWebBookmarks: [WebBookmarkRow]) {
         self.rows = rows
         self.articlePreviews = articlePreviews
+        self.myBookmarkSets = myBookmarkSets
+        self.myCurationSets = myCurationSets
+        self.followingCurationSets = followingCurationSets
+        self.myWebBookmarks = myWebBookmarks
     }
 }
 
@@ -13256,12 +13494,28 @@ extension BookmarksSnapshot: Equatable, Hashable {
         if lhs.articlePreviews != rhs.articlePreviews {
             return false
         }
+        if lhs.myBookmarkSets != rhs.myBookmarkSets {
+            return false
+        }
+        if lhs.myCurationSets != rhs.myCurationSets {
+            return false
+        }
+        if lhs.followingCurationSets != rhs.followingCurationSets {
+            return false
+        }
+        if lhs.myWebBookmarks != rhs.myWebBookmarks {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(rows)
         hasher.combine(articlePreviews)
+        hasher.combine(myBookmarkSets)
+        hasher.combine(myCurationSets)
+        hasher.combine(followingCurationSets)
+        hasher.combine(myWebBookmarks)
     }
 }
 
@@ -13275,13 +13529,21 @@ public struct FfiConverterTypeBookmarksSnapshot: FfiConverterRustBuffer {
         return
             try BookmarksSnapshot(
                 rows: FfiConverterSequenceTypeBookmarkRow.read(from: &buf),
-                articlePreviews: FfiConverterSequenceTypeArtifactPreviewRow.read(from: &buf)
+                articlePreviews: FfiConverterSequenceTypeArtifactPreviewRow.read(from: &buf),
+                myBookmarkSets: FfiConverterSequenceTypeBookmarkSetRow.read(from: &buf),
+                myCurationSets: FfiConverterSequenceTypeBookmarkSetRow.read(from: &buf),
+                followingCurationSets: FfiConverterSequenceTypeBookmarkSetRow.read(from: &buf),
+                myWebBookmarks: FfiConverterSequenceTypeWebBookmarkRow.read(from: &buf)
         )
     }
 
     public static func write(_ value: BookmarksSnapshot, into buf: inout [UInt8]) {
         FfiConverterSequenceTypeBookmarkRow.write(value.rows, into: &buf)
         FfiConverterSequenceTypeArtifactPreviewRow.write(value.articlePreviews, into: &buf)
+        FfiConverterSequenceTypeBookmarkSetRow.write(value.myBookmarkSets, into: &buf)
+        FfiConverterSequenceTypeBookmarkSetRow.write(value.myCurationSets, into: &buf)
+        FfiConverterSequenceTypeBookmarkSetRow.write(value.followingCurationSets, into: &buf)
+        FfiConverterSequenceTypeWebBookmarkRow.write(value.myWebBookmarks, into: &buf)
     }
 }
 
@@ -49468,6 +49730,166 @@ public func FfiConverterTypeWebBookmarkRecord_lower(_ value: WebBookmarkRecord) 
 }
 
 
+/**
+ * One NIP-B0 web bookmark (kind:39701) row.
+ *
+ * `d` tag is the URL without the `https://` scheme; the kernel prepends it
+ * when building the `url` field. Raw protocol data only (D1).
+ *
+ * `uniffi::Record` so Swift can decode snapshots across FFI.
+ */
+public struct WebBookmarkRow {
+    /**
+     * Full URL — `"https://"` prepended to the `d` tag.
+     */
+    public var url: String
+    /**
+     * Raw 64-char hex author pubkey.
+     */
+    public var pubkey: String
+    /**
+     * `title` tag value, or `None` when absent.
+     */
+    public var title: String?
+    /**
+     * Detailed description from the event `content` field, or `None` when empty.
+     */
+    public var description: String?
+    /**
+     * `t` tags — topic/hashtag values.
+     */
+    public var topics: [String]
+    /**
+     * `published_at` tag as Unix seconds, or `None` when absent / unparseable.
+     */
+    public var publishedAt: UInt64?
+    /**
+     * Event creation time as Unix seconds (0 when unknown).
+     */
+    public var createdAt: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Full URL — `"https://"` prepended to the `d` tag.
+         */url: String,
+        /**
+         * Raw 64-char hex author pubkey.
+         */pubkey: String,
+        /**
+         * `title` tag value, or `None` when absent.
+         */title: String?,
+        /**
+         * Detailed description from the event `content` field, or `None` when empty.
+         */description: String?,
+        /**
+         * `t` tags — topic/hashtag values.
+         */topics: [String],
+        /**
+         * `published_at` tag as Unix seconds, or `None` when absent / unparseable.
+         */publishedAt: UInt64?,
+        /**
+         * Event creation time as Unix seconds (0 when unknown).
+         */createdAt: UInt64) {
+        self.url = url
+        self.pubkey = pubkey
+        self.title = title
+        self.description = description
+        self.topics = topics
+        self.publishedAt = publishedAt
+        self.createdAt = createdAt
+    }
+}
+
+#if compiler(>=6)
+extension WebBookmarkRow: Sendable {}
+#endif
+
+
+extension WebBookmarkRow: Equatable, Hashable {
+    public static func ==(lhs: WebBookmarkRow, rhs: WebBookmarkRow) -> Bool {
+        if lhs.url != rhs.url {
+            return false
+        }
+        if lhs.pubkey != rhs.pubkey {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.description != rhs.description {
+            return false
+        }
+        if lhs.topics != rhs.topics {
+            return false
+        }
+        if lhs.publishedAt != rhs.publishedAt {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(url)
+        hasher.combine(pubkey)
+        hasher.combine(title)
+        hasher.combine(description)
+        hasher.combine(topics)
+        hasher.combine(publishedAt)
+        hasher.combine(createdAt)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWebBookmarkRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WebBookmarkRow {
+        return
+            try WebBookmarkRow(
+                url: FfiConverterString.read(from: &buf),
+                pubkey: FfiConverterString.read(from: &buf),
+                title: FfiConverterOptionString.read(from: &buf),
+                description: FfiConverterOptionString.read(from: &buf),
+                topics: FfiConverterSequenceString.read(from: &buf),
+                publishedAt: FfiConverterOptionUInt64.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: WebBookmarkRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterString.write(value.pubkey, into: &buf)
+        FfiConverterOptionString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.description, into: &buf)
+        FfiConverterSequenceString.write(value.topics, into: &buf)
+        FfiConverterOptionUInt64.write(value.publishedAt, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWebBookmarkRow_lift(_ buf: RustBuffer) throws -> WebBookmarkRow {
+    return try FfiConverterTypeWebBookmarkRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWebBookmarkRow_lower(_ value: WebBookmarkRow) -> RustBuffer {
+    return FfiConverterTypeWebBookmarkRow.lower(value)
+}
+
+
 public struct WebBookmarkRowProjection {
     public var displayTitle: String
     public var host: String?
@@ -58584,6 +59006,31 @@ fileprivate struct FfiConverterSequenceTypeBookmarkSetRecord: FfiConverterRustBu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeBookmarkSetRow: FfiConverterRustBuffer {
+    typealias SwiftType = [BookmarkSetRow]
+
+    public static func write(_ value: [BookmarkSetRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBookmarkSetRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BookmarkSetRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BookmarkSetRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBookmarkSetRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeChapter: FfiConverterRustBuffer {
     typealias SwiftType = [Chapter]
 
@@ -60176,6 +60623,31 @@ fileprivate struct FfiConverterSequenceTypeWebBookmarkRecord: FfiConverterRustBu
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeWebBookmarkRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeWebBookmarkRow: FfiConverterRustBuffer {
+    typealias SwiftType = [WebBookmarkRow]
+
+    public static func write(_ value: [WebBookmarkRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeWebBookmarkRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [WebBookmarkRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [WebBookmarkRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeWebBookmarkRow.read(from: &buf))
         }
         return seq
     }

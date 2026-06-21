@@ -172,6 +172,17 @@ enum HighlighterAction {
     /// Publish a kind:11 discussion thread into a NIP-29 room.
     case postDiscussion(groupId: String, title: String, body: String, attachmentUrl: String?)
 
+    // ── Curation sets (#1653) ────────────────────────────────────────────────────
+    /// Add `itemCoordinate` (a NIP-33 address like `"30023:<pk>:<d>"`) to the
+    /// kind:30004 curation set identified by `setCoordinate`.
+    /// Kernel is the sole kind:30004 writer; fire-and-forget.
+    case addToSet(setCoordinate: String, itemCoordinate: String)
+    /// Remove `itemCoordinate` from the curation set identified by `setCoordinate`.
+    case removeFromSet(setCoordinate: String, itemCoordinate: String)
+    /// Create a brand-new kind:30004 curation set with `title` and immediately
+    /// add `itemCoordinate` as its first member. Fire-and-forget.
+    case createAndAddToSet(title: String, itemCoordinate: String)
+
     // ── Feedback / shake-to-share (Phase 7 cutover) ─────────────────────────────
     case feedbackOpenList
     case feedbackCloseList
@@ -469,6 +480,23 @@ enum HighlighterAction {
             var dict: [String: Any] = ["root_event_id": rootEventId, "content": content]
             if let author = parentAuthorPubkey { dict["parent_author_pubkey"] = author }
             return AppActionEnvelope(namespace: "hl.feedback.post_reply", json: jsonAny(dict))
+
+        // ── Curation sets (#1653) ─────────────────────────────────────────────
+        case .addToSet(let setCoordinate, let itemCoordinate):
+            return AppActionEnvelope(
+                namespace: "hl.curation.add_to_set",
+                json: jsonObject(["set_coordinate": setCoordinate, "item_coordinate": itemCoordinate])
+            )
+        case .removeFromSet(let setCoordinate, let itemCoordinate):
+            return AppActionEnvelope(
+                namespace: "hl.curation.remove_from_set",
+                json: jsonObject(["set_coordinate": setCoordinate, "item_coordinate": itemCoordinate])
+            )
+        case .createAndAddToSet(let title, let itemCoordinate):
+            return AppActionEnvelope(
+                namespace: "hl.curation.create_and_add",
+                json: jsonObject(["title": title, "item_coordinate": itemCoordinate])
+            )
         }
     }
 }
