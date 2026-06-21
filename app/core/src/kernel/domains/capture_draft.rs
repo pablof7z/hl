@@ -1156,4 +1156,137 @@ mod tests {
             "markdown path must publish once has_upload is true; got: {effects2:?}"
         );
     }
+
+    // Phase 7 E2E: full capability round-trip stitched into one chain —
+    // camera → OCR → blossom → publish → Done. Each link is unit-tested above
+    // (and in camera.rs / blossom.rs); this is the single regression guard that
+    // the whole capture flow holds together end to end, with NO device (camera +
+    // OCR + blossom results are injected). The live camera-VC presentation is the
+    // only device-only piece and is exercised by `CapturePresenter` at runtime.
+    #[test]
+    fn capture_round_trip_camera_ocr_blossom_publish_to_done() {
+        use crate::capabilities::camera::{CameraOp, CameraResult};
+        use crate::capabilities::ocr::OcrOp;
+        use crate::capabilities::CapabilityRequest;
+
+        let mut state = make_state();
+        let clock = ManualClock::default();
+
+        // 1. capture_page → emits a Camera(CapturePage) request, marks pending.
+        let effects = step(&mut state, &clock, envelope("hl.camera.capture_page", "{}"));
+        assert!(
+            effects.iter().any(|e| matches!(
+                e,
+                Effect::EmitCapabilityRequest(CapabilityRequest::Camera(CameraOp::CapturePage))
+            )),
+            "capture_page must emit a Camera(CapturePage) request; got: {effects:?}"
+        );
+        assert!(state.camera.pending, "capture_page must mark camera pending");
+
+        // 2. CameraResult::PageImage auto-chains to an OCR RecognizeText request
+        //    on the same handle (camera::reduce_capability_camera).
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::ProvideCapabilityResult(CapabilityResult::Camera(CameraResult::PageImage {
+                image_handle: "/tmp/page.jpg".to_string(),
+                width: 1200,
+                height: 1600,
+            })),
+        );
+        assert!(
+            effects.iter().any(|e| matches!(
+                e,
+                Effect::EmitCapabilityRequest(CapabilityRequest::Ocr(OcrOp::RecognizeText {
+                    image_handle,
+                })) if image_handle == "/tmp/page.jpg"
+            )),
+            "PageImage must chain to an OCR RecognizeText on the same handle; got: {effects:?}"
+        );
+
+        // 3. OcrResult::Lines reconstructs the draft markdown.
+        step(
+            &mut state,
+            &clock,
+            Cmd::ProvideCapabilityResult(CapabilityResult::Ocr(OcrResult::Lines(vec![line(
+                "A captured paragraph long enough to read as body text here.",
+                0.1,
+                0.80,
+                0.7,
+                0.03,
+            )]))),
+        );
+        assert!(
+            !state.ocr.markdown.is_empty(),
+            "OCR result must populate the draft markdown"
+        );
+
+        // 4. hl.blossom.upload (native-annotated handle) → emits a BlossomUpload effect.
+        let effects = step(
+            &mut state,
+            &clock,
+            envelope(
+                "hl.blossom.upload",
+                r#"{"image_handle":"/tmp/annotated.jpg","servers":["https://blossom.example"]}"#,
+            ),
+        );
+        assert!(
+            effects.iter().any(|e| matches!(
+                e,
+                Effect::BlossomUpload { image_handle, .. } if image_handle == "/tmp/annotated.jpg"
+            )),
+            "blossom.upload must emit a BlossomUpload effect; got: {effects:?}"
+        );
+
+        // 5. BlossomUploadResult(success) sets has_upload on the draft.
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::BlossomUploadResult {
+                success: true,
+                blob_url: "https://blossom.example/abc.jpg".to_string(),
+                error: String::new(),
+            }),
+        );
+        assert!(
+            state.capture_draft.has_upload,
+            "successful upload result must set has_upload"
+        );
+
+        // 6. set_quote → Reviewing (quote path = kind:9802 highlight).
+        step(
+            &mut state,
+            &clock,
+            envelope("hl.capture.set_quote", r#"{"quote":"A captured paragraph"}"#),
+        );
+        assert_eq!(
+            state.capture_draft.publish_phase,
+            CaptureDraftPhase::Reviewing
+        );
+
+        // 7. publish → emits the publish effect, advances to Publishing.
+        let effects = step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
+        assert!(
+            effects
+                .iter()
+                .any(|e| matches!(e, Effect::PublishCaptureWithCorrelation { .. })),
+            "publish must emit a PublishCaptureWithCorrelation effect; got: {effects:?}"
+        );
+        assert!(matches!(
+            state.capture_draft.publish_phase,
+            CaptureDraftPhase::Publishing { .. }
+        ));
+
+        // 8. publish result(success) → terminal Done.
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::CaptureDraftPublishResult {
+                success: true,
+                event_id: "evt-roundtrip".to_string(),
+                error: String::new(),
+            }),
+        );
+        assert_eq!(state.capture_draft.publish_phase, CaptureDraftPhase::Done);
+    }
 }
