@@ -111,6 +111,13 @@ final class HighlighterAppKernel {
     /// draft state, and publish FSM; native owns all pixel work (Q1).
     private(set) var captureSnapshot: KernelCaptureSnapshot?
 
+    /// NIP-50 search snapshot. `nil` until the `ViewId.search` view is open.
+    /// Carries the raw relay hits + the kernel-decoded highlight rows + the
+    /// local communities bucket (Phase 7). SearchStore buckets `hits` by kind for
+    /// articles, reads `highlights` directly, and `communities` directly; the
+    /// profiles bucket stays on the live lane (nmp #1697).
+    private(set) var searchSnapshot: SearchSnapshot?
+
     // MARK: - Kernel handle
 
     /// The Rust-side kernel object. Callers may dispatch actions and manage
@@ -372,6 +379,22 @@ final class HighlighterAppKernel {
         captureSnapshot = nil
     }
 
+    // MARK: - Phase 7: search lifecycle
+
+    /// Open the NIP-50 search view. Snapshots stream into `searchSnapshot` once a
+    /// query is run via `dispatch(.runSearch(...))`. Call from the search screen's
+    /// `.task`.
+    func openSearch() {
+        app.openView(viewId: .search, route: .search)
+    }
+
+    /// Close the search view (kernel clears `AppState::search_results` to bound
+    /// memory).
+    func closeSearch() {
+        app.closeView(viewId: .search)
+        searchSnapshot = nil
+    }
+
     // MARK: - Snapshot ingestion (called on main actor by KernelObserver)
 
     fileprivate func receive(viewId: ViewId, snapshot: ViewSnapshot) {
@@ -423,6 +446,10 @@ final class HighlighterAppKernel {
         case .capture(let s):
             captureSnapshot = s
 
+        // Phase 7 cutover: search (SearchStore reads this).
+        case .search(let s):
+            searchSnapshot = s
+
         // Phase 2E (network settings / relay diagnostics) — handled elsewhere.
         case .networkSettings, .relayDiagnostics:
             break
@@ -436,7 +463,7 @@ final class HighlighterAppKernel {
         // `current_snapshot`; the observer push is handled by those stores
         // directly. No-op here (the actor still pushes; non-resident views
         // are closed before they can receive stale data — D5).
-        case .bookmarks, .search, .articleFeed,
+        case .bookmarks, .articleFeed,
              .highlightFeed, .whatsNew, .bookPicker, .shareComposer:
             break
 

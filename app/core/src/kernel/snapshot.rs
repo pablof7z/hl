@@ -748,6 +748,14 @@ pub struct SearchSnapshot {
     /// navigation, `RejectSecret` shows a safe-reject hint, `FreeText` keeps the
     /// result buckets. The shell consumes it after routing (one-shot).
     pub omnibox: Option<OmniboxOutcome>,
+    // ── Phase 7 (search highlights bucket) additions (append-only) ───────────
+    /// Enriched kind:9802 highlight rows decoded from the kind:9802 entries in
+    /// `hits` via the SHARED `decode_highlight_row` (same NIP-84/NIP-73 fields as
+    /// the highlight feed / article-reader overlay — quote/context/artifact
+    /// refs/clip/image). Preserves the `hits` order (created_at desc). Lets Swift
+    /// render the Highlights search bucket without re-parsing kind:9802 tags.
+    /// Empty when no kind:9802 hits are present.
+    pub highlights: Vec<HighlightRow>,
 }
 
 /// Outcome of classifying one omnibox / paste / search input through NMP's

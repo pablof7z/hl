@@ -27,7 +27,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         var rooms: [UInt64: WeakBox<RoomStore>] = [:]
         var profiles: [UInt64: WeakBox<ProfileStore>] = [:]
         var articles: [UInt64: WeakBox<ArticleReaderStore>] = [:]
-        var searches: [UInt64: WeakBox<SearchStore>] = [:]
         var bookmarks: [UInt64: WeakBox<BookmarkStore>] = [:]
         var nostrEntities: [UInt64: WeakBox<NostrEntityCardStore>] = [:]
         /// App-scoped Network Settings store (subscription_id == 0). Weak
@@ -40,7 +39,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             rooms = rooms.filter { $0.value.value != nil }
             profiles = profiles.filter { $0.value.value != nil }
             articles = articles.filter { $0.value.value != nil }
-            searches = searches.filter { $0.value.value != nil }
             bookmarks = bookmarks.filter { $0.value.value != nil }
             nostrEntities = nostrEntities.filter { $0.value.value != nil }
         }
@@ -70,13 +68,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     func registerArticle(_ store: ArticleReaderStore, handle: UInt64) {
         registry.withLock { reg in
             reg.articles[handle] = WeakBox(store)
-            reg.prune()
-        }
-    }
-
-    func registerSearch(_ store: SearchStore, handle: UInt64) {
-        registry.withLock { reg in
-            reg.searches[handle] = WeakBox(store)
             reg.prune()
         }
     }
@@ -113,7 +104,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             _ = reg.rooms.removeValue(forKey: handle)
             _ = reg.profiles.removeValue(forKey: handle)
             _ = reg.articles.removeValue(forKey: handle)
-            _ = reg.searches.removeValue(forKey: handle)
             _ = reg.bookmarks.removeValue(forKey: handle)
             _ = reg.nostrEntities.removeValue(forKey: handle)
             _ = reg.profileSnapshotHandles.removeValue(forKey: handle)
@@ -137,7 +127,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                     room: reg.rooms[id]?.value,
                     profile: reg.profiles[id]?.value,
                     article: reg.articles[id]?.value,
-                    search: reg.searches[id]?.value,
                     bookmark: reg.bookmarks[id]?.value,
                     nostrEntity: reg.nostrEntities[id]?.value,
                     profileSnapshotPubkey: reg.profileSnapshotHandles[id]
@@ -150,8 +139,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
                 self.dispatchProfile(change, store: store)
             } else if let store = routed.article {
                 self.dispatchArticle(change, store: store)
-            } else if let store = routed.search {
-                self.dispatchSearch(change, store: store)
             } else if let store = routed.bookmark {
                 self.dispatchBookmarkStore(change, store: store)
             } else if let store = routed.nostrEntity {
@@ -169,7 +156,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
         let room: RoomStore?
         let profile: ProfileStore?
         let article: ArticleReaderStore?
-        let search: SearchStore?
         let bookmark: BookmarkStore?
         let nostrEntity: NostrEntityCardStore?
         let profileSnapshotPubkey: String?

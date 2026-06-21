@@ -118,6 +118,9 @@ struct SearchView: View {
             let snapshot = await app.safeCore.getSearchChromeSnapshot()
             recentQueries = snapshot.recentQueries
         }
+        .onChange(of: kernel.searchSnapshot) { _, _ in
+            store?.applyKernelSnapshot()
+        }
         .onDisappear {
             store?.stop()
             kernel.closeSearch()

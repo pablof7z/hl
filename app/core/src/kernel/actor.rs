@@ -962,6 +962,7 @@ fn search_scope_from_str(
         "users" => Some(SearchScope::Users),
         "long_form" => Some(SearchScope::LongForm),
         "notes" => Some(SearchScope::Notes),
+        "articles_and_highlights" => Some(SearchScope::ArticlesAndHighlights),
         _ => {
             emit_invalid_action_toast(state, format!("{ns}: unknown search scope: {scope}"), now);
             None

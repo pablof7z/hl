@@ -13,10 +13,13 @@ enum SearchDirectNavigation: Equatable {
 /// NIP-50 subscription whose deltas re-run the local article match so
 /// relay-delivered events fade into the Articles section as they arrive.
 ///
-/// Architecture note: every bucket is read from nostrdb via the Rust core —
-/// the NIP-50 relay sub just ingests into ndb, which in turn triggers a
-/// `SearchArticlesUpdated` delta that the store reacts to by re-running
-/// Rust's article snapshot locally. NostrDB stays the only source of truth.
+/// Phase 7 cutover: the KERNEL owns the article / highlight / community buckets.
+/// `query` changes dispatch `hl.search.run` (scope = articles + highlights, one
+/// NIP-50 query) and run the kernel's local community scan; results stream back
+/// via `kernel.searchSnapshot` → `applyKernelSnapshot()` (wired from the View's
+/// `.onChange`). Swift buckets the mixed hits by kind. The PEOPLE bucket stays
+/// on the live lane (kind:0 local scan — nmp #1697); it's read-only and coexists
+/// (gotcha #5). `searchRelays` / recent queries stay on the bespoke chrome path.
 @MainActor
 @Observable
 final class SearchStore {
@@ -38,17 +41,13 @@ final class SearchStore {
     private(set) var profiles: [ProfileMetadata] = []
     private(set) var hasQuery: Bool = false
 
-    /// True while a local scan is running for the current query — flickers to
-    /// avoid a blank frame on a fresh query.
+    /// True while the live-lane people scan is running for the current query.
     private(set) var isLocalLoading: Bool = false
-    /// True while the current NIP-50 relay subscription is being opened.
-    /// Relay-delivered events continue to fade into Articles after this flips
-    /// off via `SearchArticlesUpdated` deltas.
+    /// True between dispatching the kernel search and the first snapshot. The
+    /// kernel streams relay results into `kernel.searchSnapshot` as they arrive.
     private(set) var isRelayLoading: Bool = false
 
-    /// The resolved set of relays the NIP-50 query is hitting. Rendered as a
-    /// subtle footnote under the Articles section so the user can see their
-    /// configured NIP-51 search relays are actually in use.
+    /// The resolved set of relays the NIP-50 query hits, shown as a footnote.
     private(set) var searchRelays: [String] = []
 
     /// Set when the query is an exact Nostr entity or cached NIP-05 match.
@@ -73,10 +72,10 @@ final class SearchStore {
 
     // MARK: - Internal state
 
-    /// Rust-projected token for the currently scheduled query. In-flight
-    /// callbacks pass it back through Rust before applying results.
+    /// Monotonic token so a slow people-scan from a stale query can't overwrite
+    /// the current results.
     private var searchToken: UInt64 = 0
-    /// Most-recent applied query (the one whose results populate the buckets).
+    /// The query whose results currently populate the buckets.
     private var appliedQuery: String = ""
     private var searchTask: Task<Void, Never>?
     private var activeSearchHandle: UInt64?
@@ -109,6 +108,7 @@ final class SearchStore {
     // MARK: - Lifecycle
 
     func start() async {
+        kernel.openSearch()
         let snapshot = await safeCore.getSearchChromeSnapshot()
         searchRelays = snapshot.searchRelays
     }
@@ -253,8 +253,29 @@ final class SearchStore {
             clearResultsForEmptyQuery()
             return
         }
-        hasQuery = projection.hasQuery
-        isLocalLoading = projection.isLocalLoading
+
+        hasQuery = true
+        isLocalLoading = true
+        isRelayLoading = true
+
+        // Kernel owns article/highlight/community buckets: dispatch the combined
+        // NIP-50 search (results stream into kernel.searchSnapshot → onChange →
+        // applyKernelSnapshot). Fire-and-forget (read path).
+        kernel.app.dispatch(.runSearch(query: trimmed, scope: .articlesAndHighlights))
+
+        // People bucket stays live (nmp #1697): local kind:0 scan via the bespoke
+        // core. Only the profiles field of the snapshot is used; the article/
+        // highlight/community fields are now kernel-owned and ignored here.
+        searchTask = Task { [weak self] in
+            guard let self else { return }
+            let snapshot = await self.safeCore.getSearchResultsSnapshot(query: trimmed)
+            guard !Task.isCancelled, token == self.searchToken else { return }
+            self.appliedQuery = trimmed
+            self.profiles = snapshot.profiles
+            self.isLocalLoading = false
+            // Reflect whatever kernel results have already arrived for this query.
+            self.applyKernelSnapshot()
+        }
     }
 
     private func clearResultsForEmptyQuery() {
@@ -272,8 +293,7 @@ final class SearchStore {
         tearDownDirectEntity()
     }
 
-    private func runSearch(for q: String, token: UInt64) async {
-        let snapshot = await safeCore.getSearchResultsSnapshot(query: q)
+    // MARK: - Kernel snapshot (article / highlight / community buckets)
 
         let applyProjection = safeCore.projectSearchResultsApply(
             input: SearchResultsApplyInput(
@@ -365,24 +385,6 @@ final class SearchStore {
                 currentToken: searchToken
             )
         )
-        guard updateProjection.shouldRefreshArticles else { return }
-        isRelayLoading = updateProjection.isRelayLoading
-        let q = updateProjection.articleQuery
-        let token = updateProjection.requestToken
-        Task { [weak self] in
-            guard let self else { return }
-            let snapshot = await self.safeCore.getSearchArticleResultsSnapshot(query: q)
-            let applyProjection = self.safeCore.projectSearchRelayArticlesApply(
-                input: SearchRelayArticlesApplyInput(
-                    requestToken: token,
-                    currentToken: self.searchToken,
-                    requestQuery: q,
-                    appliedQuery: self.appliedQuery
-                )
-            )
-            guard applyProjection.shouldApply else { return }
-            self.articles = snapshot.articles
-        }
     }
 
     func applyDirectNostrEntity(event: NostrEntityEvent) {
@@ -396,6 +398,70 @@ final class SearchStore {
         articles = snapshot.articles
         communities = snapshot.communities
         profiles = snapshot.profiles
+    }
+
+    // MARK: - Kernel snapshot (article / highlight / community buckets)
+
+    /// Apply the kernel search snapshot. Called from `SearchView.onChange(of:
+    /// kernel.searchSnapshot)` and after the people scan resolves. Buckets the
+    /// mixed `hits` by kind for Articles, reads the kernel-decoded `highlights`
+    /// directly, and maps the local `communities` rows.
+    func applyKernelSnapshot() {
+        guard let snap = kernel?.searchSnapshot else { return }
+        articles = snap.hits
+            .filter { $0.kind == 30023 }
+            .map(Self.articleRecord(from:))
+        highlights = snap.highlights.map(HighlightRecord.init(kernelRow:))
+        communities = snap.communities.map(Self.communitySummary(from:))
+        // The first snapshot for a query ends the relay-loading flicker.
+        isRelayLoading = false
+    }
+
+    // MARK: - Kernel row → bespoke record mapping (Phase 7)
+
+    /// Build the bespoke `ArticleRecord` a search card renders from a raw
+    /// kind:30023 hit. The article event is self-describing — title/summary/
+    /// image/d/published_at are top-level tags (D1: Swift extracts; no kernel
+    /// hydration needed for long-form).
+    private static func articleRecord(from hit: KernelSearchHitRow) -> ArticleRecord {
+        let identifier = tagValue(hit.tags, "d") ?? ""
+        let publishedAt = tagValue(hit.tags, "published_at").flatMap(UInt64.init)
+        return ArticleRecord(
+            eventId: hit.id,
+            address: "30023:\(hit.author):\(identifier)",
+            pubkey: hit.author,
+            identifier: identifier,
+            title: tagValue(hit.tags, "title") ?? "",
+            summary: tagValue(hit.tags, "summary") ?? "",
+            image: tagValue(hit.tags, "image") ?? "",
+            content: hit.content,
+            hashtags: hit.tags.filter { $0.first == "t" && $0.count > 1 }.map { $0[1] },
+            publishedAt: publishedAt,
+            createdAt: hit.createdAt
+        )
+    }
+
+    /// Map a kernel `CommunitySearchRow` (already filtered to public + open by the
+    /// local scan) into the bespoke `CommunitySummary` the community card renders.
+    private static func communitySummary(from row: CommunitySearchRow) -> CommunitySummary {
+        CommunitySummary(
+            id: row.groupId,
+            name: row.name ?? "",
+            about: row.about ?? "",
+            picture: row.picture ?? "",
+            access: "open",
+            visibility: "public",
+            adminPubkeys: [],
+            memberCount: row.memberCount,
+            relayUrl: row.hostRelayUrl,
+            metadataEventId: "",
+            createdAt: nil
+        )
+    }
+
+    /// First value of the first tag whose name matches `name` (NIP-01 `[name, value, …]`).
+    private static func tagValue(_ tags: [[String]], _ name: String) -> String? {
+        tags.first { $0.first == name && $0.count > 1 }?[1]
     }
 
     private func scheduleDirectNavigationIfPossible(query: String, token: UInt64) {

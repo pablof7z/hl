@@ -465,6 +465,9 @@ enum HLSearchScope: String {
     case users = "users"
     case longForm = "long_form"
     case notes = "notes"
+    /// kind:30023 articles + kind:9802 highlights in one query — backs the
+    /// unified search screen (Swift buckets the mixed hits by kind).
+    case articlesAndHighlights = "articles_and_highlights"
 }
 
 // MARK: - HighlighterApp dispatch facade
