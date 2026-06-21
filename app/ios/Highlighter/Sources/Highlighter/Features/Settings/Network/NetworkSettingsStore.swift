@@ -44,16 +44,37 @@ final class NetworkSettingsStore {
 
     // MARK: - Kernel write helpers (Phase 7)
 
-    /// Route a relay's kind:10002 (NIP-65) membership using the KERNEL's
-    /// `nip65RelayRole` decision (single source of truth, parity-tested against
-    /// bespoke nip65_tags): read|write → set_role with the marker (both/read/write)
-    /// → kind:10002; read=write=false → removeRelay (omit from kind:10002 — a
-    /// rooms/indexer-only relay lives ONLY in the kind:30078 app-data). Swift no
-    /// longer makes the marker decision locally, so it can't drift.
-    private func dispatchNip65(url: String, read: Bool, write: Bool) {
+    /// The kind:10002 (NIP-65) write a relay's read/write flags resolve to.
+    /// Extracted as a pure value so the routing decision — specifically the
+    /// regression site, read=write=false must REMOVE, not add (7e2de4f3 routed
+    /// it to the "both" marker) — is unit-testable without a live kernel.
+    enum Nip65Route: Equatable {
+        /// Set the kind:10002 marker (both/read/write) for this relay.
+        case setRole(String)
+        /// Omit the relay from kind:10002 — a rooms/indexer-only relay lives
+        /// ONLY in the kind:30078 app-data.
+        case remove
+    }
+
+    /// Pure routing decision. Delegates the marker to the KERNEL's
+    /// `nip65RelayRole` (single source of truth, parity-tested against bespoke
+    /// `nip65_tags`), so Swift never makes the marker decision locally and
+    /// can't drift. `nonisolated` so the regression-guard test can call it
+    /// without hopping to the main actor.
+    nonisolated static func nip65Route(read: Bool, write: Bool) -> Nip65Route {
         if let role = nip65RelayRole(read: read, write: write) {
+            return .setRole(role)
+        }
+        return .remove
+    }
+
+    /// Dispatch the resolved kind:10002 (NIP-65) write for a relay. Kernel is
+    /// the sole writer; read=write=false → removeRelay (omit from kind:10002).
+    private func dispatchNip65(url: String, read: Bool, write: Bool) {
+        switch Self.nip65Route(read: read, write: write) {
+        case .setRole(let role):
             kernel.app.dispatch(.setRelayRole(url: url, role: role))
-        } else {
+        case .remove:
             kernel.app.dispatch(.removeRelay(url: url))
         }
     }
