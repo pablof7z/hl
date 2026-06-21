@@ -119,7 +119,9 @@ pub(crate) fn ensure_bookmark_article_previews(state: &mut AppState) -> Vec<Effe
     let coordinates = bookmarked_article_coordinates(state);
     let mut effects = Vec::new();
     for coordinate in coordinates {
-        effects.extend(super::artifact_preview::ensure_artifact_preview(state, coordinate));
+        effects.extend(super::artifact_preview::ensure_artifact_preview(
+            state, coordinate,
+        ));
     }
     effects
 }
@@ -483,10 +485,18 @@ mod tests {
             &mut state,
             &clock,
             Cmd::Event(KernelEvent::BookmarksUpdated(vec![
-                BookmarkRow::Address { coordinate: article_coord.to_string(), relay: None },
+                BookmarkRow::Address {
+                    coordinate: article_coord.to_string(),
+                    relay: None,
+                },
                 // Non-article addressable (a NIP-29 group) — must be excluded.
-                BookmarkRow::Address { coordinate: "34550:host:room".to_string(), relay: None },
-                BookmarkRow::Url { url: "https://example.com".to_string() },
+                BookmarkRow::Address {
+                    coordinate: "34550:host:room".to_string(),
+                    relay: None,
+                },
+                BookmarkRow::Url {
+                    url: "https://example.com".to_string(),
+                },
             ])),
         );
 
@@ -507,9 +517,16 @@ mod tests {
 
         // The projected slice carries exactly the one article preview, pending.
         let previews = bookmark_article_previews(&state);
-        assert_eq!(previews.len(), 1, "only the kind:30023 bookmark is in the articles pane");
+        assert_eq!(
+            previews.len(),
+            1,
+            "only the kind:30023 bookmark is in the articles pane"
+        );
         assert_eq!(previews[0].coordinate, article_coord);
-        assert!(previews[0].pending, "missing article starts pending until the fetch resolves");
+        assert!(
+            previews[0].pending,
+            "missing article starts pending until the fetch resolves"
+        );
     }
 
     // 4C-T2: add_bookmark_dispatches_nip51_add_serde

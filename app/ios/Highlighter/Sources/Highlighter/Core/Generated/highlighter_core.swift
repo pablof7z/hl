@@ -21428,6 +21428,13 @@ public struct DiscussionRow {
      */
     public var attachmentUrl: String?
     /**
+     * Canonical artifact coordinate extracted from `a`/`e`/`i` reference tags
+     * (priority: a → e → i). `None` when no recognized reference tag is present.
+     * Swift uses this to resolve and render the artifact chip for the discussion.
+     * D1: raw canonical form only — no URL formatting.
+     */
+    public var artifactCoordinate: String?
+    /**
      * Event `created_at` Unix seconds. D1: no "X ago" formatting.
      */
     public var createdAt: UInt64
@@ -21451,6 +21458,12 @@ public struct DiscussionRow {
          * `["r", url]` tag value if present, else `None`.
          */attachmentUrl: String?,
         /**
+         * Canonical artifact coordinate extracted from `a`/`e`/`i` reference tags
+         * (priority: a → e → i). `None` when no recognized reference tag is present.
+         * Swift uses this to resolve and render the artifact chip for the discussion.
+         * D1: raw canonical form only — no URL formatting.
+         */artifactCoordinate: String?,
+        /**
          * Event `created_at` Unix seconds. D1: no "X ago" formatting.
          */createdAt: UInt64) {
         self.eventId = eventId
@@ -21458,6 +21471,7 @@ public struct DiscussionRow {
         self.title = title
         self.body = body
         self.attachmentUrl = attachmentUrl
+        self.artifactCoordinate = artifactCoordinate
         self.createdAt = createdAt
     }
 }
@@ -21484,6 +21498,9 @@ extension DiscussionRow: Equatable, Hashable {
         if lhs.attachmentUrl != rhs.attachmentUrl {
             return false
         }
+        if lhs.artifactCoordinate != rhs.artifactCoordinate {
+            return false
+        }
         if lhs.createdAt != rhs.createdAt {
             return false
         }
@@ -21496,6 +21513,7 @@ extension DiscussionRow: Equatable, Hashable {
         hasher.combine(title)
         hasher.combine(body)
         hasher.combine(attachmentUrl)
+        hasher.combine(artifactCoordinate)
         hasher.combine(createdAt)
     }
 }
@@ -21514,6 +21532,7 @@ public struct FfiConverterTypeDiscussionRow: FfiConverterRustBuffer {
                 title: FfiConverterString.read(from: &buf),
                 body: FfiConverterString.read(from: &buf),
                 attachmentUrl: FfiConverterOptionString.read(from: &buf),
+                artifactCoordinate: FfiConverterOptionString.read(from: &buf),
                 createdAt: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -21524,6 +21543,7 @@ public struct FfiConverterTypeDiscussionRow: FfiConverterRustBuffer {
         FfiConverterString.write(value.title, into: &buf)
         FfiConverterString.write(value.body, into: &buf)
         FfiConverterOptionString.write(value.attachmentUrl, into: &buf)
+        FfiConverterOptionString.write(value.artifactCoordinate, into: &buf)
         FfiConverterUInt64.write(value.createdAt, into: &buf)
     }
 }
@@ -27983,6 +28003,87 @@ public func FfiConverterTypeKernelCaptureSnapshot_lower(_ value: KernelCaptureSn
 
 
 /**
+ * Comment counts + rows grouped by artifact coordinate.
+ */
+public struct KernelCommentReferenceBucket {
+    public var rootTagValue: String
+    public var comments: [CommentRecordRow]
+    public var count: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(rootTagValue: String, comments: [CommentRecordRow], count: UInt32) {
+        self.rootTagValue = rootTagValue
+        self.comments = comments
+        self.count = count
+    }
+}
+
+#if compiler(>=6)
+extension KernelCommentReferenceBucket: Sendable {}
+#endif
+
+
+extension KernelCommentReferenceBucket: Equatable, Hashable {
+    public static func ==(lhs: KernelCommentReferenceBucket, rhs: KernelCommentReferenceBucket) -> Bool {
+        if lhs.rootTagValue != rhs.rootTagValue {
+            return false
+        }
+        if lhs.comments != rhs.comments {
+            return false
+        }
+        if lhs.count != rhs.count {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rootTagValue)
+        hasher.combine(comments)
+        hasher.combine(count)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelCommentReferenceBucket: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelCommentReferenceBucket {
+        return
+            try KernelCommentReferenceBucket(
+                rootTagValue: FfiConverterString.read(from: &buf),
+                comments: FfiConverterSequenceTypeCommentRecordRow.read(from: &buf),
+                count: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelCommentReferenceBucket, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.rootTagValue, into: &buf)
+        FfiConverterSequenceTypeCommentRecordRow.write(value.comments, into: &buf)
+        FfiConverterUInt32.write(value.count, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelCommentReferenceBucket_lift(_ buf: RustBuffer) throws -> KernelCommentReferenceBucket {
+    return try FfiConverterTypeKernelCommentReferenceBucket.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelCommentReferenceBucket_lower(_ value: KernelCommentReferenceBucket) -> RustBuffer {
+    return FfiConverterTypeKernelCommentReferenceBucket.lower(value)
+}
+
+
+/**
  * Snapshot for `ViewId::FeedbackThread { root_event_id }` — thread detail.
  *
  * Contains the root record + all descendant replies (ancestor-chain traversal),
@@ -28227,6 +28328,79 @@ public func FfiConverterTypeKernelFeedbackThreadsSnapshot_lift(_ buf: RustBuffer
 #endif
 public func FfiConverterTypeKernelFeedbackThreadsSnapshot_lower(_ value: KernelFeedbackThreadsSnapshot) -> RustBuffer {
     return FfiConverterTypeKernelFeedbackThreadsSnapshot.lower(value)
+}
+
+
+/**
+ * Highlights grouped by artifact coordinate.
+ */
+public struct KernelHighlightReferenceBucket {
+    public var coordinate: String
+    public var highlights: [HighlightRow]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(coordinate: String, highlights: [HighlightRow]) {
+        self.coordinate = coordinate
+        self.highlights = highlights
+    }
+}
+
+#if compiler(>=6)
+extension KernelHighlightReferenceBucket: Sendable {}
+#endif
+
+
+extension KernelHighlightReferenceBucket: Equatable, Hashable {
+    public static func ==(lhs: KernelHighlightReferenceBucket, rhs: KernelHighlightReferenceBucket) -> Bool {
+        if lhs.coordinate != rhs.coordinate {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(coordinate)
+        hasher.combine(highlights)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelHighlightReferenceBucket: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelHighlightReferenceBucket {
+        return
+            try KernelHighlightReferenceBucket(
+                coordinate: FfiConverterString.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHighlightRow.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelHighlightReferenceBucket, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.coordinate, into: &buf)
+        FfiConverterSequenceTypeHighlightRow.write(value.highlights, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelHighlightReferenceBucket_lift(_ buf: RustBuffer) throws -> KernelHighlightReferenceBucket {
+    return try FfiConverterTypeKernelHighlightReferenceBucket.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelHighlightReferenceBucket_lower(_ value: KernelHighlightReferenceBucket) -> RustBuffer {
+    return FfiConverterTypeKernelHighlightReferenceBucket.lower(value)
 }
 
 
@@ -28973,6 +29147,30 @@ public struct KernelRoomHomeSnapshot {
      * Empty until the first feed page arrives.
      */
     public var lanes: [RoomLaneRow]
+    /**
+     * Artifact library: kind:11 share events (non-discussion) from the lane feed
+     * with artifact coordinates resolved through `AppState::artifact_previews`.
+     */
+    public var artifactLibrary: [KernelRoomLibraryRow]
+    /**
+     * All highlights (kind:9802) received via the room highlight feed, sorted
+     * newest-first. Bounded at `ROOM_HOME_HIGHLIGHT_CAP` rows.
+     */
+    public var highlights: [HighlightRow]
+    /**
+     * Highlights grouped by artifact coordinate (matching entries in artifact_library).
+     */
+    public var highlightsByReference: [KernelHighlightReferenceBucket]
+    /**
+     * Comment counts + rows grouped by artifact coordinate.
+     */
+    public var commentsByReference: [KernelCommentReferenceBucket]
+    /**
+     * Assembled visible lanes — one per artifact in the library, sorted by
+     * `latest_activity_at` desc. Dormant lanes (no highlights AND no comments)
+     * are excluded, mirroring the bespoke `build_visible_room_lanes` filter.
+     */
+    public var assembledLanes: [KernelRoomLane]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -29020,7 +29218,26 @@ public struct KernelRoomHomeSnapshot {
          * Populated by the ADR-0058 pull engine when `ViewId::RoomHome` is open.
          * Bounded at `ROOM_LANE_ROW_CAP` rows per group in `room_home.rs`.
          * Empty until the first feed page arrives.
-         */lanes: [RoomLaneRow]) {
+         */lanes: [RoomLaneRow],
+        /**
+         * Artifact library: kind:11 share events (non-discussion) from the lane feed
+         * with artifact coordinates resolved through `AppState::artifact_previews`.
+         */artifactLibrary: [KernelRoomLibraryRow],
+        /**
+         * All highlights (kind:9802) received via the room highlight feed, sorted
+         * newest-first. Bounded at `ROOM_HOME_HIGHLIGHT_CAP` rows.
+         */highlights: [HighlightRow],
+        /**
+         * Highlights grouped by artifact coordinate (matching entries in artifact_library).
+         */highlightsByReference: [KernelHighlightReferenceBucket],
+        /**
+         * Comment counts + rows grouped by artifact coordinate.
+         */commentsByReference: [KernelCommentReferenceBucket],
+        /**
+         * Assembled visible lanes — one per artifact in the library, sorted by
+         * `latest_activity_at` desc. Dormant lanes (no highlights AND no comments)
+         * are excluded, mirroring the bespoke `build_visible_room_lanes` filter.
+         */assembledLanes: [KernelRoomLane]) {
         self.groupId = groupId
         self.hostRelayUrl = hostRelayUrl
         self.name = name
@@ -29033,6 +29250,11 @@ public struct KernelRoomHomeSnapshot {
         self.laneIds = laneIds
         self.inviteLinkBase = inviteLinkBase
         self.lanes = lanes
+        self.artifactLibrary = artifactLibrary
+        self.highlights = highlights
+        self.highlightsByReference = highlightsByReference
+        self.commentsByReference = commentsByReference
+        self.assembledLanes = assembledLanes
     }
 }
 
@@ -29079,6 +29301,21 @@ extension KernelRoomHomeSnapshot: Equatable, Hashable {
         if lhs.lanes != rhs.lanes {
             return false
         }
+        if lhs.artifactLibrary != rhs.artifactLibrary {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
+        if lhs.highlightsByReference != rhs.highlightsByReference {
+            return false
+        }
+        if lhs.commentsByReference != rhs.commentsByReference {
+            return false
+        }
+        if lhs.assembledLanes != rhs.assembledLanes {
+            return false
+        }
         return true
     }
 
@@ -29095,6 +29332,11 @@ extension KernelRoomHomeSnapshot: Equatable, Hashable {
         hasher.combine(laneIds)
         hasher.combine(inviteLinkBase)
         hasher.combine(lanes)
+        hasher.combine(artifactLibrary)
+        hasher.combine(highlights)
+        hasher.combine(highlightsByReference)
+        hasher.combine(commentsByReference)
+        hasher.combine(assembledLanes)
     }
 }
 
@@ -29118,7 +29360,12 @@ public struct FfiConverterTypeKernelRoomHomeSnapshot: FfiConverterRustBuffer {
                 isAdmin: FfiConverterBool.read(from: &buf),
                 laneIds: FfiConverterSequenceString.read(from: &buf),
                 inviteLinkBase: FfiConverterString.read(from: &buf),
-                lanes: FfiConverterSequenceTypeRoomLaneRow.read(from: &buf)
+                lanes: FfiConverterSequenceTypeRoomLaneRow.read(from: &buf),
+                artifactLibrary: FfiConverterSequenceTypeKernelRoomLibraryRow.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHighlightRow.read(from: &buf),
+                highlightsByReference: FfiConverterSequenceTypeKernelHighlightReferenceBucket.read(from: &buf),
+                commentsByReference: FfiConverterSequenceTypeKernelCommentReferenceBucket.read(from: &buf),
+                assembledLanes: FfiConverterSequenceTypeKernelRoomLane.read(from: &buf)
         )
     }
 
@@ -29135,6 +29382,11 @@ public struct FfiConverterTypeKernelRoomHomeSnapshot: FfiConverterRustBuffer {
         FfiConverterSequenceString.write(value.laneIds, into: &buf)
         FfiConverterString.write(value.inviteLinkBase, into: &buf)
         FfiConverterSequenceTypeRoomLaneRow.write(value.lanes, into: &buf)
+        FfiConverterSequenceTypeKernelRoomLibraryRow.write(value.artifactLibrary, into: &buf)
+        FfiConverterSequenceTypeHighlightRow.write(value.highlights, into: &buf)
+        FfiConverterSequenceTypeKernelHighlightReferenceBucket.write(value.highlightsByReference, into: &buf)
+        FfiConverterSequenceTypeKernelCommentReferenceBucket.write(value.commentsByReference, into: &buf)
+        FfiConverterSequenceTypeKernelRoomLane.write(value.assembledLanes, into: &buf)
     }
 }
 
@@ -29151,6 +29403,237 @@ public func FfiConverterTypeKernelRoomHomeSnapshot_lift(_ buf: RustBuffer) throw
 #endif
 public func FfiConverterTypeKernelRoomHomeSnapshot_lower(_ value: KernelRoomHomeSnapshot) -> RustBuffer {
     return FfiConverterTypeKernelRoomHomeSnapshot.lower(value)
+}
+
+
+/**
+ * One assembled room lane — per-artifact aggregate of hydrated highlights and
+ * comments. Mirrors the bespoke `RoomLane` from `room_lanes.rs` using kernel
+ * types. Dormant lanes (no highlights AND no comments) are excluded by
+ * `project_room_home_snapshot`. Sorted by `latest_activity_at` desc.
+ *
+ * D1: raw protocol data only — no formatted strings, no "X ago" labels.
+ * D4: reuses `HighlightRow` and `CommentRecordRow` already in the snapshot.
+ */
+public struct KernelRoomLane {
+    /**
+     * kind:11 event id of the artifact share that opened this lane.
+     */
+    public var shareEventId: String
+    /**
+     * Canonical artifact coordinate (e.g. `"a:30023:pk:d"`, `"i:isbn:..."`, `"r:url"`).
+     */
+    public var artifactCoordinate: String
+    /**
+     * Resolved artifact preview, or `None` while pending / not yet fetched.
+     */
+    public var artifactPreview: ArtifactPreviewRow?
+    /**
+     * Hydrated highlight rows for this lane, deduped by event_id, newest-first.
+     */
+    public var highlights: [HighlightRow]
+    /**
+     * Comment rows for this artifact, sorted newest-first.
+     */
+    public var comments: [CommentRecordRow]
+    /**
+     * UNIX seconds of the most recent highlight or comment in this lane.
+     * Used by the outer sort to place most-active lanes first.
+     */
+    public var latestActivityAt: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * kind:11 event id of the artifact share that opened this lane.
+         */shareEventId: String,
+        /**
+         * Canonical artifact coordinate (e.g. `"a:30023:pk:d"`, `"i:isbn:..."`, `"r:url"`).
+         */artifactCoordinate: String,
+        /**
+         * Resolved artifact preview, or `None` while pending / not yet fetched.
+         */artifactPreview: ArtifactPreviewRow?,
+        /**
+         * Hydrated highlight rows for this lane, deduped by event_id, newest-first.
+         */highlights: [HighlightRow],
+        /**
+         * Comment rows for this artifact, sorted newest-first.
+         */comments: [CommentRecordRow],
+        /**
+         * UNIX seconds of the most recent highlight or comment in this lane.
+         * Used by the outer sort to place most-active lanes first.
+         */latestActivityAt: UInt64) {
+        self.shareEventId = shareEventId
+        self.artifactCoordinate = artifactCoordinate
+        self.artifactPreview = artifactPreview
+        self.highlights = highlights
+        self.comments = comments
+        self.latestActivityAt = latestActivityAt
+    }
+}
+
+#if compiler(>=6)
+extension KernelRoomLane: Sendable {}
+#endif
+
+
+extension KernelRoomLane: Equatable, Hashable {
+    public static func ==(lhs: KernelRoomLane, rhs: KernelRoomLane) -> Bool {
+        if lhs.shareEventId != rhs.shareEventId {
+            return false
+        }
+        if lhs.artifactCoordinate != rhs.artifactCoordinate {
+            return false
+        }
+        if lhs.artifactPreview != rhs.artifactPreview {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
+        if lhs.comments != rhs.comments {
+            return false
+        }
+        if lhs.latestActivityAt != rhs.latestActivityAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(shareEventId)
+        hasher.combine(artifactCoordinate)
+        hasher.combine(artifactPreview)
+        hasher.combine(highlights)
+        hasher.combine(comments)
+        hasher.combine(latestActivityAt)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelRoomLane: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelRoomLane {
+        return
+            try KernelRoomLane(
+                shareEventId: FfiConverterString.read(from: &buf),
+                artifactCoordinate: FfiConverterString.read(from: &buf),
+                artifactPreview: FfiConverterOptionTypeArtifactPreviewRow.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHighlightRow.read(from: &buf),
+                comments: FfiConverterSequenceTypeCommentRecordRow.read(from: &buf),
+                latestActivityAt: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelRoomLane, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.shareEventId, into: &buf)
+        FfiConverterString.write(value.artifactCoordinate, into: &buf)
+        FfiConverterOptionTypeArtifactPreviewRow.write(value.artifactPreview, into: &buf)
+        FfiConverterSequenceTypeHighlightRow.write(value.highlights, into: &buf)
+        FfiConverterSequenceTypeCommentRecordRow.write(value.comments, into: &buf)
+        FfiConverterUInt64.write(value.latestActivityAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelRoomLane_lift(_ buf: RustBuffer) throws -> KernelRoomLane {
+    return try FfiConverterTypeKernelRoomLane.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelRoomLane_lower(_ value: KernelRoomLane) -> RustBuffer {
+    return FfiConverterTypeKernelRoomLane.lower(value)
+}
+
+
+/**
+ * One artifact in the room's library — a kind:11 share event (not a discussion)
+ * whose artifact coordinate is resolved through `AppState::artifact_previews`.
+ */
+public struct KernelRoomLibraryRow {
+    public var coordinate: String
+    public var shareEventId: String
+    public var preview: ArtifactPreviewRow?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(coordinate: String, shareEventId: String, preview: ArtifactPreviewRow?) {
+        self.coordinate = coordinate
+        self.shareEventId = shareEventId
+        self.preview = preview
+    }
+}
+
+#if compiler(>=6)
+extension KernelRoomLibraryRow: Sendable {}
+#endif
+
+
+extension KernelRoomLibraryRow: Equatable, Hashable {
+    public static func ==(lhs: KernelRoomLibraryRow, rhs: KernelRoomLibraryRow) -> Bool {
+        if lhs.coordinate != rhs.coordinate {
+            return false
+        }
+        if lhs.shareEventId != rhs.shareEventId {
+            return false
+        }
+        if lhs.preview != rhs.preview {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(coordinate)
+        hasher.combine(shareEventId)
+        hasher.combine(preview)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelRoomLibraryRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelRoomLibraryRow {
+        return
+            try KernelRoomLibraryRow(
+                coordinate: FfiConverterString.read(from: &buf),
+                shareEventId: FfiConverterString.read(from: &buf),
+                preview: FfiConverterOptionTypeArtifactPreviewRow.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelRoomLibraryRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.coordinate, into: &buf)
+        FfiConverterString.write(value.shareEventId, into: &buf)
+        FfiConverterOptionTypeArtifactPreviewRow.write(value.preview, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelRoomLibraryRow_lift(_ buf: RustBuffer) throws -> KernelRoomLibraryRow {
+    return try FfiConverterTypeKernelRoomLibraryRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelRoomLibraryRow_lower(_ value: KernelRoomLibraryRow) -> RustBuffer {
+    return FfiConverterTypeKernelRoomLibraryRow.lower(value)
 }
 
 
@@ -57017,6 +57500,30 @@ fileprivate struct FfiConverterOptionTypeArtifactPreview: FfiConverterRustBuffer
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeArtifactPreviewRow: FfiConverterRustBuffer {
+    typealias SwiftType = ArtifactPreviewRow?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeArtifactPreviewRow.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeArtifactPreviewRow.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeArtifactRecord: FfiConverterRustBuffer {
     typealias SwiftType = ArtifactRecord?
 
@@ -58762,6 +59269,56 @@ fileprivate struct FfiConverterSequenceTypeImportRelayRow: FfiConverterRustBuffe
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeKernelCommentReferenceBucket: FfiConverterRustBuffer {
+    typealias SwiftType = [KernelCommentReferenceBucket]
+
+    public static func write(_ value: [KernelCommentReferenceBucket], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeKernelCommentReferenceBucket.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [KernelCommentReferenceBucket] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [KernelCommentReferenceBucket]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeKernelCommentReferenceBucket.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeKernelHighlightReferenceBucket: FfiConverterRustBuffer {
+    typealias SwiftType = [KernelHighlightReferenceBucket]
+
+    public static func write(_ value: [KernelHighlightReferenceBucket], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeKernelHighlightReferenceBucket.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [KernelHighlightReferenceBucket] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [KernelHighlightReferenceBucket]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeKernelHighlightReferenceBucket.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeKernelHomeFeedRow: FfiConverterRustBuffer {
     typealias SwiftType = [KernelHomeFeedRow]
 
@@ -58779,6 +59336,56 @@ fileprivate struct FfiConverterSequenceTypeKernelHomeFeedRow: FfiConverterRustBu
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeKernelHomeFeedRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeKernelRoomLane: FfiConverterRustBuffer {
+    typealias SwiftType = [KernelRoomLane]
+
+    public static func write(_ value: [KernelRoomLane], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeKernelRoomLane.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [KernelRoomLane] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [KernelRoomLane]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeKernelRoomLane.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeKernelRoomLibraryRow: FfiConverterRustBuffer {
+    typealias SwiftType = [KernelRoomLibraryRow]
+
+    public static func write(_ value: [KernelRoomLibraryRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeKernelRoomLibraryRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [KernelRoomLibraryRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [KernelRoomLibraryRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeKernelRoomLibraryRow.read(from: &buf))
         }
         return seq
     }
