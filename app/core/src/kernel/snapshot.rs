@@ -497,6 +497,44 @@ pub struct KernelRoomHomeSnapshot {
     /// Bounded at `ROOM_LANE_ROW_CAP` rows per group in `room_home.rs`.
     /// Empty until the first feed page arrives.
     pub lanes: Vec<RoomLaneRow>,
+
+    // ── Room-home aggregation additions (append-only) ─────────────────────────
+    /// Artifact library: kind:11 share events (non-discussion) from the lane feed
+    /// with artifact coordinates resolved through `AppState::artifact_previews`.
+    pub artifact_library: Vec<KernelRoomLibraryRow>,
+    /// All highlights (kind:9802) received via the room highlight feed, sorted
+    /// newest-first. Bounded at `ROOM_HOME_HIGHLIGHT_CAP` rows.
+    pub highlights: Vec<HighlightRow>,
+    /// Highlights grouped by artifact coordinate (matching entries in artifact_library).
+    pub highlights_by_reference: Vec<KernelHighlightReferenceBucket>,
+    /// Comment counts + rows grouped by artifact coordinate.
+    pub comments_by_reference: Vec<KernelCommentReferenceBucket>,
+}
+
+// ── Room-home aggregation additions (append-only) ─────────────────────────────
+
+/// One artifact in the room's library — a kind:11 share event (not a discussion)
+/// whose artifact coordinate is resolved through `AppState::artifact_previews`.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelRoomLibraryRow {
+    pub coordinate: String,
+    pub share_event_id: String,
+    pub preview: Option<ArtifactPreviewRow>,
+}
+
+/// Highlights grouped by artifact coordinate.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelHighlightReferenceBucket {
+    pub coordinate: String,
+    pub highlights: Vec<HighlightRow>,
+}
+
+/// Comment counts + rows grouped by artifact coordinate.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelCommentReferenceBucket {
+    pub root_tag_value: String,
+    pub comments: Vec<CommentRecordRow>,
+    pub count: u32,
 }
 
 // ── Phase 4I additions (append-only) ─────────────────────────────────────────

@@ -1181,7 +1181,10 @@ mod tests {
             )),
             "capture_page must emit a Camera(CapturePage) request; got: {effects:?}"
         );
-        assert!(state.camera.pending, "capture_page must mark camera pending");
+        assert!(
+            state.camera.pending,
+            "capture_page must mark camera pending"
+        );
 
         // 2. CameraResult::PageImage auto-chains to an OCR RecognizeText request
         //    on the same handle (camera::reduce_capability_camera).
@@ -1257,7 +1260,10 @@ mod tests {
         step(
             &mut state,
             &clock,
-            envelope("hl.capture.set_quote", r#"{"quote":"A captured paragraph"}"#),
+            envelope(
+                "hl.capture.set_quote",
+                r#"{"quote":"A captured paragraph"}"#,
+            ),
         );
         assert_eq!(
             state.capture_draft.publish_phase,
