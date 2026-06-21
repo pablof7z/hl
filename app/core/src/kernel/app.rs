@@ -283,6 +283,14 @@ pub struct AppState {
     /// Cleared on `Logout` / `IdentityChanged(None)`.
     pub room_lanes: HashMap<String, crate::kernel::domains::feed::FeedState>,
 
+    /// Pull-cursor state per room highlight feed, keyed by group_id.
+    ///
+    /// Each entry is registered when `ViewId::RoomHome{group_id}` opens — pulls
+    /// kind:9802 events tagged `#h == <group_id>`. Key is
+    /// `"hl.feed.room_highlights.<group_id>"`. Bounded by open room views.
+    /// Cleared on `Logout` / `IdentityChanged(None)`.
+    pub room_highlight_feeds: HashMap<String, crate::kernel::domains::feed::FeedState>,
+
     /// Pull-cursor state per article-highlight feed, keyed by article address.
     ///
     /// Each entry is registered (Phase 7) when a `ViewId::ArticleReader{address}`
@@ -490,6 +498,7 @@ impl Default for AppState {
             article_feed: crate::kernel::domains::feed::FeedState::default(),
             highlight_feed: crate::kernel::domains::feed::FeedState::default(),
             room_lanes: HashMap::new(),
+            room_highlight_feeds: HashMap::new(),
             article_highlight_feeds: HashMap::new(),
             // ── Phase 7 home-feed aggregation additions ───────────────────────
             home_feed_interactions: crate::kernel::domains::feed::FeedState::default(),

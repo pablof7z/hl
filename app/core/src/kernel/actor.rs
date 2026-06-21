@@ -1206,6 +1206,12 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
                     state.room_lanes.entry(group_key).or_default();
                     state.room_lanes.get_mut(k)
                 }
+                k if k.starts_with(room_home::ROOM_HIGHLIGHT_FEED_KEY_PREFIX) => {
+                    // Lazily insert a FeedState for this room highlight feed.
+                    let hl_key = k.to_string();
+                    state.room_highlight_feeds.entry(hl_key).or_default();
+                    state.room_highlight_feeds.get_mut(k)
+                }
                 k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => {
                     // Phase 7: per-article highlight feed. Lazily insert a
                     // FeedState for this article address if not present.
@@ -1238,6 +1244,14 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
                 || key == home_feed::HOME_INTERACTIONS_FEED_KEY
             {
                 home_feed::ensure_artifact_previews(state);
+            }
+
+            // Room-home aggregation: seed artifact_previews for kind:11 events
+            // in the room lane so the next snapshot can attach previews.
+            if key.starts_with(room_home::ROOM_LANE_FEED_KEY_PREFIX) {
+                let group_id = key.trim_start_matches(room_home::ROOM_LANE_FEED_KEY_PREFIX);
+                let group_id = group_id.to_string();
+                room_home::ensure_room_artifact_previews(state, &group_id);
             }
 
             // Note: AdvancePullCursor is sent from the inline effect handler in
@@ -2202,6 +2216,10 @@ fn feed_state_cursor_id(state: &AppState, key: &str) -> u64 {
         "hl.feed.highlights" => state.highlight_feed.cursor_id,
         home_feed::HOME_INTERACTIONS_FEED_KEY => state.home_feed_interactions.cursor_id,
         k if k.starts_with("hl.feed.room.") => state.room_lanes.get(k).map_or(0, |fs| fs.cursor_id),
+        k if k.starts_with(room_home::ROOM_HIGHLIGHT_FEED_KEY_PREFIX) => state
+            .room_highlight_feeds
+            .get(k)
+            .map_or(0, |fs| fs.cursor_id),
         k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => state
             .article_highlight_feeds
             .get(k)
@@ -2221,6 +2239,10 @@ fn feed_state_after_seq(state: &AppState, key: &str) -> u64 {
         "hl.feed.highlights" => state.highlight_feed.after_seq,
         home_feed::HOME_INTERACTIONS_FEED_KEY => state.home_feed_interactions.after_seq,
         k if k.starts_with("hl.feed.room.") => state.room_lanes.get(k).map_or(0, |fs| fs.after_seq),
+        k if k.starts_with(room_home::ROOM_HIGHLIGHT_FEED_KEY_PREFIX) => state
+            .room_highlight_feeds
+            .get(k)
+            .map_or(0, |fs| fs.after_seq),
         k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => state
             .article_highlight_feeds
             .get(k)
@@ -2409,6 +2431,13 @@ pub(crate) async fn actor_task(
                         k if k.starts_with("hl.feed.room.") => {
                             state.room_lanes.entry(k.to_string()).or_default().cursor_id = id;
                         }
+                        k if k.starts_with(room_home::ROOM_HIGHLIGHT_FEED_KEY_PREFIX) => {
+                            state
+                                .room_highlight_feeds
+                                .entry(k.to_string())
+                                .or_default()
+                                .cursor_id = id;
+                        }
                         k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => {
                             state
                                 .article_highlight_feeds
@@ -2450,6 +2479,11 @@ pub(crate) async fn actor_task(
                         }
                         k if k.starts_with("hl.feed.room.") => {
                             if let Some(fs) = state.room_lanes.get_mut(k) {
+                                fs.clear();
+                            }
+                        }
+                        k if k.starts_with(room_home::ROOM_HIGHLIGHT_FEED_KEY_PREFIX) => {
+                            if let Some(fs) = state.room_highlight_feeds.get_mut(k) {
                                 fs.clear();
                             }
                         }

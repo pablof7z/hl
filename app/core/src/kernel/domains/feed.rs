@@ -236,6 +236,21 @@ pub fn room_lane_scope(group_id: &str) -> PullScope {
     PullScope::InterestShape(shape)
 }
 
+/// Pull scope for the room highlight feed (kind:9802 with `#h == group_id`).
+///
+/// Used by the room-home aggregation slice to pull highlights scoped to a room.
+/// Public for room_home.rs; unused until that slice lands.
+#[allow(dead_code)]
+pub fn room_highlight_feed_scope(group_id: &str) -> PullScope {
+    let mut shape = InterestShape::default();
+    shape.kinds = [9802].into_iter().collect();
+    shape.tags.insert(
+        "h".to_string(),
+        [group_id.to_string()].into_iter().collect(),
+    );
+    PullScope::InterestShape(shape)
+}
+
 // ─── Reduce-side helpers (called from effect reducers) ───────────────────────
 
 /// Emit `Effect::RegisterFeedCursor` for a feed with a given pull scope.
