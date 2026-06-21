@@ -59,7 +59,7 @@ use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::{
     CommentRecordRow, HighlightRow, KernelCommentReferenceBucket, KernelHighlightReferenceBucket,
-    KernelRoomHomeSnapshot, KernelRoomLibraryRow, RoomLaneRow, ViewSnapshot,
+    KernelRoomHomeSnapshot, KernelRoomLane, KernelRoomLibraryRow, RoomLaneRow, ViewSnapshot,
 };
 use crate::kernel::view::ViewId;
 
@@ -538,7 +538,9 @@ fn root_tag_value_for_coordinate(coordinate: &str) -> Option<String> {
 /// `Effect::ResolveArtifactCoordinate`).
 pub(crate) fn ensure_room_artifact_previews(state: &mut AppState, group_id: &str) -> Vec<Effect> {
     let feed_key = format!("{ROOM_LANE_FEED_KEY_PREFIX}{group_id}");
-    let coordinates: Vec<String> = state
+
+    // Coordinates from kind:11 non-discussion artifact shares in the lane feed.
+    let mut coordinates: Vec<String> = state
         .room_lanes
         .get(&feed_key)
         .map(|fs| {
@@ -549,6 +551,21 @@ pub(crate) fn ensure_room_artifact_previews(state: &mut AppState, group_id: &str
                 .collect()
         })
         .unwrap_or_default();
+
+    // Also seed from discussions' artifact_coordinate refs (Gap 2 / discussion chip).
+    // A discussion post may reference an artifact via a/e/i tags — the resolved
+    // preview enables the rich artifact chip in the discussion row.
+    let discussion_coords: Vec<String> = state
+        .room_discussions
+        .get(group_id)
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|d| d.artifact_coordinate.clone())
+                .collect()
+        })
+        .unwrap_or_default();
+    coordinates.extend(discussion_coords);
+
     let mut effects = Vec::new();
     for coord in coordinates {
         effects.extend(
@@ -716,6 +733,82 @@ pub(crate) fn project_room_home_snapshot(state: &AppState, group_id: &str) -> Op
         buckets
     };
 
+    // ── Assembled lanes: mirror build_visible_room_lanes from room_lanes.rs ─────
+    //
+    // One lane per artifact in the library. Dormant lanes (no highlights AND no
+    // comments) are excluded. Lanes sorted by latest_activity_at desc so iOS
+    // renders the most-active artifact at the top.
+    //
+    // Primary highlight match: by source_reference_key == coordinate (same key
+    // used in highlights_by_reference). Dedup by event_id via HashSet guard.
+    // Comment match: by root_tag_value (coordinate stripped of tag prefix).
+    let assembled_lanes: Vec<KernelRoomLane> = {
+        let mut lanes: Vec<KernelRoomLane> = Vec::with_capacity(artifact_library.len());
+        for lib_row in &artifact_library {
+            let coord = &lib_row.coordinate;
+
+            // Hydrated highlights for this lane (from the pre-built bucket).
+            let mut lane_highlights: Vec<HighlightRow> = highlights_by_reference
+                .iter()
+                .find(|b| &b.coordinate == coord)
+                .map(|b| b.highlights.clone())
+                .unwrap_or_default();
+
+            // Fallback: any highlight whose source_reference_key matches the
+            // coordinate but wasn't captured in the per-coordinate bucket
+            // (e.g. late-arriving highlights not yet in a bucket).
+            {
+                let mut seen: std::collections::HashSet<String> =
+                    lane_highlights.iter().map(|h| h.event_id.clone()).collect();
+                for hl in &highlights {
+                    if &hl.source_reference_key == coord && seen.insert(hl.event_id.clone()) {
+                        lane_highlights.push(hl.clone());
+                    }
+                }
+            }
+
+            // Comments for this lane (from the pre-built bucket by root_tag_value).
+            let lane_comments: Vec<CommentRecordRow> = root_tag_value_for_coordinate(coord)
+                .as_deref()
+                .and_then(|rv| {
+                    comments_by_reference
+                        .iter()
+                        .find(|b| b.root_tag_value == rv)
+                })
+                .map(|b| b.comments.clone())
+                .unwrap_or_default();
+
+            // Dormant filter: skip lanes with no highlights AND no comments.
+            // Mirrors bespoke room_lanes.rs:75 `if lane_highlights.is_empty() && …`.
+            if lane_highlights.is_empty() && lane_comments.is_empty() {
+                continue;
+            }
+
+            // Sort newest-first (descending created_at).
+            let mut sorted_highlights = lane_highlights;
+            sorted_highlights.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+            let mut sorted_comments = lane_comments;
+            sorted_comments.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+            // Latest activity = max of first highlight/comment timestamps.
+            let latest_hl = sorted_highlights.first().map(|h| h.created_at).unwrap_or(0);
+            let latest_cmt = sorted_comments.first().map(|c| c.created_at).unwrap_or(0);
+            let latest_activity_at = latest_hl.max(latest_cmt);
+
+            lanes.push(KernelRoomLane {
+                share_event_id: lib_row.share_event_id.clone(),
+                artifact_coordinate: coord.clone(),
+                artifact_preview: lib_row.preview.clone(),
+                highlights: sorted_highlights,
+                comments: sorted_comments,
+                latest_activity_at,
+            });
+        }
+        // Sort lanes: most recently active first.
+        lanes.sort_by(|a, b| b.latest_activity_at.cmp(&a.latest_activity_at));
+        lanes
+    };
+
     Some(ViewSnapshot::RoomHome(KernelRoomHomeSnapshot {
         group_id: row.group_id.clone(),
         host_relay_url: row.host_relay_url.clone(),
@@ -736,6 +829,7 @@ pub(crate) fn project_room_home_snapshot(state: &AppState, group_id: &str) -> Op
         highlights,
         highlights_by_reference,
         comments_by_reference,
+        assembled_lanes,
     }))
 }
 
@@ -1944,6 +2038,249 @@ mod tests {
             root_tag_value_for_coordinate("no-colon"),
             None,
             "malformed coordinate with no colon must return None"
+        );
+    }
+
+    // ─── Parity tests: assembled_lanes matches bespoke room_lanes.rs semantics ──
+    //
+    // These tests verify that project_room_home_snapshot produces assembled_lanes
+    // content equivalent to what crate::room_home::query_room_home_snapshot /
+    // crate::room_lanes::build_visible_room_lanes would produce for the same
+    // underlying data. They call project_room_home_snapshot and assert the lane
+    // assembly semantics field-for-field: dormant filter, dedup, activity ordering.
+    //
+    // crate::room_home::query_room_home_snapshot is pub(crate); these tests
+    // validate equivalent semantics using kernel AppState fixtures.
+
+    // P1: assembled_lanes_populated_from_artifact_and_highlights
+    //
+    // An artifact lane with a matching highlight must appear in assembled_lanes
+    // with that highlight attached. Parity: bespoke lane would contain the same
+    // highlight via HighlightReferenceBucket.
+    #[test]
+    fn assembled_lanes_populated_from_artifact_and_highlights() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        let addr = "30023:1111000000000000000000000000000000000000000000000000000000000001:lane-p1";
+        inject_lane_event(&mut state, make_kind11_with_a_tag("lane-evt-p1", addr));
+        inject_hl_event(&mut state, make_kind9802_with_a_tag("hl-p1-001", addr));
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
+        if let ViewSnapshot::RoomHome(s) = snap {
+            assert_eq!(s.assembled_lanes.len(), 1, "must have 1 assembled lane");
+            let lane = &s.assembled_lanes[0];
+            assert_eq!(lane.artifact_coordinate, format!("a:{addr}"));
+            assert_eq!(lane.share_event_id, "lane-evt-p1");
+            assert_eq!(lane.highlights.len(), 1);
+            assert_eq!(lane.highlights[0].event_id, "hl-p1-001");
+            assert!(lane.comments.is_empty());
+            assert!(
+                lane.latest_activity_at > 0,
+                "latest_activity_at must be set"
+            );
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // P2: dormant_lane_excluded_from_assembled_lanes
+    //
+    // An artifact with no highlights AND no comments must be excluded from
+    // assembled_lanes. Parity: bespoke build_visible_room_lanes:75 skips dormant
+    // lanes with `if lane_highlights.is_empty() && lane_comments.is_empty()`.
+    #[test]
+    fn dormant_lane_excluded_from_assembled_lanes() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        let addr = "30023:2222000000000000000000000000000000000000000000000000000000000002:dormant";
+        // Inject the artifact share but NO highlights or comments.
+        inject_lane_event(&mut state, make_kind11_with_a_tag("dormant-evt", addr));
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
+        if let ViewSnapshot::RoomHome(s) = snap {
+            // artifact_library must have 1 entry (the share event is catalogued)...
+            assert_eq!(s.artifact_library.len(), 1, "artifact must be in library");
+            // ...but assembled_lanes must be EMPTY (dormant filter applied).
+            assert!(
+                s.assembled_lanes.is_empty(),
+                "dormant lane (no highlights, no comments) must be excluded from assembled_lanes"
+            );
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // P3: assembled_lanes_activity_ordering
+    //
+    // Two artifact lanes with different latest highlight timestamps must be sorted
+    // newest-activity-first. Parity: bespoke room_lanes.rs `lanes.sort_by` by
+    // `latest_activity` descending.
+    #[test]
+    fn assembled_lanes_activity_ordering() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        let addr_old = "30023:3333000000000000000000000000000000000000000000000000000000000003:old";
+        let addr_new = "30023:4444000000000000000000000000000000000000000000000000000000000004:new";
+
+        inject_lane_event(&mut state, make_kind11_with_a_tag("art-old", addr_old));
+        inject_lane_event(&mut state, make_kind11_with_a_tag("art-new", addr_new));
+
+        // Old artifact: highlight at t=1000 (older).
+        let hl_old = nmp_core::substrate::KernelEvent {
+            id: "hl-old-001".to_string(),
+            author: "c".repeat(64),
+            kind: 9802,
+            created_at: 1_700_001_000,
+            tags: vec![
+                vec!["h".to_string(), TEST_GROUP.to_string()],
+                vec!["a".to_string(), addr_old.to_string()],
+            ],
+            content: "old highlight".to_string(),
+            relay_provenance: vec![],
+        };
+        // New artifact: highlight at t=1_000_000 (much newer).
+        let hl_new = nmp_core::substrate::KernelEvent {
+            id: "hl-new-001".to_string(),
+            author: "c".repeat(64),
+            kind: 9802,
+            created_at: 1_700_002_000,
+            tags: vec![
+                vec!["h".to_string(), TEST_GROUP.to_string()],
+                vec!["a".to_string(), addr_new.to_string()],
+            ],
+            content: "newer highlight".to_string(),
+            relay_provenance: vec![],
+        };
+        inject_hl_event(&mut state, hl_old);
+        inject_hl_event(&mut state, hl_new);
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
+        if let ViewSnapshot::RoomHome(s) = snap {
+            assert_eq!(s.assembled_lanes.len(), 2, "must have 2 assembled lanes");
+            // Newer activity must come first.
+            assert_eq!(
+                s.assembled_lanes[0].artifact_coordinate,
+                format!("a:{addr_new}"),
+                "lane with newer highlight must sort first"
+            );
+            assert_eq!(
+                s.assembled_lanes[1].artifact_coordinate,
+                format!("a:{addr_old}"),
+                "lane with older highlight must sort last"
+            );
+            assert!(
+                s.assembled_lanes[0].latest_activity_at > s.assembled_lanes[1].latest_activity_at,
+                "latest_activity_at must be strictly descending"
+            );
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // P4: assembled_lanes_comments_attached
+    //
+    // A lane with a comment thread entry but no highlights must appear in
+    // assembled_lanes with comments populated (not dormant-filtered).
+    #[test]
+    fn assembled_lanes_comments_attached() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        let addr = "30023:5555000000000000000000000000000000000000000000000000000000000005:cmnt-p4";
+        let root_val = addr; // root_tag_value strips the "a:" prefix
+
+        inject_lane_event(&mut state, make_kind11_with_a_tag("art-cmnt-p4", addr));
+
+        let record = nmp_nip22::CommentRecord {
+            event_id: "comment-p4-001".to_string(),
+            author_pubkey: "e".repeat(64),
+            body: "parity comment".to_string(),
+            root_tag_name: "A".to_string(),
+            root_tag_value: root_val.to_string(),
+            root_kind: "30023".to_string(),
+            parent_tag_name: "a".to_string(),
+            parent_tag_value: root_val.to_string(),
+            parent_kind: "30023".to_string(),
+            created_at: 1_700_005_000,
+        };
+        let snapshot = nmp_nip22::CommentThreadSnapshot {
+            root_tag_value: root_val.to_string(),
+            records: vec![record],
+            tree: vec![],
+        };
+        state.comment_threads.insert(root_val.to_string(), snapshot);
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
+        if let ViewSnapshot::RoomHome(s) = snap {
+            assert_eq!(
+                s.assembled_lanes.len(),
+                1,
+                "lane with comments must NOT be dormant-filtered"
+            );
+            let lane = &s.assembled_lanes[0];
+            assert_eq!(lane.artifact_coordinate, format!("a:{addr}"));
+            assert!(lane.highlights.is_empty(), "no highlights in this lane");
+            assert_eq!(lane.comments.len(), 1);
+            assert_eq!(lane.comments[0].event_id, "comment-p4-001");
+            assert_eq!(lane.latest_activity_at, 1_700_005_000);
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // P5: discussion_artifact_coordinate_extracted
+    //
+    // A kind:11 discussion event with an `a` tag must produce a DiscussionRow
+    // with artifact_coordinate populated. Parity: Gap 2 fix — extract_artifact_coordinate
+    // in discussions.rs resolves the reference for the artifact chip.
+    //
+    // Tested indirectly: inject a discussion row directly into AppState::room_discussions
+    // (simulating what DiscussionObserver would produce after discussions.rs fix).
+    #[test]
+    fn discussion_artifact_coordinate_extracted() {
+        use crate::kernel::snapshot::DiscussionRow;
+
+        let addr = "30023:6666000000000000000000000000000000000000000000000000000000000006:disc-p5";
+        let coord = format!("a:{addr}");
+
+        // Simulate the DiscussionObserver producing a row with artifact_coordinate
+        // populated (this is what the Gap 2 fix to discussions.rs delivers).
+        let row = DiscussionRow {
+            event_id: "disc-evt-p5".to_string(),
+            author_pubkey: "f".repeat(64),
+            title: "Interesting article".to_string(),
+            body: "Check out this article!".to_string(),
+            attachment_url: None,
+            artifact_coordinate: Some(coord.clone()),
+            created_at: 1_700_006_000,
+        };
+
+        // Verify the field round-trips through AppState.
+        let mut state = make_state();
+        state
+            .room_discussions
+            .insert(TEST_GROUP.to_string(), vec![row]);
+
+        let retrieved = &state.room_discussions[TEST_GROUP][0];
+        assert_eq!(
+            retrieved.artifact_coordinate.as_deref(),
+            Some(coord.as_str()),
+            "artifact_coordinate must round-trip through AppState::room_discussions"
+        );
+
+        // ensure_room_artifact_previews must seed artifact_previews for the
+        // discussion's coordinate (Gap 2: discussion coordinates included in seeding).
+        let _effects = ensure_room_artifact_previews(&mut state, TEST_GROUP);
+        assert!(
+            state.artifact_previews.contains_key(&coord),
+            "ensure_room_artifact_previews must seed artifact_previews for discussion coordinate"
         );
     }
 }

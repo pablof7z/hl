@@ -518,6 +518,10 @@ pub struct KernelRoomHomeSnapshot {
     pub highlights_by_reference: Vec<KernelHighlightReferenceBucket>,
     /// Comment counts + rows grouped by artifact coordinate.
     pub comments_by_reference: Vec<KernelCommentReferenceBucket>,
+    /// Assembled visible lanes — one per artifact in the library, sorted by
+    /// `latest_activity_at` desc. Dormant lanes (no highlights AND no comments)
+    /// are excluded, mirroring the bespoke `build_visible_room_lanes` filter.
+    pub assembled_lanes: Vec<KernelRoomLane>,
 }
 
 // ── Room-home aggregation additions (append-only) ─────────────────────────────
@@ -544,6 +548,30 @@ pub struct KernelCommentReferenceBucket {
     pub root_tag_value: String,
     pub comments: Vec<CommentRecordRow>,
     pub count: u32,
+}
+
+/// One assembled room lane — per-artifact aggregate of hydrated highlights and
+/// comments. Mirrors the bespoke `RoomLane` from `room_lanes.rs` using kernel
+/// types. Dormant lanes (no highlights AND no comments) are excluded by
+/// `project_room_home_snapshot`. Sorted by `latest_activity_at` desc.
+///
+/// D1: raw protocol data only — no formatted strings, no "X ago" labels.
+/// D4: reuses `HighlightRow` and `CommentRecordRow` already in the snapshot.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelRoomLane {
+    /// kind:11 event id of the artifact share that opened this lane.
+    pub share_event_id: String,
+    /// Canonical artifact coordinate (e.g. `"a:30023:pk:d"`, `"i:isbn:..."`, `"r:url"`).
+    pub artifact_coordinate: String,
+    /// Resolved artifact preview, or `None` while pending / not yet fetched.
+    pub artifact_preview: Option<ArtifactPreviewRow>,
+    /// Hydrated highlight rows for this lane, deduped by event_id, newest-first.
+    pub highlights: Vec<HighlightRow>,
+    /// Comment rows for this artifact, sorted newest-first.
+    pub comments: Vec<CommentRecordRow>,
+    /// UNIX seconds of the most recent highlight or comment in this lane.
+    /// Used by the outer sort to place most-active lanes first.
+    pub latest_activity_at: u64,
 }
 
 // ── Phase 4I additions (append-only) ─────────────────────────────────────────
@@ -1403,6 +1431,11 @@ pub struct DiscussionRow {
     pub body: String,
     /// `["r", url]` tag value if present, else `None`.
     pub attachment_url: Option<String>,
+    /// Canonical artifact coordinate extracted from `a`/`e`/`i` reference tags
+    /// (priority: a → e → i). `None` when no recognized reference tag is present.
+    /// Swift uses this to resolve and render the artifact chip for the discussion.
+    /// D1: raw canonical form only — no URL formatting.
+    pub artifact_coordinate: Option<String>,
     /// Event `created_at` Unix seconds. D1: no "X ago" formatting.
     pub created_at: u64,
 }

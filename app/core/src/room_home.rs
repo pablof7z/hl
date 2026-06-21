@@ -38,7 +38,7 @@ impl RoomHomeSnapshot {
 /// Full community home snapshot for one NIP-29 group id. Top-level artifact
 /// and group-highlight failures become empty sections; per-reference failures
 /// omit that bucket. Native shells render the bounded read model directly.
-pub fn query_room_home_snapshot(ndb: &Ndb, group_id: &str) -> RoomHomeSnapshot {
+pub(crate) fn query_room_home_snapshot(ndb: &Ndb, group_id: &str) -> RoomHomeSnapshot {
     let group_id = group_id.trim();
     if group_id.is_empty() {
         return RoomHomeSnapshot::empty();
