@@ -253,7 +253,7 @@ struct SearchView: View {
     private func results(store: SearchStore) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
-                if store.isLocalLoading && allEmpty(store: store) {
+                if store.isRelayLoading && allEmpty(store: store) {
                     loadingSkeleton
                 } else if allEmpty(store: store) && !store.isRelayLoading {
                     noResults(store: store)
@@ -739,13 +739,20 @@ private struct SearchCommunityRow: View {
 
 private struct SearchProfileRow: View {
     @Environment(HighlighterStore.self) private var app
-    let profile: ProfileMetadata
+    let profile: ProfileSearchRow
 
     var body: some View {
+        let metaForDisplay = ProfileMetadata(
+            pubkey: profile.pubkey, name: profile.name,
+            displayName: profile.displayName, about: profile.about,
+            picture: profile.picture, banner: "",
+            nip05: profile.nip05, website: "", lud16: "",
+            createdAt: profile.createdAt
+        )
         let display = app.safeCore.projectProfileDisplay(
             input: ProfileDisplayProjectionInput(
                 pubkey: profile.pubkey,
-                profile: profile,
+                profile: metaForDisplay,
                 fallback: .pubkey8
             )
         )

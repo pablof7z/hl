@@ -256,13 +256,20 @@ private struct SeeAllCommunityRow: View {
 private struct SeeAllPersonRow: View {
     @Environment(HighlighterStore.self) private var app
 
-    let profile: ProfileMetadata
+    let profile: ProfileSearchRow
 
     var body: some View {
+        let metaForDisplay = ProfileMetadata(
+            pubkey: profile.pubkey, name: profile.name,
+            displayName: profile.displayName, about: profile.about,
+            picture: profile.picture, banner: "",
+            nip05: profile.nip05, website: "", lud16: "",
+            createdAt: profile.createdAt
+        )
         let display = app.safeCore.projectProfileDisplay(
             input: ProfileDisplayProjectionInput(
                 pubkey: profile.pubkey,
-                profile: profile,
+                profile: metaForDisplay,
                 fallback: .pubkey8
             )
         )

@@ -804,15 +804,47 @@ pub struct CommunitySearchRow {
     pub member_count: u64,
 }
 
+/// One kind:0 profile row for the Search screen profiles bucket.
+///
+/// Derived from `AppState::profile_search_cache` via `project_profile_search_rows`
+/// (same local-scan algorithm as `crate::search::search_profiles`). Raw protocol
+/// fields only (D1 / ADR-0032): Swift formats all display strings, avatar
+/// initials, NIP-05 labels, etc. No `"npub"` encoding, no fallback strings.
+///
+/// `created_at` is the kind:0 event's UNIX-second timestamp. Kernel uses it to
+/// deduplicate replaceable events (newest wins); Swift may render a "last active"
+/// label from the raw value.
+///
+/// Append-only: new fields at the bottom keep rebases mechanical.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ProfileSearchRow {
+    /// 64-character hex pubkey. Swift formats bech32 `npub` for display.
+    pub pubkey: String,
+    /// `name` field from kind:0 content JSON (trimmed). May be empty.
+    pub name: String,
+    /// `display_name` / `displayName` / `displayname` from kind:0 content JSON (trimmed).
+    pub display_name: String,
+    /// `nip05` verification address from kind:0 content JSON (trimmed).
+    pub nip05: String,
+    /// `picture` or `image` URL from kind:0 content JSON (trimmed).
+    pub picture: String,
+    /// `about` biography from kind:0 content JSON (trimmed).
+    pub about: String,
+    /// Event creation timestamp as Unix seconds. D1: Swift formats dates.
+    pub created_at: u64,
+}
+
 /// Snapshot for `ViewId::Search` — NIP-50 relay search results + local buckets.
 ///
 /// Raw protocol data only (D1): Swift formats all display strings.
 /// Bounded by `SearchResultsProjection`'s `max_hits` cap
 /// (default `DEFAULT_MAX_SEARCH_HITS = 200` from nmp-nip50 — Non-Negotiable #7)
-/// for `hits`; `communities` is bounded at 20 (COMMUNITY_SEARCH_CAP in search.rs).
+/// for `hits`; `communities` is bounded at 20 (COMMUNITY_SEARCH_CAP in search.rs);
+/// `profiles` is bounded at 20 (PROFILE_SEARCH_CAP in search domain).
 ///
-/// Append-only: `communities` is the Phase 7 gate #4 addition.
-/// Profile rows are deferred to nmp #1697.
+/// Append-only: `communities` is the Phase 7 gate #4 addition;
+/// `highlights` is the Phase 7 highlights-bucket addition;
+/// `profiles` is the Phase 7 (#1697 gate) profiles-bucket addition.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct SearchSnapshot {
     /// Ordered (by `created_at` descending, then `id` ascending) search hit rows.
@@ -834,6 +866,14 @@ pub struct SearchSnapshot {
     /// render the Highlights search bucket without re-parsing kind:9802 tags.
     /// Empty when no kind:9802 hits are present.
     pub highlights: Vec<HighlightRow>,
+    // ── Phase 7 (#1697 gate profiles bucket) additions (append-only) ─────────
+    /// Local-scan kind:0 profile results from `AppState::profile_search_cache`.
+    /// Substring-matched by name/display_name/nip05/about against `search_query`;
+    /// ranked prefix-match first, then alphabetical by primary label; bounded at 20.
+    /// Same algorithm as `crate::search::search_profiles` (bespoke live lane).
+    /// Empty when the query is blank or no profiles match.
+    /// D1: raw rows only — Swift renders all display strings.
+    pub profiles: Vec<ProfileSearchRow>,
 }
 
 // ── Phase 4G additions (append-only) ─────────────────────────────────────────

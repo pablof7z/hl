@@ -259,6 +259,25 @@ pub struct AppState {
     /// field is always a trimmed non-empty string or the empty string (default).
     pub search_query: String,
 
+    // ── Phase 7 (#1697 gate) additions ───────────────────────────────────────
+    /// Growing cache of kind:0 profile rows seen this session.
+    ///
+    /// Populated by upsert from kind:0 hits in `KernelEvent::SearchResultsUpdated`
+    /// (decoded via `search::profile_search_row_from_hit`). Deduplicated by pubkey
+    /// (newest `created_at` wins, same as bespoke `search_profiles` dedup).
+    ///
+    /// `project_profile_search_rows` scans this cache against `search_query` to
+    /// populate `SearchSnapshot::profiles`. The cache grows across search sessions
+    /// (not reset per query) so profiles seen in any earlier query remain searchable
+    /// without re-querying — mirrors how `discovered_groups` accumulates communities.
+    ///
+    /// Bounded by the number of unique kind:0 authors seen (naturally bounded by the
+    /// session's search scope and relay capacity — Non-Negotiable #7).
+    ///
+    /// Cleared on `Logout` / `IdentityChanged(None)` so stale profiles from the
+    /// departing account's searches do not surface under the next identity.
+    pub profile_search_cache: Vec<crate::kernel::snapshot::ProfileSearchRow>,
+
     // ── Phase 4F additions ────────────────────────────────────────────────────
     /// Pull-cursor state for the article feed (kind:30023 over follows).
     ///
@@ -494,6 +513,8 @@ impl Default for AppState {
             // ── Phase 4D additions ────────────────────────────────────────────
             search_results: Vec::new(),
             search_query: String::new(),
+            // ── Phase 7 (#1697 gate) additions ───────────────────────────────
+            profile_search_cache: Vec::new(),
             // ── Phase 4F additions ────────────────────────────────────────────
             article_feed: crate::kernel::domains::feed::FeedState::default(),
             highlight_feed: crate::kernel::domains::feed::FeedState::default(),

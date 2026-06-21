@@ -3,13 +3,13 @@ import Observation
 
 /// Drives `SearchView`. Owns the query state + the result buckets.
 ///
-/// Phase 7 cutover: the KERNEL owns the article / highlight / community buckets.
+/// Phase 7 cutover (complete): the KERNEL owns ALL search buckets.
 /// `query` changes dispatch `hl.search.run` (scope = articles + highlights, one
-/// NIP-50 query) and run the kernel's local community scan; results stream back
-/// via `kernel.searchSnapshot` → `applyKernelSnapshot()` (wired from the View's
-/// `.onChange`). Swift buckets the mixed hits by kind. The PEOPLE bucket stays
-/// on the live lane (kind:0 local scan — nmp #1697); it's read-only and coexists
-/// (gotcha #5). `searchRelays` / recent queries stay on the bespoke chrome path.
+/// NIP-50 query); results stream back via `kernel.searchSnapshot` →
+/// `applyKernelSnapshot()` (wired from the View's `.onChange`). Swift buckets the
+/// mixed hits by kind. The PEOPLE bucket is now kernel-owned (#1697): a local
+/// kind:0 cache scan via `project_profile_search_rows`. `searchRelays` / recent
+/// queries stay on the bespoke chrome path.
 @MainActor
 @Observable
 final class SearchStore {
@@ -28,11 +28,11 @@ final class SearchStore {
     private(set) var highlights: [HighlightRecord] = []
     private(set) var articles: [ArticleRecord] = []
     private(set) var communities: [CommunitySummary] = []
-    private(set) var profiles: [ProfileMetadata] = []
+    /// Phase 7 cutover (#1697): kernel-owned local kind:0 scan; populated via
+    /// `applyKernelSnapshot()` from `ProfileSearchRow` rows in `searchSnapshot`.
+    private(set) var profiles: [ProfileSearchRow] = []
     private(set) var hasQuery: Bool = false
 
-    /// True while the live-lane people scan is running for the current query.
-    private(set) var isLocalLoading: Bool = false
     /// True between dispatching the kernel search and the first snapshot. The
     /// kernel streams relay results into `kernel.searchSnapshot` as they arrive.
     private(set) var isRelayLoading: Bool = false
@@ -48,12 +48,8 @@ final class SearchStore {
 
     // MARK: - Internal state
 
-    /// Monotonic token so a slow people-scan from a stale query can't overwrite
-    /// the current results.
-    private var searchToken: UInt64 = 0
     /// The query whose results currently populate the buckets.
     private var appliedQuery: String = ""
-    private var searchTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -71,8 +67,6 @@ final class SearchStore {
     }
 
     func stop() {
-        searchTask?.cancel()
-        searchTask = nil
         kernel.closeSearch()
     }
 
@@ -96,9 +90,6 @@ final class SearchStore {
     }
 
     private func scheduleSearch(for raw: String) {
-        searchTask?.cancel()
-        searchToken &+= 1
-        let token = searchToken
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmed.isEmpty else {
@@ -107,27 +98,13 @@ final class SearchStore {
         }
 
         hasQuery = true
-        isLocalLoading = true
         isRelayLoading = true
 
-        // Kernel owns article/highlight/community buckets: dispatch the combined
-        // NIP-50 search (results stream into kernel.searchSnapshot → onChange →
-        // applyKernelSnapshot). Fire-and-forget (read path).
+        // Kernel owns all search buckets (articles/highlights/communities/profiles):
+        // dispatch the combined NIP-50 search; results stream back via
+        // `kernel.searchSnapshot` → SearchView.onChange → applyKernelSnapshot().
         kernel.app.dispatch(.runSearch(query: trimmed, scope: .articlesAndHighlights))
-
-        // People bucket stays live (nmp #1697): local kind:0 scan via the bespoke
-        // core. Only the profiles field of the snapshot is used; the article/
-        // highlight/community fields are now kernel-owned and ignored here.
-        searchTask = Task { [weak self] in
-            guard let self else { return }
-            let snapshot = await self.safeCore.getSearchResultsSnapshot(query: trimmed)
-            guard !Task.isCancelled, token == self.searchToken else { return }
-            self.appliedQuery = trimmed
-            self.profiles = snapshot.profiles
-            self.isLocalLoading = false
-            // Reflect whatever kernel results have already arrived for this query.
-            self.applyKernelSnapshot()
-        }
+        appliedQuery = trimmed
     }
 
     private func clearResultsForEmptyQuery() {
@@ -137,16 +114,15 @@ final class SearchStore {
         articles = []
         communities = []
         profiles = []
-        isLocalLoading = false
         isRelayLoading = false
     }
 
     // MARK: - Kernel snapshot (article / highlight / community buckets)
 
     /// Apply the kernel search snapshot. Called from `SearchView.onChange(of:
-    /// kernel.searchSnapshot)` and after the people scan resolves. Buckets the
-    /// mixed `hits` by kind for Articles, reads the kernel-decoded `highlights`
-    /// directly, and maps the local `communities` rows.
+    /// kernel.searchSnapshot)`. Buckets the mixed `hits` by kind for Articles,
+    /// reads the kernel-decoded `highlights` directly, maps `communities` rows,
+    /// and now also reads the kernel `profiles` local-scan bucket (#1697).
     func applyKernelSnapshot() {
         guard let snap = kernel.searchSnapshot else { return }
         articles = snap.hits
@@ -154,6 +130,8 @@ final class SearchStore {
             .map(Self.articleRecord(from:))
         highlights = snap.highlights.map(HighlightRecord.init(kernelRow:))
         communities = snap.communities.map(Self.communitySummary(from:))
+        // Phase 7 (#1697): kernel owns the profiles bucket; read directly.
+        profiles = snap.profiles
         // The first snapshot for a query ends the relay-loading flicker.
         isRelayLoading = false
     }
