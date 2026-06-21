@@ -59645,6 +59645,25 @@ fileprivate func uniffiFutureContinuationCallback(handle: UInt64, pollResult: In
         print("uniffiFutureContinuationCallback invalid handle")
     }
 }
+/**
+ * NIP-65 (kind:10002) role string for a relay's read/write flags, or `None` when
+ * the relay must be OMITTED from kind:10002 (neither read nor write — a
+ * rooms/indexer-only relay, which lives only in the kind:30078 app-data).
+ *
+ * SINGLE SOURCE OF TRUTH for the marker decision: Swift's `dispatchNip65` calls
+ * this (via the binding) so the kind:10002 routing can't drift from the protocol
+ * rule. Mirrors bespoke `relays.rs::nip65_tags`: (t,t)→"both" (unmarked `r` tag),
+ * (t,f)→"read", (f,t)→"write", (f,f)→None (skip). Guarded by the parity test
+ * `nip65_relay_role_matches_bespoke_nip65_tags`.
+ */
+public func nip65RelayRole(read: Bool, write: Bool) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_nip65_relay_role(
+        FfiConverterBool.lower(read),
+        FfiConverterBool.lower(write),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -59660,6 +59679,9 @@ private let initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_highlighter_core_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_nip65_relay_role() != 11383) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_eventcallback_on_data_changed() != 54279) {
         return InitializationResult.apiChecksumMismatch
