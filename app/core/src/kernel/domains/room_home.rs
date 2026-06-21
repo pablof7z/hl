@@ -502,44 +502,181 @@ fn extract_artifact_coordinate(event: &nmp_core::substrate::KernelEvent) -> Opti
     None
 }
 
+/// First value of the first tag named `name`, mirroring bespoke
+/// `artifacts::first_tag_value` exactly: `Some` only when the tag is present
+/// AND carries a value slot (a bare `["i"]` yields `None`; `["i", ""]` yields
+/// `Some("")`).
+fn first_tag(event: &nmp_core::substrate::KernelEvent, name: &str) -> Option<String> {
+    event
+        .tags
+        .iter()
+        .find(|t| t.first().map(|s| s == name).unwrap_or(false))
+        .and_then(|t| t.get(1).cloned())
+}
+
+/// Internal (non-FFI) matching surface for one kind:11 artifact share.
+///
+/// Mirrors the subset of bespoke `ArtifactPreview`
+/// (`artifacts::artifact_record_from_event`, artifacts.rs:486) that
+/// `highlight_matches_artifact` (room_lanes.rs:95) consults. Collapsing an
+/// artifact to a single `coordinate` is lossy — bespoke matches a highlight
+/// against *all* of these surfaces (e.g. a web `source_url == preview.url`
+/// even when the artifact's primary coordinate is `a:<addr>`), so lane
+/// assembly must match against the full surface, not just the coordinate.
+struct ArtifactMatchSurface {
+    reference_tag_name: String,
+    reference_tag_value: String,
+    highlight_tag_value: String,
+    url: String,
+    audio_url: String,
+    podcast_item_guid: String,
+    share_event_id: String,
+}
+
+/// Derive the full match surface from a kind:11 event, mirroring
+/// `artifacts::artifact_record_from_event` (artifacts.rs:486) field-for-field
+/// for every field `highlight_matches_artifact` reads.
+fn artifact_match_surface(event: &nmp_core::substrate::KernelEvent) -> ArtifactMatchSurface {
+    let url = first_tag(event, "r").unwrap_or_default();
+    let k = first_tag(event, "k").unwrap_or_default();
+
+    // Reference tag: i → a → e (mirrors artifact_record_from_event:496; note
+    // `r` is NOT a reference tag — it feeds `url`/`highlight_tag` instead).
+    let (reference_tag_name, reference_tag_value) = if let Some(i) = first_tag(event, "i") {
+        ("i".to_string(), i)
+    } else if let Some(a) = first_tag(event, "a") {
+        ("a".to_string(), a)
+    } else if let Some(e_val) = first_tag(event, "e") {
+        ("e".to_string(), e_val)
+    } else {
+        (String::new(), String::new())
+    };
+
+    // NIP-73 episode GUID: dedicated tag, else the `i` tag prefix (mirrors
+    // artifact_record_from_event:508).
+    let podcast_item_guid = first_tag(event, "podcast_item_guid").unwrap_or_else(|| {
+        reference_tag_value
+            .strip_prefix("podcast:item:guid:")
+            .map(str::to_string)
+            .unwrap_or_default()
+    });
+
+    let (_highlight_tag_name, highlight_tag_value) = kernel_highlight_reference_for_artifact(
+        &reference_tag_name,
+        &reference_tag_value,
+        &k,
+        &url,
+    );
+
+    ArtifactMatchSurface {
+        reference_tag_name,
+        reference_tag_value,
+        highlight_tag_value,
+        url,
+        audio_url: first_tag(event, "audio").unwrap_or_default(),
+        podcast_item_guid,
+        share_event_id: event.id.clone(),
+    }
+}
+
+/// Port of `artifacts::highlight_reference_for_artifact` (artifacts.rs:580).
+fn kernel_highlight_reference_for_artifact(
+    reference_tag_name: &str,
+    reference_tag_value: &str,
+    reference_kind: &str,
+    url: &str,
+) -> (String, String) {
+    let reference_tag_name = reference_tag_name.trim();
+    let reference_tag_value = reference_tag_value.trim();
+    match reference_tag_name {
+        "a" | "e" if !reference_tag_value.is_empty() => (
+            reference_tag_name.to_string(),
+            reference_tag_value.to_string(),
+        ),
+        "i" if kernel_is_external_content_reference(reference_tag_value, reference_kind) => (
+            reference_tag_name.to_string(),
+            reference_tag_value.to_string(),
+        ),
+        _ if !url.trim().is_empty() => ("r".to_string(), url.trim().to_string()),
+        "i" if !reference_tag_value.is_empty() => (
+            reference_tag_name.to_string(),
+            reference_tag_value.to_string(),
+        ),
+        _ => (String::new(), String::new()),
+    }
+}
+
+/// Port of `artifacts::is_external_content_reference` (artifacts.rs:606).
+fn kernel_is_external_content_reference(value: &str, kind: &str) -> bool {
+    let value = value.to_ascii_lowercase();
+    let kind = kind.to_ascii_lowercase();
+    value.starts_with("isbn:")
+        || value.starts_with("podcast:")
+        || value.starts_with("spotify:")
+        || kind.starts_with("isbn")
+        || kind.starts_with("podcast")
+        || kind.starts_with("spotify")
+}
+
 /// Returns `true` when a kernel highlight row matches a lane artifact.
 ///
-/// Mirrors bespoke `highlight_matches_artifact` (room_lanes.rs:95) using
-/// kernel types. Checks in order:
-/// 1. `source_reference_key` (canonical `"tag:value"` form — already the
-///    primary key used when building `highlights_by_reference` buckets).
-/// 2. `artifact_address` → matches `"a:{artifact_address}"` coordinate.
-/// 3. `event_reference` → matches `"e:{event_reference}"` coordinate, or
-///    the share event id of the kind:11 event.
-/// 4. `external_reference` → matches `"i:{external_reference}"` coordinate.
-/// 5. `source_url` → matches `"r:{source_url}"` coordinate.
-///
-/// Audio-URL and podcast-GUID cross-checks from bespoke are omitted because
-/// `ArtifactPreviewRow` does not carry those fields (D1 — kernel is raw,
-/// Swift hydrates). All other match paths are equivalent.
-fn kernel_highlight_matches_lane(hl: &HighlightRow, lib_row: &KernelRoomLibraryRow) -> bool {
-    let coord = &lib_row.coordinate;
+/// Exact port of bespoke `highlight_matches_artifact` (room_lanes.rs:95):
+/// the highlight is tested against every reference surface of the artifact
+/// (primary reference key, NIP-84 `artifact_address`, NIP-22 `external_reference`
+/// incl. podcast GUID, `event_reference` incl. the kind:11 share id, and
+/// `source_url` incl. `audio_url`). Any single match attaches the highlight.
+fn kernel_highlight_matches_surface(hl: &HighlightRow, surface: &ArtifactMatchSurface) -> bool {
+    if !surface.reference_tag_name.is_empty() && !surface.reference_tag_value.is_empty() {
+        let artifact_key = format!(
+            "{}:{}",
+            surface.reference_tag_name, surface.reference_tag_value
+        );
+        if !hl.source_reference_key.is_empty() && hl.source_reference_key == artifact_key {
+            return true;
+        }
+    }
 
-    if !hl.source_reference_key.is_empty() && &hl.source_reference_key == coord {
-        return true;
+    if !hl.artifact_address.is_empty() {
+        if hl.artifact_address == surface.reference_tag_value {
+            return true;
+        }
+        if hl.artifact_address == surface.highlight_tag_value {
+            return true;
+        }
     }
-    if !hl.artifact_address.is_empty() && format!("a:{}", hl.artifact_address) == *coord {
-        return true;
+
+    if !hl.external_reference.is_empty() {
+        if hl.external_reference == surface.reference_tag_value {
+            return true;
+        }
+        if hl.external_reference == surface.highlight_tag_value {
+            return true;
+        }
+        if !surface.podcast_item_guid.is_empty()
+            && hl.external_reference == format!("podcast:item:guid:{}", surface.podcast_item_guid)
+        {
+            return true;
+        }
     }
+
     if !hl.event_reference.is_empty() {
-        if format!("e:{}", hl.event_reference) == *coord {
+        if hl.event_reference == surface.reference_tag_value {
             return true;
         }
-        if hl.event_reference == lib_row.share_event_id {
+        if hl.event_reference == surface.share_event_id {
             return true;
         }
     }
-    if !hl.external_reference.is_empty() && format!("i:{}", hl.external_reference) == *coord {
-        return true;
+
+    if !hl.source_url.is_empty() {
+        if hl.source_url == surface.url {
+            return true;
+        }
+        if !surface.audio_url.is_empty() && hl.source_url == surface.audio_url {
+            return true;
+        }
     }
-    if !hl.source_url.is_empty() && format!("r:{}", hl.source_url) == *coord {
-        return true;
-    }
+
     false
 }
 
@@ -661,7 +798,10 @@ pub(crate) fn project_room_home_snapshot(state: &AppState, group_id: &str) -> Op
     // ── Room-home aggregation ─────────────────────────────────────────────────
 
     // Artifact library: kind:11 non-discussion events from the lane feed.
-    let artifact_library: Vec<KernelRoomLibraryRow> = state
+    // Each row is paired with its full `ArtifactMatchSurface` (derived from the
+    // raw kind:11 tags) so lane assembly can match highlights against every
+    // reference surface — not just the single collapsed coordinate.
+    let artifact_library_pairs: Vec<(KernelRoomLibraryRow, ArtifactMatchSurface)> = state
         .room_lanes
         .get(&feed_key)
         .map(|fs| {
@@ -671,16 +811,24 @@ pub(crate) fn project_room_home_snapshot(state: &AppState, group_id: &str) -> Op
                 .filter_map(|e| {
                     let coordinate = extract_artifact_coordinate(e)?;
                     let preview = state.artifact_previews.get(&coordinate).cloned();
-                    Some(KernelRoomLibraryRow {
-                        coordinate,
-                        share_event_id: e.id.clone(),
-                        preview,
-                    })
+                    Some((
+                        KernelRoomLibraryRow {
+                            coordinate,
+                            share_event_id: e.id.clone(),
+                            preview,
+                        },
+                        artifact_match_surface(e),
+                    ))
                 })
                 .take(ROOM_HOME_ARTIFACT_LIB_CAP)
                 .collect()
         })
         .unwrap_or_default();
+
+    let artifact_library: Vec<KernelRoomLibraryRow> = artifact_library_pairs
+        .iter()
+        .map(|(row, _)| row.clone())
+        .collect();
 
     // Highlights: kind:9802 events from the room highlight feed, newest-first.
     let hl_feed_key = format!("{ROOM_HIGHLIGHT_FEED_KEY_PREFIX}{group_id}");
@@ -779,25 +927,27 @@ pub(crate) fn project_room_home_snapshot(state: &AppState, group_id: &str) -> Op
     // Dedup by event_id HashSet across both passes.
     // Comment match: by root_tag_value (coordinate stripped of tag prefix).
     let assembled_lanes: Vec<KernelRoomLane> = {
-        let mut lanes: Vec<KernelRoomLane> = Vec::with_capacity(artifact_library.len());
-        for lib_row in &artifact_library {
+        let mut lanes: Vec<KernelRoomLane> = Vec::with_capacity(artifact_library_pairs.len());
+        for (lib_row, surface) in &artifact_library_pairs {
             let coord = &lib_row.coordinate;
 
-            // Pass 1: highlights from the pre-built bucket (source_reference_key match).
+            // Pass 1: highlights from the pre-built bucket (source_reference_key
+            // match — mirrors bespoke's per-primary-target query_for_reference).
             let mut lane_highlights: Vec<HighlightRow> = highlights_by_reference
                 .iter()
                 .find(|b| &b.coordinate == coord)
                 .map(|b| b.highlights.clone())
                 .unwrap_or_default();
 
-            // Pass 2: full match (artifact_address / event_reference /
-            // external_reference / source_url) for highlights not yet captured.
+            // Pass 2: full-surface match for highlights not captured by the
+            // bucket (artifact_address / external_reference incl. podcast GUID /
+            // event_reference incl. share id / source_url incl. audio_url).
             // Mirrors bespoke highlight_matches_artifact fallback (room_lanes.rs:58-65).
             {
                 let mut seen: std::collections::HashSet<String> =
                     lane_highlights.iter().map(|h| h.event_id.clone()).collect();
                 for hl in &highlights {
-                    if kernel_highlight_matches_lane(hl, lib_row)
+                    if kernel_highlight_matches_surface(hl, surface)
                         && seen.insert(hl.event_id.clone())
                     {
                         lane_highlights.push(hl.clone());
@@ -2107,6 +2257,15 @@ mod tests {
             Tag::parse(vec![name.to_string(), value.to_string()]).unwrap()
         }
 
+        /// Sorted event-id set from a slice, for order-independent identity
+        /// comparison (count parity is not enough — a lane can hold the wrong
+        /// highlight and still match counts).
+        fn sorted_ids<T, F: Fn(&T) -> String>(items: &[T], f: F) -> Vec<String> {
+            let mut v: Vec<String> = items.iter().map(&f).collect();
+            v.sort();
+            v
+        }
+
         fn inject_lane_event_for(
             state: &mut AppState,
             group_id: &str,
@@ -2198,6 +2357,30 @@ mod tests {
                 "P1: assembled lane count must match"
             );
             assert_eq!(bespoke.lanes.len(), 1, "P1: fixture must yield 1 lane");
+
+            // Field-level: the lane must carry the SAME highlight identity, not
+            // just an equal count.
+            let bespoke_hl_ids = sorted_ids(&bespoke.lanes[0].highlights, |h| {
+                h.highlight.event_id.clone()
+            });
+            let kernel_hl_ids = sorted_ids(&kernel.assembled_lanes[0].highlights, |h| {
+                h.event_id.clone()
+            });
+            assert_eq!(
+                bespoke_hl_ids, kernel_hl_ids,
+                "P1: lane highlight identities must match"
+            );
+            assert_eq!(
+                kernel_hl_ids,
+                vec![hl_ev.id.to_hex()],
+                "P1: the injected highlight must be present in the kernel lane"
+            );
+            // The lane's artifact preview coordinate must reflect the kind:11 share.
+            assert_eq!(
+                kernel.assembled_lanes[0].artifact_coordinate,
+                format!("a:{addr}"),
+                "P1: lane coordinate must be the a-tag (i→a→e precedence)"
+            );
         }
 
         // P2: parity_dormant_lane_excluded_by_both_functions
@@ -2453,6 +2636,23 @@ mod tests {
                 kernel.assembled_lanes[0].comments.len(),
                 "P4: lane comment count"
             );
+
+            // Field-level identity parity for both highlights and comments.
+            assert_eq!(
+                sorted_ids(&bespoke.lanes[0].highlights, |h| h
+                    .highlight
+                    .event_id
+                    .clone()),
+                sorted_ids(&kernel.assembled_lanes[0].highlights, |h| h
+                    .event_id
+                    .clone()),
+                "P4: lane highlight identities must match"
+            );
+            assert_eq!(
+                sorted_ids(&bespoke.lanes[0].comments, |c| c.event_id.clone()),
+                sorted_ids(&kernel.assembled_lanes[0].comments, |c| c.event_id.clone()),
+                "P4: lane comment identities must match"
+            );
         }
 
         // P5: parity_discussion_excluded_from_artifacts_coordinate_seeds_preview
@@ -2512,6 +2712,105 @@ mod tests {
             assert!(
                 state.artifact_previews.contains_key(&coord),
                 "P5: ensure_room_artifact_previews must seed preview for discussion coordinate"
+            );
+
+            // Kernel must ALSO exclude the discussion from the artifact library
+            // and produce no lanes — matching bespoke's discussion exclusion.
+            let ViewSnapshot::RoomHome(kernel) =
+                project_room_home_snapshot(&state, TEST_GROUP).unwrap()
+            else {
+                panic!("expected RoomHome snapshot");
+            };
+            assert_eq!(
+                kernel.artifact_library.len(),
+                bespoke.artifacts.len(),
+                "P5: kernel artifact_library must exclude discussion events (both 0)"
+            );
+            assert_eq!(
+                kernel.assembled_lanes.len(),
+                bespoke.lanes.len(),
+                "P5: kernel must produce no lanes for a discussion-only room"
+            );
+        }
+
+        // P6: parity_highlight_matches_via_secondary_source_url
+        //
+        // REGRESSION GUARD for the prior data-drop: an artifact carries BOTH an
+        // `a:<addr>` (primary coordinate) AND an `r:<url>` tag, while the highlight
+        // references the artifact ONLY via its web `r:<url>` (source_url). Bespoke
+        // `highlight_matches_artifact` matches via `source_url == preview.url`
+        // (room_lanes.rs:144). The old kernel matcher only compared against the
+        // single collapsed coordinate (`a:<addr>`) and DROPPED this highlight,
+        // yielding a dormant (0-lane) room. Both impls must now produce 1 lane
+        // holding the highlight.
+        #[test]
+        fn parity_highlight_matches_via_secondary_source_url() {
+            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
+            let mut state = make_state();
+            state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+            state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+            let keys = Keys::generate();
+            let addr =
+                "30023:0000000000000000000000000000000000000000000000000000000000000006:p6-2surf";
+            let web_url = "https://example.test/p6-article";
+
+            // Artifact: primary coordinate is a:<addr>, but it also carries r:<url>.
+            let artifact_ev = EventBuilder::new(Kind::Custom(11), "")
+                .tags(vec![
+                    named_tag("h", TEST_GROUP),
+                    named_tag("a", addr),
+                    named_tag("k", "30023"),
+                    named_tag("r", web_url),
+                    named_tag("title", "Two-surface Article"),
+                ])
+                .custom_created_at(Timestamp::from(1_000_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+            // Highlight references the artifact ONLY via the web URL (r tag) — no a/i/e.
+            let hl_ev = EventBuilder::new(Kind::Custom(9802), "secondary-surface highlight")
+                .tags(vec![named_tag("h", TEST_GROUP), named_tag("r", web_url)])
+                .custom_created_at(Timestamp::from(1_001_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+
+            process_event_and_wait(&ndb, &artifact_ev);
+            process_event_and_wait(&ndb, &hl_ev);
+            inject_lane_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&artifact_ev));
+            inject_hl_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&hl_ev));
+
+            let bespoke = crate::room_home::query_room_home_snapshot(&ndb, TEST_GROUP);
+            let ViewSnapshot::RoomHome(kernel) =
+                project_room_home_snapshot(&state, TEST_GROUP).unwrap()
+            else {
+                panic!("expected RoomHome snapshot");
+            };
+
+            // Bespoke matches via source_url → 1 lane with the highlight.
+            assert_eq!(
+                bespoke.lanes.len(),
+                1,
+                "P6: bespoke must match the highlight via source_url (1 lane)"
+            );
+            assert_eq!(
+                bespoke.lanes.len(),
+                kernel.assembled_lanes.len(),
+                "P6: kernel lane count must match bespoke (no dropped highlight)"
+            );
+            assert_eq!(
+                sorted_ids(&bespoke.lanes[0].highlights, |h| h
+                    .highlight
+                    .event_id
+                    .clone()),
+                sorted_ids(&kernel.assembled_lanes[0].highlights, |h| h
+                    .event_id
+                    .clone()),
+                "P6: the source_url-matched highlight must be in the kernel lane"
+            );
+            assert_eq!(
+                kernel.assembled_lanes[0].highlights.len(),
+                1,
+                "P6: lane must hold the secondary-surface highlight"
             );
         }
     }
