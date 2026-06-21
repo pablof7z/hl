@@ -69,13 +69,54 @@ use nmp_nip51::{BookmarkItem, BookmarkListProjection, BookmarkUpdateInput};
 
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
-use crate::kernel::snapshot::BookmarkRow;
+use crate::kernel::snapshot::{ArtifactPreviewRow, BookmarkRow};
 
 // ── hl schema_id for the typed snapshot projection ──────────────────────────
 
 /// Schema id used when the hl-owned typed snapshot projection serialises the
 /// `BookmarkListSnapshot` to JSON. Matched in `projections::dispatch_typed_frame`.
 pub(crate) const BOOKMARK_SCHEMA_ID: &str = "hl.bookmarks";
+
+// ─── Articles pane: artifact-preview hydration (Phase 7) ────────────────────
+
+/// Collect the bookmarked kind:30023 article coordinates in bookmark order.
+fn bookmarked_article_coordinates(state: &AppState) -> Vec<String> {
+    state
+        .bookmarks
+        .iter()
+        .filter_map(|row| match row {
+            BookmarkRow::Address { coordinate, .. } if coordinate.starts_with("30023:") => {
+                Some(coordinate.clone())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// Ensure an artifact preview exists for every bookmarked kind:30023 article.
+/// Reuses the shared keystone `ensure_artifact_preview` (resolves from
+/// `AppState::articles` immediately, else marks pending + emits a
+/// `ResolveArtifactCoordinate` fetch). Idempotent — safe to call on bookmarks
+/// open and on every `BookmarksUpdated`. Coordinates are collected first to
+/// avoid borrowing `state.bookmarks` across the `&mut state` ensure calls.
+pub(crate) fn ensure_bookmark_article_previews(state: &mut AppState) -> Vec<Effect> {
+    let coordinates = bookmarked_article_coordinates(state);
+    let mut effects = Vec::new();
+    for coordinate in coordinates {
+        effects.extend(super::artifact_preview::ensure_artifact_preview(state, coordinate));
+    }
+    effects
+}
+
+/// Project the bookmarked-article previews (in bookmark order) for the
+/// `BookmarksSnapshot.article_previews` slice. Immutable — filters the already-
+/// hydrated `AppState::artifact_previews` to the bookmarked 30023 coordinates.
+pub(crate) fn bookmark_article_previews(state: &AppState) -> Vec<ArtifactPreviewRow> {
+    bookmarked_article_coordinates(state)
+        .into_iter()
+        .filter_map(|coordinate| state.artifact_previews.get(&coordinate).cloned())
+        .collect()
+}
 
 // ─── READ side: apply decoded snapshot ──────────────────────────────────────
 
@@ -411,6 +452,50 @@ mod tests {
         assert_eq!(state.bookmarks.len(), 2, "both bookmark rows stored");
         assert_eq!(&state.bookmarks[0], &address_row);
         assert_eq!(&state.bookmarks[1], &event_row);
+    }
+
+    // 7-BM-T: the Articles pane hydration covers ONLY bookmarked kind:30023
+    // address rows. BookmarksUpdated ensures previews (pending + a fetch for
+    // missing coords); bookmark_article_previews returns them in bookmark order;
+    // non-30023 addresses + url/event/hashtag rows are excluded.
+    #[test]
+    fn bookmarks_article_pane_hydrates_kind_30023_only() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        let article_coord =
+            "30023:deadbeef00000000000000000000000000000000000000000000000000000001:my-article";
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::BookmarksUpdated(vec![
+                BookmarkRow::Address { coordinate: article_coord.to_string(), relay: None },
+                // Non-article addressable (a NIP-29 group) — must be excluded.
+                BookmarkRow::Address { coordinate: "34550:host:room".to_string(), relay: None },
+                BookmarkRow::Url { url: "https://example.com".to_string() },
+            ])),
+        );
+
+        // The missing article coordinate triggers a resolve fetch (so it fills
+        // in over time) — and ONLY for the kind:30023 row.
+        let resolves: Vec<_> = effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::ResolveArtifactCoordinate { coordinate } => Some(coordinate.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            resolves,
+            vec![article_coord],
+            "only the kind:30023 bookmark gets an article preview fetch; got: {effects:?}"
+        );
+
+        // The projected slice carries exactly the one article preview, pending.
+        let previews = bookmark_article_previews(&state);
+        assert_eq!(previews.len(), 1, "only the kind:30023 bookmark is in the articles pane");
+        assert_eq!(previews[0].coordinate, article_coord);
+        assert!(previews[0].pending, "missing article starts pending until the fetch resolves");
     }
 
     // 4C-T2: add_bookmark_dispatches_nip51_add_serde

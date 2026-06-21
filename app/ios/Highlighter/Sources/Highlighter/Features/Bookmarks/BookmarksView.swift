@@ -3,6 +3,8 @@ import SwiftUI
 
 struct BookmarksView: View {
     @Environment(HighlighterStore.self) private var app
+    /// Phase 7: the kernel owns the Articles pane (bookmarked kind:30023).
+    @Environment(HighlighterAppKernel.self) private var kernel
     @Environment(\.dismiss) private var dismiss
     @State private var store = BookmarkStore()
     @State private var filter: BookmarkLibraryFilter = .articles
@@ -39,11 +41,15 @@ struct BookmarksView: View {
             guard let bridge = app.eventBridge else { return }
             await store.start(
                 core: app.safeCore,
-                bridge: bridge
+                bridge: bridge,
+                kernel: kernel
             )
         }
         .onChange(of: app.bookmarkedArticleAddresses) {
             Task { await store.reload() }
+        }
+        .onChange(of: kernel.bookmarks) { _, _ in
+            store.applyKernelSnapshot()
         }
         .onDisappear { store.stop() }
     }
@@ -138,7 +144,7 @@ struct BookmarksView: View {
             unavailableState(projection)
         } else {
             LazyVStack(spacing: 0) {
-                ForEach(store.myArticles, id: \.eventId) { article in
+                ForEach(store.myArticles, id: \.address) { article in
                     NavigationLink(value: ArticleReaderTarget(article: article, seed: article)) {
                         BookmarkedArticleRow(article: article)
                             .padding(.horizontal, 16)

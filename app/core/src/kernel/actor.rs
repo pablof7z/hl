@@ -1061,7 +1061,10 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // typed sidecar. No labels — raw fields only (D1). Also injectable
             // directly from tests via Cmd::Event (no live NmpApp needed).
             state.bookmarks = rows;
-            vec![]
+            // Phase 7: hydrate the bookmarked-article previews (resolves from
+            // AppState::articles or emits a fetch for missing coords) so the
+            // Bookmarks "Articles" pane fills in / updates.
+            bookmarks::ensure_bookmark_article_previews(state)
         }
 
         // ── Phase 4A additions (append-only) ─────────────────────────────────
@@ -1401,6 +1404,7 @@ pub(crate) fn project_snapshot(
         ViewId::Bookmarks => Some(crate::kernel::snapshot::ViewSnapshot::Bookmarks(
             crate::kernel::snapshot::BookmarksSnapshot {
                 rows: state.bookmarks.clone(),
+                article_previews: bookmarks::bookmark_article_previews(state),
             },
         )),
 
@@ -2277,6 +2281,10 @@ pub(crate) async fn actor_task(
                 lifecycle_effects.extend(highlight_feed::lifecycle_effects_for_view_open(id));
                 // ── Phase 4J: home feed — compose both underlying feed lifecycles ──
                 lifecycle_effects.extend(home_feed::lifecycle_effects_for_view_open(id, &state));
+                // ── Phase 7: bookmarks articles pane — hydrate article previews ──
+                if matches!(id, ViewId::Bookmarks) {
+                    lifecycle_effects.extend(bookmarks::ensure_bookmark_article_previews(&mut state));
+                }
                 // ── Phase 7 discussions: register DiscussionObserver per room ──
                 // Inline (not an Effect) because it needs the NmpHandle directly.
                 // No-op when nmp_handle is None (test mode) or group_id is empty.
