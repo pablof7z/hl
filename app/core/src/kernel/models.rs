@@ -13,7 +13,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Mirrors `ArtifactPreview` in `web/src/lib/ndk/artifacts.ts:19-53`.
-#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct ArtifactPreview {
     pub id: String,
     pub url: String,
@@ -55,14 +55,14 @@ pub struct ArtifactPreview {
     pub chapters: Vec<Chapter>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct Chapter {
     pub start_seconds: f64,
     pub title: String,
 }
 
 /// Mirrors `ArtifactRecord` in `web/src/lib/ndk/artifacts.ts`.
-#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, uniffi::Record)]
 pub struct ArtifactRecord {
     pub preview: ArtifactPreview,
     pub group_id: String,

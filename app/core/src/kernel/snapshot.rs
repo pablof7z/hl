@@ -8,6 +8,7 @@
 //! renders them without performing any business logic (D4 / D5).
 
 use crate::kernel::domains::relay_diagnostics::RelayDiagRow;
+use crate::kernel::models::ArtifactRecord;
 
 /// Which screen the root shell should display.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -532,7 +533,12 @@ pub struct KernelRoomHomeSnapshot {
 pub struct KernelRoomLibraryRow {
     pub coordinate: String,
     pub share_event_id: String,
+    /// Thin keystone preview (title/image/author), `None` while pending.
     pub preview: Option<ArtifactPreviewRow>,
+    /// Full rich artifact record from the kind:11 share tags — the data the
+    /// iOS library cards + `ArtifactDetailView` routing consume. See
+    /// `KernelRoomLane::artifact_record`.
+    pub artifact_record: ArtifactRecord,
 }
 
 /// Highlights grouped by artifact coordinate.
@@ -563,8 +569,17 @@ pub struct KernelRoomLane {
     pub share_event_id: String,
     /// Canonical artifact coordinate (e.g. `"a:30023:pk:d"`, `"i:isbn:..."`, `"r:url"`).
     pub artifact_coordinate: String,
-    /// Resolved artifact preview, or `None` while pending / not yet fetched.
+    /// Resolved thin artifact preview, or `None` while pending / not yet fetched.
+    /// Kept as the lightweight keystone projection for surfaces where only
+    /// title/image/author are needed (e.g. discussion chips).
     pub artifact_preview: Option<ArtifactPreviewRow>,
+    /// Full rich artifact record built directly from the kind:11 share tags
+    /// (mirrors bespoke `artifacts::artifact_record_from_event`). Carries the
+    /// fields the iOS room library cards + `ArtifactDetailView` routing need
+    /// (podcast `audio_url`/GUIDs, book `catalog_id`, source, reference tags,
+    /// chapters) that the thin `artifact_preview` does not. Self-contained — the
+    /// share event embeds all artifact metadata, so no async resolution.
+    pub artifact_record: ArtifactRecord,
     /// Hydrated highlight rows for this lane, deduped by event_id, newest-first.
     pub highlights: Vec<HighlightRow>,
     /// Comment rows for this artifact, sorted newest-first.
@@ -1452,6 +1467,12 @@ pub struct RoomDiscussionsSnapshot {
     pub group_id: String,
     /// Filtered kind:11+discussion rows, newest-first. Bounded at 64.
     pub rows: Vec<DiscussionRow>,
+    /// Thin resolved previews for the artifact coordinates referenced by the
+    /// rows (`DiscussionRow::artifact_coordinate`). Lets Swift render a rich
+    /// discussion attachment chip (title/image/author) instead of a bare URL.
+    /// Thin is sufficient here — a chip needs no podcast/book detail fields.
+    /// Seeded by `ensure_room_artifact_previews` on `RoomDiscussionsUpdated`.
+    pub artifact_previews: Vec<ArtifactPreviewRow>,
 }
 
 // ── Phase 7 additions (append-only) ─────────────────────────────────────────

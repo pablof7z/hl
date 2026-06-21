@@ -65,7 +65,7 @@ use tokio::sync::mpsc;
 use crate::kernel::action::{KernelEvent, PostDiscussionPayload};
 use crate::kernel::actor::Cmd;
 use crate::kernel::app::AppState;
-use crate::kernel::snapshot::{DiscussionRow, RoomDiscussionsSnapshot};
+use crate::kernel::snapshot::{ArtifactPreviewRow, DiscussionRow, RoomDiscussionsSnapshot};
 
 // Constants
 
@@ -337,9 +337,24 @@ pub(crate) fn compute_room_discussions_snapshot(
         .cloned()
         .unwrap_or_default();
 
+    // Resolve thin previews for the artifact coordinates the rows reference, so
+    // Swift can render a rich discussion attachment chip (title/image/author)
+    // instead of a bare URL. Deduped, in first-seen row order. Seeded by
+    // `ensure_room_artifact_previews` on `RoomDiscussionsUpdated`; a missing
+    // entry simply omits that chip's rich data (Swift falls back to the URL).
+    let artifact_previews: Vec<ArtifactPreviewRow> = {
+        let mut seen = std::collections::HashSet::new();
+        rows.iter()
+            .filter_map(|r| r.artifact_coordinate.as_ref())
+            .filter(|coord| seen.insert((*coord).clone()))
+            .filter_map(|coord| state.artifact_previews.get(coord).cloned())
+            .collect()
+    };
+
     RoomDiscussionsSnapshot {
         group_id: group_id.to_string(),
         rows,
+        artifact_previews,
     }
 }
 
@@ -495,6 +510,75 @@ mod tests {
         let stored_rows = &state.room_discussions[GROUP_ID];
         assert_eq!(stored_rows.len(), 1);
         assert_eq!(stored_rows[0].event_id, "evt_good");
+    }
+
+    /// `room_discussions_snapshot_resolves_artifact_chip_previews`
+    ///
+    /// A discussion referencing an artifact (via `a`/`e`/`i`) must surface its
+    /// resolved thin preview on the snapshot so Swift renders a rich attachment
+    /// chip (title/image/author) instead of a bare URL — the discussion-chip #1
+    /// gap. Coordinates with no seeded preview contribute no chip (no fabricated
+    /// empties); coordinates are deduped.
+    #[test]
+    fn room_discussions_snapshot_resolves_artifact_chip_previews() {
+        let mut state = make_state();
+        let addr = "30023:author:essay";
+        let coord = format!("a:{addr}");
+
+        // Two discussions referencing the SAME artifact + one referencing an
+        // unseeded artifact (must not produce a chip).
+        let referencing = |id: &str, created_at: u64, address: &str| nmp_nip29::GroupEventRow {
+            id: id.to_string(),
+            pubkey: PUBKEY_A.to_string(),
+            content: "look at this".to_string(),
+            created_at,
+            kind: 11,
+            tags: vec![
+                vec!["h".to_string(), GROUP_ID.to_string()],
+                vec!["t".to_string(), "discussion".to_string()],
+                vec!["title".to_string(), "A discussion".to_string()],
+                vec!["a".to_string(), address.to_string()],
+            ],
+            relay_provenance: vec![],
+        };
+        let rows = build_discussion_rows(&[
+            referencing("disc-1", 1000, addr),
+            referencing("disc-2", 1001, addr),
+            referencing("disc-3", 1002, "30023:author:unseeded"),
+        ]);
+        // build_discussion_rows sorts newest-first; assert order-independently
+        // that both the seeded coord and the unseeded coord were extracted.
+        assert!(rows
+            .iter()
+            .any(|r| r.artifact_coordinate.as_deref() == Some(coord.as_str())));
+        assert!(rows
+            .iter()
+            .any(|r| r.artifact_coordinate.as_deref() == Some("a:30023:author:unseeded")));
+        state.room_discussions.insert(GROUP_ID.to_string(), rows);
+
+        // Seed a resolved preview for only the first coordinate.
+        state.artifact_previews.insert(
+            coord.clone(),
+            ArtifactPreviewRow {
+                coordinate: coord.clone(),
+                title: Some("Essay".to_string()),
+                image_url: Some("https://img.example/x.jpg".to_string()),
+                author_pubkey: Some("author".to_string()),
+                summary: None,
+                kind: crate::kernel::snapshot::ArtifactPreviewKind::Article,
+                pending: false,
+                display_url: None,
+            },
+        );
+
+        let snap = compute_room_discussions_snapshot(&state, GROUP_ID);
+        assert_eq!(
+            snap.artifact_previews.len(),
+            1,
+            "deduped + only the seeded coordinate yields a chip"
+        );
+        assert_eq!(snap.artifact_previews[0].coordinate, coord);
+        assert_eq!(snap.artifact_previews[0].title.as_deref(), Some("Essay"));
     }
 
     /// `discussion_attachment_extracted_from_tags`
