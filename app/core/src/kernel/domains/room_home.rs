@@ -57,7 +57,10 @@ use nmp_nip29::GroupId;
 
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
-use crate::kernel::snapshot::{KernelRoomHomeSnapshot, RoomLaneRow, ViewSnapshot};
+use crate::kernel::snapshot::{
+    CommentRecordRow, HighlightRow, KernelCommentReferenceBucket, KernelHighlightReferenceBucket,
+    KernelRoomHomeSnapshot, KernelRoomLibraryRow, RoomLaneRow, ViewSnapshot,
+};
 use crate::kernel::view::ViewId;
 
 // Re-export schema ID so projections.rs can match without importing nmp_nip29 directly.
@@ -76,6 +79,16 @@ pub(crate) const ROOM_LANE_FEED_KEY_PREFIX: &str = "hl.feed.room.";
 /// Maximum raw rows buffered per room-lane feed in `AppState::room_lanes`.
 /// Prevents unbounded growth — the UI shows the most recent N events.
 const ROOM_LANE_ROW_CAP: usize = 100;
+
+/// Feed key prefix for room highlight feeds (kind:9802 with `#h` tag).
+/// Concatenated with `group_id` to form the full feed key.
+pub(crate) const ROOM_HIGHLIGHT_FEED_KEY_PREFIX: &str = "hl.feed.room_highlights.";
+
+/// Maximum highlight rows surfaced in `KernelRoomHomeSnapshot::highlights`.
+const ROOM_HOME_HIGHLIGHT_CAP: usize = 64;
+
+/// Maximum artifact-library entries in `KernelRoomHomeSnapshot::artifact_library`.
+const ROOM_HOME_ARTIFACT_LIB_CAP: usize = 32;
 
 // ─── Lifecycle effects (called by actor loop on OpenView / CloseView) ─────────
 
@@ -109,6 +122,14 @@ pub(crate) fn lifecycle_effects_for_view_open(id: &ViewId) -> Vec<Effect> {
             scope,
         ));
         effects.extend(crate::kernel::domains::feed::reduce_drain_feed(feed_key));
+        // ── Room-home aggregation: register room highlight feed ────────────────
+        let hl_feed_key = format!("{ROOM_HIGHLIGHT_FEED_KEY_PREFIX}{group_id}");
+        let hl_scope = crate::kernel::domains::feed::room_highlight_feed_scope(group_id);
+        effects.extend(crate::kernel::domains::feed::reduce_register_feed_cursor(
+            hl_feed_key.clone(),
+            hl_scope,
+        ));
+        effects.extend(crate::kernel::domains::feed::reduce_drain_feed(hl_feed_key));
         effects
     } else {
         Vec::new()
@@ -133,6 +154,11 @@ pub(crate) fn lifecycle_effects_for_view_close(id: &ViewId) -> Vec<Effect> {
         // ── Phase 4I: release the feed cursor to unregister and free memory ──
         effects.extend(crate::kernel::domains::feed::reduce_release_feed_cursor(
             feed_key,
+        ));
+        // ── Room-home aggregation: release room highlight feed cursor ──────────
+        let hl_feed_key = format!("{ROOM_HIGHLIGHT_FEED_KEY_PREFIX}{group_id}");
+        effects.extend(crate::kernel::domains::feed::reduce_release_feed_cursor(
+            hl_feed_key,
         ));
         effects
     } else {
@@ -454,6 +480,84 @@ pub(crate) fn run_effect_dispatch_share_to_room(
     }
 }
 
+// ─── Room-home aggregation helpers ────────────────────────────────────────────
+
+/// Extract the primary artifact coordinate from a kind:11 event.
+///
+/// Priority: a → i → e → r tags. Returns `"<tag_name>:<value>"` or `None`
+/// when no recognised reference tag is present (D6 no-op).
+fn extract_artifact_coordinate(event: &nmp_core::substrate::KernelEvent) -> Option<String> {
+    let tag_val = |name: &str| -> Option<String> {
+        event
+            .tags
+            .iter()
+            .find(|t| t.first().map(|s| s == name).unwrap_or(false))
+            .and_then(|t| t.get(1))
+            .filter(|v| !v.is_empty())
+            .cloned()
+    };
+    if let Some(v) = tag_val("a") {
+        return Some(format!("a:{v}"));
+    }
+    if let Some(v) = tag_val("i") {
+        return Some(format!("i:{v}"));
+    }
+    if let Some(v) = tag_val("e") {
+        return Some(format!("e:{v}"));
+    }
+    if let Some(v) = tag_val("r") {
+        return Some(format!("r:{v}"));
+    }
+    None
+}
+
+/// Return `true` if the event has a `["t", "discussion"]` tag (marks a
+/// kind:11 as a room discussion post rather than an artifact share).
+fn is_discussion_event(event: &nmp_core::substrate::KernelEvent) -> bool {
+    event.tags.iter().any(|t| {
+        t.first().map(|s| s == "t").unwrap_or(false)
+            && t.get(1).map(|s| s == "discussion").unwrap_or(false)
+    })
+}
+
+/// Convert an artifact coordinate (e.g. `"a:30023:pk:d"`) to the NIP-22
+/// `root_tag_value` form (e.g. `"30023:pk:d"`) by stripping the tag-prefix
+/// and the separating colon.
+///
+/// Returns `None` if the coordinate has no colon (malformed).
+fn root_tag_value_for_coordinate(coordinate: &str) -> Option<String> {
+    coordinate.split_once(':').map(|x| x.1.to_string())
+}
+
+/// Ensure `AppState::artifact_previews` has an entry for every artifact
+/// coordinate referenced by kind:11 (non-discussion) events in the room lane.
+///
+/// Idempotent — `ensure_artifact_preview` is a no-op when the coordinate is
+/// already present. Called from `actor.rs` on each new room-lane `FeedPage`.
+/// Returns any resolver effects that need to be dispatched (e.g.
+/// `Effect::ResolveArtifactCoordinate`).
+pub(crate) fn ensure_room_artifact_previews(state: &mut AppState, group_id: &str) -> Vec<Effect> {
+    let feed_key = format!("{ROOM_LANE_FEED_KEY_PREFIX}{group_id}");
+    let coordinates: Vec<String> = state
+        .room_lanes
+        .get(&feed_key)
+        .map(|fs| {
+            fs.rows
+                .iter()
+                .filter(|e| e.kind == 11 && !is_discussion_event(e))
+                .filter_map(extract_artifact_coordinate)
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut effects = Vec::new();
+    for coord in coordinates {
+        effects.extend(
+            crate::kernel::domains::artifact_preview::ensure_artifact_preview(state, coord),
+        );
+    }
+    effects
+}
+
 // ─── Snapshot projection ─────────────────────────────────────────────────────
 
 /// Compute `ViewSnapshot::RoomHome` for an open `ViewId::RoomHome{group_id}`.
@@ -505,6 +609,113 @@ pub(crate) fn project_room_home_snapshot(state: &AppState, group_id: &str) -> Op
         vec![group_id.to_string()]
     };
 
+    // ── Room-home aggregation ─────────────────────────────────────────────────
+
+    // Artifact library: kind:11 non-discussion events from the lane feed.
+    let artifact_library: Vec<KernelRoomLibraryRow> = state
+        .room_lanes
+        .get(&feed_key)
+        .map(|fs| {
+            fs.rows
+                .iter()
+                .filter(|e| e.kind == 11 && !is_discussion_event(e))
+                .filter_map(|e| {
+                    let coordinate = extract_artifact_coordinate(e)?;
+                    let preview = state.artifact_previews.get(&coordinate).cloned();
+                    Some(KernelRoomLibraryRow {
+                        coordinate,
+                        share_event_id: e.id.clone(),
+                        preview,
+                    })
+                })
+                .take(ROOM_HOME_ARTIFACT_LIB_CAP)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Highlights: kind:9802 events from the room highlight feed, newest-first.
+    let hl_feed_key = format!("{ROOM_HIGHLIGHT_FEED_KEY_PREFIX}{group_id}");
+    let mut highlights: Vec<HighlightRow> = state
+        .room_highlight_feeds
+        .get(&hl_feed_key)
+        .map(|fs| {
+            fs.rows
+                .iter()
+                .filter_map(crate::kernel::domains::highlight_feed::decode_highlight_row)
+                .collect()
+        })
+        .unwrap_or_default();
+    highlights.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    highlights.truncate(ROOM_HOME_HIGHLIGHT_CAP);
+
+    // Highlights grouped by artifact coordinate.
+    let highlights_by_reference: Vec<KernelHighlightReferenceBucket> = {
+        let mut buckets: Vec<KernelHighlightReferenceBucket> = Vec::new();
+        for lib_row in &artifact_library {
+            let coord = &lib_row.coordinate;
+            let matching: Vec<HighlightRow> = highlights
+                .iter()
+                .filter(|h| &h.source_reference_key == coord)
+                .cloned()
+                .collect();
+            if !matching.is_empty() {
+                buckets.push(KernelHighlightReferenceBucket {
+                    coordinate: coord.clone(),
+                    highlights: matching,
+                });
+            }
+        }
+        buckets
+    };
+
+    // Comments grouped by artifact coordinate (via root_tag_value mapping).
+    let comments_by_reference: Vec<KernelCommentReferenceBucket> = {
+        let mut buckets: Vec<KernelCommentReferenceBucket> = Vec::new();
+        for lib_row in &artifact_library {
+            let Some(root_val) = root_tag_value_for_coordinate(&lib_row.coordinate) else {
+                continue;
+            };
+            if let Some(thread) = state.comment_threads.get(&root_val) {
+                let comments: Vec<CommentRecordRow> = thread
+                    .records
+                    .iter()
+                    .map(|r| {
+                        let reaction = state.reaction_state.get(&r.event_id);
+                        CommentRecordRow {
+                            event_id: r.event_id.clone(),
+                            author_pubkey: r.author_pubkey.clone(),
+                            body: r.body.clone(),
+                            root_tag_name: r.root_tag_name.clone(),
+                            root_tag_value: r.root_tag_value.clone(),
+                            root_kind: r.root_kind.clone(),
+                            parent_tag_name: r.parent_tag_name.clone(),
+                            parent_tag_value: r.parent_tag_value.clone(),
+                            parent_kind: r.parent_kind.clone(),
+                            created_at: r.created_at,
+                            is_top_level: r.is_top_level(),
+                            like_count: reaction.map(|x| x.count).unwrap_or(0),
+                            viewer_reacted: reaction.map(|x| x.viewer_reacted).unwrap_or(false),
+                            bookmarked: state.bookmarks.iter().any(|b| {
+                                matches!(
+                                    b,
+                                    crate::kernel::snapshot::BookmarkRow::Event { event_id, .. }
+                                        if event_id == &r.event_id
+                                )
+                            }),
+                        }
+                    })
+                    .collect();
+                let count = comments.len() as u32;
+                buckets.push(KernelCommentReferenceBucket {
+                    root_tag_value: root_val,
+                    comments,
+                    count,
+                });
+            }
+        }
+        buckets
+    };
+
     Some(ViewSnapshot::RoomHome(KernelRoomHomeSnapshot {
         group_id: row.group_id.clone(),
         host_relay_url: row.host_relay_url.clone(),
@@ -520,6 +731,11 @@ pub(crate) fn project_room_home_snapshot(state: &AppState, group_id: &str) -> Op
         invite_link_base: state.room_policy.invite_link_base.clone(),
         // Phase 4I: raw feed rows from the ADR-0058 pull engine.
         lanes: lane_rows,
+        // Room-home aggregation additions.
+        artifact_library,
+        highlights,
+        highlights_by_reference,
+        comments_by_reference,
     }))
 }
 
@@ -1137,11 +1353,12 @@ mod tests {
 
         let expected_key = format!("hl.feed.room.{TEST_GROUP}");
 
-        // Must have WireGroupEvents + RegisterFeedCursor + DrainFeed (3 effects).
+        // Must have WireGroupEvents + RegisterFeedCursor + DrainFeed for lane
+        // + RegisterFeedCursor + DrainFeed for highlights (5 effects total).
         assert_eq!(
             effects.len(),
-            3,
-            "open must emit 3 effects: WireGroupEvents, RegisterFeedCursor, DrainFeed"
+            5,
+            "open must emit 5 effects: WireGroupEvents, RegisterFeedCursor, DrainFeed (lane + highlights)"
         );
 
         // First: WireGroupEvents
@@ -1243,8 +1460,8 @@ mod tests {
 
         assert_eq!(
             effects.len(),
-            2,
-            "close must emit 2 effects: ReleaseGroupEvents + ReleaseFeedCursor"
+            3,
+            "close must emit 3 effects: ReleaseGroupEvents + ReleaseFeedCursor (lane + highlights)"
         );
 
         // First: ReleaseGroupEvents
@@ -1369,5 +1586,364 @@ mod tests {
         } else {
             panic!("expected RoomHome snapshot");
         }
+    }
+
+    // ─── Room-home aggregation tests ─────────────────────────────────────────
+
+    fn make_kind11_with_a_tag(event_id: &str, address: &str) -> nmp_core::substrate::KernelEvent {
+        nmp_core::substrate::KernelEvent {
+            id: event_id.to_string(),
+            author: "b".repeat(64),
+            kind: 11,
+            created_at: 1_700_001_000,
+            tags: vec![
+                vec!["h".to_string(), TEST_GROUP.to_string()],
+                vec!["a".to_string(), address.to_string()],
+            ],
+            content: String::new(),
+            relay_provenance: vec![],
+        }
+    }
+
+    fn make_kind9802_with_a_tag(event_id: &str, address: &str) -> nmp_core::substrate::KernelEvent {
+        nmp_core::substrate::KernelEvent {
+            id: event_id.to_string(),
+            author: "c".repeat(64),
+            kind: 9802,
+            created_at: 1_700_002_000,
+            tags: vec![
+                vec!["h".to_string(), TEST_GROUP.to_string()],
+                vec!["a".to_string(), address.to_string()],
+            ],
+            content: "a great highlighted passage".to_string(),
+            relay_provenance: vec![],
+        }
+    }
+
+    fn inject_lane_event(state: &mut AppState, event: nmp_core::substrate::KernelEvent) {
+        let feed_key = format!("{ROOM_LANE_FEED_KEY_PREFIX}{TEST_GROUP}");
+        let fs = state.room_lanes.entry(feed_key).or_default();
+        crate::kernel::domains::feed::apply_feed_page(fs, vec![event], 1, false, None);
+    }
+
+    fn inject_hl_event(state: &mut AppState, event: nmp_core::substrate::KernelEvent) {
+        let feed_key = format!("{ROOM_HIGHLIGHT_FEED_KEY_PREFIX}{TEST_GROUP}");
+        let fs = state.room_highlight_feeds.entry(feed_key).or_default();
+        crate::kernel::domains::feed::apply_feed_page(fs, vec![event], 1, false, None);
+    }
+
+    // T1: artifact_library_populated_from_lane_rows
+    //
+    // A kind:11 event with an `a` tag (non-discussion) in the room lane feed
+    // must appear in artifact_library with the correct coordinate.
+    #[test]
+    fn artifact_library_populated_from_lane_rows() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        let addr =
+            "30023:aaaa000000000000000000000000000000000000000000000000000000000001:my-article";
+        inject_lane_event(&mut state, make_kind11_with_a_tag("evt-lib-001", addr));
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
+        if let ViewSnapshot::RoomHome(s) = snap {
+            assert_eq!(s.artifact_library.len(), 1, "must have 1 artifact");
+            assert_eq!(s.artifact_library[0].coordinate, format!("a:{addr}"));
+            assert_eq!(s.artifact_library[0].share_event_id, "evt-lib-001");
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // T2: discussions_excluded_from_artifact_library
+    //
+    // A kind:11 event with both an `a` tag AND `["t","discussion"]` must NOT
+    // appear in artifact_library (discussions are excluded).
+    #[test]
+    fn discussions_excluded_from_artifact_library() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        let addr = "30023:aaaa000000000000000000000000000000000000000000000000000000000001:d";
+        let discussion_event = nmp_core::substrate::KernelEvent {
+            id: "evt-discussion-001".to_string(),
+            author: "b".repeat(64),
+            kind: 11,
+            created_at: 1_700_001_000,
+            tags: vec![
+                vec!["h".to_string(), TEST_GROUP.to_string()],
+                vec!["a".to_string(), addr.to_string()],
+                vec!["t".to_string(), "discussion".to_string()],
+            ],
+            content: String::new(),
+            relay_provenance: vec![],
+        };
+        inject_lane_event(&mut state, discussion_event);
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
+        if let ViewSnapshot::RoomHome(s) = snap {
+            assert!(
+                s.artifact_library.is_empty(),
+                "discussion events must be excluded from artifact_library"
+            );
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // T3: highlights_decoded_from_room_highlight_feeds
+    //
+    // A kind:9802 event in room_highlight_feeds must appear in `highlights`.
+    #[test]
+    fn highlights_decoded_from_room_highlight_feeds() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        let addr = "30023:bbbb000000000000000000000000000000000000000000000000000000000001:art";
+        inject_hl_event(&mut state, make_kind9802_with_a_tag("hl-evt-001", addr));
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
+        if let ViewSnapshot::RoomHome(s) = snap {
+            assert_eq!(s.highlights.len(), 1, "must decode 1 highlight");
+            assert_eq!(s.highlights[0].event_id, "hl-evt-001");
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // T4: highlights_by_reference_groups_by_coordinate
+    //
+    // A lane artifact and a highlight with the same `a` tag coordinate must
+    // appear in a single bucket in highlights_by_reference.
+    #[test]
+    fn highlights_by_reference_groups_by_coordinate() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        let addr = "30023:cccc000000000000000000000000000000000000000000000000000000000001:ref";
+        inject_lane_event(&mut state, make_kind11_with_a_tag("evt-art-ref", addr));
+        inject_hl_event(&mut state, make_kind9802_with_a_tag("hl-ref-001", addr));
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
+        if let ViewSnapshot::RoomHome(s) = snap {
+            assert_eq!(
+                s.highlights_by_reference.len(),
+                1,
+                "must have 1 bucket in highlights_by_reference"
+            );
+            let bucket = &s.highlights_by_reference[0];
+            assert_eq!(bucket.coordinate, format!("a:{addr}"));
+            assert_eq!(bucket.highlights.len(), 1);
+            assert_eq!(bucket.highlights[0].event_id, "hl-ref-001");
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // T5: comments_by_reference_from_comment_threads
+    //
+    // A lane artifact and a comment_threads entry keyed by the article's
+    // root_tag_value must produce a bucket in comments_by_reference.
+    #[test]
+    fn comments_by_reference_from_comment_threads() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        let addr = "30023:dddd000000000000000000000000000000000000000000000000000000000001:cmnt";
+        // The NIP-22 root_tag_value for this coordinate is the part after "a:".
+        let root_val = addr; // "30023:dddd...:cmnt"
+
+        inject_lane_event(&mut state, make_kind11_with_a_tag("evt-art-cmnt", addr));
+
+        // Inject a comment thread snapshot directly into state.
+        let record = nmp_nip22::CommentRecord {
+            event_id: "comment-001".to_string(),
+            author_pubkey: "e".repeat(64),
+            body: "great article!".to_string(),
+            root_tag_name: "A".to_string(),
+            root_tag_value: root_val.to_string(),
+            root_kind: "30023".to_string(),
+            parent_tag_name: "a".to_string(),
+            parent_tag_value: root_val.to_string(),
+            parent_kind: "30023".to_string(),
+            created_at: 1_700_003_000,
+        };
+        let snapshot = nmp_nip22::CommentThreadSnapshot {
+            root_tag_value: root_val.to_string(),
+            records: vec![record],
+            tree: vec![],
+        };
+        state.comment_threads.insert(root_val.to_string(), snapshot);
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
+        if let ViewSnapshot::RoomHome(s) = snap {
+            assert_eq!(
+                s.comments_by_reference.len(),
+                1,
+                "must have 1 bucket in comments_by_reference"
+            );
+            let bucket = &s.comments_by_reference[0];
+            assert_eq!(bucket.root_tag_value, root_val);
+            assert_eq!(bucket.count, 1);
+            assert_eq!(bucket.comments.len(), 1);
+            assert_eq!(bucket.comments[0].event_id, "comment-001");
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // T6: roomhome_open_emits_highlight_feed_effects
+    //
+    // lifecycle_effects_for_view_open must return 5 effects, including
+    // RegisterFeedCursor and DrainFeed for the room highlight feed key.
+    #[test]
+    fn roomhome_open_emits_highlight_feed_effects() {
+        let id = ViewId::RoomHome {
+            group_id: TEST_GROUP.to_string(),
+        };
+        let effects = lifecycle_effects_for_view_open(&id);
+        let expected_hl_key = format!("{ROOM_HIGHLIGHT_FEED_KEY_PREFIX}{TEST_GROUP}");
+
+        assert_eq!(
+            effects.len(),
+            5,
+            "open must emit 5 effects (WireGroupEvents + lane cursor + lane drain + hl cursor + hl drain)"
+        );
+
+        let has_hl_cursor = effects.iter().any(
+            |e| matches!(e, Effect::RegisterFeedCursor { key, .. } if key == &expected_hl_key),
+        );
+        assert!(
+            has_hl_cursor,
+            "must emit RegisterFeedCursor for room highlight feed"
+        );
+
+        let has_hl_drain = effects
+            .iter()
+            .any(|e| matches!(e, Effect::DrainFeed { key } if key == &expected_hl_key));
+        assert!(has_hl_drain, "must emit DrainFeed for room highlight feed");
+    }
+
+    // T7: roomhome_close_releases_highlight_feed
+    //
+    // lifecycle_effects_for_view_close must return 3 effects, including
+    // ReleaseFeedCursor for the room highlight feed key.
+    #[test]
+    fn roomhome_close_releases_highlight_feed() {
+        let id = ViewId::RoomHome {
+            group_id: TEST_GROUP.to_string(),
+        };
+        let effects = lifecycle_effects_for_view_close(&id);
+        let expected_hl_key = format!("{ROOM_HIGHLIGHT_FEED_KEY_PREFIX}{TEST_GROUP}");
+
+        assert_eq!(
+            effects.len(),
+            3,
+            "close must emit 3 effects (ReleaseGroupEvents + lane cursor + hl cursor)"
+        );
+
+        let has_hl_release = effects
+            .iter()
+            .any(|e| matches!(e, Effect::ReleaseFeedCursor { key } if key == &expected_hl_key));
+        assert!(
+            has_hl_release,
+            "must emit ReleaseFeedCursor for room highlight feed"
+        );
+    }
+
+    // T8: ensure_room_artifact_previews_seeds_for_kind11
+    //
+    // After calling ensure_room_artifact_previews, artifact_previews must
+    // contain an entry for the coordinate referenced by a kind:11 event.
+    #[test]
+    fn ensure_room_artifact_previews_seeds_for_kind11() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+
+        let addr = "30023:ffff000000000000000000000000000000000000000000000000000000000001:seed";
+        inject_lane_event(&mut state, make_kind11_with_a_tag("evt-seed-001", addr));
+
+        let _effects = ensure_room_artifact_previews(&mut state, TEST_GROUP);
+
+        let expected_coord = format!("a:{addr}");
+        assert!(
+            state.artifact_previews.contains_key(&expected_coord),
+            "artifact_previews must contain the coordinate from kind:11 event"
+        );
+    }
+
+    // T9: empty_aggregation_when_no_artifacts
+    //
+    // A room with only kind:9 (chat) events in the lane has no artifact shares,
+    // so artifact_library, highlights_by_reference, and comments_by_reference
+    // must all be empty.
+    #[test]
+    fn empty_aggregation_when_no_artifacts() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        // Only kind:9 chat events in the lane (no kind:11 shares).
+        inject_lane_event(&mut state, dummy_kernel_event("chat-001", 9));
+        inject_lane_event(&mut state, dummy_kernel_event("chat-002", 9));
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
+        if let ViewSnapshot::RoomHome(s) = snap {
+            assert!(
+                s.artifact_library.is_empty(),
+                "no artifact_library when lane has only kind:9 events"
+            );
+            assert!(
+                s.highlights.is_empty(),
+                "no highlights when highlight feed is empty"
+            );
+            assert!(
+                s.highlights_by_reference.is_empty(),
+                "no highlights_by_reference when there are no artifacts"
+            );
+            assert!(
+                s.comments_by_reference.is_empty(),
+                "no comments_by_reference when there are no artifacts"
+            );
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // T10: root_tag_value_for_coordinate_strips_prefix
+    //
+    // root_tag_value_for_coordinate must strip the tag-name prefix and its
+    // colon separator, returning the value portion only.
+    #[test]
+    fn root_tag_value_for_coordinate_strips_prefix() {
+        let addr = "30023:aaaa000000000000000000000000000000000000000000000000000000000001:d-tag";
+        let coord = format!("a:{addr}");
+        let result = root_tag_value_for_coordinate(&coord);
+        assert_eq!(
+            result,
+            Some(addr.to_string()),
+            "root_tag_value_for_coordinate must strip 'a:' prefix"
+        );
+
+        // Also test e: prefix
+        let e_coord = "e:deadbeef00000000000000000000000000000000000000000000000000000001";
+        let e_result = root_tag_value_for_coordinate(e_coord);
+        assert_eq!(
+            e_result,
+            Some("deadbeef00000000000000000000000000000000000000000000000000000001".to_string()),
+            "root_tag_value_for_coordinate must strip 'e:' prefix"
+        );
+
+        // No colon → None
+        assert_eq!(
+            root_tag_value_for_coordinate("no-colon"),
+            None,
+            "malformed coordinate with no colon must return None"
+        );
     }
 }
