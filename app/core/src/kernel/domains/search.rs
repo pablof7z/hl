@@ -18,12 +18,12 @@
 //!     2. Calls `NmpApp::push_interest(interest)` so the planner issues NIP-50
 //!        REQs on connected search-capable relays. nmp-nip50 has NO action
 //!        namespace — submission is via `push_interest` (confirmed on pinned
-//!        nmp b4404159 `crates/nmp-ffi/src/lib.rs:1828`).
+//!        nmp d16aea608 `crates/nmp-ffi/src/lib.rs:1852`).
 //!     3. Replaces the hl-owned `SearchResultsProjection` (registered under
 //!        typed snapshot key `"hl.search"`) with a fresh instance seeded from
 //!        the new `SearchRequest`, clearing stale results from the previous query.
 //!
-//! ## NMP search seam (verified at b4404159)
+//! ## NMP search seam (verified at d16aea608)
 //!
 //! `nmp-nip50` crate (`crates/nmp-nip50/src/lib.rs`):
 //! - `SearchRequest::new(query, scope, targets, max_hits) -> Option<Self>` —
@@ -38,8 +38,8 @@
 //! - `SearchResultsProjection` does NOT implement `KernelEventObserver` —
 //!   hl wraps it in `SearchObserver` (below) which does.
 //!
-//! `NmpApp::push_interest` (`crates/nmp-ffi/src/lib.rs:1828`):
-//!   `pub fn push_interest(&self, interest: nmp_core::planner::LogicalInterest)`
+//! `NmpApp::push_interest` (`crates/nmp-ffi/src/lib.rs:1852`):
+//!   `pub fn push_interest(&self, interest: nmp_planner::LogicalInterest)`
 //!   — sends `ActorCommand::PushInterest` on the actor channel. Idempotent
 //!   for the same `InterestId` (registry replaces the prior entry).
 //!
@@ -57,11 +57,21 @@
 //!   - `auth::reduce_event_identity_changed` on `IdentityChanged(None)`.
 //!   - `AppAction::Logout` reducer arm.
 //!
-//! ## Live lane untouched
+//! ## Profiles bucket — kernel-owned local kind:0 scan (Phase 7, #1697)
 //!
-//! The bespoke `search.rs` local-scan path (`HighlighterCore`) remains active
-//! until Phase 7. This module adds the relay-search path ONLY. No double-
-//! publish risk — search is read-only (no write action for search hits).
+//! The people/profiles bucket is driven by a LOCAL scan of the kernel-owned
+//! `EventStore`, NOT by relay search: the production NIP-50 interest runs the
+//! articles/highlights scope (kinds 9802/30023) and never returns kind:0, so
+//! relay hits cannot populate it. `run_effect_run_search` calls
+//! `scan_local_profiles` (`EventStore::query(KindTime{kinds:[0]})` via the
+//! `event_store_handle()` slot), decodes each kind:0 into a `ProfileSearchRow`,
+//! and ships the matches back as `KernelEvent::ProfileSearchScanned` →
+//! `merge_profile_search_rows`. This REPLACES the bespoke
+//! `crate::search::search_profiles` nostrdb scan: the profiles bucket now has
+//! exactly ONE production source (D4). `search_profiles` survives only as the
+//! `#[cfg(test)]` parity oracle for `parity_profile_scan_matches_bespoke_algorithm`.
+//!
+//! Search is read-only (no write action for search hits) — no double-publish risk.
 
 use std::sync::{Arc, Mutex};
 
@@ -101,7 +111,7 @@ pub(crate) const SEARCH_INTEREST_ID: u64 = 0x0000_484c_5f53; // "HL_S" bytes
 
 /// Thin `KernelEventObserver` wrapper over `SearchResultsProjection`.
 ///
-/// `SearchResultsProjection` at b4404159 does not implement
+/// `SearchResultsProjection` at d16aea608 does not implement
 /// `KernelEventObserver` directly — it exposes `ingest_cache_event` and
 /// `ingest_relay_event` separately. `SearchObserver` bridges the two:
 /// on every accepted kernel event it forwards via `ingest_cache_event`
@@ -222,6 +232,16 @@ pub(crate) fn reduce_action_run_search(
         return vec![];
     }
 
+    // ── Bounded-by-active-view (D5): drop the previous query's profile cache ──
+    // The profile_search_cache holds the kind:0 rows scanned for the PRIOR
+    // query. On a query replacement it is stale and must not bleed into the new
+    // query's people bucket (it is rebuilt by the local kind:0 scan this
+    // RunSearch triggers). Clear only when the query actually changes so a
+    // re-run of the same query keeps its freshly-scanned rows.
+    if state.search_query != trimmed {
+        state.profile_search_cache.clear();
+    }
+
     // Store the trimmed query so project_search_snapshot can compute the
     // local community bucket from state (no second action required).
     state.search_query = trimmed.clone();
@@ -305,6 +325,7 @@ pub(crate) fn run_effect_run_search(
     scope_json: String,
     interest_id: u64,
     nmp: Option<&crate::kernel::actor::NmpHandle>,
+    tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
 ) {
     let Some(handle) = nmp else { return };
 
@@ -381,6 +402,102 @@ pub(crate) fn run_effect_run_search(
             ..Default::default()
         })
     });
+
+    // ── Profiles bucket: local kind:0 store scan (D4 single source) ───────────
+    // The NIP-50 interest above runs the articles/highlights scope, so kind:0
+    // never arrives from relays — the people bucket must be driven by a LOCAL
+    // scan of the kernel-owned EventStore. This replaces the bespoke
+    // `crate::search::search_profiles` nostrdb scan: there is now ONE production
+    // source for the profiles bucket. Fire the scan and send the decoded rows
+    // back as `KernelEvent::ProfileSearchScanned` for the reducer to upsert
+    // (the runner cannot mutate AppState directly).
+    let rows = scan_local_profiles(nmp_ref, &query, PROFILE_SEARCH_CACHE_SCAN_LIMIT);
+    if !rows.is_empty() {
+        let _ = tx.send(crate::kernel::actor::Cmd::Event(
+            crate::kernel::action::KernelEvent::ProfileSearchScanned(rows),
+        ));
+    }
+}
+
+/// Upper bound on the local kind:0 store scan candidate set.
+///
+/// Higher than `PROFILE_SEARCH_CAP` (the final result cap) so substring matches
+/// still surface when the candidate set is dominated by non-matching profiles —
+/// mirrors the bespoke `crate::search::search_profiles` scan-cap intent. Bounds
+/// the per-search work + the rows shipped to the reducer (Non-Negotiable #7).
+pub(crate) const PROFILE_SEARCH_CACHE_SCAN_LIMIT: usize = 2048;
+
+/// Scan the kernel-owned `EventStore` for kind:0 profiles matching `query`.
+///
+/// Reads the published `EventStore` via `scan_by_kind_time(&[0], …)` (newest-
+/// first), decodes each into a `ProfileSearchRow`, and keeps only those whose
+/// name/display_name/nip05/about contains the query (case-insensitive). The
+/// store is newest-first, so the first row seen per pubkey is the freshest
+/// replaceable kind:0 — later (older) duplicates are skipped (same "newest
+/// wins" dedup as the bespoke scan).
+///
+/// Lock discipline mirrors `event_by_id_from_store`: clone the store `Arc`
+/// under the slot lock, release the lock, then run the read against the clone.
+/// Returns an empty vec on a blank query, an unpublished store, a poisoned lock,
+/// or a store error (D6 — degrades gracefully, never panics).
+fn scan_local_profiles(
+    nmp_ref: &NmpApp,
+    query: &str,
+    limit: usize,
+) -> Vec<crate::kernel::snapshot::ProfileSearchRow> {
+    use nmp_store::{EventStore, StoreQuery};
+
+    let q = query.trim();
+    if q.is_empty() {
+        return Vec::new();
+    }
+
+    // Clone the Arc<dyn EventStore> under the slot lock, then release it (D6:
+    // any None / poisoned lock yields an empty scan).
+    let slot = nmp_ref.event_store_handle();
+    let store: std::sync::Arc<dyn EventStore> = {
+        let Ok(guard) = slot.lock() else {
+            return Vec::new();
+        };
+        match guard.clone() {
+            Some(store) => store,
+            None => return Vec::new(),
+        }
+    };
+
+    let stored = match store.query(
+        &StoreQuery::KindTime {
+            kinds: vec![0],
+            since: None,
+            until: None,
+        },
+        limit,
+    ) {
+        Ok(events) => events,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut rows: Vec<crate::kernel::snapshot::ProfileSearchRow> = Vec::new();
+    for ev in &stored {
+        let raw = &ev.raw;
+        // Newest-first: keep only the first (freshest) kind:0 per pubkey.
+        if !seen.insert(raw.pubkey.clone()) {
+            continue;
+        }
+        let Some(row) = profile_search_row_from_parts(&raw.pubkey, raw.created_at, &raw.content)
+        else {
+            continue;
+        };
+        let matches = profile_contains_ci(&row.name, q)
+            || profile_contains_ci(&row.display_name, q)
+            || profile_contains_ci(&row.nip05, q)
+            || profile_contains_ci(&row.about, q);
+        if matches {
+            rows.push(row);
+        }
+    }
+    rows
 }
 
 // ─── Snapshot projection ─────────────────────────────────────────────────────
@@ -629,7 +746,25 @@ pub(crate) fn profile_search_row_from_hit(
     if hit.kind != 0 {
         return None;
     }
-    let content: serde_json::Value = serde_json::from_str(&hit.content).ok()?;
+    profile_search_row_from_parts(&hit.author, hit.created_at, &hit.content)
+}
+
+/// Decode a kind:0 content blob into a `ProfileSearchRow`.
+///
+/// Shared by `profile_search_row_from_hit` (relay-hit path) and
+/// `scan_local_profiles` (local kind:0 store-scan path) so both production
+/// sources extract the SAME consumer fields from the SAME JSON blob (D4: one
+/// decoder). Mirrors `crate::profile::parse_metadata`: trimmed strings,
+/// `display_name`/`displayName`/`displayname` aliases, `image` fallback for
+/// `picture`.
+///
+/// Returns `None` when the content is unparseable JSON.
+fn profile_search_row_from_parts(
+    author: &str,
+    created_at: u64,
+    content: &str,
+) -> Option<crate::kernel::snapshot::ProfileSearchRow> {
+    let content: serde_json::Value = serde_json::from_str(content).ok()?;
     let str_field = |key: &str| -> String {
         content
             .get(key)
@@ -662,13 +797,13 @@ pub(crate) fn profile_search_row_from_hit(
         }
     };
     Some(crate::kernel::snapshot::ProfileSearchRow {
-        pubkey: hit.author.clone(),
+        pubkey: author.to_string(),
         name,
         display_name,
         nip05: str_field("nip05"),
         picture,
         about: str_field("about"),
-        created_at: hit.created_at,
+        created_at,
     })
 }
 
@@ -682,11 +817,27 @@ pub(crate) fn profile_search_row_from_hit(
 /// Cache growth is bounded naturally by the session's relay search scope; it
 /// is cleared on `Logout` / `IdentityChanged(None)` (auth domain).
 pub(crate) fn upsert_profile_search_cache(state: &mut crate::kernel::app::AppState) {
-    for hit in state.search_results.iter().filter(|r| r.kind == 0) {
-        let Some(row) = profile_search_row_from_hit(hit) else {
-            continue;
-        };
-        // Deduplicate by pubkey: newest created_at wins (kind:0 is replaceable).
+    let rows: Vec<crate::kernel::snapshot::ProfileSearchRow> = state
+        .search_results
+        .iter()
+        .filter(|r| r.kind == 0)
+        .filter_map(profile_search_row_from_hit)
+        .collect();
+    merge_profile_search_rows(state, rows);
+}
+
+/// Merge decoded `ProfileSearchRow`s into `AppState::profile_search_cache`.
+///
+/// Deduplicates by pubkey — newest `created_at` wins (kind:0 is replaceable,
+/// same dedup as the bespoke `search_profiles` nostrdb scan). Shared by the
+/// relay-hit path (`upsert_profile_search_cache`) and the local kind:0
+/// store-scan path (`KernelEvent::ProfileSearchScanned`), so both production
+/// sources write through ONE dedup (D4).
+pub(crate) fn merge_profile_search_rows(
+    state: &mut crate::kernel::app::AppState,
+    rows: Vec<crate::kernel::snapshot::ProfileSearchRow>,
+) {
+    for row in rows {
         if let Some(existing) = state
             .profile_search_cache
             .iter_mut()
@@ -2023,6 +2174,109 @@ mod tests {
         assert_eq!(s.profiles[0].pubkey, k.public_key().to_hex());
     }
 
+    // 7-SP-T11: ProfileSearchScanned (local kind:0 store scan) upserts into the
+    // cache via the SAME merge/dedup as the relay-hit path. This is the
+    // production driver of the people bucket (relay search never returns kind:0).
+    #[test]
+    fn profile_search_scanned_merges_into_cache() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        let k = nostr_sdk::prelude::Keys::generate();
+        let pubkey = k.public_key().to_hex();
+
+        let older = ProfileSearchRow {
+            pubkey: pubkey.clone(),
+            name: "old-name".into(),
+            display_name: "Old".into(),
+            nip05: String::new(),
+            picture: String::new(),
+            about: String::new(),
+            created_at: 1_000,
+        };
+        let newer = ProfileSearchRow {
+            pubkey: pubkey.clone(),
+            name: "new-name".into(),
+            display_name: "New".into(),
+            nip05: String::new(),
+            picture: String::new(),
+            about: String::new(),
+            created_at: 2_000,
+        };
+
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::ProfileSearchScanned(vec![older])),
+        );
+        assert_eq!(state.profile_search_cache.len(), 1);
+        assert_eq!(state.profile_search_cache[0].name, "old-name");
+
+        // Newer row for the same pubkey wins (dedup parity with search_profiles).
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::ProfileSearchScanned(vec![newer])),
+        );
+        assert_eq!(
+            state.profile_search_cache.len(),
+            1,
+            "same pubkey must not duplicate"
+        );
+        assert_eq!(
+            state.profile_search_cache[0].name, "new-name",
+            "newer created_at must win"
+        );
+    }
+
+    // 7-SP-T12: cache is bounded-by-active-query (D5/D8) — a RunSearch with a
+    // DIFFERENT query clears the prior query's profile cache; re-running the
+    // SAME query keeps it.
+    #[test]
+    fn run_search_clears_profile_cache_on_query_change() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        let k = nostr_sdk::prelude::Keys::generate();
+        state.search_query = "huxley".into();
+        state.profile_search_cache = vec![ProfileSearchRow {
+            pubkey: k.public_key().to_hex(),
+            name: "huxley-fan".into(),
+            display_name: String::new(),
+            nip05: String::new(),
+            picture: String::new(),
+            about: String::new(),
+            created_at: 1_000,
+        }];
+
+        // Same query → cache retained.
+        step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::RunSearch {
+                query: "huxley".into(),
+                scope: SearchScope::ArticlesAndHighlights,
+            }),
+        );
+        assert_eq!(
+            state.profile_search_cache.len(),
+            1,
+            "re-running the same query must keep the cache"
+        );
+
+        // Different query → cache cleared (stale prior-query profiles dropped).
+        step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::RunSearch {
+                query: "proust".into(),
+                scope: SearchScope::ArticlesAndHighlights,
+            }),
+        );
+        assert!(
+            state.profile_search_cache.is_empty(),
+            "a query replacement must clear the prior query's profile cache (D5)"
+        );
+    }
+
     // 7-SP-T_PARITY: REAL identity-level parity test — kernel profile scan must
     // match bespoke `crate::search::search_profiles` on the same fixture.
     //
@@ -2045,9 +2299,12 @@ mod tests {
         let keys_b = nostr_sdk::prelude::Keys::generate(); // contains-only match
         let keys_c = nostr_sdk::prelude::Keys::generate(); // no match
 
+        // Every consumer field is populated (name/display_name/about/picture/
+        // nip05) so the per-field parity asserts compare non-empty values, not
+        // empty==empty.
         let ev_a = nostr_sdk::prelude::EventBuilder::new(
             nostr_sdk::prelude::Kind::Custom(0),
-            r#"{"name":"huxley-fan","display_name":"Huxley Reader","about":"Books"}"#,
+            r#"{"name":"huxley-fan","display_name":"Huxley Reader","about":"Books","picture":"https://ex.com/a.png","nip05":"a@ex.com"}"#,
         )
         .custom_created_at(nostr_sdk::prelude::Timestamp::from(2_000u64))
         .sign_with_keys(&keys_a)
@@ -2055,7 +2312,7 @@ mod tests {
 
         let ev_b = nostr_sdk::prelude::EventBuilder::new(
             nostr_sdk::prelude::Kind::Custom(0),
-            r#"{"name":"Prof. Aldous Huxley","display_name":"Aldous H.","about":"Writer"}"#,
+            r#"{"name":"Prof. Aldous Huxley","display_name":"Aldous H.","about":"Writer","picture":"https://ex.com/b.png","nip05":"b@ex.com"}"#,
         )
         .custom_created_at(nostr_sdk::prelude::Timestamp::from(1_000u64))
         .sign_with_keys(&keys_b)
@@ -2075,7 +2332,6 @@ mod tests {
 
         // Bespoke result — real nostrdb scan.
         let bespoke = crate::search::search_profiles(&ndb, "huxley", 20).unwrap();
-        let bespoke_pubkeys: Vec<String> = bespoke.iter().map(|p| p.pubkey.clone()).collect();
 
         // Kernel: populate profile_search_cache from the same events.
         let make_hit = |ev: &nostr_sdk::prelude::Event| SearchHitRow {
@@ -2099,29 +2355,70 @@ mod tests {
         let crate::kernel::snapshot::ViewSnapshot::Search(s) = snap else {
             panic!("expected Search snapshot");
         };
-        let kernel_pubkeys: Vec<String> = s.profiles.iter().map(|p| p.pubkey.clone()).collect();
+        let kernel = &s.profiles;
 
-        // Identity-level assertion: same pubkeys in the same order.
+        // ── CONSUMER-FIELD parity: assert EVERY field Swift reads at
+        // SearchView.swift:745 / SearchSeeAllView.swift:262 matches between the
+        // bespoke `search_profiles` and the kernel port, in order. Not counts,
+        // not pubkey-only — the guard must BITE if any field is dropped.
+        // (proven: temporarily zero any kernel field below and this fails.)
         assert_eq!(
-            kernel_pubkeys, bespoke_pubkeys,
-            "kernel profile scan must match bespoke search_profiles pubkeys in order\n\
-             bespoke: {bespoke_pubkeys:?}\nkernel: {kernel_pubkeys:?}"
+            kernel.len(),
+            bespoke.len(),
+            "kernel and bespoke must return the same number of rows\n\
+             bespoke: {:?}\nkernel: {:?}",
+            bespoke.iter().map(|p| &p.pubkey).collect::<Vec<_>>(),
+            kernel.iter().map(|p| &p.pubkey).collect::<Vec<_>>(),
         );
         assert_eq!(
-            kernel_pubkeys.len(),
+            kernel.len(),
             2,
             "fixture has 2 huxley-matching profiles; proust is excluded"
         );
+        for (i, (k, b)) in kernel.iter().zip(bespoke.iter()).enumerate() {
+            assert_eq!(k.pubkey, b.pubkey, "row {i}: pubkey must match (and order)");
+            assert_eq!(k.name, b.name, "row {i} ({}): name must match", b.pubkey);
+            assert_eq!(
+                k.display_name, b.display_name,
+                "row {i} ({}): displayName must match",
+                b.pubkey
+            );
+            assert_eq!(k.about, b.about, "row {i} ({}): about must match", b.pubkey);
+            assert_eq!(
+                k.picture, b.picture,
+                "row {i} ({}): picture must match",
+                b.pubkey
+            );
+            assert_eq!(k.nip05, b.nip05, "row {i} ({}): nip05 must match", b.pubkey);
+            // Bespoke carries created_at as Option<u64>; kernel as u64. The
+            // fixture sets it on every event, so it must round-trip identically.
+            assert_eq!(
+                Some(k.created_at),
+                b.created_at,
+                "row {i} ({}): createdAt must match",
+                b.pubkey
+            );
+        }
+
         // Prefix-match must be first (keys_a has display_name starting with "Huxley").
         assert_eq!(
-            kernel_pubkeys[0],
+            kernel[0].pubkey,
             keys_a.public_key().to_hex(),
             "prefix-match (display_name 'Huxley Reader') must rank before contains-only"
         );
         assert_eq!(
-            kernel_pubkeys[1],
+            kernel[1].pubkey,
             keys_b.public_key().to_hex(),
             "contains-only match ('Prof. Aldous Huxley') must rank second"
+        );
+
+        // Sanity: the matched rows actually carry non-empty consumer fields, so
+        // the per-field asserts above are not vacuously comparing empty==empty.
+        assert!(
+            !kernel[0].display_name.is_empty()
+                && !kernel[0].name.is_empty()
+                && !kernel[0].about.is_empty(),
+            "fixture must populate name/displayName/about so the field guard bites"
         );
     }
 }

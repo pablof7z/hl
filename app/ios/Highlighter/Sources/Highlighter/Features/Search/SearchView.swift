@@ -17,9 +17,10 @@ import SwiftUI
 ///   between local and remote.
 struct SearchView: View {
     @Environment(HighlighterStore.self) private var app
-    /// Phase 7: the kernel owns the article/highlight/community search buckets
-    /// (NIP-50 relay search + local community scan). SearchStore reads them from
-    /// `kernel.searchSnapshot`; the people bucket stays on the live lane (nmp #1697).
+    /// Phase 7: the kernel owns ALL search buckets — articles/highlights/
+    /// communities AND people (#1697). The people bucket is the kernel's local
+    /// kind:0 `EventStore` scan (replacing the bespoke nostrdb scan). SearchStore
+    /// reads every bucket from `kernel.searchSnapshot`.
     @Environment(HighlighterAppKernel.self) private var kernel
 
     @State private var store: SearchStore?

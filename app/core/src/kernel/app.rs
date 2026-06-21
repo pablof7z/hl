@@ -260,22 +260,25 @@ pub struct AppState {
     pub search_query: String,
 
     // ── Phase 7 (#1697 gate) additions ───────────────────────────────────────
-    /// Growing cache of kind:0 profile rows seen this session.
+    /// Kind:0 profile rows scanned for the ACTIVE search query.
     ///
-    /// Populated by upsert from kind:0 hits in `KernelEvent::SearchResultsUpdated`
-    /// (decoded via `search::profile_search_row_from_hit`). Deduplicated by pubkey
-    /// (newest `created_at` wins, same as bespoke `search_profiles` dedup).
+    /// Populated by `search::merge_profile_search_rows` from two sources that
+    /// share one dedup (D4): the local kind:0 store scan
+    /// (`KernelEvent::ProfileSearchScanned`, the production driver — relay NIP-50
+    /// search runs the articles/highlights scope and never returns kind:0) and
+    /// any kind:0 hits in `KernelEvent::SearchResultsUpdated`. Deduplicated by
+    /// pubkey (newest `created_at` wins, same as bespoke `search_profiles`).
     ///
     /// `project_profile_search_rows` scans this cache against `search_query` to
-    /// populate `SearchSnapshot::profiles`. The cache grows across search sessions
-    /// (not reset per query) so profiles seen in any earlier query remain searchable
-    /// without re-querying — mirrors how `discovered_groups` accumulates communities.
+    /// populate `SearchSnapshot::profiles`.
     ///
-    /// Bounded by the number of unique kind:0 authors seen (naturally bounded by the
-    /// session's search scope and relay capacity — Non-Negotiable #7).
-    ///
-    /// Cleared on `Logout` / `IdentityChanged(None)` so stale profiles from the
-    /// departing account's searches do not surface under the next identity.
+    /// Bounded-by-active-view (D5/D8): cleared on query replacement
+    /// (`reduce_action_run_search` when the query changes) and on `ViewId::Search`
+    /// close (inline in actor `Cmd::CloseView`), so it holds only the current
+    /// query's results and never grows unbounded across search sessions. Also
+    /// cleared on `Logout` / `IdentityChanged(None)` so stale profiles from the
+    /// departing account's searches do not surface under the next identity. The
+    /// snapshot result list stays capped at `PROFILE_SEARCH_CAP` (20).
     pub profile_search_cache: Vec<crate::kernel::snapshot::ProfileSearchRow>,
 
     // ── Phase 4F additions ────────────────────────────────────────────────────
