@@ -252,6 +252,20 @@ pub struct AppState {
     /// free-text). Cleared on `Logout` / `IdentityChanged(None)`.
     pub omnibox_outcome: Option<crate::kernel::snapshot::OmniboxOutcome>,
 
+    /// The trimmed query string from the most recent `AppAction::RunSearch`.
+    ///
+    /// Stored so that `project_search_snapshot` can compute the local community
+    /// bucket purely from state — no second action needed. Empty string when
+    /// no search has been run yet or after clearing.
+    ///
+    /// Cleared when:
+    ///   - `ViewId::Search` is closed (inline in actor `Cmd::CloseView`).
+    ///   - `Logout` / `IdentityChanged(None)` (in auth domain).
+    ///
+    /// D6: blank queries are rejected before reaching the reducer, so this
+    /// field is always a trimmed non-empty string or the empty string (default).
+    pub search_query: String,
+
     // ── Phase 4F additions ────────────────────────────────────────────────────
     /// Pull-cursor state for the article feed (kind:30023 over follows).
     ///
@@ -479,6 +493,7 @@ impl Default for AppState {
             // ── Phase 4D additions ────────────────────────────────────────────
             search_results: Vec::new(),
             omnibox_outcome: None,
+            search_query: String::new(),
             // ── Phase 4F additions ────────────────────────────────────────────
             article_feed: crate::kernel::domains::feed::FeedState::default(),
             highlight_feed: crate::kernel::domains::feed::FeedState::default(),

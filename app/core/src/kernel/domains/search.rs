@@ -65,7 +65,9 @@ use nmp_nip50::{
 use crate::kernel::action::SearchScope;
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
-use crate::kernel::snapshot::{KernelSearchHitRow, SearchHitRow, SearchSnapshot};
+use crate::kernel::snapshot::{
+    CommunitySearchRow, KernelSearchHitRow, SearchHitRow, SearchSnapshot,
+};
 
 // ─── Schema id ───────────────────────────────────────────────────────────────
 
@@ -129,22 +131,47 @@ fn search_hit_to_row(hit: nmp_nip50::SearchHit) -> SearchHitRow {
 
 // ─── WRITE side: reduce_action helpers ───────────────────────────────────────
 
-/// Handle `AppAction::RunSearch{query, scope}` — emit `Effect::RunSearch`.
+/// Bounded cap for the local community-search result list.
+///
+/// Mirrors `SEARCH_COMMUNITY_RESULTS_LIMIT` from `crate::search` (both = 20).
+pub(crate) const COMMUNITY_SEARCH_CAP: usize = 20;
+
+/// Handle `AppAction::RunSearch{query, scope}` — store trimmed query, emit
+/// `Effect::RunSearch`, and optionally warm discovery (D8).
 ///
 /// Empty or whitespace-only queries are a no-op (D6): `SearchRequest::new`
 /// uses `bounded_search_query` which trims and returns `None` for blank
 /// input. We pre-check here to avoid emitting an effect that silently
 /// no-ops in the runner.
 ///
+/// State side-effect: stores the trimmed query in `AppState::search_query` so
+/// that `project_search_snapshot` can compute the local community bucket on
+/// the next snapshot pass without a separate action.
+///
+/// D8 discovery warm-up: if `discovered_groups` is empty on a non-empty query
+/// AND `room_policy.discovery_relay` is non-empty, emits the same two effects
+/// as `AppAction::StartRoomDiscovery`. This reuses the existing
+/// `DiscoveredGroupsProjection` via `"nmp.nip29.discover"` — no new interest.
+/// The discovered-groups sidecar later updates `AppState::discovered_groups`;
+/// the Search snapshot recomputes the community bucket from state.
+///
 /// The reducer does NOT speculatively update `AppState::search_results` —
 /// the authoritative update arrives via the projection frame on the next
 /// snapshot tick after the relay response.
-pub(crate) fn reduce_action_run_search(query: String, scope: SearchScope) -> Vec<Effect> {
+pub(crate) fn reduce_action_run_search(
+    state: &mut AppState,
+    query: String,
+    scope: SearchScope,
+) -> Vec<Effect> {
     let trimmed = query.trim().to_string();
     if trimmed.is_empty() {
         tracing::trace!("search::reduce_action_run_search: empty query — no-op (D6)");
         return vec![];
     }
+
+    // Store the trimmed query so project_search_snapshot can compute the
+    // local community bucket from state (no second action required).
+    state.search_query = trimmed.clone();
 
     let nmp_scope = hl_scope_to_nmp(&scope);
     let scope_json = match serde_json::to_string(&nmp_scope) {
@@ -158,10 +185,27 @@ pub(crate) fn reduce_action_run_search(query: String, scope: SearchScope) -> Vec
         }
     };
 
-    vec![Effect::RunSearch {
+    let mut effects = vec![Effect::RunSearch {
         query: trimmed,
         scope_json,
-    }]
+    }];
+
+    // D8 discovery warm-up: if we have no discovered groups yet and the
+    // discovery relay is configured, kick off discovery so the community
+    // bucket can be populated on the next snapshot pass. Reuses
+    // `StartRoomDiscovery` effects — no new interest or NMP work required.
+    let discovery_relay = state.room_policy.discovery_relay.clone();
+    if state.discovered_groups.is_empty() && !discovery_relay.is_empty() {
+        tracing::trace!(
+            relay = %discovery_relay,
+            "search::reduce_action_run_search: discovered_groups empty — warming discovery (D8)"
+        );
+        effects.extend(
+            crate::kernel::domains::discovery::reduce_action_start_room_discovery(discovery_relay),
+        );
+    }
+
+    effects
 }
 
 /// Map hl `SearchScope` → `nmp_nip50::SearchScope`.
@@ -242,12 +286,13 @@ pub(crate) fn run_effect_run_search(
 
 // ─── Snapshot projection ─────────────────────────────────────────────────────
 
-/// Project the `ViewId::Search` snapshot from `AppState::search_results`.
+/// Project the `ViewId::Search` snapshot from `AppState`.
 ///
 /// Converts internal `SearchHitRow` to the FFI `KernelSearchHitRow`, carrying the
 /// raw NIP-01 `tags` (uniffi supports `Vec<Vec<String>>`) so Swift can bucket hits
-/// by `kind` and hydrate per-kind result cards. D1: no count labels, no formatted
-/// strings — raw protocol data only.
+/// by `kind` and hydrate per-kind result cards. Also computes the local community
+/// bucket from `AppState::discovered_groups` + `AppState::communities` using the
+/// stored `AppState::search_query`. D1: no count labels, no formatted strings.
 pub(crate) fn project_search_snapshot(
     state: &AppState,
 ) -> Option<crate::kernel::snapshot::ViewSnapshot> {
@@ -265,13 +310,160 @@ pub(crate) fn project_search_snapshot(
         })
         .collect();
 
+    let communities = project_community_search_rows(
+        &state.discovered_groups,
+        &state.communities,
+        &state.search_query,
+        COMMUNITY_SEARCH_CAP,
+    );
+
     Some(crate::kernel::snapshot::ViewSnapshot::Search(
         SearchSnapshot {
             hits,
+            communities,
             // Omnibox classification outcome (#1865) — the shell routes on this.
             omnibox: state.omnibox_outcome.clone(),
         },
     ))
+}
+
+// ─── Community local scan ────────────────────────────────────────────────────
+
+/// Intermediate candidate used only during the merge / filter step.
+///
+/// Not exported — lives only inside `project_community_search_rows`.
+#[derive(Debug)]
+struct CandidateCommunity {
+    group_id: String,
+    host_relay_url: String,
+    name: Option<String>,
+    about: Option<String>,
+    picture: Option<String>,
+    member_count: u64,
+    public: bool,
+    open: bool,
+}
+
+/// Compute the local community-search rows from discovered and joined groups.
+///
+/// Parity target: `crate::search::search_communities` (bespoke live lane).
+/// Algorithm mirrors the bespoke scan, adapted for the kernel's in-memory
+/// `DiscoveredRow` + `CommunityRow` sources instead of nostrdb:
+///
+/// 1. Trim query. Return empty for blank (D6).
+/// 2. Lowercase query once.
+/// 3. Merge `communities` (joined) and `discovered_groups` into one map keyed
+///    by `(host_relay_url, group_id)`. Discovered rows OVERWRITE joined rows for
+///    the same key — the catalog source carries reliable `public`/`open` flags
+///    and member counts; joined rows may carry membership state not needed here.
+/// 4. Filter: `public && open` only (mirrors `is_public_open_room`).
+/// 5. Match: `name` or `about` contains query case-insensitively.
+/// 6. Sort: lowercase `name.unwrap_or(group_id)`, then `host_relay_url`, then
+///    `group_id` (stable tie-breaker — NIP-29 group identity is relay-scoped).
+/// 7. Truncate to `limit`.
+/// 8. Emit raw `CommunitySearchRow` (D1: no formatted strings, no fallbacks).
+///
+/// Pure function — no I/O, no ndb scan. Called from `project_search_snapshot`.
+pub(crate) fn project_community_search_rows(
+    discovered: &[crate::kernel::snapshot::DiscoveredRow],
+    communities: &[crate::kernel::snapshot::CommunityRow],
+    query: &str,
+    limit: usize,
+) -> Vec<CommunitySearchRow> {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return Vec::new();
+    }
+    let q_lower = trimmed.to_lowercase();
+
+    // Build a composite-key BTreeMap. Joined rows fill in first; discovered
+    // rows overwrite so the catalog source wins when both exist.
+    let mut by_key: std::collections::BTreeMap<(String, String), CandidateCommunity> =
+        std::collections::BTreeMap::new();
+
+    for c in communities {
+        let key = (c.host_relay_url.clone(), c.group_id.clone());
+        by_key.entry(key).or_insert_with(|| CandidateCommunity {
+            group_id: c.group_id.clone(),
+            host_relay_url: c.host_relay_url.clone(),
+            name: c.name.clone(),
+            about: c.about.clone(),
+            picture: c.picture.clone(),
+            member_count: u64::from(c.member_count),
+            public: c.public,
+            open: c.open,
+        });
+    }
+
+    for d in discovered {
+        // Overwrite the joined row (if any) with the discovered-catalog row.
+        let key = (d.host_relay_url.clone(), d.group_id.clone());
+        by_key.insert(
+            key,
+            CandidateCommunity {
+                group_id: d.group_id.clone(),
+                host_relay_url: d.host_relay_url.clone(),
+                name: d.name.clone(),
+                about: d.about.clone(),
+                picture: d.picture.clone(),
+                member_count: u64::from(d.member_count),
+                public: d.public,
+                open: d.open,
+            },
+        );
+    }
+
+    // Filter: public && open, and name/about substring-match (case-insensitive).
+    let mut matched: Vec<CandidateCommunity> = by_key
+        .into_values()
+        .filter(|c| c.public && c.open)
+        .filter(|c| {
+            let name_match = c
+                .name
+                .as_deref()
+                .map(|n| n.to_lowercase().contains(&q_lower))
+                .unwrap_or(false);
+            let about_match = c
+                .about
+                .as_deref()
+                .map(|a| a.to_lowercase().contains(&q_lower))
+                .unwrap_or(false);
+            name_match || about_match
+        })
+        .collect();
+
+    // Sort by lowercase name (falling back to group_id), then relay, then
+    // group_id for a fully deterministic order.
+    matched.sort_by(|a, b| {
+        let a_name = a
+            .name
+            .as_deref()
+            .unwrap_or(a.group_id.as_str())
+            .to_lowercase();
+        let b_name = b
+            .name
+            .as_deref()
+            .unwrap_or(b.group_id.as_str())
+            .to_lowercase();
+        a_name
+            .cmp(&b_name)
+            .then_with(|| a.host_relay_url.cmp(&b.host_relay_url))
+            .then_with(|| a.group_id.cmp(&b.group_id))
+    });
+
+    // Truncate and emit raw rows — no formatted strings (D1).
+    matched
+        .into_iter()
+        .take(limit)
+        .map(|c| CommunitySearchRow {
+            group_id: c.group_id,
+            host_relay_url: c.host_relay_url,
+            name: c.name,
+            about: c.about,
+            picture: c.picture,
+            member_count: c.member_count,
+        })
+        .collect()
 }
 
 // ─── Lifecycle (view open / close) ───────────────────────────────────────────
@@ -622,6 +814,500 @@ mod tests {
         assert_eq!(
             s.hits[0].tags, tags,
             "raw NIP-01 tags must flow through to KernelSearchHitRow verbatim"
+        );
+    }
+
+    // ── Phase 7 (gate #4) community-search tests ──────────────────────────────
+
+    // Helper factories matching the discovery.rs test pattern.
+    fn make_discovered(
+        group_id: &str,
+        relay: &str,
+        name: &str,
+        public: bool,
+        open: bool,
+    ) -> crate::kernel::snapshot::DiscoveredRow {
+        crate::kernel::snapshot::DiscoveredRow {
+            group_id: group_id.to_string(),
+            host_relay_url: relay.to_string(),
+            name: Some(name.to_string()),
+            about: Some(format!("About {name}")),
+            picture: None,
+            member_count: 5,
+            public,
+            open,
+        }
+    }
+
+    fn make_community(
+        group_id: &str,
+        relay: &str,
+        name: &str,
+        public: bool,
+        open: bool,
+    ) -> crate::kernel::snapshot::CommunityRow {
+        crate::kernel::snapshot::CommunityRow {
+            group_id: group_id.to_string(),
+            host_relay_url: relay.to_string(),
+            name: Some(name.to_string()),
+            about: Some(format!("About {name}")),
+            picture: None,
+            member_count: 3,
+            public,
+            open,
+            is_admin: false,
+        }
+    }
+
+    // 7-CS-T1: blank query returns empty community list (D6).
+    #[test]
+    fn community_search_blank_query_returns_empty() {
+        let discovered = vec![make_discovered(
+            "g1",
+            "wss://r.test",
+            "Nostr Club",
+            true,
+            true,
+        )];
+        let result = project_community_search_rows(&discovered, &[], "", COMMUNITY_SEARCH_CAP);
+        assert!(result.is_empty(), "blank query must return empty (D6)");
+
+        let result_ws =
+            project_community_search_rows(&discovered, &[], "   ", COMMUNITY_SEARCH_CAP);
+        assert!(
+            result_ws.is_empty(),
+            "whitespace query must return empty (D6)"
+        );
+    }
+
+    // 7-CS-T2: only public+open rows are returned.
+    #[test]
+    fn community_search_filters_public_open() {
+        let relay = "wss://r.test";
+        let discovered = vec![
+            make_discovered("pub_open", relay, "Nostr Public", true, true),
+            make_discovered("pub_closed", relay, "Nostr Closed", true, false),
+            make_discovered("priv_open", relay, "Nostr Private", false, true),
+        ];
+        let result = project_community_search_rows(&discovered, &[], "nostr", COMMUNITY_SEARCH_CAP);
+        assert_eq!(result.len(), 1, "only public+open should match");
+        assert_eq!(result[0].group_id, "pub_open");
+    }
+
+    // 7-CS-T3: name and about are both matched case-insensitively.
+    #[test]
+    fn community_search_matches_name_and_about() {
+        let relay = "wss://r.test";
+        // "rust" appears in name of g1 and about of g2; g3 doesn't match.
+        let discovered = vec![
+            crate::kernel::snapshot::DiscoveredRow {
+                group_id: "g1".to_string(),
+                host_relay_url: relay.to_string(),
+                name: Some("Rust Devs".to_string()),
+                about: Some("A community".to_string()),
+                picture: None,
+                member_count: 10,
+                public: true,
+                open: true,
+            },
+            crate::kernel::snapshot::DiscoveredRow {
+                group_id: "g2".to_string(),
+                host_relay_url: relay.to_string(),
+                name: Some("Open Source".to_string()),
+                about: Some("We discuss RUST and systems programming".to_string()),
+                picture: None,
+                member_count: 5,
+                public: true,
+                open: true,
+            },
+            crate::kernel::snapshot::DiscoveredRow {
+                group_id: "g3".to_string(),
+                host_relay_url: relay.to_string(),
+                name: Some("Python Users".to_string()),
+                about: Some("Snake lovers".to_string()),
+                picture: None,
+                member_count: 3,
+                public: true,
+                open: true,
+            },
+        ];
+        let result = project_community_search_rows(&discovered, &[], "RUST", COMMUNITY_SEARCH_CAP);
+        let ids: Vec<&str> = result.iter().map(|r| r.group_id.as_str()).collect();
+        assert!(ids.contains(&"g1"), "name match must be found");
+        assert!(ids.contains(&"g2"), "about match must be found");
+        assert!(!ids.contains(&"g3"), "non-matching must be excluded");
+    }
+
+    // 7-CS-T4: deduplication prefers discovered rows over joined rows for
+    // the same (host_relay_url, group_id) composite key.
+    #[test]
+    fn community_search_dedupe_prefers_discovered() {
+        let relay = "wss://r.test";
+        // Joined row has `open: false` (closed). Discovered row has `open: true`.
+        // The discovered row should win, making the group visible in results.
+        let communities = vec![make_community("g1", relay, "Nostr Club", true, false)];
+        let discovered = vec![make_discovered("g1", relay, "Nostr Club", true, true)];
+        let result =
+            project_community_search_rows(&discovered, &communities, "nostr", COMMUNITY_SEARCH_CAP);
+        assert_eq!(result.len(), 1, "discovered row should win → group visible");
+        assert_eq!(result[0].group_id, "g1");
+        // member_count from discovered row (5) should be used, not joined (3).
+        assert_eq!(
+            result[0].member_count, 5,
+            "member_count must come from discovered row"
+        );
+    }
+
+    // 7-CS-T5: joined-only rows (no corresponding discovered row) still appear.
+    #[test]
+    fn community_search_joined_only_rows_included() {
+        let relay = "wss://r.test";
+        let communities = vec![make_community(
+            "joined-only",
+            relay,
+            "Joined Nostr",
+            true,
+            true,
+        )];
+        let result =
+            project_community_search_rows(&[], &communities, "nostr", COMMUNITY_SEARCH_CAP);
+        assert_eq!(
+            result.len(),
+            1,
+            "joined-only row must appear when no discovered override"
+        );
+        assert_eq!(result[0].group_id, "joined-only");
+    }
+
+    // 7-CS-T6: different relay same group_id → both rows included (composite key).
+    #[test]
+    fn community_search_different_relay_same_group_id_both_included() {
+        let relay1 = "wss://relay1.test";
+        let relay2 = "wss://relay2.test";
+        let discovered = vec![
+            make_discovered("g1", relay1, "Nostr Club", true, true),
+            make_discovered("g1", relay2, "Nostr Club", true, true),
+        ];
+        let result = project_community_search_rows(&discovered, &[], "nostr", COMMUNITY_SEARCH_CAP);
+        assert_eq!(
+            result.len(),
+            2,
+            "same group_id on different relays = 2 distinct rows"
+        );
+    }
+
+    // 7-CS-T7: results are sorted by lowercase name, then relay, then group_id.
+    #[test]
+    fn community_search_sorted_by_name() {
+        let relay = "wss://r.test";
+        let discovered = vec![
+            make_discovered("g1", relay, "Zeta Nostr", true, true),
+            make_discovered("g2", relay, "Alpha Nostr", true, true),
+            make_discovered("g3", relay, "Meso Nostr", true, true),
+        ];
+        let result = project_community_search_rows(&discovered, &[], "nostr", COMMUNITY_SEARCH_CAP);
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].group_id, "g2", "Alpha must be first");
+        assert_eq!(result[1].group_id, "g3", "Meso must be second");
+        assert_eq!(result[2].group_id, "g1", "Zeta must be last");
+    }
+
+    // 7-CS-T8: result list is bounded at `limit`.
+    #[test]
+    fn community_search_bounded_at_limit() {
+        let relay = "wss://r.test";
+        let discovered: Vec<_> = (0..30)
+            .map(|i| {
+                make_discovered(
+                    &format!("g{i:02}"),
+                    relay,
+                    &format!("Nostr Group {i:02}"),
+                    true,
+                    true,
+                )
+            })
+            .collect();
+        let result = project_community_search_rows(&discovered, &[], "nostr", COMMUNITY_SEARCH_CAP);
+        assert!(
+            result.len() <= COMMUNITY_SEARCH_CAP,
+            "result must be bounded at COMMUNITY_SEARCH_CAP ({COMMUNITY_SEARCH_CAP}), got {}",
+            result.len()
+        );
+    }
+
+    // 7-CS-T9: search_query stored in AppState after RunSearch.
+    #[test]
+    fn run_search_stores_query_in_state() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+
+        step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::RunSearch {
+                query: "  hello world  ".to_string(),
+                scope: SearchScope::LongForm,
+            }),
+        );
+
+        assert_eq!(
+            state.search_query, "hello world",
+            "search_query must hold the trimmed query after RunSearch"
+        );
+    }
+
+    // 7-CS-T10: search_query cleared on Logout.
+    #[test]
+    fn search_query_cleared_on_logout() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        state.search_query = "something".to_string();
+
+        step(&mut state, &clock, Cmd::Action(AppAction::Logout));
+
+        assert!(
+            state.search_query.is_empty(),
+            "search_query must be empty after Logout"
+        );
+    }
+
+    // 7-CS-T11: search_query cleared on IdentityChanged(None).
+    #[test]
+    fn search_query_cleared_on_identity_changed_none() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        state.search_query = "something".to_string();
+
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::IdentityChanged(None)),
+        );
+
+        assert!(
+            state.search_query.is_empty(),
+            "search_query must be empty after IdentityChanged(None)"
+        );
+    }
+
+    // 7-CS-T12: snapshot includes community bucket from stored query.
+    #[test]
+    fn snapshot_includes_community_bucket_from_query() {
+        let mut state = make_state();
+        let relay = "wss://r.test";
+
+        state.search_query = "nostr".to_string();
+        state.discovered_groups = vec![
+            make_discovered("g1", relay, "Nostr Club", true, true),
+            make_discovered("g2", relay, "Python World", true, true),
+        ];
+
+        let snap = project_search_snapshot(&state).expect("snapshot");
+        let crate::kernel::snapshot::ViewSnapshot::Search(s) = snap else {
+            panic!("expected Search snapshot");
+        };
+        assert_eq!(
+            s.communities.len(),
+            1,
+            "only matching communities in bucket"
+        );
+        assert_eq!(s.communities[0].group_id, "g1");
+    }
+
+    // 7-CS-T13: D8 discovery warm-up emitted when discovered_groups is empty
+    // and discovery_relay is configured.
+    #[test]
+    fn run_search_warms_discovery_when_empty() {
+        let mut state = make_state();
+        state.room_policy.discovery_relay = "wss://discovery.test".to_string();
+        let clock = ManualClock::default();
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::RunSearch {
+                query: "nostr".to_string(),
+                scope: SearchScope::LongForm,
+            }),
+        );
+
+        // Must have RunSearch + DispatchNip29Action + WireGroupDiscovery.
+        assert_eq!(
+            effects.len(),
+            3,
+            "D8 warm-up must add 2 extra effects: got {effects:?}"
+        );
+        assert!(
+            matches!(effects[0], Effect::RunSearch { .. }),
+            "first effect must be RunSearch"
+        );
+        assert!(
+            matches!(effects[1], Effect::DispatchNip29Action { .. }),
+            "second effect must be DispatchNip29Action (warm-up)"
+        );
+        assert!(
+            matches!(effects[2], Effect::WireGroupDiscovery { .. }),
+            "third effect must be WireGroupDiscovery (warm-up)"
+        );
+    }
+
+    // 7-CS-T14: D8 warm-up NOT emitted when discovered_groups already has rows.
+    #[test]
+    fn run_search_no_warmup_when_discovered_not_empty() {
+        let mut state = make_state();
+        state.room_policy.discovery_relay = "wss://discovery.test".to_string();
+        // Pre-populate discovered groups — no warm-up needed.
+        state.discovered_groups = vec![make_discovered("g1", "wss://r.test", "Nostr", true, true)];
+        let clock = ManualClock::default();
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::RunSearch {
+                query: "nostr".to_string(),
+                scope: SearchScope::LongForm,
+            }),
+        );
+
+        assert_eq!(
+            effects.len(),
+            1,
+            "no warm-up when discovered_groups non-empty"
+        );
+        assert!(matches!(effects[0], Effect::RunSearch { .. }));
+    }
+
+    // 7-CS-T15: D8 warm-up NOT emitted when discovery_relay is empty.
+    #[test]
+    fn run_search_no_warmup_when_no_discovery_relay() {
+        let mut state = make_state();
+        // discovery_relay is empty by default.
+        let clock = ManualClock::default();
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::RunSearch {
+                query: "nostr".to_string(),
+                scope: SearchScope::LongForm,
+            }),
+        );
+
+        assert_eq!(effects.len(), 1, "no warm-up when discovery_relay empty");
+        assert!(matches!(effects[0], Effect::RunSearch { .. }));
+    }
+
+    // 7-CS-T16: Parity test — kernel community scan vs bespoke search_communities.
+    //
+    // Both algorithms receive the same logical fixture:
+    //   g_pub_open   : public+open, name "Rust Club", about "We love Rust"  → matches "rust"
+    //   g_pub_closed : public+closed                                         → excluded
+    //   g_priv_open  : private+open                                          → excluded
+    //   g_dup_old    : public+open, same group_id as g_pub_open (older)      → deduped out
+    //   g_other      : public+open, name "Python World"                       → no match
+    //
+    // The kernel scan receives equivalent DiscoveredRow inputs.
+    // We assert the same group_ids in the same order as the expected output.
+    //
+    // NOTE: bespoke search_communities scans nostrdb (not available in kernel unit
+    // tests). We validate parity by comparing against the documented algorithm
+    // output on the shared fixture, confirmed by checking bespoke test 1403.
+    #[test]
+    fn parity_community_scan_matches_bespoke_algorithm() {
+        let relay = "wss://relay.test";
+
+        // Shared fixture as DiscoveredRow (kernel inputs).
+        // g_dup_old has the same (relay, group_id) as g_pub_open — overwritten.
+        // We insert g_dup_old first (lower priority), then g_pub_open overwrites.
+        let communities_joined = vec![
+            // g_dup_old (joined, older row — will be overwritten by discovered below)
+            crate::kernel::snapshot::CommunityRow {
+                group_id: "rust-club".to_string(),
+                host_relay_url: relay.to_string(),
+                name: Some("Rust Club OLD".to_string()),
+                about: Some("Old about".to_string()),
+                picture: None,
+                member_count: 1,
+                public: true,
+                open: true,
+                is_admin: false,
+            },
+        ];
+
+        let discovered_groups = vec![
+            // g_pub_open — matches "rust"
+            crate::kernel::snapshot::DiscoveredRow {
+                group_id: "rust-club".to_string(),
+                host_relay_url: relay.to_string(),
+                name: Some("Rust Club".to_string()),
+                about: Some("We love Rust programming".to_string()),
+                picture: None,
+                member_count: 42,
+                public: true,
+                open: true,
+            },
+            // g_pub_closed — excluded (open: false)
+            crate::kernel::snapshot::DiscoveredRow {
+                group_id: "closed-rust".to_string(),
+                host_relay_url: relay.to_string(),
+                name: Some("Closed Rust").map(str::to_string),
+                about: Some("Rust enthusiasts (closed)".to_string()),
+                picture: None,
+                member_count: 10,
+                public: true,
+                open: false,
+            },
+            // g_priv_open — excluded (public: false)
+            crate::kernel::snapshot::DiscoveredRow {
+                group_id: "private-rust".to_string(),
+                host_relay_url: relay.to_string(),
+                name: Some("Private Rust".to_string()),
+                about: Some("Private Rust channel".to_string()),
+                picture: None,
+                member_count: 5,
+                public: false,
+                open: true,
+            },
+            // g_other — no match ("python" not in "rust" query)
+            crate::kernel::snapshot::DiscoveredRow {
+                group_id: "python-world".to_string(),
+                host_relay_url: relay.to_string(),
+                name: Some("Python World".to_string()),
+                about: Some("Pythonistas unite".to_string()),
+                picture: None,
+                member_count: 15,
+                public: true,
+                open: true,
+            },
+        ];
+
+        let results = project_community_search_rows(
+            &discovered_groups,
+            &communities_joined,
+            "rust",
+            COMMUNITY_SEARCH_CAP,
+        );
+
+        // Expected: only "rust-club" (public+open, name+about match "rust").
+        // "closed-rust" excluded (open: false).
+        // "private-rust" excluded (public: false).
+        // "python-world" excluded (no match).
+        // Dedup: discovered "rust-club" overwrites joined "rust-club OLD".
+        assert_eq!(
+            results.len(),
+            1,
+            "only 1 group should pass all filters: got {:?}",
+            results.iter().map(|r| &r.group_id).collect::<Vec<_>>()
+        );
+        assert_eq!(results[0].group_id, "rust-club");
+        assert_eq!(
+            results[0].name.as_deref(),
+            Some("Rust Club"),
+            "discovered name (not joined OLD name) must win"
+        );
+        assert_eq!(
+            results[0].member_count, 42,
+            "discovered member_count must win"
         );
     }
 }

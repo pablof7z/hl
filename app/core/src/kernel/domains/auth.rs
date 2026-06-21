@@ -126,6 +126,11 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     state.search_results.clear();
     // Omnibox outcome (#1865) belongs to the departing session — clear it.
     state.omnibox_outcome = None;
+    // ── Phase 7 (gate #4): clear search query on logout ──────────────────────
+    // AppState::search_query drives the local community-scan bucket. Clear so
+    // stale query text from the prior account does not survive into the next
+    // session and produce phantom community results.
+    state.search_query.clear();
     // ── Phase 4F: clear feed-pull state on logout ─────────────────────────────
     // FeedState rows and cursors belong to the departing account's subscriptions.
     // Wipe so stale feed rows don't surface for the next account. cursor_id is
@@ -217,6 +222,8 @@ pub(crate) fn reduce_event_identity_changed(
             state.search_results.clear();
             // Omnibox outcome (#1865) belongs to the removed account — clear it.
             state.omnibox_outcome = None;
+            // ── Phase 7 (gate #4): clear search query on account removal ─────
+            state.search_query.clear();
             // ── Phase 4F: clear feed-pull state on account removal ────────────
             clear_feed_state_on_identity_lost(state);
             // ── Phase 7 feedback: clear UI-lifecycle state on identity loss ───

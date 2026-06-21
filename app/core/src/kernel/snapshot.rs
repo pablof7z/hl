@@ -690,16 +690,58 @@ pub struct SearchHitRow {
     pub relay_provenance: Vec<String>,
 }
 
-/// Snapshot for `ViewId::Search` — NIP-50 relay search results view.
+/// One local-scan community result row for the Search screen communities bucket.
+///
+/// Derived from `AppState::discovered_groups` merged with `AppState::communities`.
+/// Raw protocol data only (D1 / ADR-0032): Swift formats all display strings
+/// (name fallback to group_id, `"{n} members"` label, avatar initials, etc.).
+///
+/// `member_count` is raw `u64` — no `"N members"` label (D1). Widened from the
+/// `u32` in `CommunityRow` / `DiscoveredRow` source types.
+/// `public` and `open` are omitted: the kernel already filters to public+open
+/// rows before emitting, so Swift never needs to render a closed/private row.
+///
+/// Append-only: new fields at the bottom keep rebases mechanical.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct CommunitySearchRow {
+    /// NIP-29 local group id (the `["d", _]` tag value).
+    pub group_id: String,
+    /// Host relay URL. Together with `group_id` forms the stable `GroupId`.
+    pub host_relay_url: String,
+    /// `["name", _]` tag value from kind:39000, if present.
+    /// D1: no fallback to group_id — Swift owns the fallback display logic.
+    pub name: Option<String>,
+    /// `["about", _]` tag value from kind:39000, if present.
+    pub about: Option<String>,
+    /// `["picture", _]` tag value from kind:39000, if present.
+    pub picture: Option<String>,
+    /// Cardinality of `["p", _]` tags on the latest kind:39002 (member list).
+    /// Raw `u64` — no `"N members"` label (D1).
+    pub member_count: u64,
+}
+
+/// Snapshot for `ViewId::Search` — NIP-50 relay search results + local buckets.
 ///
 /// Raw protocol data only (D1): Swift formats all display strings.
 /// Bounded by `SearchResultsProjection`'s `max_hits` cap
-/// (default `DEFAULT_MAX_SEARCH_HITS = 200` from nmp-nip50 — Non-Negotiable #7).
+/// (default `DEFAULT_MAX_SEARCH_HITS = 200` from nmp-nip50 — Non-Negotiable #7)
+/// for `hits`; `communities` is bounded at 20 (COMMUNITY_SEARCH_CAP in search.rs).
+///
+/// Append-only: `communities` is the Phase 7 gate #4 addition.
+/// Profile rows are deferred to nmp #1697.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct SearchSnapshot {
     /// Ordered (by `created_at` descending, then `id` ascending) search hit rows.
     /// Raw fields only — no "X results" count label, no formatted strings (D1).
     pub hits: Vec<KernelSearchHitRow>,
+    // ── Phase 7 (gate #4 communities bucket) additions (append-only) ─────────
+    /// Local-scan community results from `AppState::discovered_groups` merged with
+    /// `AppState::communities`. Substring-matched by name/about against the
+    /// active `search_query`; filtered to public+open; sorted by lowercase name
+    /// then host_relay_url then group_id; bounded at 20.
+    /// Empty when the query is blank or no public+open communities match.
+    /// D1: raw rows only — Swift renders all display strings and fallbacks.
+    pub communities: Vec<CommunitySearchRow>,
     /// The most recent omnibox classification outcome (`#1865` input-intent
     /// resolver), or `None` if the field has not classified an input yet. The
     /// shell routes on this: `Navigate`/`OpenGroup`/`ResolveNip05` drive
