@@ -389,7 +389,9 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         }
 
         // ── Phase 4D additions (append-only) ─────────────────────────────────
-        AppAction::RunSearch { query, scope } => search::reduce_action_run_search(query, scope),
+        AppAction::RunSearch { query, scope } => {
+            search::reduce_action_run_search(state, query, scope)
+        }
 
         // ── Phase 5A additions (append-only) ─────────────────────────────────
         AppAction::PrepareWhatsNew => whats_new::reduce_action_prepare_whats_new(),
@@ -660,7 +662,7 @@ fn reduce_action_envelope(
                 Some(s) => s,
                 None => return vec![],
             };
-            search::reduce_action_run_search(p.query, scope)
+            search::reduce_action_run_search(state, p.query, scope)
         }
 
         // ── What's New ────────────────────────────────────────────────────────
@@ -2276,6 +2278,11 @@ pub(crate) async fn actor_task(
                 // does not have.
                 if matches!(id, ViewId::Search) {
                     state.search_results.clear();
+                    // ── Phase 7 (gate #4): clear search query on view close ───
+                    // `search_query` drives the local community-scan bucket.
+                    // Clear together with search_results so no stale query text
+                    // leaks into the next search session.
+                    state.search_query.clear();
                 }
                 lifecycle_effects.extend(search::lifecycle_effects_for_view_close(id));
                 // ── Phase 4G: article feed lifecycle — release cursor ────────────
