@@ -129,10 +129,14 @@ struct RoomShareCard: View {
             mintInviteIfNeeded()
         }
         .onChange(of: kernel.sharePublish) { _, snapshot in
-            // Adopt the freshly minted code (first of the batch) once the kernel
-            // publishes the kind:9009. Guard on `mintRequested` so we only react
-            // to our own mint, not another screen's share publish.
-            if mintRequested, let code = snapshot?.inviteCodes.first {
+            // Adopt the freshly minted code (first of the batch) only once the
+            // kind:9009 create-invite publish ACTUALLY succeeds (#21 finding 3:
+            // the FSM stays Publishing until the publish settles, so a failed
+            // mint surfaces `errorMessage` via `mintError` instead of a bogus
+            // share link). Guard on `mintRequested` so we only react to our own
+            // mint, not another screen's share publish.
+            guard mintRequested, let snapshot else { return }
+            if snapshot.didPublish, let code = snapshot.inviteCodes.first {
                 mintedCode = code
             }
         }

@@ -1464,6 +1464,20 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
             blob_url,
             error,
         } => blossom::reduce_event_blossom_upload_result(state, success, blob_url, error),
+
+        // ── #21 share-flow additions (append-only) ───────────────────────────
+        KernelEvent::SharePublishCorrelationMinted {
+            placeholder_correlation_id,
+            nmp_correlation_id,
+        } => share::reduce_event_share_publish_correlation_minted(
+            state,
+            placeholder_correlation_id,
+            nmp_correlation_id,
+        ),
+        KernelEvent::ShareMintDispatchRejected {
+            correlation_id,
+            error,
+        } => share::reduce_event_share_publish_action_result(state, correlation_id, false, error),
         KernelEvent::CapturePublishActionResult { success, error } => {
             capture_draft::reduce_event_capture_publish_action_result(state, success, error, now)
         }
@@ -2085,7 +2099,22 @@ pub(crate) async fn run_effect(
             // projection → apply_action_result_row → SharePublishActionResult,
             // driving the share FSM → Done/Error (D6). No-op when nmp is None
             // (test mode inspects the emitted Effect directly).
-            share::run_effect_publish_share_event(json, correlation_id, nmp);
+            share::run_effect_publish_share_event(json, correlation_id, nmp, tx);
+        }
+
+        Effect::DispatchCreateInviteWithCorrelation {
+            json,
+            correlation_id,
+        } => {
+            // Dispatch the validated nmp.nip29.create_invite (kind:9009) WITH a
+            // correlation id so the create-invite publish verdict drives the
+            // share-mint FSM → Done/Error (#21 finding 3). No-op when nmp is None.
+            share::run_effect_dispatch_create_invite_with_correlation(
+                json,
+                correlation_id,
+                nmp,
+                tx,
+            );
         }
 
         // ── Phase 7 artifact-preview additions (append-only) ─────────────────

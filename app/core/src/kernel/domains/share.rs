@@ -455,17 +455,24 @@ pub fn project_share_composer_snapshot(state: &AppState) -> Option<ShareComposer
 
 // ─── Share publish: WRITE port (#21) ──────────────────────────────────────────
 //
-// The kernel is the sole writer for the three bespoke share publishes:
+// The kernel is the sole writer for the bespoke share publishes:
 //   - SHARE-TO-ROOM artifact   → kind:11 standalone artifact share (ex `artifacts::publish`)
 //   - SHARE-TO-ROOM highlight   → kind:16 generic repost      (ex `highlights::share_to_community`)
 //   - SHARE-QUEUE drain item   → kind:11 artifact share       (ex `client::publish_share_queue_item`)
 //   - ROOM invite mint          → kind:9009 create-invite      (ex `groups::create_invite_codes`)
 //
-// All four publish via `Effect::PublishShareEvent` → `ActorCommand::PublishRawEvent`
-// host-pinned to the group's host relay (`PublishTarget::Explicit`). The pure tag
-// builders below reproduce the bespoke event templates FIELD-COMPLETELY; the parity
-// tests at the bottom assert each kernel template equals the bespoke `EventBuilder`
-// output on the same fixture.
+// The three raw event publishes (artifact / repost / drain) go through
+// `Effect::PublishShareEvent` → the VALIDATED `nmp.publish` `PublishRaw` ingress
+// (`nmp_app_dispatch_action`), host-pinned to the group's host relay
+// (`PublishTarget::Explicit`, D3 fail-closed). The invite mint goes through the
+// TYPED `nmp.nip29.create_invite` action via
+// `Effect::DispatchCreateInviteWithCorrelation`. Both ingresses are validated by
+// the pinned nmp (reserved-kind rejection, fail-closed routing) and thread a
+// correlation id so the publish verdict drives `SharePublishState` → Done/Error.
+//
+// The pure tag builders below reproduce the bespoke event templates
+// FIELD-COMPLETELY; the parity tests at the bottom assert each kernel template
+// equals the bespoke `EventBuilder` output on the same fixture.
 
 use crate::kernel::models::ArtifactPreview;
 
@@ -473,6 +480,22 @@ use crate::kernel::models::ArtifactPreview;
 pub(crate) const KIND_ARTIFACT_SHARE: u32 = 11;
 pub(crate) const KIND_GENERIC_REPOST: u32 = 16;
 pub(crate) const KIND_HIGHLIGHT: u32 = 9802;
+
+/// Reserved replaceable-list kinds that `PublishAction::PublishRaw` rejects on
+/// the pinned nmp (`publish/policy.rs`): kind:0 (profile metadata), kind:3
+/// (contacts), kind:10003 (NIP-51 global bookmarks). Each has a dedicated typed
+/// builder / per-NIP action module that applies protocol-specific validation +
+/// read-modify-write merging; a raw publish would bypass that processing.
+///
+/// The share publishes route through the SAME validated `nmp.publish` ingress
+/// (`run_effect_publish_share_event` → `nmp_app_dispatch_action("nmp.publish",
+/// PublishRaw{..})`), so the live nmp enforces this rejection. We mirror the set
+/// here as a fail-closed kernel guard so a future builder emitting a reserved
+/// kind is rejected at the kernel ingress too — never silently signed (and the
+/// reducer is unit-testable without a live NmpApp).
+fn is_reserved_publish_kind(kind: u32) -> bool {
+    matches!(kind, 0 | 3 | 10003)
+}
 
 /// Phase of an in-flight share publish (D6: errors are state, not exceptions).
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -702,6 +725,54 @@ fn share_template_json(
     .to_string()
 }
 
+/// Build one host-pinned `PublishShareEvent` effect, applying the two fail-closed
+/// invariants shared by every share publish:
+///
+///   1. **D3 host-relay pin must FAIL CLOSED.** An in-group (NIP-29) event MUST
+///      land on the group's host relay. An empty/missing `host_relay_url` is a
+///      caller bug — NOT a request to widen to `Auto`/outbox routing (that would
+///      publish a group event to the wrong relays). Empty host → `Error` (D6),
+///      no publish.
+///   2. **Reserved-kind rejection.** A reserved replaceable-list kind (0/3/10003)
+///      is rejected here (mirrors the validated `nmp.publish` PublishRaw ingress)
+///      so a future builder emitting one is never silently signed.
+///
+/// On success: mints a correlation id, sets the FSM to `Publishing`, returns the
+/// single `PublishShareEvent` effect. On either guard failure: sets the FSM to
+/// `Error` and returns no effect. The verdict (Done/Error) arrives via
+/// `apply_action_result_row` → `reduce_event_share_publish_action_result`.
+fn emit_share_publish(
+    state: &mut AppState,
+    kind: u32,
+    content: &str,
+    tags: Vec<Vec<String>>,
+    host_relay_url: &str,
+) -> Vec<Effect> {
+    if host_relay_url.trim().is_empty() {
+        // D3 fail-closed: never widen a group write to Auto/outbox routing.
+        state.share_publish.phase = SharePublishPhase::Error {
+            message: "host relay required for in-group share (no outbox fallback)".into(),
+        };
+        return vec![];
+    }
+    if is_reserved_publish_kind(kind) {
+        state.share_publish.phase = SharePublishPhase::Error {
+            message: format!("kind:{kind} is reserved and may not be published raw"),
+        };
+        return vec![];
+    }
+
+    let json = share_template_json(kind, content, tags, host_relay_url);
+    let correlation_id = crate::kernel::domains::capture_draft::new_correlation_id();
+    state.share_publish.phase = SharePublishPhase::Publishing;
+    state.share_publish.pending_correlation_id = Some(correlation_id.clone());
+
+    vec![Effect::PublishShareEvent {
+        json,
+        correlation_id,
+    }]
+}
+
 // ── Reducers ──────────────────────────────────────────────────────────────────
 
 /// Reduce `hl.share.artifact_to_room` — publish a kind:11 artifact share into a
@@ -723,16 +794,7 @@ pub(crate) fn reduce_action_artifact_to_room(
     }
     let tags = build_artifact_share_tags(&group_id, &preview);
     let content = note.trim().to_string();
-    let json = share_template_json(KIND_ARTIFACT_SHARE, &content, tags, &host_relay_url);
-
-    let correlation_id = crate::kernel::domains::capture_draft::new_correlation_id();
-    state.share_publish.phase = SharePublishPhase::Publishing;
-    state.share_publish.pending_correlation_id = Some(correlation_id.clone());
-
-    vec![Effect::PublishShareEvent {
-        json,
-        correlation_id,
-    }]
+    emit_share_publish(state, KIND_ARTIFACT_SHARE, &content, tags, &host_relay_url)
 }
 
 /// Reduce `hl.share.highlight_to_room` — publish a kind:16 highlight repost into
@@ -757,16 +819,7 @@ pub(crate) fn reduce_action_highlight_to_room(
         &target_group_id,
         &relay_hint,
     );
-    let json = share_template_json(KIND_GENERIC_REPOST, "", tags, &host_relay_url);
-
-    let correlation_id = crate::kernel::domains::capture_draft::new_correlation_id();
-    state.share_publish.phase = SharePublishPhase::Publishing;
-    state.share_publish.pending_correlation_id = Some(correlation_id.clone());
-
-    vec![Effect::PublishShareEvent {
-        json,
-        correlation_id,
-    }]
+    emit_share_publish(state, KIND_GENERIC_REPOST, "", tags, &host_relay_url)
 }
 
 /// Reduce `hl.share.mint_invite` — generate `count` invite codes and publish
@@ -783,6 +836,11 @@ pub(crate) fn reduce_action_highlight_to_room(
 /// Replaces the bespoke `groups::create_invite_codes` (code-gen + publish) +
 /// `client::get_room_share_link_snapshot`. Fans out to multiple kind:9009 events
 /// internally inside `CreateInviteAction` when `count` exceeds the relay cap.
+///
+/// Finding 3: the FSM is set to `Publishing` and a correlation id is threaded
+/// through the create-invite dispatch so its publish verdict drives
+/// `SharePublishState` → Done (success) / Error (failure). The mint is NOT marked
+/// Done until the kind:9009 publish actually succeeds.
 pub(crate) fn reduce_action_mint_invite(
     state: &mut AppState,
     group_id: String,
@@ -795,21 +853,47 @@ pub(crate) fn reduce_action_mint_invite(
         };
         return vec![];
     }
+    // D3 fail-closed: a kind:9009 create-invite is a NIP-29 group write — it MUST
+    // land on the group's host relay. An empty host relay is a caller bug, not a
+    // request to widen to Auto/outbox routing. Error (D6), no publish.
+    if host_relay_url.trim().is_empty() {
+        state.share_publish.phase = SharePublishPhase::Error {
+            message: "host relay required for invite mint (no outbox fallback)".into(),
+        };
+        return vec![];
+    }
     let count = count.clamp(1, 100) as usize;
     let codes: Vec<String> = (0..count).map(|_| generate_invite_code(24)).collect();
 
     // Store raw codes for the snapshot (Swift composes the link). The codes are
-    // valid the moment relay29 receives the kind:9009 — fire-and-forget publish.
+    // valid only once relay29 ACCEPTS the kind:9009 — so the FSM stays Publishing
+    // until the create-invite publish verdict arrives (finding 3: do NOT mark
+    // Done before nmp.nip29.create_invite can fail).
     state.share_publish.last_invite_codes = codes.clone();
-    state.share_publish.phase = SharePublishPhase::Done;
 
     // Reuse the existing field-complete `nmp.nip29.create_invite` path — ONE
-    // kind:9009 writer in the kernel.
-    crate::kernel::domains::room_home::reduce_action_create_room_invites(
-        group_id,
-        host_relay_url,
-        codes,
-    )
+    // kind:9009 writer in the kernel — but thread a correlation id so the publish
+    // verdict drives the share-mint FSM. The `nmp.nip29.create_invite` payload is
+    // identical to the fire-and-forget `reduce_action_create_room_invites`; we
+    // build it inline so we can attach the correlation id (the room_home path
+    // stays fire-and-forget for `hl.room.create_invites`).
+    let json = serde_json::json!({
+        "group": {
+            "host_relay_url": host_relay_url,
+            "local_id": group_id
+        },
+        "codes": codes
+    })
+    .to_string();
+
+    let correlation_id = crate::kernel::domains::capture_draft::new_correlation_id();
+    state.share_publish.phase = SharePublishPhase::Publishing;
+    state.share_publish.pending_correlation_id = Some(correlation_id.clone());
+
+    vec![Effect::DispatchCreateInviteWithCorrelation {
+        json,
+        correlation_id,
+    }]
 }
 
 /// Publish the given share-queue `items` as host-pinned kind:11 artifact shares.
@@ -829,7 +913,8 @@ fn publish_queue_items(state: &mut AppState, items: &[ShareQueueItem]) -> Vec<Ef
         return vec![];
     }
 
-    // Resolve host relay per group from the joined-communities projection.
+    // Resolve host relay per group from the joined-communities projection up
+    // front (immutable borrow) so the publish loop can take `&mut state`.
     let host_for = |group_id: &str| -> String {
         state
             .communities
@@ -839,9 +924,9 @@ fn publish_queue_items(state: &mut AppState, items: &[ShareQueueItem]) -> Vec<Ef
             .unwrap_or_default()
     };
 
-    let mut effects = Vec::new();
-    let mut last_cid: Option<String> = None;
-
+    // Pre-build (host_relay_url, tags, content) per item; skip items whose URL
+    // fails to build a preview (D6 — logged, not fatal).
+    let mut prepared: Vec<(String, Vec<Vec<String>>, String)> = Vec::new();
     for item in items {
         let preview = match crate::artifacts::build_preview(&item.url) {
             Ok(p) => p,
@@ -854,21 +939,31 @@ fn publish_queue_items(state: &mut AppState, items: &[ShareQueueItem]) -> Vec<Ef
             }
         };
         let host_relay_url = host_for(&item.group_id);
+        // D3 fail-closed: a drained item whose group has no known host relay
+        // must NOT publish (never widen a NIP-29 group write to Auto/outbox).
+        // `emit_share_publish` sets the FSM to Error and returns no effect.
+        if host_relay_url.trim().is_empty() {
+            tracing::warn!(
+                group_id = %item.group_id,
+                "publish_queue_items: no host relay for group — skipping publish (D3 fail-closed)"
+            );
+        }
         let tags = build_artifact_share_tags(&item.group_id, &preview);
         let content = item.note.trim().to_string();
-        let json = share_template_json(KIND_ARTIFACT_SHARE, &content, tags, &host_relay_url);
-
-        let cid = crate::kernel::domains::capture_draft::new_correlation_id();
-        last_cid = Some(cid.clone());
-        effects.push(Effect::PublishShareEvent {
-            json,
-            correlation_id: cid,
-        });
+        prepared.push((host_relay_url, tags, content));
     }
 
-    if let Some(cid) = last_cid {
-        state.share_publish.phase = SharePublishPhase::Publishing;
-        state.share_publish.pending_correlation_id = Some(cid);
+    let mut effects = Vec::new();
+    for (host_relay_url, tags, content) in prepared {
+        // The last item that produces an effect drives the FSM verdict; an empty
+        // host relay yields an Error phase + no effect (D3/D6).
+        effects.extend(emit_share_publish(
+            state,
+            KIND_ARTIFACT_SHARE,
+            &content,
+            tags,
+            &host_relay_url,
+        ));
     }
 
     effects
@@ -901,6 +996,33 @@ pub(crate) fn reduce_event_share_publish_action_result(
     vec![]
 }
 
+/// Reduce `KernelEvent::SharePublishCorrelationMinted` — swap the reducer-minted
+/// placeholder in `share_publish.pending_correlation_id` for the real nmp-minted
+/// id so `apply_action_result_row` can match the arriving create-invite
+/// `action_results` row (#21 finding 3).
+///
+/// Guarded against a reset race: only swaps when the placeholder is still the
+/// in-flight id (a `reset_publish` between dispatch and the minted event cleared
+/// it; the verdict then arrives as an unknown-correlation no-op, D6).
+pub(crate) fn reduce_event_share_publish_correlation_minted(
+    state: &mut AppState,
+    placeholder_correlation_id: String,
+    nmp_correlation_id: String,
+) -> Vec<Effect> {
+    if state.share_publish.pending_correlation_id.as_deref()
+        == Some(placeholder_correlation_id.as_str())
+    {
+        state.share_publish.pending_correlation_id = Some(nmp_correlation_id);
+    } else {
+        tracing::debug!(
+            placeholder = %placeholder_correlation_id,
+            nmp_cid = %nmp_correlation_id,
+            "reduce_event_share_publish_correlation_minted: placeholder not in flight (reset race?) — dropping"
+        );
+    }
+    vec![]
+}
+
 /// Reduce `hl.share.reset_publish` — clear a terminal publish state when the
 /// iOS sheet is dismissed or re-opened.
 pub(crate) fn reduce_action_reset_share_publish(state: &mut AppState) -> Vec<Effect> {
@@ -911,16 +1033,31 @@ pub(crate) fn reduce_action_reset_share_publish(state: &mut AppState) -> Vec<Eff
 // ── Effect runner ─────────────────────────────────────────────────────────────
 
 /// Execute `Effect::PublishShareEvent` — sign-and-publish a host-pinned event
-/// via `ActorCommand::PublishRawEvent` (the generic `nmp.publish` door). The
-/// `host_relay_url` is lowered to `PublishTarget::Explicit` so the event lands
-/// on the group's host relay (NIP-29). The correlation id threads the verdict
-/// back to `apply_action_result_row` → `SharePublishActionResult`.
+/// through the **VALIDATED** `nmp.publish` ingress (`PublishAction::PublishRaw`
+/// via `nmp_app_dispatch_action`), NOT the raw `ActorCommand::PublishRawEvent`
+/// door directly (finding 1). Routing through `nmp.publish` means the pinned nmp
+/// `PublishModule::start` validation applies to this ingress too: reserved
+/// replaceable-list kinds (0/3/10003) are rejected, and an empty `Explicit`
+/// relay set is fail-closed (it never silently widens to `Auto`).
+///
+/// The `host_relay_url` is lowered to `PublishTarget::Explicit` so the event
+/// lands on the group's host relay (NIP-29, D3 — fail-closed). The kernel
+/// reducer (`emit_share_publish`) already rejects an empty host relay before this
+/// runner is reached, so `host_relay_url` is non-empty here.
+///
+/// nmp mints its own correlation id for a `PublishRaw` dispatch (the event id is
+/// not known until it signs). The runner parses it and, if it differs from the
+/// reducer placeholder, emits `KernelEvent::SharePublishCorrelationMinted` to
+/// swap it into `share_publish.pending_correlation_id` so
+/// `apply_action_result_row` can match the publish verdict. A dispatch rejection
+/// (`{"error":..}`, e.g. a reserved kind) drives the FSM → Error directly (D6).
 ///
 /// No-op when nmp is `None` (test mode inspects the emitted `Effect` directly).
 pub(crate) fn run_effect_publish_share_event(
     json: String,
     correlation_id: String,
     nmp: Option<&crate::kernel::actor::NmpHandle>,
+    tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
 ) {
     let Some(handle) = nmp else {
         tracing::debug!("PublishShareEvent: no live NmpApp (test mode) — no-op");
@@ -943,28 +1080,133 @@ pub(crate) fn run_effect_publish_share_event(
         }
     };
 
-    // Host-pin to the group's relay when known; otherwise defer to NIP-65
-    // outbox (Auto). An empty host relay is tolerated (D6) rather than a
-    // dropped publish.
-    let target = if template.host_relay_url.trim().is_empty() {
-        nmp_core::publish::PublishTarget::Auto
-    } else {
-        nmp_core::publish::PublishTarget::Explicit {
-            relays: vec![template.host_relay_url],
+    // Build the validated `nmp.publish` PublishRaw payload. Host-pin to the
+    // group's relay via an Explicit target (D3 fail-closed — empty host already
+    // rejected in the reducer). nmp fills id/sig/pubkey/created_at.
+    let action_json = serde_json::json!({
+        "PublishRaw": {
+            "kind": template.kind,
+            "tags": template.tags,
+            "content": template.content,
+            "target": { "Explicit": { "relays": [template.host_relay_url] } },
         }
+    })
+    .to_string();
+
+    dispatch_share_publish_action(handle, "nmp.publish", action_json, correlation_id, tx);
+}
+
+/// Execute `Effect::DispatchCreateInviteWithCorrelation` — dispatch the validated
+/// `nmp.nip29.create_invite` (kind:9009) action with a correlation id so the
+/// create-invite publish verdict drives the share-mint FSM (finding 3). Shares
+/// the same dispatch + correlation-swap + reject-to-Error plumbing as the share
+/// publish (`dispatch_share_publish_action`). No-op when nmp is `None`.
+pub(crate) fn run_effect_dispatch_create_invite_with_correlation(
+    json: String,
+    correlation_id: String,
+    nmp: Option<&crate::kernel::actor::NmpHandle>,
+    tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
+) {
+    let Some(handle) = nmp else {
+        tracing::debug!("DispatchCreateInviteWithCorrelation: no live NmpApp (test mode) — no-op");
+        return;
+    };
+    dispatch_share_publish_action(handle, "nmp.nip29.create_invite", json, correlation_id, tx);
+}
+
+/// Shared dispatch plumbing for the correlation-aware share publishes (artifact /
+/// repost / drain via `nmp.publish`; invite mint via `nmp.nip29.create_invite`).
+///
+/// Calls `nmp_app_dispatch_action(namespace, action_json)`, then:
+///   - `{"correlation_id":"<id>"}` matching the placeholder → no swap needed.
+///   - `{"correlation_id":"<id>"}` differing → emit
+///     `SharePublishCorrelationMinted` so the FSM tracks the real id.
+///   - `{"error":".."}` (or null / no correlation_id) → the dispatch was
+///     REJECTED (e.g. a reserved kind, fail-closed validation): drive the FSM →
+///     Error via `SharePublishActionResult`-equivalent routing (D6). This is the
+///     mechanism that surfaces reserved-kind rejection on this ingress.
+fn dispatch_share_publish_action(
+    handle: &crate::kernel::actor::NmpHandle,
+    namespace: &str,
+    action_json: String,
+    placeholder_correlation_id: String,
+    tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
+) {
+    use crate::kernel::action::KernelEvent;
+    use crate::kernel::actor::Cmd;
+    use nmp_ffi::nmp_free_string;
+    use std::ffi::CString;
+
+    #[allow(improper_ctypes)]
+    extern "C" {
+        fn nmp_app_dispatch_action(
+            app: *mut nmp_ffi::NmpApp,
+            namespace: *const std::os::raw::c_char,
+            action_json: *const std::os::raw::c_char,
+        ) -> *mut std::os::raw::c_char;
+    }
+
+    let reject = |error: String| {
+        // Drive the FSM → Error (D6): route through the same verdict reducer the
+        // action_results path uses, keyed on the placeholder still in flight.
+        let _ = tx.send(Cmd::Event(KernelEvent::ShareMintDispatchRejected {
+            correlation_id: placeholder_correlation_id.clone(),
+            error,
+        }));
     };
 
-    let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
-    let _ = nmp_ref
-        .actor_sender()
-        .send(nmp_core::ActorCommand::PublishRawEvent {
-            kind: template.kind,
-            content: template.content,
-            tags: template.tags,
-            target,
-            signer_pubkey: None,
-            correlation_id: Some(correlation_id),
-        });
+    let ns_c = match CString::new(namespace) {
+        Ok(s) => s,
+        Err(_) => return reject("invalid namespace".into()),
+    };
+    let json_c = match CString::new(action_json) {
+        Ok(s) => s,
+        Err(_) => return reject("invalid action json".into()),
+    };
+
+    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
+    // NmpHandle for the full actor lifetime. ns_c/json_c are valid CStrings alive
+    // for this call. The returned pointer is freed below via nmp_free_string.
+    let result_ptr =
+        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
+
+    if result_ptr.is_null() {
+        return reject("nmp_app_dispatch_action returned null".into());
+    }
+
+    let result_json = {
+        let cstr = unsafe { std::ffi::CStr::from_ptr(result_ptr) };
+        let s = cstr.to_string_lossy().to_string();
+        nmp_free_string(result_ptr);
+        s
+    };
+
+    let parsed = serde_json::from_str::<serde_json::Value>(&result_json).ok();
+    let nmp_cid = parsed.as_ref().and_then(|v| {
+        v.get("correlation_id")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+    });
+
+    match nmp_cid {
+        Some(nmp_id) if nmp_id != placeholder_correlation_id => {
+            let _ = tx.send(Cmd::Event(KernelEvent::SharePublishCorrelationMinted {
+                placeholder_correlation_id,
+                nmp_correlation_id: nmp_id,
+            }));
+        }
+        Some(_) => {
+            // Same id — action_results will match the placeholder directly.
+        }
+        None => {
+            // Error envelope (or no correlation id) → the dispatch was rejected.
+            tracing::warn!(
+                result = %result_json,
+                "dispatch_share_publish_action: nmp rejected dispatch — FSM → Error"
+            );
+            reject(result_json);
+        }
+    }
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -1091,6 +1333,9 @@ mod tests {
         // a valid item now emits exactly one host-pinned PublishShareEvent
         // (kind:11 artifact share) AND the communities-snapshot capability.
         let mut state = AppState::default();
+        // Seed the group's host relay so the drain publish is host-pinned (D3
+        // fail-closed: a group with no known host relay would NOT publish).
+        state.communities = vec![community_row("group-a", "Readers")];
         let payload = raw_payload("item-1", "group-a", "https://example.com");
 
         let effects = reduce_event_share_queue_drained(&mut state, vec![payload]);
@@ -1603,8 +1848,10 @@ mod tests {
     }
 
     /// `mint_invite` generates codes, stores them for the snapshot, and reuses
-    /// the existing field-complete `nmp.nip29.create_invite` path (ONE kind:9009
-    /// writer — emits a DispatchNip29Action, not a second PublishShareEvent).
+    /// the field-complete `nmp.nip29.create_invite` path (ONE kind:9009 writer —
+    /// emits a correlation-aware DispatchCreateInviteWithCorrelation, not a second
+    /// PublishShareEvent). Finding 3: the FSM is Publishing (NOT Done) until the
+    /// create-invite publish verdict arrives.
     #[test]
     fn mint_invite_generates_codes_and_reuses_create_invite_path() {
         let mut state = AppState::default();
@@ -1618,19 +1865,261 @@ mod tests {
         for code in &state.share_publish.last_invite_codes {
             assert_eq!(code.len(), 24, "invite codes are 24 chars");
         }
-        // Exactly one create_invite dispatch (codes ≤ cap fit in one event).
+        // Exactly one correlation-aware create_invite dispatch (codes ≤ cap fit
+        // in one event).
         assert_eq!(effects.len(), 1);
-        match &effects[0] {
-            Effect::DispatchNip29Action { namespace, json } => {
-                assert_eq!(namespace, "nmp.nip29.create_invite");
+        let cid = match &effects[0] {
+            Effect::DispatchCreateInviteWithCorrelation {
+                json,
+                correlation_id,
+            } => {
                 assert!(json.contains("\"codes\""));
+                assert!(json.contains("\"local_id\""), "payload pins the group");
+                assert!(!correlation_id.is_empty());
+                correlation_id.clone()
             }
-            other => panic!("expected DispatchNip29Action, got {other:?}"),
-        }
+            other => panic!("expected DispatchCreateInviteWithCorrelation, got {other:?}"),
+        };
+        // Finding 3: FSM is Publishing, the correlation id is tracked, NOT Done.
+        assert_eq!(state.share_publish.phase, SharePublishPhase::Publishing);
+        assert_eq!(
+            state.share_publish.pending_correlation_id.as_deref(),
+            Some(cid.as_str())
+        );
         // The codes surface in the snapshot (Swift composes the link — D1/D3).
         let snap = project_share_publish_snapshot(&state);
         assert_eq!(snap.invite_codes.len(), 3);
-        assert!(snap.did_publish);
+        assert!(snap.publishing, "mint is publishing, not yet done");
+        assert!(
+            !snap.did_publish,
+            "finding 3: not Done before create_invite settles"
+        );
+    }
+
+    /// Finding 3: a create-invite FAILURE verdict drives the share-mint FSM →
+    /// Error (NOT a premature Done). PRE-FIX this failed because mint set Done
+    /// unconditionally and discarded the create-invite correlation id, so the
+    /// failure verdict never matched the FSM.
+    #[test]
+    fn mint_invite_failure_drives_fsm_to_error() {
+        let mut state = AppState::default();
+        let effects = reduce_action_mint_invite(
+            &mut state,
+            "room-x".into(),
+            "wss://host.example.com".into(),
+            1,
+        );
+        let Effect::DispatchCreateInviteWithCorrelation { correlation_id, .. } = &effects[0] else {
+            panic!("expected DispatchCreateInviteWithCorrelation");
+        };
+        let cid = correlation_id.clone();
+        // Before the verdict: still Publishing (not Done).
+        assert_eq!(state.share_publish.phase, SharePublishPhase::Publishing);
+
+        // The create-invite publish FAILS → FSM → Error.
+        reduce_event_share_publish_action_result(
+            &mut state,
+            cid,
+            false,
+            "relay rejected invite".into(),
+        );
+        assert_eq!(
+            state.share_publish.phase,
+            SharePublishPhase::Error {
+                message: "relay rejected invite".into()
+            }
+        );
+        let snap = project_share_publish_snapshot(&state);
+        assert!(
+            !snap.did_publish,
+            "must NOT be Done on create-invite failure"
+        );
+        assert_eq!(snap.error_message.as_deref(), Some("relay rejected invite"));
+    }
+
+    /// Success path: a create-invite SUCCESS verdict drives the FSM → Done with
+    /// the codes still exposed for the share link.
+    #[test]
+    fn mint_invite_success_drives_fsm_to_done_with_codes() {
+        let mut state = AppState::default();
+        let effects = reduce_action_mint_invite(
+            &mut state,
+            "room-x".into(),
+            "wss://host.example.com".into(),
+            2,
+        );
+        let Effect::DispatchCreateInviteWithCorrelation { correlation_id, .. } = &effects[0] else {
+            panic!("expected DispatchCreateInviteWithCorrelation");
+        };
+        let cid = correlation_id.clone();
+
+        reduce_event_share_publish_action_result(&mut state, cid, true, String::new());
+        let snap = project_share_publish_snapshot(&state);
+        assert!(snap.did_publish, "success verdict → Done");
+        assert_eq!(snap.invite_codes.len(), 2, "codes remain for the link");
+    }
+
+    /// Finding 3: the correlation-minted swap re-keys the in-flight publish to the
+    /// nmp-minted id so the create-invite verdict (which arrives under the nmp id)
+    /// drives the FSM.
+    #[test]
+    fn mint_invite_correlation_swap_then_verdict() {
+        let mut state = AppState::default();
+        let effects = reduce_action_mint_invite(
+            &mut state,
+            "room-x".into(),
+            "wss://host.example.com".into(),
+            1,
+        );
+        let Effect::DispatchCreateInviteWithCorrelation { correlation_id, .. } = &effects[0] else {
+            panic!("expected DispatchCreateInviteWithCorrelation");
+        };
+        let placeholder = correlation_id.clone();
+
+        // nmp minted a different id → swap.
+        reduce_event_share_publish_correlation_minted(
+            &mut state,
+            placeholder.clone(),
+            "nmp-real-id".into(),
+        );
+        assert_eq!(
+            state.share_publish.pending_correlation_id.as_deref(),
+            Some("nmp-real-id")
+        );
+        // A verdict under the OLD placeholder is now ignored (stale).
+        reduce_event_share_publish_action_result(&mut state, placeholder, false, "stale".into());
+        assert_eq!(state.share_publish.phase, SharePublishPhase::Publishing);
+        // The verdict under the nmp id drives the FSM.
+        reduce_event_share_publish_action_result(
+            &mut state,
+            "nmp-real-id".into(),
+            true,
+            String::new(),
+        );
+        assert!(project_share_publish_snapshot(&state).did_publish);
+    }
+
+    /// Finding 2 (fail-closed host relay): an empty host relay for mint_invite →
+    /// Error + NO dispatch (never widen a group write to Auto/outbox). PRE-FIX the
+    /// reducer ignored host_relay_url entirely and dispatched regardless.
+    #[test]
+    fn mint_invite_empty_host_relay_fails_closed() {
+        let mut state = AppState::default();
+        let effects = reduce_action_mint_invite(&mut state, "room-x".into(), "   ".into(), 1);
+        assert!(
+            effects.is_empty(),
+            "no publish/dispatch on empty host relay"
+        );
+        assert!(
+            matches!(state.share_publish.phase, SharePublishPhase::Error { .. }),
+            "empty host relay → Error (D3 fail-closed)"
+        );
+        assert!(
+            state.share_publish.pending_correlation_id.is_none(),
+            "no in-flight publish on fail-closed"
+        );
+    }
+
+    /// Finding 2 (fail-closed host relay) for artifact_to_room: empty host →
+    /// Error + NO publish. PRE-FIX the runner widened an empty host to Auto.
+    #[test]
+    fn artifact_to_room_empty_host_relay_fails_closed() {
+        let mut state = AppState::default();
+        let effects = reduce_action_artifact_to_room(
+            &mut state,
+            "room-x".into(),
+            "  ".into(), // empty host relay
+            full_preview(),
+            String::new(),
+        );
+        assert!(effects.is_empty(), "no publish on empty host relay (D3)");
+        assert!(matches!(
+            state.share_publish.phase,
+            SharePublishPhase::Error { .. }
+        ));
+    }
+
+    /// Finding 2 (fail-closed host relay) for highlight_to_room.
+    #[test]
+    fn highlight_to_room_empty_host_relay_fails_closed() {
+        let mut state = AppState::default();
+        let effects = reduce_action_highlight_to_room(
+            &mut state,
+            "room-z".into(),
+            String::new(), // empty host relay
+            "deadbeef".into(),
+            "author".into(),
+            "wss://hint".into(),
+        );
+        assert!(effects.is_empty(), "no publish on empty host relay (D3)");
+        assert!(matches!(
+            state.share_publish.phase,
+            SharePublishPhase::Error { .. }
+        ));
+    }
+
+    /// Finding 2 (fail-closed host relay) for the SHARE-QUEUE drain: a drained
+    /// item whose group has NO known host relay must NOT publish (Error, no
+    /// effect). PRE-FIX the drain published with an empty host (→ Auto outbox).
+    #[test]
+    fn drain_empty_host_relay_fails_closed() {
+        let mut state = AppState::default();
+        // No communities seeded → host_for returns "" for the item's group.
+        let effects = reduce_event_share_queue_drained(
+            &mut state,
+            vec![raw_payload("item-1", "group-a", "https://example.com/post")],
+        );
+        let publishes = effects
+            .iter()
+            .filter(|e| matches!(e, Effect::PublishShareEvent { .. }))
+            .count();
+        assert_eq!(
+            publishes, 0,
+            "no publish for a group with no host relay (D3)"
+        );
+        assert!(
+            matches!(state.share_publish.phase, SharePublishPhase::Error { .. }),
+            "drain with no host relay → Error (D3 fail-closed)"
+        );
+    }
+
+    /// Finding 1 (validated ingress): a reserved replaceable-list kind (e.g.
+    /// kind:0 a future builder might emit) is REJECTED at the kernel share ingress
+    /// → Error + NO publish, mirroring the validated `nmp.publish` PublishRaw
+    /// rejection. PRE-FIX `emit_share_publish` did not exist and the runner sent
+    /// `ActorCommand::PublishRawEvent` directly, bypassing reserved-kind rejection.
+    #[test]
+    fn reserved_kind_rejected_through_validated_ingress() {
+        let mut state = AppState::default();
+        // Simulate a (future) builder emitting a reserved kind through the shared
+        // validated emit path.
+        let effects = emit_share_publish(
+            &mut state,
+            0, // reserved: kind:0 profile metadata
+            "",
+            vec![vec!["h".into(), "room-x".into()]],
+            "wss://host.example.com",
+        );
+        assert!(effects.is_empty(), "reserved kind must NOT publish");
+        assert!(
+            matches!(state.share_publish.phase, SharePublishPhase::Error { .. }),
+            "reserved kind → Error (validated ingress rejection)"
+        );
+        // The other reserved kinds (3 contacts, 10003 bookmarks) are rejected too.
+        for k in [3u32, 10003] {
+            let mut s = AppState::default();
+            let e = emit_share_publish(&mut s, k, "", vec![], "wss://host");
+            assert!(e.is_empty(), "kind:{k} must be rejected");
+            assert!(matches!(
+                s.share_publish.phase,
+                SharePublishPhase::Error { .. }
+            ));
+        }
+        // A normal kind:11 share still publishes (guard does not over-fire).
+        let mut s = AppState::default();
+        let e = emit_share_publish(&mut s, KIND_ARTIFACT_SHARE, "", vec![], "wss://host");
+        assert_eq!(e.len(), 1, "kind:11 still publishes");
+        assert_eq!(s.share_publish.phase, SharePublishPhase::Publishing);
     }
 
     /// Snapshot reflects each FSM phase (the iOS sheet renders from this).

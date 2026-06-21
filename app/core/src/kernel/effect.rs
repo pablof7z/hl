@@ -734,17 +734,25 @@ pub enum Effect {
     WithdrawBookmarkSetsInterest,
 
     // ── #21 share-flow additions (append-only) ───────────────────────────────
-    /// Publish an in-group share/repost/invite event via
-    /// `ActorCommand::PublishRawEvent`, host-pinned to the group's host relay
-    /// (`PublishTarget::Explicit`), threaded with a `correlation_id` so the
-    /// publish verdict routes back to `KernelEvent::SharePublishActionResult`
+    /// Publish an in-group share/repost event (kind:11 artifact share, kind:16
+    /// highlight repost) through the VALIDATED `nmp.publish` `PublishRaw` ingress
+    /// (`nmp_app_dispatch_action`, NOT the raw `ActorCommand::PublishRawEvent`
+    /// door directly — finding 1), host-pinned to the group's host relay
+    /// (`PublishTarget::Explicit`, D3 fail-closed), threaded with a
+    /// `correlation_id` so the publish verdict routes back through
+    /// `apply_action_result_row` → `reduce_event_share_publish_action_result`
     /// and drives the share FSM → Done / Error (D6).
     ///
-    /// Replaces the bespoke `artifacts::publish` (kind:11 artifact share),
-    /// `highlights::share_to_community` (kind:16 highlight repost), and
-    /// `groups::create_invite_codes` (kind:9009 invite mint) publish paths.
-    /// The kernel is the sole writer for these events on ported screens — no
-    /// double-publish with the bespoke lane.
+    /// Routing through `nmp.publish` means the pinned-nmp `PublishModule::start`
+    /// validation applies to this ingress too — reserved replaceable-list kinds
+    /// (0/3/10003) are rejected, never silently signed.
+    ///
+    /// Replaces the bespoke `artifacts::publish` (kind:11 artifact share) and
+    /// `highlights::share_to_community` (kind:16 highlight repost) publish paths.
+    /// The kind:9009 invite mint uses the TYPED `nmp.nip29.create_invite` action
+    /// via [`Effect::DispatchCreateInviteWithCorrelation`] instead. The kernel is
+    /// the sole writer for these events on ported screens — no double-publish
+    /// with the bespoke lane.
     ///
     /// At pinned nmp d16aea60 the NIP-29 typed actions
     /// (`nmp.nip29.share_event_in_group`, `repost_in_group`) cannot reproduce
@@ -752,9 +760,9 @@ pub enum Effect {
     /// target tag (the standalone kind:11 artifact has none) and offers no slot
     /// for the rich `d`/`title`/`source`/`i`/`k`/`r`/`author`/`image`/`summary`/
     /// podcast tags; `repost_in_group` drops the `e`-tag relay hint. The generic
-    /// `nmp.publish` / `ActorCommand::PublishRawEvent` path signs an arbitrary
-    /// `{kind, tags, content}` for the active account and accepts an explicit
-    /// relay set — the field-complete door for all three.
+    /// `nmp.publish` `PublishRaw` path signs an arbitrary `{kind, tags, content}`
+    /// for the active account and accepts an explicit relay set — the
+    /// field-complete door for both.
     ///
     /// The `json` field is a serde_json-serialised template
     /// `{ kind, content, tags, host_relay_url }`; nmp fills
@@ -765,6 +773,30 @@ pub enum Effect {
         /// serde_json template: `{ kind, content, tags, host_relay_url }`.
         json: String,
         /// Correlation id threaded through nmp for action_results routing.
+        correlation_id: String,
+    },
+
+    /// Dispatch `nmp.nip29.create_invite` (kind:9009 invite mint) via
+    /// `nmp_app_dispatch_action`, threading a `correlation_id` so the create-invite
+    /// publish verdict drives the share-mint FSM (`SharePublishState`).
+    ///
+    /// Unlike the fire-and-forget `DispatchNip29Action`, this runner parses the
+    /// nmp-minted dispatch correlation id and (if it differs from the reducer
+    /// placeholder) emits `KernelEvent::SharePublishCorrelationMinted` to swap it
+    /// into `share_publish.pending_correlation_id`. When nmp rejects the dispatch
+    /// (`{"error":..}`, e.g. validation failure), the runner drives the FSM to
+    /// Error directly (D6). The create-invite action's per-relay publish terminal
+    /// later arrives in `apply_action_result_row` keyed on the correlation id,
+    /// driving the FSM → Done / Error — so the mint is not marked Done until the
+    /// publish actually succeeds.
+    ///
+    /// `json` is the `nmp.nip29.create_invite` payload
+    /// (`{ group: { host_relay_url, local_id }, codes: [..] }`). No-op when nmp
+    /// is `None` (test mode inspects the emitted `Effect` directly).
+    DispatchCreateInviteWithCorrelation {
+        /// `nmp.nip29.create_invite` payload JSON.
+        json: String,
+        /// Reducer-minted placeholder correlation id (swapped for the nmp id).
         correlation_id: String,
     },
 }

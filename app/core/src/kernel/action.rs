@@ -1425,6 +1425,32 @@ pub enum KernelEvent {
         nmp_correlation_id: String,
     },
 
+    /// nmp returned a dispatch correlation_id for a share-mint invite publish
+    /// (`nmp.nip29.create_invite`) that differs from the placeholder the reducer
+    /// minted. Sent by `run_effect_dispatch_create_invite_with_correlation` after
+    /// `nmp_app_dispatch_action` returns. The actor swaps the placeholder in
+    /// `share_publish.pending_correlation_id` for the real nmp id so
+    /// `apply_action_result_row` can match the arriving `action_results` row and
+    /// drive the share-mint FSM → Done / Error (#21 finding 3).
+    SharePublishCorrelationMinted {
+        /// The reducer-minted placeholder id to replace.
+        placeholder_correlation_id: String,
+        /// The real id nmp assigned to the create-invite publish.
+        nmp_correlation_id: String,
+    },
+
+    /// nmp REJECTED a share-publish / invite-mint dispatch at validation time
+    /// (`{"error":..}` from `nmp_app_dispatch_action` — e.g. a reserved kind, or
+    /// a null/failed dispatch). Sent by `dispatch_share_publish_action`. Drives
+    /// the share FSM → Error (D6) keyed on the in-flight placeholder correlation
+    /// id (the publish never reached an `action_results` terminal). #21 finding 1.
+    ShareMintDispatchRejected {
+        /// The in-flight placeholder correlation id (matched against the FSM).
+        correlation_id: String,
+        /// Raw nmp error envelope / message. D1.
+        error: String,
+    },
+
     /// A Blossom upload action result arrived via the `"action_results"` typed
     /// projection. Routed from `projections::dispatch_typed_frame` by matching
     /// `correlation_id` against
