@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Saved Seat - Highlighter Onboarding Proposal</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <main class="stage">
+      <section class="stage-head">
+        <a class="backlink" href="./index.html">Back to proposals</a>
+        <div class="stage-kicker">Proposal 1 - Invite path</div>
+        <h1 class="stage-title">Saved Seat</h1>
+        <p class="stage-blurb">
+          Alex invites the user into a specific reading room, where the first session explains why
+          the room exists, asks for one lightweight reaction, saves a minimal reading identity, and
+          turns that first signal into a careful one-person invite.
+        </p>
+      </section>
+
+      <section class="prototype-layout">
+        <aside class="brief" aria-label="Proposal brief">
+          <article class="brief-card">
+            <h2>Hypothesis</h2>
+            <p>
+              A named invite with a visible seat in a live room will outperform generic onboarding
+              because the user understands who is waiting, what they are reading, and what action is
+              expected before account setup.
+            </p>
+          </article>
+
+          <article class="brief-card">
+            <h2>Activation</h2>
+            <p>
+              The activation moment is the first reaction to a highlight. It proves the user can
+              contribute to the room without writing a post, importing contacts, or learning Nostr
+              first.
+            </p>
+          </article>
+
+          <article class="brief-card">
+            <h2>Viral Loop</h2>
+            <p>
+              After the reaction, Highlighter asks for one specific person who would care about the
+              same passage. The invite carries the room, artifact, inviter, and highlighted
+              sentence as context.
+            </p>
+          </article>
+
+          <article class="brief-card">
+            <h2>Risk</h2>
+            <p>
+              This can feel socially pressuring if the invite copy overstates urgency. The prototype
+              keeps the room small, makes skipping possible, and frames identity save as trust and
+              portability rather than a crypto lesson.
+            </p>
+          </article>
+        </aside>
+
+        <div class="phone-wrap">
+          <div class="phone" data-flow-id="saved-seat">
+            <div class="phone-screen">
+              <div class="status">
+                <span>9:41</span>
+                <span class="status-icons" aria-hidden="true">
+                  <span class="dot"></span>
+                  <span class="dot"></span>
+                  <span class="bar"></span>
+                </span>
+              </div>
+
+              <div class="app">
+                <div class="topbar">
+                  <span class="backlink">Saved Seat</span>
+                  <span class="meta" data-step-label></span>
+                </div>
+
+                <section class="screen active" data-screen aria-label="Invite context">
+                  <div class="meta">Invite from Alex</div>
+                  <h2 class="screen-title">Alex saved you a seat in The Margins Room.</h2>
+                  <p class="screen-copy">
+                    Four people are reading the same essay this week. Alex thinks you would have a
+                    sharp take on one highlighted passage.
+                  </p>
+
+                  <article class="card hero-card">
+                    <div class="cover"></div>
+                    <div class="card-body">
+                      <div class="row">
+                        <div class="avatar accent">A</div>
+                        <div class="row-main">
+                          <div class="row-title">Alex Chen</div>
+                          <div class="row-copy">"I held a spot because this felt like your lane."</div>
+                        </div>
+                      </div>
+                      <blockquote class="quote">
+                        "The best notes are not summaries. They are invitations to notice what
+                        someone else almost missed."
+                      </blockquote>
+                    </div>
+                  </article>
+
+                  <div class="stack">
+                    <div class="card">
+                      <div class="row">
+                        <div class="avatar">4</div>
+                        <div class="row-main">
+                          <div class="row-title">Small room, not a feed</div>
+                          <div class="row-copy">Alex, Priya, Marcus, and Jun are already inside.</div>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      class="full-choice"
+                      data-toast-trigger="Your seat is private until you react or introduce yourself."
+                    >
+                      What can they see before I join?
+                    </button>
+                  </div>
+                </section>
+
+                <section class="screen" data-screen aria-label="Room purpose and artifacts">
+                  <div class="meta">Room purpose</div>
+                  <h2 class="screen-title">A room for reading slow, useful things.</h2>
+                  <p class="screen-copy">
+                    The room collects artifacts about attention, craft, and how people make meaning
+                    together. Start with what Alex already pinned.
+                  </p>
+
+                  <div class="mini-shelf" aria-label="Pinned artifacts">
+                    <div class="mini-book">How Notes Become Conversation</div>
+                    <div class="mini-book">The Social Life of Books</div>
+                    <div class="mini-book">Annotation as Memory</div>
+                  </div>
+
+                  <div class="stack">
+                    <article class="card">
+                      <div class="meta">This week</div>
+                      <div class="artifact-title">How Notes Become Conversation</div>
+                      <p class="screen-copy">
+                        A 12-minute essay. The room has 7 highlights and 3 open questions.
+                      </p>
+                    </article>
+                    <article class="card">
+                      <div class="row">
+                        <div class="avatar">?</div>
+                        <div class="row-main">
+                          <div class="row-title">Prompt waiting for you</div>
+                          <div class="row-copy">What kind of note makes you want to answer?</div>
+                        </div>
+                      </div>
+                    </article>
+                  </div>
+                </section>
+
+                <section class="screen" data-screen aria-label="First reaction to highlight">
+                  <div class="meta">First signal</div>
+                  <h2 class="screen-title">React before you write anything.</h2>
+                  <p class="screen-copy">
+                    Alex highlighted this because it separates private notes from shared reading.
+                    Pick the reaction that is closest to your first response.
+                  </p>
+
+                  <article class="card hero-card">
+                    <div class="card-body">
+                      <div class="meta">Highlighted by Alex</div>
+                      <blockquote class="quote">
+                        "A good annotation does not finish the thought. It leaves a door open for
+                        the next reader."
+                      </blockquote>
+                    </div>
+                  </article>
+
+                  <div class="choice-grid" aria-label="Reaction choices">
+                    <button
+                      class="choice"
+                      data-select="reaction"
+                      data-toast="Reaction saved: worth discussing."
+                    >
+                      Worth discussing
+                    </button>
+                    <button
+                      class="choice"
+                      data-select="reaction"
+                      data-toast="Reaction saved: I disagree."
+                    >
+                      I disagree
+                    </button>
+                    <button
+                      class="choice"
+                      data-select="reaction"
+                      data-toast="Reaction saved: save this."
+                    >
+                      Save this
+                    </button>
+                    <button
+                      class="choice"
+                      data-select="reaction"
+                      data-toast="Reaction saved: ask me later."
+                    >
+                      Ask me later
+                    </button>
+                  </div>
+
+                  <textarea class="composer" placeholder="Optional: add one sentence for Alex"></textarea>
+                </section>
+
+                <section class="screen" data-screen aria-label="Reading identity save">
+                  <div class="meta">Reading identity</div>
+                  <h2 class="screen-title">Save your seat as your reading identity.</h2>
+                  <p class="screen-copy">
+                    Your highlights and room memberships can move with you. Highlighter saves a
+                    portable reading identity now, then lets you choose stronger signing later.
+                  </p>
+
+                  <div class="stack">
+                    <article class="card">
+                      <div class="row">
+                        <div class="avatar accent">You</div>
+                        <div class="row-main">
+                          <div class="row-title">Name shown in this room</div>
+                          <div class="row-copy">Maya - can be changed any time</div>
+                        </div>
+                      </div>
+                    </article>
+
+                    <button
+                      class="full-choice selected"
+                      data-select="identity"
+                      data-toast="Highlighter will save recovery guidance after the seat is created."
+                    >
+                      Save with Highlighter for now
+                    </button>
+                    <button
+                      class="full-choice"
+                      data-select="identity"
+                      data-toast="You can connect a Nostr signer before posting publicly."
+                    >
+                      I already have a Nostr signer
+                    </button>
+
+                    <article class="ios-sheet">
+                      <div class="sheet-handle"></div>
+                      <div class="row">
+                        <div class="avatar">Lock</div>
+                        <div class="row-main">
+                          <div class="row-title">Trust copy to test</div>
+                          <div class="row-copy">
+                            We will not post, follow people, or import contacts. This only reserves
+                            your name, reaction, and room seat.
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  </div>
+                </section>
+
+                <section class="screen" data-screen aria-label="Invite one person">
+                  <div class="meta">Make the room better</div>
+                  <h2 class="screen-title">Who would Alex's highlight make you think of?</h2>
+                  <p class="screen-copy">
+                    Invite one person, with the passage attached. No address book import, no public
+                    blast, and no pressure to send now.
+                  </p>
+
+                  <div class="stack">
+                    <button
+                      class="full-choice"
+                      data-select="invite"
+                      data-toast="Invite draft addressed to Sam."
+                    >
+                      Sam, who always argues with notes
+                    </button>
+                    <button
+                      class="full-choice"
+                      data-select="invite"
+                      data-toast="Invite draft addressed to Lena."
+                    >
+                      Lena, for craft and writing
+                    </button>
+                    <button
+                      class="full-choice"
+                      data-select="invite"
+                      data-toast="Invite skipped for this session."
+                    >
+                      Skip for now
+                    </button>
+
+                    <article class="card">
+                      <div class="meta">Invite preview</div>
+                      <p class="screen-copy">
+                        Alex saved me a seat in a small reading room. This sentence made me think of
+                        you: "A good annotation does not finish the thought..."
+                      </p>
+                    </article>
+                  </div>
+                </section>
+
+                <div class="bottom">
+                  <div class="progress" data-progress aria-label="Progress"></div>
+                  <div class="cta-row">
+                    <button class="btn secondary" data-prev>Back</button>
+                    <button class="btn" data-next="Continue">Take the seat</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="toast" data-toast></div>
+            </div>
+          </div>
+          <p class="phone-note">
+            Wireframe only: tap choices for state changes, use the bottom controls to move through
+            the invite-led flow.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <script src="./shared.js"></script>
+  </body>
+</html>

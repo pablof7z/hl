@@ -1,6 +1,12 @@
 import Foundation
 import Observation
 
+enum SearchDirectNavigation: Equatable {
+    case article(ArticleReaderTarget)
+    case profile(String)
+    case entity(NostrEntityRef)
+}
+
 /// Drives `SearchView`. Owns UI query state, Rust-projected result
 /// buckets (highlights / articles / communities / people), and the live
 /// NIP-50 subscription whose deltas re-run the local article match so
@@ -44,6 +50,12 @@ final class SearchStore {
     /// configured NIP-51 search relays are actually in use.
     private(set) var searchRelays: [String] = []
 
+    /// Set when the query is an exact Nostr entity or cached NIP-05 match.
+    /// `SearchView` consumes and clears this so navigation remains
+    /// programmatic UI state rather than another durable source of truth.
+    private(set) var directNavigation: SearchDirectNavigation?
+    private(set) var directOpenMessage: String?
+
     // MARK: - Dependencies
 
     private let safeCore: SafeHighlighterCore
@@ -58,6 +70,11 @@ final class SearchStore {
     private var appliedQuery: String = ""
     private var searchTask: Task<Void, Never>?
     private var activeSearchHandle: UInt64?
+    private var directEntityHandle: UInt64?
+    private var directEntityKey: String?
+    private var directEntity: NostrEntityRef?
+    private var directEntityToken: UInt64 = 0
+    private var directTask: Task<Void, Never>?
     /// Query the current NIP-50 subscription was opened with. If the user
     /// edits the query, we tear down + re-open.
     private var activeRelayQuery: String = ""
@@ -79,6 +96,8 @@ final class SearchStore {
     func stop() {
         searchTask?.cancel()
         searchTask = nil
+        directTask?.cancel()
+        directTask = nil
         if let handle = activeSearchHandle {
             Task { [safeCore, eventBridge] in
                 await safeCore.unsubscribe(handle)
@@ -86,6 +105,7 @@ final class SearchStore {
             }
             activeSearchHandle = nil
         }
+        tearDownDirectEntity()
     }
 
     // MARK: - Query orchestration
@@ -107,11 +127,23 @@ final class SearchStore {
         }
     }
 
+    func consumeDirectNavigation() {
+        directNavigation = nil
+    }
+
     private func scheduleSearch(for q: String) {
         searchTask?.cancel()
+        directTask?.cancel()
+        tearDownDirectEntity()
+        directNavigation = nil
+        directOpenMessage = nil
         let projection = scheduleProjection(for: q)
         applyScheduleProjection(projection)
         guard projection.shouldRunSearch else { return }
+        scheduleDirectNavigationIfPossible(
+            query: projection.searchQuery,
+            token: projection.searchToken
+        )
         let token = projection.searchToken
         searchTask = Task { [weak self] in
             guard let self else { return }
@@ -147,7 +179,9 @@ final class SearchStore {
         profiles = []
         isLocalLoading = false
         isRelayLoading = false
+        directOpenMessage = nil
         tearDownRelaySearch()
+        tearDownDirectEntity()
     }
 
     private func runSearch(for q: String, token: UInt64) async {
@@ -163,6 +197,7 @@ final class SearchStore {
 
         appliedQuery = q
         apply(snapshot)
+        applyExactNip05NavigationIfNeeded(query: q, token: token, profiles: snapshot.profiles)
         isLocalLoading = applyProjection.isLocalLoading
 
         let relayProjection = safeCore.projectSearchRelayRefresh(
@@ -214,6 +249,23 @@ final class SearchStore {
         isRelayLoading = false
     }
 
+    private func tearDownDirectEntity() {
+        directTask?.cancel()
+        directTask = nil
+        if let handle = directEntityHandle {
+            let bridge = eventBridge
+            let core = safeCore
+            Task {
+                await core.unsubscribe(handle)
+                bridge?.unregister(handle: handle)
+            }
+            directEntityHandle = nil
+        }
+        directEntityKey = nil
+        directEntity = nil
+        directEntityToken = 0
+    }
+
     /// EventBridge callback: the relay search delivered new matching events
     /// into ndb. Re-run the local article scan only when Rust projects the
     /// delta as current for the open query.
@@ -245,10 +297,136 @@ final class SearchStore {
         }
     }
 
+    func applyDirectNostrEntity(event: NostrEntityEvent) {
+        guard directEntity != nil else { return }
+        routeResolvedDirectEntity(event)
+        tearDownDirectEntity()
+    }
+
     private func apply(_ snapshot: SearchResultsSnapshot) {
         highlights = snapshot.highlights
         articles = snapshot.articles
         communities = snapshot.communities
         profiles = snapshot.profiles
+    }
+
+    private func scheduleDirectNavigationIfPossible(query: String, token: UInt64) {
+        let decoded = safeCore.decodeNostrEntity(query)
+        guard decoded.decoded, let entity = decoded.entity else { return }
+
+        switch entity {
+        case .profile(let pubkeyHex, _):
+            directNavigation = .profile(pubkeyHex)
+        case .address(let kind, let pubkeyHex, let dTag, _):
+            if kind == 30023, !dTag.isEmpty {
+                let route = ArticleReaderRoute(
+                    address: "\(kind):\(pubkeyHex):\(dTag)",
+                    pubkey: pubkeyHex,
+                    dTag: dTag
+                )
+                directNavigation = .article(ArticleReaderTarget(route: route))
+            } else {
+                directNavigation = .entity(entity)
+            }
+        case .event:
+            directOpenMessage = "Fetching Nostr event…"
+            startDirectEntityResolution(entity: entity, token: token)
+        }
+    }
+
+    private func startDirectEntityResolution(entity: NostrEntityRef, token: UInt64) {
+        let key = safeCore.nostrEntityIdentityKey(entity: entity)
+        directEntityKey = key
+        directEntity = entity
+        directEntityToken = token
+        directTask = Task { [weak self] in
+            guard let self else { return }
+            await self.resolveOrSubscribeDirectEntity(entity: entity, key: key, token: token)
+        }
+    }
+
+    private func resolveOrSubscribeDirectEntity(
+        entity: NostrEntityRef,
+        key: String,
+        token: UInt64
+    ) async {
+        let snapshot = await safeCore.resolveNostrEntity(entity)
+        guard isCurrentDirectEntity(key: key, token: token) else { return }
+        if let event = snapshot.event {
+            routeResolvedDirectEntity(event)
+            tearDownDirectEntity()
+            return
+        }
+
+        let outcome = await safeCore.subscribeNostrEntity(entity)
+        let projection = safeCore.projectViewSubscriptionStart(
+            input: ViewSubscriptionStartProjectionInput(start: outcome)
+        )
+        guard isCurrentDirectEntity(key: key, token: token) else {
+            if outcome.handle != 0 { await safeCore.unsubscribe(outcome.handle) }
+            return
+        }
+        guard projection.shouldRegister else {
+            directOpenMessage = outcome.error.isEmpty
+                ? "Couldn't open that Nostr event."
+                : outcome.error
+            directNavigation = .entity(entity)
+            return
+        }
+        directEntityHandle = projection.handle
+        eventBridge?.registerSearch(self, handle: projection.handle)
+    }
+
+    private func isCurrentDirectEntity(key: String, token: UInt64) -> Bool {
+        directEntityKey == key && directEntityToken == token && searchToken == token
+    }
+
+    private func routeResolvedDirectEntity(_ event: NostrEntityEvent) {
+        directOpenMessage = nil
+        switch event.renderKind {
+        case .article:
+            let projection = safeCore.projectNostrEntityArticleCard(
+                input: NostrEntityArticleCardProjectionInput(event: event)
+            )
+            if let route = projection.readerRoute {
+                directNavigation = .article(ArticleReaderTarget(route: route))
+            } else if let entity = directEntity {
+                directNavigation = .entity(entity)
+            }
+        case .profile:
+            directNavigation = .profile(event.pubkeyHex)
+        case .note, .highlight, .generic:
+            if let entity = directEntity {
+                directNavigation = .entity(entity)
+            }
+        }
+    }
+
+    private func applyExactNip05NavigationIfNeeded(
+        query: String,
+        token: UInt64,
+        profiles: [ProfileMetadata]
+    ) {
+        guard searchToken == token, directNavigation == nil else { return }
+        let normalized = normalizedNip05(query)
+        guard isLikelyNip05(normalized) else { return }
+        if let profile = profiles.first(where: { normalizedNip05($0.nip05) == normalized }) {
+            directNavigation = .profile(profile.pubkey)
+        }
+    }
+
+    private func isLikelyNip05(_ value: String) -> Bool {
+        value.contains(".")
+            && !value.contains(" ")
+            && !value.hasPrefix("http://")
+            && !value.hasPrefix("https://")
+    }
+
+    private func normalizedNip05(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if trimmed.hasPrefix("_@") {
+            return String(trimmed.dropFirst(2))
+        }
+        return trimmed
     }
 }

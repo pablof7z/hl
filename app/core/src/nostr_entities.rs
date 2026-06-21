@@ -334,9 +334,16 @@ pub fn tokenize_nostr_markdown_inline(content: &str) -> Vec<NostrContentRun> {
         }
 
         if is_known_nip19_body(body) {
-            if let Ok(entity) = decode_nostr_entity(body) {
-                out.push(NostrContentRun::Entity { entity });
+            match decode_nostr_entity(body) {
+                Ok(entity) => out.push(NostrContentRun::Entity { entity }),
+                Err(_) => out.push(NostrContentRun::Text {
+                    value: content[prefix.start..end].to_string(),
+                }),
             }
+        } else {
+            out.push(NostrContentRun::Text {
+                value: content[prefix.start..end].to_string(),
+            });
         }
         i = end;
     }
@@ -979,11 +986,14 @@ mod tests {
     }
 
     #[test]
-    fn tokenize_nostr_markdown_inline_drops_unknown_or_undecodable_entities() {
+    fn tokenize_nostr_markdown_inline_preserves_unknown_or_undecodable_entities() {
         assert_eq!(
             tokenize_nostr_markdown_inline("x nostr:nope y"),
             vec![
                 NostrContentRun::Text { value: "x ".into() },
+                NostrContentRun::Text {
+                    value: "nostr:nope".into()
+                },
                 NostrContentRun::Text { value: " y".into() },
             ]
         );
@@ -991,6 +1001,9 @@ mod tests {
             tokenize_nostr_markdown_inline("x nostr:npub1notvalid y"),
             vec![
                 NostrContentRun::Text { value: "x ".into() },
+                NostrContentRun::Text {
+                    value: "nostr:npub1notvalid".into()
+                },
                 NostrContentRun::Text { value: " y".into() },
             ]
         );

@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Artifact Passport - Highlighter Onboarding Proposal</title>
+    <link rel="stylesheet" href="./shared.css" />
+    <style>
+      .app {
+        display: grid;
+        grid-template-rows: 1fr auto;
+      }
+
+      .screen {
+        display: none;
+        height: 100%;
+        padding: 18px;
+        overflow: hidden;
+      }
+
+      .screen.active {
+        display: grid;
+        align-content: start;
+        gap: 14px;
+      }
+
+      .topline,
+      .screen-foot,
+      .identity-row,
+      .invite-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .topline {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .crumb {
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        padding: 5px 9px;
+        background: rgba(255, 250, 244, 0.78);
+      }
+
+      .screen h2 {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1.08;
+        font-weight: 650;
+      }
+
+      .screen p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .group-card,
+      .artifact-card,
+      .prompt-card,
+      .shelf-card,
+      .identity-card,
+      .invite-card,
+      .member-strip {
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: rgba(255, 250, 244, 0.86);
+        padding: 14px;
+      }
+
+      .group-card {
+        display: grid;
+        gap: 9px;
+      }
+
+      .group-title {
+        font-size: 19px;
+        font-weight: 650;
+      }
+
+      .member-strip {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(3, 1fr);
+        padding: 10px;
+      }
+
+      .member {
+        display: grid;
+        gap: 5px;
+        justify-items: center;
+        color: var(--muted);
+        font-size: 11px;
+        text-align: center;
+      }
+
+      .avatar,
+      .avatar-small {
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--wash);
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      .avatar {
+        width: 38px;
+        height: 38px;
+      }
+
+      .avatar-small {
+        width: 28px;
+        height: 28px;
+        font-size: 12px;
+      }
+
+      .search-box,
+      .why-box,
+      .name-box {
+        width: 100%;
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--ink);
+      }
+
+      .search-box,
+      .name-box {
+        padding: 12px;
+      }
+
+      .why-box {
+        min-height: 78px;
+        padding: 12px;
+        resize: none;
+      }
+
+      .artifact-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      button.artifact-card,
+      button.invite-card,
+      button.identity-chip {
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .artifact-card {
+        display: grid;
+        gap: 7px;
+      }
+
+      .artifact-card.selected,
+      .invite-card.selected,
+      .identity-chip.selected {
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px rgba(196, 126, 94, 0.28);
+      }
+
+      .artifact-meta,
+      .passport-meta,
+      .invite-note {
+        color: var(--faint);
+        font-size: 12px;
+      }
+
+      .artifact-name,
+      .passport-title {
+        font-weight: 650;
+      }
+
+      .prompt-card {
+        display: grid;
+        gap: 12px;
+      }
+
+      .passport {
+        display: grid;
+        gap: 12px;
+        border: 1px solid var(--accent);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 14px;
+      }
+
+      .passport-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .passport-mark {
+        width: 46px;
+        height: 58px;
+        border: 1px solid var(--rule);
+        border-radius: 5px;
+        background:
+          linear-gradient(180deg, rgba(196, 126, 94, 0.18), transparent 54%),
+          var(--wash);
+        flex: 0 0 auto;
+      }
+
+      .quote-line {
+        border-left: 3px solid var(--accent);
+        padding-left: 10px;
+        color: var(--ink);
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .identity-card {
+        display: grid;
+        gap: 12px;
+      }
+
+      .identity-options {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .identity-chip {
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 10px;
+        font-size: 13px;
+      }
+
+      .shelf-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .shelf-card {
+        min-height: 122px;
+        display: grid;
+        align-content: space-between;
+        gap: 10px;
+      }
+
+      .shelf-card.mine {
+        border-color: var(--accent);
+      }
+
+      .cover-mini {
+        width: 38px;
+        height: 48px;
+        border-radius: 4px;
+        background: var(--wash);
+        border: 1px solid var(--rule);
+      }
+
+      .shelf-title {
+        font-size: 13px;
+        font-weight: 650;
+        line-height: 1.2;
+      }
+
+      .shelf-byline {
+        color: var(--faint);
+        font-size: 11px;
+      }
+
+      .invite-card {
+        display: grid;
+        gap: 8px;
+      }
+
+      .invite-row {
+        justify-content: flex-start;
+      }
+
+      .phone-nav {
+        border-top: 1px solid var(--rule);
+        background: rgba(248, 245, 240, 0.94);
+        padding: 12px 16px 16px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .progress {
+        display: flex;
+        justify-content: center;
+        gap: 6px;
+      }
+
+      .progress span {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--rule);
+      }
+
+      .progress span.active {
+        background: var(--accent);
+      }
+
+      .nav-buttons {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .nav-buttons button,
+      .primary-action {
+        border: 1px solid var(--ink);
+        border-radius: 8px;
+        padding: 11px 12px;
+        background: var(--ink);
+        color: var(--panel);
+        font-weight: 650;
+        cursor: pointer;
+      }
+
+      .nav-buttons [data-prev] {
+        background: transparent;
+        color: var(--ink);
+      }
+
+      .toast {
+        position: absolute;
+        left: 24px;
+        right: 24px;
+        bottom: 92px;
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        padding: 10px 12px;
+        background: var(--ink);
+        color: var(--panel);
+        font-size: 12px;
+        text-align: center;
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity 160ms ease, transform 160ms ease;
+        pointer-events: none;
+      }
+
+      .toast.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      @media (max-width: 860px) {
+        .prototype-layout {
+          grid-template-columns: 1fr;
+        }
+
+        .brief {
+          position: static;
+        }
+      }
+
+      @media (max-width: 450px) {
+        .phone {
+          width: min(390px, calc(100vw - 24px));
+          height: 820px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage">
+      <section class="stage-head">
+        <div class="stage-kicker">Proposal 4 - Artifact Passport</div>
+        <h1 class="stage-title">Join by bringing one thing worth reading.</h1>
+        <p class="stage-blurb">
+          An invited newcomer earns their first group moment by adding one artifact, explaining why
+          it belongs, saving a light reading identity, and sending the artifact onward to someone
+          who would recognize it.
+        </p>
+      </section>
+
+      <section class="prototype-layout">
+        <aside class="brief" aria-label="Proposal brief">
+          <div class="brief-card">
+            <h2>Hypothesis</h2>
+            <p>
+              A contribution-first invite will make the group feel legible and participatory before
+              account setup. The artifact becomes both the newcomer's introduction and the reason
+              for the next invite.
+            </p>
+          </div>
+          <div class="brief-card">
+            <h3>Activation</h3>
+            <p>
+              Activated when the user posts one artifact, adds a one-line why, and saves a reading
+              identity that appears on the newcomer shelf.
+            </p>
+          </div>
+          <div class="brief-card">
+            <h3>Viral Loop</h3>
+            <p>
+              The final invite is framed around recognition: send this artifact to the person who
+              would know why it matters, not to a generic contact list.
+            </p>
+          </div>
+          <div class="brief-card">
+            <h3>Risk</h3>
+            <p>
+              The contribution gate may feel too demanding for passive invitees, especially if they
+              arrive without a specific artifact in mind.
+            </p>
+          </div>
+        </aside>
+
+        <section class="phone-wrap" aria-label="Interactive iPhone wireframe">
+          <div class="phone" data-flow-id="artifact-passport">
+            <div class="phone-screen">
+              <div class="status">
+                <span>9:41</span>
+                <div class="status-icons" aria-hidden="true">
+                  <span class="dot"></span>
+                  <span class="dot"></span>
+                  <span class="bar"></span>
+                </div>
+              </div>
+
+              <div class="app">
+                <div>
+                  <section class="screen active" data-screen>
+                    <div class="topline">
+                      <span class="crumb">Invited by Mara</span>
+                      <span data-step-label>1 of 5</span>
+                    </div>
+                    <h2>The Margins wants to know what you bring.</h2>
+                    <p>
+                      Entry is simple: add one artifact that says something about your taste, then
+                      tell the room why it belongs here.
+                    </p>
+                    <div class="group-card">
+                      <div class="group-title">The Margins</div>
+                      <p>Books, essays, and talks that change how people read the week.</p>
+                      <div class="member-strip">
+                        <div class="member"><span class="avatar">M</span><span>Mara</span></div>
+                        <div class="member"><span class="avatar">J</span><span>Jules</span></div>
+                        <div class="member"><span class="avatar">R</span><span>Rin</span></div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="screen" data-screen>
+                    <div class="topline">
+                      <span class="crumb">Artifact</span>
+                      <span data-step-label>2 of 5</span>
+                    </div>
+                    <h2>Pick the object you want to be known by first.</h2>
+                    <input class="search-box" value="The Creative Act" aria-label="Artifact search" />
+                    <div class="artifact-list">
+                      <button
+                        class="artifact-card selected"
+                        data-select="artifact"
+                        data-toast="Artifact attached to your passport"
+                      >
+                        <span class="artifact-name">The Creative Act</span>
+                        <span class="artifact-meta">Book - Rick Rubin - 432 pages</span>
+                        <p>A practical language for attention, taste, and creative practice.</p>
+                      </button>
+                      <button
+                        class="artifact-card"
+                        data-select="artifact"
+                        data-toast="Artifact attached to your passport"
+                      >
+                        <span class="artifact-name">How to Do Nothing</span>
+                        <span class="artifact-meta">Book - Jenny Odell</span>
+                        <p>Attention as a civic and personal material.</p>
+                      </button>
+                      <button
+                        class="artifact-card"
+                        data-select="artifact"
+                        data-toast="Artifact attached to your passport"
+                      >
+                        <span class="artifact-name">The Long Now Talk</span>
+                        <span class="artifact-meta">Video - Stewardship series</span>
+                        <p>Time horizons for people building durable communities.</p>
+                      </button>
+                    </div>
+                  </section>
+
+                  <section class="screen" data-screen>
+                    <div class="topline">
+                      <span class="crumb">One-line why</span>
+                      <span data-step-label>3 of 5</span>
+                    </div>
+                    <h2>Make the artifact useful to strangers.</h2>
+                    <div class="prompt-card">
+                      <p>Finish the sentence. Keep it short enough that someone can react to it.</p>
+                      <textarea class="why-box" aria-label="One-line why">I brought this because it treats taste as a practice, not a personality.</textarea>
+                    </div>
+                    <div class="passport">
+                      <div class="passport-head">
+                        <div>
+                          <div class="passport-meta">Newcomer passport</div>
+                          <div class="passport-title">The Creative Act</div>
+                        </div>
+                        <div class="passport-mark" aria-hidden="true"></div>
+                      </div>
+                      <div class="quote-line">
+                        I brought this because it treats taste as a practice, not a personality.
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="screen" data-screen>
+                    <div class="topline">
+                      <span class="crumb">Reading identity</span>
+                      <span data-step-label>4 of 5</span>
+                    </div>
+                    <h2>Save how the group should read you.</h2>
+                    <div class="identity-card">
+                      <input class="name-box" value="Avery" aria-label="Display name" />
+                      <p>Choose a starter identity. You can rewrite it once the room knows you.</p>
+                      <div class="identity-options">
+                        <button class="identity-chip selected" data-select="identity">Slow reader</button>
+                        <button class="identity-chip" data-select="identity">Margin maker</button>
+                        <button class="identity-chip" data-select="identity">Essay hunter</button>
+                        <button class="identity-chip" data-select="identity">Audio first</button>
+                      </div>
+                    </div>
+                    <div class="passport">
+                      <div class="identity-row">
+                        <span class="avatar-small">A</span>
+                        <div>
+                          <div class="passport-title">Avery</div>
+                          <div class="passport-meta">Slow reader - joined with The Creative Act</div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="screen" data-screen>
+                    <div class="topline">
+                      <span class="crumb">Newcomer shelf</span>
+                      <span data-step-label>5 of 5</span>
+                    </div>
+                    <h2>You are on the shelf. Now send the artifact forward.</h2>
+                    <div class="shelf-grid">
+                      <div class="shelf-card mine">
+                        <div class="cover-mini"></div>
+                        <div>
+                          <div class="shelf-title">The Creative Act</div>
+                          <div class="shelf-byline">Avery - Slow reader</div>
+                        </div>
+                      </div>
+                      <div class="shelf-card">
+                        <div class="cover-mini"></div>
+                        <div>
+                          <div class="shelf-title">Ways of Seeing</div>
+                          <div class="shelf-byline">Mara - Re-reader</div>
+                        </div>
+                      </div>
+                      <div class="shelf-card">
+                        <div class="cover-mini"></div>
+                        <div>
+                          <div class="shelf-title">The Carrier Bag Theory</div>
+                          <div class="shelf-byline">Jules - Essay hunter</div>
+                        </div>
+                      </div>
+                      <div class="shelf-card">
+                        <div class="cover-mini"></div>
+                        <div>
+                          <div class="shelf-title">Seeing Like a State</div>
+                          <div class="shelf-byline">Rin - Map skeptic</div>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      class="invite-card selected"
+                      data-select="invite"
+                      data-toast="Invite draft framed around this artifact"
+                    >
+                      <span class="invite-row">
+                        <span class="avatar-small">S</span>
+                        <strong>Sam would recognize this one.</strong>
+                      </span>
+                      <span class="invite-note">
+                        Invite text: "I joined The Margins with The Creative Act. You would know
+                        why this belongs here."
+                      </span>
+                    </button>
+                    <button class="primary-action" data-toast-trigger="Invite ready to send">
+                      Prepare artifact invite
+                    </button>
+                  </section>
+                </div>
+
+                <nav class="phone-nav" aria-label="Prototype controls">
+                  <div class="progress" data-progress aria-hidden="true"></div>
+                  <div class="nav-buttons">
+                    <button data-prev type="button">Back</button>
+                    <button data-next type="button">Continue</button>
+                  </div>
+                </nav>
+              </div>
+
+              <div class="toast" data-toast role="status" aria-live="polite"></div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="./shared.js"></script>
+  </body>
+</html>
