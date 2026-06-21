@@ -57,13 +57,24 @@ few coexist-reads that Part C strips mechanically (no new kernel work):
 **(F) Misc still-live**: `SettingsView`, `KeysView`, `MediaSettingsView`, `EditProfileSheet` (profile edit write), `WebReaderView` (web_metadata/nip05), `NostrRichText`/`nostr_entities`, `RoomCoverCard`/`FriendsOnRoomCard`/`RoomSquareTile`/`RoomPreviewSheet` (room previews), `RecommendationsTab` (recommendations.rs), `GlobalUserToolbar`. Local-UI selection helpers (`toggleImportRelaySelection`, `toggleOnboardingInterestSelection`) are pure UI state — not nostr writes.
 
 ### 1c. SHOULD-BE-GONE (leftovers a completed cut missed)
-**None found at the WRITE level.** The writes scan shows every remaining bespoke
-WRITE is either gated (capture/podcast/curation), an un-cut screen (room-admin/share),
-the app-level article-bookmark toggle (`HighlighterStore.toggleArticleBookmarkSnapshot`
-— a not-yet-cut write, candidate for a future small kernel cut, not a bug), or a
-local-UI toggle (not a nostr write). No cut screen retains a stray bespoke publish.
-(Read-level certainty would need a per-cut-screen line check; the cut screens
-correctly retain only `projectXxx` presentation + coexist-reads.)
+**None found — verified at BOTH the write AND read level.**
+
+*Write level:* every remaining bespoke WRITE is either gated (capture/podcast/curation),
+an un-cut screen (room-admin/share), the app-level article-bookmark toggle
+(`HighlighterStore.toggleArticleBookmarkSnapshot` — a not-yet-cut write, candidate for
+a future small kernel cut, not a bug), or a local-UI toggle (not a nostr write). No
+cut screen retains a stray bespoke publish.
+
+*Read level (per-cut-screen `subscribe*` / `getXxxSnapshot` scan):* every residual
+bespoke read in a cut-screen store maps to a DOCUMENTED gated-remnant, not a stray
+leftover:
+- `ProfileStore.subscribeUserProfile` / `getProfilePageSnapshot` → the articles/highlights
+  tabs stay LIVE per lead (only metadata+relationship was cut).
+- `ArticleReaderStore.subscribeArticle` → the BODY read (gated nmp #1695); overlay+publish are kernel.
+- `BookmarkStore.subscribeBookmarkSets/FollowingCurationSets/WebBookmarks` + `getBookmarkLibrarySnapshot` → the sets/web panes (gated nmp #1653); only the articles pane was cut.
+- `SearchStore.getSearchResultsSnapshot` (profiles bucket, gated nmp #1697) + `getSearchChromeSnapshot` (searchRelays footnote chrome).
+No cut-screen store retains a stray primary-data read. (Cut screens otherwise hold only
+`projectXxx` presentation projections, all removed at Part C.)
 
 ---
 
