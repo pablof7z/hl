@@ -797,6 +797,55 @@ pub(crate) fn reduce_action_reset(state: &mut AppState) -> Vec<Effect> {
     vec![]
 }
 
+/// `hl.capture.set_artifact_record` — the highlight/picture publish references an
+/// EXISTING (already-published kind:11) artifact. Clears any pending preview so the
+/// two artifact paths can't both be set. Device-local scratch until publish.
+pub(crate) fn reduce_action_set_artifact_record(
+    state: &mut AppState,
+    artifact: crate::kernel::models::ArtifactRecord,
+) -> Vec<Effect> {
+    state.capture_draft.artifact_record = Some(artifact);
+    state.capture_draft.artifact_preview = None;
+    vec![]
+}
+
+/// `hl.capture.set_artifact_preview` — the publish references a PENDING book
+/// (the kind:11 artifact is published first on this path). Clears any existing record.
+pub(crate) fn reduce_action_set_artifact_preview(
+    state: &mut AppState,
+    preview: crate::kernel::models::ArtifactPreview,
+) -> Vec<Effect> {
+    state.capture_draft.artifact_preview = Some(preview);
+    state.capture_draft.artifact_record = None;
+    vec![]
+}
+
+/// `hl.capture.clear_artifact` — drop any selected book (a standalone capture with
+/// no artifact: quote-only kind:9802 highlight, or a kind:20 picture).
+pub(crate) fn reduce_action_clear_artifact(state: &mut AppState) -> Vec<Effect> {
+    state.capture_draft.artifact_record = None;
+    state.capture_draft.artifact_preview = None;
+    vec![]
+}
+
+// ─── uniffi serialize helpers (Swift book selection → set-artifact actions) ───
+// The Swift book-picker holds a typed `ArtifactRecord`/`ArtifactPreview` (uniffi
+// structs, which aren't Codable), so the kernel does the serde to build the
+// `artifact_json`/`preview_json` the set-artifact actions carry — symmetric with
+// the actor-side parse.
+
+/// Serialize an `ArtifactRecord` for `hl.capture.set_artifact_record`.
+#[uniffi::export]
+pub fn capture_artifact_record_json(artifact: crate::kernel::models::ArtifactRecord) -> String {
+    serde_json::to_string(&artifact).unwrap_or_default()
+}
+
+/// Serialize an `ArtifactPreview` for `hl.capture.set_artifact_preview`.
+#[uniffi::export]
+pub fn capture_artifact_preview_json(preview: crate::kernel::models::ArtifactPreview) -> String {
+    serde_json::to_string(&preview).unwrap_or_default()
+}
+
 // ─── Reducer (kernel event) ─────────────────────────────────────────────────────
 
 /// `KernelEvent::CaptureDraftPublishResult` — apply the publish outcome.
@@ -1669,6 +1718,45 @@ mod tests {
     // and `highlights::build_imeta_tag` — those are private functions in
     // untouched live-lane files; we replicate the tag logic inline using the
     // same `pub(crate)` builders now living in this module.
+
+    // 7-Cap-Setter-T: hl.capture.set_artifact_record / set_artifact_preview
+    // populate the draft (mutually exclusive); clear_artifact drops both. This is
+    // the wiring that lets the Swift book-picker reach the full-parity publish
+    // (publish-with-artifact itself is covered by the PP-T parity tests).
+    #[test]
+    fn capture_set_artifact_actions_populate_draft_mutually_exclusive() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+
+        let rec_json = serde_json::to_string(&fixture_artifact()).unwrap();
+        step(
+            &mut state,
+            &clock,
+            envelope(
+                "hl.capture.set_artifact_record",
+                &serde_json::json!({ "artifact_json": rec_json }).to_string(),
+            ),
+        );
+        assert!(state.capture_draft.artifact_record.is_some());
+        assert!(state.capture_draft.artifact_preview.is_none());
+
+        // Mutual exclusion: setting a pending preview clears the record.
+        let prev_json = serde_json::to_string(&fixture_podcast_preview()).unwrap();
+        step(
+            &mut state,
+            &clock,
+            envelope(
+                "hl.capture.set_artifact_preview",
+                &serde_json::json!({ "preview_json": prev_json }).to_string(),
+            ),
+        );
+        assert!(state.capture_draft.artifact_preview.is_some());
+        assert!(state.capture_draft.artifact_record.is_none());
+
+        step(&mut state, &clock, envelope("hl.capture.clear_artifact", "{}"));
+        assert!(state.capture_draft.artifact_record.is_none());
+        assert!(state.capture_draft.artifact_preview.is_none());
+    }
 
     fn fixture_artifact() -> crate::kernel::models::ArtifactRecord {
         crate::kernel::models::ArtifactRecord {

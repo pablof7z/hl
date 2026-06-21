@@ -119,6 +119,14 @@ enum HighlighterAction {
     case captureClearSelection
     case captureSetTargetGroup(groupId: String)
     case captureClearTargetGroup
+    /// Set the book the capture references — an existing published artifact
+    /// (`artifactJson` = serde-JSON of an ArtifactRecord, via captureArtifactRecordJson).
+    case captureSetArtifactRecord(artifactJson: String)
+    /// Set a pending book (`previewJson` = serde-JSON of an ArtifactPreview, via
+    /// captureArtifactPreviewJson) — published kind:11-first on the pending-book path.
+    case captureSetArtifactPreview(previewJson: String)
+    /// Drop any selected book (standalone capture).
+    case captureClearArtifact
     case capturePublish
     case captureReset
 
@@ -375,6 +383,14 @@ enum HighlighterAction {
                                      json: jsonObject(["group_id": groupId]))
         case .captureClearTargetGroup:
             return AppActionEnvelope(namespace: "hl.capture.clear_target_group", json: "{}")
+        case .captureSetArtifactRecord(let artifactJson):
+            return AppActionEnvelope(namespace: "hl.capture.set_artifact_record",
+                                     json: jsonObject(["artifact_json": artifactJson]))
+        case .captureSetArtifactPreview(let previewJson):
+            return AppActionEnvelope(namespace: "hl.capture.set_artifact_preview",
+                                     json: jsonObject(["preview_json": previewJson]))
+        case .captureClearArtifact:
+            return AppActionEnvelope(namespace: "hl.capture.clear_artifact", json: "{}")
         case .capturePublish:
             return AppActionEnvelope(namespace: "hl.capture.publish", json: "{}")
         case .captureReset:
