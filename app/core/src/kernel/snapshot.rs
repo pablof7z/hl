@@ -742,6 +742,14 @@ pub struct SearchSnapshot {
     /// Empty when the query is blank or no public+open communities match.
     /// D1: raw rows only — Swift renders all display strings and fallbacks.
     pub communities: Vec<CommunitySearchRow>,
+    // ── Phase 7 (search highlights bucket) additions (append-only) ───────────
+    /// Enriched kind:9802 highlight rows decoded from the kind:9802 entries in
+    /// `hits` via the SHARED `decode_highlight_row` (same NIP-84/NIP-73 fields as
+    /// the highlight feed / article-reader overlay — quote/context/artifact
+    /// refs/clip/image). Preserves the `hits` order (created_at desc). Lets Swift
+    /// render the Highlights search bucket without re-parsing kind:9802 tags.
+    /// Empty when no kind:9802 hits are present.
+    pub highlights: Vec<HighlightRow>,
 }
 
 // ── Phase 4G additions (append-only) ─────────────────────────────────────────

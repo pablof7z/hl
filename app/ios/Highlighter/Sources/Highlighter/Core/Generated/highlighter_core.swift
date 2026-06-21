@@ -18765,6 +18765,162 @@ public func FfiConverterTypeCommunityRowProjectionInput_lower(_ value: Community
 
 
 /**
+ * One local-scan community result row for the Search screen communities bucket.
+ *
+ * Derived from `AppState::discovered_groups` merged with `AppState::communities`.
+ * Raw protocol data only (D1 / ADR-0032): Swift formats all display strings
+ * (name fallback to group_id, `"{n} members"` label, avatar initials, etc.).
+ *
+ * `member_count` is raw `u64` — no `"N members"` label (D1). Widened from the
+ * `u32` in `CommunityRow` / `DiscoveredRow` source types.
+ * `public` and `open` are omitted: the kernel already filters to public+open
+ * rows before emitting, so Swift never needs to render a closed/private row.
+ *
+ * Append-only: new fields at the bottom keep rebases mechanical.
+ */
+public struct CommunitySearchRow {
+    /**
+     * NIP-29 local group id (the `["d", _]` tag value).
+     */
+    public var groupId: String
+    /**
+     * Host relay URL. Together with `group_id` forms the stable `GroupId`.
+     */
+    public var hostRelayUrl: String
+    /**
+     * `["name", _]` tag value from kind:39000, if present.
+     * D1: no fallback to group_id — Swift owns the fallback display logic.
+     */
+    public var name: String?
+    /**
+     * `["about", _]` tag value from kind:39000, if present.
+     */
+    public var about: String?
+    /**
+     * `["picture", _]` tag value from kind:39000, if present.
+     */
+    public var picture: String?
+    /**
+     * Cardinality of `["p", _]` tags on the latest kind:39002 (member list).
+     * Raw `u64` — no `"N members"` label (D1).
+     */
+    public var memberCount: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * NIP-29 local group id (the `["d", _]` tag value).
+         */groupId: String,
+        /**
+         * Host relay URL. Together with `group_id` forms the stable `GroupId`.
+         */hostRelayUrl: String,
+        /**
+         * `["name", _]` tag value from kind:39000, if present.
+         * D1: no fallback to group_id — Swift owns the fallback display logic.
+         */name: String?,
+        /**
+         * `["about", _]` tag value from kind:39000, if present.
+         */about: String?,
+        /**
+         * `["picture", _]` tag value from kind:39000, if present.
+         */picture: String?,
+        /**
+         * Cardinality of `["p", _]` tags on the latest kind:39002 (member list).
+         * Raw `u64` — no `"N members"` label (D1).
+         */memberCount: UInt64) {
+        self.groupId = groupId
+        self.hostRelayUrl = hostRelayUrl
+        self.name = name
+        self.about = about
+        self.picture = picture
+        self.memberCount = memberCount
+    }
+}
+
+#if compiler(>=6)
+extension CommunitySearchRow: Sendable {}
+#endif
+
+
+extension CommunitySearchRow: Equatable, Hashable {
+    public static func ==(lhs: CommunitySearchRow, rhs: CommunitySearchRow) -> Bool {
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.hostRelayUrl != rhs.hostRelayUrl {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.about != rhs.about {
+            return false
+        }
+        if lhs.picture != rhs.picture {
+            return false
+        }
+        if lhs.memberCount != rhs.memberCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groupId)
+        hasher.combine(hostRelayUrl)
+        hasher.combine(name)
+        hasher.combine(about)
+        hasher.combine(picture)
+        hasher.combine(memberCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommunitySearchRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommunitySearchRow {
+        return
+            try CommunitySearchRow(
+                groupId: FfiConverterString.read(from: &buf),
+                hostRelayUrl: FfiConverterString.read(from: &buf),
+                name: FfiConverterOptionString.read(from: &buf),
+                about: FfiConverterOptionString.read(from: &buf),
+                picture: FfiConverterOptionString.read(from: &buf),
+                memberCount: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommunitySearchRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterString.write(value.hostRelayUrl, into: &buf)
+        FfiConverterOptionString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.about, into: &buf)
+        FfiConverterOptionString.write(value.picture, into: &buf)
+        FfiConverterUInt64.write(value.memberCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommunitySearchRow_lift(_ buf: RustBuffer) throws -> CommunitySearchRow {
+    return try FfiConverterTypeCommunitySearchRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommunitySearchRow_lower(_ value: CommunitySearchRow) -> RustBuffer {
+    return FfiConverterTypeCommunitySearchRow.lower(value)
+}
+
+
+/**
  * Mirrors `CommunitySummary` in `web/src/lib/ndk/groups.ts:23-35`.
  */
 public struct CommunitySummary {
@@ -45982,11 +46138,15 @@ public func FfiConverterTypeSearchScheduleProjection_lower(_ value: SearchSchedu
 
 
 /**
- * Snapshot for `ViewId::Search` — NIP-50 relay search results view.
+ * Snapshot for `ViewId::Search` — NIP-50 relay search results + local buckets.
  *
  * Raw protocol data only (D1): Swift formats all display strings.
  * Bounded by `SearchResultsProjection`'s `max_hits` cap
- * (default `DEFAULT_MAX_SEARCH_HITS = 200` from nmp-nip50 — Non-Negotiable #7).
+ * (default `DEFAULT_MAX_SEARCH_HITS = 200` from nmp-nip50 — Non-Negotiable #7)
+ * for `hits`; `communities` is bounded at 20 (COMMUNITY_SEARCH_CAP in search.rs).
+ *
+ * Append-only: `communities` is the Phase 7 gate #4 addition.
+ * Profile rows are deferred to nmp #1697.
  */
 public struct SearchSnapshot {
     /**
@@ -45994,6 +46154,24 @@ public struct SearchSnapshot {
      * Raw fields only — no "X results" count label, no formatted strings (D1).
      */
     public var hits: [KernelSearchHitRow]
+    /**
+     * Local-scan community results from `AppState::discovered_groups` merged with
+     * `AppState::communities`. Substring-matched by name/about against the
+     * active `search_query`; filtered to public+open; sorted by lowercase name
+     * then host_relay_url then group_id; bounded at 20.
+     * Empty when the query is blank or no public+open communities match.
+     * D1: raw rows only — Swift renders all display strings and fallbacks.
+     */
+    public var communities: [CommunitySearchRow]
+    /**
+     * Enriched kind:9802 highlight rows decoded from the kind:9802 entries in
+     * `hits` via the SHARED `decode_highlight_row` (same NIP-84/NIP-73 fields as
+     * the highlight feed / article-reader overlay — quote/context/artifact
+     * refs/clip/image). Preserves the `hits` order (created_at desc). Lets Swift
+     * render the Highlights search bucket without re-parsing kind:9802 tags.
+     * Empty when no kind:9802 hits are present.
+     */
+    public var highlights: [HighlightRow]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -46001,8 +46179,26 @@ public struct SearchSnapshot {
         /**
          * Ordered (by `created_at` descending, then `id` ascending) search hit rows.
          * Raw fields only — no "X results" count label, no formatted strings (D1).
-         */hits: [KernelSearchHitRow]) {
+         */hits: [KernelSearchHitRow],
+        /**
+         * Local-scan community results from `AppState::discovered_groups` merged with
+         * `AppState::communities`. Substring-matched by name/about against the
+         * active `search_query`; filtered to public+open; sorted by lowercase name
+         * then host_relay_url then group_id; bounded at 20.
+         * Empty when the query is blank or no public+open communities match.
+         * D1: raw rows only — Swift renders all display strings and fallbacks.
+         */communities: [CommunitySearchRow],
+        /**
+         * Enriched kind:9802 highlight rows decoded from the kind:9802 entries in
+         * `hits` via the SHARED `decode_highlight_row` (same NIP-84/NIP-73 fields as
+         * the highlight feed / article-reader overlay — quote/context/artifact
+         * refs/clip/image). Preserves the `hits` order (created_at desc). Lets Swift
+         * render the Highlights search bucket without re-parsing kind:9802 tags.
+         * Empty when no kind:9802 hits are present.
+         */highlights: [HighlightRow]) {
         self.hits = hits
+        self.communities = communities
+        self.highlights = highlights
     }
 }
 
@@ -46016,11 +46212,19 @@ extension SearchSnapshot: Equatable, Hashable {
         if lhs.hits != rhs.hits {
             return false
         }
+        if lhs.communities != rhs.communities {
+            return false
+        }
+        if lhs.highlights != rhs.highlights {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(hits)
+        hasher.combine(communities)
+        hasher.combine(highlights)
     }
 }
 
@@ -46033,12 +46237,16 @@ public struct FfiConverterTypeSearchSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchSnapshot {
         return
             try SearchSnapshot(
-                hits: FfiConverterSequenceTypeKernelSearchHitRow.read(from: &buf)
+                hits: FfiConverterSequenceTypeKernelSearchHitRow.read(from: &buf),
+                communities: FfiConverterSequenceTypeCommunitySearchRow.read(from: &buf),
+                highlights: FfiConverterSequenceTypeHighlightRow.read(from: &buf)
         )
     }
 
     public static func write(_ value: SearchSnapshot, into buf: inout [UInt8]) {
         FfiConverterSequenceTypeKernelSearchHitRow.write(value.hits, into: &buf)
+        FfiConverterSequenceTypeCommunitySearchRow.write(value.communities, into: &buf)
+        FfiConverterSequenceTypeHighlightRow.write(value.highlights, into: &buf)
     }
 }
 
@@ -54990,6 +55198,12 @@ public enum SearchScope {
      * kind:1 short text notes — search for notes.
      */
     case notes
+    /**
+     * kind:30023 articles + kind:9802 highlights in one query — backs the
+     * unified search screen, which renders Articles and Highlights sections
+     * from a single query (Swift buckets the mixed hits by kind). Phase 7.
+     */
+    case articlesAndHighlights
 }
 
 
@@ -55013,6 +55227,8 @@ public struct FfiConverterTypeSearchScope: FfiConverterRustBuffer {
 
         case 3: return .notes
 
+        case 4: return .articlesAndHighlights
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -55031,6 +55247,10 @@ public struct FfiConverterTypeSearchScope: FfiConverterRustBuffer {
 
         case .notes:
             writeInt(&buf, Int32(3))
+
+
+        case .articlesAndHighlights:
+            writeInt(&buf, Int32(4))
 
         }
     }
@@ -57959,6 +58179,31 @@ fileprivate struct FfiConverterSequenceTypeCommunityRow: FfiConverterRustBuffer 
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeCommunityRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCommunitySearchRow: FfiConverterRustBuffer {
+    typealias SwiftType = [CommunitySearchRow]
+
+    public static func write(_ value: [CommunitySearchRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCommunitySearchRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CommunitySearchRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CommunitySearchRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCommunitySearchRow.read(from: &buf))
         }
         return seq
     }

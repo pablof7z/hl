@@ -17,6 +17,10 @@ import SwiftUI
 ///   between local and remote.
 struct SearchView: View {
     @Environment(HighlighterStore.self) private var app
+    /// Phase 7: the kernel owns the article/highlight/community search buckets
+    /// (NIP-50 relay search + local community scan). SearchStore reads them from
+    /// `kernel.searchSnapshot`; the people bucket stays on the live lane (nmp #1697).
+    @Environment(HighlighterAppKernel.self) private var kernel
 
     @State private var store: SearchStore?
     @FocusState private var focusedField: Bool
@@ -69,12 +73,15 @@ struct SearchView: View {
         }
         .task {
             if store == nil {
-                let s = SearchStore(safeCore: app.safeCore, eventBridge: app.eventBridge)
+                let s = SearchStore(safeCore: app.safeCore, kernel: kernel)
                 store = s
                 await s.start()
             }
             let snapshot = await app.safeCore.getSearchChromeSnapshot()
             recentQueries = snapshot.recentQueries
+        }
+        .onChange(of: kernel.searchSnapshot) { _, _ in
+            store?.applyKernelSnapshot()
         }
         .onDisappear {
             store?.stop()

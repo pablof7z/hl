@@ -272,6 +272,12 @@ fn hl_scope_to_nmp(scope: &SearchScope) -> NmpSearchScope {
             // kind:1 short text notes.
             NmpSearchScope::Kinds(BTreeSet::from([1u32]))
         }
+        SearchScope::ArticlesAndHighlights => {
+            use std::collections::BTreeSet;
+            // kind:30023 articles + kind:9802 highlights in one query — the
+            // unified search screen buckets the mixed hits by kind Swift-side.
+            NmpSearchScope::Kinds(BTreeSet::from([9802u32, 30023u32]))
+        }
     }
 }
 
@@ -410,8 +416,34 @@ pub(crate) fn project_search_snapshot(
         COMMUNITY_SEARCH_CAP,
     );
 
+    // Highlights bucket: decode the kind:9802 hits via the SHARED
+    // `decode_highlight_row` (reuse — same NIP-84/NIP-73 enrichment as the
+    // highlight feed / article-reader overlay), so Swift renders the Highlights
+    // search bucket without re-parsing kind:9802 tags. `SearchHitRow` carries the
+    // same raw fields as `NmpKernelEvent`, so map 1:1; preserve hit order.
+    let highlights: Vec<crate::kernel::snapshot::HighlightRow> = state
+        .search_results
+        .iter()
+        .filter(|r| r.kind == 9802)
+        .filter_map(|r| {
+            crate::kernel::domains::highlight_feed::decode_highlight_row(&NmpKernelEvent {
+                id: r.id.clone(),
+                author: r.author.clone(),
+                kind: r.kind,
+                created_at: r.created_at,
+                tags: r.tags.clone(),
+                content: r.content.clone(),
+                relay_provenance: r.relay_provenance.clone(),
+            })
+        })
+        .collect();
+
     Some(crate::kernel::snapshot::ViewSnapshot::Search(
-        SearchSnapshot { hits, communities },
+        SearchSnapshot {
+            hits,
+            communities,
+            highlights,
+        },
     ))
 }
 
@@ -902,6 +934,53 @@ mod tests {
             s.hits[0].tags, tags,
             "raw NIP-01 tags must flow through to KernelSearchHitRow verbatim"
         );
+    }
+
+    // 7-SH-T1: the highlights bucket decodes ONLY the kind:9802 hits, via the
+    // shared decode_highlight_row (enrichment parity itself is covered by
+    // kernel_highlight_row_matches_bespoke_record_parse @ 1c3c5cd9). Non-9802
+    // hits stay out of `highlights` but remain in `hits`.
+    #[test]
+    fn search_highlights_bucket_decodes_only_kind_9802() {
+        let mut state = make_state();
+        let row = |id: &str, kind: u32, content: &str, tags: Vec<Vec<String>>| SearchHitRow {
+            id: id.to_string(),
+            author: "dead000000000000000000000000000000000000000000000000000000000001".to_string(),
+            kind,
+            created_at: 1_700_000_000,
+            content: content.to_string(),
+            tags,
+            relay_provenance: vec![],
+        };
+        state.search_results = vec![
+            row(
+                &format!("{:064x}", 1),
+                9802,
+                "the highlighted passage",
+                vec![
+                    vec!["a".to_string(), "30023:auth:slug".to_string()],
+                    vec!["comment".to_string(), "my note".to_string()],
+                ],
+            ),
+            row(&format!("{:064x}", 2), 30023, "article body", vec![]),
+            row(&format!("{:064x}", 3), 0, "{\"name\":\"x\"}", vec![]),
+        ];
+
+        let snap = project_search_snapshot(&state).expect("snapshot");
+        let crate::kernel::snapshot::ViewSnapshot::Search(s) = snap else {
+            panic!("expected Search snapshot");
+        };
+
+        // hits carry all three (raw, unfiltered).
+        assert_eq!(s.hits.len(), 3, "hits must carry every result kind");
+        // highlights bucket = only the kind:9802 hit, decoded.
+        assert_eq!(
+            s.highlights.len(),
+            1,
+            "only the kind:9802 hit belongs in the highlights bucket"
+        );
+        assert_eq!(s.highlights[0].event_id, format!("{:064x}", 1));
+        assert_eq!(s.highlights[0].content, "the highlighted passage");
     }
 
     // ── Phase 7 (gate #4) community-search tests ──────────────────────────────

@@ -931,6 +931,10 @@ pub enum SearchScope {
     LongForm,
     /// kind:1 short text notes — search for notes.
     Notes,
+    /// kind:30023 articles + kind:9802 highlights in one query — backs the
+    /// unified search screen, which renders Articles and Highlights sections
+    /// from a single query (Swift buckets the mixed hits by kind). Phase 7.
+    ArticlesAndHighlights,
 }
 
 /// NIP-65 / kind:10002 role for a configured relay.
