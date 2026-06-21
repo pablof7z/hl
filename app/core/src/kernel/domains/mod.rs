@@ -80,3 +80,7 @@ pub(crate) mod discussions;
 
 // ── Phase 7 artifact-preview additions (append-only) ─────────────────────────
 pub(crate) mod artifact_preview;
+
+// ── #1653 additions (append-only) ─────────────────────────────────────────────
+/// Bookmark sets (kind:30003/30004) + web bookmarks (kind:39701) gate.
+pub(crate) mod bookmark_sets;

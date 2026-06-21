@@ -174,6 +174,29 @@ pub struct AppState {
     /// without re-opening a subscription (Non-Negotiable #7).
     pub room_home_events: HashMap<String, Vec<nmp_nip29::GroupEventRow>>,
 
+    // ── #1653 additions ──────────────────────────────────────────────────────
+    /// All kind:30003 bookmark-set rows observed this session, keyed by
+    /// `(author_pubkey, d_tag)` internally — stored as a flat `Vec` sorted by
+    /// `created_at` descending. Includes events from ANY observed author (not
+    /// filtered by active account) so `project_bookmarks_snapshot` can split
+    /// into "my sets" vs "following sets" without re-parsing.
+    ///
+    /// Populated by `apply_bookmark_sets` via `"hl.bookmark_sets"` sidecar.
+    /// Cleared on `Logout` / `IdentityChanged(None)`. Bounded by the number of
+    /// unique `(author, d_tag)` combinations observed — parameterized-replaceable
+    /// supersession keeps only the newest event per key (Non-Negotiable #7).
+    pub all_bookmark_sets: Vec<crate::kernel::snapshot::BookmarkSetRow>,
+
+    /// All kind:30004 curation-set rows observed this session (any author).
+    /// Same shape and lifecycle as `all_bookmark_sets`.
+    pub all_curation_sets: Vec<crate::kernel::snapshot::BookmarkSetRow>,
+
+    /// Active account's kind:39701 web-bookmark rows decoded from the
+    /// `"hl.web_bookmarks"` typed sidecar. Only the active account's events
+    /// are stored (filtered in `apply_web_bookmarks`). Newest-first.
+    /// Cleared on `Logout` / `IdentityChanged(None)`.
+    pub web_bookmarks: Vec<crate::kernel::snapshot::WebBookmarkRow>,
+
     // ── Phase 4C additions ────────────────────────────────────────────────────
     /// Active account's NIP-51 kind:10003 bookmark list, decoded from the
     /// `"hl.bookmarks"` typed sidecar (hl-owned JSON projection).
@@ -484,6 +507,10 @@ impl Default for AppState {
             claimed_profiles: HashMap::new(),
             // ── Phase 3F additions ────────────────────────────────────────────
             room_home_events: HashMap::new(),
+            // ── #1653 additions ───────────────────────────────────────────────
+            all_bookmark_sets: Vec::new(),
+            all_curation_sets: Vec::new(),
+            web_bookmarks: Vec::new(),
             // ── Phase 4C additions ────────────────────────────────────────────
             bookmarks: Vec::new(),
             // ── Phase 4A additions ────────────────────────────────────────────

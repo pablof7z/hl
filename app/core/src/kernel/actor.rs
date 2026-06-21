@@ -44,6 +44,8 @@ use crate::kernel::domains::{
     auth,
     // ── Phase 5G additions (append-only) ─────────────────────────────────────
     blossom,
+    // ── #1653 additions (append-only) ────────────────────────────────────────
+    bookmark_sets,
     bookmarks,
     // ── Phase 5E additions (append-only) ─────────────────────────────────────
     camera,
@@ -367,6 +369,17 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         AppAction::RemoveBookmark { item } => {
             bookmarks::reduce_action_remove_bookmark_for_state(state, item)
         }
+
+        // ── #1653 additions (append-only) ─────────────────────────────────────
+        AppAction::AddToSet {
+            set_coordinate,
+            item_coordinate,
+        } => bookmark_sets::reduce_action_add_to_set(state, set_coordinate, item_coordinate),
+
+        AppAction::RemoveFromSet {
+            set_coordinate,
+            item_coordinate,
+        } => bookmark_sets::reduce_action_remove_from_set(state, set_coordinate, item_coordinate),
 
         // ── Phase 4A additions ────────────────────────────────────────────────
         // OpenArticle / CloseArticle are fire-and-forget signals from native to
@@ -1095,6 +1108,27 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
             bookmarks::ensure_bookmark_article_previews(state)
         }
 
+        // ── #1653 additions (append-only) ─────────────────────────────────────
+        KernelEvent::BookmarkSetsUpdated {
+            all_bookmark_sets,
+            all_curation_sets,
+        } => {
+            // Store raw BookmarkSetRow items decoded from the "hl.bookmark_sets"
+            // typed sidecar (all authors, unfiltered). D1: raw fields only.
+            // Injectable directly from tests via Cmd::Event.
+            state.all_bookmark_sets = all_bookmark_sets;
+            state.all_curation_sets = all_curation_sets;
+            vec![]
+        }
+
+        KernelEvent::WebBookmarksUpdated(rows) => {
+            // Store web-bookmark rows decoded from the "hl.web_bookmarks"
+            // typed sidecar (active account only). D1: raw fields only.
+            // Injectable directly from tests via Cmd::Event.
+            state.web_bookmarks = rows;
+            vec![]
+        }
+
         // ── Phase 4A additions (append-only) ─────────────────────────────────
         KernelEvent::ArticlesUpdated(rows) => {
             // Replace AppState::articles with the incoming row set.
@@ -1453,6 +1487,11 @@ pub(crate) fn project_snapshot(
             crate::kernel::snapshot::BookmarksSnapshot {
                 rows: state.bookmarks.clone(),
                 article_previews: bookmarks::bookmark_article_previews(state),
+                // ── #1653: sets + web panes ───────────────────────────────────
+                my_bookmark_sets: bookmark_sets::project_my_bookmark_sets(state),
+                my_curation_sets: bookmark_sets::project_my_curation_sets(state),
+                following_curation_sets: bookmark_sets::project_following_curation_sets(state),
+                my_web_bookmarks: bookmark_sets::project_my_web_bookmarks(state),
             },
         )),
 
@@ -1715,6 +1754,14 @@ pub(crate) async fn run_effect(
             // b4404159 — this is the same raw publish path Phase 2D uses for
             // the rooms relay list. Fire-and-forget (D6).
             highlight_feed::run_effect_publish_highlight(json, nmp);
+        }
+
+        // ── #1653 additions (append-only) ─────────────────────────────────────
+        Effect::PublishSetEvent { json } => {
+            // Publish a kind:30004 curation-set update via ActorCommand::PublishRawEvent.
+            // No nmp action namespace for kind:30004 at d16aea60 — same raw
+            // publish path as PublishHighlightEvent. Fire-and-forget (D6).
+            bookmark_sets::run_effect_publish_set_event(json, nmp);
         }
 
         // ── Phase 5C additions (append-only) ─────────────────────────────────
@@ -2661,6 +2708,15 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
     // observation is harmless — both projections read the same events. The write
     // actions are NOT re-registered here (nmp-defaults already wired them).
     bookmarks::register_bookmark_list_projection(nmp_ref, nmp_ref.active_account_handle());
+
+    // #1653: wire SetListProjection (kind:30003/30004, all authors) and
+    // WebBookmarkProjection (kind:39701, active account only). NMP has no
+    // built-in observers for these kinds at d16aea60 — custom registration.
+    // SetListProjection accumulates all events; identity filtering happens at
+    // apply_bookmark_sets time on the actor thread (where AppState::follows is
+    // available). WebBookmarkProjection uses the live active-account slot so
+    // it auto-tracks identity switches.
+    bookmark_sets::register_set_projections(nmp_ref, nmp_ref.active_account_handle());
 
     // Phase 3A: register the update callback so NMP snapshot frames are
     // forwarded into the actor as KernelEvent::NmpSnapshotFrame. The
