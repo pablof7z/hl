@@ -573,6 +573,15 @@ pub struct BookmarksSnapshot {
     /// Bookmark items from the active account's kind:10003 list.
     /// Raw `BookmarkRow` values — no labels or presentation formatting (D1).
     pub rows: Vec<BookmarkRow>,
+    // ── Phase 7 (articles pane) additions (append-only) ──────────────────────
+    /// Artifact previews for the bookmarked kind:30023 article coordinates
+    /// (`BookmarkRow::Address` with a `30023:` coordinate), in bookmark order.
+    /// Hydrated via the shared artifact-preview keystone (`ensure_artifact_
+    /// preview`): resolved immediately when the article is in `AppState::articles`,
+    /// otherwise `pending` with a `ResolveArtifactCoordinate` fetch in flight so
+    /// bookmarked-but-unloaded articles fill in over time. Backs the Bookmarks
+    /// "Articles" pane; the collections/web panes stay on the live lane (nmp #1653).
+    pub article_previews: Vec<ArtifactPreviewRow>,
 }
 
 // ── Phase 4A additions (append-only) ─────────────────────────────────────────

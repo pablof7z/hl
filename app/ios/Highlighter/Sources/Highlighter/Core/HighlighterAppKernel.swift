@@ -112,6 +112,11 @@ final class HighlighterAppKernel {
     /// profiles bucket stays on the live lane (nmp #1697).
     private(set) var searchSnapshot: SearchSnapshot?
 
+    /// NIP-51 kind:10003 bookmarks snapshot. `nil` until the `ViewId.bookmarks`
+    /// view is open. BookmarkStore reads `articlePreviews` for the Articles pane
+    /// (Phase 7); the collections/web panes stay on the live lane (nmp #1653).
+    private(set) var bookmarks: BookmarksSnapshot?
+
     // MARK: - Kernel handle
 
     /// The Rust-side kernel object. Callers may dispatch actions and manage
@@ -375,6 +380,20 @@ final class HighlighterAppKernel {
         searchSnapshot = nil
     }
 
+    // MARK: - Phase 7: bookmarks lifecycle
+
+    /// Open the bookmarks view. The kernel hydrates the bookmarked-article
+    /// previews (resolving/fetching as needed); snapshots stream into `bookmarks`.
+    func openBookmarks() {
+        app.openView(viewId: .bookmarks, route: .bookmarks)
+    }
+
+    /// Close the bookmarks view.
+    func closeBookmarks() {
+        app.closeView(viewId: .bookmarks)
+        bookmarks = nil
+    }
+
     // MARK: - Snapshot ingestion (called on main actor by KernelObserver)
 
     fileprivate func receive(viewId: ViewId, snapshot: ViewSnapshot) {
@@ -424,6 +443,10 @@ final class HighlighterAppKernel {
         case .search(let s):
             searchSnapshot = s
 
+        // Phase 7 cutover: bookmarks (BookmarkStore reads the articles pane).
+        case .bookmarks(let s):
+            bookmarks = s
+
         // Phase 2E (network settings / relay diagnostics) — handled elsewhere.
         case .networkSettings, .relayDiagnostics:
             break
@@ -437,7 +460,7 @@ final class HighlighterAppKernel {
         // `current_snapshot`; the observer push is handled by those stores
         // directly. No-op here (the actor still pushes; non-resident views
         // are closed before they can receive stale data — D5).
-        case .bookmarks, .articleFeed,
+        case .articleFeed,
              .highlightFeed, .whatsNew, .bookPicker, .shareComposer:
             break
 

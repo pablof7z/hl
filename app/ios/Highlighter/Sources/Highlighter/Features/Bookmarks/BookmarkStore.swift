@@ -21,17 +21,23 @@ final class BookmarkStore {
 
     private weak var bridge: EventBridge?
     private var core: SafeHighlighterCore?
+    /// Phase 7: the kernel owns the Articles pane (bookmarked kind:30023 →
+    /// artifact-preview keystone). Collections/web stay on the live lane (nmp #1653).
+    private var kernel: HighlighterAppKernel?
 
-    func start(core: SafeHighlighterCore, bridge: EventBridge) async {
+    func start(core: SafeHighlighterCore, bridge: EventBridge, kernel: HighlighterAppKernel) async {
         self.core = core
         self.bridge = bridge
+        self.kernel = kernel
 
+        kernel.openBookmarks()
         await installSubscriptions(core: core, bridge: bridge)
 
         await reload()
     }
 
     func stop() {
+        kernel?.closeBookmarks()
         let handles = [setsHandle, followingHandle, webHandle].compactMap { $0 }
         setsHandle = nil
         followingHandle = nil
@@ -86,11 +92,47 @@ final class BookmarkStore {
         isLoading = true
         defer { isLoading = false }
 
+        // Articles pane is kernel-owned (Phase 7); the collections/web panes stay
+        // on the live lane (nmp #1653).
         let snapshot = await core.getBookmarkLibrarySnapshot()
-        myArticles = snapshot.myArticles
         myBookmarkSets = snapshot.myBookmarkSets
         myCurationSets = snapshot.myCurationSets
         myWebBookmarks = snapshot.myWebBookmarks
         followingCurationSets = snapshot.followingCurationSets
+        applyKernelSnapshot()
+    }
+
+    /// Apply the kernel bookmarks snapshot's Articles pane. Called from `reload()`
+    /// and from `BookmarksView.onChange(of: kernel.bookmarks)` so previews that
+    /// resolve after the initial load (the keystone fetches missing coords) fade in.
+    func applyKernelSnapshot() {
+        myArticles = (kernel?.bookmarks?.articlePreviews ?? []).map(ArticleRecord.init(bookmarkPreview:))
+    }
+}
+
+// MARK: - Kernel preview → bespoke record mapping (Phase 7)
+
+extension ArticleRecord {
+    /// Build the `ArticleRecord` a bookmark Articles-pane card renders from a
+    /// keystone `ArtifactPreviewRow` (title/summary/image/author). The card shows
+    /// metadata only — no body — so `content` is empty and `eventId` is unset;
+    /// the pane keys its `ForEach` on `address` (the stable bookmark coordinate).
+    init(bookmarkPreview preview: ArtifactPreviewRow) {
+        // coordinate is `30023:<pubkey>:<d>` — the `d` is everything after the 2nd colon.
+        let parts = preview.coordinate.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+        let identifier = parts.count == 3 ? String(parts[2]) : ""
+        self.init(
+            eventId: "",
+            address: preview.coordinate,
+            pubkey: preview.authorPubkey ?? "",
+            identifier: identifier,
+            title: preview.title ?? "",
+            summary: preview.summary ?? "",
+            image: preview.imageUrl ?? "",
+            content: "",
+            hashtags: [],
+            publishedAt: nil,
+            createdAt: nil
+        )
     }
 }

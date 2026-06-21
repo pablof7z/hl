@@ -13187,6 +13187,16 @@ public struct BookmarksSnapshot {
      * Raw `BookmarkRow` values — no labels or presentation formatting (D1).
      */
     public var rows: [BookmarkRow]
+    /**
+     * Artifact previews for the bookmarked kind:30023 article coordinates
+     * (`BookmarkRow::Address` with a `30023:` coordinate), in bookmark order.
+     * Hydrated via the shared artifact-preview keystone (`ensure_artifact_
+     * preview`): resolved immediately when the article is in `AppState::articles`,
+     * otherwise `pending` with a `ResolveArtifactCoordinate` fetch in flight so
+     * bookmarked-but-unloaded articles fill in over time. Backs the Bookmarks
+     * "Articles" pane; the collections/web panes stay on the live lane (nmp #1653).
+     */
+    public var articlePreviews: [ArtifactPreviewRow]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -13194,8 +13204,18 @@ public struct BookmarksSnapshot {
         /**
          * Bookmark items from the active account's kind:10003 list.
          * Raw `BookmarkRow` values — no labels or presentation formatting (D1).
-         */rows: [BookmarkRow]) {
+         */rows: [BookmarkRow],
+        /**
+         * Artifact previews for the bookmarked kind:30023 article coordinates
+         * (`BookmarkRow::Address` with a `30023:` coordinate), in bookmark order.
+         * Hydrated via the shared artifact-preview keystone (`ensure_artifact_
+         * preview`): resolved immediately when the article is in `AppState::articles`,
+         * otherwise `pending` with a `ResolveArtifactCoordinate` fetch in flight so
+         * bookmarked-but-unloaded articles fill in over time. Backs the Bookmarks
+         * "Articles" pane; the collections/web panes stay on the live lane (nmp #1653).
+         */articlePreviews: [ArtifactPreviewRow]) {
         self.rows = rows
+        self.articlePreviews = articlePreviews
     }
 }
 
@@ -13209,11 +13229,15 @@ extension BookmarksSnapshot: Equatable, Hashable {
         if lhs.rows != rhs.rows {
             return false
         }
+        if lhs.articlePreviews != rhs.articlePreviews {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(rows)
+        hasher.combine(articlePreviews)
     }
 }
 
@@ -13226,12 +13250,14 @@ public struct FfiConverterTypeBookmarksSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BookmarksSnapshot {
         return
             try BookmarksSnapshot(
-                rows: FfiConverterSequenceTypeBookmarkRow.read(from: &buf)
+                rows: FfiConverterSequenceTypeBookmarkRow.read(from: &buf),
+                articlePreviews: FfiConverterSequenceTypeArtifactPreviewRow.read(from: &buf)
         )
     }
 
     public static func write(_ value: BookmarksSnapshot, into buf: inout [UInt8]) {
         FfiConverterSequenceTypeBookmarkRow.write(value.rows, into: &buf)
+        FfiConverterSequenceTypeArtifactPreviewRow.write(value.articlePreviews, into: &buf)
     }
 }
 
