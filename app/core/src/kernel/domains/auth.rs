@@ -102,63 +102,19 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     // Arc, but AppState::follows must also be wiped so is_following never
     // returns true for the previous account's contacts.
     state.follows = Vec::new();
-    // ── Phase 3D: clear profile state on logout ──────────────────────────────
-    // own_profile and claimed_profiles belong to the departing account and
-    // must not survive into the next session.
-    super::profiles::clear_on_identity_lost(state);
-    // ── Phase 4C: clear bookmark list on logout ───────────────────────────────
-    // The BookmarkListProjection active-account slot auto-resets via the shared
-    // Arc, but AppState::bookmarks must also be wiped so stale bookmarks from
-    // the previous account don't survive into the next session.
-    state.bookmarks = Vec::new();
-    // ── #1653: clear bookmark sets + web bookmarks on logout ─────────────────
-    // SetListProjection accumulates all observed events — wipe AppState mirrors
-    // so the previous account's sets don't surface under the next identity.
-    state.all_bookmark_sets.clear();
-    state.all_curation_sets.clear();
-    state.web_bookmarks.clear();
-    // ── Phase 4A: clear articles on logout ───────────────────────────────────
-    // AppState::articles holds kind:30023 data for the departing account's
-    // subscriptions. Wipe so stale articles don't surface for the next account.
-    state.articles.clear();
-    // ── Phase 4B: clear reaction state on logout ──────────────────────────────
-    // Stale reaction counts from the departing account must not surface under
-    // a new identity. The ReactionProjection viewer_pubkey is updated on
-    // re-registration; wipe the hl-side cache here immediately.
-    super::reactions::clear_on_identity_lost(state);
-    // ── Phase 4D: clear search results on logout ─────────────────────────────
-    // AppState::search_results holds NIP-50 hits for the departing account's
-    // query. Wipe so stale search results don't survive into the next session.
-    state.search_results.clear();
-    // ── Phase 7 (gate #4): clear search query on logout ──────────────────────
-    // AppState::search_query drives the local community-scan bucket. Clear so
-    // stale query text from the prior account does not survive into the next
-    // session and produce phantom community results.
-    state.search_query.clear();
-    // ── Phase 4F: clear feed-pull state on logout ─────────────────────────────
-    // FeedState rows and cursors belong to the departing account's subscriptions.
-    // Wipe so stale feed rows don't surface for the next account. cursor_id is
-    // reset to 0 (the unregistered sentinel) so the next open re-registers.
-    clear_feed_state_on_identity_lost(state);
-    // ── Phase 7 feedback: clear UI-lifecycle state on logout ──────────────────
-    // FeedbackState holds open_thread_root_event_id, is_publishing, last_error —
-    // all view-lifecycle flags that must not leak across sessions. The underlying
-    // comment_threads entry is NOT cleared (content-addressed, not per-account).
-    super::feedback::reduce_event_clear_on_logout(state);
-    // ── Phase 7 chat: clear chat room buffers on logout ───────────────────────
-    // Chat room buffers are open-view working sets. Clear on logout so stale
-    // message rows don't survive into the next session. Re-wiring happens when
-    // hl.chat.open is dispatched for the new session.
-    super::chat::clear_on_identity_lost(state);
+    // ── #1653: shared account-scoped teardown (single source) ────────────────
+    // Logout clears the SAME account-scoped state as the None/removed-account
+    // and direct-switch arms via ONE helper (profiles, bookmarks, bookmark/
+    // curation sets, web bookmarks, articles, reactions, search, HomeFeed feed
+    // cursors/rows, feedback, chat, artifact previews) so the three teardown
+    // paths can never drift apart.
+    clear_account_scoped_state_on_switch(state);
     // ── Phase 7 discussions: clear room discussions on logout ──────────────────
     // kind:11 discussion rows are identity-scoped (the viewer's relays serve
     // them). Clear on logout so stale rows do not surface under a new account.
+    // (Logout-only today — kept inline since the None/switch arms historically
+    // did not clear discussions; folding it in would change their behaviour.)
     super::discussions::clear_on_logout(state);
-    // ── Phase 7 artifact-preview: clear preview rows on logout ────────────────
-    // Artifact previews are keyed to the active account's subscription set.
-    // Wipe both artifact_previews and artifact_preview_requests so stale
-    // coordinate rows from a prior account never surface under a new identity.
-    super::artifact_preview::clear_on_identity_lost(state);
     // RemoveActiveAccount fires nmp.remove_account; ClearSession
     // emits a CapabilityRequest to native for its keychain.
     vec![Effect::RemoveActiveAccount, Effect::ClearSession]
@@ -185,6 +141,22 @@ pub(crate) fn reduce_event_identity_changed(
                 },
                 _ => SignerKind::LocalNsec,
             };
+            // ── #1653: detect a REAL account switch vs. login / refresh ────────
+            // A DIRECT switch is NMP firing IdentityChanged(Some(new_pk)) with no
+            // intervening None (see nmp's
+            // `active_account_handle_reflects_account_switch`). There is no
+            // hl-side SigningIn transition for a direct switch, so at this point
+            // `state.session` is still `Present { pubkey: prior }`. The
+            // unambiguous signal:
+            //   - Present { pubkey: prior } && prior != pk → REAL SWITCH (wipe).
+            //   - Present { pubkey: prior } && prior == pk → same-account refresh
+            //     (do NOT wipe — would churn the active account's own state).
+            //   - SigningIn / Absent / SignInFailed → initial login from no
+            //     active account (nothing to wipe).
+            let is_real_switch = matches!(
+                &state.session,
+                SessionState::Present { pubkey: prior, .. } if prior != &pk
+            );
             // Phase 3B: clear prior account's communities before re-wiring.
             // Effect::WireJoinedGroups re-registers the JoinedGroupsProjection
             // for the new pubkey; the fresh snapshot arrives on the next tick.
@@ -206,6 +178,20 @@ pub(crate) fn reduce_event_identity_changed(
             // feed cursors only (re-)register on FollowListUpdated — never on a
             // bare IdentityChanged(Some) — so they never carry prior follows.
             state.follows = Vec::new();
+            // ── #1653 BLOCKING/HIGH: full account-scoped rebaseline on a REAL ──
+            // switch ───────────────────────────────────────────────────────────
+            // A direct switch must tear down ALL account-scoped state the same
+            // way logout does, otherwise account A's HomeFeed follow-scoped
+            // cursors/rows (article_feed / highlight_feed / home_feed_interactions
+            // / room_lanes) and bookmarks-slice state (all_bookmark_sets /
+            // all_curation_sets / web_bookmarks) persist and surface under
+            // account B (cross-account privacy leak). We share the SAME teardown
+            // path the None/removed arm uses (single source — no duplicated reset
+            // logic). We do NOT run this on initial login (nothing to wipe) or a
+            // same-account refresh (would cause churn/regression).
+            if is_real_switch {
+                clear_account_scoped_state_on_switch(state);
+            }
             // Clear the pending NostrConnect URI — the handshake is done.
             state.nostrconnect_uri = None;
             state.session = SessionState::Present {
@@ -228,41 +214,13 @@ pub(crate) fn reduce_event_identity_changed(
             // NMP fires IdentityChanged(None) on logout / account removal. Wipe
             // AppState::follows so stale contacts don't outlive the session.
             state.follows = Vec::new();
-            // ── Phase 3D: clear profile state on account removal ──────────────
-            // own_profile and claimed_profiles belong to the departing account.
-            super::profiles::clear_on_identity_lost(state);
-            // ── Phase 4C: clear bookmark list on account removal ──────────────
-            // Wipe AppState::bookmarks so stale bookmarks don't outlive the
-            // removed account.
-            state.bookmarks = Vec::new();
-            // ── #1653 HIGH #6: clear bookmark/curation sets + web bookmarks ────
-            // IdentityChanged(None) fires on account switch/removal. Wipe the
-            // AppState mirrors so the previous account's sets/web bookmarks never
-            // surface under the next identity (logout already does this at ~113).
-            state.all_bookmark_sets.clear();
-            state.all_curation_sets.clear();
-            state.web_bookmarks.clear();
-            // ── Phase 4A: clear articles on account removal ───────────────────
-            state.articles.clear();
-            // ── Phase 4B: clear reaction state on account removal ─────────────
-            super::reactions::clear_on_identity_lost(state);
-            // ── Phase 4D: clear search results on account removal ─────────────
-            state.search_results.clear();
-            // ── Phase 7 (gate #4): clear search query on account removal ─────
-            state.search_query.clear();
-            // ── Phase 4F: clear feed-pull state on account removal ────────────
-            clear_feed_state_on_identity_lost(state);
-            // ── Phase 7 feedback: clear UI-lifecycle state on identity loss ───
-            super::feedback::reduce_event_clear_on_logout(state);
-            // ── Phase 7 chat: clear chat room buffers on account removal ───────
-            // Chat room buffers are open-view working sets. Clear on identity
-            // loss so stale message rows don't outlive the account session.
-            super::chat::clear_on_identity_lost(state);
-            // ── Phase 7 artifact-preview: clear preview rows on identity loss ──
-            // Artifact previews are keyed to the active account's subscriptions.
-            // Wipe on account removal so stale rows don't surface under a new
-            // identity.
-            super::artifact_preview::clear_on_identity_lost(state);
+            // ── #1653: shared account-scoped teardown (single source) ─────────
+            // The None/removed-account arm and the direct-switch arm tear down
+            // the SAME account-scoped state via ONE helper so they can never
+            // drift apart. This clears profiles, bookmarks, bookmark/curation
+            // sets, web bookmarks, articles, reactions, search, HomeFeed feed
+            // cursors/rows, feedback, chat, and artifact previews.
+            clear_account_scoped_state_on_switch(state);
         }
     }
     vec![]
@@ -456,6 +414,53 @@ pub(crate) fn clear_feed_state_on_identity_lost(state: &mut AppState) {
     // Phase 7: interaction cursor is follow-scoped — clear on identity loss
     // so the next account's follows drive a fresh registration.
     state.home_feed_interactions = crate::kernel::domains::feed::FeedState::default();
+}
+
+// ─── #1653 shared account-scoped teardown ──────────────────────────────────────
+
+/// Tear down ALL account-scoped state when the active account goes away — used
+/// by BOTH the `IdentityChanged(None)` / logout arm AND the direct-switch arm
+/// (`IdentityChanged(Some(new))` where a *different* account was previously
+/// active). Keeping a single teardown path means the two arms can never drift:
+/// any state that must not leak across accounts is cleared identically whether
+/// the user logs out or switches directly.
+///
+/// Does NOT touch `session`, `nostrconnect_uri`, `communities`, or `follows` —
+/// those carry arm-specific semantics (e.g. the switch arm sets `session` to
+/// the new `Present`, the None arm to `Absent`) and are handled by each caller.
+///
+/// Caller is responsible for only invoking this on a real teardown: the
+/// direct-switch arm gates on `is_real_switch` so an initial login (nothing to
+/// wipe) or a same-account refresh (would churn the live account's own state)
+/// never reaches here.
+pub(crate) fn clear_account_scoped_state_on_switch(state: &mut AppState) {
+    // own_profile and claimed_profiles belong to the departing account.
+    super::profiles::clear_on_identity_lost(state);
+    // Bookmarks list — stale bookmarks must not outlive the account.
+    state.bookmarks = Vec::new();
+    // #1653 HIGH: bookmark/curation sets + web bookmarks. SetListProjection
+    // accumulates all observed events; wipe the AppState mirrors so the prior
+    // account's sets/web bookmarks never surface under the next identity.
+    state.all_bookmark_sets.clear();
+    state.all_curation_sets.clear();
+    state.web_bookmarks.clear();
+    // kind:30023 articles for the departing account's subscriptions.
+    state.articles.clear();
+    // Reaction counts from the departing account.
+    super::reactions::clear_on_identity_lost(state);
+    // NIP-50 search results + query for the departing account.
+    state.search_results.clear();
+    state.search_query.clear();
+    // #1653 BLOCKING: HomeFeed follow-scoped feed cursors/rows (article_feed,
+    // highlight_feed, home_feed_interactions, room_lanes, …). Reset to default +
+    // cursor_id=0 so the new account re-registers fresh on its FollowListUpdated.
+    clear_feed_state_on_identity_lost(state);
+    // UI-lifecycle feedback flags.
+    super::feedback::reduce_event_clear_on_logout(state);
+    // Chat room buffers — open-view working sets.
+    super::chat::clear_on_identity_lost(state);
+    // Artifact previews keyed to the active account's subscriptions.
+    super::artifact_preview::clear_on_identity_lost(state);
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -1109,6 +1114,250 @@ mod tests {
         );
         // No panic, no Result — fire-and-forget satisfied.
         assert!(matches!(&state.session, SessionState::SigningIn { .. }));
+    }
+
+    // ── #1653: direct account switch full rebaseline ──────────────────────────
+    //
+    // A DIRECT switch is IdentityChanged(Some(B)) with NO intervening None while
+    // account A is already Present. Before the fix only the None/removed arm
+    // rebaselined account-scoped state, so account A's HomeFeed follow-scoped
+    // cursors/rows and bookmarks-slice state persisted under account B.
+
+    const PK_A: &str = "aaaa000000000000000000000000000000000000000000000000000000000001";
+    const PK_B: &str = "bbbb000000000000000000000000000000000000000000000000000000000002";
+
+    /// Put state into `Present { pubkey: A }` directly (no SigningIn churn).
+    fn present_as(state: &mut AppState, clock: &ManualClock, pk: &str) {
+        step(
+            state,
+            clock,
+            Cmd::Event(KernelEvent::IdentityChanged(Some(pk.to_string()))),
+        );
+        assert!(
+            matches!(&state.session, SessionState::Present { pubkey, .. } if pubkey == pk),
+            "fixture: expected Present({pk}), got {:?}",
+            state.session
+        );
+    }
+
+    // #1653-SW1: a direct switch resets HomeFeed follow-scoped feed cursors/rows.
+    #[test]
+    fn direct_switch_resets_homefeed_cursors() {
+        use crate::kernel::domains::feed::FeedState;
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        // Account A active.
+        present_as(&mut state, &clock, PK_A);
+        // Simulate an OPEN HomeFeed under A with a non-default article feed:
+        // a registered cursor + drained rows + advanced seq.
+        state.article_feed = FeedState {
+            cursor_id: 12345,
+            after_seq: 42,
+            exhausted: true,
+            rows: vec![],
+        };
+        state.home_feed_interactions.cursor_id = 999;
+        state.room_lanes.insert(
+            "hl.feed.room.somegroup".to_string(),
+            FeedState {
+                cursor_id: 555,
+                after_seq: 7,
+                ..Default::default()
+            },
+        );
+
+        // DIRECT switch A → B (no intervening None).
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::IdentityChanged(Some(PK_B.to_string()))),
+        );
+
+        // B must NOT see A's cursors/rows — all reset to default (cursor_id=0).
+        let default = FeedState::default();
+        assert_eq!(
+            (
+                state.article_feed.cursor_id,
+                state.article_feed.after_seq,
+                state.article_feed.exhausted,
+                state.article_feed.rows.len(),
+            ),
+            (
+                default.cursor_id,
+                default.after_seq,
+                default.exhausted,
+                default.rows.len(),
+            ),
+            "article_feed must reset on direct switch (cursor_id=0, no rows)"
+        );
+        assert_eq!(
+            state.home_feed_interactions.cursor_id, 0,
+            "home_feed_interactions must reset on direct switch (cursor_id=0)"
+        );
+        assert!(
+            state.room_lanes.is_empty(),
+            "room_lanes must be cleared on direct switch"
+        );
+        // Sanity: B is the active account now.
+        assert!(matches!(&state.session, SessionState::Present { pubkey, .. } if pubkey == PK_B));
+    }
+
+    // #1653-SW2: a direct switch clears bookmark sets + web bookmarks.
+    #[test]
+    fn direct_switch_clears_bookmark_and_web_state() {
+        use crate::kernel::snapshot::{BookmarkSetRow, WebBookmarkRow};
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        present_as(&mut state, &clock, PK_A);
+
+        // A has bookmark sets, curation sets, and web bookmarks.
+        state.all_bookmark_sets.push(BookmarkSetRow {
+            d_tag: "set-a".into(),
+            pubkey: PK_A.into(),
+            kind: 30003,
+            title: None,
+            description: None,
+            image: None,
+            article_addresses: vec![],
+            note_ids: vec![],
+            r_refs: vec![],
+            topics: vec![],
+            raw_tags: vec![],
+            content: String::new(),
+            created_at: 1000,
+        });
+        state.all_curation_sets.push(BookmarkSetRow {
+            d_tag: "cur-a".into(),
+            pubkey: PK_A.into(),
+            kind: 30004,
+            title: None,
+            description: None,
+            image: None,
+            article_addresses: vec![],
+            note_ids: vec![],
+            r_refs: vec![],
+            topics: vec![],
+            raw_tags: vec![],
+            content: String::new(),
+            created_at: 1000,
+        });
+        state.web_bookmarks.push(WebBookmarkRow {
+            url: "https://example.com".into(),
+            pubkey: PK_A.into(),
+            title: None,
+            description: None,
+            topics: vec![],
+            published_at: None,
+            created_at: 1000,
+        });
+
+        // DIRECT switch A → B.
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::IdentityChanged(Some(PK_B.to_string()))),
+        );
+
+        // None of A's bookmark/web state may survive under B.
+        assert!(
+            state.all_bookmark_sets.is_empty(),
+            "all_bookmark_sets must be cleared on direct switch"
+        );
+        assert!(
+            state.all_curation_sets.is_empty(),
+            "all_curation_sets must be cleared on direct switch"
+        );
+        assert!(
+            state.web_bookmarks.is_empty(),
+            "web_bookmarks must be cleared on direct switch"
+        );
+    }
+
+    // #1653-SW3: an INITIAL login (None→Some(A)) does NOT wipe — there is nothing
+    // to wipe, and a spurious reset would be churn. We verify pre-seeded state
+    // (which in production would never exist before login, but proves the gate)
+    // survives an initial login because session was Absent, not Present.
+    #[test]
+    fn initial_login_does_not_wipe() {
+        use crate::kernel::snapshot::WebBookmarkRow;
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        // Session starts in the no-active-account default (Unknown), i.e. not
+        // Present, so an incoming Some(A) is an initial login — NOT a switch.
+        // Seed a web bookmark to detect a spurious wipe.
+        assert!(
+            !matches!(&state.session, SessionState::Present { .. }),
+            "fixture: no active account before initial login"
+        );
+        state.web_bookmarks.push(WebBookmarkRow {
+            url: "https://seed.example".into(),
+            pubkey: PK_A.into(),
+            title: None,
+            description: None,
+            topics: vec![],
+            published_at: None,
+            created_at: 1000,
+        });
+
+        // Initial login A (no prior active account).
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::IdentityChanged(Some(PK_A.to_string()))),
+        );
+
+        // Not a real switch → the gate must NOT fire the teardown.
+        assert_eq!(
+            state.web_bookmarks.len(),
+            1,
+            "initial login must NOT wipe account-scoped state"
+        );
+    }
+
+    // #1653-SW4: a same-account refresh (Some(A) while A already Present) does NOT
+    // wipe — the live account's own state must not churn/regress.
+    #[test]
+    fn same_account_refresh_does_not_wipe() {
+        use crate::kernel::domains::feed::FeedState;
+        use crate::kernel::snapshot::WebBookmarkRow;
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        present_as(&mut state, &clock, PK_A);
+
+        // A's live working state.
+        state.article_feed = FeedState {
+            cursor_id: 4242,
+            after_seq: 9,
+            exhausted: false,
+            rows: vec![],
+        };
+        state.web_bookmarks.push(WebBookmarkRow {
+            url: "https://a.example".into(),
+            pubkey: PK_A.into(),
+            title: None,
+            description: None,
+            topics: vec![],
+            published_at: None,
+            created_at: 1000,
+        });
+
+        // Re-confirm SAME account A (refresh / re-emit).
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::IdentityChanged(Some(PK_A.to_string()))),
+        );
+
+        // No wipe: A's cursor and web bookmarks survive.
+        assert_eq!(
+            state.article_feed.cursor_id, 4242,
+            "same-account refresh must NOT reset feed cursors"
+        );
+        assert_eq!(
+            state.web_bookmarks.len(),
+            1,
+            "same-account refresh must NOT clear web bookmarks"
+        );
     }
 
     // P2C-7: CreateAccount SigningIn is covered by the 2A clock timeout.
