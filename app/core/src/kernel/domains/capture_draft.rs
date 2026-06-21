@@ -829,6 +829,7 @@ pub(crate) fn reduce_event_capture_publish_action_result(
     state: &mut AppState,
     success: bool,
     error: String,
+    now: u64,
 ) -> Vec<Effect> {
     state.capture_draft.pending_publish_correlation_id = None;
 
@@ -846,11 +847,14 @@ pub(crate) fn reduce_event_capture_publish_action_result(
     // Success. Multi-step publish ordering:
     //
     // Step 1 (pending-book, Issue 3) — the artifact just published. Now publish
-    // the deferred highlight under a fresh correlation_id. The FSM stays
-    // `Publishing` until the highlight itself settles.
+    // the deferred highlight under a fresh correlation_id. Reset `started_at`
+    // to `now` so the clock-driven timeout runs from the highlight dispatch,
+    // not from when the artifact publish started (prevents premature timeout
+    // when the artifact took most of the budget).
     if let Some(highlight_json) = state.capture_draft.pending_highlight_json.take() {
         let cid = new_correlation_id();
         state.capture_draft.pending_publish_correlation_id = Some(cid.clone());
+        state.capture_draft.publish_phase = CaptureDraftPhase::Publishing { started_at: now };
         return vec![Effect::PublishCaptureWithCorrelation {
             json: highlight_json,
             correlation_id: cid,

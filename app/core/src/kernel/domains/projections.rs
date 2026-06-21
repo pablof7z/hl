@@ -59,7 +59,11 @@ use crate::kernel::effect::Effect;
 ///
 /// Decode errors are silent no-ops. Unknown `schema_id` values are logged at
 /// trace level and skipped. Neither case corrupts `AppState`.
-pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> Vec<Effect> {
+pub(crate) fn dispatch_typed_frame(
+    state: &mut AppState,
+    frame_bytes: &[u8],
+    now: u64,
+) -> Vec<Effect> {
     // Decode the full typed-projection sidecar from the frame.
     // A frame that fails to decode (wrong file identifier, truncated, etc.)
     // is silently dropped — D6. We also catch FlatBuffers panics (e.g. on
@@ -185,7 +189,7 @@ pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> 
             // Append-only: new arms go BELOW this one.
             ACTION_RESULTS_SCHEMA_ID => match decode_action_results(&proj.payload) {
                 Ok(model) => {
-                    let mut new_effects = blossom::apply_action_results(state, &model);
+                    let mut new_effects = blossom::apply_action_results(state, &model, now);
                     effects.append(&mut new_effects);
                 }
                 Err(e) => {
@@ -228,7 +232,7 @@ mod tests {
     #[test]
     fn decode_dispatch_handles_unknown_schema_id_gracefully() {
         let mut state = make_state();
-        let effects = dispatch_typed_frame(&mut state, &[]);
+        let effects = dispatch_typed_frame(&mut state, &[], 0);
         assert!(
             effects.is_empty(),
             "unknown/empty frame must produce no effects (D6)"
@@ -242,7 +246,7 @@ mod tests {
     fn malformed_frame_does_not_panic() {
         let mut state = make_state();
         let garbage = b"NOT A VALID FLATBUFFER FRAME AT ALL \x00\xFF\xFE";
-        let effects = dispatch_typed_frame(&mut state, garbage);
+        let effects = dispatch_typed_frame(&mut state, garbage, 0);
         assert!(
             effects.is_empty(),
             "malformed frame must produce no effects"
@@ -257,7 +261,7 @@ mod tests {
     fn dispatch_is_sync_pure() {
         let result = std::thread::spawn(|| {
             let mut state = make_state();
-            let _effects: Vec<Effect> = dispatch_typed_frame(&mut state, &[]);
+            let _effects: Vec<Effect> = dispatch_typed_frame(&mut state, &[], 0);
         })
         .join();
         assert!(

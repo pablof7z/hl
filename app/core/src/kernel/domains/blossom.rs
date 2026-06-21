@@ -147,10 +147,11 @@ fn parse_dim(dim: &str) -> (u32, u32) {
 pub(crate) fn apply_action_results(
     state: &mut AppState,
     model: &nmp_core::typed_projections::ActionResultsModel,
+    now: u64,
 ) -> Vec<Effect> {
     let mut effects = Vec::new();
     for row in &model.results {
-        let mut row_effects = apply_action_result_row(state, row);
+        let mut row_effects = apply_action_result_row(state, row, now);
         effects.append(&mut row_effects);
     }
     effects
@@ -162,7 +163,7 @@ pub(crate) fn apply_action_results(
 /// 1. Match `pending_upload_correlation_id` → upload result state change.
 /// 2. Match `pending_publish_correlation_id` → publish FSM state change.
 /// 3. No match → silent no-op (D6), logged at trace level.
-fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow) -> Vec<Effect> {
+fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow, now: u64) -> Vec<Effect> {
     use crate::kernel::domains::capture_draft::reduce_event_capture_publish_action_result;
 
     let cid = &row.correlation_id;
@@ -264,7 +265,7 @@ fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow) -> Vec<E
             error = %error,
             "apply_action_result_row: capture publish result"
         );
-        let effects = reduce_event_capture_publish_action_result(state, success, error);
+        let effects = reduce_event_capture_publish_action_result(state, success, error, now);
         return effects;
     }
 
@@ -651,7 +652,7 @@ mod tests {
             }],
         };
 
-        apply_action_results(&mut state, &model);
+        apply_action_results(&mut state, &model, 0);
 
         assert!(
             state.capture_draft.has_upload,
@@ -778,7 +779,7 @@ mod tests {
             }],
         };
 
-        apply_action_results(&mut state, &model);
+        apply_action_results(&mut state, &model, 0);
 
         // has_upload must still be false — the unknown row must be silently ignored.
         assert!(!state.capture_draft.has_upload);
@@ -813,7 +814,7 @@ mod tests {
             }],
         };
 
-        apply_action_results(&mut state, &model);
+        apply_action_results(&mut state, &model, 0);
 
         assert_eq!(
             state.capture_draft.publish_phase,
@@ -840,7 +841,7 @@ mod tests {
                 event_id: None,
             }],
         };
-        apply_action_results(&mut state2, &model2);
+        apply_action_results(&mut state2, &model2, 0);
         assert!(
             !matches!(state2.capture_draft.publish_phase, CaptureDraftPhase::Done),
             "status=\"success\" must NOT drive FSM to Done (nmp sends \"published\", not \"success\")"
@@ -881,7 +882,7 @@ mod tests {
                 event_id: None,
             }],
         };
-        apply_action_results(&mut state, &model_a);
+        apply_action_results(&mut state, &model_a, 0);
 
         assert!(
             state.capture_draft.has_upload,
@@ -914,7 +915,7 @@ mod tests {
                 event_id: None,
             }],
         };
-        apply_action_results(&mut state, &model_b);
+        apply_action_results(&mut state, &model_b, 0);
 
         assert!(state.capture_draft.has_upload);
         assert_eq!(

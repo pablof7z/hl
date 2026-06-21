@@ -971,7 +971,7 @@ fn search_scope_from_str(
 }
 
 /// Thin dispatcher: routes each `KernelEvent` variant to its owning domain handler.
-fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effect> {
+fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effect> {
     match event {
         KernelEvent::SessionRestored { present, pubkey } => {
             session::reduce_event_session_restored(state, present, pubkey)
@@ -1015,7 +1015,7 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // FlatBuffers decode — no network I/O, no allocation beyond the vec)
             // and dispatch to the projections domain handler which routes each
             // schema_id into the appropriate AppState field (or a no-op in 3A).
-            projections::dispatch_typed_frame(state, &bytes)
+            projections::dispatch_typed_frame(state, &bytes, now)
         }
 
         // ── Phase 3B additions (append-only) ─────────────────────────────────
@@ -1298,7 +1298,7 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             error,
         } => blossom::reduce_event_blossom_upload_result(state, success, blob_url, error),
         KernelEvent::CapturePublishActionResult { success, error } => {
-            capture_draft::reduce_event_capture_publish_action_result(state, success, error)
+            capture_draft::reduce_event_capture_publish_action_result(state, success, error, now)
         }
 
         // ── Phase 5I additions (append-only) ─────────────────────────────────
