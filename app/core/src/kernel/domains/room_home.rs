@@ -484,8 +484,10 @@ pub(crate) fn run_effect_dispatch_share_to_room(
 
 /// Extract the primary artifact coordinate from a kind:11 event.
 ///
-/// Priority: a → i → e → r tags. Returns `"<tag_name>:<value>"` or `None`
-/// when no recognised reference tag is present (D6 no-op).
+/// Priority: i → a → e → r tags (matches bespoke artifacts.rs:496 which
+/// prefers NIP-73 external ids over addressable coordinates). Returns
+/// `"<tag_name>:<value>"` or `None` when no recognised reference tag is
+/// present (D6 no-op).
 fn extract_artifact_coordinate(event: &nmp_core::substrate::KernelEvent) -> Option<String> {
     let tag_val = |name: &str| -> Option<String> {
         event
@@ -496,11 +498,12 @@ fn extract_artifact_coordinate(event: &nmp_core::substrate::KernelEvent) -> Opti
             .filter(|v| !v.is_empty())
             .cloned()
     };
-    if let Some(v) = tag_val("a") {
-        return Some(format!("a:{v}"));
-    }
+    // Priority i → a → e → r mirrors bespoke artifacts.rs coordinate extraction.
     if let Some(v) = tag_val("i") {
         return Some(format!("i:{v}"));
+    }
+    if let Some(v) = tag_val("a") {
+        return Some(format!("a:{v}"));
     }
     if let Some(v) = tag_val("e") {
         return Some(format!("e:{v}"));
@@ -509,6 +512,47 @@ fn extract_artifact_coordinate(event: &nmp_core::substrate::KernelEvent) -> Opti
         return Some(format!("r:{v}"));
     }
     None
+}
+
+/// Returns `true` when a kernel highlight row matches a lane artifact.
+///
+/// Mirrors bespoke `highlight_matches_artifact` (room_lanes.rs:95) using
+/// kernel types. Checks in order:
+/// 1. `source_reference_key` (canonical `"tag:value"` form — already the
+///    primary key used when building `highlights_by_reference` buckets).
+/// 2. `artifact_address` → matches `"a:{artifact_address}"` coordinate.
+/// 3. `event_reference` → matches `"e:{event_reference}"` coordinate, or
+///    the share event id of the kind:11 event.
+/// 4. `external_reference` → matches `"i:{external_reference}"` coordinate.
+/// 5. `source_url` → matches `"r:{source_url}"` coordinate.
+///
+/// Audio-URL and podcast-GUID cross-checks from bespoke are omitted because
+/// `ArtifactPreviewRow` does not carry those fields (D1 — kernel is raw,
+/// Swift hydrates). All other match paths are equivalent.
+fn kernel_highlight_matches_lane(hl: &HighlightRow, lib_row: &KernelRoomLibraryRow) -> bool {
+    let coord = &lib_row.coordinate;
+
+    if !hl.source_reference_key.is_empty() && &hl.source_reference_key == coord {
+        return true;
+    }
+    if !hl.artifact_address.is_empty() && format!("a:{}", hl.artifact_address) == *coord {
+        return true;
+    }
+    if !hl.event_reference.is_empty() {
+        if format!("e:{}", hl.event_reference) == *coord {
+            return true;
+        }
+        if hl.event_reference == lib_row.share_event_id {
+            return true;
+        }
+    }
+    if !hl.external_reference.is_empty() && format!("i:{}", hl.external_reference) == *coord {
+        return true;
+    }
+    if !hl.source_url.is_empty() && format!("r:{}", hl.source_url) == *coord {
+        return true;
+    }
+    false
 }
 
 /// Return `true` if the event has a `["t", "discussion"]` tag (marks a
@@ -739,29 +783,35 @@ pub(crate) fn project_room_home_snapshot(state: &AppState, group_id: &str) -> Op
     // comments) are excluded. Lanes sorted by latest_activity_at desc so iOS
     // renders the most-active artifact at the top.
     //
-    // Primary highlight match: by source_reference_key == coordinate (same key
-    // used in highlights_by_reference). Dedup by event_id via HashSet guard.
+    // Highlight match is two-pass (mirrors bespoke room_lanes.rs:38-65):
+    //   Pass 1 — from the pre-built highlights_by_reference bucket (coordinate key).
+    //   Pass 2 — full kernel_highlight_matches_lane scan for any remaining
+    //            highlights not captured by the bucket (e.g. artifact_address /
+    //            event_reference / external_reference / source_url cross-matches).
+    // Dedup by event_id HashSet across both passes.
     // Comment match: by root_tag_value (coordinate stripped of tag prefix).
     let assembled_lanes: Vec<KernelRoomLane> = {
         let mut lanes: Vec<KernelRoomLane> = Vec::with_capacity(artifact_library.len());
         for lib_row in &artifact_library {
             let coord = &lib_row.coordinate;
 
-            // Hydrated highlights for this lane (from the pre-built bucket).
+            // Pass 1: highlights from the pre-built bucket (source_reference_key match).
             let mut lane_highlights: Vec<HighlightRow> = highlights_by_reference
                 .iter()
                 .find(|b| &b.coordinate == coord)
                 .map(|b| b.highlights.clone())
                 .unwrap_or_default();
 
-            // Fallback: any highlight whose source_reference_key matches the
-            // coordinate but wasn't captured in the per-coordinate bucket
-            // (e.g. late-arriving highlights not yet in a bucket).
+            // Pass 2: full match (artifact_address / event_reference /
+            // external_reference / source_url) for highlights not yet captured.
+            // Mirrors bespoke highlight_matches_artifact fallback (room_lanes.rs:58-65).
             {
                 let mut seen: std::collections::HashSet<String> =
                     lane_highlights.iter().map(|h| h.event_id.clone()).collect();
                 for hl in &highlights {
-                    if &hl.source_reference_key == coord && seen.insert(hl.event_id.clone()) {
+                    if kernel_highlight_matches_lane(hl, lib_row)
+                        && seen.insert(hl.event_id.clone())
+                    {
                         lane_highlights.push(hl.clone());
                     }
                 }
@@ -2041,246 +2091,440 @@ mod tests {
         );
     }
 
-    // ─── Parity tests: assembled_lanes matches bespoke room_lanes.rs semantics ──
+    // ─── Parity tests: kernel snapshot vs crate::room_home::query_room_home_snapshot
     //
-    // These tests verify that project_room_home_snapshot produces assembled_lanes
-    // content equivalent to what crate::room_home::query_room_home_snapshot /
-    // crate::room_lanes::build_visible_room_lanes would produce for the same
-    // underlying data. They call project_room_home_snapshot and assert the lane
-    // assembly semantics field-for-field: dormant filter, dedup, activity ordering.
-    //
-    // crate::room_home::query_room_home_snapshot is pub(crate); these tests
-    // validate equivalent semantics using kernel AppState fixtures.
+    // Each test injects the SAME event fixture into BOTH a real nostrdb (bespoke
+    // path: crate::room_home::query_room_home_snapshot) AND kernel AppState (kernel
+    // path: project_room_home_snapshot). Both functions are called and their section
+    // counts are compared field-for-field. Any drift in highlight-matching,
+    // coordinate-precedence, or lane-assembly causes a test failure.
+    mod parity {
+        use super::*;
+        use crate::test_ndb::{isolated_ndb, process_event_and_wait};
+        use nostr_sdk::prelude::*;
 
-    // P1: assembled_lanes_populated_from_artifact_and_highlights
-    //
-    // An artifact lane with a matching highlight must appear in assembled_lanes
-    // with that highlight attached. Parity: bespoke lane would contain the same
-    // highlight via HighlightReferenceBucket.
-    #[test]
-    fn assembled_lanes_populated_from_artifact_and_highlights() {
-        let mut state = make_state();
-        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
-        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
-
-        let addr = "30023:1111000000000000000000000000000000000000000000000000000000000001:lane-p1";
-        inject_lane_event(&mut state, make_kind11_with_a_tag("lane-evt-p1", addr));
-        inject_hl_event(&mut state, make_kind9802_with_a_tag("hl-p1-001", addr));
-
-        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
-        if let ViewSnapshot::RoomHome(s) = snap {
-            assert_eq!(s.assembled_lanes.len(), 1, "must have 1 assembled lane");
-            let lane = &s.assembled_lanes[0];
-            assert_eq!(lane.artifact_coordinate, format!("a:{addr}"));
-            assert_eq!(lane.share_event_id, "lane-evt-p1");
-            assert_eq!(lane.highlights.len(), 1);
-            assert_eq!(lane.highlights[0].event_id, "hl-p1-001");
-            assert!(lane.comments.is_empty());
-            assert!(
-                lane.latest_activity_at > 0,
-                "latest_activity_at must be set"
-            );
-        } else {
-            panic!("expected RoomHome snapshot");
+        fn nostr_to_kernel(e: &Event) -> nmp_core::substrate::KernelEvent {
+            nmp_core::substrate::KernelEvent {
+                id: e.id.to_hex(),
+                author: e.pubkey.to_hex(),
+                kind: e.kind.as_u16() as u32,
+                created_at: e.created_at.as_secs(),
+                tags: e.tags.iter().map(|t| t.as_slice().to_vec()).collect(),
+                content: e.content.clone(),
+                relay_provenance: vec![],
+            }
         }
-    }
 
-    // P2: dormant_lane_excluded_from_assembled_lanes
-    //
-    // An artifact with no highlights AND no comments must be excluded from
-    // assembled_lanes. Parity: bespoke build_visible_room_lanes:75 skips dormant
-    // lanes with `if lane_highlights.is_empty() && lane_comments.is_empty()`.
-    #[test]
-    fn dormant_lane_excluded_from_assembled_lanes() {
-        let mut state = make_state();
-        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
-        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
-
-        let addr = "30023:2222000000000000000000000000000000000000000000000000000000000002:dormant";
-        // Inject the artifact share but NO highlights or comments.
-        inject_lane_event(&mut state, make_kind11_with_a_tag("dormant-evt", addr));
-
-        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
-        if let ViewSnapshot::RoomHome(s) = snap {
-            // artifact_library must have 1 entry (the share event is catalogued)...
-            assert_eq!(s.artifact_library.len(), 1, "artifact must be in library");
-            // ...but assembled_lanes must be EMPTY (dormant filter applied).
-            assert!(
-                s.assembled_lanes.is_empty(),
-                "dormant lane (no highlights, no comments) must be excluded from assembled_lanes"
-            );
-        } else {
-            panic!("expected RoomHome snapshot");
+        fn named_tag(name: &str, value: &str) -> Tag {
+            Tag::parse(vec![name.to_string(), value.to_string()]).unwrap()
         }
-    }
 
-    // P3: assembled_lanes_activity_ordering
-    //
-    // Two artifact lanes with different latest highlight timestamps must be sorted
-    // newest-activity-first. Parity: bespoke room_lanes.rs `lanes.sort_by` by
-    // `latest_activity` descending.
-    #[test]
-    fn assembled_lanes_activity_ordering() {
-        let mut state = make_state();
-        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
-        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+        fn inject_lane_event_for(
+            state: &mut AppState,
+            group_id: &str,
+            event: nmp_core::substrate::KernelEvent,
+        ) {
+            let feed_key = format!("{ROOM_LANE_FEED_KEY_PREFIX}{group_id}");
+            let fs = state.room_lanes.entry(feed_key).or_default();
+            crate::kernel::domains::feed::apply_feed_page(fs, vec![event], 1, false, None);
+        }
 
-        let addr_old = "30023:3333000000000000000000000000000000000000000000000000000000000003:old";
-        let addr_new = "30023:4444000000000000000000000000000000000000000000000000000000000004:new";
+        fn inject_hl_event_for(
+            state: &mut AppState,
+            group_id: &str,
+            event: nmp_core::substrate::KernelEvent,
+        ) {
+            let feed_key = format!("{ROOM_HIGHLIGHT_FEED_KEY_PREFIX}{group_id}");
+            let fs = state.room_highlight_feeds.entry(feed_key).or_default();
+            crate::kernel::domains::feed::apply_feed_page(fs, vec![event], 1, false, None);
+        }
 
-        inject_lane_event(&mut state, make_kind11_with_a_tag("art-old", addr_old));
-        inject_lane_event(&mut state, make_kind11_with_a_tag("art-new", addr_new));
+        // P1: parity_artifact_and_highlight_lane_counts_match
+        //
+        // Inject one kind:11 artifact share and one kind:9802 highlight into BOTH a
+        // real nostrdb (for the bespoke crate::room_home::query_room_home_snapshot
+        // call) AND kernel AppState (for project_room_home_snapshot). Assert that
+        // artifacts, highlights, highlights_by_reference, and assembled_lanes counts
+        // agree. Fails if highlight-matching or coordinate-precedence drifts.
+        #[test]
+        fn parity_artifact_and_highlight_lane_counts_match() {
+            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
+            let mut state = make_state();
+            state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+            state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
 
-        // Old artifact: highlight at t=1000 (older).
-        let hl_old = nmp_core::substrate::KernelEvent {
-            id: "hl-old-001".to_string(),
-            author: "c".repeat(64),
-            kind: 9802,
-            created_at: 1_700_001_000,
-            tags: vec![
-                vec!["h".to_string(), TEST_GROUP.to_string()],
-                vec!["a".to_string(), addr_old.to_string()],
-            ],
-            content: "old highlight".to_string(),
-            relay_provenance: vec![],
-        };
-        // New artifact: highlight at t=1_000_000 (much newer).
-        let hl_new = nmp_core::substrate::KernelEvent {
-            id: "hl-new-001".to_string(),
-            author: "c".repeat(64),
-            kind: 9802,
-            created_at: 1_700_002_000,
-            tags: vec![
-                vec!["h".to_string(), TEST_GROUP.to_string()],
-                vec!["a".to_string(), addr_new.to_string()],
-            ],
-            content: "newer highlight".to_string(),
-            relay_provenance: vec![],
-        };
-        inject_hl_event(&mut state, hl_old);
-        inject_hl_event(&mut state, hl_new);
+            let keys = Keys::generate();
+            let addr =
+                "30023:0000000000000000000000000000000000000000000000000000000000000001:p1-art";
 
-        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
-        if let ViewSnapshot::RoomHome(s) = snap {
-            assert_eq!(s.assembled_lanes.len(), 2, "must have 2 assembled lanes");
-            // Newer activity must come first.
+            let artifact_ev = EventBuilder::new(Kind::Custom(11), "")
+                .tags(vec![
+                    named_tag("h", TEST_GROUP),
+                    named_tag("a", addr),
+                    named_tag("k", "30023"),
+                    named_tag("title", "Parity Article P1"),
+                    named_tag("source", "article"),
+                ])
+                .custom_created_at(Timestamp::from(1_000_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+            let hl_ev = EventBuilder::new(Kind::Custom(9802), "highlighted passage")
+                .tags(vec![named_tag("h", TEST_GROUP), named_tag("a", addr)])
+                .custom_created_at(Timestamp::from(1_001_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+
+            // bespoke path: inject into real nostrdb
+            process_event_and_wait(&ndb, &artifact_ev);
+            process_event_and_wait(&ndb, &hl_ev);
+
+            // kernel path: inject into AppState
+            inject_lane_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&artifact_ev));
+            inject_hl_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&hl_ev));
+
+            let bespoke = crate::room_home::query_room_home_snapshot(&ndb, TEST_GROUP);
+            let ViewSnapshot::RoomHome(kernel) =
+                project_room_home_snapshot(&state, TEST_GROUP).unwrap()
+            else {
+                panic!("expected RoomHome snapshot");
+            };
+
             assert_eq!(
-                s.assembled_lanes[0].artifact_coordinate,
-                format!("a:{addr_new}"),
-                "lane with newer highlight must sort first"
+                bespoke.artifacts.len(),
+                kernel.artifact_library.len(),
+                "P1: artifact count must match"
             );
             assert_eq!(
-                s.assembled_lanes[1].artifact_coordinate,
-                format!("a:{addr_old}"),
-                "lane with older highlight must sort last"
+                bespoke.highlights.len(),
+                kernel.highlights.len(),
+                "P1: highlight count must match"
             );
-            assert!(
-                s.assembled_lanes[0].latest_activity_at > s.assembled_lanes[1].latest_activity_at,
-                "latest_activity_at must be strictly descending"
-            );
-        } else {
-            panic!("expected RoomHome snapshot");
-        }
-    }
-
-    // P4: assembled_lanes_comments_attached
-    //
-    // A lane with a comment thread entry but no highlights must appear in
-    // assembled_lanes with comments populated (not dormant-filtered).
-    #[test]
-    fn assembled_lanes_comments_attached() {
-        let mut state = make_state();
-        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
-        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
-
-        let addr = "30023:5555000000000000000000000000000000000000000000000000000000000005:cmnt-p4";
-        let root_val = addr; // root_tag_value strips the "a:" prefix
-
-        inject_lane_event(&mut state, make_kind11_with_a_tag("art-cmnt-p4", addr));
-
-        let record = nmp_nip22::CommentRecord {
-            event_id: "comment-p4-001".to_string(),
-            author_pubkey: "e".repeat(64),
-            body: "parity comment".to_string(),
-            root_tag_name: "A".to_string(),
-            root_tag_value: root_val.to_string(),
-            root_kind: "30023".to_string(),
-            parent_tag_name: "a".to_string(),
-            parent_tag_value: root_val.to_string(),
-            parent_kind: "30023".to_string(),
-            created_at: 1_700_005_000,
-        };
-        let snapshot = nmp_nip22::CommentThreadSnapshot {
-            root_tag_value: root_val.to_string(),
-            records: vec![record],
-            tree: vec![],
-        };
-        state.comment_threads.insert(root_val.to_string(), snapshot);
-
-        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
-        if let ViewSnapshot::RoomHome(s) = snap {
             assert_eq!(
-                s.assembled_lanes.len(),
-                1,
-                "lane with comments must NOT be dormant-filtered"
+                bespoke.highlights_by_reference.len(),
+                kernel.highlights_by_reference.len(),
+                "P1: highlights_by_reference count must match — matching logic drifted"
             );
-            let lane = &s.assembled_lanes[0];
-            assert_eq!(lane.artifact_coordinate, format!("a:{addr}"));
-            assert!(lane.highlights.is_empty(), "no highlights in this lane");
-            assert_eq!(lane.comments.len(), 1);
-            assert_eq!(lane.comments[0].event_id, "comment-p4-001");
-            assert_eq!(lane.latest_activity_at, 1_700_005_000);
-        } else {
-            panic!("expected RoomHome snapshot");
+            assert_eq!(
+                bespoke.lanes.len(),
+                kernel.assembled_lanes.len(),
+                "P1: assembled lane count must match"
+            );
+            assert_eq!(bespoke.lanes.len(), 1, "P1: fixture must yield 1 lane");
         }
-    }
 
-    // P5: discussion_artifact_coordinate_extracted
-    //
-    // A kind:11 discussion event with an `a` tag must produce a DiscussionRow
-    // with artifact_coordinate populated. Parity: Gap 2 fix — extract_artifact_coordinate
-    // in discussions.rs resolves the reference for the artifact chip.
-    //
-    // Tested indirectly: inject a discussion row directly into AppState::room_discussions
-    // (simulating what DiscussionObserver would produce after discussions.rs fix).
-    #[test]
-    fn discussion_artifact_coordinate_extracted() {
-        use crate::kernel::snapshot::DiscussionRow;
+        // P2: parity_dormant_lane_excluded_by_both_functions
+        //
+        // An artifact share with no highlights AND no comments must be excluded from
+        // lanes in both bespoke (build_visible_room_lanes:75 dormant filter) and
+        // kernel (assembled_lanes dormant filter). Both must agree: 0 lanes.
+        #[test]
+        fn parity_dormant_lane_excluded_by_both_functions() {
+            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
+            let mut state = make_state();
+            state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+            state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
 
-        let addr = "30023:6666000000000000000000000000000000000000000000000000000000000006:disc-p5";
-        let coord = format!("a:{addr}");
+            let keys = Keys::generate();
+            let addr =
+                "30023:0000000000000000000000000000000000000000000000000000000000000002:p2-dormant";
 
-        // Simulate the DiscussionObserver producing a row with artifact_coordinate
-        // populated (this is what the Gap 2 fix to discussions.rs delivers).
-        let row = DiscussionRow {
-            event_id: "disc-evt-p5".to_string(),
-            author_pubkey: "f".repeat(64),
-            title: "Interesting article".to_string(),
-            body: "Check out this article!".to_string(),
-            attachment_url: None,
-            artifact_coordinate: Some(coord.clone()),
-            created_at: 1_700_006_000,
-        };
+            let artifact_ev = EventBuilder::new(Kind::Custom(11), "")
+                .tags(vec![
+                    named_tag("h", TEST_GROUP),
+                    named_tag("a", addr),
+                    named_tag("k", "30023"),
+                ])
+                .custom_created_at(Timestamp::from(1_000_000))
+                .sign_with_keys(&keys)
+                .unwrap();
 
-        // Verify the field round-trips through AppState.
-        let mut state = make_state();
-        state
-            .room_discussions
-            .insert(TEST_GROUP.to_string(), vec![row]);
+            process_event_and_wait(&ndb, &artifact_ev);
+            inject_lane_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&artifact_ev));
 
-        let retrieved = &state.room_discussions[TEST_GROUP][0];
-        assert_eq!(
-            retrieved.artifact_coordinate.as_deref(),
-            Some(coord.as_str()),
-            "artifact_coordinate must round-trip through AppState::room_discussions"
-        );
+            let bespoke = crate::room_home::query_room_home_snapshot(&ndb, TEST_GROUP);
+            let ViewSnapshot::RoomHome(kernel) =
+                project_room_home_snapshot(&state, TEST_GROUP).unwrap()
+            else {
+                panic!("expected RoomHome snapshot");
+            };
 
-        // ensure_room_artifact_previews must seed artifact_previews for the
-        // discussion's coordinate (Gap 2: discussion coordinates included in seeding).
-        let _effects = ensure_room_artifact_previews(&mut state, TEST_GROUP);
-        assert!(
-            state.artifact_previews.contains_key(&coord),
-            "ensure_room_artifact_previews must seed artifact_previews for discussion coordinate"
-        );
+            assert_eq!(
+                bespoke.artifacts.len(),
+                kernel.artifact_library.len(),
+                "P2: artifact count must match"
+            );
+            assert_eq!(
+                bespoke.lanes.len(),
+                kernel.assembled_lanes.len(),
+                "P2: dormant filter must agree — both must exclude the lane"
+            );
+            assert_eq!(
+                bespoke.lanes.len(),
+                0,
+                "P2: dormant artifact must yield 0 lanes"
+            );
+        }
+
+        // P3: parity_comment_only_lane_not_dormant
+        //
+        // A lane with a comment but no highlights must survive the dormant filter in
+        // both bespoke (build_visible_room_lanes:75) and kernel (assembled_lanes).
+        // The bespoke path reads kind:1111 from nostrdb; kernel reads from
+        // state.comment_threads. Both must produce 1 lane and 1 comments_by_reference.
+        #[test]
+        fn parity_comment_only_lane_not_dormant() {
+            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
+            let mut state = make_state();
+            state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+            state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+            let keys = Keys::generate();
+            let addr =
+                "30023:0000000000000000000000000000000000000000000000000000000000000003:p3-cmnt";
+            let root_val = addr;
+
+            let artifact_ev = EventBuilder::new(Kind::Custom(11), "")
+                .tags(vec![
+                    named_tag("h", TEST_GROUP),
+                    named_tag("a", addr),
+                    named_tag("k", "30023"),
+                ])
+                .custom_created_at(Timestamp::from(1_000_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+            let comment_ev = EventBuilder::new(Kind::Custom(1111), "a comment")
+                .tags(vec![
+                    named_tag("A", root_val),
+                    named_tag("K", "30023"),
+                    named_tag("a", root_val),
+                    named_tag("k", "30023"),
+                ])
+                .custom_created_at(Timestamp::from(1_002_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+
+            // bespoke path: both events into nostrdb
+            process_event_and_wait(&ndb, &artifact_ev);
+            process_event_and_wait(&ndb, &comment_ev);
+
+            // kernel path: artifact into room_lanes; comment into comment_threads
+            inject_lane_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&artifact_ev));
+            let record = nmp_nip22::CommentRecord {
+                event_id: comment_ev.id.to_hex(),
+                author_pubkey: comment_ev.pubkey.to_hex(),
+                body: "a comment".to_string(),
+                root_tag_name: "A".to_string(),
+                root_tag_value: root_val.to_string(),
+                root_kind: "30023".to_string(),
+                parent_tag_name: "a".to_string(),
+                parent_tag_value: root_val.to_string(),
+                parent_kind: "30023".to_string(),
+                created_at: 1_002_000,
+            };
+            state.comment_threads.insert(
+                root_val.to_string(),
+                nmp_nip22::CommentThreadSnapshot {
+                    root_tag_value: root_val.to_string(),
+                    records: vec![record],
+                    tree: vec![],
+                },
+            );
+
+            let bespoke = crate::room_home::query_room_home_snapshot(&ndb, TEST_GROUP);
+            let ViewSnapshot::RoomHome(kernel) =
+                project_room_home_snapshot(&state, TEST_GROUP).unwrap()
+            else {
+                panic!("expected RoomHome snapshot");
+            };
+
+            assert_eq!(
+                bespoke.lanes.len(),
+                kernel.assembled_lanes.len(),
+                "P3: comment-only lane must survive dormant filter in both"
+            );
+            assert_eq!(bespoke.lanes.len(), 1, "P3: bespoke must have 1 lane");
+            assert_eq!(
+                bespoke.comments_by_reference.len(),
+                kernel.comments_by_reference.len(),
+                "P3: comments_by_reference count must match"
+            );
+        }
+
+        // P4: parity_full_lane_all_five_sections
+        //
+        // Full fixture: kind:11 artifact + kind:9802 highlight + kind:1111 comment.
+        // Inject into both nostrdb and kernel AppState. All five section counts AND
+        // lane content counts must agree between bespoke and kernel.
+        #[test]
+        fn parity_full_lane_all_five_sections() {
+            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
+            let mut state = make_state();
+            state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+            state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+            let keys = Keys::generate();
+            let addr =
+                "30023:0000000000000000000000000000000000000000000000000000000000000004:p4-full";
+            let root_val = addr;
+
+            let artifact_ev = EventBuilder::new(Kind::Custom(11), "")
+                .tags(vec![
+                    named_tag("h", TEST_GROUP),
+                    named_tag("a", addr),
+                    named_tag("k", "30023"),
+                    named_tag("title", "Full Parity Article"),
+                ])
+                .custom_created_at(Timestamp::from(1_000_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+            let hl_ev = EventBuilder::new(Kind::Custom(9802), "highlighted text")
+                .tags(vec![named_tag("h", TEST_GROUP), named_tag("a", addr)])
+                .custom_created_at(Timestamp::from(1_001_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+            let comment_ev = EventBuilder::new(Kind::Custom(1111), "a comment on the article")
+                .tags(vec![
+                    named_tag("A", root_val),
+                    named_tag("K", "30023"),
+                    named_tag("a", root_val),
+                    named_tag("k", "30023"),
+                ])
+                .custom_created_at(Timestamp::from(1_002_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+
+            // bespoke path
+            process_event_and_wait(&ndb, &artifact_ev);
+            process_event_and_wait(&ndb, &hl_ev);
+            process_event_and_wait(&ndb, &comment_ev);
+
+            // kernel path
+            inject_lane_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&artifact_ev));
+            inject_hl_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&hl_ev));
+            let record = nmp_nip22::CommentRecord {
+                event_id: comment_ev.id.to_hex(),
+                author_pubkey: comment_ev.pubkey.to_hex(),
+                body: "a comment on the article".to_string(),
+                root_tag_name: "A".to_string(),
+                root_tag_value: root_val.to_string(),
+                root_kind: "30023".to_string(),
+                parent_tag_name: "a".to_string(),
+                parent_tag_value: root_val.to_string(),
+                parent_kind: "30023".to_string(),
+                created_at: 1_002_000,
+            };
+            state.comment_threads.insert(
+                root_val.to_string(),
+                nmp_nip22::CommentThreadSnapshot {
+                    root_tag_value: root_val.to_string(),
+                    records: vec![record],
+                    tree: vec![],
+                },
+            );
+
+            let bespoke = crate::room_home::query_room_home_snapshot(&ndb, TEST_GROUP);
+            let ViewSnapshot::RoomHome(kernel) =
+                project_room_home_snapshot(&state, TEST_GROUP).unwrap()
+            else {
+                panic!("expected RoomHome snapshot");
+            };
+
+            assert_eq!(
+                bespoke.artifacts.len(),
+                kernel.artifact_library.len(),
+                "P4: artifact count"
+            );
+            assert_eq!(
+                bespoke.highlights.len(),
+                kernel.highlights.len(),
+                "P4: highlight count"
+            );
+            assert_eq!(
+                bespoke.highlights_by_reference.len(),
+                kernel.highlights_by_reference.len(),
+                "P4: highlights_by_reference count"
+            );
+            assert_eq!(
+                bespoke.comments_by_reference.len(),
+                kernel.comments_by_reference.len(),
+                "P4: comments_by_reference count"
+            );
+            assert_eq!(
+                bespoke.lanes.len(),
+                kernel.assembled_lanes.len(),
+                "P4: assembled lane count"
+            );
+            assert_eq!(bespoke.lanes.len(), 1, "P4: fixture must yield 1 lane");
+            assert_eq!(
+                bespoke.lanes[0].highlights.len(),
+                kernel.assembled_lanes[0].highlights.len(),
+                "P4: lane highlight count"
+            );
+            assert_eq!(
+                bespoke.lanes[0].comments.len(),
+                kernel.assembled_lanes[0].comments.len(),
+                "P4: lane comment count"
+            );
+        }
+
+        // P5: parity_discussion_excluded_from_artifacts_coordinate_seeds_preview
+        //
+        // A kind:11 discussion event (with t:discussion marker) must be excluded
+        // from bespoke artifacts — query_room_home_snapshot skips discussions.
+        // The same event's artifact_coordinate in room_discussions must seed
+        // artifact_previews via ensure_room_artifact_previews (Gap 3 fix).
+        #[test]
+        fn parity_discussion_excluded_from_artifacts_coordinate_seeds_preview() {
+            use crate::kernel::snapshot::DiscussionRow;
+
+            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
+            let mut state = make_state();
+            state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+
+            let keys = Keys::generate();
+            let addr =
+                "30023:0000000000000000000000000000000000000000000000000000000000000005:p5-disc";
+            let coord = format!("a:{addr}");
+
+            let disc_ev = EventBuilder::new(Kind::Custom(11), "Check this out!")
+                .tags(vec![
+                    named_tag("h", TEST_GROUP),
+                    named_tag("t", "discussion"),
+                    named_tag("a", addr),
+                ])
+                .custom_created_at(Timestamp::from(1_000_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+
+            // bespoke: discussion must be excluded from artifacts
+            process_event_and_wait(&ndb, &disc_ev);
+            let bespoke = crate::room_home::query_room_home_snapshot(&ndb, TEST_GROUP);
+            assert_eq!(
+                bespoke.artifacts.len(),
+                0,
+                "P5: bespoke must exclude discussion events from artifacts"
+            );
+
+            // kernel: discussion row with artifact_coordinate must seed a preview
+            // (mirrors what discussions.rs DiscussionObserver produces after Gap 2 fix)
+            let row = DiscussionRow {
+                event_id: disc_ev.id.to_hex(),
+                author_pubkey: disc_ev.pubkey.to_hex(),
+                title: String::new(),
+                body: "Check this out!".to_string(),
+                attachment_url: None,
+                artifact_coordinate: Some(coord.clone()),
+                created_at: 1_000_000,
+            };
+            state
+                .room_discussions
+                .insert(TEST_GROUP.to_string(), vec![row]);
+
+            let _effects = ensure_room_artifact_previews(&mut state, TEST_GROUP);
+            assert!(
+                state.artifact_previews.contains_key(&coord),
+                "P5: ensure_room_artifact_previews must seed preview for discussion coordinate"
+            );
+        }
     }
 }
