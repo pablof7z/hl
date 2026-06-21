@@ -836,7 +836,7 @@ fn first_non_empty(values: &[&str]) -> String {
 
 /// Pure builder for the kind:11 artifact share event. Mirrors
 /// `buildArtifactShareEvent` (`web/src/lib/ndk/artifacts.ts:509-590`).
-fn build_share_event(
+pub(crate) fn build_share_event(
     group_id: &str,
     preview: &ArtifactPreview,
     note: Option<&str>,

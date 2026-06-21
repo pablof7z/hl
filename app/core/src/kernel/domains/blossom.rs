@@ -148,10 +148,12 @@ pub(crate) fn apply_action_results(
     state: &mut AppState,
     model: &nmp_core::typed_projections::ActionResultsModel,
 ) -> Vec<Effect> {
+    let mut effects = Vec::new();
     for row in &model.results {
-        apply_action_result_row(state, row);
+        let mut row_effects = apply_action_result_row(state, row);
+        effects.append(&mut row_effects);
     }
-    vec![]
+    effects
 }
 
 /// Apply one settled `ActionResultRow` to `AppState`.
@@ -160,7 +162,7 @@ pub(crate) fn apply_action_results(
 /// 1. Match `pending_upload_correlation_id` → upload result state change.
 /// 2. Match `pending_publish_correlation_id` → publish FSM state change.
 /// 3. No match → silent no-op (D6), logged at trace level.
-fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow) {
+fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow) -> Vec<Effect> {
     use crate::kernel::domains::capture_draft::reduce_event_capture_publish_action_result;
 
     let cid = &row.correlation_id;
@@ -245,7 +247,7 @@ fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow) {
             "apply_action_result_row: blossom upload result"
         );
         reduce_event_blossom_upload_result_inner(state, success, blob_url, blossom_upload);
-        return;
+        return Vec::new();
     }
 
     // 2. Capture publish correlation_id?
@@ -262,8 +264,8 @@ fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow) {
             error = %error,
             "apply_action_result_row: capture publish result"
         );
-        reduce_event_capture_publish_action_result(state, success, error);
-        return;
+        let effects = reduce_event_capture_publish_action_result(state, success, error);
+        return effects;
     }
 
     // 3. Podcast clip publish correlation_id? (Phase 5J)
@@ -275,10 +277,10 @@ fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow) {
             error = %error,
             "apply_action_result_row: clip publish result"
         );
-        crate::kernel::domains::podcast::reduce_event_clip_publish_action_result(
+        let effects = crate::kernel::domains::podcast::reduce_event_clip_publish_action_result(
             state, success, error,
         );
-        return;
+        return effects;
     }
 
     // 4. Unknown correlation_id — silent no-op (D6).
@@ -287,6 +289,7 @@ fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow) {
         status = %row.status,
         "apply_action_result_row: unrecognised correlation_id — no-op"
     );
+    Vec::new()
 }
 
 // ─── Event reducers ─────────────────────────────────────────────────────────────

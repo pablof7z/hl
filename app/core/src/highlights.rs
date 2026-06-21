@@ -1541,7 +1541,7 @@ pub fn article_reader_highlight_draft(
 
 /// Build the kind:9802 highlight `EventBuilder`. Pure — safe to unit test.
 /// Matches `publishCanonicalHighlight` (highlights.ts:359-423).
-fn build_highlight_event(
+pub(crate) fn build_highlight_event(
     draft: &HighlightDraft,
     artifact: &ArtifactRecord,
 ) -> Result<EventBuilder, CoreError> {
@@ -1671,7 +1671,7 @@ pub(crate) fn build_imeta_tag(image: &BlossomUpload) -> Result<Tag, CoreError> {
 
 /// Build the kind:16 repost `EventBuilder` that shares a highlight into a
 /// NIP-29 community. Pure — safe to unit test.
-fn build_repost_event(
+pub(crate) fn build_repost_event(
     highlight_event_id: EventId,
     highlight_author_pubkey_hex: &str,
     target_group_id: &str,

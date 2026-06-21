@@ -214,31 +214,55 @@ pub struct CaptureDraftState {
     /// a fire-and-forget kind:11 artifact publish BEFORE the correlated kind:9802
     /// highlight publish. Tests set this field directly on `AppState::capture_draft`.
     pub artifact_preview: Option<crate::kernel::models::ArtifactPreview>,
+
+    // ── kind:16 group-share additions (append-only) ──────────────────────────
+    /// When a highlight is published into a NIP-29 group (quote path with a
+    /// `target_group_id`), holds the group id so a kind:16 generic repost can be
+    /// emitted AFTER the highlight publish succeeds. Mirrors the bespoke
+    /// `publish_and_share` (highlights.rs:788) two-step share. Cleared once the
+    /// repost is emitted. `None` when the highlight is not group-targeted.
+    pub pending_group_repost_group_id: Option<String>,
+    /// Active author pubkey (hex) captured at publish time for the kind:16 repost
+    /// `p` tag. Paired with `pending_group_repost_group_id`.
+    pub pending_group_repost_author_pubkey_hex: Option<String>,
+
+    // ── pending-book FSM ordering (append-only) ──────────────────────────────
+    /// When a pending-book artifact publish is in-flight, holds the highlight
+    /// event JSON to emit once the artifact publish succeeds. The highlight
+    /// publish is gated on this: if artifact fails, FSM goes to Error without
+    /// publishing the highlight.
+    pub pending_highlight_json: Option<String>,
 }
 
 impl CaptureDraftState {
     /// The publish gate — mirrors `publish_projection` from the live lane
-    /// (`capture.rs:182`) with per-path `has_upload` semantics.
+    /// (`capture.rs:188`: `can_publish = phase_allows_publish && has_upload`).
     ///
-    /// * **Quote path** (kind:9802 text highlight): `phase == Reviewing` AND
-    ///   `quote` is non-empty after trim. A Blossom image is NOT required —
-    ///   NIP-84 text highlights are valid without an image URL. `has_upload`
-    ///   becomes optional metadata that 5G attaches when the camera was used.
+    /// The iOS capture flow is always image-based (photo-always invariant), so
+    /// BOTH paths require `phase == Reviewing` AND a completed Blossom upload
+    /// (`has_upload == true`). No path publishes without an image.
     ///
-    /// * **Picture/kind:20 path**: `phase == Reviewing` AND markdown is
-    ///   non-empty AND a target group is set AND `has_upload == true`. The live
-    ///   lane requires `has_upload` for every capture because every capture is
-    ///   image-based. This path is gated closed until 5G sets `has_upload`.
+    /// * **Quote/highlight path** (kind:9802): additionally requires a non-empty
+    ///   `quote` after trim.
+    ///
+    /// * **Picture/kind:20 path**: additionally requires non-empty markdown AND a
+    ///   target group.
     pub fn can_publish(&self, ocr_markdown: &str) -> bool {
         if self.publish_phase != CaptureDraftPhase::Reviewing {
             return false;
         }
-        // Quote path: text highlight, no image upload required.
+        // The iOS capture flow is always image-based (photo-always invariant).
+        // Both paths require a completed Blossom upload before publish, mirroring
+        // the bespoke capture.rs:188: `can_publish = phase_allows_publish && has_upload`.
+        if !self.has_upload {
+            return false;
+        }
+        // Quote/highlight path: kind:9802.
         if !self.quote.is_empty() {
             return true;
         }
-        // Markdown/kind:11 path: requires an uploaded image (5G wires this).
-        self.has_upload && !ocr_markdown.is_empty() && self.target_group_id.is_some()
+        // Picture/kind:20 path: also requires OCR markdown and a target group.
+        !ocr_markdown.is_empty() && self.target_group_id.is_some()
     }
 }
 
@@ -336,8 +360,11 @@ pub(crate) fn reduce_action_clear_target_group(state: &mut AppState) -> Vec<Effe
 ///   `artifact_preview` present): kind:9802 with NIP-92 imeta (from
 ///   `blossom_upload`), artifact reference tag, optional context/comment tags.
 ///   For the pending-book variant (`artifact_preview` set, `artifact_record`
-///   absent) a fire-and-forget kind:11 artifact share is emitted first via
-///   `Effect::PublishCaptureEvent`, then the correlated kind:9802 follows.
+///   absent, with a host group) the kind:11 artifact share is published FIRST
+///   as the correlated primary; the kind:9802 highlight is deferred and emitted
+///   only once the artifact publish succeeds (so a failed artifact cannot let
+///   the FSM lie — Issue 3). A group-targeted highlight additionally schedules a
+///   kind:16 generic repost into the group on success (Issue 1).
 /// * **Highlight only** (`quote` non-empty, no artifact): minimal kind:9802 with
 ///   optional context/comment/imeta tags (NIP-84 text highlight, no artifact
 ///   reference).
@@ -365,70 +392,87 @@ pub(crate) fn reduce_action_publish(state: &mut AppState, now: u64) -> Vec<Effec
     // publish outcome back to this draft. 5G closes the loop that 5F left open.
     let correlation_id = new_correlation_id();
 
-    let draft = &state.capture_draft;
+    // Active author pubkey — captured now for a possible kind:16 group repost
+    // (mirrors the bespoke `publish_and_share` two-step: highlight then repost).
+    let active_pubkey =
+        if let crate::kernel::app::SessionState::Present { pubkey, .. } = &state.session {
+            Some(pubkey.clone())
+        } else {
+            None
+        };
 
-    // Collect any leading fire-and-forget effects (pending-book artifact publish).
-    let mut prefix_effects: Vec<Effect> = Vec::new();
+    // ── Build phase (immutable borrow of the draft) ───────────────────────────
+    // Outputs computed while borrowing the draft, then committed below:
+    //  * `primary_json`            — event published with `correlation_id` now.
+    //  * `deferred_highlight_json` — Some on the pending-book path: the kind:9802
+    //    highlight to publish ONLY AFTER the artifact (the primary) succeeds, so
+    //    a silent artifact failure cannot let the FSM lie (Issue 3).
+    //  * `repost_group_id`         — Some when a group-targeted highlight should
+    //    emit a kind:16 generic repost into the group on success (Issue 1).
+    let mut deferred_highlight_json: Option<String> = None;
+    let mut repost_group_id: Option<String> = None;
 
-    let event_json_result: Result<String, &'static str> = if !draft.quote.is_empty() {
-        // ── Quote path ──────────────────────────────────────────────────────────
-        //
-        // Resolve the artifact record:
-        //  - existing `artifact_record` (already published kind:11)
-        //  - OR `artifact_preview` (pending book — emit fire-and-forget kind:11
-        //    first, then reference the artifact in the kind:9802 using the preview's
-        //    `highlight_tag_name/value` which is deterministic from the preview alone)
-        let artifact = draft.artifact_record.clone().or_else(|| {
-            draft
-                .artifact_preview
-                .as_ref()
-                .map(|p| crate::artifacts::unpublished_record(p.clone()))
-        });
+    let primary_json_result: Result<String, &'static str> = {
+        let draft = &state.capture_draft;
 
-        if let Some(artifact_rec) = artifact {
-            // Pending-book: emit artifact publish (fire-and-forget) before the
-            // highlight publish. The kind:11 artifact event runs concurrently
-            // in the actor; the highlight's artifact ref tags use
-            // `preview.highlight_tag_name/value` which are deterministic from
-            // the preview alone (not from the artifact's event_id).
-            if draft.artifact_record.is_none() {
-                if let (Some(preview), Some(group_id)) =
-                    (&draft.artifact_preview, &draft.target_group_id)
-                {
-                    match build_artifact_share_event_json(preview, group_id) {
-                        Ok(artifact_json) => {
-                            prefix_effects.push(Effect::PublishCaptureEvent {
-                                json: artifact_json,
-                            });
-                        }
-                        Err(msg) => {
-                            tracing::warn!(
-                                "capture.publish: pending-book artifact build failed: {} — proceeding without artifact publish",
-                                msg
-                            );
-                        }
-                    }
-                }
+        if !draft.quote.is_empty() {
+            // ── Quote/highlight path (kind:9802) ─────────────────────────────────
+            // A group-targeted highlight schedules a kind:16 repost on success.
+            let group_id = draft.target_group_id.as_deref().filter(|g| !g.is_empty());
+            if let Some(gid) = group_id {
+                repost_group_id = Some(gid.to_string());
             }
 
-            build_capture_highlight_event_json(draft, &artifact_rec)
+            // Resolve the artifact record:
+            //  - existing `artifact_record` (already published kind:11), OR
+            //  - `artifact_preview` (pending book — the artifact is published
+            //    first as the correlated primary, then the highlight follows).
+            let artifact = draft.artifact_record.clone().or_else(|| {
+                draft
+                    .artifact_preview
+                    .as_ref()
+                    .map(|p| crate::artifacts::unpublished_record(p.clone()))
+            });
+
+            match artifact {
+                Some(artifact_rec) => {
+                    let is_pending_book =
+                        draft.artifact_record.is_none() && draft.artifact_preview.is_some();
+                    match (is_pending_book, &draft.artifact_preview, group_id) {
+                        (true, Some(preview), Some(gid)) => {
+                            // Pending-book with a host group: publish the artifact
+                            // (kind:11) as the correlated primary; defer the
+                            // highlight until that publish succeeds (Issue 3).
+                            match build_capture_highlight_event_json(draft, &artifact_rec) {
+                                Ok(highlight_json) => {
+                                    deferred_highlight_json = Some(highlight_json);
+                                    build_artifact_share_event_json(preview, gid)
+                                }
+                                Err(msg) => Err(msg),
+                            }
+                        }
+                        // Published artifact, or pending-book without a host group:
+                        // single correlated highlight publish.
+                        _ => build_capture_highlight_event_json(draft, &artifact_rec),
+                    }
+                }
+                None => {
+                    // No artifact: minimal kind:9802 text highlight (NIP-84). The
+                    // kernel supports a text highlight without a book/article ref;
+                    // imeta is attached when a Blossom upload is present.
+                    build_capture_minimal_highlight_event_json(draft)
+                }
+            }
         } else {
-            // No artifact: minimal kind:9802 text highlight. The kernel supports
-            // publishing a text highlight without a photo (unlike the bespoke
-            // capture lane which always has an image). Context and comment tags
-            // use the NIP-84 canonical names; imeta is attached if an upload exists.
-            build_capture_minimal_highlight_event_json(draft)
+            // ── Picture path (kind:20 NIP-68) ────────────────────────────────────
+            // No quote. `target_group_id` is guaranteed `Some` AND `has_upload`
+            // is `true` here (enforced by `can_publish`). kind:20 carries the
+            // `h` tag inline, so there is NO kind:16 group repost on this path.
+            build_capture_picture_event_json(draft)
         }
-    } else {
-        // ── Picture path ─────────────────────────────────────────────────────────
-        // No quote: kind:20 NIP-68 picture (NOT kind:11). `target_group_id` is
-        // guaranteed `Some` AND `has_upload` is `true` here (enforced by
-        // `can_publish`). Uses OCR markdown as the content source only to gate
-        // `can_publish`; the actual event content is `draft.note`.
-        build_capture_picture_event_json(draft)
     };
 
-    let json = match event_json_result {
+    let primary_json = match primary_json_result {
         Ok(j) => j,
         Err(msg) => {
             tracing::warn!("capture.publish: {} — no-op (D6)", msg);
@@ -436,17 +480,20 @@ pub(crate) fn reduce_action_publish(state: &mut AppState, now: u64) -> Vec<Effec
         }
     };
 
-    // Store the correlation_id so the action_results arm can look it up.
+    // ── Commit phase (mutable) ────────────────────────────────────────────────
     state.capture_draft.pending_publish_correlation_id = Some(correlation_id.clone());
     // Record `now` for the clock-driven timeout fallback (D8).
     state.capture_draft.publish_phase = CaptureDraftPhase::Publishing { started_at: now };
+    state.capture_draft.pending_highlight_json = deferred_highlight_json;
+    if let Some(gid) = repost_group_id {
+        state.capture_draft.pending_group_repost_group_id = Some(gid);
+        state.capture_draft.pending_group_repost_author_pubkey_hex = active_pubkey;
+    }
 
-    let mut effects = prefix_effects;
-    effects.push(Effect::PublishCaptureWithCorrelation {
-        json,
+    vec![Effect::PublishCaptureWithCorrelation {
+        json: primary_json,
         correlation_id,
-    });
-    effects
+    }]
 }
 
 // ─── Pure event-building helpers ────────────────────────────────────────────────
@@ -622,41 +669,92 @@ pub(crate) fn build_capture_picture_event_json(
     serde_json::to_string(&event_json).map_err(|_| "serde_json failed (20 picture)")
 }
 
-/// Build a minimal kind:11 artifact share event JSON template for the
-/// pending-book path. Mirrors the key tags of `artifacts::build_share_event`
-/// (artifacts.rs:839) — h, d, title, source, reference, r, author.
-/// Emitted as a fire-and-forget `Effect::PublishCaptureEvent` so the artifact
-/// is published concurrently with the kind:9802 highlight that references it.
+/// Build a kind:11 artifact share event JSON template for the pending-book
+/// path. Complete mirror of `artifacts::build_share_event` (artifacts.rs:839):
+/// h, d, title, source, reference (with secondary podcast feed `i`), r, author,
+/// image, summary, and the podcast-specific tags (podcast_guid,
+/// podcast_show_title, audio, audio_preview, transcript, feed, published_at,
+/// duration). Published via `Effect::PublishCaptureWithCorrelation` as the
+/// pending-book primary before the deferred kind:9802 highlight.
 fn build_artifact_share_event_json(
     preview: &crate::kernel::models::ArtifactPreview,
     group_id: &str,
 ) -> Result<String, &'static str> {
     let mut tags: Vec<serde_json::Value> = vec![
         serde_json::json!(["h", group_id]),
-        serde_json::json!(["d", preview.id]),
-        serde_json::json!(["title", preview.title]),
-        serde_json::json!(["source", preview.source]),
+        serde_json::json!(["d", &preview.id]),
+        serde_json::json!(["title", &preview.title]),
+        serde_json::json!(["source", &preview.source]),
     ];
 
-    // Reference tag — mirrors `build_share_event`'s reference_tag_name branch.
+    // Reference tag — mirrors build_share_event reference_tag_name branch.
     let ref_name = preview.reference_tag_name.trim();
     let ref_value = preview.reference_tag_value.trim();
     if !ref_name.is_empty() && !ref_value.is_empty() {
         if ref_name == "i" && !preview.url.is_empty() {
-            tags.push(serde_json::json!([ref_name, ref_value, preview.url]));
+            tags.push(serde_json::json!([ref_name, ref_value, &preview.url]));
         } else {
             tags.push(serde_json::json!([ref_name, ref_value]));
         }
         if !preview.reference_kind.is_empty() {
-            tags.push(serde_json::json!(["k", preview.reference_kind]));
+            tags.push(serde_json::json!(["k", &preview.reference_kind]));
+        }
+        // Secondary podcast feed i-tag: for podcast episodes, also emit the
+        // feed-level NIP-73 identifier (mirrors build_share_event:876).
+        if ref_name == "i" {
+            let ref_is_item = ref_value.starts_with("podcast:item:guid:");
+            let has_feed_guid = !preview.podcast_guid.is_empty();
+            let feed_catalog = format!("podcast:guid:{}", preview.podcast_guid);
+            let ref_is_feed = ref_value == feed_catalog;
+            if ref_is_item && has_feed_guid && !ref_is_feed {
+                tags.push(serde_json::json!(["i", &feed_catalog]));
+            }
         }
     }
 
     if !preview.url.is_empty() {
-        tags.push(serde_json::json!(["r", preview.url]));
+        tags.push(serde_json::json!(["r", &preview.url]));
     }
     if !preview.author.is_empty() {
-        tags.push(serde_json::json!(["author", preview.author]));
+        tags.push(serde_json::json!(["author", &preview.author]));
+    }
+    if !preview.image.is_empty() {
+        tags.push(serde_json::json!(["image", &preview.image]));
+    }
+    if !preview.description.is_empty() {
+        tags.push(serde_json::json!(["summary", &preview.description]));
+    }
+    if !preview.podcast_guid.is_empty() {
+        tags.push(serde_json::json!(["podcast_guid", &preview.podcast_guid]));
+    }
+    if !preview.podcast_show_title.is_empty() {
+        tags.push(serde_json::json!([
+            "podcast_show_title",
+            &preview.podcast_show_title
+        ]));
+    }
+    if !preview.audio_url.is_empty() {
+        tags.push(serde_json::json!(["audio", &preview.audio_url]));
+    }
+    if !preview.audio_preview_url.is_empty() {
+        tags.push(serde_json::json!([
+            "audio_preview",
+            &preview.audio_preview_url
+        ]));
+    }
+    if !preview.transcript_url.is_empty() {
+        tags.push(serde_json::json!(["transcript", &preview.transcript_url]));
+    }
+    if !preview.feed_url.is_empty() {
+        tags.push(serde_json::json!(["feed", &preview.feed_url]));
+    }
+    if !preview.published_at.is_empty() {
+        tags.push(serde_json::json!(["published_at", &preview.published_at]));
+    }
+    if let Some(d) = preview.duration_seconds {
+        if d >= 0 {
+            tags.push(serde_json::json!(["duration", d.to_string()]));
+        }
     }
 
     let event_json = serde_json::json!({
@@ -665,6 +763,31 @@ fn build_artifact_share_event_json(
         "tags": tags,
     });
     serde_json::to_string(&event_json).map_err(|_| "serde_json failed (11 artifact share)")
+}
+
+/// Build a kind:16 generic-repost event JSON for sharing a highlight into a
+/// NIP-29 group. Mirrors `highlights::build_repost_event` (highlights.rs:1674)
+/// but omits the `e` tag: the highlight event_id is not returned through the
+/// nmp action_results mechanism (known architectural limit — nmp rev d16aea60).
+/// Carries h, k (9802), p (author_pubkey_hex) tags. Fire-and-forget via
+/// `Effect::PublishCaptureEvent`.
+fn build_group_repost_event_json(
+    group_id: &str,
+    author_pubkey_hex: &str,
+) -> Result<String, &'static str> {
+    if group_id.is_empty() {
+        return Err("group repost requires non-empty group_id");
+    }
+    let event_json = serde_json::json!({
+        "kind": 16,
+        "content": "",
+        "tags": [
+            ["k", "9802"],
+            ["p", author_pubkey_hex],
+            ["h", group_id],
+        ],
+    });
+    serde_json::to_string(&event_json).map_err(|_| "serde_json failed (16 group repost)")
 }
 
 /// `hl.capture.reset` — reset all draft state to defaults (phase back to Idle).
@@ -708,11 +831,56 @@ pub(crate) fn reduce_event_capture_publish_action_result(
     error: String,
 ) -> Vec<Effect> {
     state.capture_draft.pending_publish_correlation_id = None;
-    state.capture_draft.publish_phase = if success {
-        CaptureDraftPhase::Done
-    } else {
-        CaptureDraftPhase::Error { message: error }
-    };
+
+    if !success {
+        // The artifact OR the highlight publish failed. Drop any deferred
+        // highlight so a failed artifact never lets the highlight (and FSM) lie
+        // (Issue 3), and clear any scheduled group repost.
+        state.capture_draft.pending_highlight_json = None;
+        state.capture_draft.pending_group_repost_group_id = None;
+        state.capture_draft.pending_group_repost_author_pubkey_hex = None;
+        state.capture_draft.publish_phase = CaptureDraftPhase::Error { message: error };
+        return vec![];
+    }
+
+    // Success. Multi-step publish ordering:
+    //
+    // Step 1 (pending-book, Issue 3) — the artifact just published. Now publish
+    // the deferred highlight under a fresh correlation_id. The FSM stays
+    // `Publishing` until the highlight itself settles.
+    if let Some(highlight_json) = state.capture_draft.pending_highlight_json.take() {
+        let cid = new_correlation_id();
+        state.capture_draft.pending_publish_correlation_id = Some(cid.clone());
+        return vec![Effect::PublishCaptureWithCorrelation {
+            json: highlight_json,
+            correlation_id: cid,
+        }];
+    }
+
+    // Step 2 (group share, Issue 1) — the highlight (or single-step event) just
+    // published. If it was group-targeted, emit the kind:16 generic repost into
+    // the NIP-29 group (fire-and-forget) and settle the FSM to Done.
+    if let Some(group_id) = state.capture_draft.pending_group_repost_group_id.take() {
+        let author = state
+            .capture_draft
+            .pending_group_repost_author_pubkey_hex
+            .take()
+            .unwrap_or_default();
+        state.capture_draft.publish_phase = CaptureDraftPhase::Done;
+        return match build_group_repost_event_json(&group_id, &author) {
+            Ok(json) => vec![Effect::PublishCaptureEvent { json }],
+            Err(msg) => {
+                tracing::warn!(
+                    "capture.publish: group repost build failed: {} — skipping repost",
+                    msg
+                );
+                vec![]
+            }
+        };
+    }
+
+    // Terminal: nothing deferred → Done.
+    state.capture_draft.publish_phase = CaptureDraftPhase::Done;
     vec![]
 }
 
@@ -989,6 +1157,10 @@ mod tests {
             envelope("hl.capture.set_note", r#"{"note":"a thought"}"#),
         );
 
+        // Photo-always invariant: every publish requires a completed upload.
+        state.capture_draft.has_upload = true;
+        state.capture_draft.blossom_upload = Some(fixture_blossom());
+
         let effects = step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
 
         // 5G: quote path now emits PublishCaptureWithCorrelation (tracked, not fire-and-forget).
@@ -1152,6 +1324,10 @@ mod tests {
             &clock,
             envelope("hl.capture.select_word", r#"{"word_index":2}"#),
         );
+        // Photo-always invariant: can_publish requires a completed upload, so set
+        // one to keep the can_publish projection assertion below meaningful.
+        state.capture_draft.has_upload = true;
+        state.capture_draft.blossom_upload = Some(fixture_blossom());
 
         let snap = project_capture_snapshot(&state).expect("snapshot must be Some");
         let ViewSnapshot::Capture(s) = snap else {
@@ -1262,6 +1438,9 @@ mod tests {
             &clock,
             envelope("hl.capture.set_quote", r#"{"quote":"the quote"}"#),
         );
+        // Photo-always invariant: every publish requires a completed upload.
+        state.capture_draft.has_upload = true;
+        state.capture_draft.blossom_upload = Some(fixture_blossom());
         step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
         assert!(
             matches!(
@@ -1299,6 +1478,9 @@ mod tests {
             &clock,
             envelope("hl.capture.set_quote", r#"{"quote":"the quote"}"#),
         );
+        // Photo-always invariant: every publish requires a completed upload.
+        state.capture_draft.has_upload = true;
+        state.capture_draft.blossom_upload = Some(fixture_blossom());
         step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
 
         step(
@@ -1330,6 +1512,9 @@ mod tests {
             &clock,
             envelope("hl.capture.set_quote", r#"{"quote":"the quote"}"#),
         );
+        // Photo-always invariant: every publish requires a completed upload.
+        state.capture_draft.has_upload = true;
+        state.capture_draft.blossom_upload = Some(fixture_blossom());
         let effects = step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
         assert!(!effects.is_empty(), "publish must emit an effect");
         assert!(matches!(
@@ -1532,45 +1717,79 @@ mod tests {
         }
     }
 
-    /// PP-T1 — Path 1: highlight + existing artifact → kind:9802 with imeta +
-    /// artifact ref + context + comment. Parity against `build_highlight_event`.
+    // ── Bespoke parity helpers ───────────────────────────────────────────────
+    //
+    // These call the now-`pub(crate)` bespoke builders in the UNTOUCHED live-lane
+    // files (highlights.rs / pictures.rs / artifacts.rs), sign with throwaway
+    // keys, and compare the resulting tags byte-for-byte against the kernel's
+    // emitted event-template JSON. This is REAL parity — not a re-implementation
+    // of the tag logic.
+
+    /// Sign a bespoke `EventBuilder` with throwaway keys and return the Event so
+    /// tests can read its canonical `content` + `tags`. Mirrors the `tag_pairs`
+    /// inspection helper in pictures.rs tests.
+    fn bespoke_event(builder: nostr_sdk::EventBuilder) -> nostr_sdk::Event {
+        let keys = nostr_sdk::Keys::generate();
+        builder
+            .sign_with_keys(&keys)
+            .expect("sign bespoke event for inspection")
+    }
+
+    /// A bespoke event's tags as `Vec<Vec<String>>`.
+    fn bespoke_tags(event: &nostr_sdk::Event) -> Vec<Vec<String>> {
+        event.tags.iter().map(|t| t.as_slice().to_vec()).collect()
+    }
+
+    /// Parse a kernel event-template JSON string's `tags` into `Vec<Vec<String>>`.
+    fn kernel_tags(json: &str) -> Vec<Vec<String>> {
+        let v: serde_json::Value = serde_json::from_str(json).expect("valid kernel json");
+        v["tags"]
+            .as_array()
+            .expect("tags array")
+            .iter()
+            .map(|t| {
+                t.as_array()
+                    .expect("tag is array")
+                    .iter()
+                    .map(|p| p.as_str().expect("tag part is string").to_string())
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// Sort tags for order-independent set equality.
+    fn sorted(mut tags: Vec<Vec<String>>) -> Vec<Vec<String>> {
+        tags.sort();
+        tags
+    }
+
+    /// PP-T1 — Path 1: highlight + EXISTING artifact → kind:9802. Real parity:
+    /// the expected event is built by the bespoke `highlights::build_highlight_event`,
+    /// signed, and its tags compared against the kernel JSON. Also asserts the
+    /// kind:16 group repost is emitted once the publish settles.
     #[test]
     fn parity_highlight_with_artifact_kind9802() {
         let artifact = fixture_artifact();
         let blossom = fixture_blossom();
 
-        // ── Build "bespoke" expected event tags using the same logic as
-        //    highlights::build_highlight_event ─────────────────────────────────
-        let ref_name = artifact.preview.highlight_tag_name.trim();
-        let ref_value = artifact.preview.highlight_tag_value.trim();
-
-        // Whether catalog_id would generate a SECOND "i" tag.
-        let catalog_id = artifact.preview.catalog_id.trim();
-        let emit_catalog = !(catalog_id.is_empty() || (ref_name == "i" && ref_value == catalog_id));
-
-        // Build expected imeta parts using the same logic as imeta_tag_parts.
-        let expected_imeta: Vec<serde_json::Value> = {
-            let mut p: Vec<serde_json::Value> = vec![
-                serde_json::json!("imeta"),
-                serde_json::json!(format!("url {}", blossom.url)),
-                serde_json::json!(format!("m {}", blossom.mime)),
-                serde_json::json!(format!("x {}", blossom.sha256_hex)),
-                serde_json::json!(format!("size {}", blossom.size_bytes)),
-            ];
-            if blossom.width > 0 && blossom.height > 0 {
-                p.push(serde_json::json!(format!(
-                    "dim {}x{}",
-                    blossom.width, blossom.height
-                )));
-            }
-            let alt = blossom.alt.trim();
-            if !alt.is_empty() {
-                p.push(serde_json::json!(format!("alt {alt}")));
-            }
-            p
+        // Bespoke expected event — same inputs the kernel will see.
+        let bespoke_draft = crate::models::HighlightDraft {
+            quote: "A profound insight from the book.".into(),
+            context: "The chapter about design patterns.".into(),
+            note: "This changed my mind.".into(),
+            clip_start_seconds: None,
+            clip_end_seconds: None,
+            clip_speaker: String::new(),
+            clip_transcript_segment_ids: Vec::new(),
+            image: Some(blossom.clone()),
         };
+        let expected = bespoke_event(
+            crate::highlights::build_highlight_event(&bespoke_draft, &artifact)
+                .expect("bespoke build_highlight_event"),
+        );
+        let expected_tags = sorted(bespoke_tags(&expected));
 
-        // ── Drive the kernel path ─────────────────────────────────────────────
+        // Drive the kernel path.
         let mut state = make_state();
         state.communities = vec![community("group-a", "Group A")];
         state.capture_draft.publish_phase = CaptureDraftPhase::Reviewing;
@@ -1586,97 +1805,78 @@ mod tests {
         let clock = ManualClock::default();
         let effects = step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
 
-        let publish_effect = effects
+        let Effect::PublishCaptureWithCorrelation { json, .. } = effects
             .iter()
             .find(|e| matches!(e, Effect::PublishCaptureWithCorrelation { .. }))
-            .expect("must emit PublishCaptureWithCorrelation");
-
-        let Effect::PublishCaptureWithCorrelation { json, .. } = publish_effect else {
-            panic!("expected PublishCaptureWithCorrelation")
+            .expect("must emit PublishCaptureWithCorrelation")
+        else {
+            unreachable!()
         };
         let v: serde_json::Value = serde_json::from_str(json).expect("valid json");
-
-        // ── Kind and content ──────────────────────────────────────────────────
         assert_eq!(
             v["kind"], 9802,
             "highlight+artifact path must emit kind:9802"
         );
+        assert_eq!(v["content"], expected.content, "content must equal bespoke");
         assert_eq!(
-            v["content"], "A profound insight from the book.",
-            "content must equal the quote"
+            sorted(kernel_tags(json)),
+            expected_tags,
+            "kernel highlight tags must match bespoke build_highlight_event"
         );
 
-        // ── Tags — check each expected tag is present ─────────────────────────
-        let tags = v["tags"].as_array().expect("tags array");
-
-        // 1. Artifact source reference tag.
-        assert!(
-            tags.iter().any(|t| t[0] == ref_name && t[1] == ref_value),
-            "artifact reference tag [{ref_name}, {ref_value}] must be present; tags: {tags:?}"
+        // The kind:16 group repost is emitted AFTER the highlight publish settles
+        // (the highlight event_id is not returned through nmp action_results, so
+        // the repost omits the `e` tag — see build_group_repost_event_json).
+        let result_effects = step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::CapturePublishActionResult {
+                success: true,
+                error: String::new(),
+            }),
         );
-
-        // 2. Catalog duplicate tag (skipped when ref IS the catalog).
-        if emit_catalog {
-            assert!(
-                tags.iter().any(|t| t[0] == "i" && t[1] == catalog_id),
-                "catalog tag [i, {catalog_id}] must be present; tags: {tags:?}"
-            );
-        } else {
-            // Only ONE "i" tag with this value.
-            let i_tags: Vec<_> = tags
-                .iter()
-                .filter(|t| t[0] == "i" && t[1] == ref_value)
-                .collect();
-            assert_eq!(
-                i_tags.len(),
-                1,
-                "reference and catalog are the same — must appear exactly once; tags: {tags:?}"
-            );
-        }
-
-        // 3. Context tag.
-        assert!(
-            tags.iter().any(|t| t[0] == "context"),
-            "context tag must be present; tags: {tags:?}"
-        );
-
-        // 4. Comment tag.
-        assert!(
-            tags.iter()
-                .any(|t| t[0] == "comment" && t[1] == "This changed my mind."),
-            "comment tag must be present; tags: {tags:?}"
-        );
-
-        // 5. Imeta tag — verify it matches the expected parts.
-        let imeta_tag = tags
+        let Effect::PublishCaptureEvent { json: repost_json } = result_effects
             .iter()
-            .find(|t| t[0] == "imeta")
-            .expect("imeta tag must be present");
-        let imeta_parts: Vec<&serde_json::Value> = imeta_tag
-            .as_array()
-            .expect("imeta is an array")
-            .iter()
-            .collect();
-        for part in &expected_imeta {
-            assert!(
-                imeta_parts.contains(&part),
-                "imeta tag missing part {part}; full imeta: {imeta_tag:?}"
-            );
-        }
-
-        // No h-tag on the kind:9802 itself (group sharing goes via kind:16
-        // repost in the bespoke lane — mirrors build_highlight_event behaviour).
+            .find(|e| matches!(e, Effect::PublishCaptureEvent { .. }))
+            .expect("must emit kind:16 group repost on success")
+        else {
+            unreachable!()
+        };
+        let rv: serde_json::Value = serde_json::from_str(repost_json).expect("valid repost json");
+        assert_eq!(rv["kind"], 16, "group repost must be kind:16");
+        let rtags = rv["tags"].as_array().expect("repost tags");
         assert!(
-            !tags.iter().any(|t| t[0] == "h"),
-            "kind:9802 must NOT carry h-tag (group sharing is via kind:16 repost); tags: {tags:?}"
+            rtags.iter().any(|t| t[0] == "h" && t[1] == "group-a"),
+            "repost must carry h-tag for the group; tags: {rtags:?}"
+        );
+        assert!(
+            rtags.iter().any(|t| t[0] == "k" && t[1] == "9802"),
+            "repost must carry k-tag 9802; tags: {rtags:?}"
+        );
+        assert_eq!(
+            state.capture_draft.publish_phase,
+            CaptureDraftPhase::Done,
+            "FSM must settle to Done after the repost is scheduled"
         );
     }
 
-    /// PP-T2 — Path 2: no quote, has upload → kind:20 NIP-68 picture with
-    /// imeta + h-tag. Parity against `pictures::build_picture_event`.
+    /// PP-T2 — Path 2: no quote → kind:20 NIP-68 picture. Real parity against the
+    /// bespoke `pictures::build_picture_event`.
     #[test]
     fn parity_picture_no_quote_kind20() {
         let blossom = fixture_blossom();
+
+        // Bespoke expected event (no artifact reference on this path).
+        let expected = bespoke_event(
+            crate::pictures::build_picture_event(
+                Some("group-a"),
+                &blossom,
+                None,
+                "Page capture note.".trim(),
+            )
+            .expect("bespoke build_picture_event"),
+        );
+        let expected_tags = sorted(bespoke_tags(&expected));
 
         let mut state = make_state();
         let clock = ManualClock::default();
@@ -1693,66 +1893,73 @@ mod tests {
 
         let effects = step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
 
-        let publish_effect = effects
+        let Effect::PublishCaptureWithCorrelation { json, .. } = effects
             .iter()
             .find(|e| matches!(e, Effect::PublishCaptureWithCorrelation { .. }))
-            .expect("must emit PublishCaptureWithCorrelation");
-
-        let Effect::PublishCaptureWithCorrelation { json, .. } = publish_effect else {
-            panic!("expected PublishCaptureWithCorrelation")
+            .expect("must emit PublishCaptureWithCorrelation")
+        else {
+            unreachable!()
         };
         let v: serde_json::Value = serde_json::from_str(json).expect("valid json");
-
-        // Kind:20 (NIP-68), NOT kind:11 (the old stub emitted kind:11).
         assert_eq!(v["kind"], 20, "picture path must emit kind:20, not kind:11");
         assert_eq!(
-            v["content"], "Page capture note.",
-            "content must be the note"
+            v["content"], expected.content,
+            "content must equal the note"
+        );
+        assert_eq!(
+            sorted(kernel_tags(json)),
+            expected_tags,
+            "kernel picture tags must match bespoke build_picture_event"
         );
 
-        let tags = v["tags"].as_array().expect("tags array");
-
-        // h-tag present on the kind:20 event itself (NIP-68 carries it inline,
-        // unlike kind:9802 which uses a separate kind:16 repost).
+        // Picture path is single-step (no kind:16 repost — h carried inline).
         assert!(
-            tags.iter().any(|t| t[0] == "h" && t[1] == "group-a"),
-            "h tag must be present on kind:20; tags: {tags:?}"
-        );
-
-        // imeta present with correct url.
-        let imeta = tags
-            .iter()
-            .find(|t| t[0] == "imeta")
-            .expect("imeta must be present on kind:20");
-        let url_part = format!("url {}", blossom.url);
-        assert!(
-            imeta
-                .as_array()
-                .unwrap()
+            !effects
                 .iter()
-                .any(|p| p.as_str() == Some(&url_part)),
-            "imeta must carry the blossom url; imeta: {imeta:?}"
-        );
-
-        // No "alt" or "source" stub tags (old kind:11 remnants).
-        assert!(
-            !tags.iter().any(|t| t[0] == "alt"),
-            "kind:20 must not carry legacy 'alt' tag from stub; tags: {tags:?}"
+                .any(|e| matches!(e, Effect::PublishCaptureEvent { .. })),
+            "kind:20 picture path must NOT emit a kind:16 repost"
         );
     }
 
     /// PP-T3 — Path 3: pending-book (artifact_preview + quote, no artifact_record).
-    /// Two effects emitted: fire-and-forget kind:11 artifact publish THEN correlated
-    /// kind:9802 highlight referencing the artifact via preview.highlight_tag_name/value.
+    /// Real parity: artifact (kind:11) publishes FIRST as the correlated primary;
+    /// the kind:9802 highlight is deferred until the artifact succeeds (Issue 3).
     #[test]
     fn parity_pending_book_artifact_published_then_referenced() {
         let artifact = fixture_artifact();
+        let preview = artifact.preview.clone();
         let blossom = fixture_blossom();
 
+        // Bespoke expected artifact-share event (kind:11).
+        let expected_artifact = bespoke_event(
+            crate::artifacts::build_share_event("group-a", &preview, None)
+                .expect("bespoke build_share_event"),
+        );
+        let expected_artifact_tags = sorted(bespoke_tags(&expected_artifact));
+
+        // Bespoke expected highlight event (kind:9802) referencing the same
+        // artifact record the kernel synthesises from the preview.
+        let artifact_from_preview = crate::artifacts::unpublished_record(preview.clone());
+        let bespoke_draft = crate::models::HighlightDraft {
+            quote: "Key insight from unpublished book.".into(),
+            context: "The introduction chapter.".into(),
+            note: "Must revisit.".into(),
+            clip_start_seconds: None,
+            clip_end_seconds: None,
+            clip_speaker: String::new(),
+            clip_transcript_segment_ids: Vec::new(),
+            image: Some(blossom.clone()),
+        };
+        let expected_highlight = bespoke_event(
+            crate::highlights::build_highlight_event(&bespoke_draft, &artifact_from_preview)
+                .expect("bespoke build_highlight_event"),
+        );
+        let expected_highlight_tags = sorted(bespoke_tags(&expected_highlight));
+
+        // Drive the kernel pending-book path.
         let mut state = make_state();
         let clock = ManualClock::default();
         state.communities = vec![community("group-a", "Group A")];
-
         state.capture_draft.publish_phase = CaptureDraftPhase::Reviewing;
         state.capture_draft.quote = "Key insight from unpublished book.".into();
         state.capture_draft.context = "The introduction chapter.".into();
@@ -1762,81 +1969,102 @@ mod tests {
         state.capture_draft.blossom_upload = Some(blossom.clone());
         state.capture_draft.blossom_image_url = blossom.url.clone();
         // Pending book: preview present, no artifact_record yet.
-        state.capture_draft.artifact_preview = Some(artifact.preview.clone());
+        state.capture_draft.artifact_preview = Some(preview.clone());
         state.capture_draft.artifact_record = None;
 
+        // Step 1 — publish emits exactly ONE correlated artifact (kind:11).
         let effects = step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
-
-        // ── Expect TWO effects: artifact publish (fire-and-forget) + highlight ──
-        let artifact_effect = effects
+        let correlated: Vec<_> = effects
             .iter()
-            .find(|e| matches!(e, Effect::PublishCaptureEvent { .. }));
-        assert!(
-            artifact_effect.is_some(),
-            "pending-book must emit a fire-and-forget artifact publish effect; got: {effects:?}"
+            .filter(|e| matches!(e, Effect::PublishCaptureWithCorrelation { .. }))
+            .collect();
+        assert_eq!(
+            correlated.len(),
+            1,
+            "pending-book publish must emit exactly one correlated artifact effect; got: {effects:?}"
         );
-
-        let highlight_effect = effects
-            .iter()
-            .find(|e| matches!(e, Effect::PublishCaptureWithCorrelation { .. }));
-        assert!(
-            highlight_effect.is_some(),
-            "pending-book must emit a correlated highlight publish effect; got: {effects:?}"
+        let Effect::PublishCaptureWithCorrelation {
+            json: artifact_json,
+            ..
+        } = correlated[0]
+        else {
+            unreachable!()
+        };
+        let av: serde_json::Value =
+            serde_json::from_str(artifact_json).expect("valid artifact json");
+        assert_eq!(av["kind"], 11, "artifact primary must be kind:11");
+        assert_eq!(
+            sorted(kernel_tags(artifact_json)),
+            expected_artifact_tags,
+            "kernel artifact tags must match bespoke build_share_event"
         );
-
-        // ── Artifact event: kind:11, h-tag, reference tag ─────────────────────
-        if let Some(Effect::PublishCaptureEvent { json }) = artifact_effect {
-            let v: serde_json::Value = serde_json::from_str(json).expect("valid artifact json");
-            assert_eq!(v["kind"], 11, "artifact share must be kind:11");
-            let tags = v["tags"].as_array().expect("tags array");
-            assert!(
-                tags.iter().any(|t| t[0] == "h" && t[1] == "group-a"),
-                "artifact event must have h-tag; tags: {tags:?}"
-            );
-            let ref_name = artifact.preview.reference_tag_name.trim();
-            let ref_value = artifact.preview.reference_tag_value.trim();
-            assert!(
-                tags.iter().any(|t| t[0] == ref_name),
-                "artifact event must carry reference tag [{ref_name}, ...]; tags: {tags:?}"
-            );
-            let _ = ref_value; // checked via tag[0] == ref_name above
-        }
-
-        // ── Highlight event: kind:9802, artifact reference, imeta ─────────────
-        if let Some(Effect::PublishCaptureWithCorrelation { json, .. }) = highlight_effect {
-            let v: serde_json::Value = serde_json::from_str(json).expect("valid highlight json");
-            assert_eq!(v["kind"], 9802, "highlight must be kind:9802");
-            assert_eq!(
-                v["content"], "Key insight from unpublished book.",
-                "content must equal the quote"
-            );
-            let tags = v["tags"].as_array().expect("tags array");
-
-            // Artifact reference from preview.highlight_tag_name/value.
-            let hl_ref_name = artifact.preview.highlight_tag_name.trim();
-            let hl_ref_value = artifact.preview.highlight_tag_value.trim();
-            assert!(
-                tags.iter()
-                    .any(|t| t[0] == hl_ref_name && t[1] == hl_ref_value),
-                "highlight must reference artifact via [{hl_ref_name}, {hl_ref_value}]; tags: {tags:?}"
-            );
-
-            // imeta present — the photo-always invariant.
-            assert!(
-                tags.iter().any(|t| t[0] == "imeta"),
-                "highlight must carry imeta tag (photo-always invariant); tags: {tags:?}"
-            );
-        }
-
-        // Phase advanced to Publishing.
         assert!(
             matches!(
                 state.capture_draft.publish_phase,
                 CaptureDraftPhase::Publishing { .. }
             ),
-            "phase must advance to Publishing; got: {:?}",
-            state.capture_draft.publish_phase
+            "phase must be Publishing after the artifact publish"
         );
+
+        // Step 2 — artifact succeeds → exactly ONE correlated highlight (kind:9802).
+        let result_effects = step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::CapturePublishActionResult {
+                success: true,
+                error: String::new(),
+            }),
+        );
+        let correlated2: Vec<_> = result_effects
+            .iter()
+            .filter(|e| matches!(e, Effect::PublishCaptureWithCorrelation { .. }))
+            .collect();
+        assert_eq!(
+            correlated2.len(),
+            1,
+            "artifact success must emit exactly one correlated highlight; got: {result_effects:?}"
+        );
+        let Effect::PublishCaptureWithCorrelation {
+            json: highlight_json,
+            ..
+        } = correlated2[0]
+        else {
+            unreachable!()
+        };
+        let hv: serde_json::Value =
+            serde_json::from_str(highlight_json).expect("valid highlight json");
+        assert_eq!(hv["kind"], 9802, "deferred highlight must be kind:9802");
+        assert_eq!(hv["content"], expected_highlight.content);
+        assert_eq!(
+            sorted(kernel_tags(highlight_json)),
+            expected_highlight_tags,
+            "kernel highlight tags must match bespoke build_highlight_event"
+        );
+        // Still Publishing — the highlight publish is now in flight.
+        assert!(
+            matches!(
+                state.capture_draft.publish_phase,
+                CaptureDraftPhase::Publishing { .. }
+            ),
+            "phase must remain Publishing until the highlight settles"
+        );
+
+        // Step 3 — highlight succeeds → kind:16 group repost + Done.
+        let final_effects = step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::CapturePublishActionResult {
+                success: true,
+                error: String::new(),
+            }),
+        );
+        assert!(
+            final_effects
+                .iter()
+                .any(|e| matches!(e, Effect::PublishCaptureEvent { .. })),
+            "highlight success must emit the kind:16 group repost; got: {final_effects:?}"
+        );
+        assert_eq!(state.capture_draft.publish_phase, CaptureDraftPhase::Done);
     }
 
     // Phase 7 E2E: full capability round-trip stitched into one chain —
