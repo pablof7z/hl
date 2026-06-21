@@ -146,6 +146,26 @@ fn extract_attachment_url(tags: &[Vec<String>]) -> Option<String> {
         .map(|t| t[1].clone())
 }
 
+/// Extract the canonical artifact coordinate from `a`/`e`/`i` reference tags.
+///
+/// Priority: `a` → `e` → `i`. Returns `"<tag>:<value>"` canonical form (matching
+/// the coordinate scheme used in `AppState::artifact_previews`) or `None` when no
+/// recognized reference tag with a non-empty value is present.
+///
+/// D6: non-empty guard prevents blank coordinate strings from entering the map.
+fn extract_artifact_coordinate(tags: &[Vec<String>]) -> Option<String> {
+    for prefix in ["a", "e", "i"] {
+        if let Some(v) = tags
+            .iter()
+            .find(|t| t.len() >= 2 && t[0] == prefix && !t[1].is_empty())
+            .map(|t| t[1].clone())
+        {
+            return Some(format!("{prefix}:{v}"));
+        }
+    }
+    None
+}
+
 // Snapshot builder
 
 /// Build a bounded `Vec<DiscussionRow>` from a slice of `GroupEventRow`s.
@@ -165,6 +185,7 @@ fn build_discussion_rows(events: &[nmp_nip29::GroupEventRow]) -> Vec<DiscussionR
             title: extract_title(&e.tags),
             body: e.content.clone(),
             attachment_url: extract_attachment_url(&e.tags),
+            artifact_coordinate: extract_artifact_coordinate(&e.tags),
             created_at: e.created_at,
         })
         .collect();
@@ -465,6 +486,7 @@ mod tests {
                     title: "First".to_string(),
                     body: "body".to_string(),
                     attachment_url: None,
+                    artifact_coordinate: None,
                     created_at: 1000,
                 }],
             }),
@@ -647,6 +669,7 @@ mod tests {
                     title: "Pre-logout discussion".to_string(),
                     body: "body".to_string(),
                     attachment_url: None,
+                    artifact_coordinate: None,
                     created_at: 1000,
                 }],
             }),
