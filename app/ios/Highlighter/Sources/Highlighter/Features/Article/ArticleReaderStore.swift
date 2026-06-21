@@ -65,16 +65,25 @@ final class ArticleReaderStore {
     var isLoadingInitial: Bool = true
     /// Transient flash when a highlight the user just published echoes back.
     var lastPublishedHighlightId: String?
+    /// The article BODY as the nmp `content_tree`, decoded from the kernel
+    /// `KernelArticleReaderSnapshot.contentTreeJson` (#22). This is the body
+    /// render source — replacing the bespoke `ArticleRecord.content` markdown
+    /// read. `nil` until the full document arrives (cold-start window, D6).
+    /// The native select-to-highlight overlay (`ArticleBodyView`) renders on top
+    /// of this tree via `ContentTreeBodyRenderer`.
+    var contentTree: ContentTreeWire?
 
     // Plumbing.
     @ObservationIgnored let target: ArticleReaderTarget
     @ObservationIgnored let safeCore: SafeHighlighterCore
     @ObservationIgnored weak var eventBridge: EventBridge?
     @ObservationIgnored private var subscriptionHandle: UInt64?
-    /// Phase 7: the kernel owns the overlay highlights (per-article kind:9802
-    /// feed) and is the SOLE WRITER for publishing highlights. The article BODY
-    /// is still read from the live lane (reads coexist until Part C); the kernel
-    /// snapshot's `highlights` win when the view is open.
+    /// The kernel owns the overlay highlights (per-article kind:9802 feed) and
+    /// is the SOLE WRITER for publishing highlights (D5). #22: the article BODY
+    /// is now read from the kernel snapshot's `contentTreeJson` (nmp
+    /// `content_tree`) — the bespoke `ArticleRecord.content` markdown read is no
+    /// longer the body source. The kernel snapshot's `highlights` + `content_tree`
+    /// drive the reader while the view is open.
     @ObservationIgnored let kernel: HighlighterAppKernel
 
     init(
@@ -108,13 +117,23 @@ final class ArticleReaderStore {
         }
     }
 
-    /// Apply the kernel article-reader snapshot's overlay highlights. Called from
+    /// Apply the kernel article-reader snapshot's overlay highlights AND the nmp
+    /// `content_tree` body. Called from
     /// `ArticleReaderView.onChange(of: kernel.articleReader[address])`. The kernel
-    /// is authoritative for the overlay (enriched kind:9802 rows); the body stays
-    /// from the live-lane read for now (Part C completes the cut).
+    /// is authoritative for the overlay (enriched kind:9802 rows) and the body
+    /// (raw `content_tree`, D1); #22 cut the bespoke markdown body read.
     func applyKernelSnapshot() {
         guard let snap = kernel.articleReader[target.address] else { return }
         highlights = snap.highlights.map(HighlightRecord.init(kernelRow:))
+        // #22: the article BODY is now the nmp `content_tree` the kernel emits
+        // (D1 — kernel emits raw content_tree, Swift renders). Decode the
+        // snapshot's `contentTreeJson` into the vendored nmp `ContentTreeWire`.
+        // Keep a non-empty tree once decoded so a transient empty snapshot tick
+        // (e.g. a highlight-only delta before the body arrives) doesn't blank
+        // the body mid-read.
+        if let tree = ContentTreeBodyRenderer.decodeTree(json: snap.contentTreeJson) {
+            contentTree = tree
+        }
     }
 
     // MARK: - Loads

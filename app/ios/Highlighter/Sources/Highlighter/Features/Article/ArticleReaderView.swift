@@ -129,6 +129,7 @@ struct ArticleReaderView: View {
         } else if let article = store.article {
             ReaderScroll(
                 article: article,
+                contentTree: store.contentTree,
                 authorProfile: app.profileSnapshots[target.pubkey] ?? store.authorProfile,
                 highlights: store.highlights,
                 scrollAnchor: scrollAnchor,
@@ -221,6 +222,10 @@ private struct ArticleCommentsAttachmentModifier: ViewModifier {
 
 private struct ReaderScroll: View {
     let article: ArticleRecord
+    /// The article body as the nmp `content_tree` (#22). `nil` until the kernel
+    /// snapshot's `content_tree` arrives — the body shows nothing until then
+    /// (D6, same cold-start window as the bespoke empty-body read).
+    let contentTree: ContentTreeWire?
     let authorProfile: ProfileMetadata?
     let highlights: [HighlightRecord]
     let scrollAnchor: ArticleReaderView.ScrollAnchor
@@ -244,6 +249,13 @@ private struct ReaderScroll: View {
     private var coverURL: URL? {
         guard !article.image.isEmpty else { return nil }
         return URL(string: article.image)
+    }
+
+    /// Re-render key for the body task: the article id plus the content-tree
+    /// node count so the body re-renders when the kernel `content_tree` arrives
+    /// (cold-start → populated) without re-rendering on every unrelated tick.
+    private var treeRenderKey: String {
+        "\(article.eventId)-\(contentTree?.nodes.count ?? 0)"
     }
 
     var body: some View {
@@ -277,7 +289,16 @@ private struct ReaderScroll: View {
         .fullScreenCover(item: $imageToOpen) { item in
             ImageZoomView(url: item.url, onDismiss: { imageToOpen = nil })
         }
-        .task(id: "\(article.eventId)-\(highlights.count)-\(app.profileSnapshots.count)") {
+        // #22: render the body from the nmp `content_tree` (kernel snapshot)
+        // via `ContentTreeBodyRenderer` — replacing the bespoke
+        // `MarkdownRenderer.render(content: article.content)` markdown read. The
+        // native select-to-highlight overlay (`ArticleBodyView`) renders on top
+        // of the resulting attributed body unchanged.
+        .task(id: "\(treeRenderKey)-\(highlights.count)-\(app.profileSnapshots.count)") {
+            guard let contentTree else {
+                rendered = nil
+                return
+            }
             let safeCore = app.safeCore
             let profileSnapshot = Dictionary(
                 uniqueKeysWithValues: app.profileSnapshots.map { (pk, meta) -> (String, String) in
@@ -292,22 +313,13 @@ private struct ReaderScroll: View {
                 }
             )
             rendered = await Task.detached(priority: .userInitiated) {
-                MarkdownRenderer.render(
-                    content: article.content,
+                ContentTreeBodyRenderer.render(
+                    tree: contentTree,
                     highlights: highlights,
                     accent: UIColor(Color.highlighterAccent),
                     tint: UIColor(Color.highlighterAccent),
                     ink: UIColor(Color.highlighterInkStrong),
                     muted: UIColor(Color.highlighterInkMuted),
-                    nostrStandaloneEntity: { input in
-                        safeCore.standaloneNostrEntity(input)
-                    },
-                    nostrInlineTokens: { input in
-                        safeCore.tokenizeNostrMarkdownInline(input)
-                    },
-                    nostrInlineRender: { ref in
-                        safeCore.nostrEntityInlineRender(entity: ref)
-                    },
                     highlightContent: { highlight in
                         safeCore.projectHighlightDetailContent(
                             input: HighlightDetailContentProjectionInput(highlight: highlight)
