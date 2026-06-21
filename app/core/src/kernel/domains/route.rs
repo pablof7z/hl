@@ -226,12 +226,21 @@ pub(crate) fn project_app_root(state: &AppState) -> AppRootSnapshot {
     } else {
         RouteKind::Onboarding
     };
+    // Phase 7: surface a failed restore / sign-in error so LoginView's inline
+    // error has a kernel source. Other states carry no error → None (which is
+    // how the field self-clears on a new attempt / success / logout).
+    let auth_error = match &state.session {
+        SessionState::RestoreFailed { error } => Some(error.clone()),
+        SessionState::SignInFailed { error, .. } => Some(error.clone()),
+        _ => None,
+    };
     AppRootSnapshot {
         route_kind,
         session_present,
         onboarding_complete: state.onboarding.complete,
         // Phase 2B: expose pending NostrConnect URI to the iOS QR-code sheet.
         nostrconnect_uri: state.nostrconnect_uri.clone(),
+        auth_error,
     }
 }
 
@@ -289,6 +298,43 @@ mod tests {
         } else {
             panic!("expected RootShell snapshot");
         }
+    }
+
+    // Phase 7: AppRootSnapshot.auth_error surfaces RestoreFailed/SignInFailed
+    // errors and is None for every non-error state (so it self-clears on a new
+    // attempt / success / logout — no explicit clear needed).
+    #[test]
+    fn app_root_auth_error_surfaces_failures_only() {
+        use crate::kernel::action::{SignInMethod, SignerKind};
+        use crate::kernel::app::SessionState;
+
+        let mut state = make_state();
+
+        state.session = SessionState::Absent;
+        assert_eq!(project_app_root(&state).auth_error, None);
+
+        state.session = SessionState::Present {
+            pubkey: "deadbeef".to_string(),
+            signer_kind: SignerKind::LocalNsec,
+        };
+        assert_eq!(project_app_root(&state).auth_error, None);
+
+        state.session = SessionState::RestoreFailed {
+            error: "keychain locked".to_string(),
+        };
+        assert_eq!(
+            project_app_root(&state).auth_error.as_deref(),
+            Some("keychain locked")
+        );
+
+        state.session = SessionState::SignInFailed {
+            method: SignInMethod::Nsec,
+            error: "invalid nsec".to_string(),
+        };
+        assert_eq!(
+            project_app_root(&state).auth_error.as_deref(),
+            Some("invalid nsec")
+        );
     }
 
     // Gate 6: coalescing — N changes → final state only.
