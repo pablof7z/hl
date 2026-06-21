@@ -633,6 +633,14 @@ pub(crate) fn lifecycle_effects_for_view_open(id: &ViewId, state: &AppState) -> 
 /// unnecessary — the planner keys on `InterestId`). Mirrors
 /// `home_feed::lifecycle_effects_for_follow_update`.
 ///
+/// #1653 BLOCKING #1 (withdraw-on-empty): when the refreshed author set is empty
+/// — e.g. an `IdentityChanged(None)` (logout / account removal) arrives WHILE the
+/// Bookmarks view is open — we must NOT just return `[]` and leave the stable
+/// `BOOKMARK_SETS_INTEREST_ID` interest LIVE until the view eventually closes.
+/// Instead emit `WithdrawBookmarkSetsInterest` so logout-while-open tears the
+/// interest down immediately (and clears the boot-registered accumulators). This
+/// mirrors how a follow-scoped lane stops subscribing once its author set drains.
+///
 /// D8: effect-driven, not polling — triggered by the projection event. Does not
 /// ask Swift to close/reopen the view.
 pub(crate) fn lifecycle_effects_for_follow_update(state: &AppState) -> Vec<Effect> {
@@ -643,10 +651,13 @@ pub(crate) fn lifecycle_effects_for_follow_update(state: &AppState) -> Vec<Effec
     authors.extend(state.follows.iter().cloned());
     authors.sort();
     authors.dedup();
-    // Same fail-closed guard as open: never push an unscoped (wildcard-author)
-    // interest that would fan out to every relay (D6).
+    // Withdraw-on-empty: with no active account and no follows there is nothing
+    // to subscribe for. Tear the live interest down rather than leaving it
+    // pinned to the prior author set until the view closes (#1653 BLOCKING #1).
+    // An empty author set only happens after logout / account removal while the
+    // view is open — never push an unscoped (wildcard-author) interest (D6).
     if authors.is_empty() {
-        return vec![];
+        return vec![Effect::WithdrawBookmarkSetsInterest];
     }
     vec![Effect::PushBookmarkSetsInterest { authors }]
 }
@@ -1316,16 +1327,143 @@ mod tests {
         }
     }
 
-    // 1653-BLOCKING-#2: the follow-update hook stays fail-closed — with no active
-    // account and no follows there is no author to scope, so it must NOT emit an
-    // unscoped (wildcard-author) interest that would fan out to every relay (D6).
+    // 1653-BLOCKING-#1: the follow-update hook stays fail-closed AND withdraws —
+    // with no active account and no follows there is no author to scope, so it
+    // must NOT push an unscoped (wildcard-author) interest. Instead it must emit
+    // `WithdrawBookmarkSetsInterest` so a stable interest left LIVE from a prior
+    // (logged-in) author set is torn down immediately rather than lingering until
+    // the view closes (withdraw-on-empty).
     #[test]
-    fn follow_update_emits_nothing_without_authors() {
+    fn follow_update_withdraws_without_authors() {
         let state = make_state();
+        let effects = lifecycle_effects_for_follow_update(&state);
         assert!(
-            lifecycle_effects_for_follow_update(&state).is_empty(),
-            "follow update with no user + no follows must not push an unscoped interest"
+            matches!(effects.as_slice(), [Effect::WithdrawBookmarkSetsInterest]),
+            "follow update with no user + no follows must withdraw the interest \
+             (never push an unscoped interest), got {effects:?}"
         );
+    }
+
+    // 1653-BLOCKING-#1 (logout-while-open): a logout / account removal
+    // (IdentityChanged(None)) arriving WHILE the Bookmarks view is open must
+    // WITHDRAW the live BOOKMARK_SETS_INTEREST_ID interest, not leave it pinned
+    // to the prior account's author set until the view eventually closes.
+    //
+    // The actor routes IdentityChanged(None) through the auth reducer (which
+    // clears session + follows) and then invokes
+    // `lifecycle_effects_for_follow_update` when the Bookmarks view is open. This
+    // test drives that exact sequence and asserts the hook tears the interest
+    // down. PRE-FIX the hook returned `vec![]` on an empty author set, so this
+    // assertion (matching WithdrawBookmarkSetsInterest) would fail.
+    #[test]
+    fn logout_while_bookmarks_open_withdraws_interest() {
+        let my_pk = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let follow = "bbbb000000000000000000000000000000000000000000000000000000000002";
+        let mut state = make_state_with_session(my_pk);
+        let clock = ManualClock::default();
+
+        // Bookmarks opened with an active account + one follow → an interest with
+        // a non-empty author set is live.
+        state.follows = vec![follow.to_string()];
+        let open = lifecycle_effects_for_view_open(&ViewId::Bookmarks, &state);
+        assert!(
+            matches!(open.as_slice(), [Effect::PushBookmarkSetsInterest { .. }]),
+            "open must push a scoped interest, got {open:?}"
+        );
+
+        // Logout (IdentityChanged(None)) arrives while the view is open. The auth
+        // reducer clears session + follows.
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::IdentityChanged(None)),
+        );
+        assert!(active_pubkey(&state).is_none(), "session must be absent");
+        assert!(
+            state.follows.is_empty(),
+            "follows must be cleared on logout"
+        );
+
+        // The actor's post-reduce hook (gated on the Bookmarks view being open)
+        // refreshes the interest. With no authors it must WITHDRAW, not no-op.
+        let effects = lifecycle_effects_for_follow_update(&state);
+        assert!(
+            matches!(effects.as_slice(), [Effect::WithdrawBookmarkSetsInterest]),
+            "logout while Bookmarks open must withdraw the live interest, got {effects:?}"
+        );
+    }
+
+    // 1653-BLOCKING-#2 (direct account switch — no cross-account leak): a DIRECT
+    // IdentityChanged(Some(new_pk)) with NO intervening None (nmp supports this —
+    // `active_account_handle_reflects_account_switch`) arriving WHILE the
+    // Bookmarks view is open must re-push an interest scoped to ONLY the new
+    // account — NEVER the prior account's follows. The prior account's follows
+    // are still in `state.follows` until the new account's follow sidecar
+    // arrives, so the auth reducer rebaselines (clears) follows on the Some arm.
+    //
+    // This test drives the actor's exact sequence: open under account A with
+    // follows, then IdentityChanged(Some(B)), then the post-reduce re-push hook.
+    // PRE-FIX (no follows-clear on the Some arm) the re-pushed interest would
+    // still contain A's prior follow — this test's "must NOT contain prior
+    // follow" assertion would fail.
+    #[test]
+    fn direct_account_switch_while_open_drops_prior_follows() {
+        let acct_a = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let a_follow = "bbbb000000000000000000000000000000000000000000000000000000000002";
+        let acct_b = "cccc000000000000000000000000000000000000000000000000000000000003";
+        let mut state = make_state_with_session(acct_a);
+        let clock = ManualClock::default();
+
+        // Account A open with one follow in scope.
+        state.follows = vec![a_follow.to_string()];
+        let open = lifecycle_effects_for_view_open(&ViewId::Bookmarks, &state);
+        match open.as_slice() {
+            [Effect::PushBookmarkSetsInterest { authors }] => {
+                assert!(authors.contains(&acct_a.to_string()));
+                assert!(authors.contains(&a_follow.to_string()));
+            }
+            other => panic!("expected one PushBookmarkSetsInterest on open, got {other:?}"),
+        }
+
+        // DIRECT switch to account B (no intervening None). The auth reducer
+        // rebaselines: session → B, follows → empty.
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::IdentityChanged(Some(acct_b.to_string()))),
+        );
+        assert_eq!(active_pubkey(&state), Some(acct_b));
+        assert!(
+            state.follows.is_empty(),
+            "direct switch must rebaseline follows so A's follows don't leak into B"
+        );
+
+        // The post-reduce re-push hook (gated on Bookmarks open) refreshes the
+        // interest. It must contain ONLY account B — never account A or A's follow.
+        let effects = lifecycle_effects_for_follow_update(&state);
+        match effects.as_slice() {
+            [Effect::PushBookmarkSetsInterest { authors }] => {
+                assert!(
+                    authors.contains(&acct_b.to_string()),
+                    "re-pushed interest must include the new account B"
+                );
+                assert!(
+                    !authors.contains(&a_follow.to_string()),
+                    "re-pushed interest must NOT include the prior account's follow (privacy leak)"
+                );
+                assert!(
+                    !authors.contains(&acct_a.to_string()),
+                    "re-pushed interest must NOT include the prior account itself"
+                );
+                assert_eq!(
+                    authors.as_slice(),
+                    [acct_b.to_string()],
+                    "after a direct switch the interest contains ONLY the new account \
+                     (its own follows fold in later via FollowListUpdated)"
+                );
+            }
+            other => panic!("expected one PushBookmarkSetsInterest on switch, got {other:?}"),
+        }
     }
 
     // ── Parity tests: ONE consumer-shaped fixture, bespoke vs kernel ──────────

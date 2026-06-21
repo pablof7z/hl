@@ -189,6 +189,23 @@ pub(crate) fn reduce_event_identity_changed(
             // Effect::WireJoinedGroups re-registers the JoinedGroupsProjection
             // for the new pubkey; the fresh snapshot arrives on the next tick.
             state.communities = vec![];
+            // ── #1653 BLOCKING #2: rebaseline follows on a DIRECT account switch ──
+            // NMP can fire IdentityChanged(Some(new_pk)) with no intervening
+            // None (a direct switch — see nmp's
+            // `active_account_handle_reflects_account_switch`). The prior
+            // account's follows are still in `state.follows` at this point; the
+            // new account's follow sidecar (FollowListUpdated) has not arrived
+            // yet. Anything that scopes a subscription on `state.follows` between
+            // now and that sidecar would subscribe the PRIOR account's follows
+            // under the NEW account — a cross-account privacy leak. The
+            // post-reduce bookmarks re-push hook does exactly that, so we clear
+            // follows HERE (before the hook runs) so the re-pushed bookmarks
+            // interest contains ONLY the new account; its own follows are folded
+            // back in when the new account's FollowListUpdated arrives (which
+            // re-triggers the hook). This mirrors HomeFeed, whose follow-scoped
+            // feed cursors only (re-)register on FollowListUpdated — never on a
+            // bare IdentityChanged(Some) — so they never carry prior follows.
+            state.follows = Vec::new();
             // Clear the pending NostrConnect URI — the handshake is done.
             state.nostrconnect_uri = None;
             state.session = SessionState::Present {

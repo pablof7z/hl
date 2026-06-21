@@ -799,10 +799,10 @@ mod tests {
         curation_menu_items_for_address, curation_menu_snapshot_apply_projection,
         curation_menu_snapshot_for_address, curation_set_create_projection,
         filter_explorable_curation_sets, query_bookmark_library_snapshot,
-        query_bookmark_set_detail_snapshot, query_user_sets, query_user_web_bookmarks,
-        web_bookmark_row_projection, BookmarkLibraryFilter, BookmarkLibraryFilterChipProjection,
-        BookmarkLibraryPane, BookmarkLibraryProjectionInput, BookmarkLibraryScope,
-        BookmarkLibraryScopeOptionProjection, BookmarkSetRowProjectionInput,
+        query_bookmark_set_detail_snapshot, query_following_curation_sets, query_user_sets,
+        query_user_web_bookmarks, web_bookmark_row_projection, BookmarkLibraryFilter,
+        BookmarkLibraryFilterChipProjection, BookmarkLibraryPane, BookmarkLibraryProjectionInput,
+        BookmarkLibraryScope, BookmarkLibraryScopeOptionProjection, BookmarkSetRowProjectionInput,
         BookmarkedArticleRowProjectionInput, CurationMenuSnapshotApplyInput,
         CurationSetCreateProjectionInput, WebBookmarkRowProjectionInput, KIND_BOOKMARK_SETS,
         KIND_CURATION_SETS, KIND_WEB_BOOKMARK,
@@ -1117,6 +1117,8 @@ mod tests {
     fn read_lane_fails_closed_on_empty_d() {
         let (ndb, _tmp) = fresh_ndb();
         let user = Keys::generate();
+        // A followed author for the explore lane (query_following_curation_sets).
+        let followed = Keys::generate();
 
         // Valid rows (kept).
         let good_set = EventBuilder::new(Kind::Custom(KIND_BOOKMARK_SETS), "")
@@ -1126,6 +1128,15 @@ mod tests {
         let good_web = EventBuilder::new(Kind::Custom(KIND_WEB_BOOKMARK), "")
             .tags([Tag::parse(vec!["d".to_string(), "example.com/ok".to_string()]).unwrap()])
             .sign_with_keys(&user)
+            .unwrap();
+        // Followed author's curation sets — one valid, one empty-`d`.
+        let good_following_curation = EventBuilder::new(Kind::Custom(KIND_CURATION_SETS), "")
+            .tags([Tag::parse(vec!["d".to_string(), "follow-curated".to_string()]).unwrap()])
+            .sign_with_keys(&followed)
+            .unwrap();
+        let empty_d_following_curation = EventBuilder::new(Kind::Custom(KIND_CURATION_SETS), "")
+            .tags([Tag::parse(vec!["d".to_string(), "".to_string()]).unwrap()])
+            .sign_with_keys(&followed)
             .unwrap();
         // Empty-`d` rows (must be skipped — no empty id / no `url=""`).
         let empty_d_set = EventBuilder::new(Kind::Custom(KIND_BOOKMARK_SETS), "")
@@ -1137,7 +1148,14 @@ mod tests {
             .sign_with_keys(&user)
             .unwrap();
 
-        for event in [&good_set, &good_web, &empty_d_set, &empty_d_web] {
+        for event in [
+            &good_set,
+            &good_web,
+            &good_following_curation,
+            &empty_d_following_curation,
+            &empty_d_set,
+            &empty_d_web,
+        ] {
             process(&ndb, event);
         }
 
@@ -1154,6 +1172,23 @@ mod tests {
         assert!(
             web.iter().all(|w| !w.url.is_empty()),
             "no web bookmark with an empty url may surface"
+        );
+
+        // #1653 NIT: the explore lane (query_following_curation_sets) carries the
+        // same empty-`d` guard (lists.rs ~342) — exercise it so it is not
+        // untested. The empty-`d` curation set from the followed author must be
+        // skipped, never surfacing a set with an empty id.
+        let following =
+            query_following_curation_sets(&ndb, &[followed.public_key().to_hex()]).unwrap();
+        assert_eq!(
+            following.len(),
+            1,
+            "empty-`d` following curation set must be skipped"
+        );
+        assert_eq!(following[0].id, "follow-curated");
+        assert!(
+            following.iter().all(|s| !s.id.is_empty()),
+            "no following curation set with an empty id may surface"
         );
     }
 
