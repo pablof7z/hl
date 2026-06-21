@@ -44,26 +44,14 @@ final class NetworkSettingsStore {
 
     // MARK: - Kernel write helpers (Phase 7)
 
-    /// NIP-65 (kind:10002) role string for a relay with read|write — mirrors the
-    /// bespoke `relays.rs::nip65_tags` markers, which nmp's `nip65_marker_for_role`
-    /// matches exactly: both→"both" (unmarked r-tag), read-only→"read",
-    /// write-only→"write". indexer is NOT a kind:10002 marker (it lives in the
-    /// kind:30078 app-data). Returns `nil` for read=write=false: such a relay
-    /// (rooms/indexer-only) MUST NOT appear in kind:10002 — bespoke nip65_tags
-    /// SKIPS it — so the caller routes it via removeRelay (kind:10002 omit) +
-    /// the kind:30078 app-data, never addRelay (which would publish it as "both").
-    private func nip65Role(read: Bool, write: Bool) -> String? {
-        if read && write { return "both" }
-        if read { return "read" }
-        if write { return "write" }
-        return nil
-    }
-
-    /// Route a relay's kind:10002 (NIP-65) membership: add/edit with the marker
-    /// when it has read|write, else remove it from kind:10002 (rooms/indexer-only
-    /// relays live ONLY in the kind:30078 app-data — bespoke skip-neither parity).
+    /// Route a relay's kind:10002 (NIP-65) membership using the KERNEL's
+    /// `nip65RelayRole` decision (single source of truth, parity-tested against
+    /// bespoke nip65_tags): read|write → set_role with the marker (both/read/write)
+    /// → kind:10002; read=write=false → removeRelay (omit from kind:10002 — a
+    /// rooms/indexer-only relay lives ONLY in the kind:30078 app-data). Swift no
+    /// longer makes the marker decision locally, so it can't drift.
     private func dispatchNip65(url: String, read: Bool, write: Bool) {
-        if let role = nip65Role(read: read, write: write) {
+        if let role = nip65RelayRole(read: read, write: write) {
             kernel.app.dispatch(.setRelayRole(url: url, role: role))
         } else {
             kernel.app.dispatch(.removeRelay(url: url))

@@ -114,6 +114,25 @@ pub(crate) fn relay_app_data_content(
     serde_json::to_string(&kept)
 }
 
+/// NIP-65 (kind:10002) role string for a relay's read/write flags, or `None` when
+/// the relay must be OMITTED from kind:10002 (neither read nor write — a
+/// rooms/indexer-only relay, which lives only in the kind:30078 app-data).
+///
+/// SINGLE SOURCE OF TRUTH for the marker decision: Swift's `dispatchNip65` calls
+/// this (via the binding) so the kind:10002 routing can't drift from the protocol
+/// rule. Mirrors bespoke `relays.rs::nip65_tags`: (t,t)→"both" (unmarked `r` tag),
+/// (t,f)→"read", (f,t)→"write", (f,f)→None (skip). Guarded by the parity test
+/// `nip65_relay_role_matches_bespoke_nip65_tags`.
+#[uniffi::export]
+pub fn nip65_relay_role(read: bool, write: bool) -> Option<String> {
+    match (read, write) {
+        (true, true) => Some("both".to_string()),
+        (true, false) => Some("read".to_string()),
+        (false, true) => Some("write".to_string()),
+        (false, false) => None,
+    }
+}
+
 // ─── Effect runners ──────────────────────────────────────────────────────────
 
 /// Execute `Effect::AddRelay`.
@@ -393,6 +412,48 @@ mod tests {
                 );
             }
             other => panic!("expected Effect::PublishRoomsRelayList, got {:?}", other),
+        }
+    }
+
+    // Phase 7 parity (gotcha #7): the kernel's kind:10002 (NIP-65) role decision
+    // must match bespoke relays.rs::nip65_tags for all 4 read/write cases —
+    // INCLUDING (f,f)→omitted. Guards the rooms-only-relay regression (a relay
+    // with neither read nor write must NOT appear in kind:10002). No hardcoded
+    // expectation: drive both the kernel `nip65_relay_role` and bespoke
+    // `nip65_tags` from the same flags and assert the markers agree.
+    #[test]
+    fn nip65_relay_role_matches_bespoke_nip65_tags() {
+        use crate::relays::{nip65_tags, RelayConfig};
+        for (read, write) in [(true, true), (true, false), (false, true), (false, false)] {
+            let cfg = RelayConfig {
+                url: "wss://x".into(),
+                read,
+                write,
+                rooms: false,
+                indexer: false,
+            };
+            let tags = nip65_tags(&[cfg]).expect("nip65_tags");
+            match nip65_relay_role(read, write) {
+                None => assert!(
+                    tags.is_empty(),
+                    "({read},{write}): kernel omits from kind:10002 → bespoke must too"
+                ),
+                Some(role) => {
+                    assert_eq!(tags.len(), 1, "({read},{write}): one r-tag");
+                    let slice = tags[0].as_slice(); // ["r", url, marker?]
+                    let marker = slice.get(2).map(String::as_str);
+                    let expected = match role.as_str() {
+                        "both" => None, // unmarked r-tag = read+write
+                        "read" => Some("read"),
+                        "write" => Some("write"),
+                        other => panic!("unexpected role {other}"),
+                    };
+                    assert_eq!(
+                        marker, expected,
+                        "({read},{write}): kernel role {role} must match bespoke marker"
+                    );
+                }
+            }
         }
     }
 

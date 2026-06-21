@@ -1183,7 +1183,10 @@ const KIND_RELAY_LIST: u16 = 10002;
 /// Build the `["r", url, marker?]` tags for the provided rows. Rows with
 /// neither `read` nor `write` are skipped — NIP-65 has no concept of a
 /// "disabled" relay entry, only "inbox/outbox/both".
-fn nip65_tags(rows: &[RelayConfig]) -> Result<Vec<Tag>, CoreError> {
+///
+/// `pub(crate)` so the kernel `nip65_relay_role` parity test asserts the kernel's
+/// role-marker decision matches this bespoke reference (gotcha #7).
+pub(crate) fn nip65_tags(rows: &[RelayConfig]) -> Result<Vec<Tag>, CoreError> {
     let mut tags: Vec<Tag> = Vec::new();
     for row in rows {
         let marker = match (row.read, row.write) {

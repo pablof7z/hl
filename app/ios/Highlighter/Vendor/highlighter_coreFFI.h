@@ -1955,6 +1955,11 @@ void uniffi_highlighter_core_fn_method_highlighterobserver_on_snapshot(void*_Non
 void uniffi_highlighter_core_fn_method_highlighterobserver_on_capability_request(void*_Nonnull ptr, RustBuffer request, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_FUNC_NIP65_RELAY_ROLE
+#define UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_FUNC_NIP65_RELAY_ROLE
+RustBuffer uniffi_highlighter_core_fn_func_nip65_relay_role(int8_t read, int8_t write, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_FFI_HIGHLIGHTER_CORE_RUSTBUFFER_ALLOC
 #define UNIFFI_FFIDEF_FFI_HIGHLIGHTER_CORE_RUSTBUFFER_ALLOC
 RustBuffer ffi_highlighter_core_rustbuffer_alloc(uint64_t size, RustCallStatus *_Nonnull out_status
@@ -2233,6 +2238,12 @@ void ffi_highlighter_core_rust_future_free_void(uint64_t handle
 #ifndef UNIFFI_FFIDEF_FFI_HIGHLIGHTER_CORE_RUST_FUTURE_COMPLETE_VOID
 #define UNIFFI_FFIDEF_FFI_HIGHLIGHTER_CORE_RUST_FUTURE_COMPLETE_VOID
 void ffi_highlighter_core_rust_future_complete_void(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_CHECKSUM_FUNC_NIP65_RELAY_ROLE
+#define UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_CHECKSUM_FUNC_NIP65_RELAY_ROLE
+uint16_t uniffi_highlighter_core_checksum_func_nip65_relay_role(void
+
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_CHECKSUM_METHOD_EVENTCALLBACK_ON_DATA_CHANGED
