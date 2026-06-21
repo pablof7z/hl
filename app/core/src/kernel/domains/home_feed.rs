@@ -114,9 +114,21 @@ pub(crate) fn lifecycle_effects_for_view_open(id: &ViewId, state: &AppState) -> 
 /// Emit any missing cursor registrations for an already-open `HomeFeed` view.
 ///
 /// Called from the `FollowListUpdated` reducer when `HomeFeed` is open and
-/// follows arrive (or change). If the interaction cursor has not been registered
-/// yet (cursor_id == 0), emit `RegisterFeedCursor` + `DrainFeed` for it.
-/// Similarly for the article feed which is also follow-scoped.
+/// follows arrive (or change). If a cursor has not been registered yet
+/// (cursor_id == 0), emit `RegisterFeedCursor` + `DrainFeed` for it.
+///
+/// This is also the re-population path after an account SWITCH: the unified
+/// teardown wipes ALL of HomeFeed's cursors (article_feed, highlight_feed,
+/// home_feed_interactions) to default (cursor_id == 0); the new account's
+/// `FollowListUpdated` then re-fires this hook. To leave NO open cursor blank,
+/// this re-registers EVERY wiped HomeFeed cursor — not just the follow-scoped
+/// ones (#1653 codex r5 HIGH gap #1):
+///   - `article_feed` (follow-scoped — fail-closed when follows empty),
+///   - `home_feed_interactions` (follow-scoped — fail-closed when follows empty),
+///   - `highlight_feed` (NOT follow-scoped: kind:9802 any-author). Because it
+///     does not depend on follows it has no other re-register trigger after a
+///     switch wiped it — without this branch the highlight cursor stays at 0
+///     (never advances) until the view is closed and reopened.
 ///
 /// D8: effect-driven, not polling — triggered by the follow-list update event.
 /// Does not ask Swift to close/reopen the view.
@@ -127,13 +139,22 @@ pub(crate) fn lifecycle_effects_for_follow_update(state: &AppState) -> Vec<Effec
     if state.article_feed.cursor_id == 0 {
         if let Some(scope) = super::feed::article_feed_scope(&state.follows) {
             effects.extend(super::feed::reduce_register_feed_cursor(
-                super::articles_feed::ARTICLE_FEED_KEY.to_string(),
+                crate::kernel::domains::articles_feed::ARTICLE_FEED_KEY.to_string(),
                 scope,
             ));
             effects.extend(super::feed::reduce_drain_feed(
-                super::articles_feed::ARTICLE_FEED_KEY.to_string(),
+                crate::kernel::domains::articles_feed::ARTICLE_FEED_KEY.to_string(),
             ));
         }
+    }
+
+    // Re-register the highlight feed if it was wiped (e.g. by an account switch).
+    // The highlight feed is NOT follow-scoped — register unconditionally when its
+    // cursor is unregistered so a switched-to account's open HomeFeed re-populates
+    // its highlight cursor (#1653 codex r5 gap #1). Mirrors the open-time
+    // `highlight_feed::lifecycle_effects_for_view_open` registration.
+    if state.highlight_feed.cursor_id == 0 {
+        effects.extend(highlight_feed_open(&ViewId::HighlightFeed));
     }
 
     // Register interaction cursor if follows arrived after HomeFeed was opened.
@@ -948,6 +969,73 @@ mod tests {
                 Effect::RegisterFeedCursor { key, .. } if key == HOME_INTERACTIONS_FEED_KEY
             )),
             "HomeFeed open must register the home-interaction feed cursor"
+        );
+    }
+
+    // #1653 codex r5 gap #1: after an account switch wipes ALL of HomeFeed's
+    // cursors (cursor_id == 0), the new account's FollowListUpdated re-fires the
+    // follow-update hook, which MUST re-register EVERY wiped open cursor — including
+    // the (non-follow-scoped) highlight feed. Pre-fix the hook re-registered only
+    // article_feed + home_interactions, leaving the highlight cursor stuck at 0.
+    #[test]
+    fn follow_update_reregisters_all_wiped_open_cursors_including_highlight() {
+        let mut state = make_state();
+        // Post-switch state: follows arrived for the new account; ALL HomeFeed
+        // cursors were reset to default (cursor_id == 0) by the teardown.
+        state.follows =
+            vec!["aabbcc0000000000000000000000000000000000000000000000000000000001".to_string()];
+        assert_eq!(state.article_feed.cursor_id, 0);
+        assert_eq!(state.highlight_feed.cursor_id, 0);
+        assert_eq!(state.home_feed_interactions.cursor_id, 0);
+
+        let effects = lifecycle_effects_for_follow_update(&state);
+
+        // All three wiped cursors must re-register.
+        let registered_keys: Vec<&String> = effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::RegisterFeedCursor { key, .. } => Some(key),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            registered_keys
+                .iter()
+                .any(|k| k.as_str() == crate::kernel::domains::articles_feed::ARTICLE_FEED_KEY),
+            "article_feed must re-register, got {registered_keys:?}"
+        );
+        assert!(
+            registered_keys
+                .iter()
+                .any(|k| k.as_str() == crate::kernel::domains::highlight_feed::HIGHLIGHT_FEED_KEY),
+            "highlight_feed must re-register after switch (gap #1), got {registered_keys:?}"
+        );
+        assert!(
+            registered_keys
+                .iter()
+                .any(|k| k.as_str() == HOME_INTERACTIONS_FEED_KEY),
+            "home_feed_interactions must re-register, got {registered_keys:?}"
+        );
+    }
+
+    // Once the highlight feed has been registered (cursor_id != 0), a later
+    // follow-update must NOT re-register it (idempotent — no churn).
+    #[test]
+    fn follow_update_does_not_rereregister_live_highlight_cursor() {
+        let mut state = make_state();
+        state.follows =
+            vec!["aabbcc0000000000000000000000000000000000000000000000000000000001".to_string()];
+        state.highlight_feed.cursor_id = 99; // already live
+
+        let effects = lifecycle_effects_for_follow_update(&state);
+
+        assert!(
+            !effects.iter().any(|e| matches!(
+                e,
+                Effect::RegisterFeedCursor { key, .. }
+                    if key == crate::kernel::domains::highlight_feed::HIGHLIGHT_FEED_KEY
+            )),
+            "live highlight cursor must NOT re-register (no churn), got {effects:?}"
         );
     }
 

@@ -2492,6 +2492,22 @@ pub(crate) async fn actor_task(
             effects.extend(home_feed::lifecycle_effects_for_follow_update(&state));
         }
 
+        // #1653 codex r5 gap #1: a standalone, currently-open `HighlightFeed`
+        // view also has its cursor wiped by an account switch. The highlight feed
+        // is NOT follow-scoped, so it has no `FollowListUpdated` re-register
+        // trigger of its own; re-register it on `IdentityChanged` when it is open
+        // and its cursor was reset to 0 by the teardown, so no open view is left
+        // permanently blank. (Inside HomeFeed this is covered by the
+        // follow-update hook above; this covers the standalone case.)
+        if is_identity_changed
+            && registry.is_open(&ViewId::HighlightFeed)
+            && state.highlight_feed.cursor_id == 0
+        {
+            effects.extend(highlight_feed::lifecycle_effects_for_view_open(
+                &ViewId::HighlightFeed,
+            ));
+        }
+
         // #1653 BLOCKING #2: re-push the bookmarks interest with the refreshed
         // author set (current user + follows) when a follow change or account
         // switch arrives WHILE the Bookmarks view is open. Mirrors the HomeFeed
