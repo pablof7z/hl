@@ -64,7 +64,7 @@ pub async fn publish_picture(
 }
 
 /// Pure builder for the `kind:20` event. Unit-testable.
-fn build_picture_event(
+pub(crate) fn build_picture_event(
     group_id: Option<&str>,
     image: &BlossomUpload,
     artifact: Option<&ArtifactRecord>,
