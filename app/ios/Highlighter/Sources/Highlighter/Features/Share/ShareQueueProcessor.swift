@@ -12,7 +12,7 @@ import Foundation
 /// `pending-shares-v1.json` and returns the items. When that capability result
 /// lands, the kernel dedupes the items into `share_queue.pending` AND publishes
 /// each as a host-pinned kind:11 artifact share (`build_preview` →
-/// `build_artifact_share_tags` → `ActorCommand::PublishRawEvent`) — all in
+/// `build_artifact_share_tags` → validated `nmp.publish`) — all in
 /// `reduce_event_share_queue_drained`. The kernel is the sole writer; the drain
 /// and publish are one atomic kernel step (no Swift-side ordering race).
 @MainActor

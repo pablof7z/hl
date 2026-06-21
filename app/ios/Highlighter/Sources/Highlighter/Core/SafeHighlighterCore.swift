@@ -639,7 +639,7 @@ actor SafeHighlighterCore {
     }
 
     // #21: publishShareQueueItem wrapper DELETED — the Share Extension drain
-    // dispatches the kernel `hl.share.drain_queue_publish` action (kernel sole
+    // dispatches the kernel `hl.share.drain_queue` action (kernel sole
     // writer). See ShareQueueProcessor.
 
     nonisolated func projectWebMetadataRequest(

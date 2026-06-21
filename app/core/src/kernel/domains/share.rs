@@ -1214,7 +1214,7 @@ fn dispatch_share_publish_action(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::capabilities::share::{RawSharePayload, ShareResult};
+    use crate::capabilities::share::RawSharePayload;
     use crate::kernel::app::AppState;
     use crate::kernel::snapshot::CommunityRow;
 
@@ -1526,7 +1526,7 @@ mod tests {
 
     // ── #21 share-publish parity + reducer tests ─────────────────────────────
 
-    use nostr_sdk::prelude::{EventBuilder, Keys, Kind};
+    use nostr_sdk::prelude::{EventBuilder, Keys};
 
     /// Extract a signed event's tags as `Vec<Vec<String>>` for parity comparison.
     fn event_tags(builder: EventBuilder) -> Vec<Vec<String>> {

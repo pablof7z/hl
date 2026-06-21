@@ -2640,7 +2640,7 @@ impl HighlighterCore {
     }
 
     // #21: `publish_share_queue_item` DELETED — the iOS Share Extension drain
-    // now publishes via the kernel `hl.share.drain_queue_publish` action
+    // now publishes via the kernel `hl.share.drain_queue` action
     // (kernel sole writer; no bespoke per-item publish). The queue-state path
     // (`share_extension::*` projections) is retained and still consumed.
 

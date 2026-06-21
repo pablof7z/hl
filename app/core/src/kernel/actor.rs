@@ -2094,7 +2094,7 @@ pub(crate) async fn run_effect(
             correlation_id,
         } => {
             // Sign-and-publish a host-pinned in-group share/repost via
-            // ActorCommand::PublishRawEvent (the generic nmp.publish door). The
+            // validated nmp.publish. The
             // correlation id threads the verdict back through the action_results
             // projection → apply_action_result_row → SharePublishActionResult,
             // driving the share FSM → Done/Error (D6). No-op when nmp is None
