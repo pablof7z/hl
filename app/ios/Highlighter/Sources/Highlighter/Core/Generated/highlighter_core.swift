@@ -1130,13 +1130,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func countArtifactComments(artifact: ArtifactRecord, commentsByReference: [CommentReferenceBucket])  -> UInt32
 
-    /**
-     * Create a collection with `address` already included and return the
-     * refreshed menu snapshot. Rust publishes one real curation-set event; no
-     * native-side create-then-set choreography is needed.
-     */
-    func createCurationSetWithAddressSnapshot(title: String, address: String) async  -> CurationMenuSnapshot
-
     func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess) async  -> CreateRoomPublishSnapshot
 
     func cropOcrLines(lines: [OcrLine], pageRect: OcrRect)  -> [OcrLine]
@@ -2270,13 +2263,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func toggleCommentLikeSnapshot(records: [CommentRecord], eventId: String, authorPubkeyHex: String) async  -> CommentInteractionMutationSnapshot
 
-    /**
-     * Toggle a menu row and return the refreshed menu snapshot. Rust owns the
-     * membership mutation and applies the returned state over the cached
-     * snapshot so native shells do not sequence a follow-up read.
-     */
-    func toggleCurationMenuItemSnapshot(dTag: String, address: String) async  -> CurationMenuSnapshot
-
     func toggleImportRelaySelection(fetched: [RelayConfig], selectedUrls: [String], url: String)  -> [String]
 
     func toggleOnboardingInterestSelection(selectedIds: [String], interestId: String)  -> [String]
@@ -2546,29 +2532,6 @@ open func countArtifactComments(artifact: ArtifactRecord, commentsByReference: [
         FfiConverterSequenceTypeCommentReferenceBucket.lower(commentsByReference),$0
     )
 })
-}
-
-    /**
-     * Create a collection with `address` already included and return the
-     * refreshed menu snapshot. Rust publishes one real curation-set event; no
-     * native-side create-then-set choreography is needed.
-     */
-open func createCurationSetWithAddressSnapshot(title: String, address: String)async  -> CurationMenuSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_create_curation_set_with_address_snapshot(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(title),FfiConverterString.lower(address)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCurationMenuSnapshot_lift,
-            errorHandler: nil
-
-        )
 }
 
 open func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess)async  -> CreateRoomPublishSnapshot  {
@@ -6356,29 +6319,6 @@ open func toggleCommentLikeSnapshot(records: [CommentRecord], eventId: String, a
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeCommentInteractionMutationSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Toggle a menu row and return the refreshed menu snapshot. Rust owns the
-     * membership mutation and applies the returned state over the cached
-     * snapshot so native shells do not sequence a follow-up read.
-     */
-open func toggleCurationMenuItemSnapshot(dTag: String, address: String)async  -> CurationMenuSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_toggle_curation_menu_item_snapshot(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(dTag),FfiConverterString.lower(address)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeCurationMenuSnapshot_lift,
             errorHandler: nil
 
         )
@@ -12771,6 +12711,15 @@ public struct BookmarkSetRecord {
      * `e`-tag references — event ids of kind:1 notes.
      */
     public var noteIds: [String]
+    /**
+     * `r`-tag references — NIP-51 web/URL references. Carried so the read
+     * model is lossless (previously dropped — #1653 codex BLOCKING #2).
+     */
+    public var rRefs: [String]
+    /**
+     * `t`-tag values — topic/hashtag labels on the set.
+     */
+    public var topics: [String]
     public var createdAt: UInt64?
 
     // Default memberwise initializers are never public by default, so we
@@ -12787,7 +12736,14 @@ public struct BookmarkSetRecord {
          */articleAddresses: [String],
         /**
          * `e`-tag references — event ids of kind:1 notes.
-         */noteIds: [String], createdAt: UInt64?) {
+         */noteIds: [String],
+        /**
+         * `r`-tag references — NIP-51 web/URL references. Carried so the read
+         * model is lossless (previously dropped — #1653 codex BLOCKING #2).
+         */rRefs: [String],
+        /**
+         * `t`-tag values — topic/hashtag labels on the set.
+         */topics: [String], createdAt: UInt64?) {
         self.id = id
         self.pubkey = pubkey
         self.kind = kind
@@ -12796,6 +12752,8 @@ public struct BookmarkSetRecord {
         self.image = image
         self.articleAddresses = articleAddresses
         self.noteIds = noteIds
+        self.rRefs = rRefs
+        self.topics = topics
         self.createdAt = createdAt
     }
 }
@@ -12831,6 +12789,12 @@ extension BookmarkSetRecord: Equatable, Hashable {
         if lhs.noteIds != rhs.noteIds {
             return false
         }
+        if lhs.rRefs != rhs.rRefs {
+            return false
+        }
+        if lhs.topics != rhs.topics {
+            return false
+        }
         if lhs.createdAt != rhs.createdAt {
             return false
         }
@@ -12846,6 +12810,8 @@ extension BookmarkSetRecord: Equatable, Hashable {
         hasher.combine(image)
         hasher.combine(articleAddresses)
         hasher.combine(noteIds)
+        hasher.combine(rRefs)
+        hasher.combine(topics)
         hasher.combine(createdAt)
     }
 }
@@ -12867,6 +12833,8 @@ public struct FfiConverterTypeBookmarkSetRecord: FfiConverterRustBuffer {
                 image: FfiConverterString.read(from: &buf),
                 articleAddresses: FfiConverterSequenceString.read(from: &buf),
                 noteIds: FfiConverterSequenceString.read(from: &buf),
+                rRefs: FfiConverterSequenceString.read(from: &buf),
+                topics: FfiConverterSequenceString.read(from: &buf),
                 createdAt: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
@@ -12880,6 +12848,8 @@ public struct FfiConverterTypeBookmarkSetRecord: FfiConverterRustBuffer {
         FfiConverterString.write(value.image, into: &buf)
         FfiConverterSequenceString.write(value.articleAddresses, into: &buf)
         FfiConverterSequenceString.write(value.noteIds, into: &buf)
+        FfiConverterSequenceString.write(value.rRefs, into: &buf)
+        FfiConverterSequenceString.write(value.topics, into: &buf)
         FfiConverterOptionUInt64.write(value.createdAt, into: &buf)
     }
 }
@@ -12944,6 +12914,29 @@ public struct BookmarkSetRow {
      */
     public var noteIds: [String]
     /**
+     * `r`-tag values — NIP-51 web/URL references. Previously dropped (#1653
+     * codex BLOCKING #2) — carried so user data round-trips losslessly.
+     */
+    public var rRefs: [String]
+    /**
+     * `t`-tag values — topic/hashtag labels on the set.
+     */
+    public var topics: [String]
+    /**
+     * The complete raw tag list from the source event (one entry per tag,
+     * each `[key, value, ...]`). The kernel set-writer (`AddToSet`/
+     * `RemoveFromSet`) round-trips every non-`a` tag verbatim from here so
+     * description, image, `e`/`r`/`t`, relay hints, and custom client tags are
+     * never truncated (#1653 codex BLOCKING #3). Empty for rows synthesised in
+     * tests that do not exercise the write path.
+     */
+    public var rawTags: [[String]]
+    /**
+     * The source event `content` field, preserved verbatim for lossless
+     * re-publish (#1653 codex BLOCKING #3).
+     */
+    public var content: String
+    /**
      * Event creation time as Unix seconds (0 when unknown).
      */
     public var createdAt: UInt64
@@ -12976,6 +12969,25 @@ public struct BookmarkSetRow {
          * `e`-tag values — event ids of bookmarked kind:1 notes.
          */noteIds: [String],
         /**
+         * `r`-tag values — NIP-51 web/URL references. Previously dropped (#1653
+         * codex BLOCKING #2) — carried so user data round-trips losslessly.
+         */rRefs: [String],
+        /**
+         * `t`-tag values — topic/hashtag labels on the set.
+         */topics: [String],
+        /**
+         * The complete raw tag list from the source event (one entry per tag,
+         * each `[key, value, ...]`). The kernel set-writer (`AddToSet`/
+         * `RemoveFromSet`) round-trips every non-`a` tag verbatim from here so
+         * description, image, `e`/`r`/`t`, relay hints, and custom client tags are
+         * never truncated (#1653 codex BLOCKING #3). Empty for rows synthesised in
+         * tests that do not exercise the write path.
+         */rawTags: [[String]],
+        /**
+         * The source event `content` field, preserved verbatim for lossless
+         * re-publish (#1653 codex BLOCKING #3).
+         */content: String,
+        /**
          * Event creation time as Unix seconds (0 when unknown).
          */createdAt: UInt64) {
         self.dTag = dTag
@@ -12986,6 +12998,10 @@ public struct BookmarkSetRow {
         self.image = image
         self.articleAddresses = articleAddresses
         self.noteIds = noteIds
+        self.rRefs = rRefs
+        self.topics = topics
+        self.rawTags = rawTags
+        self.content = content
         self.createdAt = createdAt
     }
 }
@@ -13021,6 +13037,18 @@ extension BookmarkSetRow: Equatable, Hashable {
         if lhs.noteIds != rhs.noteIds {
             return false
         }
+        if lhs.rRefs != rhs.rRefs {
+            return false
+        }
+        if lhs.topics != rhs.topics {
+            return false
+        }
+        if lhs.rawTags != rhs.rawTags {
+            return false
+        }
+        if lhs.content != rhs.content {
+            return false
+        }
         if lhs.createdAt != rhs.createdAt {
             return false
         }
@@ -13036,6 +13064,10 @@ extension BookmarkSetRow: Equatable, Hashable {
         hasher.combine(image)
         hasher.combine(articleAddresses)
         hasher.combine(noteIds)
+        hasher.combine(rRefs)
+        hasher.combine(topics)
+        hasher.combine(rawTags)
+        hasher.combine(content)
         hasher.combine(createdAt)
     }
 }
@@ -13057,6 +13089,10 @@ public struct FfiConverterTypeBookmarkSetRow: FfiConverterRustBuffer {
                 image: FfiConverterOptionString.read(from: &buf),
                 articleAddresses: FfiConverterSequenceString.read(from: &buf),
                 noteIds: FfiConverterSequenceString.read(from: &buf),
+                rRefs: FfiConverterSequenceString.read(from: &buf),
+                topics: FfiConverterSequenceString.read(from: &buf),
+                rawTags: FfiConverterSequenceSequenceString.read(from: &buf),
+                content: FfiConverterString.read(from: &buf),
                 createdAt: FfiConverterUInt64.read(from: &buf)
         )
     }
@@ -13070,6 +13106,10 @@ public struct FfiConverterTypeBookmarkSetRow: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.image, into: &buf)
         FfiConverterSequenceString.write(value.articleAddresses, into: &buf)
         FfiConverterSequenceString.write(value.noteIds, into: &buf)
+        FfiConverterSequenceString.write(value.rRefs, into: &buf)
+        FfiConverterSequenceString.write(value.topics, into: &buf)
+        FfiConverterSequenceSequenceString.write(value.rawTags, into: &buf)
+        FfiConverterString.write(value.content, into: &buf)
         FfiConverterUInt64.write(value.createdAt, into: &buf)
     }
 }
@@ -60941,9 +60981,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_count_artifact_comments() != 14471) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_create_curation_set_with_address_snapshot() != 31730) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_create_room() != 28154) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -61800,9 +61837,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_comment_like_snapshot() != 7174) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_curation_menu_item_snapshot() != 16580) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_import_relay_selection() != 16615) {

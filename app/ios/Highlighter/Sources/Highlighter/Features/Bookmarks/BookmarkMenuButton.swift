@@ -111,9 +111,12 @@ struct BookmarkMenuButton: View {
     // MARK: - Actions
 
     private func toggleInCuration(_ item: CurationMenuItem) {
-        // All myCurationSets are owned by the active account; any set's pubkey works.
-        guard let pubkey = kernel.bookmarks?.myCurationSets.first?.pubkey else { return }
-        let setCoordinate = "30004:\(pubkey):\(item.id)"
+        // Resolve the EXACT set this row represents and build its full
+        // coordinate (kind:pubkey:d) from that set — not the first set's pubkey
+        // (#1653 NIT #8). Targets the right set even across kinds/authors.
+        guard let set = kernel.bookmarks?.myCurationSets.first(where: { $0.dTag == item.id })
+        else { return }
+        let setCoordinate = "\(set.kind):\(set.pubkey):\(set.dTag)"
         if item.isMember {
             kernel.app.dispatch(.removeFromSet(setCoordinate: setCoordinate, itemCoordinate: articleAddress))
         } else {

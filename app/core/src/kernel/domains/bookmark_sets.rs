@@ -37,21 +37,30 @@
 //! filter, no I/O). D6: decode errors leave AppState unchanged (silent no-op).
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use nmp_core::substrate::KernelEvent as NmpKernelEvent;
 use nmp_core::KernelEventObserver;
 use nmp_ffi::NmpApp;
+use nmp_planner::{InterestId, InterestLifecycle, InterestScope, InterestShape, LogicalInterest};
+// Pubkey is `type Pubkey = String` in the planner; authors are admitted as raw hex.
 
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::{BookmarkSetRow, WebBookmarkRow};
+use crate::kernel::view::ViewId;
 
 // ── Kind constants ────────────────────────────────────────────────────────────
 
 const KIND_BOOKMARK_SET: u32 = 30003;
 const KIND_CURATION_SET: u32 = 30004;
 const KIND_WEB_BOOKMARK: u32 = 39701;
+
+/// Stable planner `InterestId` for the view-scoped bookmark-sets subscription
+/// (kind:30003 + kind:30004 + kind:39701). Non-zero (0 is the planner's
+/// "unassigned" sentinel). Idempotent push: re-opening the view replaces the
+/// prior entry under this id.
+pub(crate) const BOOKMARK_SETS_INTEREST_ID: u64 = 0x1653_5001;
 
 // ── Schema IDs ────────────────────────────────────────────────────────────────
 
@@ -99,6 +108,15 @@ impl SetListProjection {
         }
     }
 
+    /// Drop all accumulated rows (D5/D8 — bound memory when the view closes so
+    /// the observer does not grow unbounded across the session, #1653 HIGH #7).
+    pub fn clear(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.bookmark_sets.clear();
+            state.curation_sets.clear();
+        }
+    }
+
     /// Serialise all accumulated rows to a `SetListPayload` JSON payload.
     pub fn snapshot_payload(&self) -> Option<Vec<u8>> {
         let Ok(state) = self.state.lock() else {
@@ -124,7 +142,10 @@ impl KernelEventObserver for SetListProjection {
         if event.kind != KIND_BOOKMARK_SET && event.kind != KIND_CURATION_SET {
             return;
         }
-        let row = parse_set_row_from_kernel(event);
+        // Fail closed: a malformed set (no usable `d`) is dropped entirely.
+        let Some(row) = parse_set_row_from_kernel(event) else {
+            return;
+        };
         let key = (event.author.clone(), row.d_tag.clone());
 
         let Ok(mut state) = self.state.lock() else {
@@ -159,6 +180,13 @@ impl WebBookmarkProjection {
         }
     }
 
+    /// Drop all accumulated rows (D5/D8 — bound on view close, #1653 HIGH #7).
+    pub fn clear(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.clear();
+        }
+    }
+
     /// Serialise the active account's web bookmarks as a JSON array.
     pub fn snapshot_payload(&self) -> Option<Vec<u8>> {
         let active = self.active_pubkey.lock().ok()?.as_ref().cloned()?;
@@ -187,7 +215,10 @@ impl KernelEventObserver for WebBookmarkProjection {
         if active.as_deref() != Some(event.author.as_str()) {
             return;
         }
-        let row = parse_web_row_from_kernel(event);
+        // Fail closed: a malformed web bookmark (no usable `d`/URL) is dropped.
+        let Some(row) = parse_web_row_from_kernel(event) else {
+            return;
+        };
         let key = row.url.clone();
         let Ok(mut state) = self.state.lock() else {
             return;
@@ -316,7 +347,7 @@ pub(crate) fn reduce_action_add_to_set(
     set_coordinate: String,
     item_coordinate: String,
 ) -> Vec<Effect> {
-    let Some(mut row) = find_curation_set(state, &set_coordinate) else {
+    let Some(row) = find_curation_set(state, &set_coordinate) else {
         tracing::trace!(
             set = %set_coordinate,
             "bookmark_sets::add_to_set: set not found — no-op (D6)"
@@ -331,8 +362,9 @@ pub(crate) fn reduce_action_add_to_set(
         );
         return vec![];
     }
-    row.article_addresses.push(item_coordinate);
-    build_set_publish_effect(row)
+    let mut new_a = row.article_addresses.clone();
+    new_a.push(item_coordinate);
+    build_set_publish_effect(&row, &new_a)
 }
 
 /// Handle `AppAction::RemoveFromSet { set_coordinate, item_coordinate }`.
@@ -342,7 +374,7 @@ pub(crate) fn reduce_action_remove_from_set(
     set_coordinate: String,
     item_coordinate: String,
 ) -> Vec<Effect> {
-    let Some(mut row) = find_curation_set(state, &set_coordinate) else {
+    let Some(row) = find_curation_set(state, &set_coordinate) else {
         tracing::trace!(
             set = %set_coordinate,
             "bookmark_sets::remove_from_set: set not found — no-op (D6)"
@@ -350,15 +382,16 @@ pub(crate) fn reduce_action_remove_from_set(
         return vec![];
     };
     let before = row.article_addresses.len();
-    row.article_addresses.retain(|a| *a != item_coordinate);
-    if row.article_addresses.len() == before {
+    let mut new_a = row.article_addresses.clone();
+    new_a.retain(|a| *a != item_coordinate);
+    if new_a.len() == before {
         tracing::trace!(
             item = %item_coordinate,
             "bookmark_sets::remove_from_set: item not found — no-op"
         );
         return vec![];
     }
-    build_set_publish_effect(row)
+    build_set_publish_effect(&row, &new_a)
 }
 
 /// Create a brand-new kind:30004 curation set with `title` and immediately add
@@ -425,34 +458,73 @@ fn find_curation_set(state: &AppState, set_coordinate: &str) -> Option<BookmarkS
         .cloned()
 }
 
-/// Serialise a modified `BookmarkSetRow` into an `Effect::PublishSetEvent`
-/// with the kind:30004 event template JSON. Returns an empty vec on failure (D6).
-fn build_set_publish_effect(row: BookmarkSetRow) -> Vec<Effect> {
+/// Serialise a modified curation set into an `Effect::PublishSetEvent` with the
+/// kind:30004 event template JSON, **round-trip-preserving** all data the
+/// reducer does not manage (#1653 codex BLOCKING #3).
+///
+/// The kernel modifies exactly one dimension: the `a`-tag membership list
+/// (`new_a_addresses`). Every other tag from the source event — `d`, `title`,
+/// `description`, `image`, `e`, `r`, `t`, relay hints, and any custom client
+/// tag — is carried verbatim from `row.raw_tags`, and the original `content` is
+/// preserved. The `a` block is dropped and re-emitted from `new_a_addresses`
+/// while preserving every other tag's original position, mirroring the bespoke
+/// `update_address_in_curation_set` (other_tags ++ rebuilt a-tags).
+///
+/// Fallback: when `row.raw_tags` is empty (e.g. a row synthesised in a test
+/// that never observed a raw event) the builder synthesises a minimal tag set
+/// from the scalar fields so the write path still functions.
+///
+/// Returns an empty vec on serialisation failure (D6).
+fn build_set_publish_effect(row: &BookmarkSetRow, new_a_addresses: &[String]) -> Vec<Effect> {
     let mut tags: Vec<serde_json::Value> = Vec::new();
-    // d tag — always first
-    tags.push(serde_json::json!(["d", row.d_tag]));
-    // optional metadata tags
-    if let Some(title) = &row.title {
-        tags.push(serde_json::json!(["title", title]));
-    }
-    if let Some(description) = &row.description {
-        tags.push(serde_json::json!(["description", description]));
-    }
-    if let Some(image) = &row.image {
-        tags.push(serde_json::json!(["image", image]));
-    }
-    // article address tags
-    for addr in &row.article_addresses {
-        tags.push(serde_json::json!(["a", addr]));
-    }
-    // note id tags
-    for id in &row.note_ids {
-        tags.push(serde_json::json!(["e", id]));
+    let mut content = row.content.clone();
+
+    if row.raw_tags.is_empty() {
+        // Synthesised fallback (no source event to round-trip).
+        content = String::new();
+        tags.push(serde_json::json!(["d", row.d_tag]));
+        if let Some(title) = &row.title {
+            tags.push(serde_json::json!(["title", title]));
+        }
+        if let Some(description) = &row.description {
+            tags.push(serde_json::json!(["description", description]));
+        }
+        if let Some(image) = &row.image {
+            tags.push(serde_json::json!(["image", image]));
+        }
+        for id in &row.note_ids {
+            tags.push(serde_json::json!(["e", id]));
+        }
+        for r in &row.r_refs {
+            tags.push(serde_json::json!(["r", r]));
+        }
+        for t in &row.topics {
+            tags.push(serde_json::json!(["t", t]));
+        }
+        for addr in new_a_addresses {
+            tags.push(serde_json::json!(["a", addr]));
+        }
+    } else {
+        // Lossless round-trip: copy every non-`a` tag verbatim, then append the
+        // new `a` membership block.
+        for raw in &row.raw_tags {
+            if raw.first().map(String::as_str) == Some("a") {
+                continue; // managed dimension — re-emitted below
+            }
+            tags.push(serde_json::Value::Array(
+                raw.iter()
+                    .map(|s| serde_json::Value::String(s.clone()))
+                    .collect(),
+            ));
+        }
+        for addr in new_a_addresses {
+            tags.push(serde_json::json!(["a", addr]));
+        }
     }
 
     let template = serde_json::json!({
         "kind": KIND_CURATION_SET,
-        "content": "",
+        "content": content,
         "tags": tags,
     });
     match serde_json::to_string(&template) {
@@ -505,6 +577,119 @@ pub(crate) fn run_effect_publish_set_event(
             signer_pubkey: None,
             correlation_id: None,
         });
+}
+
+// ── View-scoped interest lifecycle (#1653 BLOCKING #1 + HIGH #7) ─────────────
+
+/// Holds the live projection Arcs so the view-close effect runner can clear the
+/// observers' accumulated state (D5/D8 — bound memory across the session).
+///
+/// The typed-snapshot projection closures and event observers are registered
+/// once at boot (their Arcs live forever inside the closures). What makes the
+/// data flow VIEW-SCOPED is the interest lifecycle: the REQ-driving
+/// `LogicalInterest` is pushed on `ViewId::Bookmarks` open and withdrawn on
+/// close, and on close the accumulators are cleared here so nothing grows
+/// unbounded while the view is shut.
+struct SetProjectionsController {
+    set_proj: Arc<SetListProjection>,
+    web_proj: Arc<WebBookmarkProjection>,
+}
+
+static SET_PROJECTIONS_CONTROLLER: OnceLock<SetProjectionsController> = OnceLock::new();
+
+/// Lifecycle hook on `Cmd::OpenView` — push the bookmark-sets subscription so
+/// nmp emits REQ frames for kind:30003/30004/39701 authored by the active
+/// account + follows (#1653 BLOCKING #1). No-op for any other view.
+pub(crate) fn lifecycle_effects_for_view_open(id: &ViewId, state: &AppState) -> Vec<Effect> {
+    if !matches!(id, ViewId::Bookmarks) {
+        return vec![];
+    }
+    let mut authors: Vec<String> = Vec::new();
+    if let Some(pk) = active_pubkey(state) {
+        authors.push(pk.to_string());
+    }
+    authors.extend(state.follows.iter().cloned());
+    authors.sort();
+    authors.dedup();
+    // Only emit when there is at least one author to subscribe for — an
+    // unscoped (wildcard-author) sets interest would fan out to every relay.
+    if authors.is_empty() {
+        return vec![];
+    }
+    vec![Effect::PushBookmarkSetsInterest { authors }]
+}
+
+/// Lifecycle hook on `Cmd::CloseView` — withdraw the bookmark-sets subscription
+/// and clear the observers' accumulators (#1653 HIGH #7). No-op for other views.
+pub(crate) fn lifecycle_effects_for_view_close(id: &ViewId) -> Vec<Effect> {
+    if !matches!(id, ViewId::Bookmarks) {
+        return vec![];
+    }
+    vec![Effect::WithdrawBookmarkSetsInterest]
+}
+
+/// Execute `Effect::PushBookmarkSetsInterest` — push a Tailing, ActiveAccount
+/// `LogicalInterest` for kinds [30003,30004,39701] scoped to `authors`.
+///
+/// No-op when `nmp` is `None` (test mode — the reducer/lifecycle is tested by
+/// inspecting the emitted `Effect`).
+pub(crate) fn run_effect_push_interest(
+    authors: Vec<String>,
+    nmp: Option<&crate::kernel::actor::NmpHandle>,
+) {
+    let Some(handle) = nmp else {
+        tracing::debug!("PushBookmarkSetsInterest: no live NmpApp (test mode)");
+        return;
+    };
+    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+
+    let mut shape = InterestShape::default();
+    shape.kinds.insert(KIND_BOOKMARK_SET);
+    shape.kinds.insert(KIND_CURATION_SET);
+    shape.kinds.insert(KIND_WEB_BOOKMARK);
+    for a in &authors {
+        // Pubkey is a raw hex String in the planner; only admit well-formed
+        // 64-char lowercase-hex keys so a malformed author never reaches the wire.
+        if a.len() == 64 && a.bytes().all(|b| b.is_ascii_hexdigit()) {
+            shape.authors.insert(a.clone());
+        }
+    }
+    if shape.authors.is_empty() {
+        tracing::warn!(
+            "PushBookmarkSetsInterest: no parseable authors — skipping unscoped interest (D6)"
+        );
+        return;
+    }
+
+    nmp_ref.push_interest(LogicalInterest {
+        id: InterestId(BOOKMARK_SETS_INTEREST_ID),
+        scope: InterestScope::ActiveAccount,
+        shape,
+        hints: Vec::new(),
+        lifecycle: InterestLifecycle::Tailing,
+        is_indexer_discovery: false,
+    });
+}
+
+/// Execute `Effect::WithdrawBookmarkSetsInterest` — withdraw the interest and
+/// clear the boot-registered projections' accumulators (D5/D8, #1653 HIGH #7).
+///
+/// No-op when `nmp` is `None`. The accumulator clear happens regardless so the
+/// memory bound holds even in degraded modes.
+pub(crate) fn run_effect_withdraw_interest(nmp: Option<&crate::kernel::actor::NmpHandle>) {
+    if let Some(ctrl) = SET_PROJECTIONS_CONTROLLER.get() {
+        ctrl.set_proj.clear();
+        ctrl.web_proj.clear();
+    }
+    let Some(handle) = nmp else {
+        return;
+    };
+    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+    let _ = nmp_ref
+        .actor_sender()
+        .send(nmp_core::ActorCommand::WithdrawInterest(InterestId(
+            BOOKMARK_SETS_INTEREST_ID,
+        )));
 }
 
 // ── Projection registration ───────────────────────────────────────────────────
@@ -570,25 +755,44 @@ pub(crate) fn register_set_projections(
             ..Default::default()
         })
     });
+
+    // Store the projection Arcs so the view-close effect runner can clear their
+    // accumulators (#1653 HIGH #7). `set` only succeeds on the first boot; a
+    // Reset re-registers fresh observers but keeps the original controller Arcs
+    // — the accumulators it clears are the live ones because the projections are
+    // long-lived singletons (last-writer-wins on the typed-snapshot key).
+    let _ = SET_PROJECTIONS_CONTROLLER.set(SetProjectionsController {
+        set_proj: Arc::clone(&set_proj),
+        web_proj: Arc::clone(&web_proj),
+    });
 }
 
 // ── Kernel event parsing helpers ──────────────────────────────────────────────
 
 /// Parse a `KernelEvent` (kind:30003 or kind:30004) into a `BookmarkSetRow`.
 /// Raw fields only — no presentation strings (D1).
-fn parse_set_row_from_kernel(event: &NmpKernelEvent) -> BookmarkSetRow {
-    let mut d_tag = String::new();
+///
+/// Fail-closed (D6, codex BLOCKING #2): returns `None` when the `d` tag is
+/// missing or empty (NIP-33 requires a non-empty identifier; an empty `d`
+/// would collide every author's sets under one key). Per-item values that are
+/// missing or empty are skipped (the bad item is dropped, the row survives) —
+/// matching the bespoke `parse_set_event` skip-on-empty behaviour. Total
+/// parsing: `a`, `e`, AND `r` references plus `t` topics are all carried.
+fn parse_set_row_from_kernel(event: &NmpKernelEvent) -> Option<BookmarkSetRow> {
+    let mut d_tag: Option<String> = None;
     let mut title = None;
     let mut description = None;
     let mut image = None;
     let mut article_addresses = Vec::new();
     let mut note_ids = Vec::new();
+    let mut r_refs = Vec::new();
+    let mut topics = Vec::new();
 
     for tag in &event.tags {
         match tag.first().map(String::as_str) {
             Some("d") => {
-                if d_tag.is_empty() {
-                    d_tag = tag.get(1).cloned().unwrap_or_default();
+                if d_tag.is_none() {
+                    d_tag = tag.get(1).filter(|v| !v.is_empty()).cloned();
                 }
             }
             Some("title") => {
@@ -607,20 +811,33 @@ fn parse_set_row_from_kernel(event: &NmpKernelEvent) -> BookmarkSetRow {
                 }
             }
             Some("a") => {
-                if let Some(v) = tag.get(1) {
+                if let Some(v) = tag.get(1).filter(|v| !v.is_empty()) {
                     article_addresses.push(v.clone());
                 }
             }
             Some("e") => {
-                if let Some(v) = tag.get(1) {
+                if let Some(v) = tag.get(1).filter(|v| !v.is_empty()) {
                     note_ids.push(v.clone());
+                }
+            }
+            Some("r") => {
+                if let Some(v) = tag.get(1).filter(|v| !v.is_empty()) {
+                    r_refs.push(v.clone());
+                }
+            }
+            Some("t") => {
+                if let Some(v) = tag.get(1).filter(|v| !v.is_empty()) {
+                    topics.push(v.clone());
                 }
             }
             _ => {}
         }
     }
 
-    BookmarkSetRow {
+    // Fail closed: a set with no usable `d` identifier is rejected entirely.
+    let d_tag = d_tag?;
+
+    Some(BookmarkSetRow {
         d_tag,
         pubkey: event.author.clone(),
         kind: event.kind,
@@ -629,13 +846,22 @@ fn parse_set_row_from_kernel(event: &NmpKernelEvent) -> BookmarkSetRow {
         image,
         article_addresses,
         note_ids,
+        r_refs,
+        topics,
+        // Preserve the full raw event for lossless round-trip on write (#3).
+        raw_tags: event.tags.clone(),
+        content: event.content.clone(),
         created_at: event.created_at,
-    }
+    })
 }
 
 /// Parse a `KernelEvent` (kind:39701) into a `WebBookmarkRow`.
-fn parse_web_row_from_kernel(event: &NmpKernelEvent) -> WebBookmarkRow {
-    let mut d = String::new();
+///
+/// Fail-closed (D6, codex BLOCKING #2): returns `None` when the `d` tag (the
+/// URL-without-scheme that keys the bookmark) is missing or empty — a web
+/// bookmark with no URL is meaningless and must not produce `url=""`.
+fn parse_web_row_from_kernel(event: &NmpKernelEvent) -> Option<WebBookmarkRow> {
+    let mut d: Option<String> = None;
     let mut title = None;
     let mut topics = Vec::new();
     let mut published_at = None;
@@ -643,8 +869,8 @@ fn parse_web_row_from_kernel(event: &NmpKernelEvent) -> WebBookmarkRow {
     for tag in &event.tags {
         match tag.first().map(String::as_str) {
             Some("d") => {
-                if d.is_empty() {
-                    d = tag.get(1).cloned().unwrap_or_default();
+                if d.is_none() {
+                    d = tag.get(1).filter(|v| !v.is_empty()).cloned();
                 }
             }
             Some("title") => {
@@ -653,7 +879,7 @@ fn parse_web_row_from_kernel(event: &NmpKernelEvent) -> WebBookmarkRow {
                 }
             }
             Some("t") => {
-                if let Some(v) = tag.get(1) {
+                if let Some(v) = tag.get(1).filter(|v| !v.is_empty()) {
                     topics.push(v.clone());
                 }
             }
@@ -664,11 +890,9 @@ fn parse_web_row_from_kernel(event: &NmpKernelEvent) -> WebBookmarkRow {
         }
     }
 
-    let url = if d.is_empty() {
-        String::new()
-    } else {
-        format!("https://{d}")
-    };
+    // Fail closed: no `d` → no URL → reject the row entirely (never url="").
+    let d = d?;
+    let url = format!("https://{d}");
 
     let description = if event.content.is_empty() {
         None
@@ -676,7 +900,7 @@ fn parse_web_row_from_kernel(event: &NmpKernelEvent) -> WebBookmarkRow {
         Some(event.content.clone())
     };
 
-    WebBookmarkRow {
+    Some(WebBookmarkRow {
         url,
         pubkey: event.author.clone(),
         title,
@@ -684,7 +908,7 @@ fn parse_web_row_from_kernel(event: &NmpKernelEvent) -> WebBookmarkRow {
         topics,
         published_at,
         created_at: event.created_at,
-    }
+    })
 }
 
 // ── Unit tests ────────────────────────────────────────────────────────────────
@@ -715,6 +939,39 @@ mod tests {
         reduce(state, cmd, now)
     }
 
+    /// Minimal `BookmarkSetRow` test builder. New lossless fields (`r_refs`,
+    /// `topics`, `raw_tags`, `content`) default empty — tests that exercise the
+    /// write path set `raw_tags` explicitly.
+    fn row_set(d: &str, pk: &str, kind: u32) -> BookmarkSetRow {
+        BookmarkSetRow {
+            d_tag: d.to_string(),
+            pubkey: pk.to_string(),
+            kind,
+            title: None,
+            description: None,
+            image: None,
+            article_addresses: vec![],
+            note_ids: vec![],
+            r_refs: vec![],
+            topics: vec![],
+            raw_tags: vec![],
+            content: String::new(),
+            created_at: 1000,
+        }
+    }
+
+    fn row_web(url: &str, pk: &str) -> WebBookmarkRow {
+        WebBookmarkRow {
+            url: url.to_string(),
+            pubkey: pk.to_string(),
+            title: None,
+            description: None,
+            topics: vec![],
+            published_at: None,
+            created_at: 1000,
+        }
+    }
+
     // 1653-T1: BookmarkSetsUpdated stores raw rows in AppState.
     #[test]
     fn bookmark_sets_updated_stores_rows() {
@@ -722,17 +979,9 @@ mod tests {
         let mut state = make_state_with_session(pk);
         let clock = ManualClock::default();
 
-        let row = BookmarkSetRow {
-            d_tag: "my-set".to_string(),
-            pubkey: pk.to_string(),
-            kind: 30003,
-            title: Some("My Set".to_string()),
-            description: None,
-            image: None,
-            article_addresses: vec!["30023:aabb:slug".to_string()],
-            note_ids: vec![],
-            created_at: 1000,
-        };
+        let mut row = row_set("my-set", pk, 30003);
+        row.title = Some("My Set".to_string());
+        row.article_addresses = vec!["30023:aabb:slug".to_string()];
 
         step(
             &mut state,
@@ -758,15 +1007,11 @@ mod tests {
         let mut state = make_state_with_session(pk);
         let clock = ManualClock::default();
 
-        let row = WebBookmarkRow {
-            url: "https://example.com/article".to_string(),
-            pubkey: pk.to_string(),
-            title: Some("Article Title".to_string()),
-            description: Some("A description".to_string()),
-            topics: vec!["nostr".to_string()],
-            published_at: None,
-            created_at: 2000,
-        };
+        let mut row = row_web("https://example.com/article", pk);
+        row.title = Some("Article Title".to_string());
+        row.description = Some("A description".to_string());
+        row.topics = vec!["nostr".to_string()];
+        row.created_at = 2000;
 
         step(
             &mut state,
@@ -787,17 +1032,7 @@ mod tests {
         let mut state = make_state_with_session(my_pk);
         state.follows = vec![followed_pk.to_string()];
 
-        let make_set = |pk: &str, d: &str, kind: u32| BookmarkSetRow {
-            d_tag: d.to_string(),
-            pubkey: pk.to_string(),
-            kind,
-            title: None,
-            description: None,
-            image: None,
-            article_addresses: vec![],
-            note_ids: vec![],
-            created_at: 1000,
-        };
+        let make_set = |pk: &str, d: &str, kind: u32| row_set(d, pk, kind);
 
         state.all_bookmark_sets = vec![
             make_set(my_pk, "bm-mine", 30003),
@@ -829,17 +1064,9 @@ mod tests {
         let mut state = make_state_with_session(pk);
         let clock = ManualClock::default();
 
-        state.all_curation_sets = vec![BookmarkSetRow {
-            d_tag: "my-curations".to_string(),
-            pubkey: pk.to_string(),
-            kind: 30004,
-            title: Some("My Curations".to_string()),
-            description: None,
-            image: None,
-            article_addresses: vec![],
-            note_ids: vec![],
-            created_at: 1000,
-        }];
+        let mut set_row = row_set("my-curations", pk, 30004);
+        set_row.title = Some("My Curations".to_string());
+        state.all_curation_sets = vec![set_row];
 
         let effects = step(
             &mut state,
@@ -892,17 +1119,9 @@ mod tests {
         let clock = ManualClock::default();
         let target = "30023:aabb:article";
 
-        state.all_curation_sets = vec![BookmarkSetRow {
-            d_tag: "my-curations".to_string(),
-            pubkey: pk.to_string(),
-            kind: 30004,
-            title: None,
-            description: None,
-            image: None,
-            article_addresses: vec![target.to_string(), "30023:ccdd:other".to_string()],
-            note_ids: vec![],
-            created_at: 1000,
-        }];
+        let mut set_row = row_set("my-curations", pk, 30004);
+        set_row.article_addresses = vec![target.to_string(), "30023:ccdd:other".to_string()];
+        state.all_curation_sets = vec![set_row];
 
         let effects = step(
             &mut state,
@@ -948,17 +1167,9 @@ mod tests {
         let clock = ManualClock::default();
         let existing = "30023:aabb:article";
 
-        state.all_curation_sets = vec![BookmarkSetRow {
-            d_tag: "my-curations".to_string(),
-            pubkey: pk.to_string(),
-            kind: 30004,
-            title: None,
-            description: None,
-            image: None,
-            article_addresses: vec![existing.to_string()],
-            note_ids: vec![],
-            created_at: 1000,
-        }];
+        let mut set_row = row_set("my-curations", pk, 30004);
+        set_row.article_addresses = vec![existing.to_string()];
+        state.all_curation_sets = vec![set_row];
 
         let effects = step(
             &mut state,
@@ -1004,27 +1215,9 @@ mod tests {
         let mut state = make_state_with_session(pk);
         let clock = ManualClock::default();
 
-        state.all_bookmark_sets = vec![BookmarkSetRow {
-            d_tag: "s".to_string(),
-            pubkey: pk.to_string(),
-            kind: 30003,
-            title: None,
-            description: None,
-            image: None,
-            article_addresses: vec![],
-            note_ids: vec![],
-            created_at: 1,
-        }];
+        state.all_bookmark_sets = vec![row_set("s", pk, 30003)];
         state.all_curation_sets = state.all_bookmark_sets.clone();
-        state.web_bookmarks = vec![WebBookmarkRow {
-            url: "https://example.com".to_string(),
-            pubkey: pk.to_string(),
-            title: None,
-            description: None,
-            topics: vec![],
-            published_at: None,
-            created_at: 1,
-        }];
+        state.web_bookmarks = vec![row_web("https://example.com", pk)];
 
         step(&mut state, &clock, Cmd::Action(AppAction::Logout));
 
@@ -1042,7 +1235,15 @@ mod tests {
         );
     }
 
-    // ── Parity tests: kernel projection vs bespoke query_bookmark_library_snapshot
+    // ── Parity tests: ONE consumer-shaped fixture, bespoke vs kernel ──────────
+    //
+    // Gotcha #7b/#7c: a single rich fixture event carries every tag dimension a
+    // real consumer set has — `d` + `title` + `a` items + `e` items + `r` items
+    // (+ `t` topics + description/image + custom client tag + non-empty content).
+    // Both the bespoke parser/writer and the kernel port consume the SAME bytes,
+    // and we `assert_eq` on the concrete VALUES (id, title, every coordinate
+    // incl. `r`, web url/title) — never on counts. A `guard_bites_*` test breaks
+    // one field and proves the equality assertion fails.
     mod parity {
         use super::*;
         use crate::test_ndb::{isolated_ndb, process_event_and_wait};
@@ -1064,34 +1265,50 @@ mod tests {
             Keys::generate()
         }
 
-        fn make_set_event(keys: &Keys, kind: u16, d: &str, articles: &[&str]) -> Event {
-            make_set_event_with_notes(keys, kind, d, articles, &[])
-        }
+        const A1: &str =
+            "30023:bbbb000000000000000000000000000000000000000000000000000000000002:essay";
+        const A2: &str =
+            "30023:cccc000000000000000000000000000000000000000000000000000000000003:talk";
+        const E1: &str = "1111111111111111111111111111111111111111111111111111111111111111";
+        const R1: &str = "https://example.com/reference";
+        const R2: &str = "https://example.org/another";
 
-        fn make_set_event_with_notes(
-            keys: &Keys,
-            kind: u16,
-            d: &str,
-            articles: &[&str],
-            note_ids: &[&str],
-        ) -> Event {
-            let mut tags = vec![Tag::parse(vec!["d".to_string(), d.to_string()]).unwrap()];
-            for addr in articles {
-                tags.push(Tag::parse(vec!["a".to_string(), addr.to_string()]).unwrap());
-            }
-            for nid in note_ids {
-                tags.push(Tag::parse(vec!["e".to_string(), nid.to_string()]).unwrap());
-            }
-            EventBuilder::new(Kind::from(kind), "")
+        /// The single shared consumer-shaped curation-set fixture. Carries the
+        /// full tag spectrum a real client emits, including a `["client","hl"]`
+        /// custom tag and a non-empty content body that the writer must preserve.
+        fn fixture_set_event(keys: &Keys, kind: u16, d: &str) -> Event {
+            let tags = vec![
+                Tag::parse(vec!["d".to_string(), d.to_string()]).unwrap(),
+                Tag::parse(vec!["title".to_string(), "Reading List".to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "description".to_string(),
+                    "things to read".to_string(),
+                ])
+                .unwrap(),
+                Tag::parse(vec![
+                    "image".to_string(),
+                    "https://img.example/x.png".to_string(),
+                ])
+                .unwrap(),
+                Tag::parse(vec!["a".to_string(), A1.to_string()]).unwrap(),
+                Tag::parse(vec!["a".to_string(), A2.to_string()]).unwrap(),
+                Tag::parse(vec!["e".to_string(), E1.to_string()]).unwrap(),
+                Tag::parse(vec!["r".to_string(), R1.to_string()]).unwrap(),
+                Tag::parse(vec!["r".to_string(), R2.to_string()]).unwrap(),
+                Tag::parse(vec!["t".to_string(), "nostr".to_string()]).unwrap(),
+                Tag::parse(vec!["client".to_string(), "hl".to_string()]).unwrap(),
+            ];
+            EventBuilder::new(Kind::from(kind), "set body content")
                 .tags(tags)
                 .sign_with_keys(keys)
                 .unwrap()
         }
 
-        fn make_web_event(keys: &Keys, url_without_scheme: &str, title: &str) -> Event {
+        fn fixture_web_event(keys: &Keys, url_without_scheme: &str, title: &str) -> Event {
             let tags = vec![
                 Tag::parse(vec!["d".to_string(), url_without_scheme.to_string()]).unwrap(),
                 Tag::parse(vec!["title".to_string(), title.to_string()]).unwrap(),
+                Tag::parse(vec!["t".to_string(), "reading".to_string()]).unwrap(),
             ];
             EventBuilder::new(Kind::from(39701u16), "A description")
                 .tags(tags)
@@ -1099,86 +1316,127 @@ mod tests {
                 .unwrap()
         }
 
-        // P1: my_bookmark_sets identity — kernel and bespoke return the same set coordinates and members.
+        /// Reference oracle for the deleted bespoke `update_address_in_curation_set`
+        /// writer (#1653 D4 — the live writer is gone, the kernel is sole writer).
+        /// Encodes its EXACT tag algorithm: copy every non-`a` tag verbatim, then
+        /// append the flipped `a` membership block, preserving content. The write
+        /// parity test asserts the kernel writer produces the same tag multiset.
+        fn bespoke_write_oracle(event: &Event, add_addr: &str) -> (Vec<Vec<String>>, String) {
+            let mut a_addresses: Vec<String> = Vec::new();
+            let mut other_tags: Vec<Vec<String>> = Vec::new();
+            for tag in event.tags.iter() {
+                let s = tag.as_slice();
+                match s.first().map(String::as_str) {
+                    Some("a") => {
+                        if let Some(v) = s.get(1) {
+                            a_addresses.push(v.clone());
+                        }
+                    }
+                    _ => other_tags.push(s.to_vec()),
+                }
+            }
+            if !a_addresses.iter().any(|a| a == add_addr) {
+                a_addresses.push(add_addr.to_string());
+            }
+            let mut tags = other_tags;
+            for addr in &a_addresses {
+                tags.push(vec!["a".to_string(), addr.clone()]);
+            }
+            (tags, event.content.clone())
+        }
+
+        fn json_tags(json: &str) -> (Vec<Vec<String>>, String) {
+            let v: serde_json::Value = serde_json::from_str(json).unwrap();
+            let tags = v["tags"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|t| {
+                    t.as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|x| x.as_str().unwrap().to_string())
+                        .collect::<Vec<String>>()
+                })
+                .collect();
+            let content = v["content"].as_str().unwrap().to_string();
+            (tags, content)
+        }
+
+        // P-READ: bespoke parse vs kernel parse on the SAME rich fixture event —
+        // assert_eq on id, title, ALL `a`/`e`/`r` coordinates (incl. `r` which
+        // both parsers must now carry) and pubkey/kind. Values, not counts.
         #[test]
-        fn parity_my_bookmark_sets_identity() {
+        fn parity_set_read_all_coordinates_incl_r() {
             let keys = make_keys();
             let user_hex = keys.public_key().to_hex();
-            let article_addr = format!("30023:{}:slug", Keys::generate().public_key().to_hex());
+            let set_ev = fixture_set_event(&keys, 30004, "reading-list");
 
-            let set_ev = make_set_event(&keys, 30003, "my-bookmarks", &[article_addr.as_str()]);
-
-            // ── Bespoke path ─────────────────────────────────────────────────
+            // ── Bespoke path (NostrDB read model) ────────────────────────────
             let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
             process_event_and_wait(&ndb, &set_ev);
             let bespoke = crate::lists::query_bookmark_library_snapshot(&ndb, &user_hex);
-            assert_eq!(
-                bespoke.my_bookmark_sets.len(),
-                1,
-                "bespoke: one bookmark set"
-            );
-            let bespoke_set = &bespoke.my_bookmark_sets[0];
+            assert_eq!(bespoke.my_curation_sets.len(), 1, "bespoke: one set");
+            let b = &bespoke.my_curation_sets[0];
 
-            // ── Kernel path ──────────────────────────────────────────────────
-            let mut state = make_state_with_session(&user_hex);
+            // ── Kernel path (KernelEvent parse) ──────────────────────────────
             let kernel_ev = nostr_to_kernel(&set_ev);
-            let row = parse_set_row_from_kernel(&kernel_ev);
-            state.all_bookmark_sets = vec![row];
-            let kernel_sets = project_my_bookmark_sets(&state);
-            assert_eq!(kernel_sets.len(), 1, "kernel: one bookmark set");
-            let kernel_set = &kernel_sets[0];
+            let k = parse_set_row_from_kernel(&kernel_ev).expect("kernel set parses");
 
-            // Identity assertions
+            // Identity, title, and EVERY coordinate dimension must agree.
+            assert_eq!(k.d_tag, b.id, "set id (d) must match");
             assert_eq!(
-                kernel_set.d_tag, bespoke_set.id,
-                "d_tag must match bespoke id"
+                k.title.as_deref().unwrap_or(""),
+                b.title,
+                "title must match"
             );
+            assert_eq!(k.pubkey, b.pubkey, "pubkey must match");
+            assert_eq!(k.kind, b.kind, "kind must match");
             assert_eq!(
-                kernel_set.article_addresses, bespoke_set.article_addresses,
-                "article_addresses must match"
+                k.article_addresses, b.article_addresses,
+                "a coordinates must match exactly"
             );
-            assert_eq!(kernel_set.pubkey, bespoke_set.pubkey, "pubkey must match");
-            assert_eq!(kernel_set.kind, bespoke_set.kind, "kind must match");
+            assert_eq!(k.note_ids, b.note_ids, "e coordinates must match exactly");
+            assert_eq!(k.r_refs, b.r_refs, "r coordinates must match exactly");
+            assert_eq!(k.topics, b.topics, "t topics must match exactly");
+            // The fixture's full set is present (not just a subset).
+            assert_eq!(k.article_addresses, vec![A1.to_string(), A2.to_string()]);
+            assert_eq!(k.r_refs, vec![R1.to_string(), R2.to_string()]);
         }
 
-        // P2: my_curation_sets identity — kernel and bespoke return the same set.
+        // P-WEB: bespoke vs kernel web parse on the SAME fixture — url + title.
         #[test]
-        fn parity_my_curation_sets_identity() {
+        fn parity_web_read_url_and_title() {
             let keys = make_keys();
             let user_hex = keys.public_key().to_hex();
-            let article_addr = format!("30023:{}:slug", Keys::generate().public_key().to_hex());
-
-            let cur_ev = make_set_event(&keys, 30004, "my-curations", &[article_addr.as_str()]);
+            let web_ev = fixture_web_event(&keys, "example.com/article", "Great Article");
 
             let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
-            process_event_and_wait(&ndb, &cur_ev);
+            process_event_and_wait(&ndb, &web_ev);
             let bespoke = crate::lists::query_bookmark_library_snapshot(&ndb, &user_hex);
             assert_eq!(
-                bespoke.my_curation_sets.len(),
+                bespoke.my_web_bookmarks.len(),
                 1,
-                "bespoke: one curation set"
+                "bespoke: one web bookmark"
             );
-            let bespoke_set = &bespoke.my_curation_sets[0];
+            let b = &bespoke.my_web_bookmarks[0];
 
-            let mut state = make_state_with_session(&user_hex);
-            let kernel_ev = nostr_to_kernel(&cur_ev);
-            let row = parse_set_row_from_kernel(&kernel_ev);
-            state.all_curation_sets = vec![row];
-            let kernel_sets = project_my_curation_sets(&state);
-            assert_eq!(kernel_sets.len(), 1, "kernel: one curation set");
-            let kernel_set = &kernel_sets[0];
+            let kernel_ev = nostr_to_kernel(&web_ev);
+            let k = parse_web_row_from_kernel(&kernel_ev).expect("kernel web parses");
 
-            assert_eq!(kernel_set.d_tag, bespoke_set.id);
-            let mut k_addrs = kernel_set.article_addresses.clone();
-            k_addrs.sort();
-            let mut b_addrs = bespoke_set.article_addresses.clone();
-            b_addrs.sort();
-            assert_eq!(k_addrs, b_addrs, "article_addresses must match (sorted)");
-            assert_eq!(kernel_set.pubkey, bespoke_set.pubkey);
-            assert_eq!(kernel_set.kind, bespoke_set.kind);
+            assert_eq!(k.url, b.url, "web url must match");
+            assert_eq!(k.pubkey, b.pubkey, "pubkey must match");
+            let b_title = if b.title.is_empty() {
+                None
+            } else {
+                Some(b.title.as_str())
+            };
+            assert_eq!(k.title.as_deref(), b_title, "web title must match");
+            assert_eq!(k.url, "https://example.com/article");
+            assert_eq!(k.title.as_deref(), Some("Great Article"));
         }
 
-        // P3: following_curation_sets identity — kernel follows filter matches bespoke.
+        // P-FOLLOWS: kernel follows filter matches bespoke explorable set.
         #[test]
         fn parity_following_curation_sets_identity() {
             let my_keys = make_keys();
@@ -1186,19 +1444,9 @@ mod tests {
             let user_hex = my_keys.public_key().to_hex();
             let followed_hex = followed_keys.public_key().to_hex();
 
-            // Include a note_id so explorable_curation_sets keeps this set (it
-            // filters out sets with neither articles nor notes).
-            let fake_note_id = "a".repeat(64);
-            let cur_ev = make_set_event_with_notes(
-                &followed_keys,
-                30004,
-                "fol-curations",
-                &[],
-                &[fake_note_id.as_str()],
-            );
+            let cur_ev = fixture_set_event(&followed_keys, 30004, "fol-curations");
 
             let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
-            // Also inject a follow-list event so bespoke can find the follows.
             let follow_ev = {
                 let tags = vec![Tag::parse(vec!["p".to_string(), followed_hex.clone()]).unwrap()];
                 EventBuilder::new(Kind::ContactList, "")
@@ -1210,10 +1458,6 @@ mod tests {
             process_event_and_wait(&ndb, &cur_ev);
 
             let bespoke = crate::lists::query_bookmark_library_snapshot(&ndb, &user_hex);
-            // bespoke returns explorable curation sets (may filter further) — we
-            // assert that the followed set coordinate is present in EITHER
-            // bespoke.following_curation_sets OR my_curation_sets (if both accounts
-            // are the same, which they're not here).
             let bespoke_has = bespoke
                 .following_curation_sets
                 .iter()
@@ -1222,120 +1466,145 @@ mod tests {
             let mut state = make_state_with_session(&user_hex);
             state.follows = vec![followed_hex.clone()];
             let kernel_ev = nostr_to_kernel(&cur_ev);
-            let row = parse_set_row_from_kernel(&kernel_ev);
+            let row = parse_set_row_from_kernel(&kernel_ev).expect("parses");
             state.all_curation_sets = vec![row];
-            let kernel_following = project_following_curation_sets(&state);
-            let kernel_has = kernel_following
+            let kernel_has = project_following_curation_sets(&state)
                 .iter()
                 .any(|s| s.d_tag == "fol-curations" && s.pubkey == followed_hex);
 
-            assert!(
-                bespoke_has,
-                "bespoke must include the followed curation set"
-            );
-            assert!(kernel_has, "kernel must include the followed curation set");
+            assert!(bespoke_has, "bespoke must include the followed set");
+            assert!(kernel_has, "kernel must include the followed set");
         }
 
-        // P4: my_web_bookmarks identity — url and title match.
+        // P-WRITE: the kernel writer (AddToSet) must produce the SAME event the
+        // bespoke writer would — preserving every non-`a` tag (title,
+        // description, image, e, r, t, the custom `client` tag) AND the content,
+        // adding only the new `a` item (#1653 BLOCKING #3 + #5).
         #[test]
-        fn parity_my_web_bookmarks_identity() {
+        fn parity_add_to_set_preserves_all_non_a_tags() {
             let keys = make_keys();
-            let user_hex = keys.public_key().to_hex();
+            let pk = keys.public_key().to_hex();
+            let new_item =
+                "30023:dddd000000000000000000000000000000000000000000000000000000000004:new";
 
-            let web_ev = make_web_event(&keys, "example.com/article", "Great Article");
+            // The set already in kernel state was parsed from the rich fixture,
+            // so its raw_tags + content drive the lossless round-trip.
+            let set_ev = fixture_set_event(&keys, 30004, "reading-list");
+            let kernel_ev = nostr_to_kernel(&set_ev);
+            let mut state = make_state_with_session(&pk);
+            state.all_curation_sets = vec![parse_set_row_from_kernel(&kernel_ev).expect("parses")];
 
-            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
-            process_event_and_wait(&ndb, &web_ev);
-            let bespoke = crate::lists::query_bookmark_library_snapshot(&ndb, &user_hex);
-            assert_eq!(
-                bespoke.my_web_bookmarks.len(),
-                1,
-                "bespoke: one web bookmark"
+            let effects = reduce_action_add_to_set(
+                &state,
+                format!("30004:{pk}:reading-list"),
+                new_item.to_string(),
             );
-            let bespoke_wb = &bespoke.my_web_bookmarks[0];
-
-            let mut state = make_state_with_session(&user_hex);
-            let kernel_ev = nostr_to_kernel(&web_ev);
-            let row = parse_web_row_from_kernel(&kernel_ev);
-            state.web_bookmarks = vec![row];
-            let kernel_wbs = project_my_web_bookmarks(&state);
-            assert_eq!(kernel_wbs.len(), 1, "kernel: one web bookmark");
-            let kernel_wb = &kernel_wbs[0];
-
-            assert_eq!(kernel_wb.url, bespoke_wb.url, "url must match");
-            assert_eq!(kernel_wb.pubkey, bespoke_wb.pubkey, "pubkey must match");
-            // Title: bespoke uses "" when absent, kernel uses None; compare after normalising.
-            let bespoke_title = if bespoke_wb.title.is_empty() {
-                None
-            } else {
-                Some(bespoke_wb.title.as_str())
-            };
-            assert_eq!(
-                kernel_wb.title.as_deref(),
-                bespoke_title,
-                "title must match"
-            );
-        }
-
-        // P5 (write parity): AddToSet emitted event tags match bespoke toggle_address_in_curation_set shape.
-        #[test]
-        fn parity_add_to_set_event_tags() {
-            let pk = "aaaa000000000000000000000000000000000000000000000000000000000001";
-            let item =
-                "30023:bbbb000000000000000000000000000000000000000000000000000000000002:slug";
-            let mut state = make_state_with_session(pk);
-            state.all_curation_sets = vec![BookmarkSetRow {
-                d_tag: "test-set".to_string(),
-                pubkey: pk.to_string(),
-                kind: 30004,
-                title: Some("Test Set".to_string()),
-                description: None,
-                image: None,
-                article_addresses: vec![],
-                note_ids: vec![],
-                created_at: 1000,
-            }];
-
-            let effects =
-                reduce_action_add_to_set(&state, format!("30004:{pk}:test-set"), item.to_string());
-
             assert_eq!(effects.len(), 1);
             let Effect::PublishSetEvent { json } = &effects[0] else {
                 panic!("expected PublishSetEvent");
             };
-            let v: serde_json::Value = serde_json::from_str(json).unwrap();
+            let (kernel_tags, kernel_content) = json_tags(json);
 
-            // Must be kind:30004
-            assert_eq!(v["kind"].as_u64(), Some(30004));
+            // Bespoke oracle: the deleted writer's exact tag algorithm.
+            let (oracle_tags, oracle_content) = bespoke_write_oracle(&set_ev, new_item);
 
-            // Tags must include "d" tag with the set identifier
-            let tags = v["tags"].as_array().unwrap();
-            let d_val: Vec<_> = tags
-                .iter()
-                .filter_map(|t| {
-                    let arr = t.as_array()?;
-                    if arr.get(0)?.as_str() == Some("d") {
-                        arr.get(1)?.as_str()
-                    } else {
-                        None
-                    }
+            // Content preserved verbatim (NOT clobbered to "").
+            assert_eq!(kernel_content, oracle_content, "content must be preserved");
+            assert_eq!(kernel_content, "set body content");
+
+            // Compare as sorted multisets — both writers emit the same tag set
+            // (the bespoke oracle keeps original non-`a` order then a-block;
+            // the kernel writer does the same, so a sorted compare is exact).
+            let mut k = kernel_tags.clone();
+            let mut o = oracle_tags.clone();
+            k.sort();
+            o.sort();
+            assert_eq!(k, o, "kernel writer tags must equal bespoke writer tags");
+
+            // Spot-check the load-bearing preserved dimensions are actually there.
+            let has = |tags: &[Vec<String>], key: &str, val: &str| {
+                tags.iter().any(|t| {
+                    t.first().map(String::as_str) == Some(key)
+                        && t.get(1).map(String::as_str) == Some(val)
                 })
-                .collect();
-            assert_eq!(d_val, vec!["test-set"], "must have d tag = test-set");
+            };
+            assert!(
+                has(&kernel_tags, "title", "Reading List"),
+                "title preserved"
+            );
+            assert!(
+                has(&kernel_tags, "description", "things to read"),
+                "description preserved"
+            );
+            assert!(
+                has(&kernel_tags, "image", "https://img.example/x.png"),
+                "image preserved"
+            );
+            assert!(has(&kernel_tags, "e", E1), "e preserved");
+            assert!(has(&kernel_tags, "r", R1), "r preserved (not dropped)");
+            assert!(has(&kernel_tags, "r", R2), "r preserved (not dropped)");
+            assert!(has(&kernel_tags, "t", "nostr"), "t preserved");
+            assert!(
+                has(&kernel_tags, "client", "hl"),
+                "custom client tag preserved"
+            );
+            assert!(has(&kernel_tags, "a", A1), "existing a preserved");
+            assert!(has(&kernel_tags, "a", A2), "existing a preserved");
+            assert!(has(&kernel_tags, "a", new_item), "new a added");
+        }
 
-            // Tags must include the new "a" tag
-            let a_val: Vec<_> = tags
+        // GUARD: prove the read-parity assertion BITES — corrupt the kernel row's
+        // `r_refs` and confirm the equality check would fail.
+        #[test]
+        fn guard_bites_when_r_refs_diverge() {
+            let keys = make_keys();
+            let user_hex = keys.public_key().to_hex();
+            let set_ev = fixture_set_event(&keys, 30004, "reading-list");
+
+            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
+            process_event_and_wait(&ndb, &set_ev);
+            let bespoke = crate::lists::query_bookmark_library_snapshot(&ndb, &user_hex);
+            let b = &bespoke.my_curation_sets[0];
+
+            let kernel_ev = nostr_to_kernel(&set_ev);
+            let mut k = parse_set_row_from_kernel(&kernel_ev).expect("parses");
+
+            // Sanity: they agree before corruption.
+            assert_eq!(k.r_refs, b.r_refs, "precondition: r_refs agree");
+
+            // Corrupt one field — the guard must now see a difference.
+            k.r_refs.push("https://evil.example/injected".to_string());
+            assert_ne!(
+                k.r_refs, b.r_refs,
+                "guard bites: a divergent r_refs must fail the parity equality"
+            );
+        }
+
+        // GUARD: prove the write-parity assertion BITES — a writer that dropped a
+        // non-`a` tag (the old lossy behaviour) would NOT equal the oracle.
+        #[test]
+        fn guard_bites_when_writer_drops_non_a_tag() {
+            let keys = make_keys();
+            let set_ev = fixture_set_event(&keys, 30004, "reading-list");
+            let new_item = "30023:eeee:new";
+
+            let (oracle_tags, _) = bespoke_write_oracle(&set_ev, new_item);
+
+            // Simulate the OLD lossy writer: rebuild from scalars, dropping `r`.
+            let lossy: Vec<Vec<String>> = oracle_tags
                 .iter()
-                .filter_map(|t| {
-                    let arr = t.as_array()?;
-                    if arr.get(0)?.as_str() == Some("a") {
-                        arr.get(1)?.as_str()
-                    } else {
-                        None
-                    }
-                })
+                .filter(|t| t.first().map(String::as_str) != Some("r"))
+                .cloned()
                 .collect();
-            assert_eq!(a_val, vec![item], "must have a tag with item_coordinate");
+
+            let mut a = lossy.clone();
+            let mut b = oracle_tags.clone();
+            a.sort();
+            b.sort();
+            assert_ne!(
+                a, b,
+                "guard bites: a writer that drops `r` must not equal the lossless oracle"
+            );
         }
     }
 }

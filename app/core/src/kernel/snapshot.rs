@@ -664,6 +664,21 @@ pub struct BookmarkSetRow {
     pub article_addresses: Vec<String>,
     /// `e`-tag values — event ids of bookmarked kind:1 notes.
     pub note_ids: Vec<String>,
+    /// `r`-tag values — NIP-51 web/URL references. Previously dropped (#1653
+    /// codex BLOCKING #2) — carried so user data round-trips losslessly.
+    pub r_refs: Vec<String>,
+    /// `t`-tag values — topic/hashtag labels on the set.
+    pub topics: Vec<String>,
+    /// The complete raw tag list from the source event (one entry per tag,
+    /// each `[key, value, ...]`). The kernel set-writer (`AddToSet`/
+    /// `RemoveFromSet`) round-trips every non-`a` tag verbatim from here so
+    /// description, image, `e`/`r`/`t`, relay hints, and custom client tags are
+    /// never truncated (#1653 codex BLOCKING #3). Empty for rows synthesised in
+    /// tests that do not exercise the write path.
+    pub raw_tags: Vec<Vec<String>>,
+    /// The source event `content` field, preserved verbatim for lossless
+    /// re-publish (#1653 codex BLOCKING #3).
+    pub content: String,
     /// Event creation time as Unix seconds (0 when unknown).
     pub created_at: u64,
 }

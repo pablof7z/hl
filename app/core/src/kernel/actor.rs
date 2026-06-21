@@ -1788,6 +1788,15 @@ pub(crate) async fn run_effect(
             // publish path as PublishHighlightEvent. Fire-and-forget (D6).
             bookmark_sets::run_effect_publish_set_event(json, nmp);
         }
+        Effect::PushBookmarkSetsInterest { authors } => {
+            // #1653 BLOCKING #1: push the view-scoped sets/web subscription so
+            // nmp emits REQ frames and events actually arrive. Fire-and-forget (D6).
+            bookmark_sets::run_effect_push_interest(authors, nmp);
+        }
+        Effect::WithdrawBookmarkSetsInterest => {
+            // #1653 HIGH #7: withdraw the interest + clear accumulators (D5/D8).
+            bookmark_sets::run_effect_withdraw_interest(nmp);
+        }
 
         // ── Phase 5C additions (append-only) ─────────────────────────────────
         // No-op when data_dir is empty (test mode — tests inject KernelEvent::IsbnPreviewReady
@@ -2403,6 +2412,9 @@ pub(crate) async fn actor_task(
                     lifecycle_effects
                         .extend(bookmarks::ensure_bookmark_article_previews(&mut state));
                 }
+                // ── #1653: push view-scoped sets subscription (kind 30003/30004/39701) ──
+                lifecycle_effects
+                    .extend(bookmark_sets::lifecycle_effects_for_view_open(id, &state));
                 // ── Phase 7 discussions: register DiscussionObserver per room ──
                 // Inline (not an Effect) because it needs the NmpHandle directly.
                 // No-op when nmp_handle is None (test mode) or group_id is empty.
@@ -2446,6 +2458,8 @@ pub(crate) async fn actor_task(
                 lifecycle_effects.extend(highlight_feed::lifecycle_effects_for_view_close(id));
                 // ── Phase 4J: home feed — release both underlying cursors ───────
                 lifecycle_effects.extend(home_feed::lifecycle_effects_for_view_close(id));
+                // ── #1653: withdraw sets subscription + clear accumulators (D5/D8) ──
+                lifecycle_effects.extend(bookmark_sets::lifecycle_effects_for_view_close(id));
                 registry.close(id);
             }
             Cmd::Resume => {

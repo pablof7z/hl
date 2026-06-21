@@ -218,6 +218,13 @@ pub(crate) fn reduce_event_identity_changed(
             // Wipe AppState::bookmarks so stale bookmarks don't outlive the
             // removed account.
             state.bookmarks = Vec::new();
+            // ── #1653 HIGH #6: clear bookmark/curation sets + web bookmarks ────
+            // IdentityChanged(None) fires on account switch/removal. Wipe the
+            // AppState mirrors so the previous account's sets/web bookmarks never
+            // surface under the next identity (logout already does this at ~113).
+            state.all_bookmark_sets.clear();
+            state.all_curation_sets.clear();
+            state.web_bookmarks.clear();
             // ── Phase 4A: clear articles on account removal ───────────────────
             state.articles.clear();
             // ── Phase 4B: clear reaction state on account removal ─────────────
