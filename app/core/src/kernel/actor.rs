@@ -44,6 +44,8 @@ use crate::kernel::domains::{
     auth,
     // ── Phase 5G additions (append-only) ─────────────────────────────────────
     blossom,
+    // ── #1653 additions (append-only) ────────────────────────────────────────
+    bookmark_sets,
     bookmarks,
     // ── Phase 5E additions (append-only) ─────────────────────────────────────
     camera,
@@ -368,6 +370,22 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
             bookmarks::reduce_action_remove_bookmark_for_state(state, item)
         }
 
+        // ── #1653 additions (append-only) ─────────────────────────────────────
+        AppAction::AddToSet {
+            set_coordinate,
+            item_coordinate,
+        } => bookmark_sets::reduce_action_add_to_set(state, set_coordinate, item_coordinate),
+
+        AppAction::RemoveFromSet {
+            set_coordinate,
+            item_coordinate,
+        } => bookmark_sets::reduce_action_remove_from_set(state, set_coordinate, item_coordinate),
+
+        AppAction::CreateAndAddToSet {
+            title,
+            item_coordinate,
+        } => bookmark_sets::reduce_action_create_and_add_to_set(state, title, item_coordinate, now),
+
         // ── Phase 4A additions ────────────────────────────────────────────────
         // OpenArticle / CloseArticle are fire-and-forget signals from native to
         // coordinate article reader lifecycle. No NMP action is needed — the
@@ -493,16 +511,17 @@ fn reduce_action_envelope(
     }
 
     use crate::kernel::action::{
-        AddBookmarkPayload, AddRelayPayload, AddRoomMemberPayload, AudioPlayPayload,
-        AudioSeekPayload, AudioSetResumePayload, BlossomUploadPayload, CaptureSelectWordPayload,
-        CaptureSetArtifactPreviewPayload, CaptureSetArtifactRecordPayload,
-        CaptureSetContextPayload, CaptureSetNotePayload, CaptureSetQuotePayload,
-        CaptureSetTargetGroupPayload, ClaimProfilePayload, ClipExtendSegmentPayload,
-        ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload, ClipSetStartPayload,
-        CreateAccountPayload, CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload,
-        JoinRoomPayload, LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload,
-        PairBunkerPayload, PresentSheetPayload, PublishClipPayload, PublishHighlightPayload,
-        ReactPayload, ReleaseProfilePayload, RemoveBookmarkPayload, RemoveRelayPayload,
+        AddBookmarkPayload, AddRelayPayload, AddRoomMemberPayload, AddToSetPayload,
+        AudioPlayPayload, AudioSeekPayload, AudioSetResumePayload, BlossomUploadPayload,
+        CaptureSelectWordPayload, CaptureSetArtifactPreviewPayload,
+        CaptureSetArtifactRecordPayload, CaptureSetContextPayload, CaptureSetNotePayload,
+        CaptureSetQuotePayload, CaptureSetTargetGroupPayload, ClaimProfilePayload,
+        ClipExtendSegmentPayload, ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload,
+        ClipSetStartPayload, CreateAccountPayload, CreateAndAddToSetPayload,
+        CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload, JoinRoomPayload,
+        LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload, PairBunkerPayload,
+        PresentSheetPayload, PublishClipPayload, PublishHighlightPayload, ReactPayload,
+        ReleaseProfilePayload, RemoveBookmarkPayload, RemoveFromSetPayload, RemoveRelayPayload,
         RunSearchPayload, SelectRootTabPayload, SetRelayRolePayload, SetRoomsRelayListPayload,
         ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload, ToggleReactionPayload,
         UnfollowPayload, UnreactPayload,
@@ -631,6 +650,25 @@ fn reduce_action_envelope(
         "hl.bookmark.remove" => {
             let p = parse!(RemoveBookmarkPayload);
             bookmarks::reduce_action_remove_bookmark_for_state(state, p.item)
+        }
+
+        // ── Curation sets (#1653) ─────────────────────────────────────────────
+        "hl.curation.add_to_set" => {
+            let p = parse!(AddToSetPayload);
+            bookmark_sets::reduce_action_add_to_set(state, p.set_coordinate, p.item_coordinate)
+        }
+        "hl.curation.remove_from_set" => {
+            let p = parse!(RemoveFromSetPayload);
+            bookmark_sets::reduce_action_remove_from_set(state, p.set_coordinate, p.item_coordinate)
+        }
+        "hl.curation.create_and_add" => {
+            let p = parse!(CreateAndAddToSetPayload);
+            bookmark_sets::reduce_action_create_and_add_to_set(
+                state,
+                p.title,
+                p.item_coordinate,
+                now,
+            )
         }
 
         // ── Articles ──────────────────────────────────────────────────────────
@@ -1095,6 +1133,27 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
             bookmarks::ensure_bookmark_article_previews(state)
         }
 
+        // ── #1653 additions (append-only) ─────────────────────────────────────
+        KernelEvent::BookmarkSetsUpdated {
+            all_bookmark_sets,
+            all_curation_sets,
+        } => {
+            // Store raw BookmarkSetRow items decoded from the "hl.bookmark_sets"
+            // typed sidecar (all authors, unfiltered). D1: raw fields only.
+            // Injectable directly from tests via Cmd::Event.
+            state.all_bookmark_sets = all_bookmark_sets;
+            state.all_curation_sets = all_curation_sets;
+            vec![]
+        }
+
+        KernelEvent::WebBookmarksUpdated(rows) => {
+            // Store web-bookmark rows decoded from the "hl.web_bookmarks"
+            // typed sidecar (active account only). D1: raw fields only.
+            // Injectable directly from tests via Cmd::Event.
+            state.web_bookmarks = rows;
+            vec![]
+        }
+
         // ── Phase 4A additions (append-only) ─────────────────────────────────
         KernelEvent::ArticlesUpdated(rows) => {
             // Replace AppState::articles with the incoming row set.
@@ -1489,6 +1548,11 @@ pub(crate) fn project_snapshot(
             crate::kernel::snapshot::BookmarksSnapshot {
                 rows: state.bookmarks.clone(),
                 article_previews: bookmarks::bookmark_article_previews(state),
+                // ── #1653: sets + web panes ───────────────────────────────────
+                my_bookmark_sets: bookmark_sets::project_my_bookmark_sets(state),
+                my_curation_sets: bookmark_sets::project_my_curation_sets(state),
+                following_curation_sets: bookmark_sets::project_following_curation_sets(state),
+                my_web_bookmarks: bookmark_sets::project_my_web_bookmarks(state),
             },
         )),
 
@@ -1752,6 +1816,23 @@ pub(crate) async fn run_effect(
             // b4404159 — this is the same raw publish path Phase 2D uses for
             // the rooms relay list. Fire-and-forget (D6).
             highlight_feed::run_effect_publish_highlight(json, nmp);
+        }
+
+        // ── #1653 additions (append-only) ─────────────────────────────────────
+        Effect::PublishSetEvent { json } => {
+            // Publish a kind:30004 curation-set update via ActorCommand::PublishRawEvent.
+            // No nmp action namespace for kind:30004 at d16aea60 — same raw
+            // publish path as PublishHighlightEvent. Fire-and-forget (D6).
+            bookmark_sets::run_effect_publish_set_event(json, nmp);
+        }
+        Effect::PushBookmarkSetsInterest { authors } => {
+            // #1653 BLOCKING #1: push the view-scoped sets/web subscription so
+            // nmp emits REQ frames and events actually arrive. Fire-and-forget (D6).
+            bookmark_sets::run_effect_push_interest(authors, nmp);
+        }
+        Effect::WithdrawBookmarkSetsInterest => {
+            // #1653 HIGH #7: withdraw the interest + clear accumulators (D5/D8).
+            bookmark_sets::run_effect_withdraw_interest(nmp);
         }
 
         // ── Phase 5C additions (append-only) ─────────────────────────────────
@@ -2368,6 +2449,9 @@ pub(crate) async fn actor_task(
                     lifecycle_effects
                         .extend(bookmarks::ensure_bookmark_article_previews(&mut state));
                 }
+                // ── #1653: push view-scoped sets subscription (kind 30003/30004/39701) ──
+                lifecycle_effects
+                    .extend(bookmark_sets::lifecycle_effects_for_view_open(id, &state));
                 // ── Phase 7 discussions: register DiscussionObserver per room ──
                 // Inline (not an Effect) because it needs the NmpHandle directly.
                 // No-op when nmp_handle is None (test mode) or group_id is empty.
@@ -2421,6 +2505,8 @@ pub(crate) async fn actor_task(
                 lifecycle_effects.extend(highlight_feed::lifecycle_effects_for_view_close(id));
                 // ── Phase 4J: home feed — release both underlying cursors ───────
                 lifecycle_effects.extend(home_feed::lifecycle_effects_for_view_close(id));
+                // ── #1653: withdraw sets subscription + clear accumulators (D5/D8) ──
+                lifecycle_effects.extend(bookmark_sets::lifecycle_effects_for_view_close(id));
                 registry.close(id);
             }
             Cmd::Resume => {
@@ -2437,6 +2523,10 @@ pub(crate) async fn actor_task(
         // Detect FollowListUpdated before reduce so we can emit post-reduce
         // effects that need the registry (which is not available in reduce_event).
         let is_follow_list_updated = matches!(cmd, Cmd::Event(KernelEvent::FollowListUpdated(_)));
+        // #1653 BLOCKING #2: a follow change OR account switch must refresh the
+        // bookmarks interest authors while the view is open. IdentityChanged also
+        // changes the active account (and clears/replaces follows downstream).
+        let is_identity_changed = matches!(cmd, Cmd::Event(KernelEvent::IdentityChanged(_)));
 
         // Reduce (pure, sync).
         let mut effects = reduce(&mut state, cmd, now);
@@ -2447,6 +2537,30 @@ pub(crate) async fn actor_task(
         // effect-driven; no polling; no native close/reopen.
         if is_follow_list_updated && registry.is_open(&ViewId::HomeFeed) {
             effects.extend(home_feed::lifecycle_effects_for_follow_update(&state));
+        }
+
+        // #1653 codex r5 gap #1: a standalone, currently-open `HighlightFeed`
+        // view also has its cursor wiped by an account switch. The highlight feed
+        // is NOT follow-scoped, so it has no `FollowListUpdated` re-register
+        // trigger of its own; re-register it on `IdentityChanged` when it is open
+        // and its cursor was reset to 0 by the teardown, so no open view is left
+        // permanently blank. (Inside HomeFeed this is covered by the
+        // follow-update hook above; this covers the standalone case.)
+        if is_identity_changed
+            && registry.is_open(&ViewId::HighlightFeed)
+            && state.highlight_feed.cursor_id == 0
+        {
+            effects.extend(highlight_feed::lifecycle_effects_for_view_open(
+                &ViewId::HighlightFeed,
+            ));
+        }
+
+        // #1653 BLOCKING #2: re-push the bookmarks interest with the refreshed
+        // author set (current user + follows) when a follow change or account
+        // switch arrives WHILE the Bookmarks view is open. Mirrors the HomeFeed
+        // follow-update hook above. The push is idempotent (stable InterestId).
+        if (is_follow_list_updated || is_identity_changed) && registry.is_open(&ViewId::Bookmarks) {
+            effects.extend(bookmark_sets::lifecycle_effects_for_follow_update(&state));
         }
 
         // Run lifecycle effects first (profile claim/release), then reducer effects.
@@ -2708,6 +2822,15 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
     // observation is harmless — both projections read the same events. The write
     // actions are NOT re-registered here (nmp-defaults already wired them).
     bookmarks::register_bookmark_list_projection(nmp_ref, nmp_ref.active_account_handle());
+
+    // #1653: wire SetListProjection (kind:30003/30004, all authors) and
+    // WebBookmarkProjection (kind:39701, active account only). NMP has no
+    // built-in observers for these kinds at d16aea60 — custom registration.
+    // SetListProjection accumulates all events; identity filtering happens at
+    // apply_bookmark_sets time on the actor thread (where AppState::follows is
+    // available). WebBookmarkProjection uses the live active-account slot so
+    // it auto-tracks identity switches.
+    bookmark_sets::register_set_projections(nmp_ref, nmp_ref.active_account_handle());
 
     // Phase 3A: register the update callback so NMP snapshot frames are
     // forwarded into the actor as KernelEvent::NmpSnapshotFrame. The

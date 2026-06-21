@@ -15,14 +15,9 @@ final class BookmarkStore {
     var scope: BookmarkLibraryScope = .mine
     var isLoading = false
 
-    private var setsHandle: UInt64?
-    private var followingHandle: UInt64?
-    private var webHandle: UInt64?
-
     private weak var bridge: EventBridge?
     private var core: SafeHighlighterCore?
-    /// Phase 7: the kernel owns the Articles pane (bookmarked kind:30023 →
-    /// artifact-preview keystone). Collections/web stay on the live lane (nmp #1653).
+    /// Phase 7 / #1653: kernel owns all bookmarks panes — articles, sets, and web.
     private var kernel: HighlighterAppKernel?
 
     func start(core: SafeHighlighterCore, bridge: EventBridge, kernel: HighlighterAppKernel) async {
@@ -31,82 +26,69 @@ final class BookmarkStore {
         self.kernel = kernel
 
         kernel.openBookmarks()
-        await installSubscriptions(core: core, bridge: bridge)
-
         await reload()
     }
 
     func stop() {
         kernel?.closeBookmarks()
-        let handles = [setsHandle, followingHandle, webHandle].compactMap { $0 }
-        setsHandle = nil
-        followingHandle = nil
-        webHandle = nil
-        for handle in handles {
-            bridge?.unregister(handle: handle)
-        }
-        if let core, !handles.isEmpty {
-            Task { [core, handles] in
-                for handle in handles {
-                    await core.unsubscribe(handle)
-                }
-            }
-        }
-    }
-
-    private func installSubscriptions(core: SafeHighlighterCore, bridge: EventBridge) async {
-        if setsHandle == nil {
-            let setsStart = await core.subscribeBookmarkSets()
-            let projection = core.projectViewSubscriptionStart(
-                input: ViewSubscriptionStartProjectionInput(start: setsStart)
-            )
-            if projection.shouldRegister {
-                setsHandle = projection.handle
-                bridge.registerBookmarkStore(self, handle: projection.handle)
-            }
-        }
-        if followingHandle == nil {
-            let followingStart = await core.subscribeFollowingCurationSets()
-            let projection = core.projectViewSubscriptionStart(
-                input: ViewSubscriptionStartProjectionInput(start: followingStart)
-            )
-            if projection.shouldRegister {
-                followingHandle = projection.handle
-                bridge.registerBookmarkStore(self, handle: projection.handle)
-            }
-        }
-        if webHandle == nil {
-            let webStart = await core.subscribeWebBookmarks()
-            let projection = core.projectViewSubscriptionStart(
-                input: ViewSubscriptionStartProjectionInput(start: webStart)
-            )
-            if projection.shouldRegister {
-                webHandle = projection.handle
-                bridge.registerBookmarkStore(self, handle: projection.handle)
-            }
-        }
     }
 
     func reload() async {
-        guard let core else { return }
         isLoading = true
         defer { isLoading = false }
-
-        // Articles pane is kernel-owned (Phase 7); the collections/web panes stay
-        // on the live lane (nmp #1653).
-        let snapshot = await core.getBookmarkLibrarySnapshot()
-        myBookmarkSets = snapshot.myBookmarkSets
-        myCurationSets = snapshot.myCurationSets
-        myWebBookmarks = snapshot.myWebBookmarks
-        followingCurationSets = snapshot.followingCurationSets
+        // All panes are now kernel-owned (#1653). Apply the latest snapshot.
         applyKernelSnapshot()
     }
 
-    /// Apply the kernel bookmarks snapshot's Articles pane. Called from `reload()`
-    /// and from `BookmarksView.onChange(of: kernel.bookmarks)` so previews that
-    /// resolve after the initial load (the keystone fetches missing coords) fade in.
+    /// Apply the full kernel bookmarks snapshot — articles pane (Phase 7) and
+    /// collections/web panes (#1653). Called from `reload()` and from
+    /// `BookmarksView.onChange(of: kernel.bookmarks)` so panes that resolve
+    /// after the initial load fade in automatically.
     func applyKernelSnapshot() {
-        myArticles = (kernel?.bookmarks?.articlePreviews ?? []).map(ArticleRecord.init(bookmarkPreview:))
+        let snap = kernel?.bookmarks
+        myArticles = (snap?.articlePreviews ?? []).map(ArticleRecord.init(bookmarkPreview:))
+        myBookmarkSets = (snap?.myBookmarkSets ?? []).map(BookmarkSetRecord.init(row:))
+        myCurationSets = (snap?.myCurationSets ?? []).map(BookmarkSetRecord.init(row:))
+        followingCurationSets = (snap?.followingCurationSets ?? []).map(BookmarkSetRecord.init(row:))
+        myWebBookmarks = (snap?.myWebBookmarks ?? []).map(WebBookmarkRecord.init(row:))
+    }
+}
+
+// MARK: - Kernel row → bespoke record mappings (#1653)
+
+extension BookmarkSetRecord {
+    /// Build a `BookmarkSetRecord` (bespoke presentation type) from a kernel
+    /// `BookmarkSetRow` (raw D1 snapshot field). Title/description/image use
+    /// empty-string fallbacks to match the bespoke `parse_set_event` contract.
+    init(row: BookmarkSetRow) {
+        self.init(
+            id: row.dTag,
+            pubkey: row.pubkey,
+            kind: row.kind,
+            title: row.title ?? "",
+            description: row.description ?? "",
+            image: row.image ?? "",
+            articleAddresses: row.articleAddresses,
+            noteIds: row.noteIds,
+            rRefs: row.rRefs,
+            topics: row.topics,
+            createdAt: row.createdAt
+        )
+    }
+}
+
+extension WebBookmarkRecord {
+    /// Build a `WebBookmarkRecord` from a kernel `WebBookmarkRow`.
+    init(row: WebBookmarkRow) {
+        self.init(
+            url: row.url,
+            pubkey: row.pubkey,
+            title: row.title ?? "",
+            description: row.description ?? "",
+            topics: row.topics,
+            publishedAt: row.publishedAt,
+            createdAt: row.createdAt
+        )
     }
 }
 

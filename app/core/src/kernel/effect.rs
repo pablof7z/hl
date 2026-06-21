@@ -342,6 +342,29 @@ pub enum Effect {
         json: String,
     },
 
+    // ── #1653 additions (append-only) ────────────────────────────────────────
+    /// Publish a kind:30004 curation-set update (add or remove an article) via
+    /// `ActorCommand::PublishRawEvent`. Same raw-publish path as
+    /// `PublishHighlightEvent` — NMP has no built-in action namespace for
+    /// kind:30004 at d16aea60 (verified by grep on origin/master).
+    ///
+    /// The `json` field is a serde_json-serialised event template
+    /// `{ kind: 30004, content: "", tags: [...] }` (kind, content, tags only —
+    /// nmp's signer fills `id`, `sig`, `pubkey`, `created_at`). Built in the
+    /// reducer with `serde_json::json!` (never `format!` — D-rule).
+    ///
+    /// Fire-and-forget (D6, Non-Negotiable #3): the updated set event arrives
+    /// back as a `BookmarkSetsUpdated` frame once the relay echoes the event
+    /// and the `SetListProjection` re-snapshots. Kernel is the sole
+    /// kind:30004 writer for ported screens.
+    ///
+    /// No-op when `nmp` is `None` (test mode — tests inspect the `Effect`
+    /// directly to verify the event template).
+    PublishSetEvent {
+        /// serde_json-serialised event template: `{ kind, content, tags }`.
+        json: String,
+    },
+
     // ── Phase 4F additions (append-only) ─────────────────────────────────────
     /// Register a pull cursor with the nmp kernel for the named feed.
     ///
@@ -677,4 +700,36 @@ pub enum Effect {
         /// `"i:podcast:item:guid:<guid>"`). Never empty.
         coordinate: String,
     },
+
+    // ── #1653 bookmark-sets subscription additions (append-only) ─────────────
+    /// Push a view-scoped `LogicalInterest` for NIP-51 bookmark/curation SETS
+    /// (kind:30003 + kind:30004) and NIP-B0 web bookmarks (kind:39701) so nmp
+    /// emits REQ frames and matching events actually arrive (#1653 codex
+    /// BLOCKING #1). Without this the `SetListProjection`/`WebBookmarkProjection`
+    /// observers only see accepted-event fanout — the data is starved.
+    ///
+    /// The effect runner builds `InterestShape{ authors, kinds:[30003,30004,
+    /// 39701] }` (Tailing, ActiveAccount) and calls `NmpApp::push_interest`
+    /// with the stable [`bookmark_sets::BOOKMARK_SETS_INTEREST_ID`]. Emitted on
+    /// `ViewId::Bookmarks` open. Idempotent: the registry replaces the prior
+    /// entry on the same `InterestId`.
+    ///
+    /// `authors` = active account + follows (raw 64-char hex). Empty `authors`
+    /// is tolerated (wildcard) but the reducer only emits when an account is
+    /// present. Fire-and-forget (D6). No-op when `nmp` is `None` (test mode).
+    PushBookmarkSetsInterest {
+        /// Raw hex pubkeys whose sets/web bookmarks are wanted (active + follows).
+        authors: Vec<String>,
+    },
+
+    /// Withdraw the view-scoped bookmark-sets interest pushed by
+    /// [`PushBookmarkSetsInterest`] and clear the accumulated projection state so
+    /// the observers do not grow unbounded across the session (#1653 codex
+    /// HIGH #7, D5/D8). Emitted on `ViewId::Bookmarks` close.
+    ///
+    /// Sends `ActorCommand::WithdrawInterest(InterestId(BOOKMARK_SETS_INTEREST_ID))`
+    /// and clears the live `SetListProjection`/`WebBookmarkProjection` accumulators
+    /// via the boot-registered controller. Fire-and-forget (D6). No-op when `nmp`
+    /// is `None`.
+    WithdrawBookmarkSetsInterest,
 }

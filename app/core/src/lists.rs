@@ -13,10 +13,8 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
 use crate::articles;
 use crate::artifacts::first_tag_value;
-use crate::clock::Clock;
 use crate::errors::CoreError;
 use crate::models::{ArticleRecord, BookmarkSetRecord, CurationMenuItem, WebBookmarkRecord};
-use crate::nostr_runtime::NostrRuntime;
 
 pub const KIND_BOOKMARK_SETS: u16 = 30003;
 pub const KIND_CURATION_SETS: u16 = 30004;
@@ -283,8 +281,14 @@ pub fn query_user_sets(
         let Ok(event) = Event::from_json(&json) else {
             continue;
         };
-        let d = first_tag_value(&event, "d").unwrap_or("").to_string();
-        let entry = by_d.entry(d).or_insert_with(|| event.clone());
+        // Fail closed on empty `d` — a set with no usable identifier would
+        // produce an empty `id`. Mirrors the kernel parser
+        // (`parse_set_row_from_kernel`: "no empty-string identity") so this
+        // retained read lane can never admit an identity-less row (#1653 HIGH).
+        let Some(d) = first_tag_value(&event, "d").filter(|v| !v.is_empty()) else {
+            continue;
+        };
+        let entry = by_d.entry(d.to_string()).or_insert_with(|| event.clone());
         if event.created_at > entry.created_at {
             *entry = event;
         }
@@ -335,9 +339,14 @@ pub fn query_following_curation_sets(
         let Ok(event) = Event::from_json(&json) else {
             continue;
         };
-        let d = first_tag_value(&event, "d").unwrap_or("").to_string();
+        // Fail closed on empty `d` — mirrors the kernel parser's "no
+        // empty-string identity" so the explore lane never yields a set with an
+        // empty `id` (#1653 HIGH).
+        let Some(d) = first_tag_value(&event, "d").filter(|v| !v.is_empty()) else {
+            continue;
+        };
         let pk = event.pubkey.to_hex();
-        let key = (pk, d);
+        let key = (pk, d.to_string());
         let entry = by_key.entry(key).or_insert_with(|| event.clone());
         if event.created_at > entry.created_at {
             *entry = event;
@@ -396,8 +405,14 @@ pub fn query_user_web_bookmarks(
         let Ok(event) = Event::from_json(&json) else {
             continue;
         };
-        let d = first_tag_value(&event, "d").unwrap_or("").to_string();
-        let entry = by_d.entry(d).or_insert_with(|| event.clone());
+        // Fail closed on empty `d` — the `d` IS the URL-without-scheme; an empty
+        // one would produce `url=""`. Mirrors the kernel web parser
+        // (`parse_web_row_from_kernel`: "a web bookmark with no URL is
+        // meaningless and must not produce url=\"\"") (#1653 HIGH).
+        let Some(d) = first_tag_value(&event, "d").filter(|v| !v.is_empty()) else {
+            continue;
+        };
+        let entry = by_d.entry(d.to_string()).or_insert_with(|| event.clone());
         if event.created_at > entry.created_at {
             *entry = event;
         }
@@ -690,233 +705,35 @@ fn web_bookmark_host(url: &str) -> Option<String> {
         .and_then(|parsed| parsed.host_str().map(str::to_string))
 }
 
-// -- Publish API (curation sets) --------------------------------------------
-
-/// Create a kind:30004 curation set and include `address` in the published
-/// event from the start. Used by the native bookmark menu so creation and
-/// membership are one atomic Rust operation.
-pub async fn create_curation_set_with_address(
-    runtime: &NostrRuntime,
-    user_hex: &str,
-    title: &str,
-    address: &str,
-    clock: &dyn Clock,
-) -> Result<BookmarkSetRecord, CoreError> {
-    let address = address.trim();
-    if address.is_empty() {
-        return Err(CoreError::InvalidInput("address must not be empty".into()));
-    }
-    create_curation_set_with_addresses(runtime, user_hex, title, vec![address.to_string()], clock)
-        .await
-}
-
-async fn create_curation_set_with_addresses(
-    runtime: &NostrRuntime,
-    user_hex: &str,
-    title: &str,
-    article_addresses: Vec<String>,
-    clock: &dyn Clock,
-) -> Result<BookmarkSetRecord, CoreError> {
-    let title = title.trim();
-    if title.is_empty() {
-        return Err(CoreError::InvalidInput(
-            "collection title must not be empty".into(),
-        ));
-    }
-
-    // Stable identifier — UNIX nanoseconds, unique-per-user since each
-    // author generates their own. NIP-33 only requires uniqueness within
-    // the (author, d-tag) keyspace, not globally.
-    let nanos = clock.now_unix_nanos();
-    let d_tag = format!("c-{nanos:x}");
-
-    let mut tags = vec![
-        Tag::parse(vec!["d".to_string(), d_tag.clone()])
-            .map_err(|e| CoreError::Other(format!("build d tag: {e}")))?,
-        Tag::parse(vec!["title".to_string(), title.to_string()])
-            .map_err(|e| CoreError::Other(format!("build title tag: {e}")))?,
-    ];
-    let mut normalized_addresses = Vec::new();
-    for address in article_addresses {
-        let address = address.trim();
-        if address.is_empty() {
-            continue;
-        }
-        tags.push(
-            Tag::parse(vec!["a".to_string(), address.to_string()])
-                .map_err(|e| CoreError::Other(format!("build article tag: {e}")))?,
-        );
-        normalized_addresses.push(address.to_string());
-    }
-
-    let builder = EventBuilder::new(Kind::Custom(KIND_CURATION_SETS), "").tags(tags);
-    let client = runtime.client();
-    let event = client
-        .sign_event_builder(builder)
-        .await
-        .map_err(|e| CoreError::Signer(format!("sign curation set: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish curation set: {e}")))?;
-
-    let _ = user_hex; // unused — pubkey comes from the signer
-    Ok(BookmarkSetRecord {
-        id: d_tag,
-        pubkey: event.pubkey.to_hex(),
-        kind: KIND_CURATION_SETS as u32,
-        title: title.to_string(),
-        description: String::new(),
-        image: String::new(),
-        article_addresses: normalized_addresses,
-        note_ids: Vec::new(),
-        created_at: Some(event.created_at.as_secs()),
-    })
-}
-
-/// Toggle an `a`-tag (NIP-33 article address) in the curation set keyed
-/// by `(user_hex, d_tag)`. Reads the newest cached version, mutates the
-/// membership, re-publishes the full set preserving every other tag.
-/// Returns the new membership state.
-pub async fn toggle_address_in_curation_set(
-    runtime: &NostrRuntime,
-    user_hex: &str,
-    d_tag: &str,
-    address: &str,
-) -> Result<bool, CoreError> {
-    update_address_in_curation_set(runtime, user_hex, d_tag, address).await
-}
-
-async fn update_address_in_curation_set(
-    runtime: &NostrRuntime,
-    user_hex: &str,
-    d_tag: &str,
-    address: &str,
-) -> Result<bool, CoreError> {
-    let d_tag = d_tag.trim();
-    let address = address.trim();
-    if d_tag.is_empty() {
-        return Err(CoreError::InvalidInput(
-            "curation d-tag must not be empty".into(),
-        ));
-    }
-    if address.is_empty() {
-        return Err(CoreError::InvalidInput("address must not be empty".into()));
-    }
-
-    let event = newest_set_event(runtime.ndb(), user_hex, KIND_CURATION_SETS, d_tag)?
-        .ok_or_else(|| CoreError::Other(format!("curation set not found: {d_tag}")))?;
-
-    // Walk the existing tags so we can preserve everything we don't
-    // touch (description, image, e-tags, custom tags from other
-    // clients). We rebuild the `a`-tag list with the membership flip.
-    let mut a_addresses: Vec<String> = Vec::new();
-    let mut other_tags: Vec<Vec<String>> = Vec::new();
-    for tag in event.tags.iter() {
-        let s = tag.as_slice();
-        match s.first().map(String::as_str) {
-            Some("a") => {
-                if let Some(v) = s.get(1) {
-                    a_addresses.push(v.clone());
-                }
-            }
-            _ => other_tags.push(s.to_vec()),
-        }
-    }
-
-    let was_present = a_addresses.iter().any(|a| a == address);
-    let next_member = !was_present;
-    if next_member {
-        a_addresses.push(address.to_string());
-    } else {
-        a_addresses.retain(|a| a != address);
-    }
-
-    let mut tags: Vec<Tag> = Vec::with_capacity(other_tags.len() + a_addresses.len());
-    for raw in other_tags {
-        if let Ok(t) = Tag::parse(raw) {
-            tags.push(t);
-        }
-    }
-    for addr in &a_addresses {
-        tags.push(
-            Tag::parse(vec!["a".to_string(), addr.clone()])
-                .map_err(|e| CoreError::Other(format!("build a tag: {e}")))?,
-        );
-    }
-
-    let builder =
-        EventBuilder::new(Kind::Custom(KIND_CURATION_SETS), event.content.clone()).tags(tags);
-    let client = runtime.client();
-    let new_event = client
-        .sign_event_builder(builder)
-        .await
-        .map_err(|e| CoreError::Signer(format!("sign curation set: {e}")))?;
-    client
-        .send_event(&new_event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish curation set: {e}")))?;
-
-    Ok(next_member)
-}
-
-/// Read the newest cached event for `(user_hex, kind, d_tag)`. Used by
-/// the publish path to do read-modify-write without round-tripping a
-/// relay first.
-fn newest_set_event(
-    ndb: &Ndb,
-    user_hex: &str,
-    kind: u16,
-    d_tag: &str,
-) -> Result<Option<Event>, CoreError> {
-    let author = PublicKey::from_hex(user_hex)
-        .map_err(|e| CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
-    let pk_bytes: [u8; 32] = author.to_bytes();
-
-    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
-    let filter = NdbFilter::new()
-        .kinds([kind as u64])
-        .authors([&pk_bytes])
-        .tags([d_tag], 'd')
-        .build();
-    let results = ndb
-        .query(&txn, &[filter], 16)
-        .map_err(|e| CoreError::Cache(format!("query set: {e}")))?;
-
-    let mut newest: Option<Event> = None;
-    for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
-            continue;
-        };
-        let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else {
-            continue;
-        };
-        newest = Some(match newest {
-            Some(prev) if prev.created_at >= event.created_at => prev,
-            _ => event,
-        });
-    }
-    Ok(newest)
-}
-
 // -- Parsing -----------------------------------------------------------------
 
 fn parse_set_event(event: Event, kind: u16) -> BookmarkSetRecord {
     let mut article_addresses = Vec::new();
     let mut note_ids = Vec::new();
+    let mut r_refs = Vec::new();
+    let mut topics = Vec::new();
 
     for tag in event.tags.iter() {
         let s = tag.as_slice();
         match s.first().map(String::as_str) {
             Some("a") => {
-                if let Some(v) = s.get(1) {
+                if let Some(v) = s.get(1).filter(|v| !v.is_empty()) {
                     article_addresses.push(v.clone());
                 }
             }
             Some("e") => {
-                if let Some(v) = s.get(1) {
+                if let Some(v) = s.get(1).filter(|v| !v.is_empty()) {
                     note_ids.push(v.clone());
+                }
+            }
+            Some("r") => {
+                if let Some(v) = s.get(1).filter(|v| !v.is_empty()) {
+                    r_refs.push(v.clone());
+                }
+            }
+            Some("t") => {
+                if let Some(v) = s.get(1).filter(|v| !v.is_empty()) {
+                    topics.push(v.clone());
                 }
             }
             _ => {}
@@ -934,6 +751,8 @@ fn parse_set_event(event: Event, kind: u16) -> BookmarkSetRecord {
         image: first_tag_value(&event, "image").unwrap_or("").to_string(),
         article_addresses,
         note_ids,
+        r_refs,
+        topics,
         created_at: Some(event.created_at.as_secs()),
     }
 }
@@ -980,7 +799,8 @@ mod tests {
         curation_menu_items_for_address, curation_menu_snapshot_apply_projection,
         curation_menu_snapshot_for_address, curation_set_create_projection,
         filter_explorable_curation_sets, query_bookmark_library_snapshot,
-        query_bookmark_set_detail_snapshot, web_bookmark_row_projection, BookmarkLibraryFilter,
+        query_bookmark_set_detail_snapshot, query_following_curation_sets, query_user_sets,
+        query_user_web_bookmarks, web_bookmark_row_projection, BookmarkLibraryFilter,
         BookmarkLibraryFilterChipProjection, BookmarkLibraryPane, BookmarkLibraryProjectionInput,
         BookmarkLibraryScope, BookmarkLibraryScopeOptionProjection, BookmarkSetRowProjectionInput,
         BookmarkedArticleRowProjectionInput, CurationMenuSnapshotApplyInput,
@@ -1023,6 +843,8 @@ mod tests {
             image: String::new(),
             article_addresses: article_addresses.into_iter().map(str::to_string).collect(),
             note_ids: note_ids.into_iter().map(str::to_string).collect(),
+            r_refs: Vec::new(),
+            topics: Vec::new(),
             created_at: Some(1),
         }
     }
@@ -1285,6 +1107,89 @@ mod tests {
         assert_eq!(snapshot.my_web_bookmarks.len(), 1);
         assert_eq!(snapshot.my_web_bookmarks[0].title, "Example Page");
         assert!(snapshot.following_curation_sets.is_empty());
+    }
+
+    // #1653 HIGH: the retained read lane must fail closed on empty `d`, matching
+    // the kernel parser's "no empty-string identity." A set / web bookmark with
+    // an empty `d` tag previously produced an empty set `id` / empty `url`; it
+    // must now be skipped entirely.
+    #[test]
+    fn read_lane_fails_closed_on_empty_d() {
+        let (ndb, _tmp) = fresh_ndb();
+        let user = Keys::generate();
+        // A followed author for the explore lane (query_following_curation_sets).
+        let followed = Keys::generate();
+
+        // Valid rows (kept).
+        let good_set = EventBuilder::new(Kind::Custom(KIND_BOOKMARK_SETS), "")
+            .tags([Tag::parse(vec!["d".to_string(), "saved".to_string()]).unwrap()])
+            .sign_with_keys(&user)
+            .unwrap();
+        let good_web = EventBuilder::new(Kind::Custom(KIND_WEB_BOOKMARK), "")
+            .tags([Tag::parse(vec!["d".to_string(), "example.com/ok".to_string()]).unwrap()])
+            .sign_with_keys(&user)
+            .unwrap();
+        // Followed author's curation sets — one valid, one empty-`d`.
+        let good_following_curation = EventBuilder::new(Kind::Custom(KIND_CURATION_SETS), "")
+            .tags([Tag::parse(vec!["d".to_string(), "follow-curated".to_string()]).unwrap()])
+            .sign_with_keys(&followed)
+            .unwrap();
+        let empty_d_following_curation = EventBuilder::new(Kind::Custom(KIND_CURATION_SETS), "")
+            .tags([Tag::parse(vec!["d".to_string(), "".to_string()]).unwrap()])
+            .sign_with_keys(&followed)
+            .unwrap();
+        // Empty-`d` rows (must be skipped — no empty id / no `url=""`).
+        let empty_d_set = EventBuilder::new(Kind::Custom(KIND_BOOKMARK_SETS), "")
+            .tags([Tag::parse(vec!["d".to_string(), "".to_string()]).unwrap()])
+            .sign_with_keys(&user)
+            .unwrap();
+        let empty_d_web = EventBuilder::new(Kind::Custom(KIND_WEB_BOOKMARK), "")
+            .tags([Tag::parse(vec!["d".to_string(), "".to_string()]).unwrap()])
+            .sign_with_keys(&user)
+            .unwrap();
+
+        for event in [
+            &good_set,
+            &good_web,
+            &good_following_curation,
+            &empty_d_following_curation,
+            &empty_d_set,
+            &empty_d_web,
+        ] {
+            process(&ndb, event);
+        }
+
+        let sets = query_user_sets(&ndb, &user.public_key().to_hex(), KIND_BOOKMARK_SETS).unwrap();
+        assert_eq!(sets.len(), 1, "empty-`d` set must be skipped");
+        assert_eq!(sets[0].id, "saved");
+        assert!(
+            sets.iter().all(|s| !s.id.is_empty()),
+            "no set with an empty id may surface"
+        );
+
+        let web = query_user_web_bookmarks(&ndb, &user.public_key().to_hex()).unwrap();
+        assert_eq!(web.len(), 1, "empty-`d` web bookmark must be skipped");
+        assert!(
+            web.iter().all(|w| !w.url.is_empty()),
+            "no web bookmark with an empty url may surface"
+        );
+
+        // #1653 NIT: the explore lane (query_following_curation_sets) carries the
+        // same empty-`d` guard (lists.rs ~342) — exercise it so it is not
+        // untested. The empty-`d` curation set from the followed author must be
+        // skipped, never surfacing a set with an empty id.
+        let following =
+            query_following_curation_sets(&ndb, &[followed.public_key().to_hex()]).unwrap();
+        assert_eq!(
+            following.len(),
+            1,
+            "empty-`d` following curation set must be skipped"
+        );
+        assert_eq!(following[0].id, "follow-curated");
+        assert!(
+            following.iter().all(|s| !s.id.is_empty()),
+            "no following curation set with an empty id may surface"
+        );
     }
 
     #[test]

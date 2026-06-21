@@ -461,20 +461,6 @@ actor SafeHighlighterCore {
         core.projectCurationMenuSnapshotApply(input: input)
     }
 
-    func createCurationSetWithAddressSnapshot(
-        title: String,
-        address: String
-    ) async -> CurationMenuSnapshot {
-        await core.createCurationSetWithAddressSnapshot(title: title, address: address)
-    }
-
-    func toggleCurationMenuItemSnapshot(
-        dTag: String,
-        address: String
-    ) async -> CurationMenuSnapshot {
-        await core.toggleCurationMenuItemSnapshot(dTag: dTag, address: address)
-    }
-
     nonisolated func projectBookmarkedArticleRow(
         input: BookmarkedArticleRowProjectionInput
     ) -> BookmarkedArticleRowProjection {

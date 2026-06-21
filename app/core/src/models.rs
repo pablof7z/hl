@@ -763,6 +763,11 @@ pub struct BookmarkSetRecord {
     pub article_addresses: Vec<String>,
     /// `e`-tag references — event ids of kind:1 notes.
     pub note_ids: Vec<String>,
+    /// `r`-tag references — NIP-51 web/URL references. Carried so the read
+    /// model is lossless (previously dropped — #1653 codex BLOCKING #2).
+    pub r_refs: Vec<String>,
+    /// `t`-tag values — topic/hashtag labels on the set.
+    pub topics: Vec<String>,
     pub created_at: Option<u64>,
 }
 

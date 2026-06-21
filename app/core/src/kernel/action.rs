@@ -433,6 +433,29 @@ pub(crate) struct EnsureArtifactPreviewPayload {
     pub coordinate: String,
 }
 
+// ── #1653 payload structs ─────────────────────────────────────────────────────
+
+/// `hl.curation.add_to_set` payload.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct AddToSetPayload {
+    pub set_coordinate: String,
+    pub item_coordinate: String,
+}
+
+/// `hl.curation.remove_from_set` payload.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct RemoveFromSetPayload {
+    pub set_coordinate: String,
+    pub item_coordinate: String,
+}
+
+/// `hl.curation.create_and_add` payload.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CreateAndAddToSetPayload {
+    pub title: String,
+    pub item_coordinate: String,
+}
+
 /// Every user or platform action the kernel understands.
 ///
 /// Dispatch is fire-and-forget (`dispatch(action)` returns `()`; Non-Negotiable #3).
@@ -745,6 +768,47 @@ pub enum AppAction {
     /// Fire-and-forget. No NMP release is needed (longform projection is session-scoped).
     CloseArticle {
         address: String,
+    },
+
+    // ── #1653 additions (append-only) ────────────────────────────────────────
+    /// Add `item_coordinate` (a NIP-33 address like `"30023:<pk>:<d>"`) to the
+    /// kind:30004 curation set identified by `set_coordinate`
+    /// (`"30004:<active_pk>:<d>"`).
+    ///
+    /// Kernel is the sole kind:30004 writer on ported screens (no live-lane
+    /// double-publish). Fire-and-forget (D6, Non-Negotiable #3): the updated
+    /// set event arrives back as a `BookmarkSetsUpdated` frame once the NMP
+    /// relay-echo loop closes and the `SetListProjection` re-snapshots.
+    ///
+    /// No-op when the set cannot be found in `AppState::all_curation_sets` (D6).
+    AddToSet {
+        /// NIP-33 address of the curation set to modify (`"30004:<pk>:<d>"`).
+        set_coordinate: String,
+        /// NIP-33 address of the article to add (`"30023:<pk>:<d>"`).
+        item_coordinate: String,
+    },
+
+    /// Remove `item_coordinate` from the curation set identified by `set_coordinate`.
+    /// Symmetric with `AddToSet`. Kernel sole writer; fire-and-forget (D6).
+    /// No-op when the set or the item is not found (D6).
+    RemoveFromSet {
+        /// NIP-33 address of the curation set to modify.
+        set_coordinate: String,
+        /// NIP-33 address of the article to remove.
+        item_coordinate: String,
+    },
+
+    /// Create a brand-new kind:30004 curation set with the given `title` and
+    /// immediately add `item_coordinate` as its first member. The `d_tag` is
+    /// derived from `title` + the current unix timestamp so it is unique but
+    /// human-readable. Kernel sole writer; fire-and-forget (D6). The new set
+    /// appears in `myCurationSets` after the NMP relay-echo loop closes and
+    /// `SetListProjection` re-snapshots.
+    CreateAndAddToSet {
+        /// Display title for the new set.
+        title: String,
+        /// NIP-33 address of the article to add as the first member.
+        item_coordinate: String,
     },
 
     // ── Phase 4B additions (append-only) ─────────────────────────────────────
@@ -1105,6 +1169,27 @@ pub enum KernelEvent {
     ///
     /// No labels or formatted strings — Swift formats all bookmark UI (D1).
     BookmarksUpdated(Vec<crate::kernel::snapshot::BookmarkRow>),
+
+    // ── #1653 additions (append-only) ────────────────────────────────────────
+    /// The `"hl.bookmark_sets"` typed sidecar was decoded from an NMP snapshot
+    /// frame. Carries all observed kind:30003 and kind:30004 set rows (unfiltered
+    /// by active pubkey — filtering happens at apply time using `AppState::follows`
+    /// and the active session). Produced by
+    /// `projections::dispatch_typed_frame` (schema_id `"hl.bookmark_sets"`).
+    /// Also directly injectable from tests via `Cmd::Event` (no live NmpApp).
+    ///
+    /// D1: raw fields only — no "Untitled" fallbacks, no formatted strings.
+    BookmarkSetsUpdated {
+        /// All kind:30003 bookmark-set rows observed this session (any author).
+        all_bookmark_sets: Vec<crate::kernel::snapshot::BookmarkSetRow>,
+        /// All kind:30004 curation-set rows observed this session (any author).
+        all_curation_sets: Vec<crate::kernel::snapshot::BookmarkSetRow>,
+    },
+
+    /// The `"hl.web_bookmarks"` typed sidecar was decoded. Carries all
+    /// kind:39701 web-bookmark rows for the active account. Also injectable
+    /// from tests via `Cmd::Event`. D1: raw fields only.
+    WebBookmarksUpdated(Vec<crate::kernel::snapshot::WebBookmarkRow>),
 
     // ── Phase 4A additions (append-only) ─────────────────────────────────────
     /// The `"nmp.nip23.articles"` typed sidecar was decoded.
