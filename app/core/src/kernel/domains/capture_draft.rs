@@ -1753,7 +1753,11 @@ mod tests {
         assert!(state.capture_draft.artifact_preview.is_some());
         assert!(state.capture_draft.artifact_record.is_none());
 
-        step(&mut state, &clock, envelope("hl.capture.clear_artifact", "{}"));
+        step(
+            &mut state,
+            &clock,
+            envelope("hl.capture.clear_artifact", "{}"),
+        );
         assert!(state.capture_draft.artifact_record.is_none());
         assert!(state.capture_draft.artifact_preview.is_none());
     }
