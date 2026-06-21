@@ -1215,6 +1215,12 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
             // "hl.search" JSON sidecar arrives, but also injectable directly
             // from tests via Cmd::Event (no live NmpApp needed). D1: raw fields.
             state.search_results = rows;
+            // ── Phase 7 (#1697 gate): upsert kind:0 profile hits into cache ──
+            // Any kind:0 events in the new search results are parsed and merged
+            // into `AppState::profile_search_cache` (by pubkey, newest wins).
+            // This grows the cache across search sessions so the profiles bucket
+            // in `SearchSnapshot` can be populated from in-memory state only.
+            search::upsert_profile_search_cache(state);
             vec![]
         }
 

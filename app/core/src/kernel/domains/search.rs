@@ -345,6 +345,15 @@ pub(crate) fn project_search_snapshot(
         })
         .collect();
 
+    // Profiles bucket: local scan over `AppState::profile_search_cache` using
+    // the same matching/ranking algorithm as `crate::search::search_profiles`.
+    // Cache is populated from kind:0 hits in `SearchResultsUpdated` (actor.rs).
+    let profiles = project_profile_search_rows(
+        &state.profile_search_cache,
+        &state.search_query,
+        PROFILE_SEARCH_CAP,
+    );
+
     Some(crate::kernel::snapshot::ViewSnapshot::Search(
         SearchSnapshot {
             hits,
@@ -352,6 +361,7 @@ pub(crate) fn project_search_snapshot(
             // Omnibox classification outcome (#1865) — the shell routes on this.
             omnibox: state.omnibox_outcome.clone(),
             highlights,
+            profiles,
         },
     ))
 }
@@ -493,6 +503,180 @@ pub(crate) fn project_community_search_rows(
             member_count: c.member_count,
         })
         .collect()
+}
+
+// ─── Profile local scan ──────────────────────────────────────────────────────
+
+/// Case-insensitive substring check (mirrors `contains_ci` in `crate::search`).
+///
+/// Returns `false` for empty needle (blank query is handled upstream, but this
+/// guard keeps individual field comparisons safe).
+#[inline]
+fn profile_contains_ci(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    haystack.to_lowercase().contains(&needle.to_lowercase())
+}
+
+/// Bounded cap for the local profile-search result list.
+///
+/// Mirrors `SEARCH_PROFILE_RESULTS_LIMIT` from `crate::search` (both = 20).
+pub(crate) const PROFILE_SEARCH_CAP: usize = 20;
+
+/// Parse a kind:0 `SearchHitRow` into a `ProfileSearchRow`.
+///
+/// Returns `None` when `hit.kind != 0` or the content is unparseable JSON.
+/// Mirrors the field extraction of `crate::profile::parse_metadata` (trimmed
+/// strings, `display_name`/`displayName`/`displayname` aliases, `image` fallback
+/// for `picture`) so both paths return equivalent data from the same JSON blob.
+///
+/// Called from `upsert_profile_search_cache` when `SearchResultsUpdated` fires.
+pub(crate) fn profile_search_row_from_hit(
+    hit: &crate::kernel::snapshot::SearchHitRow,
+) -> Option<crate::kernel::snapshot::ProfileSearchRow> {
+    if hit.kind != 0 {
+        return None;
+    }
+    let content: serde_json::Value = serde_json::from_str(&hit.content).ok()?;
+    let str_field = |key: &str| -> String {
+        content
+            .get(key)
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("")
+            .to_string()
+    };
+    let name = str_field("name");
+    let display_name = {
+        let dn = str_field("display_name");
+        if !dn.is_empty() {
+            dn
+        } else {
+            let alias = str_field("displayName");
+            if !alias.is_empty() {
+                alias
+            } else {
+                str_field("displayname")
+            }
+        }
+    };
+    let picture = {
+        let p = str_field("picture");
+        if !p.is_empty() {
+            p
+        } else {
+            str_field("image")
+        }
+    };
+    Some(crate::kernel::snapshot::ProfileSearchRow {
+        pubkey: hit.author.clone(),
+        name,
+        display_name,
+        nip05: str_field("nip05"),
+        picture,
+        about: str_field("about"),
+        created_at: hit.created_at,
+    })
+}
+
+/// Upsert kind:0 hits from `search_results` into `profile_search_cache`.
+///
+/// Called from the `SearchResultsUpdated` reducer arm in `actor.rs` after
+/// `state.search_results` has been replaced. For each kind:0 row the cache
+/// is updated by pubkey — the newest `created_at` wins (same dedup logic as
+/// `search_profiles` in the bespoke live lane).
+///
+/// Cache growth is bounded naturally by the session's relay search scope; it
+/// is cleared on `Logout` / `IdentityChanged(None)` (auth domain).
+pub(crate) fn upsert_profile_search_cache(state: &mut crate::kernel::app::AppState) {
+    for hit in state.search_results.iter().filter(|r| r.kind == 0) {
+        let Some(row) = profile_search_row_from_hit(hit) else {
+            continue;
+        };
+        // Deduplicate by pubkey: newest created_at wins (kind:0 is replaceable).
+        if let Some(existing) = state
+            .profile_search_cache
+            .iter_mut()
+            .find(|p| p.pubkey == row.pubkey)
+        {
+            if row.created_at > existing.created_at {
+                *existing = row;
+            }
+        } else {
+            state.profile_search_cache.push(row);
+        }
+    }
+}
+
+/// Compute the local profile-search rows from `AppState::profile_search_cache`.
+///
+/// Parity target: `crate::search::search_profiles` (bespoke live lane).
+/// Algorithm mirrors the bespoke scan, adapted for the kernel's in-memory
+/// `ProfileSearchRow` cache instead of nostrdb:
+///
+/// 1. Trim query. Return empty for blank (D6).
+/// 2. Filter: case-insensitive substring match on name/display_name/nip05/about.
+/// 3. Rank: prefix-match on display_name or name first (mirrors bespoke's prefix
+///    tier); within a tier, alphabetical by primary label (display_name → name →
+///    nip05) case-insensitively.
+/// 4. Truncate to `limit`.
+/// 5. Emit raw `ProfileSearchRow` (D1: no formatted strings, no fallbacks).
+///
+/// Pure function — no I/O, no ndb scan. Called from `project_search_snapshot`.
+pub(crate) fn project_profile_search_rows(
+    cache: &[crate::kernel::snapshot::ProfileSearchRow],
+    query: &str,
+    limit: usize,
+) -> Vec<crate::kernel::snapshot::ProfileSearchRow> {
+    let q = query.trim();
+    if q.is_empty() {
+        return Vec::new();
+    }
+
+    let mut matched: Vec<crate::kernel::snapshot::ProfileSearchRow> = cache
+        .iter()
+        .filter(|p| {
+            profile_contains_ci(&p.name, q)
+                || profile_contains_ci(&p.display_name, q)
+                || profile_contains_ci(&p.nip05, q)
+                || profile_contains_ci(&p.about, q)
+        })
+        .cloned()
+        .collect();
+
+    // Mirror bespoke `search_profiles` ranking: prefix-match first, then
+    // alphabetical by primary_label (display_name → name → nip05).
+    let q_lower = q.to_lowercase();
+    matched.sort_by(|a, b| {
+        let a_prefix = a.display_name.to_lowercase().starts_with(&q_lower)
+            || a.name.to_lowercase().starts_with(&q_lower);
+        let b_prefix = b.display_name.to_lowercase().starts_with(&q_lower)
+            || b.name.to_lowercase().starts_with(&q_lower);
+        match (a_prefix, b_prefix) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => {
+                let a_label = profile_search_row_primary_label(a).to_lowercase();
+                let b_label = profile_search_row_primary_label(b).to_lowercase();
+                a_label.cmp(&b_label)
+            }
+        }
+    });
+
+    matched.into_iter().take(limit).collect()
+}
+
+/// Primary label for sort tie-breaking — mirrors `primary_label` in `crate::search`.
+fn profile_search_row_primary_label(p: &crate::kernel::snapshot::ProfileSearchRow) -> &str {
+    if !p.display_name.is_empty() {
+        &p.display_name
+    } else if !p.name.is_empty() {
+        &p.name
+    } else {
+        &p.nip05
+    }
 }
 
 // ─── Lifecycle (view open / close) ───────────────────────────────────────────
@@ -1384,6 +1568,470 @@ mod tests {
         assert_eq!(
             results[0].member_count, 42,
             "discovered member_count must win"
+        );
+    }
+
+    // ── Phase 7 (#1697 gate) profile-search tests ─────────────────────────────
+
+    use crate::kernel::snapshot::ProfileSearchRow;
+
+    fn make_profile_hit(
+        keys: &nostr_sdk::prelude::Keys,
+        created_at: u64,
+        content: &str,
+    ) -> SearchHitRow {
+        let event =
+            nostr_sdk::prelude::EventBuilder::new(nostr_sdk::prelude::Kind::Custom(0), content)
+                .custom_created_at(nostr_sdk::prelude::Timestamp::from(created_at))
+                .sign_with_keys(keys)
+                .unwrap();
+        SearchHitRow {
+            id: event.id.to_hex(),
+            author: event.pubkey.to_hex(),
+            kind: 0,
+            created_at,
+            content: event.content.clone(),
+            tags: vec![],
+            relay_provenance: vec![],
+        }
+    }
+
+    // 7-SP-T1: blank query returns empty profile list (D6).
+    #[test]
+    fn profile_search_blank_query_returns_empty() {
+        let keys = nostr_sdk::prelude::Keys::generate();
+        let cache = vec![ProfileSearchRow {
+            pubkey: keys.public_key().to_hex(),
+            name: "alice".into(),
+            display_name: "Alice".into(),
+            nip05: "alice@example.com".into(),
+            picture: String::new(),
+            about: String::new(),
+            created_at: 1_000,
+        }];
+
+        assert!(
+            project_profile_search_rows(&cache, "", 20).is_empty(),
+            "blank query must return empty (D6)"
+        );
+        assert!(
+            project_profile_search_rows(&cache, "   ", 20).is_empty(),
+            "whitespace query must return empty (D6)"
+        );
+    }
+
+    // 7-SP-T2: case-insensitive substring match on name, display_name, nip05, about.
+    #[test]
+    fn profile_search_case_insensitive_all_fields() {
+        let k1 = nostr_sdk::prelude::Keys::generate();
+        let k2 = nostr_sdk::prelude::Keys::generate();
+        let k3 = nostr_sdk::prelude::Keys::generate();
+        let k4 = nostr_sdk::prelude::Keys::generate();
+
+        let cache = vec![
+            ProfileSearchRow {
+                pubkey: k1.public_key().to_hex(),
+                name: "HUXLEY-fan".into(),
+                display_name: String::new(),
+                nip05: String::new(),
+                picture: String::new(),
+                about: String::new(),
+                created_at: 1_000,
+            },
+            ProfileSearchRow {
+                pubkey: k2.public_key().to_hex(),
+                name: "bob".into(),
+                display_name: "Aldous Huxley".into(),
+                nip05: String::new(),
+                picture: String::new(),
+                about: String::new(),
+                created_at: 1_000,
+            },
+            ProfileSearchRow {
+                pubkey: k3.public_key().to_hex(),
+                name: "charlie".into(),
+                display_name: "Charlie".into(),
+                nip05: "huxley@example.com".into(),
+                picture: String::new(),
+                about: String::new(),
+                created_at: 1_000,
+            },
+            ProfileSearchRow {
+                pubkey: k4.public_key().to_hex(),
+                name: "dave".into(),
+                display_name: "Dave".into(),
+                nip05: String::new(),
+                picture: String::new(),
+                about: "I read all of Huxley's work".into(),
+                created_at: 1_000,
+            },
+        ];
+
+        let hits = project_profile_search_rows(&cache, "huxley", 20);
+        assert_eq!(hits.len(), 4, "all four fields must be matched");
+    }
+
+    // 7-SP-T3: prefix-match ranks before contains-only.
+    #[test]
+    fn profile_search_prefix_ranks_first() {
+        let ka = nostr_sdk::prelude::Keys::generate(); // contains-only
+        let kb = nostr_sdk::prelude::Keys::generate(); // prefix match
+
+        let cache = vec![
+            ProfileSearchRow {
+                pubkey: ka.public_key().to_hex(),
+                name: "Prof. Aldous Huxley".into(),
+                display_name: "Aldous H.".into(),
+                nip05: String::new(),
+                picture: String::new(),
+                about: String::new(),
+                created_at: 1_000,
+            },
+            ProfileSearchRow {
+                pubkey: kb.public_key().to_hex(),
+                name: "huxley-fan".into(),
+                display_name: "Huxley's Reader".into(),
+                nip05: String::new(),
+                picture: String::new(),
+                about: String::new(),
+                created_at: 2_000,
+            },
+        ];
+
+        let hits = project_profile_search_rows(&cache, "huxley", 20);
+        assert_eq!(hits.len(), 2, "both profiles must match");
+        assert_eq!(
+            hits[0].pubkey,
+            kb.public_key().to_hex(),
+            "prefix match (display_name starts with 'huxley') must rank first"
+        );
+        assert_eq!(
+            hits[1].pubkey,
+            ka.public_key().to_hex(),
+            "contains-only match must rank second"
+        );
+    }
+
+    // 7-SP-T4: non-matching profiles are excluded.
+    #[test]
+    fn profile_search_excludes_non_matching() {
+        let k = nostr_sdk::prelude::Keys::generate();
+        let cache = vec![ProfileSearchRow {
+            pubkey: k.public_key().to_hex(),
+            name: "proust".into(),
+            display_name: "Marcel Proust".into(),
+            nip05: "proust@example.com".into(),
+            picture: String::new(),
+            about: "French novelist".into(),
+            created_at: 1_000,
+        }];
+
+        let hits = project_profile_search_rows(&cache, "huxley", 20);
+        assert!(hits.is_empty(), "non-matching profile must be excluded");
+    }
+
+    // 7-SP-T5: results bounded at limit.
+    #[test]
+    fn profile_search_bounded_at_limit() {
+        let cache: Vec<ProfileSearchRow> = (0..30)
+            .map(|i| {
+                let k = nostr_sdk::prelude::Keys::generate();
+                ProfileSearchRow {
+                    pubkey: k.public_key().to_hex(),
+                    name: format!("huxley-{i:02}"),
+                    display_name: String::new(),
+                    nip05: String::new(),
+                    picture: String::new(),
+                    about: String::new(),
+                    created_at: 1_000 + i,
+                }
+            })
+            .collect();
+
+        let hits = project_profile_search_rows(&cache, "huxley", PROFILE_SEARCH_CAP);
+        assert!(
+            hits.len() <= PROFILE_SEARCH_CAP,
+            "result must be bounded at PROFILE_SEARCH_CAP ({PROFILE_SEARCH_CAP}), got {}",
+            hits.len()
+        );
+    }
+
+    // 7-SP-T6: upsert deduplicates by pubkey — newest created_at wins.
+    #[test]
+    fn upsert_profile_cache_deduplicates_by_pubkey() {
+        let keys = nostr_sdk::prelude::Keys::generate();
+        let pubkey = keys.public_key().to_hex();
+
+        let old_hit = make_profile_hit(&keys, 1_000, r#"{"name":"old-name","display_name":"Old"}"#);
+        let new_hit = make_profile_hit(&keys, 2_000, r#"{"name":"new-name","display_name":"New"}"#);
+
+        let mut state = make_state();
+        // First: insert the older hit
+        state.search_results = vec![old_hit];
+        upsert_profile_search_cache(&mut state);
+        assert_eq!(state.profile_search_cache.len(), 1);
+        assert_eq!(state.profile_search_cache[0].name, "old-name");
+
+        // Second: insert the newer hit for the same pubkey — must win
+        state.search_results = vec![new_hit];
+        upsert_profile_search_cache(&mut state);
+        assert_eq!(
+            state.profile_search_cache.len(),
+            1,
+            "same pubkey must not create duplicate cache entries"
+        );
+        assert_eq!(
+            state.profile_search_cache[0].name, "new-name",
+            "newer created_at must overwrite the older entry"
+        );
+
+        // Third: a stale hit (older created_at) must NOT overwrite the cached entry
+        let stale_hit = make_profile_hit(
+            &keys,
+            500,
+            r#"{"name":"stale-name","display_name":"Stale"}"#,
+        );
+        // stale_hit carries the same pubkey but lower created_at.
+        // We need to produce a hit with the same author pubkey but lower created_at.
+        let mut stale_row = stale_hit.clone();
+        stale_row.author = pubkey.clone();
+        stale_row.created_at = 500;
+        state.search_results = vec![stale_row];
+        upsert_profile_search_cache(&mut state);
+        assert_eq!(
+            state.profile_search_cache[0].name, "new-name",
+            "stale entry must not overwrite newer cached entry"
+        );
+    }
+
+    // 7-SP-T7: profile_search_cache cleared on Logout.
+    #[test]
+    fn profile_search_cache_cleared_on_logout() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        let k = nostr_sdk::prelude::Keys::generate();
+        state.profile_search_cache = vec![ProfileSearchRow {
+            pubkey: k.public_key().to_hex(),
+            name: "alice".into(),
+            display_name: String::new(),
+            nip05: String::new(),
+            picture: String::new(),
+            about: String::new(),
+            created_at: 1_000,
+        }];
+
+        step(&mut state, &clock, Cmd::Action(AppAction::Logout));
+
+        assert!(
+            state.profile_search_cache.is_empty(),
+            "profile_search_cache must be empty after Logout"
+        );
+    }
+
+    // 7-SP-T8: profile_search_cache cleared on IdentityChanged(None).
+    #[test]
+    fn profile_search_cache_cleared_on_identity_changed_none() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        let k = nostr_sdk::prelude::Keys::generate();
+        state.profile_search_cache = vec![ProfileSearchRow {
+            pubkey: k.public_key().to_hex(),
+            name: "alice".into(),
+            display_name: String::new(),
+            nip05: String::new(),
+            picture: String::new(),
+            about: String::new(),
+            created_at: 1_000,
+        }];
+
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::IdentityChanged(None)),
+        );
+
+        assert!(
+            state.profile_search_cache.is_empty(),
+            "profile_search_cache must be empty after IdentityChanged(None)"
+        );
+    }
+
+    // 7-SP-T9: SearchResultsUpdated upserts kind:0 hits into cache.
+    #[test]
+    fn search_results_updated_upserts_kind0_hits() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        let k1 = nostr_sdk::prelude::Keys::generate();
+        let k2 = nostr_sdk::prelude::Keys::generate();
+
+        let hit1 = SearchHitRow {
+            id: format!("{:064x}", 1u64),
+            author: k1.public_key().to_hex(),
+            kind: 0,
+            created_at: 1_000,
+            content: r#"{"name":"alice","display_name":"Alice"}"#.into(),
+            tags: vec![],
+            relay_provenance: vec![],
+        };
+        let hit_article = SearchHitRow {
+            id: format!("{:064x}", 2u64),
+            author: k2.public_key().to_hex(),
+            kind: 30023,
+            created_at: 2_000,
+            content: "article body".into(),
+            tags: vec![],
+            relay_provenance: vec![],
+        };
+
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::SearchResultsUpdated(vec![
+                hit1.clone(),
+                hit_article.clone(),
+            ])),
+        );
+
+        assert_eq!(
+            state.profile_search_cache.len(),
+            1,
+            "only kind:0 hits must be upserted into profile_search_cache"
+        );
+        assert_eq!(
+            state.profile_search_cache[0].pubkey,
+            k1.public_key().to_hex()
+        );
+        assert_eq!(state.profile_search_cache[0].name, "alice");
+    }
+
+    // 7-SP-T10: profiles bucket in SearchSnapshot populated from cache.
+    #[test]
+    fn search_snapshot_includes_profiles_bucket() {
+        let mut state = make_state();
+        let k = nostr_sdk::prelude::Keys::generate();
+
+        state.profile_search_cache = vec![ProfileSearchRow {
+            pubkey: k.public_key().to_hex(),
+            name: "huxley-fan".into(),
+            display_name: "Huxley Fan".into(),
+            nip05: String::new(),
+            picture: String::new(),
+            about: String::new(),
+            created_at: 1_000,
+        }];
+        state.search_query = "huxley".into();
+
+        let snap = project_search_snapshot(&state).expect("snapshot");
+        let crate::kernel::snapshot::ViewSnapshot::Search(s) = snap else {
+            panic!("expected Search snapshot");
+        };
+        assert_eq!(
+            s.profiles.len(),
+            1,
+            "matching profile must appear in bucket"
+        );
+        assert_eq!(s.profiles[0].pubkey, k.public_key().to_hex());
+    }
+
+    // 7-SP-T_PARITY: REAL identity-level parity test — kernel profile scan must
+    // match bespoke `crate::search::search_profiles` on the same fixture.
+    //
+    // Gotcha #7/#7b compliance: calls BOTH functions on shared test data and
+    // asserts pubkey IDENTITY in ORDER — not just counts.
+    //
+    // Fixture:
+    //   keys_a — display_name starts with "huxley" (prefix-match tier)
+    //   keys_b — name contains "Huxley" (contains-only tier)
+    //   keys_c — unrelated (no match)
+    //
+    // Expected order: keys_a first (prefix), keys_b second (contains), keys_c absent.
+    #[test]
+    fn parity_profile_scan_matches_bespoke_algorithm() {
+        use crate::test_ndb::{isolated_ndb, process_event_and_wait};
+
+        let (ndb, _tmp) = isolated_ndb(4 * 1024 * 1024);
+
+        let keys_a = nostr_sdk::prelude::Keys::generate(); // prefix-match
+        let keys_b = nostr_sdk::prelude::Keys::generate(); // contains-only match
+        let keys_c = nostr_sdk::prelude::Keys::generate(); // no match
+
+        let ev_a = nostr_sdk::prelude::EventBuilder::new(
+            nostr_sdk::prelude::Kind::Custom(0),
+            r#"{"name":"huxley-fan","display_name":"Huxley Reader","about":"Books"}"#,
+        )
+        .custom_created_at(nostr_sdk::prelude::Timestamp::from(2_000u64))
+        .sign_with_keys(&keys_a)
+        .unwrap();
+
+        let ev_b = nostr_sdk::prelude::EventBuilder::new(
+            nostr_sdk::prelude::Kind::Custom(0),
+            r#"{"name":"Prof. Aldous Huxley","display_name":"Aldous H.","about":"Writer"}"#,
+        )
+        .custom_created_at(nostr_sdk::prelude::Timestamp::from(1_000u64))
+        .sign_with_keys(&keys_b)
+        .unwrap();
+
+        let ev_c = nostr_sdk::prelude::EventBuilder::new(
+            nostr_sdk::prelude::Kind::Custom(0),
+            r#"{"name":"proust","display_name":"Marcel Proust","about":"French novelist"}"#,
+        )
+        .custom_created_at(nostr_sdk::prelude::Timestamp::from(3_000u64))
+        .sign_with_keys(&keys_c)
+        .unwrap();
+
+        for ev in [&ev_a, &ev_b, &ev_c] {
+            process_event_and_wait(&ndb, ev);
+        }
+
+        // Bespoke result — real nostrdb scan.
+        let bespoke = crate::search::search_profiles(&ndb, "huxley", 20).unwrap();
+        let bespoke_pubkeys: Vec<String> = bespoke.iter().map(|p| p.pubkey.clone()).collect();
+
+        // Kernel: populate profile_search_cache from the same events.
+        let make_hit = |ev: &nostr_sdk::prelude::Event| SearchHitRow {
+            id: ev.id.to_hex(),
+            author: ev.pubkey.to_hex(),
+            kind: 0,
+            created_at: ev.created_at.as_secs(),
+            content: ev.content.clone(),
+            tags: vec![],
+            relay_provenance: vec![],
+        };
+
+        let mut state = make_state();
+        state.profile_search_cache = [&ev_a, &ev_b, &ev_c]
+            .iter()
+            .filter_map(|ev| profile_search_row_from_hit(&make_hit(ev)))
+            .collect();
+        state.search_query = "huxley".to_string();
+
+        let snap = project_search_snapshot(&state).expect("snapshot");
+        let crate::kernel::snapshot::ViewSnapshot::Search(s) = snap else {
+            panic!("expected Search snapshot");
+        };
+        let kernel_pubkeys: Vec<String> = s.profiles.iter().map(|p| p.pubkey.clone()).collect();
+
+        // Identity-level assertion: same pubkeys in the same order.
+        assert_eq!(
+            kernel_pubkeys, bespoke_pubkeys,
+            "kernel profile scan must match bespoke search_profiles pubkeys in order\n\
+             bespoke: {bespoke_pubkeys:?}\nkernel: {kernel_pubkeys:?}"
+        );
+        assert_eq!(
+            kernel_pubkeys.len(),
+            2,
+            "fixture has 2 huxley-matching profiles; proust is excluded"
+        );
+        // Prefix-match must be first (keys_a has display_name starting with "Huxley").
+        assert_eq!(
+            kernel_pubkeys[0],
+            keys_a.public_key().to_hex(),
+            "prefix-match (display_name 'Huxley Reader') must rank before contains-only"
+        );
+        assert_eq!(
+            kernel_pubkeys[1],
+            keys_b.public_key().to_hex(),
+            "contains-only match ('Prof. Aldous Huxley') must rank second"
         );
     }
 }
