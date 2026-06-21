@@ -495,8 +495,8 @@ fn reduce_action_envelope(
     use crate::kernel::action::{
         AddBookmarkPayload, AddRelayPayload, AddRoomMemberPayload, AudioPlayPayload,
         AudioSeekPayload, AudioSetResumePayload, BlossomUploadPayload, CaptureSelectWordPayload,
-        CaptureSetArtifactPreviewPayload, CaptureSetArtifactRecordPayload, CaptureSetContextPayload,
-        CaptureSetNotePayload, CaptureSetQuotePayload,
+        CaptureSetArtifactPreviewPayload, CaptureSetArtifactRecordPayload,
+        CaptureSetContextPayload, CaptureSetNotePayload, CaptureSetQuotePayload,
         CaptureSetTargetGroupPayload, ClaimProfilePayload, ClipExtendSegmentPayload,
         ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload, ClipSetStartPayload,
         CreateAccountPayload, CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload,
@@ -2292,7 +2292,8 @@ pub(crate) async fn actor_task(
                 lifecycle_effects.extend(home_feed::lifecycle_effects_for_view_open(id, &state));
                 // ── Phase 7: bookmarks articles pane — hydrate article previews ──
                 if matches!(id, ViewId::Bookmarks) {
-                    lifecycle_effects.extend(bookmarks::ensure_bookmark_article_previews(&mut state));
+                    lifecycle_effects
+                        .extend(bookmarks::ensure_bookmark_article_previews(&mut state));
                 }
                 // ── Phase 7 discussions: register DiscussionObserver per room ──
                 // Inline (not an Effect) because it needs the NmpHandle directly.
