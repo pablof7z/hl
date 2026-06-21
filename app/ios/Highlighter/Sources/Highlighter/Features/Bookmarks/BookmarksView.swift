@@ -164,7 +164,7 @@ struct BookmarksView: View {
         } else {
             LazyVStack(spacing: 0) {
                 ForEach(store.myWebBookmarks, id: \.url) { bookmark in
-                    WebBookmarkRow(bookmark: bookmark)
+                    WebBookmarkRowView(bookmark: bookmark)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
                     Divider().padding(.leading, 16)
@@ -414,7 +414,7 @@ struct CollectionRow: View {
     }
 }
 
-struct WebBookmarkRow: View {
+struct WebBookmarkRowView: View {
     @Environment(HighlighterStore.self) private var app
     let bookmark: WebBookmarkRecord
 
