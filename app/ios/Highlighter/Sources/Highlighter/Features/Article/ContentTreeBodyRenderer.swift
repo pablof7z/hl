@@ -6,22 +6,39 @@ import UIKit
 /// `ContentTreeWire`) into the SAME `MarkdownRenderer.Output` shape the native
 /// select-to-highlight reader consumes.
 ///
-/// Why flatten the nmp tree into an `NSAttributedString` rather than render it
-/// with `NostrContentView`? Locked decision #2: the reading body is a NATIVE
-/// Swift select-to-highlight / overlay / footnotes interaction layer ON TOP OF
-/// nmp `content_tree` rendering. `NostrContentView` uses SwiftUI `Text`
-/// concatenation, which has no native text selection. The proven select-to-
-/// highlight surface is `ArticleBodyView` (a `UITextView` over an
-/// `NSAttributedString` with a custom Edit Menu → `onPublishHighlight`). So the
-/// migration keeps that overlay machinery intact and only swaps the BODY
-/// SOURCE: bespoke NIP-23 markdown (`MarkdownRenderer.render(content:)`) →
-/// nmp `content_tree` (this renderer). The kernel still owns the published
-/// kind:9802 highlight (D5); the body is raw `content_tree` emitted by the
-/// kernel and rendered Swift-side (D1).
+/// Locked decision #2: the reading body is a NATIVE Swift
+/// select-to-highlight / overlay layer ON TOP OF nmp `content_tree` rendering.
+/// `NostrContentView` uses SwiftUI `Text` concatenation, which has no native
+/// text selection. The proven select-to-highlight surface is `ArticleBodyView`
+/// (a `UITextView` over an `NSAttributedString` with a custom Edit Menu →
+/// `onPublishHighlight`). So the body is a **hybrid**: prose blocks
+/// (paragraph / heading / list / block-quote / rule / code) flatten into
+/// selectable `NSAttributedString` text segments, while rich non-text blocks
+/// (images, video / audio media, `nostr:` entity refs, placeholders) flush as
+/// their own segments that the reader renders with the same SwiftUI surfaces
+/// `NostrContentView` uses — composed in document order. This gives full
+/// `content_tree` rendering fidelity (#22 HIGH) without losing selection on the
+/// prose.
+///
+/// Fidelity contract vs. `NostrContentView` (every wire-node variant is
+/// rendered, never silently dropped):
+///   • text / emphasis / strong / inlineCode / link / url / hashtag / softBreak
+///     / hardBreak / emoji / invoice → selectable prose runs.
+///   • heading / paragraph / blockQuote / list / rule → selectable prose blocks.
+///   • codeBlock → selectable prose block WITH its language header preserved.
+///   • image (standalone) AND every URL of a `media(.image)` block → one
+///     `.image` segment each (ALL images, not just the first).
+///   • media(.video) / media(.audio) → `.media` segment → reader renders the
+///     native `NostrContentView` video player / audio row.
+///   • mention (npub / nprofile) → inline tappable `@name` run in the prose.
+///   • eventRef (note / nevent / naddr) standalone → `.nostrEntity` segment →
+///     reader renders the resolving `NostrEntityCard`. Inline (mid-paragraph)
+///     event refs render as a compact chip run.
+///   • placeholder → `.placeholder` segment → reader renders the chip.
 ///
 /// The output is the identical `MarkdownRenderer.Output` (segments + highlight
-/// overlay + footnote anchors) so `ReaderScroll` / `ArticleBodyView` need no
-/// change to their consumption contract.
+/// overlay) so `ReaderScroll` / `ArticleBodyView` keep their consumption
+/// contract; the reader's `bodySegments` switch grows the rich-block cases.
 enum ContentTreeBodyRenderer {
     /// Decode `contentTreeJson` (the kernel snapshot field) into a
     /// `ContentTreeWire`. Returns `nil` for the empty cold-start window or a
@@ -39,6 +56,13 @@ enum ContentTreeBodyRenderer {
     /// `highlights` are overlaid by quote-text match (same strategy as the
     /// bespoke path) so existing kind:9802 highlights paint as overlay marks on
     /// the rendered body. Mentions/profile entities resolve via `profileNames`.
+    ///
+    /// `resolveEntity` converts a wire entity URI into the app's resolving
+    /// `NostrEntityRef` (the kernel `standaloneNostrEntity` decode); standalone
+    /// event refs become `.nostrEntity` card segments. The closure is
+    /// `nonisolated` on `SafeHighlighterCore`, so it is safe to call here off
+    /// the main actor. When it returns `nil` (undecodable URI) the ref falls
+    /// back to a visible inline chip — never to empty.
     static func render(
         tree: ContentTreeWire,
         highlights: [HighlightRecord],
@@ -48,7 +72,8 @@ enum ContentTreeBodyRenderer {
         muted: UIColor,
         bodyPointSize: CGFloat = 18,
         highlightContent: @Sendable (HighlightRecord) -> HighlightDetailContentProjection,
-        profileNames: [String: String] = [:]
+        profileNames: [String: String] = [:],
+        resolveEntity: (@Sendable (String) -> NostrEntityRef?)? = nil
     ) -> MarkdownRenderer.Output {
         let walker = TreeWalker(
             tree: tree,
@@ -56,7 +81,8 @@ enum ContentTreeBodyRenderer {
             ink: ink,
             muted: muted,
             bodyPointSize: bodyPointSize,
-            profileNames: profileNames
+            profileNames: profileNames,
+            resolveEntity: resolveEntity
         )
         let rawSegments = walker.walk()
 
@@ -97,11 +123,12 @@ enum ContentTreeBodyRenderer {
 
 // MARK: - Tree walker
 
-/// Walks the flat `ContentTreeWire` arena (`roots` → `nodes`) and emits the same
-/// `[MarkdownRenderer.BodySegment]` the bespoke `BodyWalker` produced. Block
-/// nodes accumulate into a running `NSMutableAttributedString`; standalone
-/// images and standalone `nostr:` event refs flush as their own segments so the
-/// reader renders them as SwiftUI cards (matching the bespoke path).
+/// Walks the flat `ContentTreeWire` arena (`roots` → `nodes`) and emits the
+/// `[MarkdownRenderer.BodySegment]` hybrid the reader consumes. Prose blocks
+/// accumulate into a running selectable `NSMutableAttributedString`; rich
+/// non-text blocks (images, video/audio media, standalone `nostr:` event refs,
+/// placeholders) flush as their own segments — preserving document order so the
+/// reader composes them in place.
 private struct TreeWalker {
     let tree: ContentTreeWire
     let accent: UIColor
@@ -109,6 +136,7 @@ private struct TreeWalker {
     let muted: UIColor
     let bodyPointSize: CGFloat
     let profileNames: [String: String]
+    let resolveEntity: (@Sendable (String) -> NostrEntityRef?)?
 
     // Cached fonts — mirror the bespoke `BodyWalker` serif styling so the
     // migrated body reads identically.
@@ -134,6 +162,7 @@ private struct TreeWalker {
         return UIFont(descriptor: d, size: bodyPointSize)
     }
     private var mono: UIFont { UIFont.monospacedSystemFont(ofSize: bodyPointSize - 2, weight: .regular) }
+    private var monoSmall: UIFont { UIFont.monospacedSystemFont(ofSize: max(11, bodyPointSize - 6), weight: .semibold) }
 
     func walk() -> [MarkdownRenderer.BodySegment] {
         var segments: [MarkdownRenderer.BodySegment] = []
@@ -157,11 +186,50 @@ private struct TreeWalker {
                 } else {
                     currentText.append(renderBlock(node))
                 }
-            case .media(let urls, let kind) where kind == .image:
-                // A media-image block with a single URL → standalone image.
-                if let first = urls.first, let url = URL(string: first) {
+            case .media(let urls, let kind):
+                switch kind {
+                case .image:
+                    // Emit EVERY image URL as its own segment (the prior path
+                    // dropped all but the first). Faithfully renders multi-image
+                    // media blocks.
+                    let parsed = urls.compactMap(URL.init(string:))
+                    if parsed.isEmpty {
+                        currentText.append(renderBlock(node))
+                    } else {
+                        flush()
+                        for url in parsed {
+                            segments.append(.image(url: url, alt: ""))
+                        }
+                    }
+                case .video, .audio:
+                    // Video / audio → rich media segment; the reader reuses the
+                    // `NostrContentView` player / audio affordance.
                     flush()
-                    segments.append(.image(url: url, alt: ""))
+                    segments.append(.media(urls: urls, kind: kind))
+                }
+            case .eventRef(let uri):
+                // Standalone event ref → resolving entity card (note / nevent /
+                // naddr). Fall back to a visible inline chip if undecodable.
+                if let ref = resolveEntity?(uri.uri) {
+                    flush()
+                    segments.append(.nostrEntity(ref))
+                } else {
+                    currentText.append(renderInlineNode(nodeOrSelf: node))
+                    currentText.append(NSAttributedString(string: "\n\n", attributes: [.font: serif]))
+                }
+            case .placeholder(let reason):
+                flush()
+                segments.append(.placeholder(reason: reason))
+            case .paragraph(let children):
+                // A paragraph that is exactly one event ref reads as a
+                // standalone embed — promote it to an entity card. Otherwise
+                // it stays selectable prose.
+                if children.count == 1,
+                   let only = tree.node(at: children[0]),
+                   case .eventRef(let uri) = only,
+                   let ref = resolveEntity?(uri.uri) {
+                    flush()
+                    segments.append(.nostrEntity(ref))
                 } else {
                     currentText.append(renderBlock(node))
                 }
@@ -187,8 +255,8 @@ private struct TreeWalker {
             return s
         case .blockQuote(let children):
             return renderBlockQuote(children)
-        case .codeBlock(_, let body):
-            return renderCodeBlock(body)
+        case .codeBlock(let info, let body):
+            return renderCodeBlock(info: info, body: body)
         case .list(let orderedStart, let items):
             return renderList(orderedStart: orderedStart, items: items)
         case .rule:
@@ -296,12 +364,30 @@ private struct TreeWalker {
         return inner
     }
 
-    private func renderCodeBlock(_ body: String) -> NSAttributedString {
+    /// Code block stays selectable prose so users can copy code. The language
+    /// (`info` string, e.g. `swift`) is preserved as a small monospace header
+    /// row above the body — the prior path dropped it entirely (#22).
+    private func renderCodeBlock(info: String?, body: String) -> NSAttributedString {
+        let out = NSMutableAttributedString()
+        if let info, !info.isEmpty {
+            let headerPara = NSMutableParagraphStyle()
+            headerPara.paragraphSpacingBefore = 6
+            headerPara.lineHeightMultiple = 1.1
+            out.append(NSAttributedString(
+                string: info + "\n",
+                attributes: [
+                    .font: monoSmall,
+                    .foregroundColor: muted,
+                    .paragraphStyle: headerPara,
+                    .backgroundColor: muted.withAlphaComponent(0.08)
+                ]
+            ))
+        }
         let p = NSMutableParagraphStyle()
         p.paragraphSpacing = 14
-        p.paragraphSpacingBefore = 6
+        p.paragraphSpacingBefore = (info?.isEmpty ?? true) ? 6 : 0
         p.lineHeightMultiple = 1.25
-        return NSAttributedString(
+        out.append(NSAttributedString(
             string: body + "\n",
             attributes: [
                 .font: mono,
@@ -309,7 +395,8 @@ private struct TreeWalker {
                 .paragraphStyle: p,
                 .backgroundColor: muted.withAlphaComponent(0.08)
             ]
-        )
+        ))
+        return out
     }
 
     // MARK: - Inline rendering
@@ -392,10 +479,11 @@ private struct TreeWalker {
             }
             return NSAttributedString(string: label, attributes: attrs)
         case .eventRef(let uri):
-            // Inline (mid-paragraph) event ref → compact chip label.
+            // Inline (mid-paragraph) event ref → compact chip label. Standalone
+            // event refs are promoted to resolving cards by `walk()`.
             return NSAttributedString(
-                string: "[\(shortEntity(uri.primaryId))]",
-                attributes: [.font: mono, .foregroundColor: muted]
+                string: "↩ \(shortEntity(uri.primaryId))",
+                attributes: [.font: mono, .foregroundColor: accent]
             )
         case .emoji(let shortcode, _):
             return NSAttributedString(string: ":\(shortcode):", attributes: [.font: serif, .foregroundColor: ink])
@@ -407,7 +495,13 @@ private struct TreeWalker {
                 attributes: [.font: serifItalic, .foregroundColor: muted]
             )
         case .placeholder:
-            return NSAttributedString()
+            // A placeholder reached inline (shouldn't normally happen — they are
+            // promoted to their own segment by `walk()`). Render a visible chip
+            // label rather than collapsing to empty.
+            return NSAttributedString(
+                string: "[content unavailable]",
+                attributes: [.font: serifItalic, .foregroundColor: muted]
+            )
         // Block-level nodes should not appear inside an inline reduce; render
         // their flattened children to be safe rather than break concatenation.
         case .paragraph(let children),

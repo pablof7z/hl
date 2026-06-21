@@ -252,9 +252,10 @@ mod tests {
     #[test]
     fn bundled_payload_decodes_newest_first() {
         let entries = bundled_entries().unwrap();
-        assert_eq!(entries.len(), 2);
+        assert_eq!(entries.len(), 3);
         assert!(entries[0].shipped_at_unix_seconds > entries[1].shipped_at_unix_seconds);
-        assert_eq!(entries[0].shipped_at_iso, "2026-05-14T21:45:00Z");
+        assert!(entries[1].shipped_at_unix_seconds > entries[2].shipped_at_unix_seconds);
+        assert_eq!(entries[0].shipped_at_iso, "2026-06-21T12:00:00Z");
     }
 
     #[test]

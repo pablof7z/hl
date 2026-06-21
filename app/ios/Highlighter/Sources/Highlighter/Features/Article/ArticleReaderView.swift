@@ -325,7 +325,12 @@ private struct ReaderScroll: View {
                             input: HighlightDetailContentProjectionInput(highlight: highlight)
                         )
                     },
-                    profileNames: profileSnapshot
+                    profileNames: profileSnapshot,
+                    // Resolve standalone `nostr:` event refs into the app's
+                    // resolving entity card. `standaloneNostrEntity` is
+                    // `nonisolated`, so it's safe to call from this detached
+                    // off-main render task (#22 entity-card fidelity).
+                    resolveEntity: { uri in safeCore.standaloneNostrEntity(uri) }
                 )
             }.value
         }
@@ -362,6 +367,20 @@ private struct ReaderScroll: View {
                 NostrEntityCard(entity: ref)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 4)
+            case .media(let urls, let kind):
+                // Video / audio block — reuse `NostrContentView`'s native media
+                // affordance (VideoPlayer / audio row) by rendering a one-node
+                // wire slice. Full fidelity for media nodes (#22); these blocks
+                // are interactive (playback), not selectable text.
+                ContentTreeBlockSlice(node: .media(urls: urls, kind: kind))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 4)
+            case .placeholder(let reason):
+                // Preserve `content_tree` placeholders — reuse `NostrContentView`'s
+                // placeholder chip rather than dropping the node (#22).
+                ContentTreeBlockSlice(node: .placeholder(reason: reason))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 4)
             }
         }
     }
@@ -387,6 +406,37 @@ private struct ReaderScroll: View {
         out.append(output.footnotes)
         return out
     }
+}
+
+// MARK: - Content-tree rich block slice
+
+/// Renders a single `content_tree` block node (video / audio media, placeholder)
+/// by wrapping it in a one-node `ContentTreeWire` and handing it to the vendored
+/// `NostrContentView` — so the article body reuses the exact native media player
+/// / audio row / placeholder chip `NostrContentView` ships rather than
+/// reinventing them. Themed to the reader's serif/ink palette via a
+/// `NostrContentRenderer` environment value. (#22 fidelity.)
+private struct ContentTreeBlockSlice: View {
+    let node: NostrWireNode
+
+    var body: some View {
+        NostrContentView(tree: ContentTreeWire(nodes: [node], roots: [0]))
+            .nostrContentRenderer(Self.readerRenderer)
+    }
+
+    private static let readerRenderer = NostrContentRenderer(
+        textColor: .highlighterInkStrong,
+        secondaryTextColor: .highlighterInkMuted,
+        mentionColor: .highlighterAccent,
+        hashtagColor: .highlighterAccent,
+        linkColor: .highlighterAccent,
+        quoteBorderColor: .highlighterRule,
+        codeBackgroundColor: Color.highlighterInkMuted.opacity(0.1),
+        placeholderColor: .highlighterInkMuted,
+        callbacks: NostrContentCallbacks(
+            onLinkTap: { url in UIApplication.shared.open(url) }
+        )
+    )
 }
 
 // MARK: - Inline image

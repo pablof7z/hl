@@ -2,6 +2,12 @@
   "schema_version": 1,
   "entries": [
     {
+      "shipped_at": "2026-06-21T12:00:00Z",
+      "lines": [
+        "The article reader now renders every part of a post faithfully — all images (not just the first), embedded notes and profiles as rich cards, code blocks with their language, and inline videos and audio — while keeping the text fully selectable for highlighting."
+      ]
+    },
+    {
       "shipped_at": "2026-05-14T21:45:00Z",
       "lines": [
         "Tapping 'Open room' from a profile's Communities tab now navigates to the room properly instead of dismissing immediately."

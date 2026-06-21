@@ -22,6 +22,15 @@ enum MarkdownRenderer {
         /// A standalone `nostr:` entity paragraph — rendered as a SwiftUI card
         /// by the reader rather than inside the UITextView.
         case nostrEntity(NostrEntityRef)
+        /// A non-image media block (video / audio) lifted out of the
+        /// `content_tree`. Rendered by the reader as a `NostrContentView`
+        /// slice so the native video player / audio affordance is reused
+        /// rather than reinvented. (#22 fidelity — `ContentTreeBodyRenderer`.)
+        case media(urls: [String], kind: NostrMediaKind)
+        /// A `content_tree` placeholder node (`depth_limit` / `unresolved_uri`).
+        /// Rendered by the reader as a `NostrContentView` slice so the
+        /// placeholder chip is shown rather than silently dropped.
+        case placeholder(reason: NostrWirePlaceholderReason)
     }
 
     struct Output: @unchecked Sendable {
