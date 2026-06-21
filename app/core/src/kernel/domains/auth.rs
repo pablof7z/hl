@@ -111,6 +111,12 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     // Arc, but AppState::bookmarks must also be wiped so stale bookmarks from
     // the previous account don't survive into the next session.
     state.bookmarks = Vec::new();
+    // ── #1653: clear bookmark sets + web bookmarks on logout ─────────────────
+    // SetListProjection accumulates all observed events — wipe AppState mirrors
+    // so the previous account's sets don't surface under the next identity.
+    state.all_bookmark_sets.clear();
+    state.all_curation_sets.clear();
+    state.web_bookmarks.clear();
     // ── Phase 4A: clear articles on logout ───────────────────────────────────
     // AppState::articles holds kind:30023 data for the departing account's
     // subscriptions. Wipe so stale articles don't surface for the next account.

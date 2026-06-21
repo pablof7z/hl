@@ -651,6 +651,62 @@ pub enum BookmarkRow {
     },
 }
 
+// ── #1653 additions (append-only) ────────────────────────────────────────────
+
+/// One NIP-51 Bookmark set (kind:30003) or Curation set (kind:30004) row
+/// projected by the kernel. Parameterized-replaceable — keyed by
+/// `(pubkey, d_tag)` with supersession (newest `created_at` wins).
+///
+/// Raw protocol data only (D1): no "Untitled" fallback for absent titles,
+/// no count labels. Swift formats all display strings.
+///
+/// `uniffi::Record` so Swift can decode snapshots across FFI.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, uniffi::Record)]
+pub struct BookmarkSetRow {
+    /// `d` tag — stable identifier within the author's sets.
+    pub d_tag: String,
+    /// Raw 64-char hex author pubkey.
+    pub pubkey: String,
+    /// 30003 for bookmark sets, 30004 for curation sets.
+    pub kind: u32,
+    /// `title` tag value, or `None` when absent (D1: no "Untitled" fallback).
+    pub title: Option<String>,
+    /// `description` tag value, or `None` when absent.
+    pub description: Option<String>,
+    /// `image` tag URL, or `None` when absent.
+    pub image: Option<String>,
+    /// `a`-tag values — NIP-33 article addresses like `"30023:<pubkey>:<d>"`.
+    pub article_addresses: Vec<String>,
+    /// `e`-tag values — event ids of bookmarked kind:1 notes.
+    pub note_ids: Vec<String>,
+    /// Event creation time as Unix seconds (0 when unknown).
+    pub created_at: u64,
+}
+
+/// One NIP-B0 web bookmark (kind:39701) row.
+///
+/// `d` tag is the URL without the `https://` scheme; the kernel prepends it
+/// when building the `url` field. Raw protocol data only (D1).
+///
+/// `uniffi::Record` so Swift can decode snapshots across FFI.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, uniffi::Record)]
+pub struct WebBookmarkRow {
+    /// Full URL — `"https://"` prepended to the `d` tag.
+    pub url: String,
+    /// Raw 64-char hex author pubkey.
+    pub pubkey: String,
+    /// `title` tag value, or `None` when absent.
+    pub title: Option<String>,
+    /// Detailed description from the event `content` field, or `None` when empty.
+    pub description: Option<String>,
+    /// `t` tags — topic/hashtag values.
+    pub topics: Vec<String>,
+    /// `published_at` tag as Unix seconds, or `None` when absent / unparseable.
+    pub published_at: Option<u64>,
+    /// Event creation time as Unix seconds (0 when unknown).
+    pub created_at: u64,
+}
+
 /// Snapshot for `ViewId::Bookmarks` — the active account's NIP-51 kind:10003
 /// bookmark list.
 ///
@@ -670,8 +726,25 @@ pub struct BookmarksSnapshot {
     /// preview`): resolved immediately when the article is in `AppState::articles`,
     /// otherwise `pending` with a `ResolveArtifactCoordinate` fetch in flight so
     /// bookmarked-but-unloaded articles fill in over time. Backs the Bookmarks
-    /// "Articles" pane; the collections/web panes stay on the live lane (nmp #1653).
+    /// "Articles" pane.
     pub article_previews: Vec<ArtifactPreviewRow>,
+    // ── #1653 additions (sets + web panes, append-only) ──────────────────────
+    /// Active account's own NIP-51 kind:30003 bookmark sets.
+    /// Projected from `AppState::all_bookmark_sets` filtered by active pubkey.
+    /// Sorted by `created_at` descending (newest first). D1: raw fields.
+    pub my_bookmark_sets: Vec<BookmarkSetRow>,
+    /// Active account's own NIP-51 kind:30004 curation sets.
+    /// Projected from `AppState::all_curation_sets` filtered by active pubkey.
+    /// Sorted by `created_at` descending. D1: raw fields.
+    pub my_curation_sets: Vec<BookmarkSetRow>,
+    /// kind:30004 curation sets authored by accounts the active user follows.
+    /// Projected from `AppState::all_curation_sets` filtered by `AppState::follows`.
+    /// Sorted by `created_at` descending. D1: raw fields.
+    pub following_curation_sets: Vec<BookmarkSetRow>,
+    /// Active account's own NIP-B0 kind:39701 web bookmarks.
+    /// Stored directly in `AppState::web_bookmarks`. Sorted by `created_at`
+    /// descending. D1: raw fields.
+    pub my_web_bookmarks: Vec<WebBookmarkRow>,
 }
 
 // ── Phase 4A additions (append-only) ─────────────────────────────────────────

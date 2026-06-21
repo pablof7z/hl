@@ -200,6 +200,25 @@ pub(crate) fn dispatch_typed_frame(
                 }
             },
 
+            // ── #1653 arm: "hl.bookmark_sets" ────────────────────────────────
+            // Decode the hl-owned serde-JSON sets snapshot (registered by
+            // `bookmark_sets::register_set_projections`) and store raw
+            // BookmarkSetRow items in AppState::all_bookmark_sets /
+            // all_curation_sets (unfiltered — projection helpers in
+            // `bookmark_sets` do identity-based filtering at snapshot time).
+            // D6: decode errors are silent no-ops. D1: raw fields only.
+            super::bookmark_sets::BOOKMARK_SETS_SCHEMA_ID => {
+                super::bookmark_sets::apply_bookmark_sets(state, &proj.payload);
+            }
+
+            // ── #1653 arm: "hl.web_bookmarks" ────────────────────────────────
+            // Decode the hl-owned serde-JSON web-bookmarks snapshot and store
+            // raw WebBookmarkRow items in AppState::web_bookmarks.
+            // D6: decode errors are silent no-ops.
+            super::bookmark_sets::WEB_BOOKMARKS_SCHEMA_ID => {
+                super::bookmark_sets::apply_web_bookmarks(state, &proj.payload);
+            }
+
             // ── Default: unknown schema_id — silent no-op (D6) ────────────────
             // Projections registered by nmp-defaults that hl has not opted into
             // (e.g. action_stages, bunker_handshake) arrive here. This is the
