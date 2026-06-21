@@ -352,6 +352,44 @@ pub(crate) fn reduce_action_clear_target_group(state: &mut AppState) -> Vec<Effe
     vec![]
 }
 
+/// `hl.capture.set_artifact_record { artifact_record }` — bind an already-published
+/// `ArtifactRecord` to the draft (book-picker / recent kind:11 book flow).
+///
+/// Mutually exclusive with `artifact_preview`: sets `artifact_record = Some` and
+/// clears `artifact_preview = None`. The next `hl.capture.publish` uses the record
+/// directly for a single-step correlated kind:9802 highlight (no prior kind:11
+/// publish needed because the artifact already exists on the network).
+///
+/// Mirrors the Swift bespoke lane's `selectedArtifact = .existing(record)` path
+/// in `CaptureViewModel` before calling `publishCapture`.
+pub(crate) fn reduce_action_set_artifact_record(
+    state: &mut AppState,
+    record: crate::kernel::models::ArtifactRecord,
+) -> Vec<Effect> {
+    state.capture_draft.artifact_record = Some(record);
+    state.capture_draft.artifact_preview = None; // mutually exclusive (clear the other)
+    vec![]
+}
+
+/// `hl.capture.set_artifact_preview { artifact_preview }` — bind an unpublished
+/// `ArtifactPreview` to the draft (barcode → ISBN confirmed pending-book flow).
+///
+/// Mutually exclusive with `artifact_record`: sets `artifact_preview = Some` and
+/// clears `artifact_record = None`. The next `hl.capture.publish` emits a kind:11
+/// artifact-share FIRST (correlated primary) and defers the kind:9802 highlight
+/// until the artifact publish succeeds (Issue 3 ordering), so a failed artifact
+/// publish cannot let the FSM silently claim "done".
+///
+/// Mirrors the Swift bespoke lane's `selectedArtifact = .pending(preview)` path.
+pub(crate) fn reduce_action_set_artifact_preview(
+    state: &mut AppState,
+    preview: crate::kernel::models::ArtifactPreview,
+) -> Vec<Effect> {
+    state.capture_draft.artifact_preview = Some(preview);
+    state.capture_draft.artifact_record = None; // mutually exclusive (clear the other)
+    vec![]
+}
+
 /// `hl.capture.publish` — emit the publish effect(s) if the draft is publishable.
 ///
 /// Publish decision (mirrors `publish_capture` in the bespoke lane, client.rs:2561):
@@ -2376,5 +2414,211 @@ mod tests {
             }),
         );
         assert_eq!(state.capture_draft.publish_phase, CaptureDraftPhase::Done);
+    }
+
+    // ── Artifact-setter parity tests ─────────────────────────────────────────────
+    //
+    // These verify the TWO deferred setter actions (`hl.capture.set_artifact_record`
+    // and `hl.capture.set_artifact_preview`) actually wire up the publish paths
+    // correctly. Tests dispatch through the REAL production envelope (not direct
+    // field assignment on AppState) so they would catch a missing dispatch arm or
+    // a missing field update.
+
+    /// AS-T1 — `hl.capture.set_artifact_record` + `publish` → kind:9802 with
+    /// the correct artifact reference tags.
+    ///
+    /// Simulates the book-picker flow: the user selects an already-published
+    /// kind:11 book artifact, Swift dispatches `set_artifact_record`, then
+    /// the user taps publish. Asserts the emitted kind:9802 highlight carries
+    /// the same tags as the bespoke `highlights::build_highlight_event`.
+    #[test]
+    fn setter_set_artifact_record_routes_to_kind9802_publish() {
+        let artifact = fixture_artifact();
+        let blossom = fixture_blossom();
+
+        // Bespoke expected event — same inputs the kernel will see.
+        let bespoke_draft = crate::models::HighlightDraft {
+            quote: "A profound insight from the book.".into(),
+            context: String::new(),
+            note: String::new(),
+            clip_start_seconds: None,
+            clip_end_seconds: None,
+            clip_speaker: String::new(),
+            clip_transcript_segment_ids: Vec::new(),
+            image: Some(blossom.clone()),
+        };
+        let expected = bespoke_event(
+            crate::highlights::build_highlight_event(&bespoke_draft, &artifact)
+                .expect("bespoke build_highlight_event"),
+        );
+        let expected_tags = sorted(bespoke_tags(&expected));
+
+        // Drive the kernel via the REAL production action envelope — not by
+        // assigning the field directly. This is the gap being closed: without
+        // the setter action, Swift has no way to bind the record pre-publish.
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        state.communities = vec![community("group-a", "Group A")];
+        state.capture_draft.publish_phase = CaptureDraftPhase::Reviewing;
+        state.capture_draft.quote = "A profound insight from the book.".into();
+        state.capture_draft.has_upload = true;
+        state.capture_draft.blossom_upload = Some(blossom.clone());
+        state.capture_draft.blossom_image_url = blossom.url.clone();
+        state.capture_draft.target_group_id = Some("group-a".into());
+
+        let payload = serde_json::json!({"artifact_record": artifact}).to_string();
+        step(
+            &mut state,
+            &clock,
+            envelope("hl.capture.set_artifact_record", &payload),
+        );
+
+        // Setter postconditions: record set, preview cleared (mutually exclusive).
+        assert!(
+            state.capture_draft.artifact_record.is_some(),
+            "set_artifact_record must populate artifact_record"
+        );
+        assert!(
+            state.capture_draft.artifact_preview.is_none(),
+            "set_artifact_record must clear artifact_preview"
+        );
+
+        // Publish → kind:9802 with artifact reference tags.
+        let effects = step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
+        let Effect::PublishCaptureWithCorrelation { json, .. } = effects
+            .iter()
+            .find(|e| matches!(e, Effect::PublishCaptureWithCorrelation { .. }))
+            .expect("set_artifact_record + publish must emit PublishCaptureWithCorrelation")
+        else {
+            unreachable!()
+        };
+        let v: serde_json::Value = serde_json::from_str(json).expect("valid json");
+        assert_eq!(
+            v["kind"], 9802,
+            "set_artifact_record + publish must emit kind:9802, not kind:20 or kind:11"
+        );
+        assert_eq!(
+            sorted(kernel_tags(json)),
+            expected_tags,
+            "kind:9802 tags via set_artifact_record must match bespoke build_highlight_event"
+        );
+    }
+
+    /// AS-T2 — `hl.capture.set_artifact_preview` + `publish` → kind:11-first
+    /// multi-event pending-book path.
+    ///
+    /// Simulates the barcode → ISBN pending-book flow: the isbn lookup confirms a
+    /// book that hasn't been published yet, Swift dispatches `set_artifact_preview`,
+    /// then the user taps publish. Asserts the kind:11 artifact is emitted FIRST
+    /// (correlated primary) with the same tags as `artifacts::build_share_event`,
+    /// and that the deferred kind:9802 highlight is emitted on artifact success.
+    #[test]
+    fn setter_set_artifact_preview_routes_to_pending_book_kind11_first() {
+        let artifact = fixture_artifact();
+        let preview = artifact.preview.clone();
+        let blossom = fixture_blossom();
+
+        // Bespoke expected artifact-share event (kind:11).
+        let expected_artifact = bespoke_event(
+            crate::artifacts::build_share_event("group-a", &preview, None)
+                .expect("bespoke build_share_event"),
+        );
+        let expected_artifact_tags = sorted(bespoke_tags(&expected_artifact));
+
+        // Drive the kernel via the REAL production action envelope.
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        state.communities = vec![community("group-a", "Group A")];
+        state.capture_draft.publish_phase = CaptureDraftPhase::Reviewing;
+        state.capture_draft.quote = "Key insight from pending book.".into();
+        state.capture_draft.has_upload = true;
+        state.capture_draft.blossom_upload = Some(blossom.clone());
+        state.capture_draft.blossom_image_url = blossom.url.clone();
+        state.capture_draft.target_group_id = Some("group-a".into());
+
+        let payload = serde_json::json!({"artifact_preview": preview}).to_string();
+        step(
+            &mut state,
+            &clock,
+            envelope("hl.capture.set_artifact_preview", &payload),
+        );
+
+        // Setter postconditions: preview set, record cleared (mutually exclusive).
+        assert!(
+            state.capture_draft.artifact_preview.is_some(),
+            "set_artifact_preview must populate artifact_preview"
+        );
+        assert!(
+            state.capture_draft.artifact_record.is_none(),
+            "set_artifact_preview must clear artifact_record"
+        );
+
+        // Publish → kind:11 artifact as the correlated primary.
+        let effects = step(&mut state, &clock, envelope("hl.capture.publish", "{}"));
+        let correlated: Vec<_> = effects
+            .iter()
+            .filter(|e| matches!(e, Effect::PublishCaptureWithCorrelation { .. }))
+            .collect();
+        assert_eq!(
+            correlated.len(),
+            1,
+            "pending-book via set_artifact_preview must emit one correlated artifact; \
+             got: {effects:?}"
+        );
+        let Effect::PublishCaptureWithCorrelation {
+            json: artifact_json,
+            ..
+        } = correlated[0]
+        else {
+            unreachable!()
+        };
+        let av: serde_json::Value =
+            serde_json::from_str(artifact_json).expect("valid artifact json");
+        assert_eq!(av["kind"], 11, "pending-book primary must be kind:11");
+        assert_eq!(
+            sorted(kernel_tags(artifact_json)),
+            expected_artifact_tags,
+            "kind:11 tags via set_artifact_preview must match bespoke build_share_event"
+        );
+        assert!(
+            matches!(
+                state.capture_draft.publish_phase,
+                CaptureDraftPhase::Publishing { .. }
+            ),
+            "phase must be Publishing after artifact dispatch"
+        );
+
+        // Artifact success → deferred kind:9802 highlight emitted.
+        let result_effects = step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::CapturePublishActionResult {
+                success: true,
+                error: String::new(),
+            }),
+        );
+        let hl_effects: Vec<_> = result_effects
+            .iter()
+            .filter(|e| matches!(e, Effect::PublishCaptureWithCorrelation { .. }))
+            .collect();
+        assert_eq!(
+            hl_effects.len(),
+            1,
+            "artifact success must emit the deferred kind:9802 highlight; \
+             got: {result_effects:?}"
+        );
+        let Effect::PublishCaptureWithCorrelation { json: hl_json, .. } = hl_effects[0] else {
+            unreachable!()
+        };
+        let hv: serde_json::Value = serde_json::from_str(hl_json).expect("valid highlight json");
+        assert_eq!(hv["kind"], 9802, "deferred highlight must be kind:9802");
+        // Phase still Publishing — highlight in flight until its result arrives.
+        assert!(
+            matches!(
+                state.capture_draft.publish_phase,
+                CaptureDraftPhase::Publishing { .. }
+            ),
+            "phase must remain Publishing while the highlight is in flight"
+        );
     }
 }

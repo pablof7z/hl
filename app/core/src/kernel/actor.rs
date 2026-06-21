@@ -495,6 +495,7 @@ fn reduce_action_envelope(
     use crate::kernel::action::{
         AddBookmarkPayload, AddRelayPayload, AddRoomMemberPayload, AudioPlayPayload,
         AudioSeekPayload, AudioSetResumePayload, BlossomUploadPayload, CaptureSelectWordPayload,
+        CaptureSetArtifactPreviewPayload, CaptureSetArtifactRecordPayload,
         CaptureSetContextPayload, CaptureSetNotePayload, CaptureSetQuotePayload,
         CaptureSetTargetGroupPayload, ClaimProfilePayload, ClipExtendSegmentPayload,
         ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload, ClipSetStartPayload,
@@ -811,6 +812,14 @@ fn reduce_action_envelope(
         "hl.capture.clear_target_group" => capture_draft::reduce_action_clear_target_group(state),
         "hl.capture.publish" => capture_draft::reduce_action_publish(state, now),
         "hl.capture.reset" => capture_draft::reduce_action_reset(state),
+        "hl.capture.set_artifact_record" => {
+            let p = parse!(CaptureSetArtifactRecordPayload);
+            capture_draft::reduce_action_set_artifact_record(state, p.artifact_record)
+        }
+        "hl.capture.set_artifact_preview" => {
+            let p = parse!(CaptureSetArtifactPreviewPayload);
+            capture_draft::reduce_action_set_artifact_preview(state, p.artifact_preview)
+        }
 
         // ── Phase 5G additions (append-only) ──────────────────────────────────
         // `hl.blossom.upload { image_handle, servers }` — dispatch a Blossom
@@ -2258,7 +2267,8 @@ pub(crate) async fn actor_task(
                 lifecycle_effects.extend(home_feed::lifecycle_effects_for_view_open(id, &state));
                 // ── Phase 7: bookmarks articles pane — hydrate article previews ──
                 if matches!(id, ViewId::Bookmarks) {
-                    lifecycle_effects.extend(bookmarks::ensure_bookmark_article_previews(&mut state));
+                    lifecycle_effects
+                        .extend(bookmarks::ensure_bookmark_article_previews(&mut state));
                 }
                 // ── Phase 7 discussions: register DiscussionObserver per room ──
                 // Inline (not an Effect) because it needs the NmpHandle directly.

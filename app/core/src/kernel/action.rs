@@ -341,6 +341,20 @@ pub(crate) struct CaptureSelectWordPayload {
 pub(crate) struct CaptureSetTargetGroupPayload {
     pub group_id: String,
 }
+/// `hl.capture.set_artifact_record { artifact_record }` — bind an already-published
+/// `ArtifactRecord` to the capture draft (book-picker / recent kind:11 book flow).
+/// Mutually exclusive with `artifact_preview`: clears the preview when set.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CaptureSetArtifactRecordPayload {
+    pub artifact_record: crate::kernel::models::ArtifactRecord,
+}
+/// `hl.capture.set_artifact_preview { artifact_preview }` — bind an unpublished
+/// `ArtifactPreview` to the capture draft (barcode → ISBN confirmed pending-book
+/// flow). Mutually exclusive with `artifact_record`: clears the record when set.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CaptureSetArtifactPreviewPayload {
+    pub artifact_preview: crate::kernel::models::ArtifactPreview,
+}
 
 // ── Phase 5G payload structs ─────────────────────────────────────────────────
 
