@@ -54,6 +54,7 @@ use nmp_nip29::GroupId;
 
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
+use crate::kernel::models::{ArtifactPreview, ArtifactRecord, Chapter};
 use crate::kernel::snapshot::{
     CommentRecordRow, HighlightRow, KernelCommentReferenceBucket, KernelHighlightReferenceBucket,
     KernelRoomHomeSnapshot, KernelRoomLane, KernelRoomLibraryRow, RoomLaneRow, ViewSnapshot,
@@ -618,6 +619,148 @@ fn kernel_is_external_content_reference(value: &str, kind: &str) -> bool {
         || kind.starts_with("spotify")
 }
 
+/// Port of `artifacts::reference_key_for_tag` (artifacts.rs:775). `clean` is a
+/// plain `trim` in the bespoke source.
+fn kernel_reference_key_for_tag(tag_name: &str, value: &str) -> String {
+    let cleaned = value.trim();
+    if cleaned.is_empty() {
+        String::new()
+    } else {
+        format!("{tag_name}:{cleaned}")
+    }
+}
+
+/// Port of `artifacts::read_chapters` (artifacts.rs:450). Lifts `chapter` tags
+/// (`["chapter", "<start_seconds>", "<title>"]`) off a kind:11 podcast share,
+/// skipping malformed entries, sorted by start time. Field-for-field with the
+/// bespoke source so podcast listening chapters survive the room cut.
+fn kernel_read_chapters(event: &nmp_core::substrate::KernelEvent) -> Vec<Chapter> {
+    let mut chapters: Vec<Chapter> = event
+        .tags
+        .iter()
+        .filter_map(|tag| {
+            if tag.first().map(String::as_str) != Some("chapter") {
+                return None;
+            }
+            let start = tag.get(1)?.parse::<f64>().ok()?;
+            if !start.is_finite() || start < 0.0 {
+                return None;
+            }
+            let title = tag.get(2).map(String::as_str).unwrap_or("").trim();
+            if title.is_empty() {
+                return None;
+            }
+            Some(Chapter {
+                start_seconds: start,
+                title: title.to_string(),
+            })
+        })
+        .collect();
+    chapters.sort_by(|a, b| {
+        a.start_seconds
+            .partial_cmp(&b.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    chapters
+}
+
+/// Build the full rich `ArtifactRecord` from a kind:11 share `KernelEvent`,
+/// mirroring `artifacts::artifact_record_from_event` (artifacts.rs:486)
+/// field-for-field. Every tag the bespoke reader lifts is lifted here, or
+/// downstream iOS views see empty strings (e.g. an empty `audio_url` makes the
+/// podcast player refuse to load anything). Reads tags via the same `first_tag`
+/// helper as `artifact_match_surface` (matches `first_tag_value` semantics).
+///
+/// The bespoke fn returns `Option` but its body is infallible (always `Some`);
+/// this returns the record directly since the caller already resolved a valid
+/// kind:11 coordinate. Parity-tested against the bespoke fn in `tests`.
+fn kernel_artifact_record_from_event(
+    event: &nmp_core::substrate::KernelEvent,
+    group_id: &str,
+) -> ArtifactRecord {
+    let title = first_tag(event, "title").unwrap_or_default();
+    let url = first_tag(event, "r").unwrap_or_default();
+    let source = first_tag(event, "source").unwrap_or_default();
+    let author = first_tag(event, "author").unwrap_or_default();
+    let image = first_tag(event, "image").unwrap_or_default();
+    let summary = first_tag(event, "summary").unwrap_or_default();
+    let d = first_tag(event, "d").unwrap_or_default();
+    let k = first_tag(event, "k").unwrap_or_default();
+
+    // Reference tag: i → a → e (mirrors artifact_record_from_event:496; `r`
+    // is NOT a reference tag — it feeds `url`/`highlight_tag`).
+    let (ref_name, ref_value) = if let Some(i) = first_tag(event, "i") {
+        ("i".to_string(), i)
+    } else if let Some(a) = first_tag(event, "a") {
+        ("a".to_string(), a)
+    } else if let Some(e_val) = first_tag(event, "e") {
+        ("e".to_string(), e_val)
+    } else {
+        (String::new(), String::new())
+    };
+
+    // NIP-73 episode/feed GUIDs: dedicated tags, else parse the `i` tag prefix.
+    let podcast_item_guid = first_tag(event, "podcast_item_guid").unwrap_or_else(|| {
+        ref_value
+            .strip_prefix("podcast:item:guid:")
+            .map(str::to_string)
+            .unwrap_or_default()
+    });
+    let podcast_guid = first_tag(event, "podcast_guid").unwrap_or_else(|| {
+        ref_value
+            .strip_prefix("podcast:guid:")
+            .map(str::to_string)
+            .unwrap_or_default()
+    });
+
+    let (highlight_tag_name, highlight_tag_value) =
+        kernel_highlight_reference_for_artifact(&ref_name, &ref_value, &k, &url);
+    let highlight_reference_key =
+        kernel_reference_key_for_tag(&highlight_tag_name, &highlight_tag_value);
+
+    let preview = ArtifactPreview {
+        id: d,
+        url,
+        title,
+        author,
+        image,
+        description: summary,
+        source,
+        domain: String::new(),
+        catalog_id: if ref_name == "i" {
+            ref_value.clone()
+        } else {
+            String::new()
+        },
+        catalog_kind: k.clone(),
+        podcast_guid,
+        podcast_item_guid,
+        podcast_show_title: first_tag(event, "podcast_show_title").unwrap_or_default(),
+        audio_url: first_tag(event, "audio").unwrap_or_default(),
+        audio_preview_url: first_tag(event, "audio_preview").unwrap_or_default(),
+        transcript_url: first_tag(event, "transcript").unwrap_or_default(),
+        feed_url: first_tag(event, "feed").unwrap_or_default(),
+        published_at: first_tag(event, "published_at").unwrap_or_default(),
+        duration_seconds: first_tag(event, "duration").and_then(|v| v.parse::<i64>().ok()),
+        reference_tag_name: ref_name,
+        reference_tag_value: ref_value,
+        reference_kind: k,
+        highlight_tag_name,
+        highlight_tag_value,
+        highlight_reference_key,
+        chapters: kernel_read_chapters(event),
+    };
+
+    ArtifactRecord {
+        preview,
+        group_id: group_id.to_string(),
+        share_event_id: event.id.clone(),
+        pubkey: event.author.clone(),
+        created_at: Some(event.created_at),
+        note: event.content.clone(),
+    }
+}
+
 /// Returns `true` when a kernel highlight row matches a lane artifact.
 ///
 /// Exact port of bespoke `highlight_matches_artifact` (room_lanes.rs:95):
@@ -816,6 +959,7 @@ pub(crate) fn project_room_home_snapshot(state: &AppState, group_id: &str) -> Op
                             coordinate,
                             share_event_id: e.id.clone(),
                             preview,
+                            artifact_record: kernel_artifact_record_from_event(e, group_id),
                         },
                         artifact_match_surface(e),
                     ))
@@ -987,6 +1131,7 @@ pub(crate) fn project_room_home_snapshot(state: &AppState, group_id: &str) -> Op
                 share_event_id: lib_row.share_event_id.clone(),
                 artifact_coordinate: coord.clone(),
                 artifact_preview: lib_row.preview.clone(),
+                artifact_record: lib_row.artifact_record.clone(),
                 highlights: sorted_highlights,
                 comments: sorted_comments,
                 latest_activity_at,
@@ -2284,6 +2429,107 @@ mod tests {
             let feed_key = format!("{ROOM_HIGHLIGHT_FEED_KEY_PREFIX}{group_id}");
             let fs = state.room_highlight_feeds.entry(feed_key).or_default();
             crate::kernel::domains::feed::apply_feed_page(fs, vec![event], 1, false, None);
+        }
+
+        // P7: parity_artifact_record_matches_bespoke_field_for_field
+        //
+        // The room-cut's load-bearing guard (gotcha #7b: compare the data that
+        // drifts, not counts). The kernel port `kernel_artifact_record_from_event`
+        // must produce EXACTLY the bespoke `artifacts::artifact_record_from_event`
+        // record on the same kind:11 share — so iOS room library cards +
+        // ArtifactDetailView routing keep podcast `audio_url`/GUIDs, book
+        // `catalog_id`, chapters, reference tags, etc. Run with a rich PODCAST
+        // fixture (audio/transcript/GUIDs/chapters — the PodcastListeningView
+        // path) and a BOOK fixture (catalog_id from the `i:isbn:` ref — the
+        // BookView path), asserting the WHOLE ArtifactRecord via PartialEq.
+        #[test]
+        fn parity_artifact_record_matches_bespoke_field_for_field() {
+            let keys = Keys::generate();
+
+            // ── Podcast share: exercises every podcast-only field. ──
+            let podcast_ev = EventBuilder::new(Kind::Custom(11), "shared an episode")
+                .tags(vec![
+                    named_tag("h", TEST_GROUP),
+                    named_tag("i", "podcast:item:guid:episode-xyz"),
+                    named_tag("k", "podcast"),
+                    named_tag("title", "Episode 42"),
+                    named_tag("source", "podcast"),
+                    named_tag("author", "Host Name"),
+                    named_tag("image", "https://img.example/ep.jpg"),
+                    named_tag("summary", "What we covered this week."),
+                    named_tag("d", "ep-d-tag"),
+                    named_tag("podcast_guid", "feed-guid-123"),
+                    named_tag("podcast_show_title", "The Show"),
+                    named_tag("audio", "https://audio.example/ep.mp3"),
+                    named_tag("audio_preview", "https://audio.example/ep-preview.mp3"),
+                    named_tag("transcript", "https://transcript.example/ep.txt"),
+                    named_tag("feed", "https://feed.example/rss.xml"),
+                    named_tag("published_at", "2026-01-01"),
+                    named_tag("duration", "3600"),
+                    Tag::parse(vec![
+                        "chapter".to_string(),
+                        "120".to_string(),
+                        "Main segment".to_string(),
+                    ])
+                    .unwrap(),
+                    Tag::parse(vec![
+                        "chapter".to_string(),
+                        "0".to_string(),
+                        "Intro".to_string(),
+                    ])
+                    .unwrap(),
+                ])
+                .custom_created_at(Timestamp::from(2_000_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+
+            // ── Book share: exercises catalog_id / catalog_kind from i:isbn. ──
+            let book_ev = EventBuilder::new(Kind::Custom(11), "shared a book")
+                .tags(vec![
+                    named_tag("h", TEST_GROUP),
+                    named_tag("i", "isbn:9780735211292"),
+                    named_tag("k", "isbn"),
+                    named_tag("title", "Atomic Habits"),
+                    named_tag("source", "book"),
+                    named_tag("author", "James Clear"),
+                    named_tag("image", "https://img.example/book.jpg"),
+                    named_tag("summary", "Tiny changes, remarkable results."),
+                    named_tag("d", "book-d-tag"),
+                ])
+                .custom_created_at(Timestamp::from(2_001_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+
+            for ev in [&podcast_ev, &book_ev] {
+                let bespoke = crate::artifacts::artifact_record_from_event(ev, TEST_GROUP)
+                    .expect("bespoke record builds");
+                let kernel = kernel_artifact_record_from_event(&nostr_to_kernel(ev), TEST_GROUP);
+                assert_eq!(
+                    kernel,
+                    bespoke,
+                    "kernel artifact_record drifted from bespoke for share {}",
+                    ev.id.to_hex()
+                );
+            }
+
+            // Spot-check the regression-critical fields survive (so a future
+            // edit that nukes the assert above still has a named guard).
+            let podcast =
+                kernel_artifact_record_from_event(&nostr_to_kernel(&podcast_ev), TEST_GROUP);
+            assert_eq!(podcast.preview.audio_url, "https://audio.example/ep.mp3");
+            assert_eq!(podcast.preview.podcast_item_guid, "episode-xyz");
+            assert_eq!(
+                podcast.preview.transcript_url,
+                "https://transcript.example/ep.txt"
+            );
+            assert_eq!(podcast.preview.chapters.len(), 2);
+            assert_eq!(
+                podcast.preview.chapters[0].title, "Intro",
+                "chapters sort by start"
+            );
+            let book = kernel_artifact_record_from_event(&nostr_to_kernel(&book_ev), TEST_GROUP);
+            assert_eq!(book.preview.catalog_id, "isbn:9780735211292");
+            assert_eq!(book.preview.catalog_kind, "isbn");
         }
 
         // P1: parity_artifact_and_highlight_lane_counts_match

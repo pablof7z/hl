@@ -29425,9 +29425,20 @@ public struct KernelRoomLane {
      */
     public var artifactCoordinate: String
     /**
-     * Resolved artifact preview, or `None` while pending / not yet fetched.
+     * Resolved thin artifact preview, or `None` while pending / not yet fetched.
+     * Kept as the lightweight keystone projection for surfaces where only
+     * title/image/author are needed (e.g. discussion chips).
      */
     public var artifactPreview: ArtifactPreviewRow?
+    /**
+     * Full rich artifact record built directly from the kind:11 share tags
+     * (mirrors bespoke `artifacts::artifact_record_from_event`). Carries the
+     * fields the iOS room library cards + `ArtifactDetailView` routing need
+     * (podcast `audio_url`/GUIDs, book `catalog_id`, source, reference tags,
+     * chapters) that the thin `artifact_preview` does not. Self-contained — the
+     * share event embeds all artifact metadata, so no async resolution.
+     */
+    public var artifactRecord: ArtifactRecord
     /**
      * Hydrated highlight rows for this lane, deduped by event_id, newest-first.
      */
@@ -29452,8 +29463,18 @@ public struct KernelRoomLane {
          * Canonical artifact coordinate (e.g. `"a:30023:pk:d"`, `"i:isbn:..."`, `"r:url"`).
          */artifactCoordinate: String,
         /**
-         * Resolved artifact preview, or `None` while pending / not yet fetched.
+         * Resolved thin artifact preview, or `None` while pending / not yet fetched.
+         * Kept as the lightweight keystone projection for surfaces where only
+         * title/image/author are needed (e.g. discussion chips).
          */artifactPreview: ArtifactPreviewRow?,
+        /**
+         * Full rich artifact record built directly from the kind:11 share tags
+         * (mirrors bespoke `artifacts::artifact_record_from_event`). Carries the
+         * fields the iOS room library cards + `ArtifactDetailView` routing need
+         * (podcast `audio_url`/GUIDs, book `catalog_id`, source, reference tags,
+         * chapters) that the thin `artifact_preview` does not. Self-contained — the
+         * share event embeds all artifact metadata, so no async resolution.
+         */artifactRecord: ArtifactRecord,
         /**
          * Hydrated highlight rows for this lane, deduped by event_id, newest-first.
          */highlights: [HighlightRow],
@@ -29467,6 +29488,7 @@ public struct KernelRoomLane {
         self.shareEventId = shareEventId
         self.artifactCoordinate = artifactCoordinate
         self.artifactPreview = artifactPreview
+        self.artifactRecord = artifactRecord
         self.highlights = highlights
         self.comments = comments
         self.latestActivityAt = latestActivityAt
@@ -29489,6 +29511,9 @@ extension KernelRoomLane: Equatable, Hashable {
         if lhs.artifactPreview != rhs.artifactPreview {
             return false
         }
+        if lhs.artifactRecord != rhs.artifactRecord {
+            return false
+        }
         if lhs.highlights != rhs.highlights {
             return false
         }
@@ -29505,6 +29530,7 @@ extension KernelRoomLane: Equatable, Hashable {
         hasher.combine(shareEventId)
         hasher.combine(artifactCoordinate)
         hasher.combine(artifactPreview)
+        hasher.combine(artifactRecord)
         hasher.combine(highlights)
         hasher.combine(comments)
         hasher.combine(latestActivityAt)
@@ -29523,6 +29549,7 @@ public struct FfiConverterTypeKernelRoomLane: FfiConverterRustBuffer {
                 shareEventId: FfiConverterString.read(from: &buf),
                 artifactCoordinate: FfiConverterString.read(from: &buf),
                 artifactPreview: FfiConverterOptionTypeArtifactPreviewRow.read(from: &buf),
+                artifactRecord: FfiConverterTypeArtifactRecord.read(from: &buf),
                 highlights: FfiConverterSequenceTypeHighlightRow.read(from: &buf),
                 comments: FfiConverterSequenceTypeCommentRecordRow.read(from: &buf),
                 latestActivityAt: FfiConverterUInt64.read(from: &buf)
@@ -29533,6 +29560,7 @@ public struct FfiConverterTypeKernelRoomLane: FfiConverterRustBuffer {
         FfiConverterString.write(value.shareEventId, into: &buf)
         FfiConverterString.write(value.artifactCoordinate, into: &buf)
         FfiConverterOptionTypeArtifactPreviewRow.write(value.artifactPreview, into: &buf)
+        FfiConverterTypeArtifactRecord.write(value.artifactRecord, into: &buf)
         FfiConverterSequenceTypeHighlightRow.write(value.highlights, into: &buf)
         FfiConverterSequenceTypeCommentRecordRow.write(value.comments, into: &buf)
         FfiConverterUInt64.write(value.latestActivityAt, into: &buf)
@@ -29562,14 +29590,32 @@ public func FfiConverterTypeKernelRoomLane_lower(_ value: KernelRoomLane) -> Rus
 public struct KernelRoomLibraryRow {
     public var coordinate: String
     public var shareEventId: String
+    /**
+     * Thin keystone preview (title/image/author), `None` while pending.
+     */
     public var preview: ArtifactPreviewRow?
+    /**
+     * Full rich artifact record from the kind:11 share tags — the data the
+     * iOS library cards + `ArtifactDetailView` routing consume. See
+     * `KernelRoomLane::artifact_record`.
+     */
+    public var artifactRecord: ArtifactRecord
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(coordinate: String, shareEventId: String, preview: ArtifactPreviewRow?) {
+    public init(coordinate: String, shareEventId: String,
+        /**
+         * Thin keystone preview (title/image/author), `None` while pending.
+         */preview: ArtifactPreviewRow?,
+        /**
+         * Full rich artifact record from the kind:11 share tags — the data the
+         * iOS library cards + `ArtifactDetailView` routing consume. See
+         * `KernelRoomLane::artifact_record`.
+         */artifactRecord: ArtifactRecord) {
         self.coordinate = coordinate
         self.shareEventId = shareEventId
         self.preview = preview
+        self.artifactRecord = artifactRecord
     }
 }
 
@@ -29589,6 +29635,9 @@ extension KernelRoomLibraryRow: Equatable, Hashable {
         if lhs.preview != rhs.preview {
             return false
         }
+        if lhs.artifactRecord != rhs.artifactRecord {
+            return false
+        }
         return true
     }
 
@@ -29596,6 +29645,7 @@ extension KernelRoomLibraryRow: Equatable, Hashable {
         hasher.combine(coordinate)
         hasher.combine(shareEventId)
         hasher.combine(preview)
+        hasher.combine(artifactRecord)
     }
 }
 
@@ -29610,7 +29660,8 @@ public struct FfiConverterTypeKernelRoomLibraryRow: FfiConverterRustBuffer {
             try KernelRoomLibraryRow(
                 coordinate: FfiConverterString.read(from: &buf),
                 shareEventId: FfiConverterString.read(from: &buf),
-                preview: FfiConverterOptionTypeArtifactPreviewRow.read(from: &buf)
+                preview: FfiConverterOptionTypeArtifactPreviewRow.read(from: &buf),
+                artifactRecord: FfiConverterTypeArtifactRecord.read(from: &buf)
         )
     }
 
@@ -29618,6 +29669,7 @@ public struct FfiConverterTypeKernelRoomLibraryRow: FfiConverterRustBuffer {
         FfiConverterString.write(value.coordinate, into: &buf)
         FfiConverterString.write(value.shareEventId, into: &buf)
         FfiConverterOptionTypeArtifactPreviewRow.write(value.preview, into: &buf)
+        FfiConverterTypeArtifactRecord.write(value.artifactRecord, into: &buf)
     }
 }
 
@@ -41265,6 +41317,14 @@ public struct RoomDiscussionsSnapshot {
      * Filtered kind:11+discussion rows, newest-first. Bounded at 64.
      */
     public var rows: [DiscussionRow]
+    /**
+     * Thin resolved previews for the artifact coordinates referenced by the
+     * rows (`DiscussionRow::artifact_coordinate`). Lets Swift render a rich
+     * discussion attachment chip (title/image/author) instead of a bare URL.
+     * Thin is sufficient here — a chip needs no podcast/book detail fields.
+     * Seeded by `ensure_room_artifact_previews` on `RoomDiscussionsUpdated`.
+     */
+    public var artifactPreviews: [ArtifactPreviewRow]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -41274,9 +41334,17 @@ public struct RoomDiscussionsSnapshot {
          */groupId: String,
         /**
          * Filtered kind:11+discussion rows, newest-first. Bounded at 64.
-         */rows: [DiscussionRow]) {
+         */rows: [DiscussionRow],
+        /**
+         * Thin resolved previews for the artifact coordinates referenced by the
+         * rows (`DiscussionRow::artifact_coordinate`). Lets Swift render a rich
+         * discussion attachment chip (title/image/author) instead of a bare URL.
+         * Thin is sufficient here — a chip needs no podcast/book detail fields.
+         * Seeded by `ensure_room_artifact_previews` on `RoomDiscussionsUpdated`.
+         */artifactPreviews: [ArtifactPreviewRow]) {
         self.groupId = groupId
         self.rows = rows
+        self.artifactPreviews = artifactPreviews
     }
 }
 
@@ -41293,12 +41361,16 @@ extension RoomDiscussionsSnapshot: Equatable, Hashable {
         if lhs.rows != rhs.rows {
             return false
         }
+        if lhs.artifactPreviews != rhs.artifactPreviews {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(groupId)
         hasher.combine(rows)
+        hasher.combine(artifactPreviews)
     }
 }
 
@@ -41312,13 +41384,15 @@ public struct FfiConverterTypeRoomDiscussionsSnapshot: FfiConverterRustBuffer {
         return
             try RoomDiscussionsSnapshot(
                 groupId: FfiConverterString.read(from: &buf),
-                rows: FfiConverterSequenceTypeDiscussionRow.read(from: &buf)
+                rows: FfiConverterSequenceTypeDiscussionRow.read(from: &buf),
+                artifactPreviews: FfiConverterSequenceTypeArtifactPreviewRow.read(from: &buf)
         )
     }
 
     public static func write(_ value: RoomDiscussionsSnapshot, into buf: inout [UInt8]) {
         FfiConverterString.write(value.groupId, into: &buf)
         FfiConverterSequenceTypeDiscussionRow.write(value.rows, into: &buf)
+        FfiConverterSequenceTypeArtifactPreviewRow.write(value.artifactPreviews, into: &buf)
     }
 }
 
