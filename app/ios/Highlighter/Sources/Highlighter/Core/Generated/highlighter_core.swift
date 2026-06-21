@@ -7293,6 +7293,15 @@ public struct AppRootSnapshot {
      * Bounded: one string ≤ 512 bytes (NIP-46 spec limit).
      */
     public var nostrconnectUri: String?
+    /**
+     * Raw error from a failed restore or sign-in (`SessionState::RestoreFailed`
+     * / `SignInFailed`), or `None`. Gives LoginView's inline error a kernel
+     * source. Naturally cleared (→ `None`) the moment the session transitions
+     * to a new attempt (Restoring/SigningIn), success (Present), or Absent — so
+     * no explicit clear-on-route-change is needed. D1: raw error; Swift formats
+     * the display copy.
+     */
+    public var authError: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -7311,11 +7320,20 @@ public struct AppRootSnapshot {
          * NostrConnect sign-in is in progress. The iOS QR-code sheet renders this
          * directly. Cleared when `IdentityChanged` fires or on `Logout`.
          * Bounded: one string ≤ 512 bytes (NIP-46 spec limit).
-         */nostrconnectUri: String?) {
+         */nostrconnectUri: String?,
+        /**
+         * Raw error from a failed restore or sign-in (`SessionState::RestoreFailed`
+         * / `SignInFailed`), or `None`. Gives LoginView's inline error a kernel
+         * source. Naturally cleared (→ `None`) the moment the session transitions
+         * to a new attempt (Restoring/SigningIn), success (Present), or Absent — so
+         * no explicit clear-on-route-change is needed. D1: raw error; Swift formats
+         * the display copy.
+         */authError: String?) {
         self.routeKind = routeKind
         self.sessionPresent = sessionPresent
         self.onboardingComplete = onboardingComplete
         self.nostrconnectUri = nostrconnectUri
+        self.authError = authError
     }
 }
 
@@ -7338,6 +7356,9 @@ extension AppRootSnapshot: Equatable, Hashable {
         if lhs.nostrconnectUri != rhs.nostrconnectUri {
             return false
         }
+        if lhs.authError != rhs.authError {
+            return false
+        }
         return true
     }
 
@@ -7346,6 +7367,7 @@ extension AppRootSnapshot: Equatable, Hashable {
         hasher.combine(sessionPresent)
         hasher.combine(onboardingComplete)
         hasher.combine(nostrconnectUri)
+        hasher.combine(authError)
     }
 }
 
@@ -7361,7 +7383,8 @@ public struct FfiConverterTypeAppRootSnapshot: FfiConverterRustBuffer {
                 routeKind: FfiConverterTypeRouteKind.read(from: &buf),
                 sessionPresent: FfiConverterBool.read(from: &buf),
                 onboardingComplete: FfiConverterBool.read(from: &buf),
-                nostrconnectUri: FfiConverterOptionString.read(from: &buf)
+                nostrconnectUri: FfiConverterOptionString.read(from: &buf),
+                authError: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -7370,6 +7393,7 @@ public struct FfiConverterTypeAppRootSnapshot: FfiConverterRustBuffer {
         FfiConverterBool.write(value.sessionPresent, into: &buf)
         FfiConverterBool.write(value.onboardingComplete, into: &buf)
         FfiConverterOptionString.write(value.nostrconnectUri, into: &buf)
+        FfiConverterOptionString.write(value.authError, into: &buf)
     }
 }
 

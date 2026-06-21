@@ -29,7 +29,8 @@ final class HighlighterAppKernel {
         routeKind: .onboarding,
         sessionPresent: false,
         onboardingComplete: false,
-        nostrconnectUri: nil
+        nostrconnectUri: nil,
+        authError: nil
     )
 
     /// Latest projection for the root-shell chrome (tabs, toast, sheet).

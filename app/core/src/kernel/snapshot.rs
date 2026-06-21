@@ -36,6 +36,15 @@ pub struct AppRootSnapshot {
     /// directly. Cleared when `IdentityChanged` fires or on `Logout`.
     /// Bounded: one string ≤ 512 bytes (NIP-46 spec limit).
     pub nostrconnect_uri: Option<String>,
+
+    // ── Phase 7 additions ─────────────────────────────────────────────────────
+    /// Raw error from a failed restore or sign-in (`SessionState::RestoreFailed`
+    /// / `SignInFailed`), or `None`. Gives LoginView's inline error a kernel
+    /// source. Naturally cleared (→ `None`) the moment the session transitions
+    /// to a new attempt (Restoring/SigningIn), success (Present), or Absent — so
+    /// no explicit clear-on-route-change is needed. D1: raw error; Swift formats
+    /// the display copy.
+    pub auth_error: Option<String>,
 }
 
 /// A transient toast message visible in the root shell.

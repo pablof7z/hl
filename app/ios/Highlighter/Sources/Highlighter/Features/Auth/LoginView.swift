@@ -7,12 +7,23 @@ import SwiftUI
 ///   3. Always allow nsec paste + manual bunker URI paste as fallback.
 struct LoginView: View {
     @Environment(HighlighterStore.self) private var store
+    /// Phase 7: the kernel surfaces restore/sign-in failures via
+    /// `appRoot.authError`. Sign-in itself stays on the live lane until Part C;
+    /// only the inline error DISPLAY reads the kernel field (e.g. a failed
+    /// restore-on-launch that routed back to Login).
+    @Environment(HighlighterAppKernel.self) private var kernel
     @Environment(\.openURL) private var openURL
 
     @State private var detectedSigner: KnownSigner?
     @State private var inputText: String = ""
     @State private var isWorking: Bool = false
     @State private var errorMessage: String?
+
+    /// The inline error to show: the live-lane sign-in error takes precedence;
+    /// otherwise surface a kernel-side restore/sign-in failure.
+    private var displayedError: String? {
+        errorMessage ?? kernel.appRoot.authError
+    }
 
     var body: some View {
         NavigationStack {
@@ -28,8 +39,8 @@ struct LoginView: View {
 
                     manualEntry
 
-                    if let errorMessage {
-                        Text(errorMessage)
+                    if let displayedError {
+                        Text(displayedError)
                             .font(.footnote)
                             .foregroundStyle(.red)
                     }
