@@ -1569,13 +1569,11 @@ pub(crate) async fn run_effect(
         Effect::RunSearch {
             query,
             scope_json,
-            interest_id,
         } => {
-            // Push the NIP-50 search interest and replace the hl-owned
-            // SearchResultsProjection. Fire-and-forget (D6): search hits
-            // arrive back as KernelEvent::SearchResultsUpdated via the NMP
-            // snapshot callback. No-op if nmp is None (test mode).
-            search::run_effect_run_search(query, scope_json, interest_id, nmp);
+            // Open a NIP-50 search session via NMP's higher-order open_search.
+            // Fire-and-forget (D6): search hits arrive back as the typed N50S
+            // sidecar frame. No-op if nmp is None (test mode).
+            search::run_effect_run_search(query, scope_json, nmp);
         }
 
         // ── Phase 4H additions (append-only) ─────────────────────────────────
@@ -2205,6 +2203,17 @@ pub(crate) async fn actor_task(
                 // does not have.
                 if matches!(id, ViewId::Search) {
                     state.search_results.clear();
+                    // Tear down the NMP search session (per-relay pinned
+                    // interests + result observer + typed sidecar). Inline (not
+                    // an Effect) because it needs the NmpHandle directly. No-op
+                    // when nmp_handle is None (test mode); close_search itself is
+                    // idempotent on an unknown session.
+                    if let Some(handle) = nmp_handle.as_ref() {
+                        // SAFETY: handle.ptr is a valid non-null NmpApp pointer
+                        // kept alive by NmpHandle for the full actor lifetime.
+                        let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+                        nmp_ref.close_search(search::SEARCH_SESSION_ID);
+                    }
                 }
                 lifecycle_effects.extend(search::lifecycle_effects_for_view_close(id));
                 // ── Phase 4G: article feed lifecycle — release cursor ────────────
@@ -2441,15 +2450,12 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
 
     // Phase 3C: wire the follow-list typed snapshot projection so NIP-02
     // kind:3 events from the active account surface in `AppState::follows`.
-    // Called with `active_pubkey=None` at boot (account unknown until the
-    // identity-change observer fires); the `FollowListProjection` accumulates
-    // kind:3 events for all observed authors and filters to the active pubkey
-    // at snapshot time. The kernel's standing `account_profile_interest`
-    // (kind:0 + kind:3 + kind:10002) means no separate interest push is needed.
-    // Pass the live active-account slot so the projection auto-tracks the
-    // active account. A fresh Arc::new(Mutex::new(None)) would leave it
-    // permanently pointed at None and follows would never populate AppState.
-    follows::register_follow_list_projection(nmp_ref, nmp_ref.active_account_handle());
+    // ADR-0063: the follow list is now a PURE READ over the shared
+    // `ContactsLookup` (written by nmp_nip01::Kind3Parser). The active-account
+    // slot and contacts lookup are sourced from `NmpApp` inside the NMP runtime
+    // registrar — no manual slot is passed. Demand-driven kind:3 acquisition is
+    // handled by `register_follow_state_runtime`'s OpenInterest enqueue.
+    follows::register_follow_list_projection(nmp_ref);
 
     // Phase 4C: wire the hl BookmarkListProjection typed snapshot so NIP-51
     // kind:10003 events from the active account surface in `AppState::bookmarks`.

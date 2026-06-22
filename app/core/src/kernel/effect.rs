@@ -312,11 +312,9 @@ pub enum Effect {
         /// because the reducer no-ops empty strings).
         query: String,
         /// Serialised `nmp_nip50::SearchScope` (serde JSON). The effect runner
-        /// deserialises this to build the `SearchRequest` → `InterestShape`.
+        /// deserialises this to build the `SearchRequest`, then calls
+        /// `NmpApp::open_search` under the stable `search::SEARCH_SESSION_ID`.
         scope_json: String,
-        /// Stable `InterestId` u64 for this search session; allows the planner
-        /// to dedup or replace the prior search interest on re-query.
-        interest_id: u64,
     },
 
     // ── Phase 4H additions (append-only) ─────────────────────────────────────

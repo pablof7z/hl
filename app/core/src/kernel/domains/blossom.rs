@@ -591,6 +591,7 @@ mod tests {
                 status: "published".to_string(),
                 error: None,
                 result: Some(r#"{"url":"https://blossom.example/img.jpg"}"#.to_string()),
+                event_id: None,
             }],
         };
 
@@ -717,6 +718,7 @@ mod tests {
                 status: "completed".to_string(),
                 error: None,
                 result: Some(r#"{"url":"https://ignored.example/img.jpg"}"#.to_string()),
+                event_id: None,
             }],
         };
 
@@ -751,6 +753,7 @@ mod tests {
                 status: "published".to_string(),
                 error: None,
                 result: None,
+                event_id: None,
             }],
         };
 
@@ -778,6 +781,7 @@ mod tests {
                 status: "success".to_string(), // WRONG — nmp never sends this
                 error: None,
                 result: None,
+                event_id: None,
             }],
         };
         apply_action_results(&mut state2, &model2);
@@ -818,6 +822,7 @@ mod tests {
                 status: "published".to_string(),
                 error: None,
                 result: Some(r#"{"url":"https://cdn.example/a.jpg"}"#.to_string()),
+                event_id: None,
             }],
         };
         apply_action_results(&mut state, &model_a);
@@ -850,6 +855,7 @@ mod tests {
                 status: "published".to_string(),
                 error: None,
                 result: Some(r#"{"url":"https://cdn.example/b.jpg"}"#.to_string()),
+                event_id: None,
             }],
         };
         apply_action_results(&mut state, &model_b);
