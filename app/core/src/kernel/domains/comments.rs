@@ -18,7 +18,8 @@
 //!
 //! * **WRITE** — `hl.comment.post` envelope → `reduce_action_post_comment` →
 //!   `Effect::DispatchCommentAction { json }` → `run_effect_dispatch_comment_action`
-//!   calls `nmp_app_dispatch_action("nmp.nip22.post_comment", json)` fire-and-forget.
+//!   dispatches `"nmp.nip22.post_comment"` through the typed BYTE doorway
+//!   (`nmp_app_dispatch_action_bytes`, `PostCommentAction` payload) fire-and-forget.
 //!
 //! ## Wire registration
 //!
@@ -51,35 +52,17 @@
 //! * Non-Negotiable #3 — `reduce_action_post_comment` returns `Vec<Effect>` (never
 //!   `Result`); fire-and-forget.
 
-use std::ffi::CString;
-use std::os::raw::c_char;
 use std::sync::Arc;
 
 use nmp_core::KernelEventObserver;
 use nmp_ffi::NmpApp;
-use nmp_nip22::{CommentThreadProjection, CommentThreadSnapshot, KIND_COMMENT};
+use nmp_nip22::{CommentThreadProjection, CommentThreadSnapshot, PostCommentAction, KIND_COMMENT};
 use tokio::sync::mpsc;
 
 use crate::kernel::action::{KernelEvent, PostCommentPayload};
 use crate::kernel::actor::Cmd;
 use crate::kernel::app::AppState;
 use crate::kernel::snapshot::{CommentRecordRow, CommentThreadKernelSnapshot};
-
-// ─── nmp-ffi C ABI declarations ─────────────────────────────────────────────
-
-// `nmp_app_dispatch_action` is #[no_mangle] extern "C" in nmp-ffi/src/action.rs.
-// Declared here so the comments effect runner can call it directly without
-// importing the full nmp-ffi action surface.
-#[allow(improper_ctypes)] // NmpApp is opaque; the pointer is safe — nmp-ffi uses the same ABI.
-extern "C" {
-    fn nmp_app_dispatch_action(
-        app: *mut NmpApp,
-        namespace: *const c_char,
-        action_json: *const c_char,
-    ) -> *mut c_char;
-}
-
-use nmp_ffi::nmp_free_string;
 
 // ─── READ side: KernelEventObserver wrapper ──────────────────────────────────
 
@@ -197,13 +180,14 @@ pub(crate) fn reduce_action_post_comment(
 
 // ─── Effect runner ───────────────────────────────────────────────────────────
 
-/// Execute `Effect::DispatchCommentAction` — calls `nmp_app_dispatch_action`
-/// with namespace `"nmp.nip22.post_comment"` and the serialised JSON payload.
+/// Execute `Effect::DispatchCommentAction` — dispatches `"nmp.nip22.post_comment"`
+/// through the typed BYTE doorway carrying the nip22 [`PostCommentAction`]
+/// payload (deserialized from the reducer's serde wire `json`).
 ///
-/// Fire-and-forget (D6, Non-Negotiable #3): the returned correlation_id JSON
-/// string is freed and discarded. The authoritative comment thread arrives back
-/// via `KernelEvent::CommentThreadUpdated` from the `CommentObserver` on the
-/// next kind:1111 event.
+/// Fire-and-forget (D6, Non-Negotiable #3): the returned verdict JSON is freed
+/// and discarded. The authoritative comment thread arrives back via
+/// `KernelEvent::CommentThreadUpdated` from the `CommentObserver` on the next
+/// kind:1111 event.
 ///
 /// No-op if `nmp` is `None` (test mode — tests inject `CommentThreadUpdated`
 /// directly to drive the reducer).
@@ -211,28 +195,20 @@ pub(crate) fn run_effect_dispatch_comment_action(
     json: String,
     nmp: Option<&crate::kernel::actor::NmpHandle>,
 ) {
+    use crate::kernel::byte_doorway::{dispatch_action_bytes, fresh_correlation_id};
+
     let Some(handle) = nmp else { return };
 
-    let namespace = "nmp.nip22.post_comment";
-    let ns_c = match CString::new(namespace) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let json_c = match CString::new(json) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. ns_c and json_c are valid
-    // CStrings alive for the duration of this call. The returned pointer is
-    // freed below via nmp_free_string (same Rust allocator as the allocation).
-    let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
-
-    // Free the returned correlation-id JSON string (same Rust allocator path).
-    if !result_ptr.is_null() {
-        nmp_free_string(result_ptr);
+    match serde_json::from_str::<PostCommentAction>(&json) {
+        Ok(action) => dispatch_action_bytes(
+            handle.ptr.as_ptr(),
+            "nmp.nip22.post_comment",
+            &fresh_correlation_id(),
+            &action,
+        ),
+        Err(e) => {
+            tracing::warn!(error = %e, "comments: bad PostCommentAction payload — no dispatch")
+        }
     }
 }
 

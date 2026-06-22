@@ -7,17 +7,20 @@
 //!   `projections::dispatch_typed_frame` when the `schema_id` arm matches.
 //!
 //! * **WRITE** — `AppAction::Follow{pubkey}` / `Unfollow{pubkey}` → reducer
-//!   emits `Effect::DispatchFollowAction` → effect runner calls
-//!   `nmp_app_dispatch_action("nmp.follow"|"nmp.unfollow", {"pubkey":...})`.
-//!   Fire-and-forget (D6, Non-Negotiable #3): the updated follow list arrives
-//!   back via the NMP update callback as a `FollowListUpdated` event.
+//!   emits `Effect::DispatchFollowAction` → effect runner dispatches
+//!   `"nmp.follow"`/`"nmp.unfollow"` through the typed BYTE doorway
+//!   (`nmp_app_dispatch_action_bytes`) carrying a `PubkeyAction { pubkey }`
+//!   FlatBuffers payload. Fire-and-forget (D6, Non-Negotiable #3): the updated
+//!   follow list arrives back via the NMP update callback as a
+//!   `FollowListUpdated` event.
 //!
 //! * **QUERY** — `AppState::is_following(pubkey)` (defined on `AppState` in
 //!   `app.rs`; reads `AppState::follows`) is the single query point.
 //!
 //! ## NMP follow/unfollow seam
 //!
-//! Follow and unfollow dispatch goes through `nmp_app_dispatch_action` with the
+//! Follow and unfollow dispatch goes through the typed BYTE doorway
+//! (`nmp_app_dispatch_action_bytes`) with the
 //! `"nmp.follow"` / `"nmp.unfollow"` namespaces exposed by
 //! `nmp_nip02::FollowModule` / `UnfollowModule`. These are registered at app
 //! boot via `nmp_nip02::register_actions(&mut builder)` (in `start_nmp_app`).
@@ -40,14 +43,11 @@
 //! synchronous and non-blocking (FlatBuffers decode only, no I/O). D6: decode
 //! errors leave `AppState::follows` unchanged.
 
-use std::ffi::CString;
-use std::os::raw::c_char;
 use std::sync::{Arc, Mutex};
 
-use nmp_core::KernelEventObserver;
 use nmp_ffi::NmpApp;
-use nmp_nip02::projection::FollowListProjection;
 use nmp_nip02::wire::typed_fb::decode_follow_list;
+use nmp_nip02::PubkeyAction;
 
 use crate::kernel::app::AppState;
 
@@ -57,23 +57,12 @@ pub(crate) use nmp_nip02::FOLLOW_LIST_SCHEMA_ID as SCHEMA_ID;
 
 // ─── nmp-ffi C ABI declarations ─────────────────────────────────────────────
 
-// `nmp_app_dispatch_action` is #[no_mangle] extern "C" in nmp-ffi/src/action.rs.
-// We declare it here so the follows effect runner can call it directly.
-#[allow(improper_ctypes)]
-extern "C" {
-    fn nmp_app_dispatch_action(
-        app: *mut NmpApp,
-        namespace: *const c_char,
-        action_json: *const c_char,
-    ) -> *mut c_char;
-}
-
-// `nmp_free_string` is the canonical free path for all C strings returned by
-// nmp-ffi (they are allocated via `CString::into_raw` in the Rust allocator;
-// calling host `free()` would use a different allocator — UB). Re-exported in
-// `nmp_ffi::nmp_free_string` but we use the direct C ABI here to avoid a
-// separate Rust function call layer.
-use nmp_ffi::nmp_free_string;
+// `nmp_app_dispatch_action_bytes` is #[no_mangle] extern "C" in
+// nmp-ffi/src/action/bytes.rs — the typed BYTE doorway (ADR-0064 / S4). It
+// carries a finished `DispatchEnvelope` (correlation_id + action_namespace +
+// schema_version + opaque per-crate typed payload) and returns the SAME
+// `{"correlation_id":…}` / `{"error":…}` JSON shape as the retired JSON twin.
+// See `crate::kernel::byte_doorway` for the shared envelope builder + free path.
 
 // ─── READ side: projection frame apply ──────────────────────────────────────
 
@@ -124,8 +113,9 @@ pub(crate) fn reduce_action_unfollow(pubkey: String) -> Vec<crate::kernel::effec
 
 // ─── Effect runner ───────────────────────────────────────────────────────────
 
-/// Execute `Effect::DispatchFollowAction` — calls `nmp_app_dispatch_action`
-/// with `"nmp.follow"` or `"nmp.unfollow"` and `{"pubkey":"<hex>"}`.
+/// Execute `Effect::DispatchFollowAction` — dispatches `"nmp.follow"` or
+/// `"nmp.unfollow"` through the typed BYTE doorway carrying a nip02
+/// [`PubkeyAction`] payload (`{ pubkey }`).
 ///
 /// Fire-and-forget (D6): the return value (`{correlation_id}` JSON string) is
 /// freed and discarded. The updated follow list arrives back as a
@@ -141,92 +131,48 @@ pub(crate) fn run_effect_dispatch_follow_action(
     let Some(handle) = nmp else { return };
 
     let namespace = if follow { "nmp.follow" } else { "nmp.unfollow" };
-    // Serialize the wire shape: {"pubkey":"<hex>"}
-    let action_json = format!("{{\"pubkey\":\"{pubkey}\"}}");
-
-    let ns_c = match CString::new(namespace) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let json_c = match CString::new(action_json) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
+    // Typed nip02 follow payload (NF2A FlatBuffers root). `nmp.follow` and
+    // `nmp.unfollow` both decode a `PubkeyAction`.
+    let payload = PubkeyAction { pubkey };
 
     // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. ns_c and json_c are valid CStrings
-    // alive for the duration of this call. The returned pointer is freed below.
-    let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
-
-    // Free the returned correlation-id JSON string. nmp-ffi returns a
-    // CString::into_raw pointer; `nmp_free_string` is the canonical free path
-    // (same Rust allocator as the allocation). Calling host `free()` would be
-    // UB. A null pointer is a no-op (nmp-ffi D6 null-safety contract).
-    if !result_ptr.is_null() {
-        // nmp_free_string takes ownership of the CString::into_raw pointer and
-        // frees it through the same Rust allocator. It handles null gracefully
-        // but we guard anyway to be explicit about the non-null path.
-        nmp_free_string(result_ptr);
-    }
+    // NmpHandle for the full actor lifetime. The verdict JSON is freed inside
+    // `dispatch_action_bytes`.
+    crate::kernel::byte_doorway::dispatch_action_bytes(
+        handle.ptr.as_ptr(),
+        namespace,
+        &crate::kernel::byte_doorway::fresh_correlation_id(),
+        &payload,
+    );
 }
 
 // ─── Projection registration ─────────────────────────────────────────────────
 
-/// Wire the `FollowListProjection` event observer + typed snapshot projection
-/// against `nmp_ref`. Follows the Chirp pattern in
-/// `apps/chirp/nmp-app-chirp/src/ffi/register.rs::nmp_app_chirp_register_follow_list`.
+/// Wire the follow-state runtime (observer + kind:3 interest + typed snapshot
+/// projection) against `nmp_ref`, delegating to the canonical
+/// [`nmp_nip02::register_follow_state_runtime`] (the same entry point Chirp's
+/// `nmp_app_chirp_register_follow_list` uses).
 ///
-/// `active_account_slot` is the live `Arc<Mutex<Option<String>>>` that NMP
-/// itself updates on sign-in/switch/logout. Pass `nmp_ref.active_account_handle()`
-/// so the projection auto-tracks the active account without manual updates.
-/// Using a fresh `Arc::new(Mutex::new(None))` would leave the projection
-/// permanently pointed at None, so follows would never populate AppState.
+/// Post-#1671 Lane F, `FollowListProjection` is no longer a `KernelEventObserver`
+/// — it is a pure read-model over the kernel-owned [`ContactsLookup`] that the
+/// `Kind3Parser` populates through the cache-serve pipeline.
+/// `register_follow_state_runtime` performs the full wiring: it sources the
+/// contacts lookup from `nmp_ref.contacts_lookup()` (the SAME `Arc` the parser
+/// writes), opens/closes the kind:3 interest on identity change, and registers
+/// the typed `"nmp.follow_list"` snapshot (schema `"nmp.nip02.follow_list"`) —
+/// so no Swift decoder changes are needed.
 ///
-/// Must be called once at boot (after `nmp_app_start`). The slot automatically
-/// reflects future identity changes because NMP writes through the same Arc.
+/// The `_active_account_slot` parameter is retained for call-site stability but
+/// is no longer used: the runtime reads the kernel's authoritative
+/// `active_pubkey()` slot internally.
 ///
-/// The kernel already fetches kind:3 for the active account via the
-/// `account_profile_interest` (kind:0 + kind:3 + kind:10002); no separate
-/// interest push is needed — events arrive through the standing subscription.
-///
-/// D6: a null or poisoned observer slot degrades to a silent return without
-/// registering the typed projection (so the snapshot never updates but the
-/// app does not crash).
+/// Must be called once at boot (after `nmp_app_start`).
 pub(crate) fn register_follow_list_projection(
     nmp_ref: &NmpApp,
-    active_account_slot: Arc<Mutex<Option<String>>>,
+    _active_account_slot: Arc<Mutex<Option<String>>>,
 ) {
-    let projection = Arc::new(FollowListProjection::new(active_account_slot));
-
-    let observer_id =
-        nmp_ref.register_event_observer(Arc::clone(&projection) as Arc<dyn KernelEventObserver>);
-    if observer_id.0 == 0 {
-        // Observer slot is full or poisoned — skip projection registration.
-        tracing::warn!(
-            "follows::register_follow_list_projection: event-observer registration failed (D6)"
-        );
-        return;
-    }
-
-    // Register the typed sidecar projection under the canonical key.
-    // KEY = "nmp.follow_list"; SCHEMA_ID (in the payload) = "nmp.nip02.follow_list".
-    // This mirrors the Chirp wiring exactly (key/schema_id split is deliberate).
-    let typed_proj = Arc::clone(&projection);
-    nmp_ref.register_typed_snapshot_projection("nmp.follow_list", move || {
-        let snapshot = typed_proj.snapshot();
-        Some(nmp_core::TypedProjectionData {
-            key: "nmp.follow_list".to_string(),
-            schema_id: SCHEMA_ID.to_string(),
-            schema_version: nmp_nip02::FOLLOW_LIST_SCHEMA_VERSION,
-            // FILE_IDENTIFIER is a &[u8;4]; convert to a UTF-8 string as
-            // Chirp does (String::from_utf8_lossy — "NF02" is valid ASCII).
-            file_identifier: String::from_utf8_lossy(nmp_nip02::FOLLOW_LIST_FILE_IDENTIFIER)
-                .into_owned(),
-            payload: nmp_nip02::encode_follow_list(&snapshot),
-            ..Default::default()
-        })
-    });
+    let contacts_lookup = nmp_ref.contacts_lookup();
+    nmp_nip02::register_follow_state_runtime(nmp_ref, contacts_lookup);
 }
 
 // ─── Unit tests ──────────────────────────────────────────────────────────────

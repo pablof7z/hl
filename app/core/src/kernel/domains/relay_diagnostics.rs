@@ -101,13 +101,14 @@ pub(crate) fn apply(state: &mut AppState, frame_bytes: &[u8]) -> bool {
         .relays
         .into_iter()
         .map(|r| {
-            // Map nmp's pre-formatted connection_tone to a stable enum.
-            // We read `connection_tone` (NOT `connection_label`) to stay
-            // independent of NMP's localised label strings.
-            let connection_state = match r.connection_tone.as_str() {
-                "ok" => RelayConnectionState::Connected,
-                "warn" => RelayConnectionState::Reconnecting,
-                "error" => RelayConnectionState::Error,
+            // Map nmp's RAW connection string to a stable enum. Post-#1670 the
+            // wire field is `connection` (the deprecated presentation-tone field
+            // `connection_tone` was removed): it carries the kernel's raw
+            // connection state token, not a localised label.
+            let connection_state = match r.connection.as_str() {
+                "connected" => RelayConnectionState::Connected,
+                "connecting" | "backing_off" => RelayConnectionState::Reconnecting,
+                "closed" => RelayConnectionState::Error,
                 _ => RelayConnectionState::Unknown,
             };
             RelayDiagRow {

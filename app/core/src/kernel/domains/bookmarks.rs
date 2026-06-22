@@ -73,9 +73,20 @@ use crate::kernel::snapshot::{ArtifactPreviewRow, BookmarkRow};
 
 // ─── nmp-ffi C ABI declarations ─────────────────────────────────────────────
 
-// `nmp_app_dispatch_action` is #[no_mangle] extern "C" in nmp-ffi/src/action.rs.
-// Declared here so the bookmarks effect runner can call it directly — same
-// pattern as follows.rs:63.
+// STILL ON THE JSON DOORWAY (ADR-0064 not-yet-migrated namespace).
+//
+// `nmp.nip51.add_bookmark` / `nmp.nip51.remove_bookmark` have NOT been migrated
+// to a typed FlatBuffers `ActionPayload` in NMP: `nmp_nip51::AddBookmarkAction`
+// / `RemoveBookmarkAction` leave `ActionModule::decode_payload` defaulted to
+// `None`, so the typed BYTE doorway (`nmp_app_dispatch_action_bytes`) rejects
+// these namespaces fail-closed with
+// `{"error":"namespace does not support typed FlatBuffers payloads"}`. The
+// kind:10003 bookmark list is a reserved replaceable kind, so it also cannot be
+// routed through `nmp.publish` `PublishRaw` (which rejects reserved kinds).
+//
+// This site therefore stays on the JSON `nmp_app_dispatch_action` doorway until
+// NMP adds the nip51 `ActionPayload` impl. The JSON doorway is still live
+// pre-Cut-B (ADR-0064 staged migration), so this is correct and non-breaking.
 #[allow(improper_ctypes)]
 extern "C" {
     fn nmp_app_dispatch_action(

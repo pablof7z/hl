@@ -42,11 +42,10 @@
 //! Both are synchronous and non-blocking (FlatBuffers decode only — no I/O). D6:
 //! decode errors leave `AppState` fields unchanged (silent no-op).
 
-use std::collections::HashMap;
 use std::ffi::CString;
-use std::os::raw::{c_char, c_int};
+use std::os::raw::c_char;
 
-use nmp_core::typed_projections::{decode_claimed_profiles, decode_profile, ProfileCardModel};
+use nmp_core::typed_projections::decode_profile;
 use nmp_ffi::NmpApp;
 
 use crate::kernel::actor::NmpHandle;
@@ -56,28 +55,33 @@ use crate::kernel::snapshot::{CommunityRow, ProfileSnapshot, ViewSnapshot};
 
 // ─── nmp-ffi C ABI declarations ─────────────────────────────────────────────
 
-// `nmp_app_claim_profile` is `#[no_mangle] extern "C"` in nmp-ffi/src/timeline.rs.
-// We declare it here to drive the profiles effect runner without a separate wrapper.
+// Post-#1671 the bespoke `nmp_app_claim_profile` / `nmp_app_release_profile`
+// symbols were removed: a visited profile is now an INTEREST (a kind:0 filter
+// for the pubkey) opened/closed through the generic interest doorway. NMP's
+// cache-serve pipeline serves the cached kind:0 and tails for live edits while
+// the interest is open, then drops it on close. `nmp_app_open_interest` /
+// `nmp_app_close_interest` are `#[no_mangle] extern "C"` in nmp-ffi/src/timeline.rs.
 #[allow(improper_ctypes)] // NmpApp is opaque; the pointer is safe.
 extern "C" {
-    fn nmp_app_claim_profile(
+    fn nmp_app_open_interest(
         app: *mut NmpApp,
-        pubkey: *const c_char,
+        filter_json: *const c_char,
         consumer_id: *const c_char,
-        force: c_int,
-        liveness: c_int,
+        scope: u32,
+    );
+    fn nmp_app_close_interest(
+        app: *mut NmpApp,
+        filter_json: *const c_char,
+        consumer_id: *const c_char,
+        scope: u32,
     );
 }
 
-// `nmp_app_release_profile` is `#[no_mangle] extern "C"` in nmp-ffi/src/timeline.rs.
-#[allow(improper_ctypes)] // NmpApp is opaque; the pointer is safe.
-extern "C" {
-    fn nmp_app_release_profile(app: *mut NmpApp, pubkey: *const c_char, consumer_id: *const c_char);
-}
-
-// `ProfileLiveness` int constants from nmp-core (D6: 0 = CacheOk, non-zero = Live).
-// We use `1` (Live/Tailing) for open profile views so profile edits arrive reactively.
-const LIVENESS_LIVE: c_int = 1;
+/// Interest scope for a visited profile: `1` = Global (account-agnostic). A
+/// profile view is not tied to the active account — it must NOT be re-routed or
+/// dropped on an account switch — so it uses the Global scope rather than
+/// `0` = ActiveAccount.
+const INTEREST_SCOPE: u32 = 1;
 
 /// Stable consumer-id prefix. The per-pubkey suffix makes each profile view
 /// an independent refcount owner. Must not contain NUL bytes.
@@ -106,33 +110,13 @@ pub(crate) fn apply_own_profile(state: &mut AppState, payload: &[u8]) {
     }
 }
 
-// ─── READ side: claimed profiles projection ──────────────────────────────────
-
-/// Apply a decoded `"claimed_profiles"` FlatBuffers payload to
-/// `AppState::claimed_profiles`. Each entry is a `(pubkey, ProfileCardModel)`
-/// pair from the flattened BTreeMap.
-///
-/// Called from `projections::dispatch_typed_frame` when
-/// `schema_id == "claimed_profiles"`. The snapshot reflects every profile that
-/// has been claimed via `ClaimProfile` and not yet released.
-///
-/// D6: any decode error leaves `AppState::claimed_profiles` unchanged.
-pub(crate) fn apply_claimed_profiles(state: &mut AppState, payload: &[u8]) {
-    match decode_claimed_profiles(payload) {
-        Ok(model) => {
-            state.claimed_profiles = model
-                .entries
-                .into_iter()
-                .collect::<HashMap<String, ProfileCardModel>>();
-        }
-        Err(e) => {
-            tracing::trace!(
-                error = %e,
-                "profiles::apply_claimed_profiles: decode error — claimed_profiles unchanged (D6)"
-            );
-        }
-    }
-}
+// ─── READ side: claimed profiles ─────────────────────────────────────────────
+//
+// The `"claimed_profiles"` typed sidecar was deleted in NMP (#1671 Lane H —
+// only `claimed_events` remains). Visited-profile cards now populate
+// `AppState::claimed_profiles` exclusively via `KernelEvent::ProfileCardUpdated`
+// (the per-pubkey push the actor applies in `actor.rs`), so there is no longer a
+// bulk-snapshot decode here.
 
 // ─── WRITE side: view-lifecycle helpers ─────────────────────────────────────
 
@@ -195,12 +179,19 @@ pub(crate) fn reduce_action_release_profile(pubkey: String) -> Vec<Effect> {
 
 // ─── Effect runners ──────────────────────────────────────────────────────────
 
-/// Execute `Effect::ClaimProfile` — calls `nmp_app_claim_profile` with the
-/// stable consumer-id `"hl.profile.<pubkey>"` and `liveness = Live`.
+/// Build the kind:0 REQ filter that opens/closes a single-pubkey profile
+/// interest. The filter shape hash gives NMP deterministic dedup, so the SAME
+/// pubkey's open/close pair refcounts one live subscription.
+fn profile_filter_json(pubkey: &str) -> String {
+    format!(r#"{{"kinds":[0],"authors":["{pubkey}"]}}"#)
+}
+
+/// Execute `Effect::ClaimProfile` — opens a kind:0 INTEREST for `pubkey` under
+/// the stable consumer-id `"hl.profile.<pubkey>"` (Global scope).
 ///
-/// Live liveness means a `Tailing` kind:0 subscription stays open while the
-/// view is open so profile edits arrive reactively. CacheOk would be correct
-/// for feed-row avatars, but the Profile view needs live updates.
+/// NMP's cache-serve pipeline serves the cached kind:0 and tails for live edits
+/// while the interest is open, so profile edits arrive reactively. Released
+/// (refcount-decremented) by `run_effect_release_profile`.
 ///
 /// No-op if `nmp` is `None` (test mode — tests inject `ProfileCardUpdated`
 /// directly into the reducer via `Cmd::Event`).
@@ -208,8 +199,9 @@ pub(crate) fn run_effect_claim_profile(pubkey: String, nmp: Option<&NmpHandle>) 
     let Some(handle) = nmp else { return };
 
     let consumer_id = format!("{CONSUMER_ID_PREFIX}{pubkey}");
+    let filter_json = profile_filter_json(&pubkey);
 
-    let pubkey_c = match CString::new(pubkey) {
+    let filter_c = match CString::new(filter_json) {
         Ok(s) => s,
         Err(_) => return,
     };
@@ -219,34 +211,35 @@ pub(crate) fn run_effect_claim_profile(pubkey: String, nmp: Option<&NmpHandle>) 
     };
 
     // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. pubkey_c and consumer_c are valid
-    // CStrings alive for the duration of this call. nmp_app_claim_profile is
-    // FFI-clean (null/invalid pubkey is a silent no-op — nmp D6 contract).
+    // NmpHandle for the full actor lifetime. filter_c and consumer_c are valid
+    // CStrings alive for the duration of this call. nmp_app_open_interest is
+    // FFI-clean (null/malformed filter is a silent no-op / toast — nmp D6).
     unsafe {
-        nmp_app_claim_profile(
+        nmp_app_open_interest(
             handle.ptr.as_ptr(),
-            pubkey_c.as_ptr(),
+            filter_c.as_ptr(),
             consumer_c.as_ptr(),
-            0,             // force = false
-            LIVENESS_LIVE, // liveness = Live (Tailing sub)
+            INTEREST_SCOPE,
         );
     }
 }
 
-/// Execute `Effect::ReleaseProfile` — calls `nmp_app_release_profile` with
-/// consumer-id `"hl.profile.<pubkey>"`.
+/// Execute `Effect::ReleaseProfile` — closes the kind:0 interest for `pubkey`
+/// under consumer-id `"hl.profile.<pubkey>"`.
 ///
 /// Decrements the per-consumer refcount. When the count reaches zero NMP
-/// cancels the kind:0 subscription and removes the profile from
-/// `claimed_profiles`. D6: null/invalid pubkey is a silent no-op in nmp-ffi.
+/// cancels the kind:0 subscription. D6: null/invalid argument is a silent no-op
+/// in nmp-ffi. The close MUST pass the SAME `filter_json` the claim used so the
+/// shape hash matches the open refcount entry.
 ///
 /// No-op if `nmp` is `None` (test mode).
 pub(crate) fn run_effect_release_profile(pubkey: String, nmp: Option<&NmpHandle>) {
     let Some(handle) = nmp else { return };
 
     let consumer_id = format!("{CONSUMER_ID_PREFIX}{pubkey}");
+    let filter_json = profile_filter_json(&pubkey);
 
-    let pubkey_c = match CString::new(pubkey) {
+    let filter_c = match CString::new(filter_json) {
         Ok(s) => s,
         Err(_) => return,
     };
@@ -258,7 +251,12 @@ pub(crate) fn run_effect_release_profile(pubkey: String, nmp: Option<&NmpHandle>
     // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
     // NmpHandle for the full actor lifetime. CStrings alive for duration of call.
     unsafe {
-        nmp_app_release_profile(handle.ptr.as_ptr(), pubkey_c.as_ptr(), consumer_c.as_ptr());
+        nmp_app_close_interest(
+            handle.ptr.as_ptr(),
+            filter_c.as_ptr(),
+            consumer_c.as_ptr(),
+            INTEREST_SCOPE,
+        );
     }
 }
 
@@ -332,6 +330,7 @@ pub(crate) fn clear_on_identity_lost(state: &mut AppState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nmp_core::typed_projections::ProfileCardModel;
     use crate::kernel::action::{AppAction, KernelEvent};
     use crate::kernel::actor::{reduce, Cmd};
     use crate::kernel::clock::{Clock, ManualClock};
@@ -535,8 +534,8 @@ mod tests {
 
     // 3D-T5: malformed_profile_frame_no_ops
     //
-    // apply_own_profile and apply_claimed_profiles with garbage bytes must not
-    // panic or corrupt AppState (D6).
+    // apply_own_profile with garbage bytes must not panic or corrupt AppState
+    // (D6).
     #[test]
     fn malformed_profile_frame_no_ops() {
         let mut state = make_state();
@@ -549,16 +548,6 @@ mod tests {
         assert!(
             state.own_profile.is_some(),
             "malformed payload must leave own_profile unchanged (D6)"
-        );
-        // Seed claimed_profiles.
-        state.claimed_profiles.insert(
-            "bbbb".to_string(),
-            make_profile_card("bbbb000000000000000000000000000000000000000000000000000000000001"),
-        );
-        apply_claimed_profiles(&mut state, b"NOT A VALID FLATBUFFER");
-        assert!(
-            !state.claimed_profiles.is_empty(),
-            "malformed payload must leave claimed_profiles unchanged (D6)"
         );
     }
 

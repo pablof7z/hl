@@ -17,7 +17,8 @@
 //!
 //! * **WRITE** — `hl.chat.post` envelope → `reduce_action_post_chat` →
 //!   `Effect::DispatchChatPost { json }` → `run_effect_dispatch_chat_post` calls
-//!   `nmp_app_dispatch_action("nmp.nip29.post_chat_message", json)` fire-and-forget.
+//!   dispatches `"nmp.nip29.post_chat_message"` through the typed BYTE doorway
+//!   (`nmp_app_dispatch_action_bytes`, `PostChatMessageInput` payload) fire-and-forget.
 //!   Kernel is the sole kind:9 writer.
 //!
 //! ## Wire registration
@@ -51,12 +52,9 @@
 //! * Non-Negotiable #3 — `reduce_action_post_chat` returns `Vec<Effect>` (never
 //!   `Result`); fire-and-forget.
 
-use std::ffi::CString;
-use std::os::raw::c_char;
 use std::sync::Arc;
 
 use nmp_core::KernelEventObserver;
-use nmp_ffi::NmpApp;
 use nmp_nip29::{GroupChatProjection, GroupId};
 use tokio::sync::mpsc;
 
@@ -76,19 +74,6 @@ const CHAT_MAX_PAGES: u32 = 20;
 pub(crate) const CHAT_MAX_MESSAGES: usize = CHAT_MAX_PAGES as usize * CHAT_PAGE_SIZE;
 /// Gap threshold for `show_header` grouping (300 seconds).
 const SHOW_HEADER_GAP_SECS: u64 = 300;
-
-// ─── nmp-ffi C ABI declarations ─────────────────────────────────────────────
-
-#[allow(improper_ctypes)] // NmpApp is opaque; the pointer is safe — nmp-ffi uses the same ABI.
-extern "C" {
-    fn nmp_app_dispatch_action(
-        app: *mut NmpApp,
-        namespace: *const c_char,
-        action_json: *const c_char,
-    ) -> *mut c_char;
-}
-
-use nmp_ffi::nmp_free_string;
 
 // ─── Per-room state ──────────────────────────────────────────────────────────
 
@@ -379,11 +364,12 @@ pub(crate) fn run_effect_wire_group_chat(
     }
 }
 
-/// Execute `Effect::DispatchChatPost` — calls `nmp_app_dispatch_action`
-/// with namespace `"nmp.nip29.post_chat_message"` and the serialised JSON payload.
+/// Execute `Effect::DispatchChatPost` — dispatches `"nmp.nip29.post_chat_message"`
+/// through the typed BYTE doorway carrying the nip29 [`PostChatMessageInput`]
+/// payload (deserialized from the reducer's serde wire `json`).
 ///
-/// Fire-and-forget (D6, Non-Negotiable #3): the returned correlation_id JSON
-/// string is freed and discarded.
+/// Fire-and-forget (D6, Non-Negotiable #3): the returned verdict JSON is freed
+/// and discarded.
 ///
 /// No-op if `nmp` is `None` (test mode — tests drive the authoritative read
 /// path via injected `KernelEvent::ChatRoomUpdated`).
@@ -391,26 +377,21 @@ pub(crate) fn run_effect_dispatch_chat_post(
     json: String,
     nmp: Option<&crate::kernel::actor::NmpHandle>,
 ) {
+    use crate::kernel::byte_doorway::{dispatch_action_bytes, fresh_correlation_id};
+    use nmp_nip29::action::PostChatMessageInput;
+
     let Some(handle) = nmp else { return };
 
-    let namespace = "nmp.nip29.post_chat_message";
-    let ns_c = match CString::new(namespace) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let json_c = match CString::new(json) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. ns_c and json_c are valid
-    // CStrings alive for the duration of this call.
-    let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
-
-    if !result_ptr.is_null() {
-        nmp_free_string(result_ptr);
+    match serde_json::from_str::<PostChatMessageInput>(&json) {
+        Ok(action) => dispatch_action_bytes(
+            handle.ptr.as_ptr(),
+            "nmp.nip29.post_chat_message",
+            &fresh_correlation_id(),
+            &action,
+        ),
+        Err(e) => {
+            tracing::warn!(error = %e, "chat: bad PostChatMessageInput payload — no dispatch")
+        }
     }
 }
 

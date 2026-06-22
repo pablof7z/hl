@@ -7,6 +7,7 @@
 pub mod action;
 pub mod actor;
 pub mod app;
+pub(crate) mod byte_doorway;
 pub mod clock;
 pub(crate) mod domains;
 pub mod effect;

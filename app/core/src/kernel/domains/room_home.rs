@@ -422,9 +422,10 @@ pub(crate) fn reduce_action_share_to_room(
 
 /// Execute `Effect::DispatchShareToRoom { namespace, json }`.
 ///
-/// Calls `nmp_app_dispatch_action(nmp_ref, namespace, json_ptr)` with the
-/// pre-serialized payload. The returned correlation_id C string is freed via
-/// `nmp_free_string` and discarded — fire-and-forget (D6, Non-Negotiable #3).
+/// Dispatches the room-management `namespace` through the typed BYTE doorway
+/// carrying the matching nip29 action payload, deserialized from the reducer's
+/// serde wire `json` and FlatBuffers-encoded for the envelope. Fire-and-forget
+/// (D6, Non-Negotiable #3): the verdict JSON is freed and discarded.
 ///
 /// No-op if `nmp` is `None` (test mode — tests inspect the emitted `Effect`
 /// directly without running it against a live `NmpApp`).
@@ -433,39 +434,41 @@ pub(crate) fn run_effect_dispatch_share_to_room(
     json: String,
     nmp: Option<&crate::kernel::actor::NmpHandle>,
 ) {
-    use nmp_ffi::nmp_free_string;
-    use std::ffi::CString;
-
-    #[allow(improper_ctypes)]
-    extern "C" {
-        fn nmp_app_dispatch_action(
-            app: *mut NmpApp,
-            namespace: *const std::os::raw::c_char,
-            action_json: *const std::os::raw::c_char,
-        ) -> *mut std::os::raw::c_char;
-    }
+    use crate::kernel::byte_doorway::{dispatch_action_bytes, fresh_correlation_id};
+    use nmp_nip29::action::{
+        CreateInviteInput, CreatePublicGroupInput, JoinGroupInput, PutUserInput,
+        RepostInGroupInput, ShareEventInGroupInput,
+    };
 
     let Some(handle) = nmp else { return };
+    let app = handle.ptr.as_ptr();
+    let cid = fresh_correlation_id();
 
-    let ns_c = match CString::new(namespace) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let json_c = match CString::new(json) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
+    // Decode the reducer's serde wire shape into the typed nip29 action for this
+    // namespace and dispatch it as a FlatBuffers payload. A serde error (never
+    // expected — the reducer built it) is a logged no-op (D6). Each typed Input
+    // implements `ActionPayload`, so the byte doorway routes it by namespace.
+    macro_rules! dispatch_typed {
+        ($ty:ty) => {
+            match serde_json::from_str::<$ty>(&json) {
+                Ok(action) => dispatch_action_bytes(app, &namespace, &cid, &action),
+                Err(e) => tracing::warn!(
+                    namespace = %namespace,
+                    error = %e,
+                    "room_home: bad nip29 action payload — no dispatch"
+                ),
+            }
+        };
+    }
 
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. ns_c and json_c are valid CStrings
-    // alive for the duration of this call. The returned pointer is freed below.
-    let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
-
-    // Free the returned correlation-id JSON string via the nmp allocator.
-    // A null pointer is a no-op (guard for clarity).
-    if !result_ptr.is_null() {
-        nmp_free_string(result_ptr);
+    match namespace.as_str() {
+        "nmp.nip29.join" => dispatch_typed!(JoinGroupInput),
+        "nmp.nip29.create_public_group" => dispatch_typed!(CreatePublicGroupInput),
+        "nmp.nip29.put_user" => dispatch_typed!(PutUserInput),
+        "nmp.nip29.create_invite" => dispatch_typed!(CreateInviteInput),
+        "nmp.nip29.share_event_in_group" => dispatch_typed!(ShareEventInGroupInput),
+        "nmp.nip29.repost_in_group" => dispatch_typed!(RepostInGroupInput),
+        other => tracing::warn!(namespace = %other, "room_home: unknown nip29 namespace — no dispatch"),
     }
 }
 

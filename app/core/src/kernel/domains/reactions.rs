@@ -18,7 +18,8 @@
 //!
 //! * **WRITE** — `AppAction::React{target_event_id, reaction, target_author_pubkey?}`
 //!   → reducer emits `Effect::DispatchReactAction{namespace:"nmp.nip25.react", json}`
-//!   (serde_json payload) → effect runner calls `nmp_app_dispatch_action` fire-and-forget.
+//!   → effect runner dispatches through the typed BYTE doorway
+//!   (`nmp_app_dispatch_action_bytes`, `ReactAction`/`UnreactAction` payload) fire-and-forget.
 //!   `AppAction::Unreact{reaction_event_id}` → `"nmp.nip25.unreact"`.
 //!
 //!   The kernel is the **sole kind:7 writer** for ported screens (no live-lane
@@ -59,34 +60,16 @@
 //!   `Result`); fire-and-forget.
 
 use std::collections::HashMap;
-use std::ffi::CString;
-use std::os::raw::c_char;
 use std::sync::{Arc, Mutex};
 
 use nmp_core::KernelEventObserver;
 use nmp_ffi::NmpApp;
-use nmp_nip25::{ReactionProjection, KIND_REACTION, KIND_REACTION_DELETE};
+use nmp_nip25::{ReactAction, ReactionProjection, UnreactAction, KIND_REACTION, KIND_REACTION_DELETE};
 use tokio::sync::mpsc;
 
 use crate::kernel::action::KernelEvent;
 use crate::kernel::actor::Cmd;
 use crate::kernel::app::AppState;
-
-// ─── nmp-ffi C ABI declarations ─────────────────────────────────────────────
-
-// `nmp_app_dispatch_action` is #[no_mangle] extern "C" in nmp-ffi/src/action.rs.
-// Declared here so the reactions effect runner can call it directly without
-// importing the full nmp-ffi action surface.
-#[allow(improper_ctypes)] // NmpApp is opaque; the pointer is safe — nmp-ffi uses the same ABI.
-extern "C" {
-    fn nmp_app_dispatch_action(
-        app: *mut NmpApp,
-        namespace: *const c_char,
-        action_json: *const c_char,
-    ) -> *mut c_char;
-}
-
-use nmp_ffi::nmp_free_string;
 
 // ─── READ side: KernelEventObserver wrapper ──────────────────────────────────
 
@@ -378,14 +361,18 @@ pub(crate) fn reduce_action_unreact(
 
 // ─── Effect runner ───────────────────────────────────────────────────────────
 
-/// Execute `Effect::DispatchReactAction` — calls `nmp_app_dispatch_action`
-/// with the given `namespace` (`"nmp.nip25.react"` or `"nmp.nip25.unreact"`)
-/// and the serialised JSON payload.
+/// Execute `Effect::DispatchReactAction` — dispatches the given `namespace`
+/// (`"nmp.nip25.react"` or `"nmp.nip25.unreact"`) through the typed BYTE doorway
+/// carrying the nip25 [`ReactAction`] / [`UnreactAction`] payload.
 ///
-/// Fire-and-forget (D6, Non-Negotiable #3): the returned correlation_id JSON
-/// string is freed and discarded. The authoritative reaction state arrives back
-/// via `KernelEvent::ReactionStateUpdated` from the `ReactionObserver` on the
-/// next kind:7/kind:5 event.
+/// The reducer-built `json` is the serde shape of the matching typed action; we
+/// deserialize it into that typed struct and FlatBuffers-encode it for the byte
+/// envelope (the JSON never crosses the FFI).
+///
+/// Fire-and-forget (D6, Non-Negotiable #3): the returned verdict JSON is freed
+/// and discarded. The authoritative reaction state arrives back via
+/// `KernelEvent::ReactionStateUpdated` from the `ReactionObserver` on the next
+/// kind:7/kind:5 event.
 ///
 /// No-op if `nmp` is `None` (test mode — tests inject `ReactionStateUpdated`
 /// directly to drive the reducer).
@@ -394,29 +381,31 @@ pub(crate) fn run_effect_dispatch_react_action(
     json: String,
     nmp: Option<&crate::kernel::actor::NmpHandle>,
 ) {
+    use crate::kernel::byte_doorway::{dispatch_action_bytes, fresh_correlation_id};
+
     let Some(handle) = nmp else { return };
+    let app = handle.ptr.as_ptr();
+    let cid = fresh_correlation_id();
 
-    let ns_c = match CString::new(namespace) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let json_c = match CString::new(json) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. ns_c and json_c are valid
-    // CStrings alive for the duration of this call. The returned pointer is
-    // freed below via nmp_free_string (same Rust allocator as the allocation).
-    let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
-
-    // Free the returned correlation-id JSON string (same Rust allocator path).
-    // A null pointer is a no-op (nmp-ffi D6 null-safety contract), but guard
-    // explicitly to document the non-null path.
-    if !result_ptr.is_null() {
-        nmp_free_string(result_ptr);
+    // Deserialize the reducer's serde wire shape into the typed nip25 action and
+    // dispatch it as a FlatBuffers payload. A serde error (never expected — the
+    // reducer built it) is a silent no-op (D6).
+    match namespace.as_str() {
+        "nmp.nip25.react" => match serde_json::from_str::<ReactAction>(&json) {
+            Ok(action) => dispatch_action_bytes(app, &namespace, &cid, &action),
+            Err(e) => {
+                tracing::warn!(error = %e, "reactions: bad ReactAction payload — no dispatch")
+            }
+        },
+        "nmp.nip25.unreact" => match serde_json::from_str::<UnreactAction>(&json) {
+            Ok(action) => dispatch_action_bytes(app, &namespace, &cid, &action),
+            Err(e) => {
+                tracing::warn!(error = %e, "reactions: bad UnreactAction payload — no dispatch")
+            }
+        },
+        other => {
+            tracing::warn!(namespace = %other, "reactions: unknown react namespace — no dispatch")
+        }
     }
 }
 

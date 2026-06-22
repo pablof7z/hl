@@ -28,8 +28,7 @@
 //! `AppState` — the previous value is left unchanged.
 
 use nmp_core::typed_projections::{
-    decode_action_results, ACTION_RESULTS_SCHEMA_ID, CLAIMED_PROFILES_SCHEMA_ID, PROFILE_SCHEMA_ID,
-    RELAY_DIAGNOSTICS_SCHEMA_ID,
+    decode_action_results, ACTION_RESULTS_SCHEMA_ID, PROFILE_SCHEMA_ID, RELAY_DIAGNOSTICS_SCHEMA_ID,
 };
 
 use crate::kernel::app::AppState;
@@ -118,13 +117,11 @@ pub(crate) fn dispatch_typed_frame(
                 profiles::apply_own_profile(state, &proj.payload);
             }
 
-            // ── Phase 3D arm: "claimed_profiles" ─────────────────────────────
-            // Map of pubkey → ProfileCardModel for all currently claimed profiles
-            // (visited via AppAction::ClaimProfile / Effect::ClaimProfile).
-            // Decoded into AppState::claimed_profiles (HashMap).
-            CLAIMED_PROFILES_SCHEMA_ID => {
-                profiles::apply_claimed_profiles(state, &proj.payload);
-            }
+            // The `"claimed_profiles"` typed sidecar was deleted in NMP
+            // (#1671 Lane H — only `claimed_events` remains). Visited-profile
+            // cards now populate `AppState::claimed_profiles` exclusively via
+            // `KernelEvent::ProfileCardUpdated` (see `actor.rs`), so there is no
+            // longer a projection arm here.
 
             // ── Phase 3E arm: "nmp.nip29.discovered_groups" ──────────────────
             // Decode the `"nmp.nip29.discovered_groups"` FlatBuffers payload via

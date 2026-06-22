@@ -1083,17 +1083,19 @@ pub(crate) fn run_effect_publish_share_event(
     // Build the validated `nmp.publish` PublishRaw payload. Host-pin to the
     // group's relay via an Explicit target (D3 fail-closed — empty host already
     // rejected in the reducer). nmp fills id/sig/pubkey/created_at.
-    let action_json = serde_json::json!({
-        "PublishRaw": {
-            "kind": template.kind,
-            "tags": template.tags,
-            "content": template.content,
-            "target": { "Explicit": { "relays": [template.host_relay_url] } },
-        }
-    })
-    .to_string();
+    let action = nmp_core::publish::PublishAction::PublishRaw {
+        kind: template.kind,
+        tags: template.tags,
+        content: template.content,
+        target: nmp_core::publish::PublishTarget::Explicit {
+            relays: vec![template.host_relay_url],
+        },
+        signer_pubkey: None,
+    };
+    let envelope =
+        crate::kernel::byte_doorway::build_envelope(&correlation_id, "nmp.publish", &action);
 
-    dispatch_share_publish_action(handle, "nmp.publish", action_json, correlation_id, tx);
+    dispatch_share_publish_action(handle, envelope, correlation_id, tx);
 }
 
 /// Execute `Effect::DispatchCreateInviteWithCorrelation` — dispatch the validated
@@ -1111,13 +1113,34 @@ pub(crate) fn run_effect_dispatch_create_invite_with_correlation(
         tracing::debug!("DispatchCreateInviteWithCorrelation: no live NmpApp (test mode) — no-op");
         return;
     };
-    dispatch_share_publish_action(handle, "nmp.nip29.create_invite", json, correlation_id, tx);
+
+    // Deserialize the reducer's serde wire shape into the typed nip29
+    // `CreateInviteInput` and FlatBuffers-encode it for the byte envelope.
+    let action = match serde_json::from_str::<nmp_nip29::action::CreateInviteInput>(&json) {
+        Ok(a) => a,
+        Err(e) => {
+            let _ = tx.send(crate::kernel::actor::Cmd::Event(
+                crate::kernel::action::KernelEvent::ShareMintDispatchRejected {
+                    correlation_id,
+                    error: format!("invalid create_invite payload: {e}"),
+                },
+            ));
+            return;
+        }
+    };
+    let envelope = crate::kernel::byte_doorway::build_envelope(
+        &correlation_id,
+        "nmp.nip29.create_invite",
+        &action,
+    );
+    dispatch_share_publish_action(handle, envelope, correlation_id, tx);
 }
 
 /// Shared dispatch plumbing for the correlation-aware share publishes (artifact /
 /// repost / drain via `nmp.publish`; invite mint via `nmp.nip29.create_invite`).
 ///
-/// Calls `nmp_app_dispatch_action(namespace, action_json)`, then:
+/// Dispatches the pre-built `envelope` through the typed BYTE doorway
+/// (`nmp_app_dispatch_action_bytes`), then:
 ///   - `{"correlation_id":"<id>"}` matching the placeholder → no swap needed.
 ///   - `{"correlation_id":"<id>"}` differing → emit
 ///     `SharePublishCorrelationMinted` so the FSM tracks the real id.
@@ -1127,24 +1150,12 @@ pub(crate) fn run_effect_dispatch_create_invite_with_correlation(
 ///     mechanism that surfaces reserved-kind rejection on this ingress.
 fn dispatch_share_publish_action(
     handle: &crate::kernel::actor::NmpHandle,
-    namespace: &str,
-    action_json: String,
+    envelope: Vec<u8>,
     placeholder_correlation_id: String,
     tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
 ) {
     use crate::kernel::action::KernelEvent;
     use crate::kernel::actor::Cmd;
-    use nmp_ffi::nmp_free_string;
-    use std::ffi::CString;
-
-    #[allow(improper_ctypes)]
-    extern "C" {
-        fn nmp_app_dispatch_action(
-            app: *mut nmp_ffi::NmpApp,
-            namespace: *const std::os::raw::c_char,
-            action_json: *const std::os::raw::c_char,
-        ) -> *mut std::os::raw::c_char;
-    }
 
     let reject = |error: String| {
         // Drive the FSM → Error (D6): route through the same verdict reducer the
@@ -1155,30 +1166,19 @@ fn dispatch_share_publish_action(
         }));
     };
 
-    let ns_c = match CString::new(namespace) {
-        Ok(s) => s,
-        Err(_) => return reject("invalid namespace".into()),
-    };
-    let json_c = match CString::new(action_json) {
-        Ok(s) => s,
-        Err(_) => return reject("invalid action json".into()),
-    };
-
     // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. ns_c/json_c are valid CStrings alive
-    // for this call. The returned pointer is freed below via nmp_free_string.
-    let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
-
-    if result_ptr.is_null() {
-        return reject("nmp_app_dispatch_action returned null".into());
-    }
-
-    let result_json = {
-        let cstr = unsafe { std::ffi::CStr::from_ptr(result_ptr) };
-        let s = cstr.to_string_lossy().to_string();
-        nmp_free_string(result_ptr);
-        s
+    // NmpHandle for the full actor lifetime. The verdict JSON is freed inside
+    // `dispatch_envelope_bytes`. The byte doorway echoes the HOST-SUPPLIED
+    // `placeholder_correlation_id` back verbatim (ADR-0064 §4), so on the byte
+    // lane `nmp_cid` always equals the placeholder and the swap branch below is
+    // a no-op — but it is retained so the rejection (`None` / `{"error":…}`)
+    // path is byte-identical to the JSON twin it replaces.
+    let result_json = match crate::kernel::byte_doorway::dispatch_envelope_bytes(
+        handle.ptr.as_ptr(),
+        &envelope,
+    ) {
+        Some(s) => s,
+        None => return reject("nmp_app_dispatch_action_bytes returned null".into()),
     };
 
     let parsed = serde_json::from_str::<serde_json::Value>(&result_json).ok();

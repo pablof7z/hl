@@ -167,7 +167,16 @@ pub(crate) fn reduce_event_discovered_groups_updated(
 
 /// Execute `Effect::DispatchNip29Action { namespace, json }`.
 ///
-/// Calls `nmp_app_dispatch_action` with the given namespace and JSON payload.
+/// STILL ON THE JSON DOORWAY (ADR-0064 not-yet-migrated namespace): the only
+/// namespace dispatched here is `nmp.nip29.discover`, and
+/// `nmp_nip29::action::DiscoverGroupsAction` leaves `ActionModule::decode_payload`
+/// defaulted to `None` (no typed `ActionPayload` impl). The typed BYTE doorway
+/// (`nmp_app_dispatch_action_bytes`) would reject it fail-closed with
+/// `{"error":"namespace does not support typed FlatBuffers payloads"}`, so this
+/// site stays on the JSON `nmp_app_dispatch_action` doorway until NMP adds the
+/// nip29-discover `ActionPayload` impl. The JSON doorway is still live
+/// pre-Cut-B (ADR-0064 staged migration), so this is correct and non-breaking.
+///
 /// Fire-and-forget (D6): the returned correlation-id JSON is freed and
 /// discarded. Results arrive via the relevant `KernelEvent::*Updated` event.
 ///
