@@ -103,6 +103,23 @@ pub(crate) fn dispatch_action_bytes<P: ActionPayload>(
     let _ = dispatch_envelope_bytes(app, &envelope);
 }
 
+/// Build a finished `DispatchEnvelope` from pre-encoded typed payload bytes.
+/// Useful when the payload was encoded in the reducer and carried as `Vec<u8>`
+/// through the `Effect`.
+#[must_use]
+pub(crate) fn build_envelope_from_bytes(
+    correlation_id: &str,
+    namespace: &str,
+    payload_bytes: &[u8],
+) -> Vec<u8> {
+    encode_dispatch_envelope(
+        correlation_id,
+        namespace,
+        DISPATCH_ENVELOPE_SCHEMA_VERSION,
+        payload_bytes,
+    )
+}
+
 /// A fresh 32-hex correlation id for a fire-and-forget action that does not
 /// track the operation. The byte doorway requires a non-empty correlation_id
 /// (it rejects `MissingCorrelationId`); a random id satisfies that without the

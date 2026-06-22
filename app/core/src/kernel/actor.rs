@@ -1829,12 +1829,12 @@ pub(crate) async fn run_effect(
         }
 
         // ── Phase 4C additions (append-only) ─────────────────────────────────
-        Effect::DispatchBookmarkAction { namespace, json } => {
-            // Call nmp_app_dispatch_action with the NIP-51 bookmark namespace
-            // and BookmarkUpdateInput JSON. Fire-and-forget (D6): the updated
-            // kind:10003 list arrives back through the BookmarksUpdated
+        Effect::DispatchBookmarkAction { namespace, payload_bytes } => {
+            // Build a DispatchEnvelope wrapping the typed FlatBuffers payload
+            // and dispatch through the byte doorway. Fire-and-forget (D6): the
+            // updated kind:10003 list arrives back through the BookmarksUpdated
             // projection event.
-            bookmarks::run_effect_dispatch_bookmark_action(namespace, json, nmp);
+            bookmarks::run_effect_dispatch_bookmark_action(namespace, payload_bytes, nmp);
         }
 
         // ── Phase 4B additions (append-only) ─────────────────────────────────

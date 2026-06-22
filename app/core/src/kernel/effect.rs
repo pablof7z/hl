@@ -236,8 +236,8 @@ pub enum Effect {
     },
 
     // ── Phase 4C additions (append-only) ─────────────────────────────────────
-    /// Call `nmp_app_dispatch_action` with a NIP-51 bookmark namespace and the
-    /// `BookmarkUpdateInput { account_pubkey, item }` JSON payload.
+    /// Build a `DispatchEnvelope` and call `nmp_app_dispatch_action_bytes` with
+    /// the typed `BookmarkUpdateInput` FlatBuffers payload.
     ///
     /// Namespaces: `"nmp.nip51.add_bookmark"` or `"nmp.nip51.remove_bookmark"`
     /// (`AddBookmarkAction::NAMESPACE` and `RemoveBookmarkAction::NAMESPACE` in
@@ -253,8 +253,9 @@ pub enum Effect {
         /// NIP-51 bookmark action namespace.
         /// One of `"nmp.nip51.add_bookmark"` or `"nmp.nip51.remove_bookmark"`.
         namespace: String,
-        /// Serialised `BookmarkUpdateInput { account_pubkey, item }` JSON.
-        json: String,
+        /// Typed FlatBuffers `BookmarkUpdateInput` bytes encoded via
+        /// `ActionPayload::encode` (S9 nip51 typed payload — ADR-0064).
+        payload_bytes: Vec<u8>,
     },
 
     // ── Phase 4B additions (append-only) ─────────────────────────────────────

@@ -10,11 +10,12 @@
 //!   `AppState::bookmarks`.
 //!
 //! * **WRITE** — `AppAction::AddBookmark{item}` / `RemoveBookmark{item}` →
-//!   reducer emits `Effect::DispatchBookmarkAction{namespace, json}` → effect
-//!   runner calls `nmp_app_dispatch_action("nmp.nip51.add_bookmark"|
-//!   "nmp.nip51.remove_bookmark", BookmarkUpdateInput JSON)`. Fire-and-forget
-//!   (D6, Non-Negotiable #3): the updated bookmark list arrives back through
-//!   the `BookmarksUpdated` projection event via the NMP update callback.
+//!   reducer emits `Effect::DispatchBookmarkAction{namespace, payload_bytes}` →
+//!   effect runner builds a `DispatchEnvelope` and calls
+//!   `nmp_app_dispatch_action_bytes` with the typed `BookmarkUpdateInput`
+//!   FlatBuffers payload. Fire-and-forget (D6, Non-Negotiable #3): the updated
+//!   bookmark list arrives back through the `BookmarksUpdated` projection event
+//!   via the NMP update callback.
 //!
 //! ## Scope
 //!
@@ -31,10 +32,10 @@
 //! `RemoveBookmarkAction::NAMESPACE` in `nmp-nip51/src/bookmarks.rs:203,246`).
 //! Wire shape: `BookmarkUpdateInput { account_pubkey, item: BookmarkItem }`.
 //! `BookmarkItem` is a tagged-union with variants `Event{event_id, relay?}`,
-//! `Address{coordinate, relay?}`, `Url{url}`, `Hashtag{hashtag}` — serialised
-//! with `#[serde(tag = "type", rename_all = "snake_case")]`.
+//! `Address{coordinate, relay?}`, `Url{url}`, `Hashtag{hashtag}` — encoded
+//! via `ActionPayload::encode` (FlatBuffers, ADR-0064 S9).
 //!
-//! NOTE: `nmp-defaults::register_bookmark_runtime` (called by
+//! `nmp-defaults::register_bookmark_runtime` (called by
 //! `register_defaults` at boot) already registers a `BookmarkListProjection`
 //! as a kind:10003 observer AND wires the add/remove action modules. This
 //! module creates a SECOND `BookmarkListProjection` (also pointing at the
@@ -59,44 +60,16 @@
 //! `apply_bookmarks` runs on the **actor thread** (JSON decode + Vec clone,
 //! no I/O). D6: decode errors leave `AppState::bookmarks` unchanged.
 
-use std::ffi::CString;
-use std::os::raw::c_char;
 use std::sync::{Arc, Mutex};
 
+use nmp_core::substrate::ActionPayload;
 use nmp_core::KernelEventObserver;
 use nmp_ffi::NmpApp;
-use nmp_nip51::{BookmarkItem, BookmarkListProjection};
+use nmp_nip51::{BookmarkItem, BookmarkListProjection, BookmarkUpdateInput};
 
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::{ArtifactPreviewRow, BookmarkRow};
-
-// ─── nmp-ffi C ABI declarations ─────────────────────────────────────────────
-
-// STILL ON THE JSON DOORWAY (ADR-0064 not-yet-migrated namespace).
-//
-// `nmp.nip51.add_bookmark` / `nmp.nip51.remove_bookmark` have NOT been migrated
-// to a typed FlatBuffers `ActionPayload` in NMP: `nmp_nip51::AddBookmarkAction`
-// / `RemoveBookmarkAction` leave `ActionModule::decode_payload` defaulted to
-// `None`, so the typed BYTE doorway (`nmp_app_dispatch_action_bytes`) rejects
-// these namespaces fail-closed with
-// `{"error":"namespace does not support typed FlatBuffers payloads"}`. The
-// kind:10003 bookmark list is a reserved replaceable kind, so it also cannot be
-// routed through `nmp.publish` `PublishRaw` (which rejects reserved kinds).
-//
-// This site therefore stays on the JSON `nmp_app_dispatch_action` doorway until
-// NMP adds the nip51 `ActionPayload` impl. The JSON doorway is still live
-// pre-Cut-B (ADR-0064 staged migration), so this is correct and non-breaking.
-#[allow(improper_ctypes)]
-extern "C" {
-    fn nmp_app_dispatch_action(
-        app: *mut NmpApp,
-        namespace: *const c_char,
-        action_json: *const c_char,
-    ) -> *mut c_char;
-}
-
-use nmp_ffi::nmp_free_string;
 
 // ── hl schema_id for the typed snapshot projection ──────────────────────────
 
@@ -196,8 +169,9 @@ fn bookmark_item_to_row(item: BookmarkItem) -> BookmarkRow {
 /// Handle `AppAction::AddBookmark{item}` — emit `Effect::DispatchBookmarkAction`.
 ///
 /// Reads the active account pubkey from `state` and includes it in the
-/// `BookmarkUpdateInput` JSON payload (nmp validates `account_pubkey` against
-/// the live active account — supplying the wrong or empty pubkey is rejected).
+/// `BookmarkUpdateInput` FlatBuffers payload (nmp validates `account_pubkey`
+/// against the live active account — supplying the wrong or empty pubkey is
+/// rejected).
 ///
 /// The reducer does NOT speculatively update `AppState::bookmarks` — the
 /// authoritative update arrives via the projection frame (`BookmarksUpdated`)
@@ -216,14 +190,14 @@ pub(crate) fn reduce_action_add_bookmark_for_state(
             return vec![];
         }
     };
-    match build_bookmark_update_input_json(account_pubkey, item) {
-        Some(json) => vec![Effect::DispatchBookmarkAction {
+    match build_bookmark_update_input_bytes(account_pubkey, item) {
+        Some(payload_bytes) => vec![Effect::DispatchBookmarkAction {
             namespace: "nmp.nip51.add_bookmark".to_string(),
-            json,
+            payload_bytes,
         }],
         None => {
             tracing::trace!(
-                "bookmarks::reduce_action_add_bookmark: JSON serialisation failed — no-op (D6)"
+                "bookmarks::reduce_action_add_bookmark: payload encode failed — no-op (D6)"
             );
             vec![]
         }
@@ -245,14 +219,14 @@ pub(crate) fn reduce_action_remove_bookmark_for_state(
             return vec![];
         }
     };
-    match build_bookmark_update_input_json(account_pubkey, item) {
-        Some(json) => vec![Effect::DispatchBookmarkAction {
+    match build_bookmark_update_input_bytes(account_pubkey, item) {
+        Some(payload_bytes) => vec![Effect::DispatchBookmarkAction {
             namespace: "nmp.nip51.remove_bookmark".to_string(),
-            json,
+            payload_bytes,
         }],
         None => {
             tracing::trace!(
-                "bookmarks::reduce_action_remove_bookmark: JSON serialisation failed — no-op (D6)"
+                "bookmarks::reduce_action_remove_bookmark: payload encode failed — no-op (D6)"
             );
             vec![]
         }
@@ -268,84 +242,62 @@ fn active_pubkey(state: &AppState) -> Option<String> {
     }
 }
 
-/// Serialise `BookmarkUpdateInput { account_pubkey, item }` to JSON.
-/// Returns `None` if serialisation fails (D6).
-fn build_bookmark_update_input_json(account_pubkey: String, item: BookmarkRow) -> Option<String> {
+/// Encode `BookmarkUpdateInput { account_pubkey, item }` to typed FlatBuffers bytes.
+/// Returns `None` if the row cannot be converted (D6).
+fn build_bookmark_update_input_bytes(account_pubkey: String, item: BookmarkRow) -> Option<Vec<u8>> {
     let nmp_item = row_to_bookmark_item(item)?;
-    let input = serde_json::json!({
-        "account_pubkey": account_pubkey,
-        "item": nmp_item,
-    });
-    serde_json::to_string(&input).ok()
+    let input = BookmarkUpdateInput {
+        account_pubkey,
+        item: nmp_item,
+    };
+    Some(input.encode())
 }
 
-/// Convert a `BookmarkRow` to a `serde_json::Value` matching `BookmarkItem`'s
-/// `#[serde(tag = "type", rename_all = "snake_case")]` wire shape.
+/// Convert a `BookmarkRow` to the NMP `BookmarkItem` typed struct.
 /// Returns `None` for malformed inputs (D6).
-fn row_to_bookmark_item(row: BookmarkRow) -> Option<serde_json::Value> {
+fn row_to_bookmark_item(row: BookmarkRow) -> Option<BookmarkItem> {
     match row {
-        BookmarkRow::Event { event_id, relay } => {
-            let mut m = serde_json::json!({ "type": "event", "event_id": event_id });
-            if let Some(r) = relay {
-                m["relay"] = serde_json::Value::String(r);
-            }
-            Some(m)
-        }
+        BookmarkRow::Event { event_id, relay } => Some(BookmarkItem::Event { event_id, relay }),
         BookmarkRow::Address { coordinate, relay } => {
-            let mut m = serde_json::json!({ "type": "address", "coordinate": coordinate });
-            if let Some(r) = relay {
-                m["relay"] = serde_json::Value::String(r);
-            }
-            Some(m)
+            Some(BookmarkItem::Address { coordinate, relay })
         }
-        BookmarkRow::Url { url } => Some(serde_json::json!({ "type": "url", "url": url })),
-        BookmarkRow::Hashtag { hashtag } => {
-            Some(serde_json::json!({ "type": "hashtag", "hashtag": hashtag }))
-        }
+        BookmarkRow::Url { url } => Some(BookmarkItem::Url { url }),
+        BookmarkRow::Hashtag { hashtag } => Some(BookmarkItem::Hashtag { hashtag }),
     }
 }
 
 // ─── Effect runner ───────────────────────────────────────────────────────────
 
-/// Execute `Effect::DispatchBookmarkAction` — calls `nmp_app_dispatch_action`
-/// with the given `namespace` and `json` payload.
+/// Execute `Effect::DispatchBookmarkAction` — builds a `DispatchEnvelope`
+/// wrapping the typed FlatBuffers `BookmarkUpdateInput` payload and dispatches
+/// through the byte doorway (`nmp_app_dispatch_action_bytes`).
 ///
 /// Namespaces: `"nmp.nip51.add_bookmark"` or `"nmp.nip51.remove_bookmark"`.
-/// Payload: `BookmarkUpdateInput { account_pubkey, item: BookmarkItem }` JSON.
+/// Payload: pre-encoded `BookmarkUpdateInput` FlatBuffers bytes from the reducer.
 ///
-/// Fire-and-forget (D6): the returned correlation-id JSON string is freed and
-/// discarded. The updated bookmark list arrives back as a `BookmarksUpdated`
-/// projection event via the NMP update callback.
+/// Fire-and-forget (D6): the returned verdict JSON is freed and discarded.
+/// The updated bookmark list arrives back as a `BookmarksUpdated` projection
+/// event via the NMP update callback.
 ///
 /// No-op if `nmp` is `None` (test mode — tests inject `BookmarksUpdated`
 /// directly to drive the reducer).
 pub(crate) fn run_effect_dispatch_bookmark_action(
     namespace: String,
-    json: String,
+    payload_bytes: Vec<u8>,
     nmp: Option<&crate::kernel::actor::NmpHandle>,
 ) {
     let Some(handle) = nmp else { return };
 
-    let ns_c = match CString::new(namespace) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let json_c = match CString::new(json) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. ns_c and json_c are valid CStrings
-    // alive for the duration of this call. The returned pointer is freed below.
-    let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
-
-    // Free the returned correlation-id JSON string via nmp_free_string
-    // (same Rust allocator as the allocation — calling host free() is UB).
-    if !result_ptr.is_null() {
-        nmp_free_string(result_ptr);
-    }
+    // Build the DispatchEnvelope wrapping the typed FlatBuffers payload and
+    // dispatch through the byte doorway. Fire-and-forget (D6): the updated
+    // kind:10003 list arrives back as a BookmarksUpdated projection event via
+    // the NMP update callback. Verdict JSON is freed inside dispatch_envelope_bytes.
+    let envelope = crate::kernel::byte_doorway::build_envelope_from_bytes(
+        &crate::kernel::byte_doorway::fresh_correlation_id(),
+        &namespace,
+        &payload_bytes,
+    );
+    let _ = crate::kernel::byte_doorway::dispatch_envelope_bytes(handle.ptr.as_ptr(), &envelope);
 }
 
 // ─── Projection registration ─────────────────────────────────────────────────
@@ -425,6 +377,8 @@ mod tests {
     use crate::kernel::clock::{Clock, ManualClock};
     use crate::kernel::effect::Effect;
     use crate::kernel::snapshot::BookmarkRow;
+    use nmp_core::substrate::ActionPayload;
+    use nmp_nip51::BookmarkUpdateInput;
 
     fn make_state() -> AppState {
         AppState::default()
@@ -544,8 +498,8 @@ mod tests {
     //
     // AppAction::AddBookmark{item:Address} must produce exactly one
     // Effect::DispatchBookmarkAction with namespace "nmp.nip51.add_bookmark"
-    // and a valid JSON payload containing account_pubkey + item with correct
-    // serde structure (tag="type", snake_case).
+    // and a valid typed FlatBuffers payload that round-trips to the correct
+    // BookmarkUpdateInput (account_pubkey + Address item).
     #[test]
     fn add_bookmark_dispatches_nip51_add_serde() {
         let mut state = make_state_with_session();
@@ -566,34 +520,22 @@ mod tests {
 
         assert_eq!(effects.len(), 1, "AddBookmark must emit exactly one effect");
         match &effects[0] {
-            Effect::DispatchBookmarkAction { namespace, json } => {
+            Effect::DispatchBookmarkAction { namespace, payload_bytes } => {
+                assert_eq!(namespace, "nmp.nip51.add_bookmark");
+                // Decode the typed FlatBuffers payload and verify structure.
+                let decoded = BookmarkUpdateInput::decode(payload_bytes)
+                    .expect("payload_bytes must decode to BookmarkUpdateInput");
                 assert_eq!(
-                    namespace, "nmp.nip51.add_bookmark",
-                    "namespace must be nmp.nip51.add_bookmark"
+                    decoded.account_pubkey,
+                    "deadbeef00000000000000000000000000000000000000000000000000000001"
                 );
-                // Validate JSON structure: must parse and have account_pubkey + item.type
-                let parsed: serde_json::Value =
-                    serde_json::from_str(json).expect("action JSON must be valid");
-                assert_eq!(
-                    parsed["account_pubkey"].as_str(),
-                    Some("deadbeef00000000000000000000000000000000000000000000000000000001"),
-                    "account_pubkey must match active session pubkey"
-                );
-                assert_eq!(
-                    parsed["item"]["type"].as_str(),
-                    Some("address"),
-                    "item type must be 'address' (snake_case serde tag)"
-                );
-                assert_eq!(
-                    parsed["item"]["coordinate"].as_str(),
-                    Some("30023:deadbeef00000000000000000000000000000000000000000000000000000001:my-article"),
-                    "coordinate must thread through verbatim"
-                );
-                assert_eq!(
-                    parsed["item"]["relay"].as_str(),
-                    Some("wss://relay.example.com"),
-                    "relay must be included when present"
-                );
+                match &decoded.item {
+                    nmp_nip51::BookmarkItem::Address { coordinate, relay } => {
+                        assert_eq!(coordinate, "30023:deadbeef00000000000000000000000000000000000000000000000000000001:my-article");
+                        assert_eq!(relay.as_deref(), Some("wss://relay.example.com"));
+                    }
+                    other => panic!("expected Address variant, got {:?}", other),
+                }
             }
             other => panic!("expected DispatchBookmarkAction, got {:?}", other),
         }
@@ -602,7 +544,9 @@ mod tests {
     // 4C-T3: remove_bookmark_dispatches_nip51_remove
     //
     // AppAction::RemoveBookmark{item:Event} must produce exactly one
-    // Effect::DispatchBookmarkAction with namespace "nmp.nip51.remove_bookmark".
+    // Effect::DispatchBookmarkAction with namespace "nmp.nip51.remove_bookmark"
+    // and a valid typed FlatBuffers payload that round-trips to the correct
+    // BookmarkUpdateInput (Event item).
     #[test]
     fn remove_bookmark_dispatches_nip51_remove() {
         let mut state = make_state_with_session();
@@ -626,23 +570,20 @@ mod tests {
             "RemoveBookmark must emit exactly one effect"
         );
         match &effects[0] {
-            Effect::DispatchBookmarkAction { namespace, json } => {
-                assert_eq!(
-                    namespace, "nmp.nip51.remove_bookmark",
-                    "namespace must be nmp.nip51.remove_bookmark"
-                );
-                let parsed: serde_json::Value =
-                    serde_json::from_str(json).expect("action JSON must be valid");
-                assert_eq!(
-                    parsed["item"]["type"].as_str(),
-                    Some("event"),
-                    "item type must be 'event'"
-                );
-                assert_eq!(
-                    parsed["item"]["event_id"].as_str(),
-                    Some("aabbcc0000000000000000000000000000000000000000000000000000000001"),
-                    "event_id must thread through verbatim"
-                );
+            Effect::DispatchBookmarkAction { namespace, payload_bytes } => {
+                assert_eq!(namespace, "nmp.nip51.remove_bookmark");
+                let decoded = BookmarkUpdateInput::decode(payload_bytes)
+                    .expect("payload_bytes must decode to BookmarkUpdateInput");
+                match &decoded.item {
+                    nmp_nip51::BookmarkItem::Event { event_id, relay } => {
+                        assert_eq!(
+                            event_id,
+                            "aabbcc0000000000000000000000000000000000000000000000000000000001"
+                        );
+                        assert!(relay.is_none());
+                    }
+                    other => panic!("expected Event variant, got {:?}", other),
+                }
             }
             other => panic!("expected DispatchBookmarkAction, got {:?}", other),
         }
