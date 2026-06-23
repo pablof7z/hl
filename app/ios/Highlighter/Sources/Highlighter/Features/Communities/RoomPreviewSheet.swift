@@ -21,19 +21,25 @@ struct RoomPreviewSheet: View {
     private var isExpanded: Bool { detent == .large }
 
     private var actionProjection: RoomPreviewActionProjection {
-        appStore.safeCore.projectRoomPreviewAction(
-            input: RoomPreviewActionProjectionInput(
-                roomAccess: room.access,
-                roomId: room.id,
-                joinedRoomIds: appStore.joinedCommunities.map(\.id),
-                isExpanded: isExpanded
-            )
-        )
+        let access = room.access.trimmingCharacters(in: .whitespaces)
+        let roomId = room.id.trimmingCharacters(in: .whitespaces)
+        let alreadyJoined = appStore.joinedCommunities.contains { $0.id.trimmingCharacters(in: .whitespaces) == roomId }
+        let secondaryAction: RoomPreviewSecondaryAction = alreadyJoined || access != "open" ? .none : isExpanded ? .openFullRoom : .peekInside
+        let primaryLabel = alreadyJoined ? "Open room" : access == "closed" ? "Request to join" : "Join room"
+        return RoomPreviewActionProjection(alreadyJoined: alreadyJoined, primaryLabel: primaryLabel, secondaryAction: secondaryAction)
     }
 
     private var headerProjection: RoomPreviewHeaderProjection {
-        appStore.safeCore.projectRoomPreviewHeader(
-            input: RoomPreviewHeaderProjectionInput(room: room)
+        let accessIsOpen = room.access == "open"
+        let memberCountLabel: String? = {
+            guard let count = room.memberCount, count > 0 else { return nil }
+            return count == 1 ? "1 member" : "\(count) members"
+        }()
+        return RoomPreviewHeaderProjection(
+            accessLabel: accessIsOpen ? "Open" : "Closed",
+            accessIconSystemName: accessIsOpen ? "lock.open" : "lock",
+            accessIsOpen: accessIsOpen,
+            memberCountLabel: memberCountLabel
         )
     }
 
@@ -161,11 +167,17 @@ struct RoomPreviewSheet: View {
                 .foregroundStyle(Color.highlighterInkMuted)
 
             if let store = roomStore, !store.artifacts.isEmpty {
-                let projection = appStore.safeCore.projectRoomPreviewArtifacts(
-                    input: RoomPreviewArtifactsProjectionInput(artifacts: store.artifacts)
-                )
+                let previewRows: [RoomPreviewArtifactRowProjection] = {
+                    let visible = Array(store.artifacts.prefix(8))
+                    return visible.enumerated().map { (index, artifact) in
+                        let rawTitle = artifact.preview.title.trimmingCharacters(in: .whitespaces)
+                        let title = rawTitle.isEmpty ? "Untitled" : rawTitle
+                        let subtitle: String? = !artifact.preview.author.isEmpty ? artifact.preview.author : !artifact.preview.domain.isEmpty ? artifact.preview.domain : nil
+                        return RoomPreviewArtifactRowProjection(artifact: artifact, title: title, subtitle: subtitle, showsDivider: index < visible.count - 1)
+                    }
+                }()
                 VStack(spacing: 0) {
-                    ForEach(projection.rows, id: \.artifact.shareEventId) { row in
+                    ForEach(previewRows, id: \.artifact.shareEventId) { row in
                         InsideArtifactRow(row: row)
                         if row.showsDivider {
                             Divider().overlay(Color.highlighterRule)
