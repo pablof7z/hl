@@ -27,12 +27,12 @@ struct RoomInviteView: View {
     let onClose: (() -> Void)?
 
     @Environment(HighlighterStore.self) private var appStore
+    @Environment(HighlighterAppKernel.self) private var kernel
     @Environment(\.dismiss) private var dismiss
 
     @State private var query: String = ""
     @State private var inviteSnapshot: RoomInviteSnapshot?
     @State private var selected: [Candidate] = []
-    @State private var sending = false
     @State private var error: String?
     @State private var sentToast: String?
     @State private var sentToastResetTimer = OneShotUITimer()
@@ -235,24 +235,17 @@ struct RoomInviteView: View {
                 .frame(height: 24)
 
                 Button(action: send) {
-                    ZStack {
-                        if sending {
-                            ProgressView().tint(.white)
-                        } else {
-                            Text(selectionChrome.addButtonLabel)
-                                .font(.headline)
-                                .foregroundStyle(.white)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.highlighterAccent)
-                    )
+                    Text(addButtonLabel)
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color.highlighterAccent)
+                        )
                 }
                 .buttonStyle(.plain)
-                .disabled(sending)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 24)
                 .background(Color.highlighterPaper)
@@ -310,10 +303,9 @@ struct RoomInviteView: View {
         inviteSnapshot?.projection ?? Self.emptyInviteProjection
     }
 
-    private var selectionChrome: RoomInviteSelectionChromeProjection {
-        appStore.safeCore.projectRoomInviteSelectionChrome(
-            input: RoomInviteSelectionChromeInput(selectedCount: UInt64(selected.count))
-        )
+    private var addButtonLabel: String {
+        let count = selected.count
+        return count == 1 ? "Add 1 person" : "Add \(count) people"
     }
 
     private var inviteSnapshotRequestKey: String {
@@ -363,20 +355,24 @@ struct RoomInviteView: View {
         candidate: RoomInviteCandidate,
         action: RoomInviteSelectionAction
     ) {
-        let projection = appStore.safeCore.projectRoomInviteSelection(
-            input: RoomInviteSelectionInput(
-                selected: selected.map(\.coreCandidate),
-                candidate: candidate,
-                currentUserPubkey: appStore.currentUser?.pubkey ?? "",
-                action: action
-            )
-        )
+        let pubkey = candidate.pubkeyHex
+        guard pubkey != appStore.currentUser?.pubkey else { return }
         let previousCount = selected.count
-        selected = projection.selected.map(Candidate.init(core:))
-        if let errorMessage = projection.errorMessage {
-            error = errorMessage
+        switch action {
+        case .add:
+            if !selected.contains(where: { $0.pubkeyHex == pubkey }) {
+                selected.append(Candidate(pubkeyHex: pubkey, source: candidate.source))
+            }
+        case .remove:
+            selected.removeAll(where: { $0.pubkeyHex == pubkey })
+        case .toggle:
+            if let idx = selected.firstIndex(where: { $0.pubkeyHex == pubkey }) {
+                selected.remove(at: idx)
+            } else {
+                selected.append(Candidate(pubkeyHex: pubkey, source: candidate.source))
+            }
         }
-        if projection.selectionChanged, projection.selected.count > previousCount {
+        if selected.count > previousCount {
             UISelectionFeedbackGenerator().selectionChanged()
         }
     }
@@ -415,31 +411,19 @@ struct RoomInviteView: View {
     }
 
     private func send() {
-        guard !sending, !selected.isEmpty else { return }
-        sending = true
+        guard !selected.isEmpty else { return }
         let toAdd = selected
-        Task {
-            defer { Task { @MainActor in sending = false } }
-            let result = await appStore.safeCore.sendRoomInvites(
-                groupId: groupId,
-                selected: toAdd.map(\.coreCandidate)
-            )
-            await MainActor.run {
-                if result.allSucceeded {
-                    selected.removeAll()
-                    sentToast = result.successToast
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    sentToastResetTimer.schedule(after: 2) {
-                        sentToast = nil
-                    }
-                } else if result.allFailed {
-                    error = result.errorMessage
-                } else {
-                    selected = result.remainingSelected.map(Candidate.init(core:))
-                    error = result.errorMessage
-                }
-            }
-        }
+        let hostRelayUrl = cachedRoom?.relayUrl ?? ""
+        let codes = toAdd.map { _ in UUID().uuidString.lowercased() }
+        kernel.app.dispatch(.createRoomInvites(
+            groupId: groupId,
+            hostRelayUrl: hostRelayUrl,
+            codes: codes
+        ))
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        selected.removeAll()
+        sentToast = toAdd.count == 1 ? "Invite sent" : "\(toAdd.count) invites sent"
+        sentToastResetTimer.schedule(after: 2) { sentToast = nil }
     }
 }
 

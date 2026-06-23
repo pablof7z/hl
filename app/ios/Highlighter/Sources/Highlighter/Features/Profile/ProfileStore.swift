@@ -3,19 +3,14 @@ import Observation
 
 /// View-scoped store for a single profile page.
 ///
-/// Phase 3G cutover: state now derives from the `HighlighterAppKernel`
-/// typed `ProfileSnapshot` rather than the live lane's
-/// `SafeHighlighterCore.getProfilePageSnapshot`. The kernel view is opened
-/// via `kernel.openProfile(pubkey:)` on `start()` and closed via
-/// `kernel.closeProfile(pubkey:)` on `stop()`. Follow/Unfollow are
-/// dispatched as `AppAction.follow`/`.unfollow` kernel actions.
+/// Phase 7 cutover: bespoke `subscribeUserProfile` subscription removed;
+/// `safeCore.projectProfileRelationship` and `safeCore.projectProfileFollowAction`
+/// replaced with inline Swift. Kernel owns profile subscription via
+/// `kernel.openProfile(pubkey:)` / `kernel.closeProfile(pubkey:)`.
+/// Follow/Unfollow are dispatched as `AppAction.follow`/`.unfollow` kernel actions.
 ///
-/// Articles and highlights are deferred to Phase 4 (spec §2.2 / Phase 3D
-/// scope); the tabbed profile page still shows their tabs but they arrive
-/// from the live lane unchanged until Phase 4 wires feed data.
-///
-/// The live lane subscription (`subscribeUserProfile`) is intentionally
-/// kept for the articles/highlights tab content — it is removed in Phase 7.
+/// Articles and highlights (Phase 4 deferred) still load from the live lane via
+/// `safeCore.getProfilePageSnapshot`; that call is intentionally kept.
 @MainActor
 @Observable
 final class ProfileStore {
@@ -40,18 +35,20 @@ final class ProfileStore {
     @ObservationIgnored let safeCore: SafeHighlighterCore
     @ObservationIgnored weak var eventBridge: EventBridge?
     @ObservationIgnored private weak var kernel: HighlighterAppKernel?
-    @ObservationIgnored private var subscriptionHandle: UInt64?
 
     var isOwnProfile: Bool {
-        relationshipProjection.isOwnProfile
+        pubkey == viewerPubkey
     }
 
+    /// Computed inline in Phase 7 (safeCore.projectProfileRelationship removed).
+    /// ProfileView.ActionRow still reads `canShowFollowAction` from this property.
     var relationshipProjection: ProfileRelationshipProjection {
-        safeCore.projectProfileRelationship(
-            input: ProfileRelationshipProjectionInput(
-                profilePubkey: pubkey,
-                viewerPubkey: viewerPubkey
-            )
+        let isOwn = pubkey == viewerPubkey
+        return ProfileRelationshipProjection(
+            targetPubkey: pubkey,
+            isOwnProfile: isOwn,
+            canShowFollowAction: !isOwn && viewerPubkey != nil,
+            shouldRefreshFollowState: false
         )
     }
 
@@ -83,18 +80,14 @@ final class ProfileStore {
         // Phase 3D deferred: articles and highlights still come from the live lane.
         await loadArticlesAndHighlights()
         isLoadingInitial = false
-        await installSubscription()
+        // Phase 7: bespoke subscription removed; kernel.openProfile owns the subscription.
     }
 
     /// Called from `ProfileView.onDisappear`. Sends `ReleaseProfile` to NMP.
     func stop() {
         // Phase 3G: close kernel view — sends Effect::ReleaseProfile to NMP.
         kernel?.closeProfile(pubkey: pubkey)
-        if let handle = subscriptionHandle {
-            Task { [safeCore] in await safeCore.unsubscribe(handle) }
-            eventBridge?.unregister(handle: handle)
-            subscriptionHandle = nil
-        }
+        // Phase 7: subscriptionHandle removed; bespoke subscription cleanup no longer needed.
     }
 
     // MARK: - Kernel snapshot ingestion
@@ -138,20 +131,16 @@ final class ProfileStore {
     // MARK: - Follow / Unfollow
 
     func toggleFollow() async {
-        let relationship = relationshipProjection
-        let action = safeCore.projectProfileFollowAction(
-            relationship: relationship,
-            input: ProfileFollowActionInput(
-                isFollowing: isFollowing,
-                isMutating: isMutatingFollow
-            )
-        )
-        guard action.canStart, let mutation = action.mutation else {
-            return
-        }
+        // Phase 7: guard inlined from safeCore.projectProfileFollowAction.
+        // canStart = !isMutating && canShowFollowAction = !isMutating && !isOwn && viewer != nil.
+        guard !isMutatingFollow,
+              viewerPubkey != nil,
+              pubkey != viewerPubkey else { return }
+
+        let wantFollow = !isFollowing
         isMutatingFollow = true
         followError = nil
-        isFollowing = action.optimisticIsFollowing
+        isFollowing = wantFollow  // optimistic flip
 
         // Phase 3G: dispatch Follow/Unfollow as kernel AppActions
         // (fire-and-forget, D6). The `FollowListUpdated` projection event
@@ -162,7 +151,7 @@ final class ProfileStore {
         // do NOT call the live lane's applyProfileFollowMutation here.
         // Coexistence keeps the live lane for READS only; writes must come
         // from exactly one writer (the kernel) to avoid double kind:3 publishes.
-        if mutation.requestedFollowState {
+        if wantFollow {
             kernel?.app.dispatch(.follow(pubkey: pubkey))
         } else {
             kernel?.app.dispatch(.unfollow(pubkey: pubkey))
@@ -175,20 +164,4 @@ final class ProfileStore {
         isMutatingFollow = false
     }
 
-    // MARK: - Private
-
-    private func installSubscription() async {
-        guard subscriptionHandle == nil, let bridge = eventBridge else { return }
-        let outcome = await safeCore.subscribeUserProfile(pubkeyHex: pubkey)
-        let projection = safeCore.projectViewSubscriptionStart(
-            input: ViewSubscriptionStartProjectionInput(start: outcome)
-        )
-        guard projection.shouldRegister else {
-            // Non-fatal: the profile view still has its initial load. Live
-            // updates will simply not stream in until the next visit.
-            return
-        }
-        subscriptionHandle = projection.handle
-        bridge.registerProfile(self, handle: projection.handle)
-    }
 }

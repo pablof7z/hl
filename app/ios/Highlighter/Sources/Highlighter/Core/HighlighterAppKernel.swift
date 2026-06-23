@@ -460,8 +460,11 @@ final class HighlighterAppKernel {
             searchSnapshot = s
 
         // Phase 7 cutover: bookmarks (BookmarkStore reads the articles pane).
+        // Bridge: push the updated rows into HighlighterStore so bookmark
+        // affordances across the UI react when the kernel snapshot changes.
         case .bookmarks(let s):
             bookmarks = s
+            store?.applyKernelBookmarks(s.rows)
 
         // Phase 2E (network settings / relay diagnostics) — handled elsewhere.
         case .networkSettings, .relayDiagnostics:
@@ -485,12 +488,6 @@ final class HighlighterAppKernel {
         case .podcastListening:
             break
 
-        // Kernel-lane comment / feedback / room chat + discussion snapshots
-        // (#1747 migration in flight). hl's Swift still drives these surfaces
-        // through the legacy lane, so the kernel push is a no-op here for now.
-        case .commentThread, .feedbackThreads, .feedbackThread,
-             .roomChat, .roomDiscussions:
-            break
         }
     }
 

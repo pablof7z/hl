@@ -52,7 +52,6 @@ final class HighlighterStore {
     @ObservationIgnored let safeCore: SafeHighlighterCore
     @ObservationIgnored private(set) var eventBridge: EventBridge?
     @ObservationIgnored private var joinedCommunitiesHandle: UInt64?
-    @ObservationIgnored private var bookmarksHandle: UInt64?
     @ObservationIgnored private var profileSnapshotHandles: [String: UInt64] = [:]
     @ObservationIgnored private var networkPathMonitor: NWPathMonitor?
     /// Weak reference to the kernel, set by `AppEntry` after both objects are
@@ -122,11 +121,7 @@ final class HighlighterStore {
             eventBridge?.unregister(handle: handle)
             joinedCommunitiesHandle = nil
         }
-        if let handle = bookmarksHandle {
-            core.unsubscribe(handle: handle)
-            eventBridge?.unregister(handle: handle)
-            bookmarksHandle = nil
-        }
+        kernel?.closeBookmarks()
         for (_, handle) in profileSnapshotHandles {
             core.unsubscribe(handle: handle)
             eventBridge?.unregister(handle: handle)
@@ -176,41 +171,43 @@ final class HighlighterStore {
     // MARK: - Bookmarks
 
     /// Optimistic toggle: flip local state immediately for snappy UI, then
-    /// publish. The inevitable `BookmarksUpdated` delta (ours or from another
-    /// client) reconciles to authoritative state via `refreshBookmarks`.
+    /// dispatch to the kernel. The kernel will push a new BookmarksSnapshot
+    /// when the event publishes, which calls back via applyKernelBookmarks.
     func toggleBookmark(articleAddress: String) async {
-        let projection = articleBookmarkStateProjection(articleAddress: articleAddress)
-        guard projection.canToggle else { return }
-        bookmarkedArticleAddresses = projection.optimisticAddresses
-        // Authoritative toggle + publish.
-        let snapshot = await safeCore.toggleArticleBookmarkSnapshot(address: projection.canonicalAddress)
-        let apply = articleBookmarksSnapshotApplyProjection(snapshot)
-        if apply.shouldApplyAddresses {
-            bookmarkedArticleAddresses = apply.addresses
-        } else if apply.shouldRefreshAfterFailure {
-            await refreshBookmarks()
+        guard let kernel else { return }
+        let isCurrentlyBookmarked = bookmarkedArticleAddresses.contains(articleAddress)
+        // Optimistic update
+        if isCurrentlyBookmarked {
+            bookmarkedArticleAddresses.removeAll { $0 == articleAddress }
+            kernel.app.dispatch(.removeBookmark(item: .address(coordinate: articleAddress, relay: nil)))
+        } else {
+            bookmarkedArticleAddresses.append(articleAddress)
+            kernel.app.dispatch(.addBookmark(item: .address(coordinate: articleAddress, relay: nil)))
         }
-        // No explicit refresh on success — the pump will deliver
-        // `BookmarksUpdated`.
+        // No refresh needed — kernel will push a new BookmarksSnapshot when the event publishes
     }
 
     func refreshBookmarks() async {
-        let snapshot = await safeCore.getArticleBookmarksSnapshot()
-        let apply = articleBookmarksSnapshotApplyProjection(snapshot)
-        if apply.shouldApplyAddresses {
-            bookmarkedArticleAddresses = apply.addresses
-        }
+        guard let kernel else { return }
+        // kernel.bookmarks is populated when openBookmarks() is called (in loadAppScopeData)
+        applyBookmarkRows(kernel.bookmarks?.rows ?? [])
     }
 
     func isBookmarked(articleAddress: String) -> Bool {
-        articleBookmarkStateProjection(articleAddress: articleAddress).isBookmarked
+        bookmarkedArticleAddresses.contains(articleAddress)
     }
 
-    private func articleBookmarkStateProjection(articleAddress: String) -> ArticleBookmarkStateProjection {
-        safeCore.projectArticleBookmarkState(input: ArticleBookmarkStateProjectionInput(
-            addresses: bookmarkedArticleAddresses,
-            address: articleAddress
-        ))
+    /// Called by HighlighterAppKernel when a new BookmarksSnapshot arrives
+    /// from the kernel observer. Updates bookmarkedArticleAddresses reactively.
+    func applyKernelBookmarks(_ rows: [BookmarkRow]) {
+        applyBookmarkRows(rows)
+    }
+
+    private func applyBookmarkRows(_ rows: [BookmarkRow]) {
+        bookmarkedArticleAddresses = rows.compactMap {
+            guard case .address(let coord, _) = $0, coord.hasPrefix("30023:") else { return nil }
+            return coord
+        }
     }
 
     /// Opens a profile subscription and seeds the local snapshot.
@@ -434,19 +431,12 @@ final class HighlighterStore {
             }
         }
 
-        // Hydrate the bookmark set from nostrdb, then install a live sub so
-        // later kind:10003 events (ours or another client's) trigger a
-        // `BookmarksUpdated` delta that refreshes the set.
+        // Open the bookmarks view via the kernel so kind:10003 snapshots
+        // stream into kernel.bookmarks and back into bookmarkedArticleAddresses
+        // via applyKernelBookmarks. Initial hydration fires immediately as the
+        // kernel delivers its first BookmarksSnapshot.
+        kernel?.openBookmarks()
         await refreshBookmarks()
-        if bookmarksHandle == nil {
-            let bookmarksStart = await safeCore.subscribeBookmarks()
-            let bookmarksProjection = safeCore.projectAppSubscriptionStart(
-                input: AppSubscriptionStartProjectionInput(start: bookmarksStart)
-            )
-            if bookmarksProjection.shouldKeepHandle {
-                bookmarksHandle = bookmarksProjection.handle
-            }
-        }
     }
 
     private func startNetworkPathMonitor() {
@@ -465,14 +455,6 @@ final class HighlighterStore {
     private func applyNetworkPathStatus(isWifi: Bool) async {
         let snapshot = await safeCore.applyNetworkPathStatus(isWifi: isWifi)
         applyNetworkPathMonitorEnabled(snapshot.pathMonitorEnabled)
-    }
-
-    private func articleBookmarksSnapshotApplyProjection(
-        _ snapshot: ArticleBookmarksSnapshot
-    ) -> ArticleBookmarksSnapshotApplyProjection {
-        safeCore.projectArticleBookmarksSnapshotApply(
-            input: ArticleBookmarksSnapshotApplyInput(snapshot: snapshot)
-        )
     }
 
     private func applyJoinedCommunitiesSnapshot(_ snapshot: JoinedCommunitiesSnapshot) {

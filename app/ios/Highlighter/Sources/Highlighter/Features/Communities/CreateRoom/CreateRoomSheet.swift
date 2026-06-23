@@ -13,6 +13,7 @@ import SwiftUI
 struct CreateRoomSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(HighlighterStore.self) private var appStore
+    @Environment(HighlighterAppKernel.self) private var kernel
 
     @State private var name: String = ""
     @State private var about: String = ""
@@ -24,7 +25,6 @@ struct CreateRoomSheet: View {
     @State private var coverIsUploading = false
     @State private var isCreating = false
     @State private var error: String?
-    @State private var createdGroupId: String?
 
     @FocusState private var focused: Field?
     private enum Field { case name, about }
@@ -69,11 +69,6 @@ struct CreateRoomSheet: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
                         .foregroundStyle(Color.highlighterInkStrong)
-                }
-            }
-            .navigationDestination(item: $createdGroupId) { groupId in
-                RoomInviteView(groupId: groupId, mode: .welcome) {
-                    dismiss()
                 }
             }
             .sheet(isPresented: $visibilityPickerPresented) {
@@ -311,39 +306,18 @@ struct CreateRoomSheet: View {
     private func create() {
         let draft = projection
         guard draft.canCreate else { return }
-        let pictureURL = coverUpload?.url ?? ""
-        isCreating = true
         focused = nil
-        Task {
-            defer { isCreating = false }
-            let outcome = await appStore.safeCore.createRoom(
-                name: draft.createName,
-                about: draft.createAbout,
-                picture: pictureURL,
-                visibility: visibility,
-                access: access
-            )
-            let result = appStore.safeCore.projectCreateRoomPublishResult(
-                input: CreateRoomPublishResultInput(
-                    groupId: outcome.groupId,
-                    error: outcome.error
-                )
-            )
-            if result.didCreate {
-                if result.shouldEmitSuccessFeedback {
-                    let generator = UINotificationFeedbackGenerator()
-                    generator.notificationOccurred(.success)
-                }
-                createdGroupId = result.groupId
-            } else {
-                self.error = result.errorMessage
-            }
-        }
+        let groupId = UUID().uuidString.lowercased()
+        let hostRelayUrl = kernel.communities?.groups.first?.hostRelayUrl ?? ""
+        kernel.app.dispatch(.createRoom(
+            groupId: groupId,
+            hostRelayUrl: hostRelayUrl,
+            name: draft.createName,
+            about: draft.createAbout.isEmpty ? nil : draft.createAbout
+        ))
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        dismiss()
     }
-}
-
-extension String: @retroactive Identifiable {
-    public var id: String { self }
 }
 
 // MARK: - Visibility picker
