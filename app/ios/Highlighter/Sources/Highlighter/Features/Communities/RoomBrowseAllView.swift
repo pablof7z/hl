@@ -76,13 +76,7 @@ struct RoomBrowseAllView: View {
         let query = search
         let snapshot = await appStore.safeCore.getRoomBrowseSnapshot(query: query, limit: 200)
         if query == search {
-            let projection = appStore.safeCore.projectRoomBrowseSnapshotApply(
-                input: RoomBrowseSnapshotApplyInput(
-                    rooms: snapshot.rooms,
-                    error: snapshot.error
-                )
-            )
-            rooms = projection.rooms
+            rooms = snapshot.error.trimmingCharacters(in: .whitespaces).isEmpty ? snapshot.rooms : []
         }
     }
 }

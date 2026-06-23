@@ -311,9 +311,9 @@ struct RoomInviteView: View {
     }
 
     private var selectionChrome: RoomInviteSelectionChromeProjection {
-        appStore.safeCore.projectRoomInviteSelectionChrome(
-            input: RoomInviteSelectionChromeInput(selectedCount: UInt64(selected.count))
-        )
+        let count = UInt64(selected.count)
+        let addButtonLabel = count == 1 ? "Add 1 person" : "Add \(count) people"
+        return RoomInviteSelectionChromeProjection(addButtonLabel: addButtonLabel)
     }
 
     private var inviteSnapshotRequestKey: String {
@@ -504,12 +504,14 @@ private struct AvatarView: View {
     }
 
     private var avatarProjection: RoomInviteAvatarProjection {
-        appStore.safeCore.getRoomInviteAvatarProjection(
-            input: RoomInviteAvatarProjectionInput(
-                pubkeyHex: pubkeyHex,
-                profile: profile
-            )
-        )
+        let pictureUrl = profile?.picture ?? ""
+        let displayInitial: String
+        if let first = profile?.name.first {
+            displayInitial = String(first).uppercased()
+        } else {
+            displayInitial = String(pubkeyHex.prefix(1)).uppercased()
+        }
+        return RoomInviteAvatarProjection(pictureUrl: pictureUrl, displayInitial: displayInitial)
     }
 }
 
