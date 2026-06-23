@@ -114,17 +114,14 @@ struct BookmarkMenuButton: View {
     }
 
     private func apply(_ snapshot: CurationMenuSnapshot, errorPrefix: String? = nil) {
-        let projection = app.safeCore.projectCurationMenuSnapshotApply(
-            input: CurationMenuSnapshotApplyInput(
-                items: snapshot.items,
-                error: snapshot.error,
-                errorPrefix: errorPrefix
-            )
-        )
-        curationItems = projection.items
-        if projection.shouldApplyErrorMessage {
-            errorMessage = projection.errorMessage
+        curationItems = snapshot.items
+        let error = snapshot.error.trimmingCharacters(in: .whitespaces)
+        if error.isEmpty {
+            errorMessage = nil
+        } else if let prefix = errorPrefix?.trimmingCharacters(in: .whitespaces), !prefix.isEmpty {
+            errorMessage = "\(prefix) — \(error)"
         }
+        // else: no prefix → keep existing errorMessage unchanged
     }
 }
 
@@ -173,9 +170,8 @@ struct NewCollectionSheet: View {
     }
 
     private var createProjection: CurationSetCreateProjection {
-        app.safeCore.projectCurationSetCreate(
-            input: CurationSetCreateProjectionInput(title: title)
-        )
+        let submitTitle = title.trimmingCharacters(in: .whitespaces)
+        return CurationSetCreateProjection(canCreate: !submitTitle.isEmpty, submitTitle: submitTitle)
     }
 
     private func commit() {

@@ -239,7 +239,7 @@ struct ShareToCommunitySheet: View {
         publishingId = groupId
         let rawNote = note
         Task {
-            let result: ShareToCommunityPublishResultProjection
+            let shareError: String?
             switch target.payload {
             case .artifactShare(let preview):
                 let outcome = await app.safeCore.publishArtifact(
@@ -247,9 +247,8 @@ struct ShareToCommunitySheet: View {
                     groupId: groupId,
                     note: rawNote
                 )
-                result = app.safeCore.projectShareToCommunityPublishResult(
-                    input: ShareToCommunityPublishResultInput(error: outcome.error)
-                )
+                let e = outcome.error.trimmingCharacters(in: .whitespaces)
+                shareError = e.isEmpty ? nil : e
             case .highlightRepost(let eventId, let authorPubkey, let relayHint):
                 let outcome = await app.safeCore.shareHighlightToRoom(
                     highlightId: eventId,
@@ -257,11 +256,10 @@ struct ShareToCommunitySheet: View {
                     highlightRelayUrl: relayHint,
                     targetGroupId: groupId
                 )
-                result = app.safeCore.projectShareToCommunityPublishResult(
-                    input: ShareToCommunityPublishResultInput(error: outcome.error)
-                )
+                let e = outcome.error.trimmingCharacters(in: .whitespaces)
+                shareError = e.isEmpty ? nil : e
             }
-            if result.didPublish {
+            if shareError == nil {
                 await MainActor.run {
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     dismiss()
@@ -269,7 +267,7 @@ struct ShareToCommunitySheet: View {
             } else {
                 await MainActor.run {
                     publishingId = nil
-                    errorMessage = result.errorMessage
+                    errorMessage = shareError
                 }
             }
         }
