@@ -51,7 +51,6 @@ final class HighlighterStore {
     @ObservationIgnored let core: HighlighterCore
     @ObservationIgnored let safeCore: SafeHighlighterCore
     @ObservationIgnored private(set) var eventBridge: EventBridge?
-    @ObservationIgnored private var joinedCommunitiesHandle: UInt64?
     @ObservationIgnored private var profileSnapshotHandles: [String: UInt64] = [:]
     @ObservationIgnored private var networkPathMonitor: NWPathMonitor?
     /// Weak reference to the kernel, set by `AppEntry` after both objects are
@@ -116,11 +115,7 @@ final class HighlighterStore {
     }
 
     func logout() {
-        if let handle = joinedCommunitiesHandle {
-            core.unsubscribe(handle: handle)
-            eventBridge?.unregister(handle: handle)
-            joinedCommunitiesHandle = nil
-        }
+        kernel?.closeCommunities()
         kernel?.closeBookmarks()
         for (_, handle) in profileSnapshotHandles {
             core.unsubscribe(handle: handle)
@@ -210,62 +205,30 @@ final class HighlighterStore {
         }
     }
 
-    /// Opens a profile subscription and seeds the local snapshot.
+    /// Opens a profile subscription and seeds the local snapshot via the kernel.
     ///
-    /// **Kernel path (Phase 7):** calls `kernel.openProfile(pubkey:)` which
-    /// dispatches `ClaimProfile` to NMP and opens a `ViewId.profile` projection.
-    /// The `KernelObserver` pushes fresh `ProfileSnapshot` deltas back into
-    /// `kernel.profileSnapshots`; the Phase 7 bridge in `HighlighterAppKernel.receive`
-    /// then mirrors them here via `applyProfileSnapshot(_:)`.
+    /// Calls `kernel.openProfile(pubkey:)` which dispatches `ClaimProfile` to NMP
+    /// and opens a `ViewId.profile` projection. The `KernelObserver` pushes fresh
+    /// `ProfileSnapshot` deltas back into `kernel.profileSnapshots`; the bridge in
+    /// `HighlighterAppKernel.receive` then mirrors them here via `applyProfileSnapshot(_:)`.
     ///
-    /// **Legacy path (no kernel):** falls through to the original `safeCore`
-    /// subscription so the live-lane still works while the migration is in progress.
-    ///
-    /// Safe to call from multiple views for the same pubkey — both paths are
-    /// idempotent.
+    /// Safe to call from multiple views for the same pubkey — idempotent.
     func requestProfile(pubkeyHex: String) async {
-        if let kernel = kernel {
-            // Kernel lane: open the profile view (idempotent if already open)
-            // and seed the local snapshot from whatever the kernel already has.
-            kernel.openProfile(pubkey: pubkeyHex)
-            kernelManagedPubkeys.insert(pubkeyHex)
-            if let snapshot = kernel.profileSnapshots[pubkeyHex] {
-                applyProfileSnapshot(snapshot.asProfileMetadata())
-            }
-            return
-        }
-        // Legacy safeCore path — active while the kernel reference is not yet wired.
-        if profileSnapshots[pubkeyHex] == nil {
-            if let profile = await safeCore.getUserProfile(pubkeyHex: pubkeyHex) {
-                applyProfileSnapshot(profile)
-            }
-        }
-        guard profileSnapshotHandles[pubkeyHex] == nil else { return }
-        let profileStart = await safeCore.subscribeUserProfile(pubkeyHex: pubkeyHex)
-        let handle = profileStart.handle
-        if profileStart.error.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && handle != 0 {
-            profileSnapshotHandles[pubkeyHex] = handle
-            eventBridge?.registerProfileSnapshot(pubkeyHex: pubkeyHex, handle: handle)
+        // Kernel lane: open the profile view (idempotent if already open)
+        // and seed the local snapshot from whatever the kernel already has.
+        kernel?.openProfile(pubkey: pubkeyHex)
+        kernelManagedPubkeys.insert(pubkeyHex)
+        if let snapshot = kernel?.profileSnapshots[pubkeyHex] {
+            applyProfileSnapshot(snapshot.asProfileMetadata())
         }
     }
 
-    /// Called by `EventBridge` when a legacy-lane profile subscription delivers
-    /// a fresh kind:0, and by the kernel bridge when `KernelObserver` pushes a
-    /// `ProfileSnapshot` update (via `HighlighterAppKernel.receive`).
-    ///
-    /// **Kernel path:** reads the latest `ProfileSnapshot` the kernel already
-    /// holds (which the kernel observer has already updated synchronously before
-    /// this call) and converts it to `ProfileMetadata` for the UI.
-    ///
-    /// **Legacy path:** re-queries `safeCore` for the refreshed profile, as before.
+    /// Called by the kernel bridge when `KernelObserver` pushes a `ProfileSnapshot`
+    /// update (via `HighlighterAppKernel.receive`). Reads the latest snapshot the
+    /// kernel already holds and converts it to `ProfileMetadata` for the UI.
     func applyProfileSnapshotUpdate(pubkeyHex: String) async {
         if let snapshot = kernel?.profileSnapshots[pubkeyHex] {
             applyProfileSnapshot(snapshot.asProfileMetadata())
-            return
-        }
-        // Legacy safeCore fallback for live-lane subscriptions.
-        if let profile = await safeCore.getUserProfile(pubkeyHex: pubkeyHex) {
-            applyProfileSnapshot(profile)
         }
     }
 
@@ -390,24 +353,26 @@ final class HighlighterStore {
     }
 
     /// Public so `EventBridge` can re-query on a `MembershipChanged` delta.
+    /// Reads the latest snapshot from the kernel (always resident since kernel
+    /// opens the communities view on login).
     func refreshJoinedCommunities() async {
-        let outcome = await safeCore.getJoinedCommunities()
-        applyJoinedCommunitiesSnapshot(outcome)
+        joinedCommunities = kernel?.communities?.groups.map { $0.asCommunitySummary() } ?? []
     }
 
     private func loadAppScopeData() async {
         refreshNetworkPathCapabilityPreference()
 
-        // Immediate read from nostrdb via the Rust core. Non-blocking on
-        // relays — the cache answers first, subscriptions catch up later.
-        let communitiesSnapshot = await safeCore.getJoinedCommunities()
-        applyJoinedCommunitiesSnapshot(communitiesSnapshot)
+        // Open the communities view via the kernel (idempotent) and seed the
+        // joined list from whatever the kernel already holds. applyKernelCommunities
+        // refreshes joinedCommunities reactively as CommunitiesSnapshot deltas arrive.
+        kernel?.openCommunities()
+        joinedCommunities = kernel?.communities?.groups.map { $0.asCommunitySummary() } ?? []
 
-        // Fetch the user's own kind:0 so the top-bar avatar shows their real
-        // picture. Cheap — single nostrdb read. Lives on the app-scope store
-        // because multiple surfaces (toolbar + future editors) need it.
+        // Seed the user's own profile from the kernel's projection if available.
+        // The kernel delivers a fresh kind:0 asynchronously; the observer updates
+        // currentUserProfile again via the profile snapshot bridge.
         if let user = currentUser {
-            if let profile = await safeCore.getUserProfile(pubkeyHex: user.pubkey) {
+            if let profile = kernel?.profileSnapshots[user.pubkey]?.asProfileMetadata() {
                 currentUserProfile = profile
             }
         }
@@ -415,21 +380,6 @@ final class HighlighterStore {
         // Publish the default Blossom server list if the user has never set one.
         // No-op when a kind:10063 is already cached. Fire-and-forget.
         _ = await safeCore.initDefaultBlossomServers()
-
-        // Install the joined-communities pump so future 39000/39001/39002
-        // events apply to the app-scope store as CommunityUpserted /
-        // MembershipChanged deltas (subscription_id == new handle, routed
-        // by EventBridge).
-        if joinedCommunitiesHandle == nil {
-            let joinedStart = await safeCore.subscribeJoinedCommunities()
-            let joinedHandle = joinedStart.handle
-            if joinedStart.error.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && joinedHandle != 0 {
-                joinedCommunitiesHandle = joinedHandle
-                // Joined-communities deltas are dispatched via the appStore
-                // path in EventBridge (not per-view). No store registration
-                // needed; we only hold the handle so logout can unsubscribe.
-            }
-        }
 
         // Open the bookmarks view via the kernel so kind:10003 snapshots
         // stream into kernel.bookmarks and back into bookmarkedArticleAddresses
@@ -457,9 +407,9 @@ final class HighlighterStore {
         applyNetworkPathMonitorEnabled(snapshot.pathMonitorEnabled)
     }
 
-    private func applyJoinedCommunitiesSnapshot(_ snapshot: JoinedCommunitiesSnapshot) {
-        if snapshot.error.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            joinedCommunities = snapshot.communities
-        }
+    /// Called by HighlighterAppKernel when a new CommunitiesSnapshot arrives
+    /// from the kernel observer. Updates joinedCommunities reactively.
+    func applyKernelCommunities(_ communities: [CommunitySummary]) {
+        joinedCommunities = communities
     }
 }

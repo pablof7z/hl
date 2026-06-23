@@ -214,15 +214,61 @@ struct BookmarksView: View {
     }
 
     private var libraryProjection: BookmarkLibraryProjection {
-        app.safeCore.projectBookmarkLibrary(
-            input: BookmarkLibraryProjectionInput(
-                scope: store.scope,
-                selectedFilter: filter,
-                articleCount: UInt64(store.myArticles.count),
-                collectionCount: UInt64(store.myBookmarkSets.count + store.myCurationSets.count),
-                webBookmarkCount: UInt64(store.myWebBookmarks.count),
-                exploreCount: UInt64(store.followingCurationSets.count)
-            )
+        // Phase 7: inline — no safeCore round-trip.
+        let selectedPane: BookmarkLibraryPane
+        switch store.scope {
+        case .mine:
+            switch filter {
+            case .articles:    selectedPane = .articles
+            case .collections: selectedPane = .collections
+            case .web:         selectedPane = .web
+            }
+        case .explore:
+            selectedPane = .explore
+        }
+        let itemCount: Int
+        switch selectedPane {
+        case .articles:    itemCount = store.myArticles.count
+        case .collections: itemCount = store.myBookmarkSets.count + store.myCurationSets.count
+        case .web:         itemCount = store.myWebBookmarks.count
+        case .explore:     itemCount = store.followingCurationSets.count
+        }
+        let emptyIcon: String
+        let emptyTitle: String
+        let emptyMessage: String
+        switch selectedPane {
+        case .articles:
+            emptyIcon = "bookmark"
+            emptyTitle = "No bookmarks yet"
+            emptyMessage = "Save articles from anywhere in Highlighter to find them here."
+        case .collections:
+            emptyIcon = "rectangle.stack"
+            emptyTitle = "No collections yet"
+            emptyMessage = "Create bookmark or curation sets to organise your saved content."
+        case .web:
+            emptyIcon = "globe"
+            emptyTitle = "No web bookmarks yet"
+            emptyMessage = "Web pages you bookmark via Nostr will appear here."
+        case .explore:
+            emptyIcon = "rectangle.stack"
+            emptyTitle = "Nothing to explore"
+            emptyMessage = "People you follow haven't created any curation sets yet."
+        }
+        return BookmarkLibraryProjection(
+            scopeOptions: [
+                BookmarkLibraryScopeOptionProjection(scope: .mine, label: "Mine"),
+                BookmarkLibraryScopeOptionProjection(scope: .explore, label: "Explore"),
+            ],
+            filterChips: [
+                BookmarkLibraryFilterChipProjection(filter: .articles, label: "Articles", iconSystemName: "doc.text"),
+                BookmarkLibraryFilterChipProjection(filter: .collections, label: "Collections", iconSystemName: "rectangle.stack"),
+                BookmarkLibraryFilterChipProjection(filter: .web, label: "Web", iconSystemName: "globe"),
+            ],
+            selectedPane: selectedPane,
+            isEmpty: itemCount == 0,
+            emptyIconSystemName: emptyIcon,
+            emptyTitle: emptyTitle,
+            emptyMessage: emptyMessage
         )
     }
 }
@@ -390,8 +436,25 @@ struct CollectionRow: View {
     }
 
     private var rowProjection: BookmarkSetRowProjection {
-        app.safeCore.projectBookmarkSetRow(
-            input: BookmarkSetRowProjectionInput(record: record)
+        // Phase 7: inline — no safeCore round-trip.
+        let itemCount = record.articleAddresses.count + record.noteIds.count
+        let isBookmarkSet = record.kind == 30003
+        let displayTitle: String
+        if !record.title.isEmpty {
+            displayTitle = record.title
+        } else if !record.id.isEmpty {
+            displayTitle = record.id
+        } else {
+            displayTitle = "Untitled"
+        }
+        let itemCountLabel: String? = itemCount == 0
+            ? nil
+            : "\(itemCount) item\(itemCount == 1 ? "" : "s")"
+        return BookmarkSetRowProjection(
+            displayTitle: displayTitle,
+            kindLabel: isBookmarkSet ? "Bookmarks" : "Curation",
+            kindIconSystemName: isBookmarkSet ? "bookmark.fill" : "rectangle.stack.fill",
+            itemCountLabel: itemCountLabel
         )
     }
 }
@@ -457,8 +520,16 @@ struct WebBookmarkRowView: View {
     }
 
     private var rowProjection: WebBookmarkRowProjection {
-        app.safeCore.projectWebBookmarkRow(
-            input: WebBookmarkRowProjectionInput(bookmark: bookmark)
+        // Phase 7: inline — no safeCore round-trip.
+        let displayTitle = bookmark.title.isEmpty ? bookmark.url : bookmark.title
+        let host = URL(string: bookmark.url)?.host
+        let bookmarkDescription = bookmark.description.isEmpty ? nil : bookmark.description
+        let displayUnixSeconds = bookmark.publishedAt ?? bookmark.createdAt
+        return WebBookmarkRowProjection(
+            displayTitle: displayTitle,
+            host: host,
+            description: bookmarkDescription,
+            displayUnixSeconds: displayUnixSeconds
         )
     }
 

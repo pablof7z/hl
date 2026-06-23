@@ -188,6 +188,19 @@ final class HighlighterAppKernel {
 
     // MARK: - Phase 3G: per-view lifecycle helpers
 
+    /// Open the Communities view (idempotent). Normally opened at init and
+    /// re-opened by `HighlighterStore.loadAppScopeData()` after each login.
+    func openCommunities() {
+        app.openView(viewId: .communities, route: .communities)
+    }
+
+    /// Close the Communities view and clear its cached snapshot.
+    /// Called from `HighlighterStore.logout()` to release NMP resources.
+    func closeCommunities() {
+        app.closeView(viewId: .communities)
+        communities = nil
+    }
+
     /// Open the RoomExplorer view. The kernel's lifecycle hook auto-starts
     /// discovery on open (Phase 3G). Call from `RoomExplorerView.task`.
     func openRoomExplorer() {
@@ -417,6 +430,9 @@ final class HighlighterAppKernel {
         // Phase 3G additions:
         case .communities(let s):
             communities = s
+            // Phase 7 bridge: push the updated list into the live-lane store so
+            // `joinedCommunities` (and the App Group mirror) stay in sync reactively.
+            store?.applyKernelCommunities(s.groups.map { $0.asCommunitySummary() })
         case .roomExplorer(let s):
             roomExplorer = s
         case .profile(let s):
