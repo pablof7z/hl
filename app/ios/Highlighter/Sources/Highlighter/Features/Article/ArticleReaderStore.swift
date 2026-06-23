@@ -50,17 +50,18 @@ struct ArticleReaderTarget: Hashable, Sendable {
 
 /// View-scoped store for the article reader. Lifetime matches the
 /// `ArticleReaderView` that owns it — created in `.task`, torn down in
-/// `.onDisappear`. Subscribes via `subscribe_article` so live article and
-/// highlight deltas trigger Rust-classified re-queries.
+/// `.onDisappear`. The kernel owns the subscription (via `openArticleReader`);
+/// live updates arrive through the observable `kernel.articleReader[address]`
+/// dict — no bespoke EventBridge subscription needed (Phase 7 complete cut).
 ///
-/// Architecture: **nostrdb is the source of truth.** The store never holds
-/// data that isn't already in (or en-route to) ndb.
+/// Architecture: **kernel snapshot is the source of truth.** The store maps
+/// `KernelArticleReaderSnapshot` → bespoke records so the existing view
+/// hierarchy keeps working without changes.
 @MainActor
 @Observable
 final class ArticleReaderStore {
     // Reactive state driving the view.
     var article: ArticleRecord?
-    var authorProfile: ProfileMetadata?
     var highlights: [HighlightRecord] = []
     var isLoadingInitial: Bool = true
     /// Transient flash when a highlight the user just published echoes back.
@@ -68,82 +69,63 @@ final class ArticleReaderStore {
 
     // Plumbing.
     @ObservationIgnored let target: ArticleReaderTarget
-    @ObservationIgnored let safeCore: SafeHighlighterCore
-    @ObservationIgnored weak var eventBridge: EventBridge?
-    @ObservationIgnored private var subscriptionHandle: UInt64?
-    /// Phase 7: the kernel owns the overlay highlights (per-article kind:9802
-    /// feed) and is the SOLE WRITER for publishing highlights. The article BODY
-    /// is still read from the live lane (reads coexist until Part C); the kernel
-    /// snapshot's `highlights` win when the view is open.
     @ObservationIgnored let kernel: HighlighterAppKernel
 
     init(
         target: ArticleReaderTarget,
-        safeCore: SafeHighlighterCore,
-        eventBridge: EventBridge?,
         kernel: HighlighterAppKernel
     ) {
         self.target = target
-        self.safeCore = safeCore
-        self.eventBridge = eventBridge
         self.kernel = kernel
         self.article = target.seed
     }
 
     func start() async {
         // Open the kernel article-reader view (registers the per-article
-        // highlight feed; pushes KernelArticleReaderSnapshot.highlights).
+        // highlight feed; pushes KernelArticleReaderSnapshot).
         kernel.openArticleReader(address: target.address)
-        await loadAll()
+        // Eagerly apply whatever snapshot the kernel already holds.  On a
+        // cold start this is typically nil and the seed article covers the
+        // gap; the view's onChange fires once the snapshot lands.
+        applyKernelSnapshot()
         isLoadingInitial = false
-        await installSubscription()
     }
 
     func stop() {
         kernel.closeArticleReader(address: target.address)
-        if let handle = subscriptionHandle {
-            Task { [safeCore] in await safeCore.unsubscribe(handle) }
-            eventBridge?.unregister(handle: handle)
-            subscriptionHandle = nil
-        }
     }
 
-    /// Apply the kernel article-reader snapshot's overlay highlights. Called from
-    /// `ArticleReaderView.onChange(of: kernel.articleReader[address])`. The kernel
-    /// is authoritative for the overlay (enriched kind:9802 rows); the body stays
-    /// from the live-lane read for now (Part C completes the cut).
+    /// Apply the kernel article-reader snapshot: article metadata + overlay
+    /// highlights. Called from `ArticleReaderView.onChange(of: kernel.articleReader[address])`
+    /// and from `start()`. The kernel is authoritative for both the article
+    /// body and the overlay highlights (per-article kind:9802 feed) —
+    /// Phase 7 complete cut-over.
     func applyKernelSnapshot() {
         guard let snap = kernel.articleReader[target.address] else { return }
+        // Map kernel snapshot → bespoke ArticleRecord so the existing view
+        // hierarchy (ReaderScroll → Header) keeps working without changes.
+        article = ArticleRecord(
+            eventId: snap.id,
+            address: snap.address,
+            pubkey: snap.authorPubkey,
+            identifier: snap.dTag,
+            title: snap.title ?? "",
+            summary: snap.summary ?? "",
+            image: snap.heroImageUrl ?? "",
+            content: "",   // Body rendered via contentTreeJson; markdown unused.
+            hashtags: [],  // Phase 7: kernel snapshot omits hashtags; empty fallback.
+            publishedAt: nil,
+            createdAt: snap.createdAt
+        )
         highlights = snap.highlights.map(HighlightRecord.init(kernelRow:))
     }
 
-    // MARK: - Loads
-
-    func loadAll() async {
-        let snapshot = await safeCore.getArticleReaderSnapshot(
-            pubkeyHex: target.pubkey,
-            dTag: target.dTag
-        )
-        apply(snapshot: snapshot)
-    }
-
-    private func apply(snapshot: ArticleReaderSnapshot) {
-        // Inline the former projectArticleReaderSnapshot projection: prefer the
-        // new snapshot values and fall back to whatever the store already holds.
-        article = snapshot.article ?? article
-        authorProfile = snapshot.authorProfile ?? authorProfile
-        // The live-lane snapshot seeds highlights for the cold-start window;
-        // the kernel overlay (per-article kind:9802 feed) is authoritative and
-        // overrides as soon as its snapshot is present (Phase 7).
-        highlights = snapshot.highlights
-        applyKernelSnapshot()
-    }
-
     /// Called by `EventBridge` when an `ArticleUpdated` delta arrives.
-    /// Re-queries Rust's full reader snapshot so native code does not branch
-    /// on protocol event kinds.
+    /// With the kernel cut-over the live snapshot arrives via `articleReader`
+    /// already; this re-applies it so any in-flight EventBridge registration
+    /// (e.g. from a previous session) still converges correctly.
     func applyUpdate() async {
-        await loadAll()
+        applyKernelSnapshot()
     }
 
     // MARK: - Writes
@@ -171,26 +153,6 @@ final class ArticleReaderStore {
             )
         )
         return nil
-    }
-
-    // MARK: - Private
-
-    private func installSubscription() async {
-        guard subscriptionHandle == nil, let bridge = eventBridge else { return }
-        let outcome = await safeCore.subscribeArticle(
-            pubkeyHex: target.pubkey,
-            dTag: target.dTag
-        )
-        // Inline the former projectViewSubscriptionStart projection: a non-empty
-        // error string means the subscription did not open.
-        guard outcome.error.isEmpty else {
-            // Non-fatal: cold ndb path still shows the seeded article and
-            // its cached highlights. Live updates will resume on the next
-            // visit.
-            return
-        }
-        subscriptionHandle = outcome.handle
-        bridge.registerArticle(self, handle: outcome.handle)
     }
 }
 

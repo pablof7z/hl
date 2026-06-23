@@ -7,19 +7,18 @@ import SwiftUI
 /// one shot.
 ///
 /// Uses SwiftUI's `Menu(primaryAction:)` so a tap stays one-tap-fast and
-/// long-press surfaces the curation choices.
-///
-/// The curation-set list is read directly from `kernel.bookmarks.myCurationSets`
-/// (kernel sole writer after #1653). Membership is computed locally by checking
-/// whether `articleAddress` is present in each set's `articleAddresses`.
+/// long-press surfaces the curation choices. Loads curations lazily on
+/// the first appear; refreshes after every membership change so the
+/// checkmark state is always accurate without a full BookmarkStore.
 struct BookmarkMenuButton: View {
     /// NIP-33 a-tag value — `"30023:<pubkey>:<d>"`.
     let articleAddress: String
 
     @Environment(HighlighterStore.self) private var app
-    @Environment(HighlighterAppKernel.self) private var kernel
 
+    @State private var curationItems: [CurationMenuItem] = []
     @State private var newCollectionPresented: Bool = false
+    @State private var errorMessage: String?
 
     var body: some View {
         Menu {
@@ -39,12 +38,13 @@ struct BookmarkMenuButton: View {
             Task { await app.toggleBookmark(articleAddress: articleAddress) }
         }
         .accessibilityLabel(bookmarkChrome.accessibilityLabel)
+        .task { await loadCurations() }
         .sheet(isPresented: $newCollectionPresented) {
             NewCollectionSheet(
                 onCancel: { newCollectionPresented = false },
                 onCreate: { title in
                     newCollectionPresented = false
-                    kernel.app.dispatch(.createAndAddToSet(title: title, itemCoordinate: articleAddress))
+                    Task { await createAndAdd(title: title) }
                 }
             )
             .presentationDetents([.medium])
@@ -53,17 +53,16 @@ struct BookmarkMenuButton: View {
 
     @ViewBuilder
     private var curationsSection: some View {
-        let items = curationItems
-        if items.isEmpty {
+        if curationItems.isEmpty {
             // Header-only section so the menu still reads as the
             // collection picker before any sets exist.
             Text("No collections yet")
                 .font(.footnote)
         } else {
             Section("Add to collection") {
-                ForEach(items, id: \.id) { item in
+                ForEach(curationItems, id: \.id) { item in
                     Button {
-                        toggleInCuration(item)
+                        Task { await toggleInCuration(item) }
                     } label: {
                         if item.isMember {
                             Label(item.title, systemImage: "checkmark")
@@ -76,48 +75,65 @@ struct BookmarkMenuButton: View {
         }
     }
 
-    /// Compute curation menu items from the kernel snapshot. The kernel pushes
-    /// fresh snapshots whenever sets are updated, so no explicit reload is needed.
-    private var curationItems: [CurationMenuItem] {
-        let sets = kernel.bookmarks?.myCurationSets ?? []
-        return sets.map { set in
-            let isMember = set.articleAddresses.contains(articleAddress)
-            let displayTitle: String
-            if let t = set.title, !t.isEmpty {
-                displayTitle = t
-            } else if !set.dTag.isEmpty {
-                displayTitle = set.dTag
-            } else {
-                displayTitle = "Untitled"
-            }
-            return CurationMenuItem(
-                id: set.dTag,
-                title: displayTitle,
-                isMember: isMember
-            )
-        }
-    }
-
     private var isBookmarked: Bool {
         app.isBookmarked(articleAddress: articleAddress)
     }
 
     private var bookmarkChrome: ArticleBookmarkChromeProjection {
-        app.safeCore.projectArticleBookmarkChrome(
-            input: ArticleBookmarkChromeProjectionInput(isBookmarked: isBookmarked)
-        )
+        if isBookmarked {
+            ArticleBookmarkChromeProjection(
+                toolbarSystemImage: "bookmark.fill",
+                usesAccentColor: true,
+                accessibilityLabel: "Remove bookmark",
+                swipeTitle: "Remove",
+                menuTitle: "Remove bookmark",
+                actionSystemImage: "bookmark.slash"
+            )
+        } else {
+            ArticleBookmarkChromeProjection(
+                toolbarSystemImage: "bookmark",
+                usesAccentColor: false,
+                accessibilityLabel: "Bookmark article",
+                swipeTitle: "Bookmark",
+                menuTitle: "Bookmark",
+                actionSystemImage: "bookmark"
+            )
+        }
     }
 
     // MARK: - Actions
 
-    private func toggleInCuration(_ item: CurationMenuItem) {
-        // All myCurationSets are owned by the active account; any set's pubkey works.
-        guard let pubkey = kernel.bookmarks?.myCurationSets.first?.pubkey else { return }
-        let setCoordinate = "30004:\(pubkey):\(item.id)"
-        if item.isMember {
-            kernel.app.dispatch(.removeFromSet(setCoordinate: setCoordinate, itemCoordinate: articleAddress))
-        } else {
-            kernel.app.dispatch(.addToSet(setCoordinate: setCoordinate, itemCoordinate: articleAddress))
+    private func loadCurations() async {
+        apply(await app.safeCore.getCurationMenuSnapshot(address: articleAddress))
+    }
+
+    private func toggleInCuration(_ item: CurationMenuItem) async {
+        let snapshot = await app.safeCore.toggleCurationMenuItemSnapshot(
+            dTag: item.id,
+            address: articleAddress
+        )
+        apply(snapshot, errorPrefix: "Couldn't update collection")
+    }
+
+    private func createAndAdd(title: String) async {
+        let snapshot = await app.safeCore.createCurationSetWithAddressSnapshot(
+            title: title,
+            address: articleAddress
+        )
+        apply(snapshot, errorPrefix: "Couldn't create collection")
+    }
+
+    private func apply(_ snapshot: CurationMenuSnapshot, errorPrefix: String? = nil) {
+        let projection = app.safeCore.projectCurationMenuSnapshotApply(
+            input: CurationMenuSnapshotApplyInput(
+                items: snapshot.items,
+                error: snapshot.error,
+                errorPrefix: errorPrefix
+            )
+        )
+        curationItems = projection.items
+        if projection.shouldApplyErrorMessage {
+            errorMessage = projection.errorMessage
         }
     }
 }
@@ -167,9 +183,8 @@ struct NewCollectionSheet: View {
     }
 
     private var createProjection: CurationSetCreateProjection {
-        app.safeCore.projectCurationSetCreate(
-            input: CurationSetCreateProjectionInput(title: title)
-        )
+        let submitTitle = title.trimmingCharacters(in: .whitespaces)
+        return CurationSetCreateProjection(submitTitle: submitTitle, canCreate: !submitTitle.isEmpty)
     }
 
     private func commit() {

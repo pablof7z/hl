@@ -9,7 +9,28 @@ struct OnboardingInterestsView: View {
     @State private var isWorking = false
 
     private var projection: OnboardingInterestProjection {
-        store.safeCore.getOnboardingInterestProjection(selectedIds: selectedIds)
+        let minimumRequired: UInt32 = 3
+        let selectedSet = Set(selectedIds)
+        let chips = onboardingInterestCatalog.map { seed in
+            OnboardingInterestChip(
+                id: seed.id,
+                emoji: seed.emoji,
+                label: seed.label,
+                isSelected: selectedSet.contains(seed.id)
+            )
+        }
+        let selectedCount = UInt32(selectedSet.intersection(Set(onboardingInterestCatalog.map(\.id))).count)
+        let remaining = selectedCount < minimumRequired ? minimumRequired - selectedCount : 0
+        return OnboardingInterestProjection(
+            interests: chips,
+            selection: OnboardingInterestSelection(
+                minimumRequired: minimumRequired,
+                selectedCount: selectedCount,
+                remaining: remaining,
+                canContinue: remaining == 0,
+                followPubkeys: []
+            )
+        )
     }
 
     var body: some View {
@@ -98,10 +119,11 @@ struct OnboardingInterestsView: View {
     private func chip(_ interest: OnboardingInterestChip) -> some View {
         let active = interest.isSelected
         return Button {
-            selectedIds = store.safeCore.toggleOnboardingInterestSelection(
-                selectedIds: selectedIds,
-                interestId: interest.id
-            )
+            let id = interest.id
+            guard onboardingInterestCatalog.contains(where: { $0.id == id }) else { return }
+            var selected = Set(selectedIds)
+            if selected.contains(id) { selected.remove(id) } else { selected.insert(id) }
+            selectedIds = onboardingInterestCatalog.compactMap { selected.contains($0.id) ? $0.id : nil }
         } label: {
             HStack(spacing: 6) {
                 Text(interest.emoji)
@@ -190,3 +212,34 @@ private struct FlowLayout: Layout {
         return rows
     }
 }
+
+// MARK: - Onboarding Interest Catalog (mirrors onboarding.rs INTERESTS)
+
+private struct OnboardingInterestSeed {
+    let id: String
+    let emoji: String
+    let label: String
+}
+
+private let onboardingInterestCatalog: [OnboardingInterestSeed] = [
+    OnboardingInterestSeed(id: "philosophy",      emoji: "🧠",  label: "Philosophy"),
+    OnboardingInterestSeed(id: "science_fiction",  emoji: "🚀",  label: "Science Fiction"),
+    OnboardingInterestSeed(id: "technology",       emoji: "💻",  label: "Technology"),
+    OnboardingInterestSeed(id: "history",          emoji: "📜",  label: "History"),
+    OnboardingInterestSeed(id: "economics",        emoji: "📈",  label: "Economics"),
+    OnboardingInterestSeed(id: "psychology",       emoji: "🔬",  label: "Psychology"),
+    OnboardingInterestSeed(id: "literature",       emoji: "📚",  label: "Literature"),
+    OnboardingInterestSeed(id: "politics",         emoji: "🗳️", label: "Politics"),
+    OnboardingInterestSeed(id: "bitcoin",          emoji: "₿",   label: "Bitcoin"),
+    OnboardingInterestSeed(id: "self_improvement", emoji: "🌱",  label: "Self-improvement"),
+    OnboardingInterestSeed(id: "science",          emoji: "🔭",  label: "Science"),
+    OnboardingInterestSeed(id: "art",              emoji: "🎨",  label: "Art"),
+    OnboardingInterestSeed(id: "music",            emoji: "🎵",  label: "Music"),
+    OnboardingInterestSeed(id: "design",           emoji: "✏️", label: "Design"),
+    OnboardingInterestSeed(id: "writing",          emoji: "✍️", label: "Writing"),
+    OnboardingInterestSeed(id: "startups",         emoji: "⚡️", label: "Startups"),
+    OnboardingInterestSeed(id: "nostr",            emoji: "🟣",  label: "Nostr"),
+    OnboardingInterestSeed(id: "food",             emoji: "🍳",  label: "Food"),
+    OnboardingInterestSeed(id: "travel",           emoji: "🗺️", label: "Travel"),
+    OnboardingInterestSeed(id: "health",           emoji: "🏃",  label: "Health"),
+]

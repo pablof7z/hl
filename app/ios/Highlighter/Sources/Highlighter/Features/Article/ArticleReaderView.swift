@@ -60,8 +60,6 @@ struct ArticleReaderView: View {
             if store == nil {
                 let s = ArticleReaderStore(
                     target: target,
-                    safeCore: app.safeCore,
-                    eventBridge: app.eventBridge,
                     kernel: kernel
                 )
                 store = s
@@ -123,7 +121,7 @@ struct ArticleReaderView: View {
             ReaderScroll(
                 article: article,
                 contentTreeJson: kernel.articleReader[target.address]?.contentTreeJson ?? "",
-                authorProfile: app.profileSnapshots[target.pubkey] ?? store.authorProfile,
+                authorProfile: app.profileSnapshots[target.pubkey],
                 highlights: store.highlights,
                 onPublishHighlight: { quote, context in
                     Task { await publish(quote: quote, context: context, note: "") }

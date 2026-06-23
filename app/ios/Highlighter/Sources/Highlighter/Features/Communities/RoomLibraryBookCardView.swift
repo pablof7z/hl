@@ -126,12 +126,22 @@ struct RoomLibraryBookCardView: View {
         )
     }
 
+    /// Pure-Swift replacement for `projectRoomLibraryBookCard`.
     private var cardProjection: RoomLibraryBookCardProjection {
-        app.safeCore.projectRoomLibraryBookCard(
-            input: RoomLibraryBookCardProjectionInput(
-                artifact: artifact,
-                commentCount: UInt32(commentCount)
-            )
+        let preview = artifact.preview
+        let title = preview.title.isEmpty ? "Untitled" : preview.title
+        let titleIsFallback = preview.title.isEmpty
+        let relativeUnixSeconds: UInt64? = artifact.createdAt.flatMap { $0 > 0 ? $0 : nil }
+        let commentBadgeLabel: String? = commentCount > 0 ? "\(commentCount)" : nil
+        return RoomLibraryBookCardProjection(
+            title: title,
+            titleIsFallback: titleIsFallback,
+            authorLabel: preview.author.isEmpty ? nil : preview.author,
+            summary: preview.description.isEmpty ? nil : preview.description,
+            imageUrl: preview.image.isEmpty ? nil : preview.image,
+            sharerPubkey: artifact.pubkey,
+            relativeUnixSeconds: relativeUnixSeconds,
+            commentBadgeLabel: commentBadgeLabel
         )
     }
 

@@ -42,13 +42,66 @@ struct RoomLibraryArticleCardView: View {
 
     // MARK: - Derived bits
 
+    /// Pure-Swift replacement for `projectRoomLibraryArticleCard`.
     private var cardProjection: RoomLibraryArticleCardProjection {
-        app.safeCore.projectRoomLibraryArticleCard(
-            input: RoomLibraryArticleCardProjectionInput(
-                artifact: artifact,
-                commentCount: UInt32(commentCount)
-            )
+        let preview = artifact.preview
+        let displayTitle = preview.title.isEmpty ? "Untitled" : preview.title
+        let titleIsFallback = preview.title.isEmpty
+        let imageUrl: String? = preview.image.isEmpty ? nil : preview.image
+        let articleAuthorPubkey = Self.articleAuthorPubkey(preview: preview)
+        let authorProfilePubkey = articleAuthorPubkey ?? ""
+        let avatarPubkey = articleAuthorPubkey ?? artifact.pubkey
+        let relativeUnixSeconds: UInt64? = artifact.createdAt.flatMap { $0 > 0 ? $0 : nil }
+        let metaText: String? = {
+            var bits: [String] = []
+            if !preview.domain.isEmpty { bits.append(preview.domain) }
+            if commentCount > 0 {
+                bits.append("\(commentCount) comment\(commentCount == 1 ? "" : "s")")
+            }
+            return bits.isEmpty ? nil : bits.joined(separator: " · ")
+        }()
+        return RoomLibraryArticleCardProjection(
+            displayTitle: displayTitle,
+            titleIsFallback: titleIsFallback,
+            imageUrl: imageUrl,
+            articleAuthorPubkey: articleAuthorPubkey,
+            avatarPubkey: avatarPubkey,
+            authorProfilePubkey: authorProfilePubkey,
+            relativeUnixSeconds: relativeUnixSeconds,
+            metaText: metaText
         )
+    }
+
+    /// Extract the NIP-23 article author pubkey from the preview's reference
+    /// tags, mirroring `article_card_projection` in Rust.
+    ///
+    /// Returns a pubkey only when the source is "article" and there is a
+    /// well-formed `"a"` reference of the form `"30023:<pubkey>:<d-tag>"`.
+    private static func articleAuthorPubkey(preview: ArtifactPreview) -> String? {
+        guard preview.source.trimmingCharacters(in: .whitespaces).lowercased() == "article" else {
+            return nil
+        }
+        // reference_value_for(preview, "a"): highlight tag wins, then reference tag.
+        let raw: String
+        if preview.highlightTagName.caseInsensitiveCompare("a") == .orderedSame,
+           !preview.highlightTagValue.trimmingCharacters(in: .whitespaces).isEmpty {
+            raw = preview.highlightTagValue
+        } else if preview.referenceTagName.caseInsensitiveCompare("a") == .orderedSame,
+                  !preview.referenceTagValue.trimmingCharacters(in: .whitespaces).isEmpty {
+            raw = preview.referenceTagValue
+        } else {
+            return nil
+        }
+        // parse_nip23_address: split at most at the first two colons (Rust splitn(3, ':')).
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        guard let c1 = trimmed.firstIndex(of: ":") else { return nil }
+        let part0 = String(trimmed[..<c1])
+        let rest = String(trimmed[trimmed.index(after: c1)...])
+        guard let c2 = rest.firstIndex(of: ":") else { return nil }
+        let part1 = String(rest[..<c2])
+        let part2 = String(rest[rest.index(after: c2)...])
+        guard part0 == "30023", !part1.isEmpty, !part2.isEmpty else { return nil }
+        return part1
     }
 
     private func authorDisplay(

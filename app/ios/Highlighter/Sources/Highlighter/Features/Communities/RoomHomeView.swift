@@ -245,11 +245,7 @@ struct RoomHomeView: View {
 
     @ViewBuilder
     private func artifactRow(_ a: ArtifactRecord, commentCount: Int) -> some View {
-        let projection = app.safeCore.projectRoomLibraryCardKind(
-            input: RoomLibraryCardKindProjectionInput(artifact: a)
-        )
-
-        switch projection.cardKind {
+        switch roomLibraryCardKind(for: a) {
         case .article:
             RoomLibraryArticleCardView(artifact: a, commentCount: commentCount)
         case .book:
@@ -261,13 +257,23 @@ struct RoomHomeView: View {
         }
     }
 
+    /// Pure-Swift replacement for `projectRoomLibraryCardKind`: maps the
+    /// artifact's preview source string to the native card component kind.
+    private func roomLibraryCardKind(for artifact: ArtifactRecord) -> RoomLibraryCardKind {
+        switch artifact.preview.source.trimmingCharacters(in: .whitespaces).lowercased() {
+        case "article": return .article
+        case "book":    return .book
+        case "podcast": return .podcast
+        default:        return .generic
+        }
+    }
+
     private func genericArtifactRow(_ artifact: ArtifactRecord) -> some View {
-        let projection = app.safeCore.projectRoomLibraryGenericCard(
-            input: RoomLibraryGenericCardProjectionInput(artifact: artifact)
-        )
+        // Pure-Swift replacement for `projectRoomLibraryGenericCard`.
+        let title = artifact.preview.title.isEmpty ? "Untitled" : artifact.preview.title
 
         return HStack {
-            Text(projection.title)
+            Text(title)
                 .foregroundStyle(Color.highlighterInkStrong)
             Spacer()
             Image(systemName: "chevron.right")

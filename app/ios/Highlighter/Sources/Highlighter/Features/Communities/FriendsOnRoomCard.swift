@@ -53,17 +53,51 @@ struct FriendsOnRoomCard: View {
     }
 
     private var cardProjection: RoomRecommendationCardProjection {
-        store.safeCore.projectRoomRecommendationCard(
-            input: RoomRecommendationCardProjectionInput(
-                recommendation: recommendation,
-                reasonProfiles: recommendation.reasonPubkeys.map { pubkey in
-                    RoomRecommendationReasonProfile(
-                        pubkey: pubkey,
-                        profile: store.profileSnapshots[pubkey]
-                    )
-                }
+        // Inlined room_recommendation_card_projection
+        let reasonPubkeys = recommendation.reasonPubkeys
+        let total = reasonPubkeys.count
+
+        let byline: String
+        if let primaryPubkey = reasonPubkeys.first {
+            let firstHandle = recommendationDisplayName(pubkey: primaryPubkey)
+            switch total {
+            case 1: byline = "@\(firstHandle) is here"
+            case 2: byline = "@\(firstHandle) + 1 you follow"
+            default: byline = "@\(firstHandle) + \(total - 1) you follow"
+            }
+        } else {
+            let about = recommendation.summary.about.trimmingCharacters(in: .whitespaces)
+            byline = about.isEmpty ? "Rooms you may like" : about
+        }
+
+        let visiblePubkeys = Array(reasonPubkeys.prefix(3))
+        let visibleAvatars: [RoomRecommendationAvatarProjection] = visiblePubkeys.map { pubkey in
+            let snapshot = store.profileSnapshots[pubkey]
+            return RoomRecommendationAvatarProjection(
+                pubkey: pubkey,
+                pictureUrl: snapshot?.picture ?? "",
+                displayInitial: String(pubkey.prefix(1))
             )
+        }
+        let overflowLabel: String? = total > 3 ? "+\(total - 3)" : nil
+
+        return RoomRecommendationCardProjection(
+            byline: byline,
+            visibleAvatars: visibleAvatars,
+            preloadPubkeys: visiblePubkeys,
+            overflowLabel: overflowLabel
         )
+    }
+
+    // Inlined recommendation_profile_handle / profile_handle_projection:
+    // name > displayName > first-6-chars-of-pubkey (ProfileDisplayFallback::Pubkey6)
+    private func recommendationDisplayName(pubkey: String) -> String {
+        guard let snapshot = store.profileSnapshots[pubkey] else {
+            return String(pubkey.prefix(6))
+        }
+        if !snapshot.name.isEmpty { return snapshot.name }
+        if !snapshot.displayName.isEmpty { return snapshot.displayName }
+        return String(pubkey.prefix(6))
     }
 
     @ViewBuilder
