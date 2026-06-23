@@ -110,6 +110,22 @@ enum HighlighterAction {
     case audioSeek(seconds: Double)
     /// Explicitly persist the current resume position (call on app resign-active).
     case audioSetResume(seconds: Double)
+    /// Load the current episode's transcript (kernel fetches URL from episode state).
+    case transcriptLoad
+    /// Set clip mark-in at the current position.
+    case clipMarkIn(currentTime: Double)
+    /// Set clip mark-out at the current position.
+    case clipMarkOut(currentTime: Double)
+    /// Extend the clip selection to include a transcript segment.
+    case clipExtendSegment(segmentId: String)
+    /// Override clip start to `value` (kernel clamps to [0, end/duration]).
+    case clipSetStart(value: Double)
+    /// Override clip end to `value` (kernel clamps to [start, duration]).
+    case clipSetEnd(value: Double, durationSeconds: Double)
+    /// Clear the in-progress clip selection.
+    case clipClear
+    /// Publish the current clip selection as a kind:9802 highlight.
+    case publishClip(artifactJson: String, note: String)
 
     // ── Capture draft (Phase 5F) ──────────────────────────────────────────────────
     case captureSetQuote(quote: String)
@@ -373,6 +389,28 @@ enum HighlighterAction {
         case .audioSetResume(let seconds):
             return AppActionEnvelope(namespace: "hl.audio.set_resume",
                                      json: jsonAny(["seconds": seconds]))
+        case .transcriptLoad:
+            return AppActionEnvelope(namespace: "hl.transcript.load", json: "{}")
+        case .clipMarkIn(let t):
+            return AppActionEnvelope(namespace: "hl.audio.clip_mark_in",
+                                     json: jsonAny(["current_time": t]))
+        case .clipMarkOut(let t):
+            return AppActionEnvelope(namespace: "hl.audio.clip_mark_out",
+                                     json: jsonAny(["current_time": t]))
+        case .clipExtendSegment(let id):
+            return AppActionEnvelope(namespace: "hl.audio.clip_extend_segment",
+                                     json: jsonObject(["segment_id": id]))
+        case .clipSetStart(let v):
+            return AppActionEnvelope(namespace: "hl.audio.clip_set_start",
+                                     json: jsonAny(["value": v]))
+        case .clipSetEnd(let v, let dur):
+            return AppActionEnvelope(namespace: "hl.audio.clip_set_end",
+                                     json: jsonAny(["value": v, "duration_seconds": dur]))
+        case .clipClear:
+            return AppActionEnvelope(namespace: "hl.audio.clip_clear", json: "{}")
+        case .publishClip(let artifactJson, let note):
+            return AppActionEnvelope(namespace: "hl.podcast.publish_clip",
+                                     json: jsonObject(["artifact_json": artifactJson, "note": note]))
 
         // ── Capture draft (Phase 5F) ──────────────────────────────────────────────────
         case .captureSetQuote(let quote):

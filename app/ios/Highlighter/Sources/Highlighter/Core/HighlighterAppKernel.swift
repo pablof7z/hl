@@ -123,6 +123,13 @@ final class HighlighterAppKernel {
     /// cutover: replaces the live-lane `safeCore.prepareWhatsNew()` call).
     private(set) var whatsNew: WhatsNewSnapshot?
 
+    /// The current podcast listening snapshot. Updated whenever the kernel
+    /// emits `ViewSnapshot.podcastListening`. Nil when no episode is loaded.
+    private(set) var podcastListeningSnapshot: PodcastListeningSnapshot?
+
+    /// Network settings diagnostic rows from the kernel. Updated live.
+    private(set) var networkSettingsSnapshot: KernelNetworkSettingsSnapshot?
+
     // MARK: - Back-reference to the live-lane store (Phase 7 bridge)
 
     /// Weak reference set by `AppEntry` after both objects are initialised.
@@ -487,8 +494,10 @@ final class HighlighterAppKernel {
             bookmarks = s
             store?.applyKernelBookmarks(s.rows)
 
-        // Phase 2E (network settings / relay diagnostics) — handled elsewhere.
-        case .networkSettings, .relayDiagnostics:
+        // Phase 2E (network settings / relay diagnostics).
+        case .networkSettings(let s):
+            networkSettingsSnapshot = s
+        case .relayDiagnostics:
             break
 
         // Phase 7 cutover: article reader (ArticleReaderStore reads its overlay
@@ -508,10 +517,9 @@ final class HighlighterAppKernel {
              .highlightFeed, .bookPicker, .shareComposer:
             break
 
-        // Phase 5+ snapshots (podcast) — managed by their owning views / stores;
-        // no-op here (same pattern as Phase 4+ above).
-        case .podcastListening:
-            break
+        // Phase 5+ snapshots (podcast) — store the latest listening snapshot.
+        case .podcastListening(let s):
+            podcastListeningSnapshot = s
 
         }
     }

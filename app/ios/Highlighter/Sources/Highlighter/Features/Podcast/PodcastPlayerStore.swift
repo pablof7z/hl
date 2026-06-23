@@ -112,7 +112,7 @@ final class PodcastPlayerStore {
         loadedTimeRanges = []
         transcriptSegments = []
         transcriptAvailability = .unavailable
-        applyClipSelection(core.clearPodcastClipSelection())
+        clearClip()
         publishError = nil
         currentTime = 0
         duration = 0
@@ -193,7 +193,7 @@ final class PodcastPlayerStore {
         isBuffering = false
         loadedTimeRanges = []
         lastError = nil
-        applyClipSelection(core.clearPodcastClipSelection())
+        clearClip()
         publishError = nil
         transcriptSegments = []
         transcriptAvailability = .unavailable
@@ -230,13 +230,7 @@ final class PodcastPlayerStore {
     }
 
     func seek(to seconds: TimeInterval) {
-        let projection = core.projectPodcastPlaybackSeek(
-            input: PodcastPlaybackSeekInput(
-                targetSeconds: seconds,
-                durationSeconds: duration
-            )
-        )
-        let clamped = projection.positionSeconds
+        let clamped = max(0, min(seconds, duration))
         let time = CMTime(seconds: clamped, preferredTimescale: 600)
         player?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
         currentTime = clamped
@@ -266,53 +260,49 @@ final class PodcastPlayerStore {
     // MARK: - Clip selection
 
     func markIn() {
-        applyClipSelection(
-            core.markPodcastClipIn(
-                selection: clipSelection,
-                currentTime: currentTime
-            )
-        )
+        let t = currentTime
+        clipStart = t
+        if let end = clipEnd, end <= t { clipEnd = nil }
     }
 
     func markOut() {
-        applyClipSelection(
-            core.markPodcastClipOut(
-                selection: clipSelection,
-                currentTime: currentTime
-            )
-        )
+        let t = currentTime
+        guard t > (clipStart ?? 0) else { return }
+        clipEnd = min(t, duration)
     }
 
     func clearClip() {
-        applyClipSelection(core.clearPodcastClipSelection())
+        clipStart = nil
+        clipEnd = nil
+        speaker = ""
+        selectedSegmentIds = []
     }
 
     func extendClipToSegment(_ segment: TranscriptSegment) {
-        applyClipSelection(
-            core.extendPodcastClipToSegment(
-                selection: clipSelection,
-                segment: segment
-            )
-        )
+        if !selectedSegmentIds.contains(segment.id) {
+            selectedSegmentIds.append(segment.id)
+        }
+        if !segment.speaker.isEmpty { speaker = segment.speaker }
+        if let s = clipStart {
+            clipStart = min(s, segment.start)
+        } else {
+            clipStart = segment.start
+        }
+        if let e = clipEnd {
+            clipEnd = max(e, segment.end)
+        } else {
+            clipEnd = segment.end
+        }
     }
 
     func setClipStart(_ value: TimeInterval) {
-        applyClipSelection(
-            core.setPodcastClipStart(
-                selection: clipSelection,
-                value: value
-            )
-        )
+        let clamped = max(0, min(value, clipEnd ?? duration))
+        clipStart = clamped
     }
 
     func setClipEnd(_ value: TimeInterval) {
-        applyClipSelection(
-            core.setPodcastClipEnd(
-                selection: clipSelection,
-                value: value,
-                durationSeconds: duration
-            )
-        )
+        let clamped = max(clipStart ?? 0, min(value, duration))
+        clipEnd = clamped
     }
 
     // MARK: - Publish
