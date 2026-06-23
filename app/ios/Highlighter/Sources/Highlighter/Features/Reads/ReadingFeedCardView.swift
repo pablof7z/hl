@@ -62,27 +62,89 @@ struct ReadingFeedCardView: View {
 
     // MARK: - Author display
 
+    /// Inline port of `profile_display_projection` — mirrors CommentRow.authorDisplay pattern.
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: item.article.pubkey,
-                profile: app.profileSnapshots[item.article.pubkey],
-                fallback: .pubkey10
-            )
+        let pubkey = item.article.pubkey
+        let profile = app.profileSnapshots[pubkey]
+        let name: String = {
+            if let d = profile?.displayName, !d.isEmpty { return d }
+            if let n = profile?.name, !n.isEmpty { return n }
+            return String(pubkey.prefix(8))
+        }()
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: String(name.prefix(1)),
+            pictureUrl: profile?.picture ?? ""
         )
     }
 
+    // MARK: - Card projection (inline port of reading_feed_card_projection in reads.rs)
+
     private var cardProjection: ReadingFeedCardProjection {
-        app.safeCore.projectReadingFeedCard(
-            input: ReadingFeedCardProjectionInput(
-                item: item,
-                interactorProfiles: item.interactorPubkeys.map { pubkey in
-                    ReadingFeedInteractorProfile(
-                        pubkey: pubkey,
-                        profile: app.profileSnapshots[pubkey]
-                    )
-                }
-            )
+        let article = item.article
+
+        // Title fallback
+        let displayTitle = article.title.isEmpty ? "Untitled" : article.title
+        let titleIsFallback = article.title.isEmpty
+
+        // Image URL (nil when empty)
+        let imageUrl: String? = article.image.isEmpty ? nil : article.image
+
+        // Meta text: "N min read" and first hashtag
+        var metaBits: [String] = []
+        let words = article.content.split(separator: " ").count
+        if words > 60 {
+            let minutes = max(1, words / 240)
+            metaBits.append("\(minutes) min read")
+        }
+        if let tag = article.hashtags.first(where: { !$0.isEmpty }) {
+            metaBits.append("#\(tag)")
+        }
+        let metaText: String? = metaBits.isEmpty ? nil : metaBits.joined(separator: " · ")
+
+        // Social signal
+        let interactorPubkeys = item.interactorPubkeys
+        let primaryInteractorPubkey = interactorPubkeys.first
+        let visibleInteractorPubkeys = Array(interactorPubkeys.prefix(3))
+
+        let primaryName: String = {
+            guard let pk = primaryInteractorPubkey else { return "Someone" }
+            let profile = app.profileSnapshots[pk]
+            if let d = profile?.displayName, !d.isEmpty { return d }
+            if let n = profile?.name, !n.isEmpty { return n }
+            return String(pk.prefix(8))
+        }()
+
+        let interactorCount = interactorPubkeys.count
+        let showSocialSignal = !interactorPubkeys.isEmpty
+            || (item.authorFollowed && interactorPubkeys.isEmpty)
+
+        let socialText: String = {
+            if item.authorFollowed && interactorPubkeys.isEmpty {
+                return "From someone you follow"
+            }
+            switch interactorCount {
+            case 0: return ""
+            case 1 where item.authorFollowed: return "\(primaryName) and the author liked this"
+            case 1: return "\(primaryName) liked this"
+            case 2: return "\(primaryName) and 1 other"
+            default: return "\(primaryName) and \(interactorCount - 1) others"
+            }
+        }()
+
+        // Timestamp: published_at preferred, then created_at
+        let relativeUnixSeconds = article.publishedAt ?? article.createdAt
+
+        return ReadingFeedCardProjection(
+            displayTitle: displayTitle,
+            titleIsFallback: titleIsFallback,
+            imageUrl: imageUrl,
+            metaText: metaText,
+            showSocialSignal: showSocialSignal,
+            visibleInteractorPubkeys: visibleInteractorPubkeys,
+            primaryInteractorPubkey: primaryInteractorPubkey,
+            socialText: socialText,
+            relativeUnixSeconds: relativeUnixSeconds.flatMap { $0 > 0 ? $0 : nil }
         )
     }
 

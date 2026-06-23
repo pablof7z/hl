@@ -416,16 +416,14 @@ struct SearchView: View {
 
     @ViewBuilder
     private func highlightRow(_ h: HighlightRecord) -> some View {
-        let projection = app.safeCore.projectSearchHighlightRow(
-            input: SearchHighlightRowProjectionInput(highlight: h)
-        )
-        if let route = projection.articleRoute {
+        let articleRoute = articleReaderRoute(from: h.artifactAddress)
+        let pageImageUrl = validPageImageUrl(h.imageUrl)
+        if let route = articleRoute {
             NavigationLink(value: ArticleReaderTarget(route: route)) {
                 SearchHighlightRow(
                     highlight: h,
                     query: store?.query ?? "",
-                    pageImageUrl: projection.pageImageUrl,
-                    safeCore: app.safeCore
+                    pageImageUrl: pageImageUrl
                 )
             }
             .buttonStyle(.plain)
@@ -433,8 +431,7 @@ struct SearchView: View {
             SearchHighlightRow(
                 highlight: h,
                 query: store?.query ?? "",
-                pageImageUrl: projection.pageImageUrl,
-                safeCore: app.safeCore
+                pageImageUrl: pageImageUrl
             )
         }
     }
@@ -451,12 +448,10 @@ struct SearchView: View {
     // MARK: - Helpers
 
     private func commitRecentQuery() {
-        let projection = app.safeCore.projectSearchQuery(
-            input: SearchQueryProjectionInput(query: store?.query ?? "")
-        )
-        guard projection.hasQuery else { return }
+        let trimmed = (store?.query ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
         Task { @MainActor in
-            let snapshot = await app.safeCore.recordRecentSearchSnapshot(projection.searchQuery)
+            let snapshot = await app.safeCore.recordRecentSearchSnapshot(trimmed)
             recentQueries = snapshot.recentQueries
         }
     }
@@ -476,9 +471,23 @@ struct SearchView: View {
     }
 
     private func suggestedQueries() -> [String] {
-        app.safeCore.projectSearchSuggestions(
-            input: SearchSuggestionsProjectionInput(joinedCommunities: app.joinedCommunities)
-        ).queries
+        let evergreen = ["Dostoevsky", "Bitcoin", "Attention", "Borges", "Philosophy"]
+        var seen = Set<String>()
+        var queries: [String] = []
+        for community in app.joinedCommunities.prefix(4) {
+            let trimmed = community.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if seen.insert(trimmed.lowercased()).inserted {
+                queries.append(trimmed)
+            }
+        }
+        for fallback in evergreen {
+            guard queries.count < 8 else { break }
+            if seen.insert(fallback.lowercased()).inserted {
+                queries.append(fallback)
+            }
+        }
+        return Array(queries.prefix(8))
     }
 
     private func displayRelay(_ url: String) -> String {
@@ -572,7 +581,6 @@ private struct SectionKicker: View {
 }
 
 private struct RoomMiniTile: View {
-    @Environment(HighlighterStore.self) private var app
     let room: CommunitySummary
 
     var body: some View {
@@ -591,8 +599,6 @@ private struct RoomCoverArt: View {
     let picture: String
     let name: String
     let size: CGFloat
-
-    @Environment(HighlighterStore.self) private var app
 
     var body: some View {
         let avatar = avatarProjection
@@ -629,14 +635,9 @@ private struct RoomCoverArt: View {
         }
     }
 
-    private var avatarProjection: RoomAvatarProjection {
-        app.safeCore.projectRoomAvatar(
-            input: RoomAvatarProjectionInput(
-                name: name,
-                pictureUrl: picture,
-                uppercaseInitial: false
-            )
-        )
+    private var avatarProjection: (pictureUrl: String, displayInitial: String) {
+        let initial = name.first.map(String.init) ?? ""
+        return (pictureUrl: picture, displayInitial: initial)
     }
 }
 
@@ -646,7 +647,6 @@ private struct SearchHighlightRow: View {
     let highlight: HighlightRecord
     let query: String
     let pageImageUrl: String?
-    let safeCore: SafeHighlighterCore
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -662,8 +662,7 @@ private struct SearchHighlightRow: View {
                 HighlightMatchedText(
                     text: highlight.quote,
                     query: query,
-                    font: .system(size: 18, design: .default).italic(),
-                    safeCore: safeCore
+                    font: .system(size: 18, design: .default).italic()
                 )
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineSpacing(3)
@@ -687,7 +686,6 @@ private struct SearchHighlightRow: View {
 }
 
 private struct SearchCommunityRow: View {
-    @Environment(HighlighterStore.self) private var app
     let community: CommunitySummary
 
     var body: some View {
@@ -730,42 +728,37 @@ private struct SearchCommunityRow: View {
         .contentShape(Rectangle())
     }
 
-    private var rowProjection: SearchCommunityRowProjection {
-        app.safeCore.projectSearchCommunityRow(
-            input: SearchCommunityRowProjectionInput(community: community)
+    private var rowProjection: (displayName: String, about: String?, visibilityLabel: String, accessLabel: String, memberCountLabel: String?) {
+        let about: String? = community.about.isEmpty ? nil : community.about
+        let memberCountLabel: String? = community.memberCount.flatMap { $0 > 0 ? "\($0) members" : nil }
+        return (
+            displayName: community.name,
+            about: about,
+            visibilityLabel: capitalizeFirst(community.visibility),
+            accessLabel: capitalizeFirst(community.access),
+            memberCountLabel: memberCountLabel
         )
     }
 }
 
 private struct SearchProfileRow: View {
-    @Environment(HighlighterStore.self) private var app
     let profile: ProfileSearchRow
 
     var body: some View {
-        let metaForDisplay = ProfileMetadata(
-            pubkey: profile.pubkey, name: profile.name,
-            displayName: profile.displayName, about: profile.about,
-            picture: profile.picture, banner: "",
-            nip05: profile.nip05, website: "", lud16: "",
-            createdAt: profile.createdAt
-        )
-        let display = app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: profile.pubkey,
-                profile: metaForDisplay,
-                fallback: .pubkey8
-            )
-        )
+        let displayName = profile.displayName.isEmpty
+            ? (profile.name.isEmpty ? String(profile.pubkey.prefix(8)) : profile.name)
+            : profile.displayName
+        let displayInitial = String((displayName).prefix(1))
 
         HStack(spacing: 14) {
             AuthorAvatar(
                 pubkey: profile.pubkey,
-                pictureURL: display.pictureUrl,
-                displayInitial: display.displayInitial,
+                pictureURL: profile.picture,
+                displayInitial: displayInitial,
                 size: 44
             )
             VStack(alignment: .leading, spacing: 2) {
-                Text(display.displayName)
+                Text(displayName)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(1)
@@ -800,7 +793,6 @@ private struct HighlightMatchedText: View {
     let text: String
     let query: String
     let font: Font
-    let safeCore: SafeHighlighterCore
 
     var body: some View {
         Text(attributed)
@@ -809,12 +801,10 @@ private struct HighlightMatchedText: View {
 
     private var attributed: AttributedString {
         var out = AttributedString(text)
-        let projection = safeCore.projectSearchTextMatches(
-            input: SearchTextMatchesProjectionInput(text: text, query: query)
-        )
-        for span in projection.spans {
-            if let s = out.index(out.startIndex, offsetByCharacters: Int(span.start)),
-               let e = out.index(out.startIndex, offsetByCharacters: Int(span.end)),
+        let spans = searchTextMatchSpans(text: text, query: query)
+        for (start, end) in spans {
+            if let s = out.index(out.startIndex, offsetByCharacters: start),
+               let e = out.index(out.startIndex, offsetByCharacters: end),
                s < e {
                 out[s..<e].foregroundColor = .highlighterAccent
                 out[s..<e].backgroundColor = Color.laneArticleHighlightFill
@@ -836,6 +826,55 @@ private extension AttributedString {
         }
         return idx
     }
+}
+
+// MARK: - Inline projection helpers (Phase 7 Part C: no safeCore calls)
+
+/// Parse a NIP-33 kind:30023 address string (`"30023:<pubkey>:<d>"`) into an
+/// `ArticleReaderRoute`. Returns `nil` for any other kind or malformed input.
+func articleReaderRoute(from address: String) -> ArticleReaderRoute? {
+    let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+    var parts = trimmed.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+    guard parts.count == 3 else { return nil }
+    let kind = String(parts[0])
+    let pubkey = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+    let dTag = String(parts[2]).trimmingCharacters(in: .whitespacesAndNewlines)
+    guard kind == "30023", !pubkey.isEmpty, !dTag.isEmpty else { return nil }
+    return ArticleReaderRoute(address: "30023:\(pubkey):\(dTag)", pubkey: pubkey, dTag: dTag)
+}
+
+/// Validate and normalise a page-image URL. Returns `nil` for empty, blank, or
+/// non-http(s) URLs (mirrors Rust `page_image_url`).
+func validPageImageUrl(_ raw: String) -> String? {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty,
+          let url = URL(string: trimmed),
+          url.scheme == "http" || url.scheme == "https" else { return nil }
+    return trimmed
+}
+
+/// Capitalise the first Unicode scalar of `value` (mirrors Rust `capitalize_first`).
+private func capitalizeFirst(_ value: String) -> String {
+    guard let first = value.first else { return value }
+    return first.uppercased() + value.dropFirst()
+}
+
+/// Return case-insensitive character-offset spans of `query` in `text`.
+/// Returns an empty array when `query` is blank (mirrors Rust `search_text_matches_projection`).
+private func searchTextMatchSpans(text: String, query: String) -> [(start: Int, end: Int)] {
+    let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard !q.isEmpty else { return [] }
+    let lower = text.lowercased()
+    var spans: [(Int, Int)] = []
+    var searchFrom = lower.startIndex
+    while searchFrom < lower.endIndex {
+        guard let range = lower.range(of: q, range: searchFrom..<lower.endIndex) else { break }
+        let start = lower.distance(from: lower.startIndex, to: range.lowerBound)
+        let end = lower.distance(from: lower.startIndex, to: range.upperBound)
+        spans.append((start, end))
+        searchFrom = range.upperBound
+    }
+    return spans
 }
 
 // MARK: - Flow layout (chips)

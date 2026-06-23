@@ -8,7 +8,6 @@ import SwiftUI
 struct SearchSeeAllView: View {
     let target: SearchSeeAllTarget
     let store: SearchStore
-    @Environment(HighlighterStore.self) private var app
 
     var body: some View {
         Group {
@@ -49,16 +48,14 @@ struct SearchSeeAllView: View {
 
     @ViewBuilder
     private func row(for h: HighlightRecord) -> some View {
-        let projection = app.safeCore.projectSearchHighlightRow(
-            input: SearchHighlightRowProjectionInput(highlight: h)
-        )
-        if let route = projection.articleRoute {
+        let articleRoute = articleReaderRoute(from: h.artifactAddress)
+        let pageImageUrl = validPageImageUrl(h.imageUrl)
+        if let route = articleRoute {
             NavigationLink(value: ArticleReaderTarget(route: route)) {
                 SeeAllHighlightRow(
                     highlight: h,
                     query: store.query,
-                    pageImageUrl: projection.pageImageUrl,
-                    safeCore: app.safeCore
+                    pageImageUrl: pageImageUrl
                 )
             }
             .buttonStyle(.plain)
@@ -66,8 +63,7 @@ struct SearchSeeAllView: View {
             SeeAllHighlightRow(
                 highlight: h,
                 query: store.query,
-                pageImageUrl: projection.pageImageUrl,
-                safeCore: app.safeCore
+                pageImageUrl: pageImageUrl
             )
         }
     }
@@ -146,7 +142,6 @@ private struct SeeAllHighlightRow: View {
     let highlight: HighlightRecord
     let query: String
     let pageImageUrl: String?
-    let safeCore: SafeHighlighterCore
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -159,7 +154,7 @@ private struct SeeAllHighlightRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 1.25))
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text(matched(highlight.quote, query, safeCore: safeCore))
+                Text(matched(highlight.quote, query))
                     .font(.system(size: 17, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineSpacing(3)
@@ -184,8 +179,6 @@ private struct SeeAllHighlightRow: View {
 
 private struct SeeAllCommunityRow: View {
     let community: CommunitySummary
-
-    @Environment(HighlighterStore.self) private var app
 
     var body: some View {
         let avatar = avatarProjection
@@ -242,47 +235,30 @@ private struct SeeAllCommunityRow: View {
         .contentShape(Rectangle())
     }
 
-    private var avatarProjection: RoomAvatarProjection {
-        app.safeCore.projectRoomAvatar(
-            input: RoomAvatarProjectionInput(
-                name: community.name,
-                pictureUrl: community.picture,
-                uppercaseInitial: false
-            )
-        )
+    private var avatarProjection: (pictureUrl: String, displayInitial: String) {
+        let initial = community.name.first.map(String.init) ?? ""
+        return (pictureUrl: community.picture, displayInitial: initial)
     }
 }
 
 private struct SeeAllPersonRow: View {
-    @Environment(HighlighterStore.self) private var app
-
     let profile: ProfileSearchRow
 
     var body: some View {
-        let metaForDisplay = ProfileMetadata(
-            pubkey: profile.pubkey, name: profile.name,
-            displayName: profile.displayName, about: profile.about,
-            picture: profile.picture, banner: "",
-            nip05: profile.nip05, website: "", lud16: "",
-            createdAt: profile.createdAt
-        )
-        let display = app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: profile.pubkey,
-                profile: metaForDisplay,
-                fallback: .pubkey8
-            )
-        )
+        let displayName = profile.displayName.isEmpty
+            ? (profile.name.isEmpty ? String(profile.pubkey.prefix(8)) : profile.name)
+            : profile.displayName
+        let displayInitial = String(displayName.prefix(1))
 
         HStack(spacing: 14) {
             AuthorAvatar(
                 pubkey: profile.pubkey,
-                pictureURL: display.pictureUrl,
-                displayInitial: display.displayInitial,
+                pictureURL: profile.picture,
+                displayInitial: displayInitial,
                 size: 46
             )
             VStack(alignment: .leading, spacing: 2) {
-                Text(display.displayName)
+                Text(displayName)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                 if !profile.nip05.isEmpty {
@@ -311,28 +287,37 @@ private struct SeeAllPersonRow: View {
 
 /// Build an `AttributedString` highlighting every case-insensitive occurrence
 /// of `query` within `text`. Free function so every row view can reuse it.
-fileprivate func matched(
-    _ text: String,
-    _ query: String,
-    safeCore: SafeHighlighterCore
-) -> AttributedString {
+fileprivate func matched(_ text: String, _ query: String) -> AttributedString {
     var out = AttributedString(text)
-    let projection = safeCore.projectSearchTextMatches(
-        input: SearchTextMatchesProjectionInput(text: text, query: query)
-    )
-    for span in projection.spans {
-        let chars = out.characters
-        var s = out.startIndex
-        var e = out.startIndex
-        var idx = 0
-        while idx < Int(span.start), s < out.endIndex { s = chars.index(after: s); idx += 1 }
-        idx = 0
-        e = s
-        while idx < Int(span.end - span.start), e < out.endIndex { e = chars.index(after: e); idx += 1 }
-        if s < e {
+    let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard !q.isEmpty else { return out }
+    let lower = text.lowercased()
+    var searchFrom = lower.startIndex
+    while searchFrom < lower.endIndex {
+        guard let range = lower.range(of: q, range: searchFrom..<lower.endIndex) else { break }
+        let startOffset = lower.distance(from: lower.startIndex, to: range.lowerBound)
+        let endOffset = lower.distance(from: lower.startIndex, to: range.upperBound)
+        if let s = out.index(out.startIndex, offsetByCharacters: startOffset),
+           let e = out.index(out.startIndex, offsetByCharacters: endOffset),
+           s < e {
             out[s..<e].foregroundColor = .highlighterAccent
             out[s..<e].backgroundColor = Color.laneArticleHighlightFill
         }
+        searchFrom = range.upperBound
     }
     return out
+}
+
+private extension AttributedString {
+    /// Convenience — characters-based offset into the attributed string.
+    func index(_ base: AttributedString.Index, offsetByCharacters n: Int) -> AttributedString.Index? {
+        var idx = base
+        var remaining = n
+        while remaining > 0 {
+            guard idx < endIndex else { return nil }
+            idx = characters.index(after: idx)
+            remaining -= 1
+        }
+        return idx
+    }
 }
