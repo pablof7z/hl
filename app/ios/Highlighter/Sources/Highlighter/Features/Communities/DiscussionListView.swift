@@ -113,12 +113,18 @@ private struct DiscussionRowView: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: discussion.pubkey,
-                profile: app.profileSnapshots[discussion.pubkey],
-                fallback: .pubkey8
-            )
+        let profile = app.profileSnapshots[discussion.pubkey]
+        let name: String = {
+            if let p = profile {
+                let candidate = p.displayName.isEmpty ? p.name : p.displayName
+                return candidate.isEmpty ? String(discussion.pubkey.prefix(8)) : candidate
+            }
+            return String(discussion.pubkey.prefix(8))
+        }()
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: String(name.prefix(1)),
+            pictureUrl: profile.map(\.picture) ?? ""
         )
     }
 
@@ -131,10 +137,12 @@ private struct DiscussionRowView: View {
 
     @ViewBuilder
     private func attachmentChip(_ a: DiscussionAttachment) -> some View {
-        let projection = app.safeCore.projectDiscussionAttachment(
-            input: DiscussionAttachmentProjectionInput(attachment: a)
-        )
-        if let label = projection.label {
+        let chipLabel: String? = {
+            if !a.title.isEmpty { return a.title }
+            if !a.url.isEmpty { return a.url }
+            return nil
+        }()
+        if let label = chipLabel {
             HStack(spacing: 5) {
                 Image(systemName: "link")
                     .font(.caption2.weight(.medium))

@@ -14,7 +14,6 @@ struct ThreadView: View {
     let scope: CommentScope
     let artifactAuthorPubkey: String?
 
-    @Environment(HighlighterStore.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var focusedNode: CommentNode? = nil
 
@@ -83,24 +82,52 @@ struct ThreadView: View {
     // MARK: - Projection
 
     private var threadProjection: CommentThreadViewProjection {
-        app.safeCore.projectCommentThreadView(
-            input: CommentThreadViewProjectionInput(
-                tree: store.tree,
-                focused: focused
-            )
+        let tree = store.tree
+        let focusedNode: CommentNode? = focused.flatMap { f in
+            findNode(in: tree, eventId: f.record.eventId) ?? f
+        }
+        let children: [CommentNode] = focusedNode?.children ?? tree
+        let replyCount = focusedNode?.children.count ?? 0
+        let totalCount = countNodes(tree)
+        let navTitle: String = focusedNode != nil
+            ? "Reply thread"
+            : (totalCount == 0 ? "Comments" : (totalCount == 1 ? "1 comment" : "\(totalCount) comments"))
+        let emptyStateLabel = focusedNode != nil ? "Be the first to reply." : "Start the conversation."
+        let composerPlaceholder = focusedNode != nil ? "Reply…" : "Add to the conversation"
+        let replyCountLabel: String = {
+            switch replyCount {
+            case 0: return "Be the first to reply"
+            case 1: return "1 reply"
+            default: return "\(replyCount) replies"
+            }
+        }()
+        return CommentThreadViewProjection(
+            focused: focusedNode,
+            children: children,
+            navTitle: navTitle,
+            emptyStateLabel: emptyStateLabel,
+            composerPlaceholder: composerPlaceholder,
+            replyCountLabel: replyCountLabel
         )
+    }
+
+    private func findNode(in nodes: [CommentNode], eventId: String) -> CommentNode? {
+        for node in nodes {
+            if node.record.eventId == eventId { return node }
+            if let hit = findNode(in: node.children, eventId: eventId) { return hit }
+        }
+        return nil
+    }
+
+    private func countNodes(_ nodes: [CommentNode]) -> Int {
+        nodes.reduce(0) { $0 + 1 + countNodes($1.children) }
     }
 
     // MARK: - Inline reply preview
 
     @ViewBuilder
     private func inlineReplyPreview(for parent: CommentNode) -> some View {
-        let chrome = app.safeCore.projectCommentNodeChrome(
-            input: CommentNodeChromeProjectionInput(
-                node: parent,
-                artifactAuthorPubkey: artifactAuthorPubkey
-            )
-        )
+        let chrome = nodeChrome(for: parent)
         if let mostRecent = chrome.mostRecentReply {
             CommentRow(
                 node: mostRecent,
@@ -187,6 +214,32 @@ struct ThreadView: View {
     }
 
     // MARK: - Helpers
+
+    private func nodeChrome(for parent: CommentNode) -> CommentNodeChromeProjection {
+        let children = parent.children
+        let replyCount = UInt32(children.count)
+        let mostRecentReply = children.last
+        let moreCount = children.count > 1 ? children.count - 1 : 0
+        let moreRepliesLabel: String
+        switch moreCount {
+        case 0: moreRepliesLabel = ""
+        case 1: moreRepliesLabel = "View 1 more reply"
+        default: moreRepliesLabel = "View \(moreCount) more replies"
+        }
+        let authorPubkey = artifactAuthorPubkey.flatMap { $0.isEmpty ? nil : $0 }
+        let isMostRecentAuthorReply: Bool = {
+            guard let reply = mostRecentReply, let author = authorPubkey else { return false }
+            return reply.record.pubkey == author
+        }()
+        return CommentNodeChromeProjection(
+            replyCount: replyCount,
+            showsReplyChevron: replyCount > 0,
+            mostRecentReply: mostRecentReply,
+            hasMoreReplies: moreCount > 0,
+            moreRepliesLabel: moreRepliesLabel,
+            isMostRecentAuthorReply: isMostRecentAuthorReply
+        )
+    }
 
     private func focusOn(_ node: CommentNode) {
         focusedNode = node

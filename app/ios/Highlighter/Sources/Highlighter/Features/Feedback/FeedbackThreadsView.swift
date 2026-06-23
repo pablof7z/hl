@@ -3,7 +3,6 @@ import SwiftUI
 /// Sheet presented on shake. Slack-style list of feedback threads the current
 /// user has started, with a "New thread" entry point.
 struct FeedbackThreadsView: View {
-    @Environment(HighlighterStore.self) private var app
     @Environment(HighlighterAppKernel.self) private var kernel
     @Environment(\.dismiss) private var dismiss
     @State private var feedbackStore = FeedbackStore()
@@ -73,14 +72,32 @@ struct FeedbackThreadsView: View {
 }
 
 private struct FeedbackThreadRowView: View {
-    @Environment(HighlighterStore.self) private var app
-
     let thread: FeedbackThreadRecord
+
+    // MARK: – Inline projections (no safeCore FFI calls)
+    //
+    // Mirrors feedback_thread_presentation in Rust (feedback.rs):
+    //   row_title      = title ?? preview
+    //   row_secondary  = non-empty summary; or preview when title exists
+    //   status_label   = non-empty status_label
+
+    private var rowTitle: String { thread.title ?? thread.preview }
+
+    private var rowSecondaryText: String? {
+        if let summary = thread.summary, !summary.isEmpty { return summary }
+        if thread.title != nil && !thread.preview.isEmpty { return thread.preview }
+        return nil
+    }
+
+    private var statusLabel: String? {
+        guard let s = thread.statusLabel, !s.isEmpty else { return nil }
+        return s
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
-                Text(projection.rowTitle)
+                Text(rowTitle)
                     .font(.body.weight(.semibold))
                     .lineLimit(1)
                 Spacer()
@@ -88,13 +105,13 @@ private struct FeedbackThreadRowView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            if let secondaryText = projection.rowSecondaryText {
+            if let secondaryText = rowSecondaryText {
                 Text(secondaryText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
-            if let status = projection.statusLabel {
+            if let status = statusLabel {
                 Text(status.uppercased())
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 6)
@@ -104,10 +121,6 @@ private struct FeedbackThreadRowView: View {
             }
         }
         .padding(.vertical, 4)
-    }
-
-    private var projection: FeedbackThreadPresentationProjection {
-        app.safeCore.projectFeedbackThreadPresentation(thread: thread)
     }
 
     private func relativeTime(_ ts: UInt64) -> String {

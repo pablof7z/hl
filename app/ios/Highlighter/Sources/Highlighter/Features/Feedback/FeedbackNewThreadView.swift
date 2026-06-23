@@ -10,21 +10,18 @@ struct FeedbackNewThreadView: View {
     /// list so the user sees their new thread arrive).
     let onSent: (Bool) -> Void
 
-    @Environment(HighlighterStore.self) private var app
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft: String = ""
     @State private var isPublishing = false
     @State private var errorMessage: String?
 
-    private var composerProjection: FeedbackComposerProjection {
-        app.safeCore.projectFeedbackComposer(
-            input: FeedbackComposerProjectionInput(
-                body: draft,
-                isPublishing: isPublishing
-            )
-        )
-    }
+    // MARK: – Inline composer projection (no safeCore FFI calls)
+
+    /// Trimmed body; mirrors feedback_composer_projection's `submit_body` in Rust.
+    private var submitBody: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// Gate: non-empty body and not already publishing.
+    private var canSend: Bool { !submitBody.isEmpty && !isPublishing }
 
     var body: some View {
         NavigationStack {
@@ -62,21 +59,21 @@ struct FeedbackNewThreadView: View {
                     Button(isPublishing ? "Sending…" : "Send") {
                         Task { await publish() }
                     }
-                    .disabled(!composerProjection.canSend)
+                    .disabled(!canSend)
                 }
             }
         }
     }
 
     private func publish() async {
-        let projection = composerProjection
-        guard projection.canSend else { return }
+        let body = submitBody
+        guard canSend else { return }
 
         // Kernel is the sole writer: dispatch hl.feedback.post_root
         // fire-and-forget. The new root note streams back into
         // kernel.feedbackThreads, which the list re-applies. Dismiss
         // optimistically (publish errors surface as kernel toasts).
-        store.postRoot(content: projection.submitBody)
+        store.postRoot(content: body)
         dismiss()
         onSent(false)
     }

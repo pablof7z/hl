@@ -27,7 +27,7 @@ struct DiscussionComposerView: View {
     @State private var errorMessage: String?
 
     private var canPublish: Bool {
-        composerProjection.canPublish
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isPublishing
     }
 
     var body: some View {
@@ -75,20 +75,8 @@ struct DiscussionComposerView: View {
         }
     }
 
-    private var composerProjection: DiscussionComposerProjection {
-        app.safeCore.projectDiscussionComposer(
-            input: DiscussionComposerProjectionInput(
-                title: title,
-                body: messageBody,
-                attachmentUrl: attachmentURL,
-                isPublishing: isPublishing
-            )
-        )
-    }
-
     private func publish() async {
-        let projection = composerProjection
-        guard projection.canPublish else { return }
+        guard canPublish else { return }
         isPublishing = true
         errorMessage = nil
         defer { isPublishing = false }
@@ -97,11 +85,14 @@ struct DiscussionComposerView: View {
         // The new kind:11 streams back into kernel.roomDiscussions, which the
         // list re-applies; dismiss optimistically (publish errors surface as
         // kernel toasts, same as other kernel actions).
-        let attachment = projection.submitAttachmentUrl.flatMap { $0.isEmpty ? nil : $0 }
+        let submitTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let submitBody = messageBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedUrl = attachmentURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let attachment: String? = trimmedUrl.isEmpty ? nil : trimmedUrl
         kernel.app.dispatch(.postDiscussion(
             groupId: groupId,
-            title: projection.submitTitle,
-            body: projection.submitBody,
+            title: submitTitle,
+            body: submitBody,
             attachmentUrl: attachment
         ))
         onPublished()

@@ -265,9 +265,8 @@ struct ChatView: View {
     // MARK: - Helpers
 
     private var composerProjection: ChatComposerProjection {
-        app.safeCore.projectChatComposer(
-            input: ChatComposerProjectionInput(body: draft)
-        )
+        let submitBody = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ChatComposerProjection(submitBody: submitBody, canSend: !submitBody.isEmpty)
     }
 
     private func send() async {
@@ -282,13 +281,17 @@ struct ChatView: View {
     }
 
     private func profileDisplay(for pubkey: String) -> ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: pubkey,
-                profile: app.profileSnapshots[pubkey],
-                fallback: .pubkey8
-            )
-        )
+        let profile = app.profileSnapshots[pubkey]
+        let name: String
+        if let p = profile {
+            let candidate = p.displayName.isEmpty ? p.name : p.displayName
+            name = candidate.isEmpty ? String(pubkey.prefix(8)) : candidate
+        } else {
+            name = String(pubkey.prefix(8))
+        }
+        let initial = String(name.prefix(1))
+        let pictureUrl = profile.map(\.picture) ?? ""
+        return ProfileDisplayProjection(displayName: name, displayInitial: initial, pictureUrl: pictureUrl)
     }
 
 

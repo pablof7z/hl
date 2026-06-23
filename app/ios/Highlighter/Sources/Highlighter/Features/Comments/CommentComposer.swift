@@ -13,7 +13,6 @@ struct CommentComposer: View {
 
     let store: CommentsStore
 
-    @Environment(HighlighterStore.self) private var app
     @FocusState private var focused: Bool
     @State private var isPublishing: Bool = false
     @State private var errorMessage: String?
@@ -94,11 +93,10 @@ struct CommentComposer: View {
     }
 
     private var composerProjection: CommentComposerProjection {
-        app.safeCore.projectCommentComposer(
-            input: CommentComposerProjectionInput(
-                body: draft.wrappedValue,
-                isPublishing: isPublishing
-            )
+        let submitBody = draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return CommentComposerProjection(
+            submitBody: submitBody,
+            canSubmit: !submitBody.isEmpty && !isPublishing
         )
     }
 

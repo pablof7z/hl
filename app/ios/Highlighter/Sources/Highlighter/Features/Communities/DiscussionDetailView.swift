@@ -9,8 +9,8 @@ struct DiscussionDetailView: View {
     @State private var focusedNode: CommentNode? = nil
 
     private var commentScope: CommentScope? {
-        let snapshot = app.safeCore.getDiscussionCommentScope(eventIdHex: discussion.eventId)
-        return snapshot.attach ? snapshot.scope : nil
+        guard !discussion.eventId.isEmpty else { return nil }
+        return CommentScope(rootTagName: "E", rootTagValue: discussion.eventId, rootKind: 11)
     }
 
     var body: some View {
@@ -113,12 +113,16 @@ struct DiscussionDetailView: View {
 
     @ViewBuilder
     private func attachmentCard(_ a: DiscussionAttachment) -> some View {
-        let projection = app.safeCore.projectDiscussionAttachment(
-            input: DiscussionAttachmentProjectionInput(attachment: a)
-        )
-        if let title = projection.label {
+        let attachLabel: String? = {
+            if !a.title.isEmpty { return a.title }
+            if !a.url.isEmpty { return a.url }
+            return nil
+        }()
+        let attachImageUrl: String? = a.image.isEmpty ? nil : a.image
+        let attachAuthor: String? = a.author.isEmpty ? nil : a.author
+        if let title = attachLabel {
             HStack(spacing: 10) {
-                if let image = projection.imageUrl, let url = URL(string: image) {
+                if let image = attachImageUrl, let url = URL(string: image) {
                     AsyncImage(url: url) { phase in
                         if let img = phase.image {
                             img.resizable().scaledToFill()
@@ -144,7 +148,7 @@ struct DiscussionDetailView: View {
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(Color.highlighterInkStrong)
                         .lineLimit(2)
-                    if let author = projection.author {
+                    if let author = attachAuthor {
                         Text(author)
                             .font(.caption)
                             .foregroundStyle(Color.highlighterInkMuted)
@@ -205,28 +209,37 @@ struct DiscussionDetailView: View {
 
     @ViewBuilder
     private func inlineReplyPreview(for parent: CommentNode) -> some View {
-        let chrome = app.safeCore.projectCommentNodeChrome(
-            input: CommentNodeChromeProjectionInput(
-                node: parent,
-                artifactAuthorPubkey: discussion.pubkey
-            )
-        )
-        if let mostRecent = chrome.mostRecentReply {
+        let replyCount = parent.children.count
+        let mostRecent = parent.children.last
+        let moreCount = replyCount > 1 ? replyCount - 1 : 0
+        let hasMore = moreCount > 0
+        let moreLabel: String = {
+            switch moreCount {
+            case 0: return ""
+            case 1: return "View 1 more reply"
+            default: return "View \(moreCount) more replies"
+            }
+        }()
+        let isMostRecentAuthorReply: Bool = {
+            guard let reply = mostRecent else { return false }
+            return reply.record.pubkey == discussion.pubkey
+        }()
+        if let mostRecent {
             CommentRow(
                 node: mostRecent,
                 depth: 1,
-                isAuthorReply: chrome.isMostRecentAuthorReply,
+                isAuthorReply: isMostRecentAuthorReply,
                 onTap: { focusedNode = mostRecent },
                 store: store
             )
             .padding(.leading, 18)
             .padding(.trailing, 18)
 
-            if chrome.hasMoreReplies {
+            if hasMore {
                 Button { focusedNode = parent } label: {
                     HStack(spacing: 6) {
                         Spacer().frame(width: 36 + 18 + 12)
-                        Text(chrome.moreRepliesLabel)
+                        Text(moreLabel)
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(Color.highlighterAccent)
                         Image(systemName: "chevron.right")
@@ -245,30 +258,54 @@ struct DiscussionDetailView: View {
     // MARK: - Helpers
 
     private var rootThreadProjection: CommentThreadViewProjection {
-        app.safeCore.projectCommentThreadView(
-            input: CommentThreadViewProjectionInput(
-                tree: store.tree,
-                focused: nil
-            )
+        let tree = store.tree
+        let children = tree
+        let emptyLabel = "Start the conversation."
+        let placeholder = "Add to the conversation"
+        return CommentThreadViewProjection(
+            focused: nil,
+            children: children,
+            navTitle: commentThreadNavTitle(tree: tree, focused: false),
+            emptyStateLabel: emptyLabel,
+            composerPlaceholder: placeholder,
+            replyCountLabel: ""
         )
     }
 
     private func focusedThreadNode(_ node: CommentNode) -> CommentNode {
-        app.safeCore.projectCommentThreadView(
-            input: CommentThreadViewProjectionInput(
-                tree: store.tree,
-                focused: node
-            )
-        ).focused ?? node
+        let tree = store.tree
+        func find(in nodes: [CommentNode], id: String) -> CommentNode? {
+            for n in nodes {
+                if n.record.eventId == id { return n }
+                if let found = find(in: n.children, id: id) { return found }
+            }
+            return nil
+        }
+        return find(in: tree, id: node.record.eventId) ?? node
+    }
+
+    private func commentThreadNavTitle(tree: [CommentNode], focused: Bool) -> String {
+        func countAll(_ nodes: [CommentNode]) -> Int {
+            nodes.reduce(0) { $0 + 1 + countAll($1.children) }
+        }
+        let total = countAll(tree)
+        if focused { return total == 0 ? "Replies" : total == 1 ? "1 Reply" : "\(total) Replies" }
+        return total == 0 ? "Comments" : total == 1 ? "1 Comment" : "\(total) Comments"
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: discussion.pubkey,
-                profile: app.profileSnapshots[discussion.pubkey],
-                fallback: .pubkey8
-            )
+        let profile = app.profileSnapshots[discussion.pubkey]
+        let name: String = {
+            if let p = profile {
+                let candidate = p.displayName.isEmpty ? p.name : p.displayName
+                return candidate.isEmpty ? String(discussion.pubkey.prefix(8)) : candidate
+            }
+            return String(discussion.pubkey.prefix(8))
+        }()
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: String(name.prefix(1)),
+            pictureUrl: profile.map(\.picture) ?? ""
         )
     }
 

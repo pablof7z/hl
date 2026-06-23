@@ -19,7 +19,7 @@ struct FeedbackThreadDetailView: View {
             Divider()
             composer
         }
-        .navigationTitle(threadPresentation.navigationTitle)
+        .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await detailStore.start(rootEventId: thread.rootEventId, kernel: kernel)
@@ -35,7 +35,7 @@ struct FeedbackThreadDetailView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
-                    if let summary = threadPresentation.detailSummary {
+                    if let summary = detailSummary {
                         Text(summary)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -46,7 +46,7 @@ struct FeedbackThreadDetailView: View {
                     ForEach(detailStore.rows, id: \.event.eventId) { row in
                         FeedbackMessageBubble(
                             event: row.event,
-                            projection: messagePresentation(for: row)
+                            presentation: messagePresentation(for: row)
                         )
                         .id(row.event.eventId)
                         .task(id: row.event.authorPubkey) {
@@ -89,73 +89,97 @@ struct FeedbackThreadDetailView: View {
                         .font(.title3)
                         .frame(width: 36, height: 36)
                         .background(
-                            Color.accentColor.opacity(composerProjection.canSend ? 1 : 0.4),
+                            Color.accentColor.opacity(composerCanSend ? 1 : 0.4),
                             in: .circle
                         )
                         .foregroundStyle(.white)
                 }
-                .disabled(!composerProjection.canSend)
+                .disabled(!composerCanSend)
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
     }
 
-    private var composerProjection: FeedbackComposerProjection {
-        app.safeCore.projectFeedbackComposer(
-            input: FeedbackComposerProjectionInput(
-                body: draft,
-                isPublishing: detailStore.isPublishing
-            )
-        )
-    }
+    // MARK: – Inline projections (no safeCore FFI calls)
 
-    private var threadPresentation: FeedbackThreadPresentationProjection {
-        app.safeCore.projectFeedbackThreadPresentation(thread: thread)
+    /// `submitBody` is the draft trimmed; `canSend` requires a non-empty body
+    /// and no in-flight publish — mirrors feedback_composer_projection in Rust.
+    private var composerSubmitBody: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var composerCanSend: Bool { !composerSubmitBody.isEmpty && !detailStore.isPublishing }
+
+    /// Navigation title: thread's title when set, otherwise "Feedback".
+    private var navigationTitle: String { thread.title ?? "Feedback" }
+
+    /// One-liner detail summary: non-empty summary if present, otherwise nil.
+    private var detailSummary: String? {
+        guard let s = thread.summary, !s.isEmpty else { return nil }
+        return s
     }
 
     private func send() async {
-        let projection = composerProjection
-        guard projection.canSend else { return }
+        let body = composerSubmitBody
+        guard composerCanSend else { return }
 
         // Kernel is the sole writer: dispatch hl.feedback.post_reply
         // fire-and-forget. The reply streams back into
         // kernel.feedbackThread[rootEventId] (and bumps the list's activity),
         // which the views re-apply. Clear the draft optimistically.
         sendError = nil
-        await detailStore.sendReply(body: projection.submitBody)
+        await detailStore.sendReply(body: body)
         draft = ""
     }
 
+    /// Inline equivalent of feedback_message_presentation in Rust.
     private func messagePresentation(
         for row: FeedbackMessageRowProjection
-    ) -> FeedbackMessagePresentationProjection {
-        app.safeCore.projectFeedbackMessagePresentation(
-            input: FeedbackMessagePresentationInput(
-                event: row.event,
-                showHeader: row.showHeader,
-                currentUserPubkey: app.currentUser?.pubkey,
-                profile: app.profileSnapshots[row.event.authorPubkey]
-            )
+    ) -> InlineFeedbackMessagePresentation {
+        let event = row.event
+        let profile = app.profileSnapshots[event.authorPubkey]
+        let isFromMe = app.currentUser?.pubkey == event.authorPubkey
+        let displayName: String = {
+            if let p = profile {
+                if !p.displayName.isEmpty { return p.displayName }
+                if !p.name.isEmpty { return p.name }
+            }
+            return String(event.authorPubkey.prefix(8))
+        }()
+        let displayInitial = displayName.unicodeScalars.first.map { String($0).uppercased() } ?? ""
+        let pictureUrl = profile?.picture ?? ""
+        return InlineFeedbackMessagePresentation(
+            isFromMe: isFromMe,
+            showHeader: row.showHeader,
+            displayName: displayName,
+            displayInitial: displayInitial,
+            pictureUrl: pictureUrl
         )
     }
 }
 
+/// Value type used in place of the FFI `FeedbackMessagePresentationProjection`.
+private struct InlineFeedbackMessagePresentation {
+    let isFromMe: Bool
+    let showHeader: Bool
+    let displayName: String
+    let displayInitial: String
+    let pictureUrl: String
+}
+
 private struct FeedbackMessageBubble: View {
     let event: FeedbackEventRecord
-    let projection: FeedbackMessagePresentationProjection
+    let presentation: InlineFeedbackMessagePresentation
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 6) {
-            if projection.isFromMe {
+            if presentation.isFromMe {
                 Spacer(minLength: 40)
             } else {
                 avatarSlot
             }
 
-            VStack(alignment: projection.isFromMe ? .trailing : .leading, spacing: 2) {
-                if projection.showHeader {
-                    Text(projection.displayName)
+            VStack(alignment: presentation.isFromMe ? .trailing : .leading, spacing: 2) {
+                if presentation.showHeader {
+                    Text(presentation.displayName)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 4)
@@ -163,11 +187,11 @@ private struct FeedbackMessageBubble: View {
                 }
                 Text(markdownContent)
                     .font(.body)
-                    .foregroundStyle(projection.isFromMe ? Color.white : Color.primary)
+                    .foregroundStyle(presentation.isFromMe ? Color.white : Color.primary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(
-                        projection.isFromMe
+                        presentation.isFromMe
                             ? Color.accentColor
                             : Color(.secondarySystemBackground),
                         in: .rect(cornerRadius: 14)
@@ -178,23 +202,23 @@ private struct FeedbackMessageBubble: View {
                     .padding(.horizontal, 4)
             }
 
-            if projection.isFromMe {
+            if presentation.isFromMe {
                 avatarSlot
             } else {
                 Spacer(minLength: 40)
             }
         }
         .padding(.horizontal, 12)
-        .padding(.top, projection.showHeader ? 4 : 1)
+        .padding(.top, presentation.showHeader ? 4 : 1)
     }
 
     @ViewBuilder
     private var avatarSlot: some View {
-        if projection.showHeader {
+        if presentation.showHeader {
             AuthorAvatar(
                 pubkey: event.authorPubkey,
-                pictureURL: projection.pictureUrl,
-                displayInitial: projection.displayInitial,
+                pictureURL: presentation.pictureUrl,
+                displayInitial: presentation.displayInitial,
                 size: 28
             )
         } else {

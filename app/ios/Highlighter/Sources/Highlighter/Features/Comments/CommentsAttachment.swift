@@ -9,7 +9,6 @@ struct CommentsAttachment: ViewModifier {
     let artifactAuthorPubkey: String?
     let artifactHeader: AnyView?
 
-    @Environment(HighlighterStore.self) private var app
     @Environment(HighlighterAppKernel.self) private var kernel
     @State private var store = CommentsStore()
     @State private var showComments = false
@@ -59,8 +58,12 @@ struct CommentsAttachment: ViewModifier {
     }
 
     private var toolbarProjection: CommentToolbarProjection {
-        app.safeCore.projectCommentToolbar(
-            input: CommentToolbarProjectionInput(records: store.records)
+        let count = UInt32(store.records.count)
+        return CommentToolbarProjection(
+            count: count,
+            showsCount: count > 0,
+            countLabel: count > 0 ? "\(count)" : "",
+            accessibilityLabel: count == 0 ? "Start the thread" : "\(count) comments"
         )
     }
 }
