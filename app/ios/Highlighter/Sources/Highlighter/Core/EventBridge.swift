@@ -209,15 +209,6 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     }
 
     @MainActor
-    private func dispatchSearch(_ change: DataChangeType, store: SearchStore) {
-        if case .searchArticlesUpdated(let query) = change {
-            store.applyRelaySearchUpdate(query: query)
-        } else if case .nostrEntityResolved(let event) = change {
-            store.applyDirectNostrEntity(event: event)
-        }
-    }
-
-    @MainActor
     private func dispatchBookmarkStore(_ change: DataChangeType, store: BookmarkStore) {
         switch change {
         case .bookmarkSetsUpdated, .followingCurationSetsUpdated, .webBookmarksUpdated:
