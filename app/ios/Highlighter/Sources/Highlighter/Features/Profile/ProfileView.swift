@@ -192,12 +192,19 @@ private struct IdentityBlock: View {
     }
 
     private var profileIdentity: ProfileIdentityProjection {
-        store.safeCore.projectProfileIdentity(
-            input: ProfileIdentityProjectionInput(
-                pubkey: pubkey,
-                profile: store.profile,
-                fallback: .pubkey12
-            )
+        let profile = store.profile
+        let dn = profile?.displayName ?? ""
+        let n = profile?.name ?? ""
+        let displayName = !dn.isEmpty ? dn : (!n.isEmpty ? n : String(pubkey.prefix(12)))
+        let displayInitial = !dn.isEmpty ? String(dn.prefix(1)) : (!n.isEmpty ? String(n.prefix(1)) : String(pubkey.prefix(1)))
+        let nip05 = profile?.nip05 ?? ""
+        let verifiedNip05: String? = nip05.isEmpty ? nil : (nip05.hasPrefix("_@") ? String(nip05.dropFirst(2)) : nip05)
+        return ProfileIdentityProjection(
+            displayName: displayName,
+            displayInitial: displayInitial,
+            pictureUrl: profile?.picture ?? "",
+            bio: profile?.about ?? "",
+            verifiedNip05: verifiedNip05
         )
     }
 }

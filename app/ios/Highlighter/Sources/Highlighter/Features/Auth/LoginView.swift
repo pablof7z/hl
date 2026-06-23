@@ -150,15 +150,24 @@ struct LoginView: View {
 
     // MARK: - Actions
 
-    private var isManualInputEmpty: Bool {
-        if case .empty = store.safeCore.classifyLoginInput(inputText) {
-            return true
+    private func classifyLoginInput(_ input: String) -> LoginInputAction {
+        let trimmed = input.trimmingCharacters(in: .whitespaces)
+        let normalized = trimmed.hasPrefix("nostr:") ? String(trimmed.dropFirst(6)) : trimmed
+        if normalized.isEmpty { return .empty }
+        if normalized.hasPrefix("nsec1") { return .nsec(nsec: normalized) }
+        if normalized.hasPrefix("bunker://") || normalized.hasPrefix("nostrconnect://") {
+            return .bunker(uri: normalized)
         }
+        return .invalid(message: "Enter an nsec1… or bunker:// URI.")
+    }
+
+    private var isManualInputEmpty: Bool {
+        if case .empty = classifyLoginInput(inputText) { return true }
         return false
     }
 
     private func submitManualInput() async {
-        let action = store.safeCore.classifyLoginInput(inputText)
+        let action = classifyLoginInput(inputText)
 
         isWorking = true
         errorMessage = nil
