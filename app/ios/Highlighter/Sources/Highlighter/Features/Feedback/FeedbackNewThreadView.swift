@@ -18,12 +18,8 @@ struct FeedbackNewThreadView: View {
     @State private var errorMessage: String?
 
     private var composerProjection: FeedbackComposerProjection {
-        app.safeCore.projectFeedbackComposer(
-            input: FeedbackComposerProjectionInput(
-                body: draft,
-                isPublishing: isPublishing
-            )
-        )
+        let submitBody = draft.trimmingCharacters(in: .whitespaces)
+        return FeedbackComposerProjection(submitBody: submitBody, canSend: !submitBody.isEmpty && !isPublishing)
     }
 
     var body: some View {

@@ -25,10 +25,8 @@ struct ImportRelaysSheet: View {
     }
 
     private var sourceProjection: ImportRelaysSourceProjection {
-        appStore.safeCore.projectImportRelaysSource(input: ImportRelaysSourceProjectionInput(
-            npub: npubText,
-            isFetching: isFetching
-        ))
+        let submitNpub = npubText.trimmingCharacters(in: .whitespaces)
+        return ImportRelaysSourceProjection(submitNpub: submitNpub, canFetch: !submitNpub.isEmpty && !isFetching)
     }
 
     var body: some View {
@@ -138,12 +136,10 @@ struct ImportRelaysSheet: View {
         defer { isFetching = false }
         let snapshot = await appStore.safeCore
             .importRelaysFromNpubSnapshot(source.submitNpub)
-        let apply = appStore.safeCore.projectImportRelaysFetchApply(
-            input: ImportRelaysFetchApplyInput(snapshot: snapshot)
-        )
-        fetched = apply.fetched
-        selectedUrls = apply.selectedUrls
-        errorText = apply.errorMessage
+        fetched = snapshot.fetched
+        selectedUrls = snapshot.selectedUrls
+        let rawFetchError = snapshot.errorMessage.trimmingCharacters(in: .whitespaces)
+        errorText = rawFetchError.isEmpty ? nil : rawFetchError
     }
 
     private func applySelected() async {

@@ -110,14 +110,9 @@ struct ClipThreadView: View {
                 isSending = false
                 return
             }
-            let applyProjection = app.safeCore.projectCommentInlineThreadSnapshotApply(
-                input: CommentInlineThreadSnapshotApplyInput(
-                    records: outcome.snapshot.records,
-                    error: outcome.snapshot.error
-                )
-            )
-            app.podcastPlayer.comments[id] = applyProjection.records
-            sendError = applyProjection.errorMessage
+            let rawError = outcome.snapshot.error.trimmingCharacters(in: .whitespaces)
+            app.podcastPlayer.comments[id] = rawError.isEmpty ? outcome.snapshot.records : []
+            sendError = rawError.isEmpty ? nil : rawError
             replyText = ""
             isSending = false
         }

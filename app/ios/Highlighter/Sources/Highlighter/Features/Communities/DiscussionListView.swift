@@ -135,8 +135,11 @@ private struct DiscussionRowView: View {
 
     @ViewBuilder
     private func attachmentChip(_ a: DiscussionAttachment) -> some View {
-        let projection = app.safeCore.projectDiscussionAttachment(
-            input: DiscussionAttachmentProjectionInput(attachment: a)
+        let rawLabel = a.title.isEmpty ? a.url : a.title
+        let projection = DiscussionAttachmentProjection(
+            label: rawLabel.isEmpty ? nil : rawLabel,
+            imageUrl: a.image.isEmpty ? nil : a.image,
+            author: a.author.isEmpty ? nil : a.author
         )
         if let label = projection.label {
             HStack(spacing: 5) {
