@@ -21,34 +21,12 @@ struct MediaSettingsView: View {
                             .truncationMode(.middle)
                     }
                     .onMove { indices, newOffset in
-                        let projection = store.safeCore.projectBlossomServerList(
-                            input: BlossomServerListProjectionInput(
-                                servers: servers,
-                                addUrl: nil,
-                                removeIndexes: [],
-                                moveIndexes: indices.map(UInt64.init),
-                                moveToIndex: UInt64(newOffset)
-                            )
-                        )
-                        servers = projection.servers
-                        if projection.canSave {
-                            Task { await save() }
-                        }
+                        servers.move(fromOffsets: indices, toOffset: newOffset)
+                        Task { await save() }
                     }
                     .onDelete { indices in
-                        let projection = store.safeCore.projectBlossomServerList(
-                            input: BlossomServerListProjectionInput(
-                                servers: servers,
-                                addUrl: nil,
-                                removeIndexes: indices.map(UInt64.init),
-                                moveIndexes: [],
-                                moveToIndex: nil
-                            )
-                        )
-                        servers = projection.servers
-                        if projection.canSave {
-                            Task { await save() }
-                        }
+                        servers.remove(atOffsets: indices)
+                        Task { await save() }
                     }
                 }
             } header: {
@@ -77,19 +55,8 @@ struct MediaSettingsView: View {
         }
         .sheet(isPresented: $showAddSheet) {
             AddBlossomServerSheet(existingServers: servers) { url in
-                let projection = store.safeCore.projectBlossomServerList(
-                    input: BlossomServerListProjectionInput(
-                        servers: servers,
-                        addUrl: url,
-                        removeIndexes: [],
-                        moveIndexes: [],
-                        moveToIndex: nil
-                    )
-                )
-                servers = projection.servers
-                if projection.canSave {
-                    Task { await save() }
-                }
+                servers.append(url)
+                Task { await save() }
             }
         }
         .task { await load() }
@@ -102,17 +69,7 @@ struct MediaSettingsView: View {
     }
 
     private func save() async {
-        let projection = store.safeCore.projectBlossomServerList(
-            input: BlossomServerListProjectionInput(
-                servers: servers,
-                addUrl: nil,
-                removeIndexes: [],
-                moveIndexes: [],
-                moveToIndex: nil
-            )
-        )
-        guard projection.canSave else { return }
-        servers = projection.servers
+        guard !servers.isEmpty else { return }
         isSaving = true
         let snapshot = await store.safeCore.setBlossomServerSettings(servers)
         servers = snapshot.servers
@@ -124,7 +81,6 @@ private struct AddBlossomServerSheet: View {
     let existingServers: [String]
     let onAdd: (String) -> Void
 
-    @Environment(HighlighterStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var urlText = ""
 
@@ -150,22 +106,21 @@ private struct AddBlossomServerSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Add") {
-                        onAdd(entryProjection.submitUrl)
+                        onAdd(submitUrl)
                         dismiss()
                     }
-                    .disabled(!entryProjection.canAdd)
+                    .disabled(!canAdd)
                 }
             }
         }
         .presentationDetents([.medium])
     }
 
-    private var entryProjection: BlossomServerEntryProjection {
-        store.safeCore.projectBlossomServerEntry(
-            input: BlossomServerEntryProjectionInput(
-                url: urlText,
-                existingServers: existingServers
-            )
-        )
+    private var submitUrl: String { urlText.trimmingCharacters(in: .whitespaces) }
+
+    private var canAdd: Bool {
+        let isValid = submitUrl.hasPrefix("https://") || submitUrl.hasPrefix("http://")
+        let isDuplicate = existingServers.contains { $0.trimmingCharacters(in: .whitespaces) == submitUrl }
+        return isValid && !isDuplicate
     }
 }
