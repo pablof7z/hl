@@ -102,16 +102,30 @@ struct FeedbackThreadDetailView: View {
     }
 
     private var composerProjection: FeedbackComposerProjection {
-        app.safeCore.projectFeedbackComposer(
-            input: FeedbackComposerProjectionInput(
-                body: draft,
-                isPublishing: detailStore.isPublishing
-            )
+        let submitBody = draft.trimmingCharacters(in: .whitespaces)
+        return FeedbackComposerProjection(
+            submitBody: submitBody,
+            canSend: !submitBody.isEmpty && !detailStore.isPublishing
         )
     }
 
     private var threadPresentation: FeedbackThreadPresentationProjection {
-        app.safeCore.projectFeedbackThreadPresentation(thread: thread)
+        let rowTitle = thread.title ?? thread.preview
+        let navigationTitle = thread.title ?? "Feedback"
+        let rowSecondaryText: String? = {
+            if let summary = thread.summary, !summary.isEmpty { return summary }
+            if thread.title != nil && !thread.preview.isEmpty { return thread.preview }
+            return nil
+        }()
+        let detailSummary: String? = (thread.summary?.isEmpty == false) ? thread.summary : nil
+        let statusLabel: String? = (thread.statusLabel?.isEmpty == false) ? thread.statusLabel : nil
+        return FeedbackThreadPresentationProjection(
+            navigationTitle: navigationTitle,
+            rowTitle: rowTitle,
+            rowSecondaryText: rowSecondaryText,
+            detailSummary: detailSummary,
+            statusLabel: statusLabel
+        )
     }
 
     private func send() async {
@@ -130,13 +144,22 @@ struct FeedbackThreadDetailView: View {
     private func messagePresentation(
         for row: FeedbackMessageRowProjection
     ) -> FeedbackMessagePresentationProjection {
-        app.safeCore.projectFeedbackMessagePresentation(
-            input: FeedbackMessagePresentationInput(
-                event: row.event,
-                showHeader: row.showHeader,
-                currentUserPubkey: app.currentUser?.pubkey,
-                profile: app.profileSnapshots[row.event.authorPubkey]
-            )
+        let profile = app.profileSnapshots[row.event.authorPubkey]
+        let isFromMe = app.currentUser.map { $0.pubkey == row.event.authorPubkey } ?? false
+        let displayName: String = {
+            if let p = profile {
+                if !p.displayName.isEmpty { return p.displayName }
+                if !p.name.isEmpty { return p.name }
+            }
+            return String(row.event.authorPubkey.prefix(8))
+        }()
+        let displayInitial = displayName.first.map { String($0).uppercased() } ?? ""
+        return FeedbackMessagePresentationProjection(
+            isFromMe: isFromMe,
+            showHeader: row.showHeader,
+            displayName: displayName,
+            displayInitial: displayInitial,
+            pictureUrl: profile?.picture ?? ""
         )
     }
 }

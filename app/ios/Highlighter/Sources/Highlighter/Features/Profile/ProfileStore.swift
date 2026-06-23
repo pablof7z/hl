@@ -47,11 +47,19 @@ final class ProfileStore {
     }
 
     var relationshipProjection: ProfileRelationshipProjection {
-        safeCore.projectProfileRelationship(
-            input: ProfileRelationshipProjectionInput(
-                profilePubkey: pubkey,
-                viewerPubkey: viewerPubkey
-            )
+        let targetPubkey = pubkey.trimmingCharacters(in: .whitespaces)
+        let viewer: String? = viewerPubkey.flatMap { v in
+            let t = v.trimmingCharacters(in: .whitespaces)
+            return t.isEmpty ? nil : t
+        }
+        let hasTarget = !targetPubkey.isEmpty
+        let isOwn = viewer.map { hasTarget && $0.caseInsensitiveCompare(targetPubkey) == .orderedSame } ?? false
+        let canShowFollow = viewer != nil && hasTarget && !isOwn
+        return ProfileRelationshipProjection(
+            targetPubkey: targetPubkey,
+            isOwnProfile: isOwn,
+            canShowFollowAction: canShowFollow,
+            shouldRefreshFollowState: canShowFollow
         )
     }
 

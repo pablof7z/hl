@@ -59,8 +59,13 @@ struct CommentsAttachment: ViewModifier {
     }
 
     private var toolbarProjection: CommentToolbarProjection {
-        app.safeCore.projectCommentToolbar(
-            input: CommentToolbarProjectionInput(records: store.records)
+        let count = UInt32(store.records.count)
+        let countLabel = count == 1 ? "1 Comment" : "\(count) Comments"
+        return CommentToolbarProjection(
+            count: count,
+            showsCount: count > 0,
+            countLabel: countLabel,
+            accessibilityLabel: countLabel
         )
     }
 }

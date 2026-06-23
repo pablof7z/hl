@@ -5,13 +5,23 @@ import SwiftUI
 /// enclosing `NavigationStack`'s `.navigationDestination(for: String.self)`
 /// into `RoomHomeView`, which already exists.
 struct CommunityRowView: View {
-    @Environment(HighlighterStore.self) private var app
-
     let community: CommunitySummary
 
+    private var subtitleText: String? {
+        if !community.about.isEmpty { return community.about }
+        if let count = community.memberCount, count > 0 {
+            return count == 1 ? "1 member" : "\(count) members"
+        }
+        return nil
+    }
+
     var body: some View {
-        let projection = app.safeCore.projectCommunityRow(
-            input: CommunityRowProjectionInput(community: community)
+        let displayName = community.name.isEmpty ? community.id : community.name
+        let pictureUrl: String? = community.picture.isEmpty ? nil : community.picture
+        let projection = CommunityRowProjection(
+            displayName: displayName,
+            pictureUrl: pictureUrl,
+            subtitle: subtitleText
         )
 
         HStack(spacing: 14) {

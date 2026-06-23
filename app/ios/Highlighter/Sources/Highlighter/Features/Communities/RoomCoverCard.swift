@@ -9,8 +9,6 @@ struct RoomCoverCard: View {
     /// When `nil`, the card fills the width its container gives it.
     let fixedWidth: CGFloat?
 
-    @Environment(HighlighterStore.self) private var store
-
     init(room: CommunitySummary, width: CGFloat? = nil) {
         self.room = room
         self.fixedWidth = width
@@ -46,9 +44,15 @@ struct RoomCoverCard: View {
     }
 
     private var cardProjection: RoomCoverCardProjection {
-        store.safeCore.projectRoomCoverCard(
-            input: RoomCoverCardProjectionInput(room: room)
-        )
+        let subtitle: String
+        if let count = room.memberCount, count > 0 {
+            subtitle = count == 1 ? "1 member" : "\(count) members"
+        } else if room.access == "open" {
+            subtitle = "Open room"
+        } else {
+            subtitle = "Closed room"
+        }
+        return RoomCoverCardProjection(subtitle: subtitle)
     }
 
     @ViewBuilder
@@ -86,12 +90,7 @@ struct RoomCoverCard: View {
     }
 
     private var avatarProjection: RoomAvatarProjection {
-        store.safeCore.projectRoomAvatar(
-            input: RoomAvatarProjectionInput(
-                name: room.name,
-                pictureUrl: room.picture,
-                uppercaseInitial: true
-            )
-        )
+        let initial = room.name.first.map { String($0).uppercased() } ?? ""
+        return RoomAvatarProjection(pictureUrl: room.picture, displayInitial: initial)
     }
 }

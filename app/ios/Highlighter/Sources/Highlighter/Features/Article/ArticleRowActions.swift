@@ -34,9 +34,25 @@ private struct ArticleRowActionsModifier: ViewModifier {
     }
 
     private var bookmarkChrome: ArticleBookmarkChromeProjection {
-        app.safeCore.projectArticleBookmarkChrome(
-            input: ArticleBookmarkChromeProjectionInput(isBookmarked: isBookmarked)
-        )
+        if isBookmarked {
+            return ArticleBookmarkChromeProjection(
+                toolbarSystemImage: "bookmark.fill",
+                usesAccentColor: true,
+                accessibilityLabel: "Remove bookmark",
+                swipeTitle: "Remove",
+                menuTitle: "Remove bookmark",
+                actionSystemImage: "bookmark.slash"
+            )
+        } else {
+            return ArticleBookmarkChromeProjection(
+                toolbarSystemImage: "bookmark",
+                usesAccentColor: false,
+                accessibilityLabel: "Bookmark article",
+                swipeTitle: "Bookmark",
+                menuTitle: "Bookmark",
+                actionSystemImage: "bookmark"
+            )
+        }
     }
 
     func body(content: Content) -> some View {

@@ -160,30 +160,27 @@ struct ArticleReaderView: View {
 
     private func publish(quote: String, context: String, note: String) async {
         guard let store else { return }
-        let request = app.safeCore.projectArticleHighlightPublish(
-            input: ArticleHighlightPublishProjectionInput(note: note, error: "")
-        )
+        let submitNote = note.trimmingCharacters(in: .whitespaces)
         let outcome = await store.publishHighlight(
             quote: quote,
-            note: request.submitNote,
+            note: submitNote,
             context: context
         )
-        let result = app.safeCore.projectArticleHighlightPublish(
-            input: ArticleHighlightPublishProjectionInput(
-                note: request.submitNote,
-                error: outcome ?? ""
-            )
-        )
-        if result.isSuccess {
+        let error = (outcome ?? "").trimmingCharacters(in: .whitespaces)
+        let isSuccess = error.isEmpty
+        let toastMessage = isSuccess
+            ? (submitNote.isEmpty ? "Highlighted" : "Highlighted with note")
+            : "Couldn't save — \(error)"
+        if isSuccess {
             withAnimation(.easeOut(duration: 0.2)) {
-                toast = result.toastMessage
+                toast = toastMessage
             }
             toastResetTimer.schedule(after: 1.8) {
                 withAnimation(.easeIn(duration: 0.2)) { toast = nil }
             }
         } else {
             withAnimation(.easeOut(duration: 0.2)) {
-                toast = result.toastMessage
+                toast = toastMessage
             }
             toastResetTimer.schedule(after: 2.8) {
                 withAnimation(.easeIn(duration: 0.2)) { toast = nil }
@@ -302,14 +299,10 @@ private struct ReaderScroll: View {
             let safeCore = app.safeCore
             let profileSnapshot = Dictionary(
                 uniqueKeysWithValues: app.profileSnapshots.map { (pk, meta) -> (String, String) in
-                    let display = safeCore.projectProfileDisplay(
-                        input: ProfileDisplayProjectionInput(
-                            pubkey: pk,
-                            profile: meta,
-                            fallback: .pubkey8
-                        )
-                    )
-                    return (pk, display.displayName)
+                    let name = meta.displayName.isEmpty
+                        ? (meta.name.isEmpty ? String(pk.prefix(8)) : meta.name)
+                        : meta.displayName
+                    return (pk, name)
                 }
             )
             rendered = await Task.detached(priority: .userInitiated) {
@@ -321,8 +314,14 @@ private struct ReaderScroll: View {
                     ink: UIColor(Color.highlighterInkStrong),
                     muted: UIColor(Color.highlighterInkMuted),
                     highlightContent: { highlight in
-                        safeCore.projectHighlightDetailContent(
-                            input: HighlightDetailContentProjectionInput(highlight: highlight)
+                        let quoteText = highlight.quote.trimmingCharacters(in: .whitespaces)
+                        let noteText = highlight.note.trimmingCharacters(in: .whitespaces)
+                        let imageUrl = highlight.imageUrl.trimmingCharacters(in: .whitespaces)
+                        return HighlightDetailContentProjection(
+                            quoteText: quoteText,
+                            noteText: noteText.isEmpty ? nil : highlight.note,
+                            pageImageUrl: imageUrl.isEmpty ? nil : imageUrl,
+                            shareMessage: quoteText
                         )
                     },
                     profileNames: profileSnapshot,
@@ -583,18 +582,25 @@ private struct Header: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: article.pubkey,
-                profile: authorProfile,
-                fallback: .pubkey10
-            )
+        let name = (authorProfile?.displayName ?? "").isEmpty
+            ? ((authorProfile?.name ?? "").isEmpty ? String(article.pubkey.prefix(10)) : authorProfile!.name)
+            : authorProfile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: authorProfile?.picture ?? ""
         )
     }
 
     private var headerProjection: ArticleReaderHeaderProjection {
-        app.safeCore.projectArticleReaderHeader(
-            input: ArticleReaderHeaderProjectionInput(article: article)
+        let words = article.content.split(whereSeparator: \.isWhitespace).count
+        let readTime: UInt32? = words > 60 ? UInt32(max(1, words / 240)) : nil
+        let displaySeconds = (article.publishedAt ?? article.createdAt).flatMap { $0 > 0 ? $0 : nil }
+        return ArticleReaderHeaderProjection(
+            title: article.title.isEmpty ? "Untitled" : article.title,
+            hashtagLabels: Array(article.hashtags.prefix(12)).map { "#\($0)" },
+            displayUnixSeconds: displaySeconds,
+            readTimeMinutes: readTime
         )
     }
 
@@ -716,12 +722,14 @@ private struct HighlightDetailSheet: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: highlight.pubkey,
-                profile: app.profileSnapshots[highlight.pubkey],
-                fallback: .pubkey10
-            )
+        let profile = app.profileSnapshots[highlight.pubkey]
+        let name = (profile?.displayName ?? "").isEmpty
+            ? ((profile?.name ?? "").isEmpty ? String(highlight.pubkey.prefix(10)) : profile!.name)
+            : profile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: profile?.picture ?? ""
         )
     }
 

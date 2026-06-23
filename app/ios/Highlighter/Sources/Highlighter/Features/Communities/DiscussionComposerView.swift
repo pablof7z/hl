@@ -76,13 +76,15 @@ struct DiscussionComposerView: View {
     }
 
     private var composerProjection: DiscussionComposerProjection {
-        app.safeCore.projectDiscussionComposer(
-            input: DiscussionComposerProjectionInput(
-                title: title,
-                body: messageBody,
-                attachmentUrl: attachmentURL,
-                isPublishing: isPublishing
-            )
+        let submitTitle = title.trimmingCharacters(in: .whitespaces)
+        let submitBody = messageBody.trimmingCharacters(in: .whitespaces)
+        let trimmedUrl = attachmentURL.trimmingCharacters(in: .whitespaces)
+        let submitAttachmentUrl: String? = trimmedUrl.isEmpty ? nil : trimmedUrl
+        return DiscussionComposerProjection(
+            submitTitle: submitTitle,
+            submitBody: submitBody,
+            submitAttachmentUrl: submitAttachmentUrl,
+            canPublish: !submitTitle.isEmpty && !isPublishing
         )
     }
 

@@ -77,16 +77,67 @@ struct ReadingFeedCardView: View {
     }
 
     private var cardProjection: ReadingFeedCardProjection {
-        app.safeCore.projectReadingFeedCard(
-            input: ReadingFeedCardProjectionInput(
-                item: item,
-                interactorProfiles: item.interactorPubkeys.map { pubkey in
-                    ReadingFeedInteractorProfile(
-                        pubkey: pubkey,
-                        profile: app.profileSnapshots[pubkey]
-                    )
-                }
-            )
+        let article = item.article
+        let titleIsFallback = article.title.isEmpty
+        let displayTitle = titleIsFallback ? "Untitled" : article.title
+
+        // reading_meta_bits: read-time estimate + first hashtag
+        var metaBits: [String] = []
+        let wordCount = article.content.split(whereSeparator: \.isWhitespace).count
+        if wordCount > 60 {
+            metaBits.append("\(max(wordCount / 240, 1)) min read")
+        }
+        if let tag = article.hashtags.first, !tag.isEmpty {
+            metaBits.append("#\(tag)")
+        }
+        let metaText: String? = metaBits.isEmpty ? nil : metaBits.joined(separator: " · ")
+
+        let interactorPubkeys = item.interactorPubkeys
+        let interactorCount = interactorPubkeys.count
+        let primaryPubkey = interactorPubkeys.first
+
+        // interactor_display_name: profile display_name → name → pubkey prefix(10)
+        func interactorName(_ pk: String) -> String {
+            let p = app.profileSnapshots[pk]
+            if let dn = p?.displayName, !dn.isEmpty { return dn }
+            if let n = p?.name, !n.isEmpty { return n }
+            return String(pk.prefix(10))
+        }
+
+        let primaryName = primaryPubkey.map { interactorName($0) } ?? "Someone"
+
+        let socialText: String
+        if item.authorFollowed && interactorPubkeys.isEmpty {
+            socialText = "From someone you follow"
+        } else {
+            switch interactorCount {
+            case 0:
+                socialText = ""
+            case 1 where item.authorFollowed:
+                socialText = "\(primaryName) and the author liked this"
+            case 1:
+                socialText = "\(primaryName) liked this"
+            case 2:
+                socialText = "\(primaryName) and 1 other"
+            default:
+                socialText = "\(primaryName) and \(interactorCount - 1) others"
+            }
+        }
+
+        let relativeUnixSeconds: UInt64? = [article.publishedAt, article.createdAt]
+            .compactMap { $0 }
+            .first { $0 > 0 }
+
+        return ReadingFeedCardProjection(
+            displayTitle: displayTitle,
+            titleIsFallback: titleIsFallback,
+            imageUrl: article.image.isEmpty ? nil : article.image,
+            metaText: metaText,
+            showSocialSignal: !interactorPubkeys.isEmpty || item.authorFollowed,
+            visibleInteractorPubkeys: Array(interactorPubkeys.prefix(3)),
+            primaryInteractorPubkey: primaryPubkey,
+            socialText: socialText,
+            relativeUnixSeconds: relativeUnixSeconds
         )
     }
 

@@ -30,14 +30,33 @@ struct CreateRoomSheet: View {
     private enum Field { case name, about }
 
     private var projection: CreateRoomProjection {
-        appStore.safeCore.projectCreateRoom(input: CreateRoomProjectionInput(
-            name: name,
-            about: about,
-            visibility: visibility,
-            access: access,
-            isCreating: isCreating,
-            coverIsUploading: coverIsUploading
-        ))
+        let createName = name.trimmingCharacters(in: .whitespaces)
+        let createAbout = about.trimmingCharacters(in: .whitespaces)
+        let (glyph, summary) = Self.visibilityDisplay(visibility, access)
+        return CreateRoomProjection(
+            canCreate: createName.count >= 2 && !isCreating && !coverIsUploading,
+            createName: createName,
+            createAbout: createAbout,
+            visibilityGlyph: glyph,
+            visibilitySummary: summary,
+            visibilityOptions: Self.visibilityOptions(for: visibility, access: access)
+        )
+    }
+
+    private static func visibilityDisplay(_ visibility: RoomVisibility, _ access: RoomAccess) -> (String, String) {
+        switch (visibility, access) {
+        case (.public, .open): return ("globe", "Public · Anyone can join")
+        case (.public, .closed): return ("globe.badge.chevron.backward", "Public · You approve joins")
+        case (.private, _): return ("lock", "Private · Invite only")
+        }
+    }
+
+    private static func visibilityOptions(for selectedVisibility: RoomVisibility, access selectedAccess: RoomAccess) -> [CreateRoomVisibilityOption] {
+        [
+            CreateRoomVisibilityOption(id: "public-open", title: "Public", summary: "Anyone can find and join this room.", glyph: "globe", visibility: .public, access: .open, isSelected: selectedVisibility == .public && selectedAccess == .open),
+            CreateRoomVisibilityOption(id: "public-closed", title: "Public · By approval", summary: "Anyone can find it, but you approve who joins.", glyph: "globe.badge.chevron.backward", visibility: .public, access: .closed, isSelected: selectedVisibility == .public && selectedAccess == .closed),
+            CreateRoomVisibilityOption(id: "private", title: "Private", summary: "Hidden from the explorer. Invite only.", glyph: "lock", visibility: .private, access: .closed, isSelected: selectedVisibility == .private),
+        ]
     }
 
     var body: some View {
@@ -273,14 +292,11 @@ struct CreateRoomSheet: View {
                 height: UInt32(prepared.height),
                 alt: ""
             )
-            let projection = appStore.safeCore.projectCreateRoomCoverUploadResult(
-                input: CreateRoomCoverUploadResultInput(snapshot: outcome)
-            )
-            guard let upload = projection.upload else {
-                self.error = projection.errorMessage
-                return
+            if let upload = outcome.upload {
+                coverUpload = upload
+            } else {
+                self.error = "Couldn't upload cover: \(outcome.error.trimmingCharacters(in: .whitespaces))"
             }
-            coverUpload = upload
         } catch {
             self.error = "Couldn't upload cover: \(error.localizedDescription)"
         }
@@ -323,20 +339,13 @@ struct CreateRoomSheet: View {
                 visibility: visibility,
                 access: access
             )
-            let result = appStore.safeCore.projectCreateRoomPublishResult(
-                input: CreateRoomPublishResultInput(
-                    groupId: outcome.groupId,
-                    error: outcome.error
-                )
-            )
-            if result.didCreate {
-                if result.shouldEmitSuccessFeedback {
-                    let generator = UINotificationFeedbackGenerator()
-                    generator.notificationOccurred(.success)
-                }
-                createdGroupId = result.groupId
+            let trimmedError = outcome.error.trimmingCharacters(in: .whitespaces)
+            if trimmedError.isEmpty {
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+                createdGroupId = outcome.groupId
             } else {
-                self.error = result.errorMessage
+                self.error = "Couldn't publish: \(trimmedError)"
             }
         }
     }

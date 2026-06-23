@@ -184,31 +184,46 @@ struct CommentRow: View {
     // MARK: - Helpers
 
     private var actionChrome: CommentActionChromeProjection {
-        app.safeCore.projectCommentActionChrome(
-            input: CommentActionChromeProjectionInput(
-                isLiked: store.isLiked(node.record.eventId),
-                isBookmarked: store.isBookmarked(node.record.eventId),
-                likeCount: UInt32(store.likeCount(node.record.eventId))
-            )
+        let isLiked = store.isLiked(node.record.eventId)
+        let isBookmarked = store.isBookmarked(node.record.eventId)
+        let likeCount = UInt32(store.likeCount(node.record.eventId))
+        return CommentActionChromeProjection(
+            showsFooter: likeCount > 0 || isLiked,
+            footerSystemImage: isLiked ? "heart.fill" : "heart",
+            footerIsAccented: isLiked,
+            showsFooterCount: likeCount > 0,
+            footerCountLabel: "\(likeCount)",
+            likeTitle: isLiked ? "Unlike" : "Like",
+            likeSystemImage: isLiked ? "heart.fill" : "heart",
+            bookmarkTitle: isBookmarked ? "Remove Bookmark" : "Bookmark",
+            bookmarkSystemImage: isBookmarked ? "bookmark.fill" : "bookmark"
         )
     }
 
     private var nodeChrome: CommentNodeChromeProjection {
-        app.safeCore.projectCommentNodeChrome(
-            input: CommentNodeChromeProjectionInput(
-                node: node,
-                artifactAuthorPubkey: nil
-            )
+        let children = node.children
+        let replyCount = UInt32(children.count)
+        let moreCount = children.count > 1 ? children.count - 1 : 0
+        let moreLabel = moreCount == 0 ? "" : moreCount == 1 ? "View 1 more reply" : "View \(moreCount) more replies"
+        return CommentNodeChromeProjection(
+            replyCount: replyCount,
+            showsReplyChevron: !children.isEmpty,
+            mostRecentReply: children.last,
+            hasMoreReplies: moreCount > 0,
+            moreRepliesLabel: moreLabel,
+            isMostRecentAuthorReply: false
         )
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: node.record.pubkey,
-                profile: app.profileSnapshots[node.record.pubkey],
-                fallback: .pubkey10
-            )
+        let profile = app.profileSnapshots[node.record.pubkey]
+        let name = (profile?.displayName ?? "").isEmpty
+            ? ((profile?.name ?? "").isEmpty ? String(node.record.pubkey.prefix(10)) : profile!.name)
+            : profile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: profile?.picture ?? ""
         )
     }
 

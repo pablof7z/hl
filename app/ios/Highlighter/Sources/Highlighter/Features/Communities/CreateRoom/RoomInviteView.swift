@@ -240,7 +240,7 @@ struct RoomInviteView: View {
                         if sending {
                             ProgressView().tint(.white)
                         } else {
-                            Text(selectionChrome.addButtonLabel)
+                            Text(addButtonLabel)
                                 .font(.headline)
                                 .foregroundStyle(.white)
                         }
@@ -311,10 +311,8 @@ struct RoomInviteView: View {
         inviteSnapshot?.projection ?? Self.emptyInviteProjection
     }
 
-    private var selectionChrome: RoomInviteSelectionChromeProjection {
-        appStore.safeCore.projectRoomInviteSelectionChrome(
-            input: RoomInviteSelectionChromeInput(selectedCount: UInt64(selected.count))
-        )
+    private var addButtonLabel: String {
+        selected.count == 1 ? "Add 1 person" : "Add \(selected.count) people"
     }
 
     private var inviteSnapshotRequestKey: String {
@@ -364,20 +362,39 @@ struct RoomInviteView: View {
         candidate: RoomInviteCandidate,
         action: RoomInviteSelectionAction
     ) {
-        let projection = appStore.safeCore.projectRoomInviteSelection(
-            input: RoomInviteSelectionInput(
-                selected: selected.map(\.coreCandidate),
-                candidate: candidate,
-                currentUserPubkey: appStore.currentUser?.pubkey ?? "",
-                action: action
-            )
-        )
-        let previousCount = selected.count
-        selected = projection.selected.map(Candidate.init(core:))
-        if let errorMessage = projection.errorMessage {
+        var currentSelected = selected.map(\.coreCandidate)
+        let candidateKey = candidate.pubkeyHex.lowercased()
+        let selectedIdx = currentSelected.firstIndex(where: { $0.pubkeyHex.lowercased() == candidateKey })
+        let previousCount = currentSelected.count
+        var errorMessage: String? = nil
+        var selectionChanged = false
+
+        switch action {
+        case .remove:
+            if let idx = selectedIdx {
+                currentSelected.remove(at: idx)
+                selectionChanged = true
+            }
+        case .toggle where selectedIdx != nil:
+            currentSelected.remove(at: selectedIdx!)
+            selectionChanged = true
+        case .add, .toggle:
+            if selectedIdx == nil {
+                let currentUserPubkey = (appStore.currentUser?.pubkey ?? "").lowercased()
+                if !currentUserPubkey.isEmpty && candidateKey == currentUserPubkey {
+                    errorMessage = "You're already in this room."
+                } else {
+                    currentSelected.append(RoomInviteCandidate(pubkeyHex: candidateKey, source: candidate.source))
+                    selectionChanged = true
+                }
+            }
+        }
+
+        selected = currentSelected.map(Candidate.init(core:))
+        if let errorMessage {
             error = errorMessage
         }
-        if projection.selectionChanged, projection.selected.count > previousCount {
+        if selectionChanged && currentSelected.count > previousCount {
             UISelectionFeedbackGenerator().selectionChanged()
         }
     }
@@ -390,6 +407,11 @@ struct RoomInviteView: View {
 
     private var errorBinding: Binding<Bool> {
         Binding(get: { error != nil }, set: { if !$0 { error = nil } })
+    }
+
+    private func shortPubkey(_ hex: String) -> String {
+        guard hex.count > 12 else { return hex }
+        return "\(hex.prefix(6))…\(hex.suffix(4))"
     }
 
     // MARK: - Loading + actions
@@ -458,24 +480,32 @@ struct RoomInviteView: View {
                 }
             }
 
-            let result = appStore.safeCore.projectRoomInviteSendResult(
-                selected: toAdd.map(\.coreCandidate),
-                failedPubkeys: failedPubkeys
-            )
+            let failedSet = Set(failedPubkeys.map { $0.lowercased() })
+            let remainingCandidates = toAdd.filter { failedSet.contains($0.pubkeyHex.lowercased()) }
+            let failedLabels = remainingCandidates.map { shortPubkey($0.pubkeyHex) }
+            let failedCount = remainingCandidates.count
+            let addedCount = toAdd.count - failedCount
+            let allSucceeded = failedCount == 0
+            let allFailed = !toAdd.isEmpty && failedCount == toAdd.count
+            let successToast = addedCount == 1 ? "Added 1 person" : "Added \(addedCount) people"
+            let sendError: String = allFailed
+                ? "Couldn't add anyone. Are you a moderator of this room?"
+                : failedCount > 0 ? "Some failed: \(failedLabels.joined(separator: ", "))"
+                : ""
 
             await MainActor.run {
-                if result.allSucceeded {
+                if allSucceeded {
                     selected.removeAll()
-                    sentToast = result.successToast
+                    sentToast = successToast
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     sentToastResetTimer.schedule(after: 2) {
                         sentToast = nil
                     }
-                } else if result.allFailed {
-                    error = result.errorMessage
+                } else if allFailed {
+                    error = sendError
                 } else {
-                    selected = result.remainingSelected.map(Candidate.init(core:))
-                    error = result.errorMessage
+                    selected = remainingCandidates
+                    error = sendError
                 }
             }
         }

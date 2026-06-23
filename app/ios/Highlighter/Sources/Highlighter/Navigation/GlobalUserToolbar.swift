@@ -86,12 +86,22 @@ private struct GlobalUserToolbar: ViewModifier {
     }
 
     private func profileDisplay(for user: CurrentUser) -> ProfileDisplayProjection {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: user.pubkey,
-                profile: appStore.currentUserProfile,
-                fallback: .pubkey8
-            )
+        let profile = appStore.currentUserProfile
+        let pubkey = user.pubkey
+        let displayName: String = {
+            if let dn = profile?.displayName, !dn.isEmpty { return dn }
+            if let n = profile?.name, !n.isEmpty { return n }
+            return String(pubkey.prefix(8))
+        }()
+        let displayInitial: String = {
+            if let dn = profile?.displayName, !dn.isEmpty { return String(dn.prefix(1)) }
+            if let n = profile?.name, !n.isEmpty { return String(n.prefix(1)) }
+            return String(pubkey.prefix(1))
+        }()
+        return ProfileDisplayProjection(
+            displayName: displayName,
+            displayInitial: displayInitial,
+            pictureUrl: profile?.picture ?? ""
         )
     }
 }

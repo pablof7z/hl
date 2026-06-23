@@ -38,22 +38,26 @@ struct EditProfileSheet: View {
     @State private var error: String?
 
     private var updateProjection: ProfileUpdateProjection {
-        appStore.safeCore.projectProfileUpdate(
-            input: ProfileUpdateProjectionInput(
-                initial: initial,
-                name: name,
-                displayName: displayName,
-                about: about,
-                picture: picture,
-                banner: banner,
-                nip05: nip05,
-                website: website,
-                lud16: lud16,
-                saving: saving,
-                pictureUploading: pictureUploading,
-                bannerUploading: bannerUploading
-            )
+        let isDirty = displayName != (initial?.displayName ?? "")
+            || name != (initial?.name ?? "")
+            || about != (initial?.about ?? "")
+            || picture != (initial?.picture ?? "")
+            || banner != (initial?.banner ?? "")
+            || nip05 != (initial?.nip05 ?? "")
+            || website != (initial?.website ?? "")
+            || lud16 != (initial?.lud16 ?? "")
+        let canSave = isDirty && !saving && !pictureUploading && !bannerUploading
+        let draft = ProfileUpdateDraft(
+            name: name.trimmingCharacters(in: .whitespaces),
+            displayName: displayName.trimmingCharacters(in: .whitespaces),
+            about: about.trimmingCharacters(in: .whitespaces),
+            picture: picture.trimmingCharacters(in: .whitespaces),
+            banner: banner.trimmingCharacters(in: .whitespaces),
+            nip05: nip05.trimmingCharacters(in: .whitespaces),
+            website: website.trimmingCharacters(in: .whitespaces),
+            lud16: lud16.trimmingCharacters(in: .whitespaces)
         )
+        return ProfileUpdateProjection(draft: draft, isDirty: isDirty, canSave: canSave)
     }
 
     var body: some View {
@@ -410,11 +414,8 @@ struct EditProfileSheet: View {
                 height: UInt32(prepared.height),
                 alt: ""
             )
-            let projection = appStore.safeCore.projectProfileImageUploadResult(
-                input: ProfileImageUploadResultInput(snapshot: outcome)
-            )
-            guard let imageURL = projection.imageUrl else {
-                error = projection.errorMessage
+            guard let imageURL = outcome.upload?.url else {
+                error = "Upload failed: \(outcome.error.trimmingCharacters(in: .whitespaces))"
                 return
             }
             commit(imageURL)
@@ -442,23 +443,19 @@ struct EditProfileSheet: View {
         Task {
             defer { Task { @MainActor in saving = false } }
             let outcome = await appStore.safeCore.updateProfile(draft: projection.draft)
-            let result = appStore.safeCore.projectProfileUpdateResult(
-                input: ProfileUpdateResultInput(snapshot: outcome)
-            )
             await MainActor.run {
-                if let errorMessage = result.errorMessage {
-                    self.error = errorMessage
+                let errorText = outcome.error.trimmingCharacters(in: .whitespaces)
+                if !errorText.isEmpty {
+                    self.error = errorText
                     return
                 }
-                if result.shouldEmitSuccessFeedback {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                guard let updated = outcome.profile else {
+                    self.error = "Unable to update profile."
+                    return
                 }
-                if let updated = result.profile {
-                    onSaved(updated)
-                }
-                if result.shouldDismiss {
-                    dismiss()
-                }
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                onSaved(updated)
+                dismiss()
             }
         }
     }

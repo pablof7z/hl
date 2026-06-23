@@ -526,12 +526,9 @@ private struct ISBNPreviewSheet: View {
     }
 
     private var manualProjection: IsbnManualPreviewProjection {
-        appStore.safeCore.projectIsbnManualPreview(
-            input: IsbnManualPreviewProjectionInput(
-                title: manualTitle,
-                author: manualAuthor
-            )
-        )
+        let title = manualTitle.trimmingCharacters(in: .whitespaces)
+        let author = manualAuthor.trimmingCharacters(in: .whitespaces)
+        return IsbnManualPreviewProjection(title: title, author: author, canUse: !title.isEmpty)
     }
 
     @ViewBuilder

@@ -70,7 +70,7 @@ struct OnboardingCreateAccountView: View {
                         .padding(.vertical, 14)
                     }
                     .buttonStyle(.glassProminent)
-                    .disabled(!createProjection.canContinue)
+                    .disabled(!canContinue)
                     .padding(.horizontal, 32)
 
                     NavigationLink {
@@ -92,19 +92,17 @@ struct OnboardingCreateAccountView: View {
         .onAppear { focusedField = .displayName }
     }
 
-    private var createProjection: OnboardingCreateAccountProjection {
-        store.safeCore.projectOnboardingCreateAccount(input: OnboardingCreateAccountProjectionInput(
-            displayName: displayName,
-            username: "",
-            usernameAvailable: false,
-            isWorking: isWorking
-        ))
+    private var trimmedDisplayName: String {
+        displayName.trimmingCharacters(in: .whitespaces)
+    }
+
+    private var canContinue: Bool {
+        !isWorking && !trimmedDisplayName.isEmpty
     }
 
     private func createAccount() {
-        let projection = createProjection
-        let name = projection.displayName
-        guard projection.canContinue else { return }
+        let name = trimmedDisplayName
+        guard canContinue else { return }
 
         isWorking = true
         errorMessage = nil

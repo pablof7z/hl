@@ -6,8 +6,6 @@ import SwiftUI
 struct RoomSquareTile: View {
     let room: CommunitySummary
 
-    @Environment(HighlighterStore.self) private var store
-
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             cover
@@ -60,12 +58,7 @@ struct RoomSquareTile: View {
     }
 
     private var avatarProjection: RoomAvatarProjection {
-        store.safeCore.projectRoomAvatar(
-            input: RoomAvatarProjectionInput(
-                name: room.name,
-                pictureUrl: room.picture,
-                uppercaseInitial: true
-            )
-        )
+        let initial = room.name.first.map { String($0).uppercased() } ?? ""
+        return RoomAvatarProjection(pictureUrl: room.picture, displayInitial: initial)
     }
 }

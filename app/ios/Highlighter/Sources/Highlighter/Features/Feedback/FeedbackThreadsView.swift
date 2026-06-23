@@ -107,7 +107,22 @@ private struct FeedbackThreadRowView: View {
     }
 
     private var projection: FeedbackThreadPresentationProjection {
-        app.safeCore.projectFeedbackThreadPresentation(thread: thread)
+        let rowTitle = thread.title ?? thread.preview
+        let navigationTitle = thread.title ?? "Feedback"
+        let rowSecondaryText: String? = {
+            if let summary = thread.summary, !summary.isEmpty { return summary }
+            if thread.title != nil && !thread.preview.isEmpty { return thread.preview }
+            return nil
+        }()
+        let detailSummary: String? = (thread.summary?.isEmpty == false) ? thread.summary : nil
+        let statusLabel: String? = (thread.statusLabel?.isEmpty == false) ? thread.statusLabel : nil
+        return FeedbackThreadPresentationProjection(
+            navigationTitle: navigationTitle,
+            rowTitle: rowTitle,
+            rowSecondaryText: rowSecondaryText,
+            detailSummary: detailSummary,
+            statusLabel: statusLabel
+        )
     }
 
     private func relativeTime(_ ts: UInt64) -> String {

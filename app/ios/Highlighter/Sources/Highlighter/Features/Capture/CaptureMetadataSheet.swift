@@ -191,17 +191,26 @@ struct CaptureMetadataSheet: View {
     }
 
     private var communitySelection: CaptureCommunitySelectionProjection {
-        appStore.safeCore.projectCaptureCommunitySelection(
-            input: CaptureCommunitySelectionProjectionInput(
-                selectedGroupId: store.selectedGroupId,
-                joinedCommunities: appStore.joinedCommunities
-            )
-        )
+        let selectedId = store.selectedGroupId.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : Optional($0) }
+        let displayName: String
+        if let id = selectedId {
+            if let community = appStore.joinedCommunities.first(where: { $0.id == id }) {
+                displayName = community.name.isEmpty ? id : community.name
+            } else {
+                displayName = id
+            }
+        } else {
+            displayName = "Optional"
+        }
+        return CaptureCommunitySelectionProjection(displayName: displayName, hasSelection: selectedId != nil)
     }
 
     private func bookDisplay(_ selection: BookSelection) -> CaptureBookDisplayProjection {
-        appStore.safeCore.projectCaptureBookDisplay(
-            input: CaptureBookDisplayProjectionInput(preview: selection.preview)
+        let preview = selection.preview
+        return CaptureBookDisplayProjection(
+            displayTitle: preview.title.isEmpty ? "Untitled" : preview.title,
+            author: preview.author.isEmpty ? nil : preview.author,
+            imageUrl: preview.image.isEmpty ? nil : preview.image
         )
     }
 

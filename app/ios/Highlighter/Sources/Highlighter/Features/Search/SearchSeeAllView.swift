@@ -49,16 +49,14 @@ struct SearchSeeAllView: View {
 
     @ViewBuilder
     private func row(for h: HighlightRecord) -> some View {
-        let projection = app.safeCore.projectSearchHighlightRow(
-            input: SearchHighlightRowProjectionInput(highlight: h)
-        )
-        if let route = projection.articleRoute {
+        let route = articleReaderRoute(for: h.artifactAddress)
+        let pageImageUrl = validPageImageUrl(h.imageUrl)
+        if let route {
             NavigationLink(value: ArticleReaderTarget(route: route)) {
                 SeeAllHighlightRow(
                     highlight: h,
                     query: store.query,
-                    pageImageUrl: projection.pageImageUrl,
-                    safeCore: app.safeCore
+                    pageImageUrl: pageImageUrl
                 )
             }
             .buttonStyle(.plain)
@@ -66,10 +64,30 @@ struct SearchSeeAllView: View {
             SeeAllHighlightRow(
                 highlight: h,
                 query: store.query,
-                pageImageUrl: projection.pageImageUrl,
-                safeCore: app.safeCore
+                pageImageUrl: pageImageUrl
             )
         }
+    }
+
+    /// Parse a NIP-33 article address (`30023:<pubkey>:<d>`) into a reader route.
+    private func articleReaderRoute(for address: String) -> ArticleReaderRoute? {
+        let addr = address.trimmingCharacters(in: .whitespaces)
+        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 3, parts[0] == "30023" else { return nil }
+        let pubkey = parts[1].trimmingCharacters(in: .whitespaces)
+        let dTag   = parts[2].trimmingCharacters(in: .whitespaces)
+        guard !pubkey.isEmpty, !dTag.isEmpty else { return nil }
+        return ArticleReaderRoute(address: "30023:\(pubkey):\(dTag)", pubkey: pubkey, dTag: dTag)
+    }
+
+    /// Return the URL string if it is a valid http/https URL, otherwise nil.
+    private func validPageImageUrl(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty,
+              let url = URL(string: trimmed),
+              url.scheme == "http" || url.scheme == "https"
+        else { return nil }
+        return trimmed
     }
 
     // MARK: - Articles
@@ -146,7 +164,6 @@ private struct SeeAllHighlightRow: View {
     let highlight: HighlightRecord
     let query: String
     let pageImageUrl: String?
-    let safeCore: SafeHighlighterCore
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -159,7 +176,7 @@ private struct SeeAllHighlightRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 1.25))
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text(matched(highlight.quote, query, safeCore: safeCore))
+                Text(matched(highlight.quote, query))
                     .font(.system(size: 17, design: .default).italic())
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineSpacing(3)
@@ -243,12 +260,9 @@ private struct SeeAllCommunityRow: View {
     }
 
     private var avatarProjection: RoomAvatarProjection {
-        app.safeCore.projectRoomAvatar(
-            input: RoomAvatarProjectionInput(
-                name: community.name,
-                pictureUrl: community.picture,
-                uppercaseInitial: false
-            )
+        RoomAvatarProjection(
+            pictureUrl: community.picture,
+            displayInitial: community.name.first.map(String.init) ?? ""
         )
     }
 }
@@ -258,31 +272,23 @@ private struct SeeAllPersonRow: View {
 
     let profile: ProfileSearchRow
 
-    var body: some View {
-        let metaForDisplay = ProfileMetadata(
-            pubkey: profile.pubkey, name: profile.name,
-            displayName: profile.displayName, about: profile.about,
-            picture: profile.picture, banner: "",
-            nip05: profile.nip05, website: "", lud16: "",
-            createdAt: profile.createdAt
-        )
-        let display = app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: profile.pubkey,
-                profile: metaForDisplay,
-                fallback: .pubkey8
-            )
-        )
+    private var displayName: String {
+        if !profile.displayName.isEmpty { return profile.displayName }
+        if !profile.name.isEmpty { return profile.name }
+        return String(profile.pubkey.prefix(8))
+    }
+    private var displayInitial: String { String(displayName.prefix(1)) }
 
+    var body: some View {
         HStack(spacing: 14) {
             AuthorAvatar(
                 pubkey: profile.pubkey,
-                pictureURL: display.pictureUrl,
-                displayInitial: display.displayInitial,
+                pictureURL: profile.picture,
+                displayInitial: displayInitial,
                 size: 46
             )
             VStack(alignment: .leading, spacing: 2) {
-                Text(display.displayName)
+                Text(displayName)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                 if !profile.nip05.isEmpty {
@@ -311,28 +317,28 @@ private struct SeeAllPersonRow: View {
 
 /// Build an `AttributedString` highlighting every case-insensitive occurrence
 /// of `query` within `text`. Free function so every row view can reuse it.
-fileprivate func matched(
-    _ text: String,
-    _ query: String,
-    safeCore: SafeHighlighterCore
-) -> AttributedString {
+fileprivate func matched(_ text: String, _ query: String) -> AttributedString {
     var out = AttributedString(text)
-    let projection = safeCore.projectSearchTextMatches(
-        input: SearchTextMatchesProjectionInput(text: text, query: query)
-    )
-    for span in projection.spans {
-        let chars = out.characters
+    let trimmedQuery = query.trimmingCharacters(in: .whitespaces).lowercased()
+    guard !trimmedQuery.isEmpty else { return out }
+    let lowerText = text.lowercased()
+    var searchFrom = lowerText.startIndex
+    while searchFrom < lowerText.endIndex,
+          let range = lowerText.range(of: trimmedQuery, range: searchFrom..<lowerText.endIndex) {
+        let startOffset = lowerText.distance(from: lowerText.startIndex, to: range.lowerBound)
+        let endOffset   = lowerText.distance(from: lowerText.startIndex, to: range.upperBound)
         var s = out.startIndex
         var e = out.startIndex
-        var idx = 0
-        while idx < Int(span.start), s < out.endIndex { s = chars.index(after: s); idx += 1 }
-        idx = 0
+        var i = 0
+        while i < startOffset, s < out.endIndex { s = out.characters.index(after: s); i += 1 }
+        i = 0
         e = s
-        while idx < Int(span.end - span.start), e < out.endIndex { e = chars.index(after: e); idx += 1 }
+        while i < (endOffset - startOffset), e < out.endIndex { e = out.characters.index(after: e); i += 1 }
         if s < e {
             out[s..<e].foregroundColor = .highlighterAccent
             out[s..<e].backgroundColor = Color.laneArticleHighlightFill
         }
+        searchFrom = range.upperBound
     }
     return out
 }

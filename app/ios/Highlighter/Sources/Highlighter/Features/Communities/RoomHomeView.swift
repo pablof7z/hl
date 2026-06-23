@@ -243,13 +243,18 @@ struct RoomHomeView: View {
         }
     }
 
+    private func cardKind(for a: ArtifactRecord) -> RoomLibraryCardKind {
+        switch a.preview.source.trimmingCharacters(in: .whitespaces).lowercased() {
+        case "article": return .article
+        case "book":    return .book
+        case "podcast": return .podcast
+        default:        return .generic
+        }
+    }
+
     @ViewBuilder
     private func artifactRow(_ a: ArtifactRecord, commentCount: Int) -> some View {
-        let projection = app.safeCore.projectRoomLibraryCardKind(
-            input: RoomLibraryCardKindProjectionInput(artifact: a)
-        )
-
-        switch projection.cardKind {
+        switch cardKind(for: a) {
         case .article:
             RoomLibraryArticleCardView(artifact: a, commentCount: commentCount)
         case .book:
@@ -262,12 +267,11 @@ struct RoomHomeView: View {
     }
 
     private func genericArtifactRow(_ artifact: ArtifactRecord) -> some View {
-        let projection = app.safeCore.projectRoomLibraryGenericCard(
-            input: RoomLibraryGenericCardProjectionInput(artifact: artifact)
-        )
+        let trimmed = artifact.preview.title.trimmingCharacters(in: .whitespaces)
+        let title = trimmed.isEmpty ? "Untitled" : trimmed
 
         return HStack {
-            Text(projection.title)
+            Text(title)
                 .foregroundStyle(Color.highlighterInkStrong)
             Spacer()
             Image(systemName: "chevron.right")

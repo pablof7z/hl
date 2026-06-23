@@ -313,18 +313,12 @@ struct ClipComposerSheet: View {
             )
             await MainActor.run {
                 isPublishing = false
-                let result = app.safeCore.projectPodcastClipPublishResult(
-                    input: PodcastClipPublishResultInput(snapshot: outcome)
-                )
-                if !result.didPublish {
-                    publishError = result.errorMessage
+                let errorMessage = outcome.error.trimmingCharacters(in: .whitespaces)
+                if errorMessage.isEmpty {
+                    app.shareToast = "Clip shared"
+                    dismiss()
                 } else {
-                    if let toast = result.shareToast {
-                        app.shareToast = toast
-                    }
-                    if result.shouldDismiss {
-                        dismiss()
-                    }
+                    publishError = errorMessage
                 }
             }
         }

@@ -257,21 +257,38 @@ struct DiscussionDetailView: View {
     // MARK: - Helpers
 
     private var rootThreadProjection: CommentThreadViewProjection {
-        app.safeCore.projectCommentThreadView(
-            input: CommentThreadViewProjectionInput(
-                tree: store.tree,
-                focused: nil
-            )
+        let totalCount = countAllNodes(store.tree)
+        let navTitle: String = {
+            switch totalCount {
+            case 0: return "Comments"
+            case 1: return "1 comment"
+            default: return "\(totalCount) comments"
+            }
+        }()
+        return CommentThreadViewProjection(
+            focused: nil,
+            children: store.tree,
+            navTitle: navTitle,
+            emptyStateLabel: "Start the conversation.",
+            composerPlaceholder: "Add to the conversation",
+            replyCountLabel: "Be the first to reply"
         )
     }
 
     private func focusedThreadNode(_ node: CommentNode) -> CommentNode {
-        app.safeCore.projectCommentThreadView(
-            input: CommentThreadViewProjectionInput(
-                tree: store.tree,
-                focused: node
-            )
-        ).focused ?? node
+        findNode(in: store.tree, eventId: node.record.eventId) ?? node
+    }
+
+    private func countAllNodes(_ nodes: [CommentNode]) -> Int {
+        nodes.reduce(0) { $0 + 1 + countAllNodes($1.children) }
+    }
+
+    private func findNode(in nodes: [CommentNode], eventId: String) -> CommentNode? {
+        for node in nodes {
+            if node.record.eventId == eventId { return node }
+            if let found = findNode(in: node.children, eventId: eventId) { return found }
+        }
+        return nil
     }
 
     private var authorDisplay: ProfileDisplayProjection {

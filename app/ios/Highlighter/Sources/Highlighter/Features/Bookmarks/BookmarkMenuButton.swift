@@ -31,14 +31,14 @@ struct BookmarkMenuButton: View {
                 Label("New collection…", systemImage: "plus")
             }
         } label: {
-            Image(systemName: bookmarkChrome.toolbarSystemImage)
+            Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
                 .foregroundStyle(
-                    bookmarkChrome.usesAccentColor ? Color.highlighterAccent : Color.highlighterInkStrong
+                    isBookmarked ? Color.highlighterAccent : Color.highlighterInkStrong
                 )
         } primaryAction: {
             Task { await app.toggleBookmark(articleAddress: articleAddress) }
         }
-        .accessibilityLabel(bookmarkChrome.accessibilityLabel)
+        .accessibilityLabel(isBookmarked ? "Remove bookmark" : "Bookmark article")
         .sheet(isPresented: $newCollectionPresented) {
             NewCollectionSheet(
                 onCancel: { newCollectionPresented = false },
@@ -102,12 +102,6 @@ struct BookmarkMenuButton: View {
         app.isBookmarked(articleAddress: articleAddress)
     }
 
-    private var bookmarkChrome: ArticleBookmarkChromeProjection {
-        app.safeCore.projectArticleBookmarkChrome(
-            input: ArticleBookmarkChromeProjectionInput(isBookmarked: isBookmarked)
-        )
-    }
-
     // MARK: - Actions
 
     private func toggleInCuration(_ item: CurationMenuItem) {
@@ -162,22 +156,20 @@ struct NewCollectionSheet: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") { commit() }
                         .fontWeight(.semibold)
-                        .disabled(!createProjection.canCreate)
+                        .disabled(!canCreateCollection)
                 }
             }
             .onAppear { focused = true }
         }
     }
 
-    private var createProjection: CurationSetCreateProjection {
-        app.safeCore.projectCurationSetCreate(
-            input: CurationSetCreateProjectionInput(title: title)
-        )
+    private var canCreateCollection: Bool {
+        !title.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     private func commit() {
-        let projection = createProjection
-        guard projection.canCreate else { return }
-        onCreate(projection.submitTitle)
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        onCreate(trimmed)
     }
 }

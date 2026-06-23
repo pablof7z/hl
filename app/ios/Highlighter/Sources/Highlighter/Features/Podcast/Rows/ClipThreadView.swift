@@ -78,11 +78,10 @@ struct ClipThreadView: View {
     }
 
     private var composerProjection: CommentComposerProjection {
-        app.safeCore.projectCommentComposer(
-            input: CommentComposerProjectionInput(
-                body: replyText,
-                isPublishing: isSending
-            )
+        let submitBody = replyText.trimmingCharacters(in: .whitespaces)
+        return CommentComposerProjection(
+            submitBody: submitBody,
+            canSubmit: !submitBody.isEmpty && !isSending
         )
     }
 

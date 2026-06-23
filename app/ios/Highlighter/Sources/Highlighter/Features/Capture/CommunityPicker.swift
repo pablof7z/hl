@@ -12,15 +12,14 @@ struct CommunityPicker: View {
     var body: some View {
         NavigationStack {
             List(appStore.joinedCommunities, id: \.id) { community in
-                let projection = appStore.safeCore.projectCommunityRow(
-                    input: CommunityRowProjectionInput(community: community)
-                )
+                let displayName = community.name.isEmpty ? community.id : community.name
+                let pictureUrl: String? = community.picture.isEmpty ? nil : community.picture
                 Button {
                     selection = community.id
                     dismiss()
                 } label: {
                     HStack(spacing: 12) {
-                        if let picture = projection.pictureUrl, let url = URL(string: picture) {
+                        if let picture = pictureUrl, let url = URL(string: picture) {
                             KFImage(url)
                                 .placeholder { Color.highlighterPaper.opacity(0.5) }
                                 .fade(duration: 0.15)
@@ -33,7 +32,7 @@ struct CommunityPicker: View {
                                 .frame(width: 32, height: 32)
                                 .foregroundStyle(Color.highlighterInkMuted)
                         }
-                        Text(projection.displayName)
+                        Text(displayName)
                             .foregroundStyle(Color.highlighterInkStrong)
                         Spacer()
                         if selection == community.id {

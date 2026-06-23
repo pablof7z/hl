@@ -197,12 +197,11 @@ struct ShareToCommunitySheet: View {
     // MARK: - Community row
 
     private func communityRow(_ community: CommunitySummary) -> some View {
-        let projection = app.safeCore.projectCommunityRow(
-            input: CommunityRowProjectionInput(community: community)
-        )
+        let displayName = community.name.isEmpty ? community.id : community.name
+        let pictureUrl: String? = community.picture.isEmpty ? nil : community.picture
 
         return HStack(spacing: 12) {
-            if let picture = projection.pictureUrl, let url = URL(string: picture) {
+            if let picture = pictureUrl, let url = URL(string: picture) {
                 KFImage(url)
                     .placeholder { Color.highlighterRule.opacity(0.4) }
                     .fade(duration: 0.15)
@@ -216,7 +215,7 @@ struct ShareToCommunitySheet: View {
                     .foregroundStyle(Color.highlighterInkMuted)
             }
 
-            Text(projection.displayName)
+            Text(displayName)
                 .foregroundStyle(Color.highlighterInkStrong)
 
             Spacer()

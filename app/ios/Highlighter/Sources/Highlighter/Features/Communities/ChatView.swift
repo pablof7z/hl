@@ -265,8 +265,10 @@ struct ChatView: View {
     // MARK: - Helpers
 
     private var composerProjection: ChatComposerProjection {
-        app.safeCore.projectChatComposer(
-            input: ChatComposerProjectionInput(body: draft)
+        let submitBody = draft.trimmingCharacters(in: .whitespaces)
+        return ChatComposerProjection(
+            submitBody: submitBody,
+            canSend: !submitBody.isEmpty
         )
     }
 
