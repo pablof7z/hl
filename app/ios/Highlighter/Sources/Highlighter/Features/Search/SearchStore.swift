@@ -38,6 +38,7 @@ final class SearchStore {
     private(set) var isRelayLoading: Bool = false
 
     /// The resolved set of relays the NIP-50 query hits, shown as a footnote.
+    /// Phase 7: deferred to NMP upstream (kernel SearchSnapshot doesn't expose relay list yet).
     private(set) var searchRelays: [String] = []
 
     // MARK: - Dependencies
@@ -62,8 +63,6 @@ final class SearchStore {
 
     func start() async {
         kernel.openSearch()
-        let snapshot = await safeCore.getSearchChromeSnapshot()
-        searchRelays = snapshot.searchRelays
     }
 
     func stop() {

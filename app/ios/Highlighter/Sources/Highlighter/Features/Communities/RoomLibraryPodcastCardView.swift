@@ -132,11 +132,22 @@ struct RoomLibraryPodcastCardView: View {
     }
 
     private var cardProjection: RoomLibraryPodcastCardProjection {
-        app.safeCore.projectRoomLibraryPodcastCard(
-            input: RoomLibraryPodcastCardProjectionInput(
-                artifact: artifact,
-                commentCount: UInt32(commentCount)
-            )
+        let title = artifact.preview.title.isEmpty ? "Untitled" : artifact.preview.title
+        let show = artifact.preview.podcastShowTitle.isEmpty ? artifact.preview.author : artifact.preview.podcastShowTitle
+        let durationLabel: String? = {
+            guard let secs = artifact.preview.durationSeconds, secs > 0 else { return nil }
+            let total = Int(secs); let h = total / 3600; let m = (total % 3600) / 60
+            return h > 0 ? (m > 0 ? "\(h)h \(m)m" : "\(h)h") : "\(m)m"
+        }()
+        return RoomLibraryPodcastCardProjection(
+            title: title,
+            titleIsFallback: artifact.preview.title.isEmpty,
+            showLabel: show.isEmpty ? nil : show,
+            durationLabel: durationLabel,
+            imageUrl: artifact.preview.image.isEmpty ? nil : artifact.preview.image,
+            sharerPubkey: artifact.pubkey,
+            relativeUnixSeconds: artifact.createdAt,
+            commentBadgeLabel: commentCount == 0 ? nil : (commentCount > 99 ? "99+" : "\(commentCount)")
         )
     }
 
