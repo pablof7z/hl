@@ -22,6 +22,7 @@ struct AppEntry: App {
             RootSceneView()
                 .environment(store)
                 .environment(kernel)
+                .environment(\EnvironmentValues.nostrProfileHost, store)
                 .task {
                     // Kick the kernel's session-restore loop first so the
                     // route state is available as early as possible.
