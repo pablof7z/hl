@@ -171,7 +171,7 @@ struct NewCollectionSheet: View {
 
     private var createProjection: CurationSetCreateProjection {
         let submitTitle = title.trimmingCharacters(in: .whitespaces)
-        return CurationSetCreateProjection(canCreate: !submitTitle.isEmpty, submitTitle: submitTitle)
+        return CurationSetCreateProjection(submitTitle: submitTitle, canCreate: !submitTitle.isEmpty)
     }
 
     private func commit() {

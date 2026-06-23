@@ -201,11 +201,16 @@ struct CommentRow: View {
     }
 
     private var nodeChrome: CommentNodeChromeProjection {
-        app.safeCore.projectCommentNodeChrome(
-            input: CommentNodeChromeProjectionInput(
-                node: node,
-                artifactAuthorPubkey: nil
-            )
+        let count = node.children.count
+        let moreCount = count > 1 ? count - 1 : 0
+        let moreLabel: String = moreCount == 0 ? "" : moreCount == 1 ? "View 1 more reply" : "View \(moreCount) more replies"
+        return CommentNodeChromeProjection(
+            replyCount: UInt32(count),
+            showsReplyChevron: count > 0,
+            mostRecentReply: node.children.last,
+            hasMoreReplies: moreCount > 0,
+            moreRepliesLabel: moreLabel,
+            isMostRecentAuthorReply: false
         )
     }
 

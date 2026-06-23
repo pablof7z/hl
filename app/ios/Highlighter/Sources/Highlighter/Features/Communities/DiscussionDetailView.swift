@@ -205,11 +205,20 @@ struct DiscussionDetailView: View {
 
     @ViewBuilder
     private func inlineReplyPreview(for parent: CommentNode) -> some View {
-        let chrome = app.safeCore.projectCommentNodeChrome(
-            input: CommentNodeChromeProjectionInput(
-                node: parent,
-                artifactAuthorPubkey: discussion.pubkey
-            )
+        let authorPubkey = discussion.pubkey.trimmingCharacters(in: .whitespaces)
+        let nodeChildren = parent.children
+        let replyCount = nodeChildren.count
+        let moreCount = replyCount > 1 ? replyCount - 1 : 0
+        let mostRecent = nodeChildren.last
+        let isMostRecentAuthorReply = !authorPubkey.isEmpty && (mostRecent.map { $0.record.pubkey == authorPubkey } ?? false)
+        let moreLabel = moreCount == 0 ? "" : moreCount == 1 ? "View 1 more reply" : "View \(moreCount) more replies"
+        let chrome = CommentNodeChromeProjection(
+            replyCount: UInt32(replyCount),
+            showsReplyChevron: replyCount > 0,
+            mostRecentReply: mostRecent,
+            hasMoreReplies: moreCount > 0,
+            moreRepliesLabel: moreLabel,
+            isMostRecentAuthorReply: isMostRecentAuthorReply
         )
         if let mostRecent = chrome.mostRecentReply {
             CommentRow(

@@ -516,8 +516,17 @@ private struct Header: View {
     }
 
     private var headerProjection: ArticleReaderHeaderProjection {
-        app.safeCore.projectArticleReaderHeader(
-            input: ArticleReaderHeaderProjectionInput(article: article)
+        let title = article.title.isEmpty ? "Untitled" : article.title
+        let hashtagLabels = Array(article.hashtags.prefix(12)).map { "#\($0)" }
+        let rawSecs: UInt64? = article.publishedAt ?? article.createdAt
+        let displayUnixSeconds: UInt64? = rawSecs.flatMap { $0 > 0 ? $0 : nil }
+        let words = article.content.split(whereSeparator: \.isWhitespace).count
+        let readTimeMinutes: UInt32? = words > 60 ? UInt32(max(1, words / 240)) : nil
+        return ArticleReaderHeaderProjection(
+            title: title,
+            hashtagLabels: hashtagLabels,
+            displayUnixSeconds: displayUnixSeconds,
+            readTimeMinutes: readTimeMinutes
         )
     }
 
