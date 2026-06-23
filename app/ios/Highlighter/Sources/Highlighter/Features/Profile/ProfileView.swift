@@ -451,9 +451,7 @@ private struct TabContent: View {
                     RoomPreviewSheet(
                         room: room,
                         onJoin: {
-                            Task {
-                                _ = await appStore.safeCore.requestJoinRoom(groupId: room.id, roomName: room.name)
-                            }
+                            kernel.app.dispatch(.joinRoom(groupId: room.id, hostRelayUrl: room.relayUrl, inviteCode: nil))
                             previewRoom = nil
                         },
                         onOpenRoom: {

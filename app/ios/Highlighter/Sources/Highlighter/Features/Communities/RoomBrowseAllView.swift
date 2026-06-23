@@ -5,6 +5,7 @@ import SwiftUI
 /// rooms" footer.
 struct RoomBrowseAllView: View {
     @Environment(HighlighterStore.self) private var appStore
+    @Environment(HighlighterAppKernel.self) private var kernel
 
     /// Called when the user taps "Open room" (or the already-joined primary
     /// button) inside the preview sheet. The parent NavigationStack owner
@@ -55,9 +56,7 @@ struct RoomBrowseAllView: View {
                 RoomPreviewSheet(
                     room: room,
                     onJoin: {
-                        Task {
-                            _ = await appStore.safeCore.requestJoinRoom(groupId: room.id, roomName: room.name)
-                        }
+                        kernel.app.dispatch(.joinRoom(groupId: room.id, hostRelayUrl: room.relayUrl, inviteCode: nil))
                         previewRoom = nil
                     },
                     onOpenRoom: onOpenRoom.map { open in
