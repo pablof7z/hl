@@ -192,8 +192,11 @@ struct ShareToCommunitySheet: View {
     // MARK: - Community row
 
     private func communityRow(_ community: CommunitySummary) -> some View {
-        let projection = app.safeCore.projectCommunityRow(
-            input: CommunityRowProjectionInput(community: community)
+        let memberLabel = community.memberCount.map { $0 == 1 ? "1 member" : "\($0) members" }
+        let projection = CommunityRowProjection(
+            displayName: community.name.isEmpty ? community.id : community.name,
+            pictureUrl: community.picture.isEmpty ? nil : community.picture,
+            subtitle: community.about.isEmpty ? memberLabel : community.about
         )
 
         return HStack(spacing: 12) {
