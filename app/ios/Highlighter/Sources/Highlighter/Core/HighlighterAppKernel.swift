@@ -60,12 +60,6 @@ final class HighlighterAppKernel {
     /// Populated while a `ViewId.roomHome(groupId:)` view is open.
     private(set) var roomHomeSnapshots: [String: KernelRoomHomeSnapshot] = [:]
 
-    /// Latest `ViewId.search` snapshot. Carries the omnibox classification
-    /// outcome (`#1865`) the Search screen routes on, plus the multi-kind
-    /// NIP-50 hits. Populated while the Search view is open (see
-    /// `openSearch()`), `nil` otherwise.
-    private(set) var search: SearchSnapshot?
-
     // MARK: - Published snapshots (Phase 7 cutovers)
 
     /// Per-group-id room chat snapshots, keyed by NIP-29 local group id.
@@ -271,20 +265,6 @@ final class HighlighterAppKernel {
         articleReader.removeValue(forKey: address)
     }
 
-    /// Open the Search view so the actor projects + pushes `ViewId.search`
-    /// snapshots (the omnibox outcome is only delivered while the view is
-    /// resident). Idempotent. Call from `SearchView.task`.
-    func openSearch() {
-        app.openView(viewId: .search, route: .search)
-    }
-
-    /// Close the Search view and drop its cached snapshot.
-    /// Call from `SearchView.onDisappear`.
-    func closeSearch() {
-        app.closeView(viewId: .search)
-        search = nil
-    }
-
     // MARK: - Phase 7: room chat lifecycle
 
     /// Open a room-chat view for `groupId`. Opens the kernel view (so snapshots
@@ -433,12 +413,6 @@ final class HighlighterAppKernel {
             profileSnapshots[s.pubkey] = s
         case .roomHome(let s):
             roomHomeSnapshots[s.groupId] = s
-
-        // Search omnibox lane (#1865): the kernel owns classification, so the
-        // pushed snapshot (omnibox outcome + multi-kind hits) is published here
-        // for `SearchView`/`SearchStore` to route on.
-        case .search(let s):
-            search = s
 
         // Phase 7 cutover: room chat snapshot (ChatStore reads this dict).
         case .roomChat(let s):
