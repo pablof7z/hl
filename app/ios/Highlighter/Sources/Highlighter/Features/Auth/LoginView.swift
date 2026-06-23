@@ -167,6 +167,7 @@ struct LoginView: View {
                     errorMessage = storage.errorMessage
                     return
                 }
+                _ = store.markOnboardingComplete()
                 await store.completeLogin(user: user)
             } else {
                 errorMessage = snapshot.errorMessage
@@ -182,6 +183,7 @@ struct LoginView: View {
                     errorMessage = storage.errorMessage
                     return
                 }
+                _ = store.markOnboardingComplete()
                 await store.completeLogin(user: user)
             } else {
                 errorMessage = snapshot.errorMessage

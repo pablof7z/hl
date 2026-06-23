@@ -64,7 +64,7 @@ struct FeedbackThreadsView: View {
                 NavigationLink {
                     FeedbackThreadDetailView(thread: thread, listStore: feedbackStore)
                 } label: {
-                    FeedbackThreadRow(thread: thread)
+                    FeedbackThreadRowView(thread: thread)
                 }
             }
             .listStyle(.plain)
@@ -72,7 +72,7 @@ struct FeedbackThreadsView: View {
     }
 }
 
-private struct FeedbackThreadRow: View {
+private struct FeedbackThreadRowView: View {
     @Environment(HighlighterStore.self) private var app
 
     let thread: FeedbackThreadRecord

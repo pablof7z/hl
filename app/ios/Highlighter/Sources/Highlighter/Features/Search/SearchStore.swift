@@ -5,6 +5,7 @@ enum SearchDirectNavigation: Equatable {
     case article(ArticleReaderTarget)
     case profile(String)
     case entity(NostrEntityRef)
+    case group(String)
 }
 
 /// Drives `SearchView`. Owns UI query state, Rust-projected result
@@ -56,10 +57,19 @@ final class SearchStore {
     private(set) var directNavigation: SearchDirectNavigation?
     private(set) var directOpenMessage: String?
 
+    /// Set when the omnibox resolver (#1865) classified the current input as a
+    /// secret key (`nsec` / `ncryptsec`). The view renders a safe inline notice
+    /// and suppresses the normal result echo — the secret is NEVER displayed.
+    private(set) var secretRejected: Bool = false
+
     // MARK: - Dependencies
 
     private let safeCore: SafeHighlighterCore
     private let eventBridge: EventBridge?
+    /// The nmp-lane kernel that owns the omnibox resolver (#1865). The store
+    /// dispatches `.runOmnibox` here and routes on the resolved `OmniboxOutcome`
+    /// surfaced in the `ViewId.search` snapshot. `nil` in legacy/test contexts.
+    private let kernel: HighlighterAppKernel?
 
     // MARK: - Internal state
 
@@ -78,12 +88,22 @@ final class SearchStore {
     /// Query the current NIP-50 subscription was opened with. If the user
     /// edits the query, we tear down + re-open.
     private var activeRelayQuery: String = ""
+    /// Gate for the omnibox outcome (#1865). Armed on each fresh `runOmnibox`
+    /// dispatch (a genuine query change) and consumed once the resolved outcome
+    /// is routed — so the kernel re-pushing the retained outcome (e.g. as relay
+    /// hits stream in, or when the Search view re-opens) never re-navigates.
+    private var omniboxArmed: Bool = false
 
     // MARK: - Init
 
-    init(safeCore: SafeHighlighterCore, eventBridge: EventBridge?) {
+    init(
+        safeCore: SafeHighlighterCore,
+        eventBridge: EventBridge?,
+        kernel: HighlighterAppKernel? = nil
+    ) {
         self.safeCore = safeCore
         self.eventBridge = eventBridge
+        self.kernel = kernel
     }
 
     // MARK: - Lifecycle
@@ -131,23 +151,90 @@ final class SearchStore {
         directNavigation = nil
     }
 
+    /// Disarm the omnibox gate so a retained outcome pushed on Search re-open
+    /// (the kernel keeps the last classification in state) is not re-routed.
+    /// The next genuine query change re-arms it. Call from `SearchView.task`.
+    func disarmOmnibox() {
+        omniboxArmed = false
+    }
+
     private func scheduleSearch(for q: String) {
         searchTask?.cancel()
         directTask?.cancel()
         tearDownDirectEntity()
         directNavigation = nil
         directOpenMessage = nil
+        secretRejected = false
         let projection = scheduleProjection(for: q)
         applyScheduleProjection(projection)
         guard projection.shouldRunSearch else { return }
-        scheduleDirectNavigationIfPossible(
-            query: projection.searchQuery,
-            token: projection.searchToken
-        )
+
+        // Single brain (#1865): hand the raw input to NMP's input-intent
+        // resolver. The kernel classifies (paste-nav / NIP-05 / group / relay /
+        // secret / free text), performs the side effect (multi-kind relay
+        // search for free text, NIP-05 reverse lookup), and surfaces the
+        // resolved `OmniboxOutcome` in the `ViewId.search` snapshot, which the
+        // view feeds back via `applyOmniboxOutcome`. Paste-navigation no longer
+        // decodes eagerly here — it routes through the resolver outcome.
+        omniboxArmed = true
+        kernel?.app.dispatch(.runOmnibox(query: projection.searchQuery))
+
         let token = projection.searchToken
         searchTask = Task { [weak self] in
             guard let self else { return }
             await self.runSearch(for: projection.searchQuery, token: token)
+        }
+    }
+
+    // MARK: - Omnibox routing (#1865)
+
+    /// Route the resolver's classification of the current input. Called by
+    /// `SearchView` whenever the `ViewId.search` snapshot's omnibox outcome
+    /// changes. The resolver is the single classification brain; this method
+    /// only maps each outcome onto hl's existing navigation / result surfaces.
+    func applyOmniboxOutcome(_ outcome: OmniboxOutcome?) {
+        guard let outcome, omniboxArmed else { return }
+        // One-shot: consume this classification so the kernel re-pushing the
+        // retained outcome (streaming hits, view re-open) doesn't re-route.
+        omniboxArmed = false
+        switch outcome {
+        case .navigate(let uri):
+            // Pasted NIP-19/21 reference → decode + route via hl's existing
+            // entity navigation (profile / article / thread).
+            secretRejected = false
+            scheduleDirectNavigationIfPossible(query: uri, token: searchToken)
+
+        case .resolveNip05(let identifier):
+            // Async `.well-known` reverse lookup is in flight. Show a looking-up
+            // state; the resolved profile lands reactively and the legacy
+            // exact-NIP-05 match (`applyExactNip05NavigationIfNeeded`, run on the
+            // parallel free-text scan) navigates to it.
+            secretRejected = false
+            if directNavigation == nil {
+                directOpenMessage = "Looking up \(identifier)…"
+            }
+
+        case .openGroup(_, let localId):
+            // NIP-29 group reference → hl's existing room/community route
+            // (RoomHomeView is keyed by the local group id).
+            secretRejected = false
+            directOpenMessage = nil
+            directNavigation = .group(localId)
+
+        case .rejectSecret:
+            // Secret key — never echoed. Clear buckets and show a safe notice.
+            directNavigation = nil
+            directOpenMessage = nil
+            secretRejected = true
+            highlights = []
+            articles = []
+            communities = []
+            profiles = []
+
+        case .freeText, .relayUrl, .noMatch:
+            // Keep hl's existing bucketed results UI (the parallel free-text
+            // scan populates highlights / articles / communities / people).
+            secretRejected = false
         }
     }
 
@@ -180,6 +267,7 @@ final class SearchStore {
         isLocalLoading = false
         isRelayLoading = false
         directOpenMessage = nil
+        secretRejected = false
         tearDownRelaySearch()
         tearDownDirectEntity()
     }

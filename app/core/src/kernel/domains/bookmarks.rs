@@ -59,33 +59,17 @@
 //! `apply_bookmarks` runs on the **actor thread** (JSON decode + Vec clone,
 //! no I/O). D6: decode errors leave `AppState::bookmarks` unchanged.
 
-use std::ffi::CString;
-use std::os::raw::c_char;
 use std::sync::{Arc, Mutex};
 
+use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
+use nmp_core::substrate::ActionPayload;
 use nmp_core::KernelEventObserver;
-use nmp_ffi::NmpApp;
-use nmp_nip51::{BookmarkItem, BookmarkListProjection};
+use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
+use nmp_nip51::{BookmarkItem, BookmarkListProjection, BookmarkUpdateInput};
 
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::BookmarkRow;
-
-// ─── nmp-ffi C ABI declarations ─────────────────────────────────────────────
-
-// `nmp_app_dispatch_action` is #[no_mangle] extern "C" in nmp-ffi/src/action.rs.
-// Declared here so the bookmarks effect runner can call it directly — same
-// pattern as follows.rs:63.
-#[allow(improper_ctypes)]
-extern "C" {
-    fn nmp_app_dispatch_action(
-        app: *mut NmpApp,
-        namespace: *const c_char,
-        action_json: *const c_char,
-    ) -> *mut c_char;
-}
-
-use nmp_ffi::nmp_free_string;
 
 // ── hl schema_id for the typed snapshot projection ──────────────────────────
 
@@ -272,23 +256,25 @@ pub(crate) fn run_effect_dispatch_bookmark_action(
 ) {
     let Some(handle) = nmp else { return };
 
-    let ns_c = match CString::new(namespace) {
-        Ok(s) => s,
-        Err(_) => return,
+    let action = match serde_json::from_str::<BookmarkUpdateInput>(&json) {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!(error = %e, "bookmarks: failed to deserialise BookmarkUpdateInput");
+            return;
+        }
     };
-    let json_c = match CString::new(json) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
+    let payload_bytes = action.encode();
+    let correlation_id = uuid::Uuid::new_v4().to_string();
+    let envelope = encode_dispatch_envelope(
+        &correlation_id,
+        &namespace,
+        DISPATCH_ENVELOPE_SCHEMA_VERSION,
+        &payload_bytes,
+    );
 
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. ns_c and json_c are valid CStrings
-    // alive for the duration of this call. The returned pointer is freed below.
     let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
+        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
 
-    // Free the returned correlation-id JSON string via nmp_free_string
-    // (same Rust allocator as the allocation — calling host free() is UB).
     if !result_ptr.is_null() {
         nmp_free_string(result_ptr);
     }

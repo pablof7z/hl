@@ -67,6 +67,8 @@ use crate::kernel::domains::{
     isbn,
     // ── Phase 5D additions (append-only) ─────────────────────────────────────
     ocr,
+    // ── Omnibox (#1865 input-intent resolver) ────────────────────────────────
+    omnibox,
     // ── Phase 5H additions (append-only) ─────────────────────────────────────
     podcast,
     profiles,
@@ -390,6 +392,7 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
 
         // ── Phase 4D additions (append-only) ─────────────────────────────────
         AppAction::RunSearch { query, scope } => search::reduce_action_run_search(query, scope),
+        AppAction::RunOmnibox { query } => omnibox::reduce_action_run_omnibox(query),
 
         // ── Phase 5A additions (append-only) ─────────────────────────────────
         AppAction::PrepareWhatsNew => whats_new::reduce_action_prepare_whats_new(),
@@ -496,7 +499,8 @@ fn reduce_action_envelope(
         JoinRoomPayload, LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload,
         PairBunkerPayload, PresentSheetPayload, PublishClipPayload, PublishHighlightPayload,
         ReactPayload, ReleaseProfilePayload, RemoveBookmarkPayload, RemoveRelayPayload,
-        RunSearchPayload, SelectRootTabPayload, SetRelayRolePayload, SetRoomsRelayListPayload,
+        RunOmniboxPayload, RunSearchPayload, SelectRootTabPayload, SetRelayRolePayload,
+        SetRoomsRelayListPayload,
         ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload, UnfollowPayload,
         UnreactPayload,
     };
@@ -649,6 +653,10 @@ fn reduce_action_envelope(
                 None => return vec![],
             };
             search::reduce_action_run_search(p.query, scope)
+        }
+        "hl.search.omnibox" => {
+            let p = parse!(RunOmniboxPayload);
+            omnibox::reduce_action_run_omnibox(p.query)
         }
 
         // ── What's New ────────────────────────────────────────────────────────
@@ -1078,6 +1086,14 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             vec![]
         }
 
+        KernelEvent::OmniboxResolved(outcome) => {
+            // Store the resolved omnibox outcome (#1865). Surfaced in
+            // SearchSnapshot::omnibox for the shell to route on the next tick.
+            // Also injectable directly from tests via Cmd::Event.
+            state.omnibox_outcome = Some(outcome);
+            vec![]
+        }
+
         // ── Phase 5A additions (append-only) ─────────────────────────────────
         KernelEvent::WhatsNewLoaded {
             entries,
@@ -1426,6 +1442,10 @@ pub(crate) async fn run_effect(
             route::run_effect_load_onboarding_flag(onboarding_store, tx).await;
         }
 
+        Effect::SaveOnboardingFlag => {
+            route::run_effect_save_onboarding_flag(onboarding_store).await;
+        }
+
         Effect::RestoreSessionSecret => {
             session::run_effect_restore_session_secret(shared, tx).await;
         }
@@ -1574,6 +1594,15 @@ pub(crate) async fn run_effect(
             // Fire-and-forget (D6): search hits arrive back as the typed N50S
             // sidecar frame. No-op if nmp is None (test mode).
             search::run_effect_run_search(query, scope_json, nmp);
+        }
+
+        Effect::RunOmnibox { query } => {
+            // Classify the omnibox input through NMP's input-intent resolver
+            // (#1865) and route it. The runner performs the branch side effect
+            // (multi-kind open_search / NIP-05 reverse-lookup enqueue) and emits
+            // KernelEvent::OmniboxResolved back through `tx`. No-op if nmp is
+            // None (test mode — the pure classifier is unit-tested directly).
+            omnibox::run_effect_run_omnibox(query, nmp, tx);
         }
 
         // ── Phase 4H additions (append-only) ─────────────────────────────────

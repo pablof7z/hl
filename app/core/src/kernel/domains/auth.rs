@@ -124,6 +124,8 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     // AppState::search_results holds NIP-50 hits for the departing account's
     // query. Wipe so stale search results don't survive into the next session.
     state.search_results.clear();
+    // Omnibox outcome (#1865) belongs to the departing session — clear it.
+    state.omnibox_outcome = None;
     // ── Phase 4F: clear feed-pull state on logout ─────────────────────────────
     // FeedState rows and cursors belong to the departing account's subscriptions.
     // Wipe so stale feed rows don't surface for the next account. cursor_id is
@@ -213,6 +215,8 @@ pub(crate) fn reduce_event_identity_changed(
             super::reactions::clear_on_identity_lost(state);
             // ── Phase 4D: clear search results on account removal ─────────────
             state.search_results.clear();
+            // Omnibox outcome (#1865) belongs to the removed account — clear it.
+            state.omnibox_outcome = None;
             // ── Phase 4F: clear feed-pull state on account removal ────────────
             clear_feed_state_on_identity_lost(state);
             // ── Phase 7 feedback: clear UI-lifecycle state on identity loss ───

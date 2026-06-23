@@ -317,6 +317,18 @@ pub enum Effect {
         scope_json: String,
     },
 
+    /// Classify one omnibox / paste / search input through NMP's input-intent
+    /// resolver (`#1865`) and route it.
+    ///
+    /// The effect runner calls `nmp_app_intent_classify` (and, for a NIP-05 top
+    /// candidate, `nmp_app_intent_dispatch` to enqueue the HTTP reverse lookup;
+    /// for free text, a multi-kind `NmpApp::open_search`), then emits
+    /// `KernelEvent::OmniboxResolved`. No-op if `nmp` is `None` (test mode).
+    RunOmnibox {
+        /// Trimmed, non-empty omnibox input (the reducer no-ops empty input).
+        query: String,
+    },
+
     // ── Phase 4H additions (append-only) ─────────────────────────────────────
     /// Publish a NIP-84 kind:9802 highlight event via `ActorCommand::PublishRawEvent`.
     ///
@@ -669,4 +681,17 @@ pub enum Effect {
         /// `"i:podcast:item:guid:<guid>"`). Never empty.
         coordinate: String,
     },
+
+    // ── Auth-bridge additions (append-only) ──────────────────────────────────
+    /// Durably write `onboarding.complete = true` to `OnboardingStore`.
+    ///
+    /// Emitted by `reduce_action_complete_onboarding` so the NMP kernel's own
+    /// onboarding file reflects the completed state. Without this write, the
+    /// `LoadOnboardingFlag` effect (fired on every `RestoreSession`) would
+    /// always return `false`, preventing the post-logout route from landing on
+    /// `.login` instead of `.onboarding`.
+    ///
+    /// Fire-and-forget (D6): I/O failure is logged but never surfaced as an
+    /// error to the caller (the in-memory state is already updated).
+    SaveOnboardingFlag,
 }

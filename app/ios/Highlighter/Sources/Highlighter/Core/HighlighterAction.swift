@@ -68,6 +68,10 @@ enum HighlighterAction {
 
     // ── Search ────────────────────────────────────────────────────────────────
     case runSearch(query: String, scope: HLSearchScope)
+    /// Classify one omnibox / paste / search input through NMP's input-intent
+    /// resolver (#1865) and route it. The resolved `OmniboxOutcome` is surfaced
+    /// in `SearchSnapshot.omnibox`. Empty / whitespace input is a no-op (D6).
+    case runOmnibox(query: String)
 
     // ── What's New ────────────────────────────────────────────────────────────
     case prepareWhatsNew
@@ -236,6 +240,9 @@ enum HighlighterAction {
         case .runSearch(let query, let scope):
             return AppActionEnvelope(namespace: "hl.search.run",
                                      json: jsonObject(["query": query, "scope": scope.rawValue]))
+        case .runOmnibox(let query):
+            return AppActionEnvelope(namespace: "hl.search.omnibox",
+                                     json: jsonObject(["query": query]))
 
         // ── What's New ────────────────────────────────────────────────────────
         case .prepareWhatsNew:

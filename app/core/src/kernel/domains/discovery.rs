@@ -43,7 +43,12 @@
 //! `projections::dispatch_typed_frame`, called from `reduce_event`). It is
 //! synchronous and non-blocking (FlatBuffers decode only, no I/O).
 
-use nmp_ffi::NmpApp;
+use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
+use nmp_core::substrate::ActionPayload;
+use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
+use nmp_nip29::action::{
+    CreateInviteInput, CreatePublicGroupInput, DiscoverGroupsInput, JoinGroupInput, PutUserInput,
+};
 use nmp_nip29::decode_discovered_groups_snapshot;
 use nmp_nip29::register::open_group_discovery;
 
@@ -177,37 +182,48 @@ pub(crate) fn run_effect_dispatch_nip29_action(
     json: String,
     nmp: Option<&crate::kernel::actor::NmpHandle>,
 ) {
-    use nmp_ffi::nmp_free_string;
-    use std::ffi::CString;
-
-    #[allow(improper_ctypes)]
-    extern "C" {
-        fn nmp_app_dispatch_action(
-            app: *mut NmpApp,
-            namespace: *const std::os::raw::c_char,
-            action_json: *const std::os::raw::c_char,
-        ) -> *mut std::os::raw::c_char;
-    }
-
     let Some(handle) = nmp else { return };
 
-    let ns_c = match CString::new(namespace) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let json_c = match CString::new(json) {
-        Ok(s) => s,
-        Err(_) => return,
+    // Route by namespace: deserialise the pre-built JSON to the typed struct,
+    // then encode as FlatBuffers for the bytes doorway (ADR-0064 / Cut-B).
+    let payload_bytes: Vec<u8> = match namespace.as_str() {
+        "nmp.nip29.discover" => match serde_json::from_str::<DiscoverGroupsInput>(&json) {
+            Ok(a) => a.encode(),
+            Err(e) => { tracing::warn!(error = %e, "nip29: failed to deserialise DiscoverGroupsInput"); return; }
+        },
+        "nmp.nip29.join" => match serde_json::from_str::<JoinGroupInput>(&json) {
+            Ok(a) => a.encode(),
+            Err(e) => { tracing::warn!(error = %e, "nip29: failed to deserialise JoinGroupInput"); return; }
+        },
+        "nmp.nip29.create_public_group" => match serde_json::from_str::<CreatePublicGroupInput>(&json) {
+            Ok(a) => a.encode(),
+            Err(e) => { tracing::warn!(error = %e, "nip29: failed to deserialise CreatePublicGroupInput"); return; }
+        },
+        "nmp.nip29.put_user" => match serde_json::from_str::<PutUserInput>(&json) {
+            Ok(a) => a.encode(),
+            Err(e) => { tracing::warn!(error = %e, "nip29: failed to deserialise PutUserInput"); return; }
+        },
+        "nmp.nip29.create_invite" => match serde_json::from_str::<CreateInviteInput>(&json) {
+            Ok(a) => a.encode(),
+            Err(e) => { tracing::warn!(error = %e, "nip29: failed to deserialise CreateInviteInput"); return; }
+        },
+        other => {
+            tracing::warn!(namespace = other, "nip29: unknown namespace — no-op");
+            return;
+        }
     };
 
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. ns_c and json_c are valid CStrings
-    // alive for the duration of this call. The returned pointer is freed below.
+    let correlation_id = uuid::Uuid::new_v4().to_string();
+    let envelope = encode_dispatch_envelope(
+        &correlation_id,
+        &namespace,
+        DISPATCH_ENVELOPE_SCHEMA_VERSION,
+        &payload_bytes,
+    );
+
     let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
+        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
 
-    // Free the returned correlation-id JSON string via the nmp allocator.
-    // A null pointer is a no-op (guard for clarity).
     if !result_ptr.is_null() {
         nmp_free_string(result_ptr);
     }

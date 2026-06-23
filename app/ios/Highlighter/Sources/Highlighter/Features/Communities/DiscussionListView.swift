@@ -24,7 +24,7 @@ struct DiscussionListView: View {
                     LazyVStack(spacing: 0) {
                         ForEach(store.discussions, id: \.eventId) { d in
                             NavigationLink(value: d) {
-                                DiscussionRow(discussion: d)
+                                DiscussionRowView(discussion: d)
                             }
                             .buttonStyle(.plain)
                             Divider()
@@ -49,7 +49,7 @@ struct DiscussionListView: View {
     }
 }
 
-private struct DiscussionRow: View {
+private struct DiscussionRowView: View {
     let discussion: DiscussionRecord
 
     @Environment(HighlighterStore.self) private var app

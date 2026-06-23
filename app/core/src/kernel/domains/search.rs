@@ -264,7 +264,11 @@ pub(crate) fn project_search_snapshot(
         .collect();
 
     Some(crate::kernel::snapshot::ViewSnapshot::Search(
-        SearchSnapshot { hits },
+        SearchSnapshot {
+            hits,
+            // Omnibox classification outcome (#1865) — the shell routes on this.
+            omnibox: state.omnibox_outcome.clone(),
+        },
     ))
 }
 

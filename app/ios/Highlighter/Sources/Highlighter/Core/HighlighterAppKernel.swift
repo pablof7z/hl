@@ -59,6 +59,12 @@ final class HighlighterAppKernel {
     /// Populated while a `ViewId.roomHome(groupId:)` view is open.
     private(set) var roomHomeSnapshots: [String: KernelRoomHomeSnapshot] = [:]
 
+    /// Latest `ViewId.search` snapshot. Carries the omnibox classification
+    /// outcome (`#1865`) the Search screen routes on, plus the multi-kind
+    /// NIP-50 hits. Populated while the Search view is open (see
+    /// `openSearch()`), `nil` otherwise.
+    private(set) var search: SearchSnapshot?
+
     // MARK: - Kernel handle
 
     /// The Rust-side kernel object. Callers may dispatch actions and manage
@@ -158,6 +164,20 @@ final class HighlighterAppKernel {
         roomHomeSnapshots.removeValue(forKey: groupId)
     }
 
+    /// Open the Search view so the actor projects + pushes `ViewId.search`
+    /// snapshots (the omnibox outcome is only delivered while the view is
+    /// resident). Idempotent. Call from `SearchView.task`.
+    func openSearch() {
+        app.openView(viewId: .search, route: .search)
+    }
+
+    /// Close the Search view and drop its cached snapshot.
+    /// Call from `SearchView.onDisappear`.
+    func closeSearch() {
+        app.closeView(viewId: .search)
+        search = nil
+    }
+
     // MARK: - Snapshot ingestion (called on main actor by KernelObserver)
 
     fileprivate func receive(viewId: ViewId, snapshot: ViewSnapshot) {
@@ -177,6 +197,12 @@ final class HighlighterAppKernel {
         case .roomHome(let s):
             roomHomeSnapshots[s.groupId] = s
 
+        // Search omnibox lane (#1865): the kernel owns classification, so the
+        // pushed snapshot (omnibox outcome + multi-kind hits) is published here
+        // for `SearchView`/`SearchStore` to route on.
+        case .search(let s):
+            search = s
+
         // Phase 2E (network settings / relay diagnostics) — handled elsewhere.
         case .networkSettings, .relayDiagnostics:
             break
@@ -185,13 +211,20 @@ final class HighlighterAppKernel {
         // `current_snapshot`; the observer push is handled by those stores
         // directly. No-op here (the actor still pushes; non-resident views
         // are closed before they can receive stale data — D5).
-        case .bookmarks, .articleReader, .search, .articleFeed,
+        case .bookmarks, .articleReader, .articleFeed,
              .highlightFeed, .homeFeed, .whatsNew, .bookPicker, .shareComposer:
             break
 
         // Phase 5+ snapshots (podcast, OCR capture) — managed by their owning
         // views / stores; no-op here (same pattern as Phase 4+ above).
         case .podcastListening, .capture:
+            break
+
+        // Kernel-lane comment / feedback / room chat + discussion snapshots
+        // (#1747 migration in flight). hl's Swift still drives these surfaces
+        // through the legacy lane, so the kernel push is a no-op here for now.
+        case .commentThread, .feedbackThreads, .feedbackThread,
+             .roomChat, .roomDiscussions:
             break
         }
     }

@@ -35,11 +35,7 @@ pub(crate) fn reduce_action_dismiss_sheet(state: &mut AppState) -> Vec<Effect> {
 
 pub(crate) fn reduce_action_complete_onboarding(state: &mut AppState) -> Vec<Effect> {
     state.onboarding.complete = true;
-    // OnboardingStore::set_complete is called as part of the
-    // LoadOnboardingFlag effect's write path; here we update in-memory
-    // state. The durable write is a side effect handled by the actor
-    // after the reduce pass when it detects the flag changed.
-    vec![]
+    vec![Effect::SaveOnboardingFlag]
 }
 
 // ─── Reducer (event) ─────────────────────────────────────────────────────────
@@ -75,6 +71,12 @@ pub(crate) async fn run_effect_load_onboarding_flag(
     use crate::kernel::actor::Cmd;
     let complete = onboarding_store.is_complete();
     let _ = tx.send(Cmd::Event(KernelEvent::OnboardingStateLoaded(complete)));
+}
+
+pub(crate) async fn run_effect_save_onboarding_flag(onboarding_store: &OnboardingStore) {
+    if let Err(e) = onboarding_store.set_complete(true) {
+        eprintln!("run_effect_save_onboarding_flag: write failed — {e}");
+    }
 }
 
 // ─── Snapshot projection ─────────────────────────────────────────────────────
@@ -213,12 +215,16 @@ pub(crate) fn project_snapshot(
 
 pub(crate) fn project_app_root(state: &AppState) -> AppRootSnapshot {
     let session_present = matches!(state.session, SessionState::Present { .. });
-    let route_kind = if !state.onboarding.complete {
-        RouteKind::Onboarding
-    } else if !session_present {
+    // Session presence takes priority: an active session means the user is
+    // authenticated regardless of the onboarding flag. The onboarding flag is
+    // only consulted when there is no session (to distinguish a new user from
+    // a returning user who has logged out).
+    let route_kind = if session_present {
+        RouteKind::RootShell
+    } else if state.onboarding.complete {
         RouteKind::Login
     } else {
-        RouteKind::RootShell
+        RouteKind::Onboarding
     };
     AppRootSnapshot {
         route_kind,
@@ -349,13 +355,13 @@ mod tests {
         let clock = ManualClock::default();
         let now = clock.now_unix_seconds();
 
-        // Onboarding incomplete → Onboarding.
+        // No session, onboarding incomplete → Onboarding.
         let state = make_state();
         if let Some(ViewSnapshot::AppRoot(s)) = project_snapshot(&state, &ViewId::AppRoot, now) {
             assert_eq!(s.route_kind, RouteKind::Onboarding);
         }
 
-        // Onboarding complete, no session → Login.
+        // No session, onboarding complete → Login.
         let mut state = make_state();
         step(
             &mut state,
@@ -366,7 +372,7 @@ mod tests {
             assert_eq!(s.route_kind, RouteKind::Login);
         }
 
-        // Session present → RootShell.
+        // Session present → RootShell regardless of onboarding flag.
         step(
             &mut state,
             &clock,
@@ -378,6 +384,22 @@ mod tests {
         if let Some(ViewSnapshot::AppRoot(s)) = project_snapshot(&state, &ViewId::AppRoot, now) {
             assert_eq!(s.route_kind, RouteKind::RootShell);
             assert!(s.session_present);
+        }
+
+        // Session present even without onboarding complete → RootShell.
+        // This covers the auth-bridge path where the live lane logs in before
+        // the kernel has loaded its onboarding file.
+        let mut state = make_state();
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::SessionRestored {
+                present: true,
+                pubkey: Some("pk".into()),
+            }),
+        );
+        if let Some(ViewSnapshot::AppRoot(s)) = project_snapshot(&state, &ViewId::AppRoot, now) {
+            assert_eq!(s.route_kind, RouteKind::RootShell);
         }
     }
 }
