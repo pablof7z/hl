@@ -55,14 +55,27 @@ struct RoomLibraryArticleCardView: View {
         _ projection: RoomLibraryArticleCardProjection
     ) -> ProfileDisplayProjection {
         let pubkey = projection.authorProfilePubkey
-        return app.safeCore.projectProfileDisplayWithLabel(
-            input: ProfileDisplayWithLabelProjectionInput(
-                pubkey: pubkey,
-                profile: pubkey.isEmpty ? nil : app.profileSnapshots[pubkey],
-                labelFallback: artifact.preview.author,
-                pubkeyFallback: .pubkey10,
-                emptyFallback: "Unknown"
-            )
+        let profile = pubkey.isEmpty ? nil : app.profileSnapshots[pubkey]
+        let dn = profile?.displayName ?? ""
+        let n = profile?.name ?? ""
+        let label = artifact.preview.author
+        let displayName: String
+        let displayInitial: String
+        if !dn.isEmpty {
+            displayName = dn; displayInitial = String(dn.prefix(1))
+        } else if !n.isEmpty {
+            displayName = n; displayInitial = String(n.prefix(1))
+        } else if !label.isEmpty {
+            displayName = label; displayInitial = String(label.prefix(1))
+        } else if !pubkey.isEmpty {
+            displayName = String(pubkey.prefix(10)); displayInitial = String(pubkey.prefix(1))
+        } else {
+            displayName = "Unknown"; displayInitial = "U"
+        }
+        return ProfileDisplayProjection(
+            displayName: displayName,
+            displayInitial: displayInitial,
+            pictureUrl: profile?.picture ?? ""
         )
     }
 
