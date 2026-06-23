@@ -159,34 +159,14 @@ struct ArticleReaderView: View {
 
     private func publish(quote: String, context: String, note: String) async {
         guard let store else { return }
-        let request = app.safeCore.projectArticleHighlightPublish(
-            input: ArticleHighlightPublishProjectionInput(note: note, error: "")
-        )
-        let outcome = await store.publishHighlight(
-            quote: quote,
-            note: request.submitNote,
-            context: context
-        )
-        let result = app.safeCore.projectArticleHighlightPublish(
-            input: ArticleHighlightPublishProjectionInput(
-                note: request.submitNote,
-                error: outcome ?? ""
-            )
-        )
-        if result.isSuccess {
-            withAnimation(.easeOut(duration: 0.2)) {
-                toast = result.toastMessage
-            }
-            toastResetTimer.schedule(after: 1.8) {
-                withAnimation(.easeIn(duration: 0.2)) { toast = nil }
-            }
-        } else {
-            withAnimation(.easeOut(duration: 0.2)) {
-                toast = result.toastMessage
-            }
-            toastResetTimer.schedule(after: 2.8) {
-                withAnimation(.easeIn(duration: 0.2)) { toast = nil }
-            }
+        // Phase 7: kernel publish is fire-and-forget (returns nil); always show
+        // success toast. Errors surface via the kernel event bus, not here.
+        await store.publishHighlight(quote: quote, note: note, context: context)
+        withAnimation(.easeOut(duration: 0.2)) {
+            toast = "Highlighted"
+        }
+        toastResetTimer.schedule(after: 1.8) {
+            withAnimation(.easeIn(duration: 0.2)) { toast = nil }
         }
     }
 }
@@ -521,18 +501,28 @@ private struct Header: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: article.pubkey,
-                profile: authorProfile,
-                fallback: .pubkey10
-            )
+        let profile = authorProfile
+        let pubkey = article.pubkey
+        let rawName = profile.map { !$0.displayName.isEmpty ? $0.displayName : $0.name } ?? ""
+        let name = rawName.isEmpty ? String(pubkey.prefix(10)) : rawName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: String(name.prefix(1)),
+            pictureUrl: profile?.picture ?? ""
         )
     }
 
     private var headerProjection: ArticleReaderHeaderProjection {
-        app.safeCore.projectArticleReaderHeader(
-            input: ArticleReaderHeaderProjectionInput(article: article)
+        let title = article.title.isEmpty ? "Untitled" : article.title
+        let hashtagLabels = article.hashtags.map { "#\($0)" }
+        let displayUnixSeconds = article.publishedAt ?? article.createdAt
+        let wordCount = article.content.split(separator: " ").count
+        let mins = wordCount / 200
+        return ArticleReaderHeaderProjection(
+            title: title,
+            hashtagLabels: hashtagLabels,
+            displayUnixSeconds: displayUnixSeconds,
+            readTimeMinutes: mins > 0 ? UInt32(mins) : nil
         )
     }
 
@@ -654,12 +644,14 @@ private struct HighlightDetailSheet: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: highlight.pubkey,
-                profile: app.profileSnapshots[highlight.pubkey],
-                fallback: .pubkey10
-            )
+        let profile = app.profileSnapshots[highlight.pubkey]
+        let pubkey = highlight.pubkey
+        let rawName = profile.map { !$0.displayName.isEmpty ? $0.displayName : $0.name } ?? ""
+        let name = rawName.isEmpty ? String(pubkey.prefix(10)) : rawName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: String(name.prefix(1)),
+            pictureUrl: profile?.picture ?? ""
         )
     }
 

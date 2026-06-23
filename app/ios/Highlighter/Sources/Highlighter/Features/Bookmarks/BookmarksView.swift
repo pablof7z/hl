@@ -234,22 +234,20 @@ struct BookmarkedArticleRow: View {
     let article: ArticleRecord
 
     var body: some View {
-        let projection = rowProjection
-
         HStack(alignment: .top, spacing: 12) {
-            coverImage(imageURL: projection.imageUrl)
+            coverImage(imageURL: article.image.isEmpty ? nil : article.image)
                 .frame(width: 56, height: 56)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(projection.title)
+                Text(article.title)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
 
-                if let summary = projection.summary {
-                    Text(summary)
+                if !article.summary.isEmpty {
+                    Text(article.summary)
                         .font(.caption)
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineLimit(2)
@@ -257,10 +255,10 @@ struct BookmarkedArticleRow: View {
                 }
 
                 HStack(spacing: 4) {
-                    Text(authorDisplay.displayName)
+                    Text(authorDisplayName)
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(Color.highlighterInkMuted)
-                    if let date = relativeDate(projection.displayUnixSeconds) {
+                    if let date = relativeDate(article.publishedAt ?? article.createdAt) {
                         Text("·")
                             .font(.caption2)
                             .foregroundStyle(Color.highlighterInkMuted)
@@ -307,29 +305,19 @@ struct BookmarkedArticleRow: View {
         }
     }
 
-    private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: article.pubkey,
-                profile: app.profileSnapshots[article.pubkey],
-                fallback: .pubkey10
-            )
-        )
-    }
-
-    private var rowProjection: BookmarkedArticleRowProjection {
-        app.safeCore.projectBookmarkedArticleRow(
-            input: BookmarkedArticleRowProjectionInput(article: article)
-        )
+    /// Phase 7: inline display name — no safeCore round-trip.
+    /// Falls back: displayName → name → first 8 hex chars of pubkey.
+    private var authorDisplayName: String {
+        let profile = app.profileSnapshots[article.pubkey]
+        if let dn = profile?.displayName, !dn.isEmpty { return dn }
+        if let n = profile?.name, !n.isEmpty { return n }
+        return article.pubkey.isEmpty ? "" : String(article.pubkey.prefix(8))
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
-        return app.safeCore.projectRelativeTimeLabel(
-            input: RelativeTimeLabelInput(
-                unixSeconds: seconds,
-                style: .bookmarkCompact
-            )
-        ).label
+        guard let seconds else { return nil }
+        let date = Date(timeIntervalSince1970: TimeInterval(seconds))
+        return RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date())
     }
 }
 

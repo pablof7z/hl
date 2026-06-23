@@ -128,23 +128,14 @@ final class ArticleReaderStore {
     }
 
     private func apply(snapshot: ArticleReaderSnapshot) {
-        let projection = safeCore.projectArticleReaderSnapshot(
-            input: ArticleReaderSnapshotApplyInput(
-                snapshot: snapshot,
-                currentArticle: article,
-                currentAuthorProfile: authorProfile
-            )
-        )
-        apply(projection: projection)
-    }
-
-    private func apply(projection: ArticleReaderSnapshotProjection) {
-        article = projection.article
-        authorProfile = projection.authorProfile
-        // The live-lane projection seeds highlights for the cold-start window;
+        // Inline the former projectArticleReaderSnapshot projection: prefer the
+        // new snapshot values and fall back to whatever the store already holds.
+        article = snapshot.article ?? article
+        authorProfile = snapshot.authorProfile ?? authorProfile
+        // The live-lane snapshot seeds highlights for the cold-start window;
         // the kernel overlay (per-article kind:9802 feed) is authoritative and
         // overrides as soon as its snapshot is present (Phase 7).
-        highlights = projection.highlights
+        highlights = snapshot.highlights
         applyKernelSnapshot()
     }
 
@@ -190,17 +181,16 @@ final class ArticleReaderStore {
             pubkeyHex: target.pubkey,
             dTag: target.dTag
         )
-        let projection = safeCore.projectViewSubscriptionStart(
-            input: ViewSubscriptionStartProjectionInput(start: outcome)
-        )
-        guard projection.shouldRegister else {
+        // Inline the former projectViewSubscriptionStart projection: a non-empty
+        // error string means the subscription did not open.
+        guard outcome.error.isEmpty else {
             // Non-fatal: cold ndb path still shows the seeded article and
             // its cached highlights. Live updates will resume on the next
             // visit.
             return
         }
-        subscriptionHandle = projection.handle
-        bridge.registerArticle(self, handle: projection.handle)
+        subscriptionHandle = outcome.handle
+        bridge.registerArticle(self, handle: outcome.handle)
     }
 }
 
