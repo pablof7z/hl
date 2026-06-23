@@ -1,5 +1,20 @@
 import SwiftUI
 
+fileprivate func articleReaderRoute(from address: String) -> ArticleReaderRoute? {
+    let parts = address.trimmingCharacters(in: .whitespaces).split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+    guard parts.count == 3, parts[0] == "30023" else { return nil }
+    let pubkey = parts[1].trimmingCharacters(in: .whitespaces)
+    let dTag = parts[2].trimmingCharacters(in: .whitespaces)
+    guard !pubkey.isEmpty, !dTag.isEmpty else { return nil }
+    return ArticleReaderRoute(address: "30023:\(pubkey):\(dTag)", pubkey: pubkey, dTag: dTag)
+}
+
+fileprivate func pageImageUrl(from raw: String) -> String? {
+    let trimmed = raw.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty, let url = URL(string: trimmed), url.scheme == "http" || url.scheme == "https" else { return nil }
+    return trimmed
+}
+
 /// The search destination. Tap the liquid-glass search button in any tab's
 /// toolbar to land here.
 ///
@@ -416,16 +431,14 @@ struct SearchView: View {
 
     @ViewBuilder
     private func highlightRow(_ h: HighlightRecord) -> some View {
-        let projection = app.safeCore.projectSearchHighlightRow(
-            input: SearchHighlightRowProjectionInput(highlight: h)
-        )
-        if let route = projection.articleRoute {
+        let route = articleReaderRoute(from: h.artifactAddress)
+        let pageImage = pageImageUrl(from: h.imageUrl)
+        if let route {
             NavigationLink(value: ArticleReaderTarget(route: route)) {
                 SearchHighlightRow(
                     highlight: h,
                     query: store?.query ?? "",
-                    pageImageUrl: projection.pageImageUrl,
-                    safeCore: app.safeCore
+                    pageImageUrl: pageImage
                 )
             }
             .buttonStyle(.plain)
@@ -433,8 +446,7 @@ struct SearchView: View {
             SearchHighlightRow(
                 highlight: h,
                 query: store?.query ?? "",
-                pageImageUrl: projection.pageImageUrl,
-                safeCore: app.safeCore
+                pageImageUrl: pageImage
             )
         }
     }
@@ -451,12 +463,10 @@ struct SearchView: View {
     // MARK: - Helpers
 
     private func commitRecentQuery() {
-        let projection = app.safeCore.projectSearchQuery(
-            input: SearchQueryProjectionInput(query: store?.query ?? "")
-        )
-        guard projection.hasQuery else { return }
+        let trimmed = (store?.query ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
         Task { @MainActor in
-            let snapshot = await app.safeCore.recordRecentSearchSnapshot(projection.searchQuery)
+            let snapshot = await app.safeCore.recordRecentSearchSnapshot(trimmed)
             recentQueries = snapshot.recentQueries
         }
     }
@@ -475,10 +485,21 @@ struct SearchView: View {
             && store.profiles.isEmpty
     }
 
+    private static let evergreenSearchQueries = ["Dostoevsky", "Bitcoin", "Attention", "Borges", "Philosophy"]
+
     private func suggestedQueries() -> [String] {
-        app.safeCore.projectSearchSuggestions(
-            input: SearchSuggestionsProjectionInput(joinedCommunities: app.joinedCommunities)
-        ).queries
+        var queries: [String] = []
+        var seen = Set<String>()
+        for community in app.joinedCommunities.prefix(4) {
+            let name = community.name.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty, seen.insert(name.lowercased()).inserted else { continue }
+            queries.append(name)
+        }
+        for fallback in SearchView.evergreenSearchQueries where queries.count < 8 {
+            guard seen.insert(fallback.lowercased()).inserted else { continue }
+            queries.append(fallback)
+        }
+        return queries
     }
 
     private func displayRelay(_ url: String) -> String {
@@ -592,10 +613,7 @@ private struct RoomCoverArt: View {
     let name: String
     let size: CGFloat
 
-    @Environment(HighlighterStore.self) private var app
-
     var body: some View {
-        let avatar = avatarProjection
         ZStack {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(
@@ -608,7 +626,7 @@ private struct RoomCoverArt: View {
                         endPoint: .bottomTrailing
                     )
                 )
-            if let url = URL(string: avatar.pictureUrl), !avatar.pictureUrl.isEmpty {
+            if !picture.isEmpty, let url = URL(string: picture) {
                 AsyncImage(url: url) { phase in
                     if case .success(let image) = phase {
                         image.resizable().aspectRatio(contentMode: .fill)
@@ -617,7 +635,7 @@ private struct RoomCoverArt: View {
                 .frame(width: size, height: size)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
-                Text(avatar.displayInitial)
+                Text(name.first.map(String.init) ?? "")
                     .font(.system(size: size * 0.38, design: .default).weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong.opacity(0.75))
             }
@@ -628,16 +646,6 @@ private struct RoomCoverArt: View {
                 .stroke(Color.highlighterRule, lineWidth: 0.5)
         }
     }
-
-    private var avatarProjection: RoomAvatarProjection {
-        app.safeCore.projectRoomAvatar(
-            input: RoomAvatarProjectionInput(
-                name: name,
-                pictureUrl: picture,
-                uppercaseInitial: false
-            )
-        )
-    }
 }
 
 // MARK: - Row views
@@ -646,7 +654,6 @@ private struct SearchHighlightRow: View {
     let highlight: HighlightRecord
     let query: String
     let pageImageUrl: String?
-    let safeCore: SafeHighlighterCore
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -662,8 +669,7 @@ private struct SearchHighlightRow: View {
                 HighlightMatchedText(
                     text: highlight.quote,
                     query: query,
-                    font: .system(size: 18, design: .default).italic(),
-                    safeCore: safeCore
+                    font: .system(size: 18, design: .default).italic()
                 )
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineSpacing(3)
@@ -687,35 +693,33 @@ private struct SearchHighlightRow: View {
 }
 
 private struct SearchCommunityRow: View {
-    @Environment(HighlighterStore.self) private var app
     let community: CommunitySummary
 
     var body: some View {
-        let projection = rowProjection
         HStack(alignment: .center, spacing: 14) {
             RoomCoverArt(picture: community.picture, name: community.name, size: 54)
             VStack(alignment: .leading, spacing: 4) {
-                Text(projection.displayName)
+                Text(community.name)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(1)
-                if let about = projection.about {
-                    Text(about)
+                if !community.about.isEmpty {
+                    Text(community.about)
                         .font(.footnote)
                         .foregroundStyle(Color.highlighterInkMuted)
                         .lineLimit(2)
                 }
                 HStack(spacing: 6) {
-                    Text(projection.visibilityLabel)
+                    Text(community.visibility.isEmpty ? "Public" : community.visibility.prefix(1).uppercased() + community.visibility.dropFirst())
                         .font(.caption2.weight(.semibold))
                         .tracking(0.6)
                     Text("·")
-                    Text(projection.accessLabel)
+                    Text(community.access.isEmpty ? "Open" : community.access.prefix(1).uppercased() + community.access.dropFirst())
                         .font(.caption2.weight(.semibold))
                         .tracking(0.6)
-                    if let memberCountLabel = projection.memberCountLabel {
+                    if let count = community.memberCount, count > 0 {
                         Text("·")
-                        Text(memberCountLabel)
+                        Text("\(count) members")
                             .font(.caption2)
                     }
                 }
@@ -729,27 +733,23 @@ private struct SearchCommunityRow: View {
         .padding(.vertical, 10)
         .contentShape(Rectangle())
     }
-
-    private var rowProjection: SearchCommunityRowProjection {
-        app.safeCore.projectSearchCommunityRow(
-            input: SearchCommunityRowProjectionInput(community: community)
-        )
-    }
 }
 
 private struct SearchProfileRow: View {
-    @Environment(HighlighterStore.self) private var app
     let profile: ProfileMetadata
 
-    var body: some View {
-        let display = app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: profile.pubkey,
-                profile: profile,
-                fallback: .pubkey8
-            )
+    private var display: ProfileDisplayProjection {
+        let name = profile.displayName.isEmpty
+            ? (profile.name.isEmpty ? String(profile.pubkey.prefix(8)) : profile.name)
+            : profile.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: profile.picture
         )
+    }
 
+    var body: some View {
         HStack(spacing: 14) {
             AuthorAvatar(
                 pubkey: profile.pubkey,
@@ -793,7 +793,6 @@ private struct HighlightMatchedText: View {
     let text: String
     let query: String
     let font: Font
-    let safeCore: SafeHighlighterCore
 
     var body: some View {
         Text(attributed)
@@ -802,32 +801,20 @@ private struct HighlightMatchedText: View {
 
     private var attributed: AttributedString {
         var out = AttributedString(text)
-        let projection = safeCore.projectSearchTextMatches(
-            input: SearchTextMatchesProjectionInput(text: text, query: query)
-        )
-        for span in projection.spans {
-            if let s = out.index(out.startIndex, offsetByCharacters: Int(span.start)),
-               let e = out.index(out.startIndex, offsetByCharacters: Int(span.end)),
-               s < e {
-                out[s..<e].foregroundColor = .highlighterAccent
-                out[s..<e].backgroundColor = Color.laneArticleHighlightFill
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return out }
+        var searchStart = text.startIndex
+        while searchStart < text.endIndex {
+            guard let range = text.range(of: query, options: .caseInsensitive, range: searchStart..<text.endIndex) else { break }
+            if let attrStart = AttributedString.Index(range.lowerBound, within: out),
+               let attrEnd = AttributedString.Index(range.upperBound, within: out),
+               attrStart < attrEnd {
+                out[attrStart..<attrEnd].foregroundColor = .highlighterAccent
+                out[attrStart..<attrEnd].backgroundColor = Color.laneArticleHighlightFill
             }
+            searchStart = range.upperBound
         }
         return out
-    }
-}
-
-private extension AttributedString {
-    /// Convenience — characters-based offset into the attributed string.
-    func index(_ base: AttributedString.Index, offsetByCharacters n: Int) -> AttributedString.Index? {
-        var idx = base
-        var remaining = n
-        while remaining > 0 {
-            guard idx < endIndex else { return nil }
-            idx = characters.index(after: idx)
-            remaining -= 1
-        }
-        return idx
     }
 }
 
