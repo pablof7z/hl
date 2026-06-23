@@ -273,11 +273,9 @@ struct CreateRoomSheet: View {
                 height: UInt32(prepared.height),
                 alt: ""
             )
-            let projection = appStore.safeCore.projectCreateRoomCoverUploadResult(
-                input: CreateRoomCoverUploadResultInput(snapshot: outcome)
-            )
-            guard let upload = projection.upload else {
-                self.error = projection.errorMessage
+            guard let upload = outcome.upload else {
+                let uploadErr = outcome.error.trimmingCharacters(in: .whitespaces)
+                self.error = "Couldn't upload cover: \(uploadErr)"
                 return
             }
             coverUpload = upload
@@ -323,20 +321,12 @@ struct CreateRoomSheet: View {
                 visibility: visibility,
                 access: access
             )
-            let result = appStore.safeCore.projectCreateRoomPublishResult(
-                input: CreateRoomPublishResultInput(
-                    groupId: outcome.groupId,
-                    error: outcome.error
-                )
-            )
-            if result.didCreate {
-                if result.shouldEmitSuccessFeedback {
-                    let generator = UINotificationFeedbackGenerator()
-                    generator.notificationOccurred(.success)
-                }
-                createdGroupId = result.groupId
+            let createError = outcome.error.trimmingCharacters(in: .whitespaces)
+            if createError.isEmpty {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                createdGroupId = outcome.groupId
             } else {
-                self.error = result.errorMessage
+                self.error = "Couldn't publish: \(createError)"
             }
         }
     }
