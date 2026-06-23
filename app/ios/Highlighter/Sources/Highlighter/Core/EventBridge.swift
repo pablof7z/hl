@@ -184,13 +184,11 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             store?.applyStatus(url: url, state: state)
         case .appToastRequested(let message):
             appStore?.shareToast = message
-        case .membershipChanged(let groupId):
-            if let appStore {
-                Task {
-                    await appStore.safeCore.confirmPendingJoin(groupId: groupId)
-                    await appStore.refreshJoinedCommunities()
-                }
-            }
+        case .membershipChanged:
+            // joinRoom goes through kernel dispatch; kernel emits appToastRequested on
+            // confirmation. The bespoke confirmPendingJoin was a no-op here since the
+            // bespoke pending-join map is never populated in the kernel flow.
+            appStore?.joinedCommunities = appStore?.kernel?.communities?.groups.map { $0.asCommunitySummary() } ?? []
         case .communityUpserted:
             // Any group-related event arrived — re-query nostrdb for the
             // authoritative joined set. A single refresh path eliminates the

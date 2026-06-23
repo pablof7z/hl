@@ -38,21 +38,27 @@ struct EditProfileSheet: View {
     @State private var error: String?
 
     private var updateProjection: ProfileUpdateProjection {
-        appStore.safeCore.projectProfileUpdate(
-            input: ProfileUpdateProjectionInput(
-                initial: initial,
-                name: name,
-                displayName: displayName,
-                about: about,
-                picture: picture,
-                banner: banner,
-                nip05: nip05,
-                website: website,
-                lud16: lud16,
-                saving: saving,
-                pictureUploading: pictureUploading,
-                bannerUploading: bannerUploading
-            )
+        let isDirty = displayName != (initial?.displayName ?? "")
+            || name != (initial?.name ?? "")
+            || about != (initial?.about ?? "")
+            || picture != (initial?.picture ?? "")
+            || banner != (initial?.banner ?? "")
+            || nip05 != (initial?.nip05 ?? "")
+            || website != (initial?.website ?? "")
+            || lud16 != (initial?.lud16 ?? "")
+        return ProfileUpdateProjection(
+            draft: ProfileUpdateDraft(
+                name: name.trimmingCharacters(in: .whitespaces),
+                displayName: displayName.trimmingCharacters(in: .whitespaces),
+                about: about.trimmingCharacters(in: .whitespaces),
+                picture: picture.trimmingCharacters(in: .whitespaces),
+                banner: banner.trimmingCharacters(in: .whitespaces),
+                nip05: nip05.trimmingCharacters(in: .whitespaces),
+                website: website.trimmingCharacters(in: .whitespaces),
+                lud16: lud16.trimmingCharacters(in: .whitespaces)
+            ),
+            isDirty: isDirty,
+            canSave: isDirty && !saving && !pictureUploading && !bannerUploading
         )
     }
 
