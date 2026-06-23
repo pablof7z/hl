@@ -203,13 +203,17 @@ struct CommentRow: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: node.record.pubkey,
-                profile: app.profileSnapshots[node.record.pubkey],
-                fallback: .pubkey10
+        {
+            let profile = app.profileSnapshots[node.record.pubkey]
+            let name = (profile?.displayName ?? "").isEmpty
+                ? ((profile?.name ?? "").isEmpty ? String(node.record.pubkey.prefix(10)) : profile!.name)
+                : profile!.displayName
+            return ProfileDisplayProjection(
+                displayName: name,
+                displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+                pictureUrl: profile?.picture ?? ""
             )
-        )
+        }()
     }
 
     private var relativeTime: String? {

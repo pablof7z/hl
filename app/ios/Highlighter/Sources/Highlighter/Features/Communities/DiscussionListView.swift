@@ -113,13 +113,17 @@ private struct DiscussionRowView: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: discussion.pubkey,
-                profile: app.profileSnapshots[discussion.pubkey],
-                fallback: .pubkey8
+        {
+            let profile = app.profileSnapshots[discussion.pubkey]
+            let name = (profile?.displayName ?? "").isEmpty
+                ? ((profile?.name ?? "").isEmpty ? String(discussion.pubkey.prefix(8)) : profile!.name)
+                : profile!.displayName
+            return ProfileDisplayProjection(
+                displayName: name,
+                displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+                pictureUrl: profile?.picture ?? ""
             )
-        )
+        }()
     }
 
     private func relativeTime(_ timestamp: UInt64) -> String {

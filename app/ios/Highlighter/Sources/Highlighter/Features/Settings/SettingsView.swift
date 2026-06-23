@@ -123,19 +123,31 @@ struct SettingsView: View {
     // MARK: - Helpers
 
     private func profileDisplay(for user: CurrentUser) -> ProfileDisplayProjection {
-        store.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: user.pubkey,
-                profile: store.currentUserProfile,
-                fallback: .accountLabel
-            )
+        let profile = store.currentUserProfile
+        let name = (profile?.displayName ?? "").isEmpty
+            ? ((profile?.name ?? "").isEmpty ? "Nostr Account" : profile!.name)
+            : profile!.displayName
+        let initial = (profile?.displayName ?? "").isEmpty
+            ? ((profile?.name ?? "").isEmpty ? "" : String(profile!.name.prefix(1)))
+            : String(profile!.displayName.prefix(1))
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: initial,
+            pictureUrl: profile?.picture ?? ""
         )
     }
 
     private func publicKeyDisplay(for user: CurrentUser) -> PublicKeyDisplayProjection {
-        store.safeCore.projectPublicKeyDisplay(
-            input: PublicKeyDisplayProjectionInput(npub: user.npub)
-        )
+        let npub = user.npub
+        let label: String
+        if npub.count <= 20 {
+            label = npub
+        } else {
+            let prefix = String(npub.prefix(10))
+            let suffix = String(npub.suffix(8))
+            label = "\(prefix)…\(suffix)"
+        }
+        return PublicKeyDisplayProjection(compactLabel: label)
     }
 
     private var appVersionString: String {

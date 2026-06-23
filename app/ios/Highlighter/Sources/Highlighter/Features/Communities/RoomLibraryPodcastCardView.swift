@@ -143,13 +143,17 @@ struct RoomLibraryPodcastCardView: View {
     private func sharerDisplay(
         _ projection: RoomLibraryPodcastCardProjection
     ) -> ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: projection.sharerPubkey,
-                profile: app.profileSnapshots[projection.sharerPubkey],
-                fallback: .pubkey10
+        {
+            let profile = app.profileSnapshots[projection.sharerPubkey]
+            let name = (profile?.displayName ?? "").isEmpty
+                ? ((profile?.name ?? "").isEmpty ? String(projection.sharerPubkey.prefix(10)) : profile!.name)
+                : profile!.displayName
+            return ProfileDisplayProjection(
+                displayName: name,
+                displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+                pictureUrl: profile?.picture ?? ""
             )
-        )
+        }()
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {

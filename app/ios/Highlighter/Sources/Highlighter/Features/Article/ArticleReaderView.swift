@@ -281,14 +281,11 @@ private struct ReaderScroll: View {
             let safeCore = app.safeCore
             let profileSnapshot = Dictionary(
                 uniqueKeysWithValues: app.profileSnapshots.map { (pk, meta) -> (String, String) in
-                    let display = safeCore.projectProfileDisplay(
-                        input: ProfileDisplayProjectionInput(
-                            pubkey: pk,
-                            profile: meta,
-                            fallback: .pubkey8
-                        )
-                    )
-                    return (pk, display.displayName)
+                    let name: String
+                    if !meta.displayName.isEmpty { name = meta.displayName }
+                    else if !meta.name.isEmpty { name = meta.name }
+                    else { name = String(pk.prefix(8)) }
+                    return (pk, name)
                 }
             )
             rendered = await Task.detached(priority: .userInitiated) {
@@ -521,12 +518,13 @@ private struct Header: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: article.pubkey,
-                profile: authorProfile,
-                fallback: .pubkey10
-            )
+        let name = (authorProfile?.displayName ?? "").isEmpty
+            ? ((authorProfile?.name ?? "").isEmpty ? String(article.pubkey.prefix(10)) : authorProfile!.name)
+            : authorProfile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: authorProfile?.picture ?? ""
         )
     }
 
@@ -654,12 +652,14 @@ private struct HighlightDetailSheet: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: highlight.pubkey,
-                profile: app.profileSnapshots[highlight.pubkey],
-                fallback: .pubkey10
-            )
+        let profile = app.profileSnapshots[highlight.pubkey]
+        let name = (profile?.displayName ?? "").isEmpty
+            ? ((profile?.name ?? "").isEmpty ? String(highlight.pubkey.prefix(10)) : profile!.name)
+            : profile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: profile?.picture ?? ""
         )
     }
 
