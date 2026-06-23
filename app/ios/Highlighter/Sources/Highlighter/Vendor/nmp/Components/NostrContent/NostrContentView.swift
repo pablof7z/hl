@@ -19,29 +19,51 @@ public struct NostrContentView: View {
     public var font: Font
     public var mentionLabel: (NostrWireUri) -> String
     public var quoteCardProvider: ((NostrWireUri) -> NostrQuoteCardModel?)?
+    /// Highlight overlays to paint on the body. Each decoration's `quote` is
+    /// matched against rendered text and painted with its colour; taps route to
+    /// `renderer.callbacks.onDecorationTap`.
+    public var decorations: [NostrContentDecoration]
+    /// Opt-in body text selection. When `true`, paragraph/heading runs become
+    /// selectable and the selection edit menu gains "Highlight" / "Highlight with
+    /// note" actions. Off by default for the lightweight non-article `Text` path.
+    public var selectionEnabled: Bool
 
-    @Environment(\.nostrContentRenderer) private var renderer
+    @Environment(\.nostrContentRenderer) var renderer
 
     public init(
         tree: ContentTreeWire,
         font: Font = .body,
         mentionLabel: @escaping (NostrWireUri) -> String = NostrContentView.defaultMentionLabel,
-        quoteCardProvider: ((NostrWireUri) -> NostrQuoteCardModel?)? = nil
+        quoteCardProvider: ((NostrWireUri) -> NostrQuoteCardModel?)? = nil,
+        decorations: [NostrContentDecoration] = [],
+        selectionEnabled: Bool = false
     ) {
         self.tree = tree
         self.font = font
         self.mentionLabel = mentionLabel
         self.quoteCardProvider = quoteCardProvider
+        self.decorations = decorations
+        self.selectionEnabled = selectionEnabled
     }
 
     public var body: some View {
         let groups = nostrContentGroups(tree)
         if groups.isEmpty {
             EmptyView()
+        } else if articleMode {
+            let bodyGroups = groups.filter { !isFootnoteDefinitionGroup($0) }
+            ScrollViewReader { proxy in
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(bodyGroups.enumerated()), id: \.offset) { _, group in
+                        groupView(group, proxy: proxy)
+                    }
+                    footnoteSection(proxy: proxy)
+                }
+            }
         } else {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
-                    groupView(group)
+                    groupView(group, proxy: nil)
                 }
             }
         }
@@ -50,10 +72,10 @@ public struct NostrContentView: View {
     // MARK: - Group dispatch
 
     @ViewBuilder
-    private func groupView(_ group: NostrContentGroup) -> some View {
+    private func groupView(_ group: NostrContentGroup, proxy: ScrollViewProxy?) -> some View {
         switch group {
         case .inline(let level, let children):
-            inlineGroup(level: level, children: children)
+            inlineGroup(level: level, children: children, proxy: proxy)
         case .media(let urls, let kind):
             mediaGroup(urls: urls, kind: kind)
         case .eventRef(let uri):
@@ -74,21 +96,25 @@ public struct NostrContentView: View {
     }
 
     @ViewBuilder
-    private func inlineGroup(level: NostrContentInlineLevel, children: [UInt32]) -> some View {
-        let concatenated = children.reduce(Text("")) { acc, child in
-            acc + inlineText(child)
-        }
-        switch level {
-        case .paragraph:
-            concatenated
-                .font(font)
-                .foregroundStyle(renderer.textColor)
-                .fixedSize(horizontal: false, vertical: true)
-        case .heading(let lvl):
-            concatenated
-                .font(headingFont(for: lvl))
-                .foregroundStyle(renderer.textColor)
-                .fixedSize(horizontal: false, vertical: true)
+    private func inlineGroup(level: NostrContentInlineLevel, children: [UInt32], proxy: ScrollViewProxy?) -> some View {
+        if articleMode {
+            articleInlineGroup(level: level, children: children, proxy: proxy)
+        } else {
+            let concatenated = children.reduce(Text("")) { acc, child in
+                acc + inlineText(child)
+            }
+            switch level {
+            case .paragraph:
+                concatenated
+                    .font(font)
+                    .foregroundStyle(renderer.textColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            case .heading(let lvl):
+                concatenated
+                    .font(headingFont(for: lvl))
+                    .foregroundStyle(renderer.textColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 

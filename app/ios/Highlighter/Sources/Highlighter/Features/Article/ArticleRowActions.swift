@@ -33,10 +33,10 @@ private struct ArticleRowActionsModifier: ViewModifier {
         app.isBookmarked(articleAddress: address)
     }
 
-    private var bookmarkChrome: ArticleBookmarkChromeProjection {
-        app.safeCore.projectArticleBookmarkChrome(
-            input: ArticleBookmarkChromeProjectionInput(isBookmarked: isBookmarked)
-        )
+    private var bookmarkChrome: (swipeTitle: String, menuTitle: String, systemImage: String) {
+        isBookmarked
+            ? (swipeTitle: "Remove", menuTitle: "Remove Bookmark", systemImage: "bookmark.slash")
+            : (swipeTitle: "Bookmark", menuTitle: "Bookmark", systemImage: "bookmark")
     }
 
     func body(content: Content) -> some View {
@@ -47,7 +47,7 @@ private struct ArticleRowActionsModifier: ViewModifier {
                 } label: {
                     Label(
                         bookmarkChrome.swipeTitle,
-                        systemImage: bookmarkChrome.actionSystemImage
+                        systemImage: bookmarkChrome.systemImage
                     )
                 }
                 .tint(Color.highlighterAccent)
@@ -66,7 +66,7 @@ private struct ArticleRowActionsModifier: ViewModifier {
                 } label: {
                     Label(
                         bookmarkChrome.menuTitle,
-                        systemImage: bookmarkChrome.actionSystemImage
+                        systemImage: bookmarkChrome.systemImage
                     )
                 }
                 Button {

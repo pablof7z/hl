@@ -150,7 +150,10 @@
 		E76FED6E3011B2BF817FEE44 /* GlobalUserToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDD0E4A37936AD80ECF52317 /* GlobalUserToolbar.swift */; };
 		E9F21B132B5A5D5BAC626B63 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B928BF8363A41669AC01A5F5 /* KeychainService.swift */; };
 		EC59C2F5EF3CDC6F8DFF8A4B /* BookmarkMenuButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C07C2E6A576151047C22769 /* BookmarkMenuButton.swift */; };
-		F433018E84DC611D5A308064 /* ArticleBodyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F206D49B13185CCF92155DF4 /* ArticleBodyView.swift */; };
+		4D2244B6260ECAA561652D1C /* NostrContentHighlights.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4CCD2D9410E013BBEA1DCA2 /* NostrContentHighlights.swift */; };
+		9717ECB28B2F68F4135CA47C /* NostrSelectableText.swift in Sources */ = {isa = PBXBuildFile; fileRef = D72E3FC4E88FBEAB06C29AE3 /* NostrSelectableText.swift */; };
+		A2AA2FB05C8F2B0A115656ED /* NostrContentAttributed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 239AEB2078B4D6BFF38001AC /* NostrContentAttributed.swift */; };
+		CFC09F5920C934DC717A1405 /* NostrContentArticleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1922BA51CB4DB7FDA2722EC /* NostrContentArticleView.swift */; };
 		F4BB417D04CB238F9D18B078 /* AuthorAvatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 481980DFF25F7D1D0440C19D /* AuthorAvatar.swift */; };
 		FA5F4BC45BCBE5001FE66DD9 /* PodcastPlayerStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 086CEFC46ADE095C2C280637 /* PodcastPlayerStore.swift */; };
 		FB4F8B9641B1FE21DAC28D8D /* OneShotUITimer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F96EA3DF97B36BF2E5ACF832 /* OneShotUITimer.swift */; };
@@ -329,7 +332,10 @@
 		E058F052D0BB19EEBFF2E36E /* BookPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookPicker.swift; sourceTree = "<group>"; };
 		E58E01CBB5EEEB2358437B36 /* TranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptView.swift; sourceTree = "<group>"; };
 		E770D4722D4955DC88F55BE3 /* WebReaderTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebReaderTarget.swift; sourceTree = "<group>"; };
-		F206D49B13185CCF92155DF4 /* ArticleBodyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticleBodyView.swift; sourceTree = "<group>"; };
+		239AEB2078B4D6BFF38001AC /* NostrContentAttributed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrContentAttributed.swift; sourceTree = "<group>"; };
+		C1922BA51CB4DB7FDA2722EC /* NostrContentArticleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrContentArticleView.swift; sourceTree = "<group>"; };
+		D72E3FC4E88FBEAB06C29AE3 /* NostrSelectableText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrSelectableText.swift; sourceTree = "<group>"; };
+		E4CCD2D9410E013BBEA1DCA2 /* NostrContentHighlights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrContentHighlights.swift; sourceTree = "<group>"; };
 		F5C307F542E0909AA378D8B3 /* HighlightPageImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HighlightPageImage.swift; sourceTree = "<group>"; };
 		F7C2B4F898A1038FD0BA930A /* ChapterRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChapterRow.swift; sourceTree = "<group>"; };
 		F96EA3DF97B36BF2E5ACF832 /* OneShotUITimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneShotUITimer.swift; sourceTree = "<group>"; };
@@ -390,7 +396,6 @@
 		0AD6B7AAF98185AB8B48F44B /* Article */ = {
 			isa = PBXGroup;
 			children = (
-				F206D49B13185CCF92155DF4 /* ArticleBodyView.swift */,
 				C9E2771D8440F9E7827D2DF7 /* ArticleReaderStore.swift */,
 				B5B02F4E550EB515EF977948 /* ArticleReaderView.swift */,
 				7DE5E60FD0F0D0277E9EF990 /* ArticleRowActions.swift */,
@@ -556,9 +561,13 @@
 			isa = PBXGroup;
 			children = (
 				D2A11308B7BCA956A5EBBD99 /* ContentTreeWire.swift */,
+				239AEB2078B4D6BFF38001AC /* NostrContentAttributed.swift */,
+				C1922BA51CB4DB7FDA2722EC /* NostrContentArticleView.swift */,
 				53DB38D802EBACF458DB6495 /* NostrContentGrouping.swift */,
+				E4CCD2D9410E013BBEA1DCA2 /* NostrContentHighlights.swift */,
 				B930ACF876231B90D087D7DA /* NostrContentRenderer.swift */,
 				1BB14F93C53A58830C11DC16 /* NostrContentView.swift */,
+				D72E3FC4E88FBEAB06C29AE3 /* NostrSelectableText.swift */,
 				4460054F26F1A92049F21AB3 /* NostrMediaGrid.swift */,
 				6653C142101ED845DC2AF028 /* NostrQuoteCard.swift */,
 			);
@@ -986,7 +995,6 @@
 				A49CFCE8C2D8EAD8D751144E /* AddRelaySheet.swift in Sources */,
 				12506BA5362A4A28F685B75E /* App.swift in Sources */,
 				D23E356C9D4F80D55508A102 /* AppSessionStore.swift in Sources */,
-				F433018E84DC611D5A308064 /* ArticleBodyView.swift in Sources */,
 				DBC69C0AC92ADF0903D5A425 /* ArticleCardView.swift in Sources */,
 				73DE8B4F1ACA88BE11DE1CFA /* ArticleReaderStore.swift in Sources */,
 				8C5DFBA1B45CA93EEC5B75F8 /* ArticleReaderView.swift in Sources */,
@@ -1066,8 +1074,12 @@
 				E1DE5A510F8579130B9FDDB1 /* NetworkSettingsStore.swift in Sources */,
 				ACA17C8EEC9768B46B11D0CB /* NetworkSettingsView.swift in Sources */,
 				703EE5A400A1665ADD2CE4E0 /* NostrContentGrouping.swift in Sources */,
+				A2AA2FB05C8F2B0A115656ED /* NostrContentAttributed.swift in Sources */,
+				CFC09F5920C934DC717A1405 /* NostrContentArticleView.swift in Sources */,
+				4D2244B6260ECAA561652D1C /* NostrContentHighlights.swift in Sources */,
 				7B86CABC2BADB8FF3EFE5F2B /* NostrContentRenderer.swift in Sources */,
 				A5BB2484C19B1739BD8EE9D0 /* NostrContentView.swift in Sources */,
+				9717ECB28B2F68F4135CA47C /* NostrSelectableText.swift in Sources */,
 				A06FE1ACD012D6D69C22AE32 /* NostrMediaGrid.swift in Sources */,
 				0ED40EDAFB4A85A6A3073FD7 /* NostrQuoteCard.swift in Sources */,
 				A6148C000E1FC2734F5D085C /* NostrRichText.swift in Sources */,

@@ -3,8 +3,8 @@ import SwiftUI
 import UIKit
 
 /// Full-screen NIP-23 long-form reader. Handles the gorgeous header (cover,
-/// serif title, author row, metadata), renders the body via `ArticleBodyView`,
-/// and orchestrates the text-selection → highlight flow.
+/// serif title, author row, metadata), renders the body via `NostrContentView`
+/// in article mode, and orchestrates the text-selection → highlight flow.
 struct ArticleReaderView: View {
     let target: ArticleReaderTarget
 
@@ -14,15 +14,8 @@ struct ArticleReaderView: View {
     @State private var pendingHighlight: PendingHighlight?
     @State private var highlightDetail: HighlightRecord?
     @State private var toast: String?
-    @State private var scrollAnchor: ScrollAnchor = .idle
     @State private var shareTarget: ShareToCommunityTarget?
     @State private var toastResetTimer = OneShotUITimer()
-
-    enum ScrollAnchor: Equatable {
-        case idle
-        case footnote(number: Int)
-        case footnoteBack(number: Int)
-    }
 
     struct PendingHighlight: Identifiable {
         let id = UUID()
@@ -129,22 +122,16 @@ struct ArticleReaderView: View {
         } else if let article = store.article {
             ReaderScroll(
                 article: article,
+                contentTreeJson: kernel.articleReader[target.address]?.contentTreeJson ?? "",
                 authorProfile: app.profileSnapshots[target.pubkey] ?? store.authorProfile,
                 highlights: store.highlights,
-                scrollAnchor: scrollAnchor,
                 onPublishHighlight: { quote, context in
                     Task { await publish(quote: quote, context: context, note: "") }
                 },
                 onRequestNote: { quote, context in
                     pendingHighlight = PendingHighlight(quote: quote, context: context)
                 },
-                onHighlightTap: { highlightDetail = $0 },
-                onFootnoteTap: { number in
-                    scrollAnchor = .footnote(number: number)
-                },
-                onFootnoteBackTap: { number in
-                    scrollAnchor = .footnoteBack(number: number)
-                }
+                onHighlightTap: { highlightDetail = $0 }
             )
         } else {
             ContentUnavailableView(
@@ -185,10 +172,10 @@ private struct ArticleCommentsAttachmentModifier: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        let snapshot = app.safeCore.getArticleCommentScope(address: target.address)
-        if snapshot.attach, let scope = snapshot.scope {
+        let address = target.address
+        if !address.isEmpty {
             content.commentsAttachment(
-                scope: scope,
+                scope: CommentScope(rootTagName: "A", rootTagValue: address, rootKind: 30023),
                 artifactAuthorPubkey: target.pubkey
             )
         } else {
@@ -201,16 +188,14 @@ private struct ArticleCommentsAttachmentModifier: ViewModifier {
 
 private struct ReaderScroll: View {
     let article: ArticleRecord
+    let contentTreeJson: String
     let authorProfile: ProfileMetadata?
     let highlights: [HighlightRecord]
-    let scrollAnchor: ArticleReaderView.ScrollAnchor
     var onPublishHighlight: (String, String) -> Void
     var onRequestNote: (String, String) -> Void
     var onHighlightTap: (HighlightRecord) -> Void
-    var onFootnoteTap: (Int) -> Void
-    var onFootnoteBackTap: (Int) -> Void
 
-    @State private var rendered: MarkdownRenderer.Output?
+    @State private var contentTree: ContentTreeWire?
     @State private var imageToOpen: IdentifiableURL?
     @State private var profileNavPubkey: String?
     @State private var profileNavActive = false
@@ -238,8 +223,50 @@ private struct ReaderScroll: View {
                     .padding(.top, coverURL == nil ? 10 : 20)
                     .padding(.bottom, 12)
 
-                if let rendered {
-                    bodySegments(rendered)
+                if let tree = contentTree {
+                    let highlightDecorations = highlights.map { h in
+                        NostrContentDecoration(
+                            id: h.eventId,
+                            quote: h.quote,
+                            color: Color.highlighterAccent.opacity(0.25)
+                        )
+                    }
+                    NostrContentView(
+                        tree: tree,
+                        decorations: highlightDecorations,
+                        selectionEnabled: true
+                    )
+                    .padding(.horizontal, 20)
+                    .nostrContentRenderer(NostrContentRenderer(
+                        textColor: Color.highlighterInkStrong,
+                        secondaryTextColor: Color.highlighterInkMuted,
+                        mentionColor: Color.highlighterAccent,
+                        hashtagColor: Color.highlighterAccent,
+                        linkColor: Color.highlighterAccent,
+                        quoteBorderColor: Color.highlighterRule,
+                        codeBackgroundColor: Color.highlighterRule.opacity(0.15),
+                        placeholderColor: Color.highlighterInkMuted.opacity(0.6),
+                        callbacks: NostrContentCallbacks(
+                            onMentionTap: { pubkey in
+                                profileNavPubkey = pubkey
+                                profileNavActive = true
+                            },
+                            onLinkTap: { url in UIApplication.shared.open(url) },
+                            onImageTap: { url in imageToOpen = IdentifiableURL(url: url) },
+                            onEventRefTap: { _ in },
+                            onTextSelected: { quote, context in
+                                onPublishHighlight(quote, context)
+                            },
+                            onDecorationTap: { id in
+                                if let h = highlights.first(where: { $0.eventId == id.raw }) {
+                                    onHighlightTap(h)
+                                }
+                            },
+                            onTextSelectedWithNote: { quote, context in
+                                onRequestNote(quote, context)
+                            }
+                        )
+                    ))
                 }
 
                 NavigationLink(
@@ -257,103 +284,13 @@ private struct ReaderScroll: View {
         .fullScreenCover(item: $imageToOpen) { item in
             ImageZoomView(url: item.url, onDismiss: { imageToOpen = nil })
         }
-        .task(id: "\(article.eventId)-\(highlights.count)-\(app.profileSnapshots.count)") {
-            let safeCore = app.safeCore
-            let profileSnapshot = Dictionary(
-                uniqueKeysWithValues: app.profileSnapshots.map { (pk, meta) -> (String, String) in
-                    let display = safeCore.projectProfileDisplay(
-                        input: ProfileDisplayProjectionInput(
-                            pubkey: pk,
-                            profile: meta,
-                            fallback: .pubkey8
-                        )
-                    )
-                    return (pk, display.displayName)
-                }
-            )
-            rendered = await Task.detached(priority: .userInitiated) {
-                MarkdownRenderer.render(
-                    content: article.content,
-                    highlights: highlights,
-                    accent: UIColor(Color.highlighterAccent),
-                    tint: UIColor(Color.highlighterAccent),
-                    ink: UIColor(Color.highlighterInkStrong),
-                    muted: UIColor(Color.highlighterInkMuted),
-                    nostrStandaloneEntity: { input in
-                        safeCore.standaloneNostrEntity(input)
-                    },
-                    nostrInlineTokens: { input in
-                        safeCore.tokenizeNostrMarkdownInline(input)
-                    },
-                    nostrInlineRender: { ref in
-                        safeCore.nostrEntityInlineRender(entity: ref)
-                    },
-                    highlightContent: { highlight in
-                        safeCore.projectHighlightDetailContent(
-                            input: HighlightDetailContentProjectionInput(highlight: highlight)
-                        )
-                    },
-                    profileNames: profileSnapshot
-                )
-            }.value
+        .task(id: contentTreeJson) {
+            guard !contentTreeJson.isEmpty,
+                  let data = contentTreeJson.data(using: .utf8),
+                  let tree = try? JSONDecoder().decode(ContentTreeWire.self, from: data)
+            else { return }
+            contentTree = tree
         }
-    }
-
-    @ViewBuilder
-    private func bodySegments(_ output: MarkdownRenderer.Output) -> some View {
-        ForEach(Array(output.segments.enumerated()), id: \.offset) { idx, segment in
-            switch segment {
-            case .text(let attrStr):
-                let isLast = idx == output.segments.count - 1
-                ArticleBodyView(
-                    attributedText: isLast ? withFootnotes(attrStr, output) : attrStr,
-                    footnoteAnchors: isLast ? output.footnoteAnchors : [:],
-                    footnoteBackAnchors: [:],
-                    highlightsById: output.highlightsById,
-                    paperColor: UIColor(Color.highlighterPaper),
-                    safeCore: app.safeCore,
-                    onPublishHighlight: onPublishHighlight,
-                    onRequestNote: onRequestNote,
-                    onHighlightTap: onHighlightTap,
-                    onFootnoteTap: onFootnoteTap,
-                    onFootnoteBackTap: onFootnoteBackTap,
-                    onImageTap: { url in imageToOpen = IdentifiableURL(url: url) },
-                    onProfileTap: { pk in
-                        profileNavPubkey = pk
-                        profileNavActive = true
-                    }
-                )
-                .frame(maxWidth: .infinity)
-            case .image(let url, let alt):
-                InlineArticleImage(url: url, alt: alt)
-            case .nostrEntity(let ref):
-                NostrEntityCard(entity: ref)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 4)
-            }
-        }
-    }
-
-    private func withFootnotes(_ body: NSAttributedString, _ output: MarkdownRenderer.Output) -> NSAttributedString {
-        guard output.footnotes.length > 0 else { return body }
-        let out = NSMutableAttributedString(attributedString: body)
-        out.append(NSAttributedString(
-            string: "\n———\n\n",
-            attributes: [
-                .font: UIFont.systemFont(ofSize: 14, weight: .semibold),
-                .foregroundColor: UIColor(Color.highlighterInkMuted)
-            ]
-        ))
-        out.append(NSAttributedString(
-            string: "Footnotes\n\n",
-            attributes: [
-                .font: UIFont.systemFont(ofSize: 12, weight: .bold),
-                .foregroundColor: UIColor(Color.highlighterInkMuted),
-                .kern: 0.6
-            ]
-        ))
-        out.append(output.footnotes)
-        return out
     }
 }
 

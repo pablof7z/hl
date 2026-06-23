@@ -378,7 +378,7 @@ pub(crate) fn run_effect_drain_feed(
     tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
     nmp: Option<&NmpHandle>,
 ) {
-    use nmp_ffi::pull::{nmp_app_pull_page, nmp_free_bytes};
+    use nmp_ffi::pull::{nmp_mirror_pull_page, nmp_mirror_free_bytes};
 
     let Some(handle) = nmp else {
         tracing::debug!(?key, "DrainFeed: no live NmpApp (test mode)");
@@ -397,7 +397,7 @@ pub(crate) fn run_effect_drain_feed(
     // Call nmp_app_pull_page. It is `pub extern "C"` (not `unsafe`) in nmp-ffi,
     // so the call itself does not require an unsafe block; we cast the pointer
     // here, which is safe because nmp_ref is a valid reference to an NmpApp.
-    let owned_bytes = nmp_app_pull_page(
+    let owned_bytes = nmp_mirror_pull_page(
         nmp_ref as *const nmp_ffi::NmpApp,
         cursor_id,
         FEED_PAGE_SIZE,
@@ -407,8 +407,8 @@ pub(crate) fn run_effect_drain_feed(
     // Borrow the bytes, then free — no early return between borrow and free.
     let result = decode_pull_page_wire(key.clone(), cursor_id, &owned_bytes);
 
-    // nmp_free_bytes is `pub extern "C"` (not `unsafe`) — call directly.
-    nmp_free_bytes(owned_bytes);
+    // nmp_mirror_free_bytes is `pub extern "C"` (not `unsafe`) — call directly.
+    nmp_mirror_free_bytes(owned_bytes);
 
     match result {
         Some(event) => {
@@ -466,7 +466,7 @@ pub(crate) fn advance_feed_cursor(cursor_id: u64, after_seq: u64, nmp: Option<&N
 
 // ─── Binary wire decoder ──────────────────────────────────────────────────────
 
-/// Decode the `nmp_app_pull_page` binary wire result into a `KernelEvent::FeedPage`.
+/// Decode the `nmp_mirror_pull_page` binary wire result into a `KernelEvent::FeedPage`.
 ///
 /// Returns `None` on Error variant, unknown variant, or a malformed buffer
 /// (D6: no panics from untrusted wire data). Returns `Some(FeedPage)` for both
@@ -478,7 +478,7 @@ pub(crate) fn advance_feed_cursor(cursor_id: u64, after_seq: u64, nmp: Option<&N
 fn decode_pull_page_wire(
     key: FeedKey,
     cursor_id: u64,
-    bytes: &nmp_ffi::pull::NmpOwnedBytes,
+    bytes: &nmp_ffi::pull::NmpMirrorBytes,
 ) -> Option<KernelEvent> {
     if bytes.ptr.is_null() || bytes.len == 0 {
         tracing::warn!(?key, "DrainFeed: empty bytes returned");
@@ -871,12 +871,12 @@ mod tests {
     /// Garbage binary wire input produces no-op (D6 — malformed_page_no_ops).
     #[test]
     fn malformed_page_no_ops() {
-        use nmp_ffi::pull::NmpOwnedBytes;
+        use nmp_ffi::pull::NmpMirrorBytes;
 
         // Simulate garbage bytes that look like a Page variant but are truncated.
         let garbage: Vec<u8> = vec![0u8, 0xDE, 0xAD, 0xBE, 0xEF]; // variant=Page, then truncated
         let mut v = garbage.clone();
-        let bytes = NmpOwnedBytes {
+        let bytes = NmpMirrorBytes {
             ptr: v.as_mut_ptr(),
             len: v.len(),
             cap: v.capacity(),
@@ -891,10 +891,10 @@ mod tests {
     /// Garbage all-zeros wire produces no-op.
     #[test]
     fn all_zeros_wire_no_ops() {
-        use nmp_ffi::pull::NmpOwnedBytes;
+        use nmp_ffi::pull::NmpMirrorBytes;
 
         let mut zeros = vec![0u8; 32];
-        let bytes = NmpOwnedBytes {
+        let bytes = NmpMirrorBytes {
             ptr: zeros.as_mut_ptr(),
             len: zeros.len(),
             cap: zeros.capacity(),

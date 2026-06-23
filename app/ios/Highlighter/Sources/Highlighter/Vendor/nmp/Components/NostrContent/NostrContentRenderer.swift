@@ -7,13 +7,23 @@ public struct NostrContentCallbacks: @unchecked Sendable {
     public var onLinkTap: (URL) -> Void
     public var onImageTap: (URL) -> Void
     public var onEventRefTap: (String) -> Void
+    /// Text-selection → highlight-creation seam (NIP-84 kind:9802).
+    public var onTextSelected: (_ quote: String, _ context: String) -> Void
+    /// Tap on a rendered highlight overlay (see `NostrContentView.decorations`).
+    public var onDecorationTap: (NostrContentDecorationId) -> Void
+    /// Optional "Highlight with note" action. When non-nil, `NostrSelectableText`
+    /// shows a second edit-menu action that fires this instead of `onTextSelected`.
+    public var onTextSelectedWithNote: ((_ quote: String, _ context: String) -> Void)?
 
     public init(
         onMentionTap: @escaping (String) -> Void = { _ in },
         onHashtagTap: @escaping (String) -> Void = { _ in },
         onLinkTap: @escaping (URL) -> Void = { _ in },
         onImageTap: ((URL) -> Void)? = nil,
-        onEventRefTap: @escaping (String) -> Void = { _ in }
+        onEventRefTap: @escaping (String) -> Void = { _ in },
+        onTextSelected: @escaping (_ quote: String, _ context: String) -> Void = { _, _ in },
+        onDecorationTap: @escaping (NostrContentDecorationId) -> Void = { _ in },
+        onTextSelectedWithNote: ((_ quote: String, _ context: String) -> Void)? = nil
     ) {
         self.onMentionTap = onMentionTap
         self.onHashtagTap = onHashtagTap
@@ -22,6 +32,9 @@ public struct NostrContentCallbacks: @unchecked Sendable {
         // generic link handler still get image-tap routing for free.
         self.onImageTap = onImageTap ?? onLinkTap
         self.onEventRefTap = onEventRefTap
+        self.onTextSelected = onTextSelected
+        self.onDecorationTap = onDecorationTap
+        self.onTextSelectedWithNote = onTextSelectedWithNote
     }
 }
 
