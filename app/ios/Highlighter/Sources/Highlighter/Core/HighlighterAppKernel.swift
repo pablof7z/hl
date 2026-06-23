@@ -118,6 +118,11 @@ final class HighlighterAppKernel {
     /// (Phase 7); the collections/web panes stay on the live lane (nmp #1653).
     private(set) var bookmarks: BookmarksSnapshot?
 
+    /// What's-new sheet snapshot. `nil` until `.prepareWhatsNew` is dispatched.
+    /// `shouldPresent` drives the sheet presentation in App.swift (Phase 7
+    /// cutover: replaces the live-lane `safeCore.prepareWhatsNew()` call).
+    private(set) var whatsNew: WhatsNewSnapshot?
+
     // MARK: - Back-reference to the live-lane store (Phase 7 bridge)
 
     /// Weak reference set by `AppEntry` after both objects are initialised.
@@ -495,8 +500,12 @@ final class HighlighterAppKernel {
         // `current_snapshot`; the observer push is handled by those stores
         // directly. No-op here (the actor still pushes; non-resident views
         // are closed before they can receive stale data — D5).
+        // Phase 7 cutover: what's-new snapshot drives the sheet in App.swift.
+        case .whatsNew(let s):
+            whatsNew = s
+
         case .articleFeed,
-             .highlightFeed, .whatsNew, .bookPicker, .shareComposer:
+             .highlightFeed, .bookPicker, .shareComposer:
             break
 
         // Phase 5+ snapshots (podcast) — managed by their owning views / stores;

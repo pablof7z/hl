@@ -7,18 +7,17 @@ import SwiftUI
 /// one shot.
 ///
 /// Uses SwiftUI's `Menu(primaryAction:)` so a tap stays one-tap-fast and
-/// long-press surfaces the curation choices. Loads curations lazily on
-/// the first appear; refreshes after every membership change so the
-/// checkmark state is always accurate without a full BookmarkStore.
+/// long-press surfaces the curation choices. Curation state is derived
+/// live from the kernel's BookmarksSnapshot; write operations dispatch
+/// kernel actions (addToSet / removeFromSet / createAndAddToSet).
 struct BookmarkMenuButton: View {
     /// NIP-33 a-tag value — `"30023:<pubkey>:<d>"`.
     let articleAddress: String
 
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
 
-    @State private var curationItems: [CurationMenuItem] = []
     @State private var newCollectionPresented: Bool = false
-    @State private var errorMessage: String?
 
     var body: some View {
         Menu {
@@ -38,13 +37,12 @@ struct BookmarkMenuButton: View {
             Task { await app.toggleBookmark(articleAddress: articleAddress) }
         }
         .accessibilityLabel(bookmarkChrome.accessibilityLabel)
-        .task { await loadCurations() }
         .sheet(isPresented: $newCollectionPresented) {
             NewCollectionSheet(
                 onCancel: { newCollectionPresented = false },
                 onCreate: { title in
                     newCollectionPresented = false
-                    Task { await createAndAdd(title: title) }
+                    createAndAdd(title: title)
                 }
             )
             .presentationDetents([.medium])
@@ -62,7 +60,7 @@ struct BookmarkMenuButton: View {
             Section("Add to collection") {
                 ForEach(curationItems, id: \.id) { item in
                     Button {
-                        Task { await toggleInCuration(item) }
+                        toggleInCuration(item)
                     } label: {
                         if item.isMember {
                             Label(item.title, systemImage: "checkmark")
@@ -101,40 +99,33 @@ struct BookmarkMenuButton: View {
         }
     }
 
+    /// Derives the curation-set menu items from the live kernel snapshot.
+    /// SwiftUI re-evaluates this whenever `kernel.bookmarks` changes
+    /// because `HighlighterAppKernel` is `@Observable`.
+    private var curationItems: [CurationMenuItem] {
+        guard let sets = kernel.bookmarks?.myCurationSets else { return [] }
+        return sets.map { set in
+            CurationMenuItem(
+                id: "30004:\(set.pubkey):\(set.dTag)",
+                title: set.title ?? "",
+                isMember: set.articleAddresses.contains(articleAddress)
+            )
+        }
+    }
+
     // MARK: - Actions
 
-    private func loadCurations() async {
-        apply(await app.safeCore.getCurationMenuSnapshot(address: articleAddress))
-    }
-
-    private func toggleInCuration(_ item: CurationMenuItem) async {
-        let snapshot = await app.safeCore.toggleCurationMenuItemSnapshot(
-            dTag: item.id,
-            address: articleAddress
-        )
-        apply(snapshot, errorPrefix: "Couldn't update collection")
-    }
-
-    private func createAndAdd(title: String) async {
-        let snapshot = await app.safeCore.createCurationSetWithAddressSnapshot(
-            title: title,
-            address: articleAddress
-        )
-        apply(snapshot, errorPrefix: "Couldn't create collection")
-    }
-
-    private func apply(_ snapshot: CurationMenuSnapshot, errorPrefix: String? = nil) {
-        let projection = app.safeCore.projectCurationMenuSnapshotApply(
-            input: CurationMenuSnapshotApplyInput(
-                items: snapshot.items,
-                error: snapshot.error,
-                errorPrefix: errorPrefix
-            )
-        )
-        curationItems = projection.items
-        if projection.shouldApplyErrorMessage {
-            errorMessage = projection.errorMessage
+    private func toggleInCuration(_ item: CurationMenuItem) {
+        // item.id is the full NIP-33 coordinate "30004:<pubkey>:<d>"
+        if item.isMember {
+            kernel.app.dispatch(.removeFromSet(setCoordinate: item.id, itemCoordinate: articleAddress))
+        } else {
+            kernel.app.dispatch(.addToSet(setCoordinate: item.id, itemCoordinate: articleAddress))
         }
+    }
+
+    private func createAndAdd(title: String) {
+        kernel.app.dispatch(.createAndAddToSet(title: title, itemCoordinate: articleAddress))
     }
 }
 
