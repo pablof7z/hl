@@ -303,9 +303,9 @@ struct HighlightDetailView: View {
     }
 
     private var commentsButton: some View {
-        let projection = app.safeCore.projectCommentToolbar(
-            input: CommentToolbarProjectionInput(records: commentsStore.records)
-        )
+        let count = commentsStore.records.count
+        let countLabel = count > 99 ? "99+" : "\(count)"
+        let a11yLabel = count == 0 ? "Comments" : "\(count) comment\(count == 1 ? "" : "s")"
 
         return Button {
             showComments = true
@@ -313,15 +313,15 @@ struct HighlightDetailView: View {
             HStack(spacing: 5) {
                 Image(systemName: "bubble.left")
                     .font(.system(size: 20, weight: .medium))
-                if projection.showsCount {
-                    Text(projection.countLabel)
+                if count > 0 {
+                    Text(countLabel)
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                 }
             }
             .foregroundStyle(Color.highlighterInkStrong)
         }
-        .accessibilityLabel(projection.accessibilityLabel)
+        .accessibilityLabel(a11yLabel)
     }
 
     private func actionIcon(systemName: String) -> some View {
