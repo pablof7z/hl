@@ -96,12 +96,13 @@ struct ClipThreadView: View {
                 return
             }
             let scope = CommentScope(rootTagName: "E", rootTagValue: trimmedId, rootKind: 9802)
-            let outcome = await app.safeCore.publishCommentForScopeSnapshot(
+            let outcome = await app.core.publishCommentForScopeSnapshot(
                 scope: scope,
+                parentEventId: nil,
                 content: projection.submitBody,
                 limit: 200
             )
-            let result = app.safeCore.projectCommentPublishResult(
+            let result = app.core.projectCommentPublishResult(
                 input: CommentPublishResultInput(error: outcome.error)
             )
             guard result.didPublish else {
@@ -109,7 +110,7 @@ struct ClipThreadView: View {
                 isSending = false
                 return
             }
-            let applyProjection = app.safeCore.projectCommentInlineThreadSnapshotApply(
+            let applyProjection = app.core.projectCommentInlineThreadSnapshotApply(
                 input: CommentInlineThreadSnapshotApplyInput(
                     records: outcome.snapshot.records,
                     error: outcome.snapshot.error

@@ -16,11 +16,11 @@ final class BookmarkStore {
     var isLoading = false
 
     private weak var bridge: EventBridge?
-    private var core: SafeHighlighterCore?
+    private var core: HighlighterCore?
     /// Phase 7 / #1653: kernel owns all bookmarks panes — articles, sets, and web.
     private var kernel: HighlighterAppKernel?
 
-    func start(core: SafeHighlighterCore, bridge: EventBridge, kernel: HighlighterAppKernel) async {
+    func start(core: HighlighterCore, bridge: EventBridge, kernel: HighlighterAppKernel) async {
         self.core = core
         self.bridge = bridge
         self.kernel = kernel

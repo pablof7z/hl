@@ -8,7 +8,7 @@ final class AppSessionStore {
     private init() {}
 
     /// Returns the logged-in user if a saved credential succeeds, nil otherwise.
-    func restoreSession(into core: SafeHighlighterCore) async -> CurrentUser? {
+    func restoreSession(into core: HighlighterCore) async -> CurrentUser? {
         let snapshot = await core.restoreSessionSnapshot(
             nsec: KeychainService.loadNsec(),
             bunkerUri: KeychainService.loadBunkerURI()
@@ -26,7 +26,7 @@ final class AppSessionStore {
 
     func persistAuthInstructions(
         _ snapshot: AuthSessionSnapshot,
-        core: SafeHighlighterCore
+        core: HighlighterCore
     ) -> SessionStorageWriteSnapshot {
         var nsecSucceeded = false
         var bunkerSucceeded = false
@@ -46,7 +46,7 @@ final class AppSessionStore {
 
     func persistAccountInstructions(
         _ snapshot: AccountGenerationSnapshot,
-        core: SafeHighlighterCore
+        core: HighlighterCore
     ) -> SessionStorageWriteSnapshot {
         var nsecSucceeded = false
         if let nsec = snapshot.persistNsec {

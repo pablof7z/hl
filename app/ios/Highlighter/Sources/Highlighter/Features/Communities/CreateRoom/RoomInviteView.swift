@@ -392,7 +392,7 @@ struct RoomInviteView: View {
     @MainActor
     private func refreshInviteSnapshot(requestProfiles: Bool) async {
         let requestKey = inviteSnapshotRequestKey
-        let snapshot = await appStore.safeCore.getRoomInviteSnapshot(
+        let snapshot = await appStore.core.getRoomInviteSnapshot(
             input: RoomInviteSnapshotInput(
                 query: query,
                 profiles: Array(appStore.profileSnapshots.values),

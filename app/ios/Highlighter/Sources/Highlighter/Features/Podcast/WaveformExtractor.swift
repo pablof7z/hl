@@ -25,7 +25,7 @@ enum WaveformExtractor {
     static func peaks(
         forAudioURL url: URL,
         durationSeconds: TimeInterval,
-        core: SafeHighlighterCore
+        core: HighlighterCore
     ) async -> [Float]? {
         let audioUrl = url.absoluteString
         let keyProjection = core.projectWaveformCacheKey(
@@ -76,7 +76,7 @@ enum WaveformExtractor {
     }
 
     /// Raw, uncached waveform extraction for the kernel audio capability bridge
-    /// (Phase 7). Bypasses the bespoke `SafeHighlighterCore` planning/caching
+    /// (Phase 7). Bypasses the bespoke `HighlighterCore` planning/caching
     /// path — the kernel owns waveform caching policy. Returns normalized peaks
     /// in `[0, 1]`, or an empty array on failure (the kernel tolerates absent
     /// peaks; D6: errors are data).

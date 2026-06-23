@@ -49,7 +49,6 @@ final class HighlighterStore {
 
     // Internal plumbing
     @ObservationIgnored let core: HighlighterCore
-    @ObservationIgnored let safeCore: SafeHighlighterCore
     @ObservationIgnored private(set) var eventBridge: EventBridge?
     @ObservationIgnored private var profileSnapshotHandles: [String: UInt64] = [:]
     @ObservationIgnored private var networkPathMonitor: NWPathMonitor?
@@ -75,10 +74,8 @@ final class HighlighterStore {
 
     init() {
         let core = HighlighterCore()
-        let safeCore = SafeHighlighterCore(core: core)
         self.core = core
-        self.safeCore = safeCore
-        let podcastPlayer = PodcastPlayerStore(core: safeCore)
+        let podcastPlayer = PodcastPlayerStore(core: core)
         self.podcastPlayer = podcastPlayer
         self.isOnboardingComplete = core.isOnboardingComplete()
         // Surface the MiniPlayer (paused) with whatever episode the user was
@@ -100,7 +97,7 @@ final class HighlighterStore {
         // is dropped silently and the UI never transitions to logged-in.
         registerEventBridge()
 
-        if let user = await AppSessionStore.shared.restoreSession(into: safeCore) {
+        if let user = await AppSessionStore.shared.restoreSession(into: core) {
             currentUser = user
             await loadAppScopeData()
         }
@@ -156,7 +153,7 @@ final class HighlighterStore {
     }
 
     func completeOnboardingInterests(selectedIds: [String]) async -> MutationSnapshot {
-        let outcome = await safeCore.completeOnboardingInterests(selectedIds: selectedIds)
+        let outcome = await core.completeOnboardingInterests(selectedIds: selectedIds)
         if outcome.applied {
             isOnboardingComplete = true
         }
@@ -242,7 +239,7 @@ final class HighlighterStore {
     /// map deduplicates Swift-side, the Rust store deduplicates HTTP-side.
     /// No-op when the URL is already cached in `webMetadataCache`.
     func requestWebMetadata(url: String) async {
-        let projection = safeCore.projectWebMetadataRequest(input: WebMetadataRequestProjectionInput(url: url))
+        let projection = core.projectWebMetadataRequest(input: WebMetadataRequestProjectionInput(url: url))
         guard projection.canRequest else { return }
         let canonicalUrl = projection.canonicalUrl
         let cacheKeys = projection.cacheKeys
@@ -259,7 +256,7 @@ final class HighlighterStore {
         }
         let task = Task { [weak self, canonicalUrl, cacheKeys] in
             guard let self else { return }
-            let metadata = await self.safeCore.getWebMetadata(url: canonicalUrl)
+            let metadata = await self.core.getWebMetadata(url: canonicalUrl)
             await MainActor.run {
                 if let metadata {
                     self.applyWebMetadata(metadata, cacheKeys: cacheKeys)
@@ -293,7 +290,7 @@ final class HighlighterStore {
     /// coalesce onto one in-flight Task. No-op when already cached.
     /// Rust canonicalizes the input to ISBN-13 before lookup.
     func requestIsbnPreview(isbn: String) async {
-        let projection = safeCore.projectIsbnPreviewRequest(input: IsbnPreviewRequestProjectionInput(isbn: isbn))
+        let projection = core.projectIsbnPreviewRequest(input: IsbnPreviewRequestProjectionInput(isbn: isbn))
         guard projection.canRequest else { return }
         let key = projection.normalizedIsbn
         if isbnPreviewCache[key] != nil { return }
@@ -303,9 +300,9 @@ final class HighlighterStore {
         }
         let task = Task { [weak self] in
             guard let self else { return }
-            let outcome = await self.safeCore.lookupIsbn(key)
+            let outcome = await self.core.lookupIsbn(isbn: key)
             await MainActor.run {
-                let projection = self.safeCore.projectIsbnPreviewLookupApply(
+                let projection = self.core.projectIsbnPreviewLookupApply(
                     input: IsbnPreviewLookupApplyInput(
                         preview: outcome.preview,
                         error: outcome.error
@@ -331,7 +328,7 @@ final class HighlighterStore {
     }
 
     func refreshNetworkPathCapabilityPreference() {
-        let snapshot = safeCore.getNetworkWifiOnlyPreferenceSnapshot()
+        let snapshot = core.getNetworkWifiOnlyPreferenceSnapshot()
         applyNetworkPathMonitorEnabled(snapshot.pathMonitorEnabled)
     }
 
@@ -379,7 +376,7 @@ final class HighlighterStore {
 
         // Publish the default Blossom server list if the user has never set one.
         // No-op when a kind:10063 is already cached. Fire-and-forget.
-        _ = await safeCore.initDefaultBlossomServers()
+        _ = await core.initDefaultBlossomServers()
 
         // Open the bookmarks view via the kernel so kind:10003 snapshots
         // stream into kernel.bookmarks and back into bookmarkedArticleAddresses
@@ -403,7 +400,7 @@ final class HighlighterStore {
     }
 
     private func applyNetworkPathStatus(isWifi: Bool) async {
-        let snapshot = await safeCore.applyNetworkPathStatus(isWifi: isWifi)
+        let snapshot = await core.applyNetworkPathStatus(isWifi: isWifi)
         applyNetworkPathMonitorEnabled(snapshot.pathMonitorEnabled)
     }
 

@@ -87,7 +87,7 @@ struct SetDetailView: View {
         isLoading = true
         defer { isLoading = false }
 
-        let snapshot = await app.safeCore.getBookmarkSetDetailSnapshot(record: record)
+        let snapshot = await app.core.getBookmarkSetDetailSnapshot(record: record)
         displayTitle = snapshot.displayTitle
         articles = snapshot.articles
         isCollectionEmpty = snapshot.isEmpty

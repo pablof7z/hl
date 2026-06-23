@@ -291,14 +291,14 @@ struct CreateRoomSheet: View {
                 return
             }
             let prepared = await prepareForUpload(image: image)
-            let outcome = await appStore.safeCore.uploadPhoto(
+            let outcome = await appStore.core.uploadPhoto(
                 bytes: prepared.data,
                 mime: "image/jpeg",
                 width: UInt32(prepared.width),
                 height: UInt32(prepared.height),
                 alt: ""
             )
-            let projection = appStore.safeCore.projectCreateRoomCoverUploadResult(
+            let projection = appStore.core.projectCreateRoomCoverUploadResult(
                 input: CreateRoomCoverUploadResultInput(snapshot: outcome)
             )
             guard let upload = projection.upload else {

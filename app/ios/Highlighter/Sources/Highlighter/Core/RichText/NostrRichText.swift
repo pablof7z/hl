@@ -92,7 +92,7 @@ struct NostrRichText: View {
     private var blocks: [Block] {
         var blocks: [Block] = []
         var currentRuns: [Run] = []
-        for token in appStore.safeCore.tokenizeNostrContent(content) {
+        for token in appStore.core.tokenizeNostrContent(content: content) {
             switch token {
             case .text(let value):
                 currentRuns.append(.text(value))
@@ -150,22 +150,22 @@ final class NostrEntityCardStore {
     private(set) var resolved: NostrEntityEvent?
 
     @ObservationIgnored let entity: NostrEntityRef
-    @ObservationIgnored let safeCore: SafeHighlighterCore
+    @ObservationIgnored let core: HighlighterCore
     @ObservationIgnored weak var eventBridge: EventBridge?
     @ObservationIgnored private var subscriptionHandle: UInt64?
 
     init(
         entity: NostrEntityRef,
-        safeCore: SafeHighlighterCore,
+        core: HighlighterCore,
         eventBridge: EventBridge?
     ) {
         self.entity = entity
-        self.safeCore = safeCore
+        self.core = core
         self.eventBridge = eventBridge
     }
 
     func start() async {
-        let snapshot = await safeCore.resolveNostrEntity(entity)
+        let snapshot = await core.resolveNostrEntity(entity: entity)
         if snapshot.resolved, let event = snapshot.event {
             resolved = event
             return
@@ -174,8 +174,8 @@ final class NostrEntityCardStore {
         guard !Task.isCancelled else { return }
         guard subscriptionHandle == nil else { return }
 
-        let outcome = await safeCore.subscribeNostrEntity(entity)
-        let projection = safeCore.projectViewSubscriptionStart(
+        let outcome = await core.subscribeNostrEntity(entity: entity)
+        let projection = core.projectViewSubscriptionStart(
             input: ViewSubscriptionStartProjectionInput(start: outcome)
         )
         guard projection.shouldRegister else {
@@ -183,7 +183,7 @@ final class NostrEntityCardStore {
             return
         }
         guard !Task.isCancelled else {
-            await safeCore.unsubscribe(projection.handle)
+            core.unsubscribe(handle: projection.handle)
             return
         }
         subscriptionHandle = projection.handle
@@ -192,7 +192,7 @@ final class NostrEntityCardStore {
 
     func stop() {
         if let handle = subscriptionHandle {
-            Task { [safeCore] in await safeCore.unsubscribe(handle) }
+            core.unsubscribe(handle: handle)
             eventBridge?.unregister(handle: handle)
         }
         subscriptionHandle = nil
@@ -220,7 +220,7 @@ struct NostrEntityCard: View {
                 placeholder
             }
         }
-        .task(id: appStore.safeCore.nostrEntityIdentityKey(entity: entity)) { await start() }
+        .task(id: appStore.core.nostrEntityIdentityKey(entity: entity)) { await start() }
         .onDisappear { stop() }
     }
 
@@ -260,7 +260,7 @@ struct NostrEntityCard: View {
         store?.stop()
         let next = NostrEntityCardStore(
             entity: entity,
-            safeCore: appStore.safeCore,
+            core: appStore.core,
             eventBridge: appStore.eventBridge
         )
         store = next
@@ -282,7 +282,7 @@ private struct ArticleEntityCard: View {
     @State private var profile: ProfileMetadata?
 
     var body: some View {
-        let projection = appStore.safeCore.projectNostrEntityArticleCard(
+        let projection = appStore.core.projectNostrEntityArticleCard(
             input: NostrEntityArticleCardProjectionInput(event: event)
         )
         let target = projection.readerRoute.map { ArticleReaderTarget(route: $0) }

@@ -245,8 +245,8 @@ struct BookView: View {
     // MARK: - Data loading
 
     private func load() async {
-        let snapshot = await app.safeCore.getBookDetailSnapshot(catalogId: catalogId, limit: 64)
-        let projection = app.safeCore.projectBookDetailSnapshotApply(
+        let snapshot = await app.core.getBookDetailSnapshot(catalogId: catalogId, limit: 64)
+        let projection = app.core.projectBookDetailSnapshotApply(
             input: BookDetailSnapshotApplyInput(
                 route: snapshot.route,
                 highlights: snapshot.highlights,

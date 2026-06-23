@@ -111,14 +111,14 @@ struct OnboardingCreateAccountView: View {
 
         Task {
             defer { isWorking = false }
-            let accountSnapshot = await store.safeCore.generateAccount()
+            let accountSnapshot = await store.core.generateAccount()
             guard accountSnapshot.succeeded, let account = accountSnapshot.account else {
                 errorMessage = accountSnapshot.errorMessage
                 return
             }
             let storage = AppSessionStore.shared.persistAccountInstructions(
                 accountSnapshot,
-                core: store.safeCore
+                core: store.core
             )
             guard storage.succeeded else {
                 errorMessage = storage.errorMessage
@@ -126,15 +126,17 @@ struct OnboardingCreateAccountView: View {
             }
 
             Task {
-                _ = await store.safeCore.updateProfile(
-                    name: "",
-                    displayName: name,
-                    about: "",
-                    picture: "",
-                    banner: "",
-                    nip05: "",
-                    website: "",
-                    lud16: ""
+                _ = await store.core.updateProfile(
+                    draft: ProfileUpdateDraft(
+                        name: "",
+                        displayName: name,
+                        about: "",
+                        picture: "",
+                        banner: "",
+                        nip05: "",
+                        website: "",
+                        lud16: ""
+                    )
                 )
             }
 

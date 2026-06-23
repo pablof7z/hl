@@ -40,7 +40,7 @@ struct RootSceneView: View {
                 // nostrconnect:// flow misses Primal's response when the user
                 // comes back from the signer app.
                 Task {
-                    _ = await store.safeCore.refreshRelayConnectionsForForeground()
+                    _ = await store.core.refreshRelayConnectionsForForeground()
                 }
             }
         }

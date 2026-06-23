@@ -193,12 +193,12 @@ struct AddRelaySheet: View {
         let currentProjection = projection
         guard currentProjection.isValid else { return }
         let url = currentProjection.normalizedUrl
-        let core = appStore.safeCore
+        let core = appStore.core
         probeTask = Task { [url] in
             guard !Task.isCancelled else { return }
             probeInFlight = true
             defer { probeInFlight = false }
-            let snapshot = await core.probeRelayNip11Snapshot(url)
+            let snapshot = await core.probeRelayNip11Snapshot(url: url)
             guard !Task.isCancelled else { return }
             probeResult = snapshot.document
             probeFailed = snapshot.probeFailed

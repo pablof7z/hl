@@ -63,7 +63,7 @@ struct MediaSettingsView: View {
     }
 
     private func load() async {
-        let snapshot = await store.safeCore.getBlossomServerSettingsSnapshot()
+        let snapshot = await store.core.getBlossomServerSettingsSnapshot()
         servers = snapshot.servers
         isLoading = false
     }
@@ -71,7 +71,7 @@ struct MediaSettingsView: View {
     private func save() async {
         guard !servers.isEmpty else { return }
         isSaving = true
-        let snapshot = await store.safeCore.setBlossomServerSettings(servers)
+        let snapshot = await store.core.setBlossomServerSettings(servers: servers)
         servers = snapshot.servers
         isSaving = false
     }

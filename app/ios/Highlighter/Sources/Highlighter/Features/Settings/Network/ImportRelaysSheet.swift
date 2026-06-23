@@ -159,8 +159,8 @@ struct ImportRelaysSheet: View {
         selectedUrls = []
         isFetching = true
         defer { isFetching = false }
-        let snapshot = await appStore.safeCore
-            .importRelaysFromNpubSnapshot(source.submitNpub)
+        let snapshot = await appStore.core
+            .importRelaysFromNpubSnapshot(npub: source.submitNpub)
         fetched = snapshot.fetched
         selectedUrls = snapshot.selectedUrls
         let trimmedError = snapshot.errorMessage.trimmingCharacters(in: .whitespaces)

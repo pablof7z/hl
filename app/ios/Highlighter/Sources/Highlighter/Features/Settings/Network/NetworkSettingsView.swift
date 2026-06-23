@@ -76,7 +76,7 @@ struct NetworkSettingsView: View {
         }
         .task {
             if store == nil {
-                store = NetworkSettingsStore(core: appStore.safeCore, appStore: appStore, kernel: appStore.kernel!)
+                store = NetworkSettingsStore(core: appStore.core, appStore: appStore, kernel: appStore.kernel!)
                 appStore.eventBridge?.registerNetworkStore(store!)
             }
             await store?.load()

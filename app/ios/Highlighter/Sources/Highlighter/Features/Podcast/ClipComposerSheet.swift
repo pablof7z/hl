@@ -20,7 +20,7 @@ struct ClipComposerSheet: View {
     // MARK: - Computed
 
     private var composerProjection: PodcastClipComposerProjection {
-        app.safeCore.getPodcastClipComposerProjection(
+        app.core.getPodcastClipComposerProjection(input: PodcastClipComposerInput(
             segments: player.transcriptSegments,
             transcriptAvailable: player.transcriptAvailability == .available,
             clipStartSeconds: startSeconds,
@@ -28,7 +28,7 @@ struct ClipComposerSheet: View {
             durationSeconds: player.duration,
             selectedGroupId: selectedGroupId,
             joinedCommunities: app.joinedCommunities
-        )
+        ))
     }
 
     private var extractedFragment: String {
@@ -300,7 +300,7 @@ struct ClipComposerSheet: View {
         publishError = nil
 
         Task {
-            let outcome = await app.safeCore.publishPodcastComposerClip(
+            let outcome = await app.core.publishPodcastComposerClip(
                 input: PodcastClipComposerPublishInput(
                     artifact: artifact,
                     segments: player.transcriptSegments,
@@ -313,7 +313,7 @@ struct ClipComposerSheet: View {
             )
             await MainActor.run {
                 isPublishing = false
-                let result = app.safeCore.projectPodcastClipPublishResult(
+                let result = app.core.projectPodcastClipPublishResult(
                     input: PodcastClipPublishResultInput(snapshot: outcome)
                 )
                 if !result.didPublish {

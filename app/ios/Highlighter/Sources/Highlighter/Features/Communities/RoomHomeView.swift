@@ -190,7 +190,7 @@ struct RoomHomeView: View {
             artifactCount: room.artifacts.count,
             isLoading: room.isLoading,
             onShareToCommunity: { artifact in
-                shareTarget = .artifact(artifact, core: app.safeCore)
+                shareTarget = .artifact(artifact, core: app.core)
             }
         )
     }
@@ -219,7 +219,7 @@ struct RoomHomeView: View {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 Button {
-                                    shareTarget = .artifact(a, core: app.safeCore)
+                                    shareTarget = .artifact(a, core: app.core)
                                 } label: {
                                     Label("Share to community", systemImage: "square.and.arrow.up")
                                 }

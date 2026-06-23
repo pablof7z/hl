@@ -90,7 +90,7 @@ struct WebReaderView: View {
     private func prepareShare() async {
         sharePreparing = true
         defer { sharePreparing = false }
-        let snapshot = await app.safeCore.buildWebReaderShareTarget(url: target.url.absoluteString)
+        let snapshot = await app.core.buildWebReaderShareTarget(url: target.url.absoluteString)
         guard snapshot.ready, let projection = snapshot.target else {
             await MainActor.run {
                 shareError = snapshot.errorMessage

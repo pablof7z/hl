@@ -76,14 +76,14 @@ final class CaptureStore {
     /// Current crop box for the selected passage (Vision normalized). Native.
     private(set) var highlightCropBox: CGRect?
 
-    @ObservationIgnored private let safeCore: SafeHighlighterCore
+    @ObservationIgnored private let core: HighlighterCore
     @ObservationIgnored private let kernel: HighlighterAppKernel
     @ObservationIgnored private var processedJPEG: ImageProcessing.Result?
     @ObservationIgnored private var selectedHighlightBoxes: [CGRect] = []
     @ObservationIgnored private var highlightCropMarginFraction: Double = 0.08
 
-    init(safeCore: SafeHighlighterCore, kernel: HighlighterAppKernel) {
-        self.safeCore = safeCore
+    init(core: HighlighterCore, kernel: HighlighterAppKernel) {
+        self.core = core
         self.kernel = kernel
     }
 
@@ -141,7 +141,7 @@ final class CaptureStore {
             // the kernel re-OCRs the cropped image for the authoritative draft.
             let initialLines = await self.recognize(processed: initial)
             let processed: ImageProcessing.Result
-            if let detection = self.safeCore.detectOcrActivePage(initialLines),
+            if let detection = self.core.detectOcrActivePage(lines: initialLines),
                let cropped = ImageProcessing.cropToPage(initial, pageRect: detection.pageRect.cgRect) {
                 processed = cropped
                 if let croppedThumb = UIImage(data: cropped.data) { self.thumbnail = croppedThumb }
@@ -166,7 +166,7 @@ final class CaptureStore {
     private func prefillRecentBook() {
         guard selectedBook == nil else { return }
         Task {
-            let snapshot = await safeCore.getBookPickerSnapshot(query: "", recentLimit: 1, searchLimit: 0)
+            let snapshot = await core.getBookPickerSnapshot(query: "", recentLimit: 1, searchLimit: 0)
             guard let book = snapshot.recents.first, self.selectedBook == nil else { return }
             self.selectedBook = .existing(book)
         }
@@ -315,7 +315,7 @@ final class CaptureStore {
     }
 
     private func defaultHighlightCropBox(processed: ImageProcessing.Result) -> CGRect? {
-        safeCore.defaultHighlightCropBox(
+        core.defaultHighlightCropBox(
             highlightBoxes: selectedHighlightBoxes.map { OcrRect($0) },
             imageWidth: Double(processed.width),
             imageHeight: Double(processed.height),

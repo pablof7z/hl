@@ -20,10 +20,10 @@ enum ShareQueueProcessor {
         var attempts: [ShareQueueAttempt] = []
 
         for share in pending {
-            attempts.append(await app.safeCore.publishShareQueueItem(share.coreQueueItem))
+            attempts.append(await app.core.publishShareQueueItem(item: share.coreQueueItem))
         }
 
-        let projection = app.safeCore.projectShareQueueDrain(
+        let projection = app.core.projectShareQueueDrain(
             input: ShareQueueDrainProjectionInput(
                 attempts: attempts,
                 communities: app.joinedCommunities

@@ -110,7 +110,7 @@ struct MiniPlayerView: View {
     }
 
     private func podcastNowPlaying(_ artifact: ArtifactRecord) -> PodcastNowPlayingProjection {
-        app.safeCore.getPodcastNowPlayingProjection(
+        app.core.getPodcastNowPlayingProjection(
             input: PodcastNowPlayingProjectionInput(artifact: artifact)
         )
     }

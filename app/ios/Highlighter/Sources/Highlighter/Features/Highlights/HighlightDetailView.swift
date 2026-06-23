@@ -284,7 +284,7 @@ struct HighlightDetailView: View {
             }
 
             Button {
-                shareTarget = .highlight(highlight, core: app.safeCore)
+                shareTarget = .highlight(highlight, core: app.core)
             } label: {
                 actionIcon(systemName: "rectangle.stack.badge.plus")
             }
@@ -343,7 +343,7 @@ struct HighlightDetailView: View {
     /// server-rendered with full Open Graph + Twitter Card meta so the
     /// link unfurls into a social card built around the quote.
     private func refreshShareURL() async {
-        let snapshot = await app.safeCore.getHighlightShareUrlSnapshot(
+        let snapshot = await app.core.getHighlightShareUrlSnapshot(
             eventIdHex: highlight.eventId,
             authorPubkeyHex: highlight.pubkey
         )

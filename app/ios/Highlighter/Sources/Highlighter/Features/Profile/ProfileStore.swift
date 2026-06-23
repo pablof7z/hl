@@ -32,7 +32,7 @@ final class ProfileStore {
     // Plumbing
     @ObservationIgnored let pubkey: String
     @ObservationIgnored let viewerPubkey: String?
-    @ObservationIgnored let safeCore: SafeHighlighterCore
+    @ObservationIgnored let core: HighlighterCore
     @ObservationIgnored weak var eventBridge: EventBridge?
     @ObservationIgnored private weak var kernel: HighlighterAppKernel?
 
@@ -55,13 +55,13 @@ final class ProfileStore {
     init(
         pubkey: String,
         viewerPubkey: String?,
-        safeCore: SafeHighlighterCore,
+        core: HighlighterCore,
         eventBridge: EventBridge?,
         kernel: HighlighterAppKernel?
     ) {
         self.pubkey = pubkey
         self.viewerPubkey = viewerPubkey
-        self.safeCore = safeCore
+        self.core = core
         self.eventBridge = eventBridge
         self.kernel = kernel
     }
@@ -113,7 +113,7 @@ final class ProfileStore {
         // was removed in Phase 7 so the kernel ProfileSnapshot is the SOLE
         // metadata source. The view renders metadata from applyKernelSnapshot();
         // first paint waits for the kernel card rather than the live snapshot.
-        let snapshot = await safeCore.getProfilePageSnapshot(pubkeyHex: pubkey)
+        let snapshot = await core.getProfilePageSnapshot(pubkeyHex: pubkey)
         articles = snapshot.articles
         highlights = snapshot.highlights
     }

@@ -60,7 +60,7 @@ struct BookPicker: View {
             }
             .task {
                 if loadingRecents {
-                    apply(await appStore.safeCore.getBookPickerSnapshot(query: ""))
+                    apply(await appStore.core.getBookPickerSnapshot(query: "", recentLimit: 24, searchLimit: 20))
                     loadingRecents = false
                 }
             }
@@ -365,7 +365,7 @@ struct BookPicker: View {
     }
 
     private func bookDisplay(_ preview: ArtifactPreview) -> CaptureBookDisplayProjection {
-        appStore.safeCore.projectCaptureBookDisplay(
+        appStore.core.projectCaptureBookDisplay(
             input: CaptureBookDisplayProjectionInput(preview: preview)
         )
     }
@@ -398,7 +398,7 @@ struct BookPicker: View {
     // MARK: - Actions
 
     private var queryProjection: BookPickerQueryProjection {
-        appStore.safeCore.projectBookPickerQuery(
+        appStore.core.projectBookPickerQuery(
             input: BookPickerQueryProjectionInput(query: query)
         )
     }
@@ -410,7 +410,7 @@ struct BookPicker: View {
     }
 
     private func beginResolve(_ isbn: String) {
-        if let existing = appStore.safeCore.findExistingBookForIsbn(isbn, recents: recents) {
+        if let existing = appStore.core.findExistingBookForIsbn(isbn: isbn, recents: recents) {
             selection = .existing(existing)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             dismiss()
@@ -421,11 +421,11 @@ struct BookPicker: View {
         resolvedPreview = nil
         resolveError = nil
         Task {
-            let outcome = await appStore.safeCore.lookupIsbn(isbn)
+            let outcome = await appStore.core.lookupIsbn(isbn: isbn)
             // Only commit the preview if we're still on the same ISBN
             // (user could have cancelled mid-flight).
             if resolvingISBN == isbn {
-                let projection = appStore.safeCore.projectIsbnPreviewLookupApply(
+                let projection = appStore.core.projectIsbnPreviewLookupApply(
                     input: IsbnPreviewLookupApplyInput(
                         preview: outcome.preview,
                         error: outcome.error
@@ -449,7 +449,7 @@ struct BookPicker: View {
         }
         searching = true
         guard !Task.isCancelled, queryProjection.searchQuery == projection.searchQuery else { return }
-        let snapshot = await appStore.safeCore.getBookPickerSnapshot(query: projection.searchQuery)
+        let snapshot = await appStore.core.getBookPickerSnapshot(query: projection.searchQuery, recentLimit: 24, searchLimit: 20)
         guard !Task.isCancelled, queryProjection.searchQuery == projection.searchQuery else { return }
         apply(snapshot)
         searching = false
@@ -529,7 +529,7 @@ private struct ISBNPreviewSheet: View {
     }
 
     private var manualProjection: IsbnManualPreviewProjection {
-        appStore.safeCore.projectIsbnManualPreview(
+        appStore.core.projectIsbnManualPreview(
             input: IsbnManualPreviewProjectionInput(
                 title: manualTitle,
                 author: manualAuthor
@@ -620,7 +620,7 @@ private struct ISBNPreviewSheet: View {
     private func commit() {
         let projection = manualProjection
         guard projection.canUse else { return }
-        let outcome = appStore.safeCore.buildEditedBookPreview(
+        let outcome = appStore.core.buildEditedBookPreview(
             isbn: isbn,
             basePreview: preview,
             title: projection.title,

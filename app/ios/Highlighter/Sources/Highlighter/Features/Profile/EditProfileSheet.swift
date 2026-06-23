@@ -409,14 +409,14 @@ struct EditProfileSheet: View {
                 return
             }
             let prepared = await prepareForUpload(image: image)
-            let outcome = await appStore.safeCore.uploadPhoto(
+            let outcome = await appStore.core.uploadPhoto(
                 bytes: prepared.data,
                 mime: "image/jpeg",
                 width: UInt32(prepared.width),
                 height: UInt32(prepared.height),
                 alt: ""
             )
-            let projection = appStore.safeCore.projectProfileImageUploadResult(
+            let projection = appStore.core.projectProfileImageUploadResult(
                 input: ProfileImageUploadResultInput(snapshot: outcome)
             )
             guard let imageURL = projection.imageUrl else {
@@ -447,8 +447,8 @@ struct EditProfileSheet: View {
         saving = true
         Task {
             defer { Task { @MainActor in saving = false } }
-            let outcome = await appStore.safeCore.updateProfile(draft: projection.draft)
-            let result = appStore.safeCore.projectProfileUpdateResult(
+            let outcome = await appStore.core.updateProfile(draft: projection.draft)
+            let result = appStore.core.projectProfileUpdateResult(
                 input: ProfileUpdateResultInput(snapshot: outcome)
             )
             await MainActor.run {

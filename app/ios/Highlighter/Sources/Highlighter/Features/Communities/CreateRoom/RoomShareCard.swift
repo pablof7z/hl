@@ -135,7 +135,7 @@ struct RoomShareCard: View {
     }
 
     private func loadShareLinkIfNeeded() async {
-        let snapshot = await appStore.safeCore.getRoomShareLinkSnapshot(groupId: groupId)
+        let snapshot = await appStore.core.getRoomShareLinkSnapshot(groupId: groupId)
         await MainActor.run { linkSnapshot = snapshot }
     }
 

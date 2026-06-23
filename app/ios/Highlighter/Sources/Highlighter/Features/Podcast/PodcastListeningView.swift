@@ -114,7 +114,7 @@ struct PodcastListeningView: View {
     }
 
     private var listeningProjection: PodcastListeningProjection {
-        app.safeCore.getPodcastListeningProjection(
+        app.core.getPodcastListeningProjection(
             input: PodcastListeningProjectionInput(
                 artifact: player.currentArtifact,
                 clips: memberClips,
@@ -434,8 +434,8 @@ struct PodcastListeningView: View {
     // MARK: - Helpers
 
     private func loadClips() async {
-        let snapshot = await app.safeCore.getPodcastListeningClipsSnapshot(
-            artifact: player.currentArtifact
+        let snapshot = await app.core.getPodcastListeningClipsSnapshot(
+            artifact: player.currentArtifact, limit: 128
         )
         memberClips = snapshot.clips
     }

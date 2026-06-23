@@ -44,7 +44,7 @@ final class PodcastPlayerStore {
 
     // MARK: - Private plumbing
 
-    @ObservationIgnored private let core: SafeHighlighterCore
+    @ObservationIgnored private let core: HighlighterCore
     @ObservationIgnored private var player: AVPlayer?
     @ObservationIgnored private let logger = Logger(subsystem: "com.highlighter.app", category: "PodcastPlayer")
     @ObservationIgnored private nonisolated(unsafe) var timeObserver: Any?
@@ -58,7 +58,7 @@ final class PodcastPlayerStore {
 
     // MARK: - Lifecycle
 
-    init(core: SafeHighlighterCore) {
+    init(core: HighlighterCore) {
         self.core = core
     }
 
@@ -153,12 +153,11 @@ final class PodcastPlayerStore {
         waveformPeaks = []
         waveformTask?.cancel()
         let dur = playback.previewDurationSeconds
-        let safeCore = core
-        waveformTask = Task(priority: .background) { [weak self, url, safeCore] in
+        waveformTask = Task(priority: .background) { [weak self, url, core] in
             let peaks = await WaveformExtractor.peaks(
                 forAudioURL: url,
                 durationSeconds: dur,
-                core: safeCore
+                core: core
             )
             guard let self, !Task.isCancelled, let peaks else { return }
             await MainActor.run { self.waveformPeaks = peaks }
@@ -323,7 +322,7 @@ final class PodcastPlayerStore {
         targetGroupId: String,
         note: String,
         segments: [TranscriptSegment],
-        core: SafeHighlighterCore
+        core: HighlighterCore
     ) async -> PodcastClipPublishSnapshot {
         isPublishing = true
         publishError = nil
@@ -370,9 +369,11 @@ final class PodcastPlayerStore {
         guard let artifact = currentArtifact else { return }
         let position = position ?? currentTime
         Task { [core, position, artifact] in
-            _ = await core.recordPodcastPlaybackPosition(
-                artifact: artifact,
-                positionSeconds: position
+            _ = core.recordPodcastPlaybackPosition(
+                input: PodcastPlaybackPositionInput(
+                    artifact: artifact,
+                    positionSeconds: position
+                )
             )
         }
     }

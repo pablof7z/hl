@@ -73,7 +73,7 @@ struct SearchView: View {
         }
         .task {
             if store == nil {
-                let s = SearchStore(safeCore: app.safeCore, kernel: kernel)
+                let s = SearchStore(kernel: kernel)
                 store = s
                 await s.start()
             }

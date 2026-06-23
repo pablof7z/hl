@@ -31,7 +31,7 @@ struct ProfileView: View {
                 store = ProfileStore(
                     pubkey: pubkey,
                     viewerPubkey: appStore.currentUser?.pubkey,
-                    safeCore: appStore.safeCore,
+                    core: appStore.core,
                     eventBridge: appStore.eventBridge,
                     kernel: kernel
                 )

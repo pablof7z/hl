@@ -25,7 +25,7 @@ struct ShareToCommunityTarget: Identifiable {
         case highlightRepost(eventId: String, authorPubkeyHex: String, relayHint: String)
     }
 
-    static func article(_ article: ArticleRecord, core: SafeHighlighterCore) -> ShareToCommunityTarget {
+    static func article(_ article: ArticleRecord, core: HighlighterCore) -> ShareToCommunityTarget {
         let projection = core.projectShareArticleTarget(
             input: ShareArticleTargetProjectionInput(article: article)
         )
@@ -38,7 +38,7 @@ struct ShareToCommunityTarget: Identifiable {
         )
     }
 
-    static func artifact(_ artifact: ArtifactRecord, core: SafeHighlighterCore) -> ShareToCommunityTarget {
+    static func artifact(_ artifact: ArtifactRecord, core: HighlighterCore) -> ShareToCommunityTarget {
         let projection = core.projectShareArtifactTarget(
             input: ShareArtifactTargetProjectionInput(artifact: artifact)
         )
@@ -57,7 +57,7 @@ struct ShareToCommunityTarget: Identifiable {
     static func highlight(
         _ highlight: HighlightRecord,
         relayHint: String = "",
-        core: SafeHighlighterCore
+        core: HighlighterCore
     ) -> ShareToCommunityTarget {
         let projection = core.projectShareHighlightTarget(
             input: ShareHighlightTargetProjectionInput(
@@ -78,7 +78,7 @@ struct ShareToCommunityTarget: Identifiable {
         )
     }
 
-    private static func articleShareURL(for article: ArticleRecord, core: SafeHighlighterCore) -> URL? {
+    private static func articleShareURL(for article: ArticleRecord, core: HighlighterCore) -> URL? {
         let snapshot = core.articleShareUrl(address: article.address)
         guard snapshot.error.isEmpty else { return nil }
         return URL(string: snapshot.url)

@@ -115,8 +115,8 @@ struct MemberClipRow: View {
                     return
                 }
                 let scope = CommentScope(rootTagName: "E", rootTagValue: trimmedId, rootKind: 9802)
-                let snapshot = await app.safeCore.getCommentThreadSnapshot(scope: scope, limit: 200)
-                let projection = app.safeCore.projectCommentInlineThreadSnapshotApply(
+                let snapshot = await app.core.getCommentThreadSnapshot(scope: scope, limit: 200)
+                let projection = app.core.projectCommentInlineThreadSnapshotApply(
                     input: CommentInlineThreadSnapshotApplyInput(
                         records: snapshot.records,
                         error: snapshot.error

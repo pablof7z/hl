@@ -28,7 +28,7 @@ final class NetworkSettingsStore {
     var lastError: String?
     private(set) var wifiOnlyEnabled: Bool = false
 
-    @ObservationIgnored private let core: SafeHighlighterCore
+    @ObservationIgnored private let core: HighlighterCore
     @ObservationIgnored private weak var appStore: HighlighterStore?
     @ObservationIgnored private var inFlightNip11: [String] = []
     /// Phase 7: the kernel is the SOLE WRITER for relay config. Read paths
@@ -36,7 +36,7 @@ final class NetworkSettingsStore {
     /// until Part C); writes dispatch kernel actions.
     @ObservationIgnored private let kernel: HighlighterAppKernel
 
-    init(core: SafeHighlighterCore, appStore: HighlighterStore, kernel: HighlighterAppKernel) {
+    init(core: HighlighterCore, appStore: HighlighterStore, kernel: HighlighterAppKernel) {
         self.core = core
         self.appStore = appStore
         self.kernel = kernel
@@ -151,7 +151,7 @@ final class NetworkSettingsStore {
     /// policy.
     func setWifiOnly(_ on: Bool) async {
         wifiOnlyEnabled = on
-        let snapshot = await core.setWifiOnlyEnabled(on)
+        let snapshot = await core.setWifiOnlyEnabled(enabled: on)
         applyWifiOnlyPreferenceSnapshot(snapshot)
     }
 
@@ -183,7 +183,7 @@ final class NetworkSettingsStore {
                         )
                     }
                 }
-                let snapshot = await core.probeRelayNip11Snapshot(url)
+                let snapshot = await core.probeRelayNip11Snapshot(url: url)
                 guard let doc = snapshot.document else { return }
                 await MainActor.run { self?.nip11ByUrl[url] = doc }
             }
@@ -240,7 +240,7 @@ final class NetworkSettingsStore {
     }
 
     func relayHostedRooms(hostedOnRelay url: String) async -> RelayHostedRoomsSnapshot {
-        let snapshot = await core.getRelayHostedRoomsSnapshot(hostedOnRelay: url)
+        let snapshot = await core.getRelayHostedRoomsSnapshot(url: url)
         let apply = core.projectRelayHostedRoomsApply(
             input: RelayHostedRoomsApplyInput(snapshot: snapshot)
         )
