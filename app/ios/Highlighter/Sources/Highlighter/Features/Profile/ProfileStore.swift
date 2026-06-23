@@ -47,11 +47,18 @@ final class ProfileStore {
     }
 
     var relationshipProjection: ProfileRelationshipProjection {
-        safeCore.projectProfileRelationship(
-            input: ProfileRelationshipProjectionInput(
-                profilePubkey: pubkey,
-                viewerPubkey: viewerPubkey
-            )
+        let target = pubkey.trimmingCharacters(in: .whitespaces)
+        let viewer = viewerPubkey.flatMap {
+            let t = $0.trimmingCharacters(in: .whitespaces); return t.isEmpty ? nil : t
+        }
+        let hasTarget = !target.isEmpty
+        let isOwn = viewer != nil && hasTarget && viewer!.lowercased() == target.lowercased()
+        let canFollow = viewer != nil && hasTarget && !isOwn
+        return ProfileRelationshipProjection(
+            targetPubkey: target,
+            isOwnProfile: isOwn,
+            canShowFollowAction: canFollow,
+            shouldRefreshFollowState: canFollow
         )
     }
 
@@ -139,13 +146,21 @@ final class ProfileStore {
 
     func toggleFollow() async {
         let relationship = relationshipProjection
-        let action = safeCore.projectProfileFollowAction(
-            relationship: relationship,
-            input: ProfileFollowActionInput(
-                isFollowing: isFollowing,
-                isMutating: isMutatingFollow
+        let action: ProfileFollowActionProjection
+        if isMutatingFollow || !relationship.canShowFollowAction {
+            action = ProfileFollowActionProjection(canStart: false, optimisticIsFollowing: isFollowing, mutation: nil)
+        } else {
+            let targetFollow = !isFollowing
+            action = ProfileFollowActionProjection(
+                canStart: true,
+                optimisticIsFollowing: targetFollow,
+                mutation: ProfileFollowMutationInput(
+                    targetPubkey: relationship.targetPubkey,
+                    requestedFollowState: targetFollow,
+                    previousFollowState: isFollowing
+                )
             )
-        )
+        }
         guard action.canStart, let mutation = action.mutation else {
             return
         }

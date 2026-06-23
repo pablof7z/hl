@@ -80,9 +80,15 @@ struct BookmarkMenuButton: View {
     }
 
     private var bookmarkChrome: ArticleBookmarkChromeProjection {
-        app.safeCore.projectArticleBookmarkChrome(
-            input: ArticleBookmarkChromeProjectionInput(isBookmarked: isBookmarked)
-        )
+        isBookmarked
+            ? ArticleBookmarkChromeProjection(
+                toolbarSystemImage: "bookmark.fill", usesAccentColor: true,
+                accessibilityLabel: "Remove bookmark", swipeTitle: "Remove",
+                menuTitle: "Remove bookmark", actionSystemImage: "bookmark.slash")
+            : ArticleBookmarkChromeProjection(
+                toolbarSystemImage: "bookmark", usesAccentColor: false,
+                accessibilityLabel: "Bookmark article", swipeTitle: "Bookmark",
+                menuTitle: "Bookmark", actionSystemImage: "bookmark")
     }
 
     // MARK: - Actions
