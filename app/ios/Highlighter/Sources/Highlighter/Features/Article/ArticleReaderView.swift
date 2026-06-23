@@ -306,8 +306,13 @@ private struct ReaderScroll: View {
                         safeCore.nostrEntityInlineRender(entity: ref)
                     },
                     highlightContent: { highlight in
-                        safeCore.projectHighlightDetailContent(
-                            input: HighlightDetailContentProjectionInput(highlight: highlight)
+                        let img = highlight.imageUrl.trimmingCharacters(in: .whitespaces)
+                        let qt = highlight.quote.trimmingCharacters(in: .whitespaces)
+                        return HighlightDetailContentProjection(
+                            quoteText: qt,
+                            noteText: highlight.note.trimmingCharacters(in: .whitespaces).isEmpty ? nil : highlight.note,
+                            pageImageUrl: img.isEmpty ? nil : img,
+                            shareMessage: qt
                         )
                     },
                     profileNames: profileSnapshot

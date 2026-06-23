@@ -183,8 +183,13 @@ struct BookView: View {
     }
 
     private func passageRow(_ h: HighlightRecord) -> some View {
-        let content = app.safeCore.projectHighlightDetailContent(
-            input: HighlightDetailContentProjectionInput(highlight: h)
+        let trimmedImage = h.imageUrl.trimmingCharacters(in: .whitespaces)
+        let quoteText = h.quote.trimmingCharacters(in: .whitespaces)
+        let content = HighlightDetailContentProjection(
+            quoteText: quoteText,
+            noteText: h.note.trimmingCharacters(in: .whitespaces).isEmpty ? nil : h.note,
+            pageImageUrl: trimmedImage.isEmpty ? nil : trimmedImage,
+            shareMessage: quoteText
         )
         return HStack(alignment: .top, spacing: 14) {
             Rectangle()
