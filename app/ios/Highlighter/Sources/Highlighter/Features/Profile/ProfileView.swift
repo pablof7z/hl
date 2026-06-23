@@ -192,12 +192,20 @@ private struct IdentityBlock: View {
     }
 
     private var profileIdentity: ProfileIdentityProjection {
-        store.safeCore.projectProfileIdentity(
-            input: ProfileIdentityProjectionInput(
-                pubkey: pubkey,
-                profile: store.profile,
-                fallback: .pubkey12
-            )
+        // Inline profile_identity_projection: display fields from ProfileDisplayProjection,
+        // bio from profile.about, verifiedNip05 strips the "_@" root-domain prefix.
+        let display = ProfileDisplayProjection.from(pubkey: pubkey, profile: store.profile)
+        let bio = store.profile?.about ?? ""
+        let rawNip05 = store.profile?.nip05 ?? ""
+        let verifiedNip05: String? = rawNip05.isEmpty ? nil
+            : rawNip05.hasPrefix("_@") ? String(rawNip05.dropFirst(2))
+            : rawNip05
+        return ProfileIdentityProjection(
+            displayName: display.displayName,
+            displayInitial: display.displayInitial,
+            pictureUrl: display.pictureUrl,
+            bio: bio,
+            verifiedNip05: verifiedNip05
         )
     }
 }
@@ -348,6 +356,7 @@ private struct TabBar: View {
 private struct TabContent: View {
     let store: ProfileStore
     @Environment(HighlighterStore.self) private var appStore
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var previewRoom: CommunitySummary?
     @State private var pendingOpenRoomId: String?
     @State private var openRoomGroupId: String?
@@ -444,9 +453,7 @@ private struct TabContent: View {
                     RoomPreviewSheet(
                         room: room,
                         onJoin: {
-                            Task {
-                                _ = await appStore.safeCore.requestJoinRoom(groupId: room.id, roomName: room.name)
-                            }
+                            kernel.app.dispatch(.joinRoom(groupId: room.id, hostRelayUrl: room.relayUrl, inviteCode: nil))
                             previewRoom = nil
                         },
                         onOpenRoom: {

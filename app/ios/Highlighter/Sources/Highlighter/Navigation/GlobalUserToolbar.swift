@@ -86,13 +86,7 @@ private struct GlobalUserToolbar: ViewModifier {
     }
 
     private func profileDisplay(for user: CurrentUser) -> ProfileDisplayProjection {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: user.pubkey,
-                profile: appStore.currentUserProfile,
-                fallback: .pubkey8
-            )
-        )
+        ProfileDisplayProjection.from(pubkey: user.pubkey, profile: appStore.currentUserProfile)
     }
 }
 

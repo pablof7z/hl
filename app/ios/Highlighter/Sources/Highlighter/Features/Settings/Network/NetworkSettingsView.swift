@@ -5,7 +5,6 @@ import SwiftUI
 /// `+` opens `AddRelaySheet`.
 struct NetworkSettingsView: View {
     @Environment(HighlighterStore.self) private var appStore
-    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var store: NetworkSettingsStore?
     @State private var showAddSheet = false
     @State private var showImportSheet = false
@@ -49,7 +48,7 @@ struct NetworkSettingsView: View {
         }
         .sheet(isPresented: $showAddSheet) {
             if let store {
-                AddRelaySheet(initialDraft: appStore.safeCore.defaultAddRelayConfig()) { cfg in
+                AddRelaySheet(initialDraft: RelayConfig(url: "", read: true, write: true, rooms: false, indexer: false)) { cfg in
                     Task { await store.upsert(cfg) }
                 }
             }
@@ -77,7 +76,7 @@ struct NetworkSettingsView: View {
         }
         .task {
             if store == nil {
-                store = NetworkSettingsStore(core: appStore.safeCore, appStore: appStore, kernel: kernel)
+                store = NetworkSettingsStore(core: appStore.safeCore, appStore: appStore, kernel: appStore.kernel!)
                 appStore.eventBridge?.registerNetworkStore(store!)
             }
             await store?.load()

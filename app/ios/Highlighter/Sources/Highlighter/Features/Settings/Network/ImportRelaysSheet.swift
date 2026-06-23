@@ -18,17 +18,40 @@ struct ImportRelaysSheet: View {
     @State private var isApplying = false
 
     private var projection: ImportRelaysProjection {
-        appStore.safeCore.projectImportRelays(input: ImportRelaysProjectionInput(
-            fetched: fetched,
-            selectedUrls: selectedUrls
-        ))
+        let selectedSet = Set(selectedUrls)
+        var selectedConfigs: [RelayConfig] = []
+        let rows: [ImportRelayRow] = fetched.map { config in
+            let isSelected = selectedSet.contains(config.url)
+            if isSelected { selectedConfigs.append(config) }
+            let displayUrl = config.url.hasPrefix("wss://")
+                ? String(config.url.dropFirst(6))
+                : config.url
+            let roleLabel: String
+            switch (config.read, config.write) {
+            case (true, true): roleLabel = "Read + Write"
+            case (true, false): roleLabel = "Read"
+            case (false, true): roleLabel = "Write"
+            default: roleLabel = "No roles"
+            }
+            return ImportRelayRow(config: config, displayUrl: displayUrl, roleLabel: roleLabel, isSelected: isSelected)
+        }
+        let selectedCount = UInt64(selectedConfigs.count)
+        let foundCount = rows.count
+        return ImportRelaysProjection(
+            rows: rows,
+            selectedCount: selectedCount,
+            foundTitle: "Found \(foundCount) relay\(foundCount == 1 ? "" : "s")",
+            canApply: selectedCount > 0,
+            selectedConfigs: selectedConfigs
+        )
     }
 
     private var sourceProjection: ImportRelaysSourceProjection {
-        appStore.safeCore.projectImportRelaysSource(input: ImportRelaysSourceProjectionInput(
-            npub: npubText,
-            isFetching: isFetching
-        ))
+        let submitNpub = npubText.trimmingCharacters(in: .whitespaces)
+        return ImportRelaysSourceProjection(
+            submitNpub: submitNpub,
+            canFetch: !submitNpub.isEmpty && !isFetching
+        )
     }
 
     var body: some View {
@@ -138,12 +161,10 @@ struct ImportRelaysSheet: View {
         defer { isFetching = false }
         let snapshot = await appStore.safeCore
             .importRelaysFromNpubSnapshot(source.submitNpub)
-        let apply = appStore.safeCore.projectImportRelaysFetchApply(
-            input: ImportRelaysFetchApplyInput(snapshot: snapshot)
-        )
-        fetched = apply.fetched
-        selectedUrls = apply.selectedUrls
-        errorText = apply.errorMessage
+        fetched = snapshot.fetched
+        selectedUrls = snapshot.selectedUrls
+        let trimmedError = snapshot.errorMessage.trimmingCharacters(in: .whitespaces)
+        errorText = trimmedError.isEmpty ? nil : trimmedError
     }
 
     private func applySelected() async {
@@ -157,10 +178,15 @@ struct ImportRelaysSheet: View {
     }
 
     private func toggle(_ url: String) {
-        selectedUrls = appStore.safeCore.toggleImportRelaySelection(
-            fetched: fetched,
-            selectedUrls: selectedUrls,
-            url: url
-        )
+        let known = fetched.contains { $0.url == url }
+        guard known else { return }
+        var selectedSet = Set(selectedUrls)
+        if selectedSet.contains(url) {
+            selectedSet.remove(url)
+        } else {
+            selectedSet.insert(url)
+        }
+        // Preserve fetched order (matches Rust's selected_import_urls_for_fetched)
+        selectedUrls = fetched.compactMap { selectedSet.contains($0.url) ? $0.url : nil }
     }
 }

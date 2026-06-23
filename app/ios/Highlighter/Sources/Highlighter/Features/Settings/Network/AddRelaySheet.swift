@@ -33,17 +33,50 @@ struct AddRelaySheet: View {
     }
 
     private var projection: AddRelaySheetProjection {
-        appStore.safeCore.projectAddRelaySheet(input: AddRelaySheetProjectionInput(
-            urlText: urlText,
-            clipboardText: UIPasteboard.general.string,
-            read: read,
-            write: write,
-            rooms: rooms,
-            indexer: indexer,
+        let normalizedUrl = urlText.trimmingCharacters(in: .whitespaces)
+        let isValid = normalizedUrl.hasPrefix("wss://") || normalizedUrl.hasPrefix("ws://")
+        let isUnencrypted = normalizedUrl.hasPrefix("ws://")
+        let clipboardUrl: String? = UIPasteboard.general.string.flatMap { text -> String? in
+            let trimmed = text.trimmingCharacters(in: .whitespaces)
+            let valid = trimmed.hasPrefix("wss://") || trimmed.hasPrefix("ws://")
+            return (valid && trimmed != normalizedUrl) ? trimmed : nil
+        }
+        let (probeStatus, probeText) = Self.addRelayProbeStatus(
             probeInFlight: probeInFlight,
             probeResult: probeResult,
             probeFailed: probeFailed
-        ))
+        )
+        return AddRelaySheetProjection(
+            normalizedUrl: normalizedUrl,
+            clipboardUrl: clipboardUrl,
+            isValid: isValid,
+            isUnencrypted: isUnencrypted,
+            canAdd: isValid,
+            addConfig: RelayConfig(url: normalizedUrl, read: read, write: write, rooms: rooms, indexer: indexer),
+            probeStatus: probeStatus,
+            probeText: probeText
+        )
+    }
+
+    private static func addRelayProbeStatus(
+        probeInFlight: Bool,
+        probeResult: Nip11Document?,
+        probeFailed: Bool
+    ) -> (AddRelayProbeStatus, String) {
+        if probeInFlight { return (.checking, "Checking relay…") }
+        if let doc = probeResult { return (.reachable, nip11Summary(doc)) }
+        if probeFailed { return (.unreachable, "Couldn't reach the relay — you can still add it.") }
+        return (.idle, "")
+    }
+
+    private static func nip11Summary(_ doc: Nip11Document) -> String {
+        let softwareLabel: String? = doc.software.map { name in
+            if let version = doc.version { return "\(name) \(version)" }
+            return name
+        }
+        let nipCount: String? = doc.supportedNips.isEmpty ? nil : "\(doc.supportedNips.count) NIPs"
+        let parts = [doc.name, softwareLabel, nipCount].compactMap { $0 }
+        return parts.isEmpty ? "Reachable (no NIP-11 metadata)" : parts.joined(separator: " • ")
     }
 
     var body: some View {

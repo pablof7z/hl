@@ -112,13 +112,16 @@ struct WebReaderView: View {
 private struct WebCommentsScopeModifier: ViewModifier {
     let url: URL
 
-    @Environment(HighlighterStore.self) private var app
-
     @ViewBuilder
     func body(content: Content) -> some View {
-        let snapshot = app.safeCore.getWebCommentScope(url: url.absoluteString)
-        if snapshot.attach, let scope = snapshot.scope {
-            content.commentsAttachment(scope: scope)
+        // Inlined from Rust get_web_comment_scope / web_scope / external_scope:
+        // trims the URL, wraps it in an `I`-tag CommentScope with rootKind 0
+        // (KIND_WEB_EXTERNAL). Pure computation — no safeCore call needed.
+        let trimmed = url.absoluteString.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty {
+            content.commentsAttachment(
+                scope: CommentScope(rootTagName: "I", rootTagValue: trimmed, rootKind: 0)
+            )
         } else {
             content
         }

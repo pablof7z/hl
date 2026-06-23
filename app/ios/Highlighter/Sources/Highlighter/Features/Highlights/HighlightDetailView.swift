@@ -303,9 +303,10 @@ struct HighlightDetailView: View {
     }
 
     private var commentsButton: some View {
-        let projection = app.safeCore.projectCommentToolbar(
-            input: CommentToolbarProjectionInput(records: commentsStore.records)
-        )
+        let count = commentsStore.records.count
+        let showsCount = count > 0
+        let countLabel = count > 0 ? "\(count)" : ""
+        let accessibilityLabel = count == 0 ? "Start the thread" : "\(count) comments"
 
         return Button {
             showComments = true
@@ -313,15 +314,15 @@ struct HighlightDetailView: View {
             HStack(spacing: 5) {
                 Image(systemName: "bubble.left")
                     .font(.system(size: 20, weight: .medium))
-                if projection.showsCount {
-                    Text(projection.countLabel)
+                if showsCount {
+                    Text(countLabel)
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                 }
             }
             .foregroundStyle(Color.highlighterInkStrong)
         }
-        .accessibilityLabel(projection.accessibilityLabel)
+        .accessibilityLabel(accessibilityLabel)
     }
 
     private func actionIcon(systemName: String) -> some View {
@@ -356,14 +357,118 @@ struct HighlightDetailView: View {
     // MARK: - Resource projection
 
     private var resourceProjection: HighlightDetailResourceProjection {
-        app.safeCore.projectHighlightDetailResource(
-            input: HighlightDetailResourceProjectionInput(item: item)
+        let preview = item.artifact?.preview
+        let previewSource = (preview?.source ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+        let externalReference = highlight.externalReference
+        let artifactAddress = highlight.artifactAddress
+        let rawSourceUrl = highlight.sourceUrl
+
+        // Inline article_route_for_highlight: parse NIP-33 "30023:<pubkey>:<d-tag>"
+        let articleRoute: ArticleReaderRoute? = {
+            let t = artifactAddress.trimmingCharacters(in: .whitespaces)
+            let parts = t.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+            guard parts.count == 3, parts[0] == "30023" else { return nil }
+            let pubkey = String(parts[1]).trimmingCharacters(in: .whitespaces)
+            let dTag = String(parts[2]).trimmingCharacters(in: .whitespaces)
+            guard !pubkey.isEmpty, !dTag.isEmpty else { return nil }
+            return ArticleReaderRoute(address: "30023:\(pubkey):\(dTag)", pubkey: pubkey, dTag: dTag)
+        }()
+
+        // Inline book_route_for_highlight → catalog_id only
+        let bookCatalogId: String? = {
+            func catalogId(from ref: String) -> String? {
+                let t = ref.trimmingCharacters(in: .whitespaces)
+                guard t.lowercased().hasPrefix("isbn:") else { return nil }
+                let isbn = String(t.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                return isbn.isEmpty ? nil : "isbn:\(isbn)"
+            }
+            return catalogId(from: externalReference) ?? catalogId(from: artifactAddress)
+        }()
+
+        // Inline web_reader_url: only http/https pass through
+        let webUrl: String? = {
+            let t = rawSourceUrl.trimmingCharacters(in: .whitespaces)
+            guard !t.isEmpty, let url = URL(string: t) else { return nil }
+            let scheme = url.scheme?.lowercased() ?? ""
+            return (scheme == "http" || scheme == "https") ? t : nil
+        }()
+
+        // Inline source_kind
+        let sourceKind: HighlightSourceKind = {
+            switch previewSource {
+            case "article": return .article
+            case "web":     return .web
+            case "podcast": return .podcast
+            case "book":    return .book
+            case "video":   return .video
+            case "paper":   return .paper
+            case "":        break
+            default:        return .unknown
+            }
+            if externalReference.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("isbn:") {
+                return .book
+            }
+            if articleRoute != nil { return .article }
+            if artifactAddress.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("isbn:") {
+                return .book
+            }
+            if !rawSourceUrl.trimmingCharacters(in: .whitespaces).isEmpty { return .web }
+            return .unknown
+        }()
+
+        // Inline url_host for title/author fallback
+        let urlHost: String? = {
+            let t = rawSourceUrl.trimmingCharacters(in: .whitespaces)
+            guard !t.isEmpty, let url = URL(string: t) else { return nil }
+            return url.host
+        }()
+
+        let kindLabel: String
+        let iconSystemName: String
+        switch sourceKind {
+        case .article: kindLabel = "Article"; iconSystemName = "doc.text"
+        case .book:    kindLabel = "Book";    iconSystemName = "book.closed"
+        case .podcast: kindLabel = "Podcast"; iconSystemName = "waveform"
+        case .web:     kindLabel = "Web";     iconSystemName = "globe"
+        case .video:   kindLabel = "Video";   iconSystemName = "play.rectangle"
+        case .paper:   kindLabel = "Paper";   iconSystemName = "doc.richtext"
+        case .unknown: kindLabel = "Source";  iconSystemName = "quote.bubble"
+        }
+
+        let nonEmpty = { (s: String) -> String? in s.isEmpty ? nil : s }
+        let title  = preview.flatMap { nonEmpty($0.title) }  ?? urlHost ?? "Untitled"
+        let author = preview.flatMap { nonEmpty($0.author) }
+            ?? preview.flatMap { nonEmpty($0.domain) }
+            ?? urlHost
+            ?? ""
+        let coverUrl = preview.flatMap { nonEmpty($0.image) }
+
+        return HighlightDetailResourceProjection(
+            sourceKind: sourceKind,
+            kindLabel: kindLabel,
+            iconSystemName: iconSystemName,
+            title: title,
+            author: author,
+            coverUrl: coverUrl,
+            articleRoute: articleRoute,
+            bookCatalogId: bookCatalogId,
+            webUrl: webUrl
         )
     }
 
     private var contentProjection: HighlightDetailContentProjection {
-        app.safeCore.projectHighlightDetailContent(
-            input: HighlightDetailContentProjectionInput(highlight: highlight)
+        let quoteText = highlight.quote.trimmingCharacters(in: .whitespaces)
+        let noteText: String? = highlight.note.trimmingCharacters(in: .whitespaces).isEmpty
+            ? nil : highlight.note
+        let pageImageUrl: String? = {
+            let t = highlight.imageUrl.trimmingCharacters(in: .whitespaces)
+            return t.isEmpty ? nil : t
+        }()
+        return HighlightDetailContentProjection(
+            quoteText: quoteText,
+            noteText: noteText,
+            pageImageUrl: pageImageUrl,
+            shareMessage: quoteText
         )
     }
 

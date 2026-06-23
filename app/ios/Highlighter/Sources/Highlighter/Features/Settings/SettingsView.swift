@@ -127,9 +127,17 @@ struct SettingsView: View {
     }
 
     private func publicKeyDisplay(for user: CurrentUser) -> PublicKeyDisplayProjection {
-        store.safeCore.projectPublicKeyDisplay(
-            input: PublicKeyDisplayProjectionInput(npub: user.npub)
-        )
+        // Inline project_public_key_display: truncate long npubs to prefix(10)…suffix(8)
+        let npub = user.npub
+        let compactLabel: String
+        if npub.count <= 20 {
+            compactLabel = npub
+        } else {
+            let prefix = String(npub.prefix(10))
+            let suffix = String(npub.suffix(8))
+            compactLabel = "\(prefix)…\(suffix)"
+        }
+        return PublicKeyDisplayProjection(compactLabel: compactLabel)
     }
 
     private var appVersionString: String {

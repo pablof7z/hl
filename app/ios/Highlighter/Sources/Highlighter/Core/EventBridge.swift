@@ -165,7 +165,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     private func dispatchProfileSnapshot(_ change: DataChangeType, pubkey: String) {
         guard case .userProfileUpdated(_, let kind) = change,
               let appStore,
-              appStore.safeCore.getProfileUpdateAction(kind: kind) == .refreshProfile else {
+              kind == 0 else { // kind:0 = NIP-01 metadata → profile refresh
             return
         }
         Task { await appStore.applyProfileSnapshotUpdate(pubkeyHex: pubkey) }

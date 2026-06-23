@@ -5,27 +5,28 @@ import SwiftUI
 /// enclosing `NavigationStack`'s `.navigationDestination(for: String.self)`
 /// into `RoomHomeView`, which already exists.
 struct CommunityRowView: View {
-    @Environment(HighlighterStore.self) private var app
-
     let community: CommunitySummary
 
     var body: some View {
-        let projection = app.safeCore.projectCommunityRow(
-            input: CommunityRowProjectionInput(community: community)
-        )
+        // Inline community_row_projection: name with id fallback, non-empty picture, about/member-count subtitle
+        let displayName = community.name.isEmpty ? community.id : community.name
+        let pictureUrl: String? = community.picture.isEmpty ? nil : community.picture
+        let subtitle: String? = !community.about.isEmpty
+            ? community.about
+            : community.memberCount.map { $0 == 1 ? "1 member" : "\($0) members" }
 
         HStack(spacing: 14) {
-            thumbnail(projection)
+            thumbnail(pictureUrl)
                 .frame(width: 52, height: 52)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(projection.displayName)
+                Text(displayName)
                     .font(.body.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(1)
 
-                if let subtitle = projection.subtitle {
+                if let subtitle {
                     Text(subtitle)
                         .font(.footnote)
                         .foregroundStyle(Color.highlighterInkMuted)
@@ -44,8 +45,8 @@ struct CommunityRowView: View {
     }
 
     @ViewBuilder
-    private func thumbnail(_ projection: CommunityRowProjection) -> some View {
-        if let picture = projection.pictureUrl, let url = URL(string: picture) {
+    private func thumbnail(_ pictureUrl: String?) -> some View {
+        if let picture = pictureUrl, let url = URL(string: picture) {
             KFImage(url)
                 .placeholder { Color.highlighterRule.opacity(0.5) }
                 .fade(duration: 0.15)

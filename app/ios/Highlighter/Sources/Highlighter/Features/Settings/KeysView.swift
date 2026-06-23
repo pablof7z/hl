@@ -142,6 +142,24 @@ struct KeysView: View {
     // MARK: - Helpers
 
     private var secretKeySnapshot: SecretKeySettingsSnapshot {
-        store.safeCore.currentSecretKeySettingsSnapshot(isRevealed: isRevealed)
+        // Inline current_secret_key_settings_snapshot: reads nsec from keychain,
+        // masks it with prefix(8)••…••suffix(6) when not revealed.
+        guard let nsec = KeychainService.loadNsec(), !nsec.isEmpty else {
+            return SecretKeySettingsSnapshot(hasSecretKey: false, displayValue: "", copyValue: nil)
+        }
+        let displayValue: String
+        if isRevealed {
+            displayValue = nsec
+        } else {
+            let charCount = nsec.count
+            if charCount <= 10 {
+                displayValue = String(repeating: "•", count: charCount)
+            } else {
+                let prefix = String(nsec.prefix(8))
+                let suffix = String(nsec.suffix(6))
+                displayValue = "\(prefix)••••••••••••••••••••••••\(suffix)"
+            }
+        }
+        return SecretKeySettingsSnapshot(hasSecretKey: true, displayValue: displayValue, copyValue: nsec)
     }
 }

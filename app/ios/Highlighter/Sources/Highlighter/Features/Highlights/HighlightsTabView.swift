@@ -185,16 +185,50 @@ struct HighlightsTabView: View {
         if let existing = item.artifact {
             return .artifact(existing, core: app.safeCore)
         }
-        guard let projection = app.safeCore.projectShareHighlightArticleTarget(
-            input: ShareHighlightArticleTargetProjectionInput(highlight: item.highlight)
-        ) else {
-            return nil
-        }
+        // Inline project_share_highlight_article_target:
+        // parse the NIP-33 "30023:<pubkey>:<d-tag>" artifact address, then
+        // build a minimal article ArtifactPreview from it.
+        let address = item.highlight.artifactAddress.trimmingCharacters(in: .whitespaces)
+        guard !address.isEmpty else { return nil }
+        let parts = address.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+        guard parts.count == 3, parts[0] == "30023" else { return nil }
+        let pubkey = String(parts[1]).trimmingCharacters(in: .whitespaces)
+        let dTag   = String(parts[2]).trimmingCharacters(in: .whitespaces)
+        guard !pubkey.isEmpty, !dTag.isEmpty else { return nil }
+
+        let preview = ArtifactPreview(
+            id: dTag,
+            url: "",
+            title: "",
+            author: "",
+            image: "",
+            description: "",
+            source: "article",
+            domain: "",
+            catalogId: "",
+            catalogKind: "",
+            podcastGuid: "",
+            podcastItemGuid: "",
+            podcastShowTitle: "",
+            audioUrl: "",
+            audioPreviewUrl: "",
+            transcriptUrl: "",
+            feedUrl: "",
+            publishedAt: "",
+            durationSeconds: nil,
+            referenceTagName: "a",
+            referenceTagValue: address,
+            referenceKind: "30023",
+            highlightTagName: "a",
+            highlightTagValue: address,
+            highlightReferenceKey: "a:\(address)",
+            chapters: []
+        )
         return ShareToCommunityTarget(
-            payload: .artifactShare(preview: projection.preview),
-            displayTitle: projection.displayTitle,
-            displaySubtitle: projection.displaySubtitle,
-            imageURL: projection.imageUrl.flatMap { URL(string: $0) },
+            payload: .artifactShare(preview: preview),
+            displayTitle: "Article",
+            displaySubtitle: item.highlight.quote,
+            imageURL: nil,
             publicShareURL: nil
         )
     }
