@@ -209,12 +209,10 @@ final class HighlighterStore {
         }
         guard profileSnapshotHandles[pubkeyHex] == nil else { return }
         let profileStart = await safeCore.subscribeUserProfile(pubkeyHex: pubkeyHex)
-        let projection = safeCore.projectViewSubscriptionStart(
-            input: ViewSubscriptionStartProjectionInput(start: profileStart)
-        )
-        if projection.shouldRegister {
-            profileSnapshotHandles[pubkeyHex] = projection.handle
-            eventBridge?.registerProfileSnapshot(pubkeyHex: pubkeyHex, handle: projection.handle)
+        let handle = profileStart.handle
+        if profileStart.error.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && handle != 0 {
+            profileSnapshotHandles[pubkeyHex] = handle
+            eventBridge?.registerProfileSnapshot(pubkeyHex: pubkeyHex, handle: handle)
         }
     }
 
@@ -378,11 +376,9 @@ final class HighlighterStore {
         // by EventBridge).
         if joinedCommunitiesHandle == nil {
             let joinedStart = await safeCore.subscribeJoinedCommunities()
-            let joinedProjection = safeCore.projectAppSubscriptionStart(
-                input: AppSubscriptionStartProjectionInput(start: joinedStart)
-            )
-            if joinedProjection.shouldKeepHandle {
-                joinedCommunitiesHandle = joinedProjection.handle
+            let joinedHandle = joinedStart.handle
+            if joinedStart.error.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && joinedHandle != 0 {
+                joinedCommunitiesHandle = joinedHandle
                 // Joined-communities deltas are dispatched via the appStore
                 // path in EventBridge (not per-view). No store registration
                 // needed; we only hold the handle so logout can unsubscribe.
@@ -431,11 +427,8 @@ final class HighlighterStore {
     }
 
     private func applyJoinedCommunitiesSnapshot(_ snapshot: JoinedCommunitiesSnapshot) {
-        let apply = safeCore.projectJoinedCommunitiesSnapshotApply(
-            input: JoinedCommunitiesSnapshotApplyInput(snapshot: snapshot)
-        )
-        if apply.shouldApplyCommunities {
-            joinedCommunities = apply.communities
+        if snapshot.error.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            joinedCommunities = snapshot.communities
         }
     }
 }
