@@ -84,13 +84,7 @@ struct NostrRichText: View {
         if needsProfileRefresh {
             Task { await appStore.requestProfile(pubkeyHex: pubkeyHex) }
         }
-        return appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: pubkeyHex,
-                profile: snapshot,
-                fallback: .pubkey8
-            )
-        ).displayName
+        return ProfileDisplayProjection.from(pubkey: pubkeyHex, profile: snapshot).displayName
     }
 
     // MARK: - Tokenisation + blocking
@@ -362,13 +356,7 @@ private struct ArticleEntityCard: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: event.pubkeyHex,
-                profile: profile,
-                fallback: .pubkey8
-            )
-        )
+        ProfileDisplayProjection.from(pubkey: event.pubkeyHex, profile: profile)
     }
 }
 
@@ -417,13 +405,7 @@ private struct NoteEntityCard: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: event.pubkeyHex,
-                profile: profile,
-                fallback: .pubkey8
-            )
-        )
+        ProfileDisplayProjection.from(pubkey: event.pubkeyHex, profile: profile)
     }
 }
 
@@ -461,13 +443,7 @@ private struct HighlightEntityCard: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: event.pubkeyHex,
-                profile: profile,
-                fallback: .pubkey8
-            )
-        )
+        ProfileDisplayProjection.from(pubkey: event.pubkeyHex, profile: profile)
     }
 }
 
@@ -532,13 +508,7 @@ private struct ProfileCalloutFromSnapshot: View {
     }
 
     private var profileDisplay: ProfileDisplayProjection {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: pubkey,
-                profile: profile,
-                fallback: .pubkey8
-            )
-        )
+        ProfileDisplayProjection.from(pubkey: pubkey, profile: profile)
     }
 }
 
@@ -571,13 +541,7 @@ private struct GenericEntityCard: View {
     }
 
     private var authorFallback: String {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: event.pubkeyHex,
-                profile: nil,
-                fallback: .pubkey12
-            )
-        ).displayName
+        ProfileDisplayProjection.from(pubkey: event.pubkeyHex, profile: nil).displayName
     }
 }
 

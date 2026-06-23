@@ -398,11 +398,10 @@ struct HighlightDetailView: View {
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
-        app.safeCore.projectRelativeTimeLabel(
-            input: RelativeTimeLabelInput(
-                unixSeconds: seconds,
-                style: .ago
-            )
-        ).label
+        guard let seconds else { return nil }
+        let date = Date(timeIntervalSince1970: TimeInterval(seconds))
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }

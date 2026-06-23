@@ -62,13 +62,7 @@ struct SetDetailView: View {
     }
 
     private var curatorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: record.pubkey,
-                profile: app.profileSnapshots[record.pubkey],
-                fallback: .pubkey10
-            )
-        )
+        ProfileDisplayProjection.from(pubkey: record.pubkey, profile: app.profileSnapshots[record.pubkey])
     }
 
     private var articleList: some View {

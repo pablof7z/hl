@@ -23,6 +23,15 @@ struct AppEntry: App {
                 .environment(store)
                 .environment(kernel)
                 .task {
+                    // Phase 7 bridge: wire the two-way weak references so
+                    // profile snapshots flow from the kernel observer into
+                    // the live-lane store (kernel → store) and so the store
+                    // can open/close kernel profile views (store → kernel).
+                    // Must happen before any subscription is opened so no
+                    // initial snapshot is dropped.
+                    store.kernel = kernel
+                    kernel.store = store
+
                     // Kick the kernel's session-restore loop first so the
                     // route state is available as early as possible.
                     kernel.app.dispatch(.restoreSession)

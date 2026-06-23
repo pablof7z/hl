@@ -143,13 +143,7 @@ struct RoomLibraryPodcastCardView: View {
     private func sharerDisplay(
         _ projection: RoomLibraryPodcastCardProjection
     ) -> ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: projection.sharerPubkey,
-                profile: app.profileSnapshots[projection.sharerPubkey],
-                fallback: .pubkey10
-            )
-        )
+        ProfileDisplayProjection.from(pubkey: projection.sharerPubkey, profile: app.profileSnapshots[projection.sharerPubkey])
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {

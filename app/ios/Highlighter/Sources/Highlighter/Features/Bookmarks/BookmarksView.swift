@@ -386,13 +386,7 @@ struct CollectionRow: View {
     }
 
     private var curatorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: record.pubkey,
-                profile: app.profileSnapshots[record.pubkey],
-                fallback: .pubkey10
-            )
-        )
+        ProfileDisplayProjection.from(pubkey: record.pubkey, profile: app.profileSnapshots[record.pubkey])
     }
 
     private var rowProjection: BookmarkSetRowProjection {
@@ -469,11 +463,10 @@ struct WebBookmarkRowView: View {
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
-        return app.safeCore.projectRelativeTimeLabel(
-            input: RelativeTimeLabelInput(
-                unixSeconds: seconds,
-                style: .bookmarkCompact
-            )
-        ).label
+        guard let seconds else { return nil }
+        let date = Date(timeIntervalSince1970: TimeInterval(seconds))
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }

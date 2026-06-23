@@ -17,7 +17,6 @@ struct BookScannerView: View {
     /// or with `nil` when the user dismisses without scanning.
     var onResult: (String?) -> Void
 
-    @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
     @State private var model = BookScannerModel()
     @State private var showManualEntry = false
@@ -50,7 +49,7 @@ struct BookScannerView: View {
                 return
             }
             await model.start { payload in
-                guard let isbn = appStore.safeCore.normalizeIsbnInput(payload) else {
+                guard let isbn = normalizeISBN(payload) else {
                     model.flashNotABook()
                     return
                 }
@@ -60,6 +59,14 @@ struct BookScannerView: View {
         .onDisappear {
             model.stop()
         }
+    }
+
+    /// Strips non-digit characters and returns the ISBN only when it is
+    /// exactly 10 or 13 digits (ISBN-10 or Bookland EAN-13).
+    private func normalizeISBN(_ raw: String) -> String? {
+        let digits = raw.filter(\.isNumber)
+        guard digits.count == 10 || digits.count == 13 else { return nil }
+        return digits
     }
 
     private func hand(off isbn: String) {

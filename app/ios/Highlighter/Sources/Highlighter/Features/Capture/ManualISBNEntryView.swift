@@ -10,13 +10,14 @@ import SwiftUI
 struct ManualISBNEntryView: View {
     var onResult: (String?) -> Void
 
-    @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
     @State private var raw: String = ""
     @FocusState private var focused: Bool
 
     private var normalizedISBN: String? {
-        appStore.safeCore.normalizeIsbnInput(raw)
+        let digits = raw.filter(\.isNumber)
+        guard digits.count == 10 || digits.count == 13 else { return nil }
+        return digits
     }
 
     var body: some View {

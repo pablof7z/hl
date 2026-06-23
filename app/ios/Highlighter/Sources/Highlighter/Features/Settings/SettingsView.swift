@@ -123,13 +123,7 @@ struct SettingsView: View {
     // MARK: - Helpers
 
     private func profileDisplay(for user: CurrentUser) -> ProfileDisplayProjection {
-        store.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: user.pubkey,
-                profile: store.currentUserProfile,
-                fallback: .accountLabel
-            )
-        )
+        ProfileDisplayProjection.from(pubkey: user.pubkey, profile: store.currentUserProfile)
     }
 
     private func publicKeyDisplay(for user: CurrentUser) -> PublicKeyDisplayProjection {

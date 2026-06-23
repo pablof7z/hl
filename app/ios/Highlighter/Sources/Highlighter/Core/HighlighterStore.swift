@@ -55,6 +55,14 @@ final class HighlighterStore {
     @ObservationIgnored private var bookmarksHandle: UInt64?
     @ObservationIgnored private var profileSnapshotHandles: [String: UInt64] = [:]
     @ObservationIgnored private var networkPathMonitor: NWPathMonitor?
+    /// Weak reference to the kernel, set by `AppEntry` after both objects are
+    /// initialised. Used to route `requestProfile` through the kernel lane
+    /// (Phase 7) instead of the legacy `safeCore` subscription path.
+    /// Weak to avoid a retain cycle: `AppEntry` (@State) is the sole strong owner.
+    @ObservationIgnored weak var kernel: HighlighterAppKernel?
+    /// Pubkeys whose profile views were opened via the kernel so `logout()`
+    /// can close them and release NMP resources.
+    @ObservationIgnored private var kernelManagedPubkeys: Set<String> = []
     /// In-flight `requestWebMetadata` calls coalesce here so multiple rows
     /// referencing the same URL share a single Task. Cleared once the
     /// fetch completes (success or failure).
@@ -124,6 +132,13 @@ final class HighlighterStore {
             eventBridge?.unregister(handle: handle)
         }
         profileSnapshotHandles.removeAll()
+        // Close any profile views that were opened via the kernel lane so
+        // NMP resources (relay subscription slots, in-memory projections)
+        // are released on sign-out.
+        for pubkey in kernelManagedPubkeys {
+            kernel?.closeProfile(pubkey: pubkey)
+        }
+        kernelManagedPubkeys.removeAll()
         profileSnapshots.removeAll()
         for (_, task) in webMetadataInflight { task.cancel() }
         webMetadataInflight.removeAll()
@@ -198,10 +213,31 @@ final class HighlighterStore {
         ))
     }
 
-    /// Reads a profile projection from Rust's local nostrdb state and sets up
-    /// a relay subscription so the projection is replaced when a fresh kind:0
-    /// arrives. Safe to call from multiple views for the same pubkey.
+    /// Opens a profile subscription and seeds the local snapshot.
+    ///
+    /// **Kernel path (Phase 7):** calls `kernel.openProfile(pubkey:)` which
+    /// dispatches `ClaimProfile` to NMP and opens a `ViewId.profile` projection.
+    /// The `KernelObserver` pushes fresh `ProfileSnapshot` deltas back into
+    /// `kernel.profileSnapshots`; the Phase 7 bridge in `HighlighterAppKernel.receive`
+    /// then mirrors them here via `applyProfileSnapshot(_:)`.
+    ///
+    /// **Legacy path (no kernel):** falls through to the original `safeCore`
+    /// subscription so the live-lane still works while the migration is in progress.
+    ///
+    /// Safe to call from multiple views for the same pubkey — both paths are
+    /// idempotent.
     func requestProfile(pubkeyHex: String) async {
+        if let kernel = kernel {
+            // Kernel lane: open the profile view (idempotent if already open)
+            // and seed the local snapshot from whatever the kernel already has.
+            kernel.openProfile(pubkey: pubkeyHex)
+            kernelManagedPubkeys.insert(pubkeyHex)
+            if let snapshot = kernel.profileSnapshots[pubkeyHex] {
+                applyProfileSnapshot(snapshot.asProfileMetadata())
+            }
+            return
+        }
+        // Legacy safeCore path — active while the kernel reference is not yet wired.
         if profileSnapshots[pubkeyHex] == nil {
             if let profile = await safeCore.getUserProfile(pubkeyHex: pubkeyHex) {
                 applyProfileSnapshot(profile)
@@ -216,8 +252,21 @@ final class HighlighterStore {
         }
     }
 
-    /// Called by `EventBridge` when a subscribed profile's kind:0 arrives from a relay.
+    /// Called by `EventBridge` when a legacy-lane profile subscription delivers
+    /// a fresh kind:0, and by the kernel bridge when `KernelObserver` pushes a
+    /// `ProfileSnapshot` update (via `HighlighterAppKernel.receive`).
+    ///
+    /// **Kernel path:** reads the latest `ProfileSnapshot` the kernel already
+    /// holds (which the kernel observer has already updated synchronously before
+    /// this call) and converts it to `ProfileMetadata` for the UI.
+    ///
+    /// **Legacy path:** re-queries `safeCore` for the refreshed profile, as before.
     func applyProfileSnapshotUpdate(pubkeyHex: String) async {
+        if let snapshot = kernel?.profileSnapshots[pubkeyHex] {
+            applyProfileSnapshot(snapshot.asProfileMetadata())
+            return
+        }
+        // Legacy safeCore fallback for live-lane subscriptions.
         if let profile = await safeCore.getUserProfile(pubkeyHex: pubkeyHex) {
             applyProfileSnapshot(profile)
         }

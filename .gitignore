@@ -17,6 +17,8 @@ app/android/.kotlin/
 app/android/**/build/
 app/android/app/src/main/jniLibs/
 app/ios/DerivedData*/
+app/ios/**/DerivedData/
+.claire/
 
 # Android release signing (local only)
 app/android/keystore.properties

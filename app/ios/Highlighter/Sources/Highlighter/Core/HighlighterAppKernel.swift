@@ -118,6 +118,16 @@ final class HighlighterAppKernel {
     /// (Phase 7); the collections/web panes stay on the live lane (nmp #1653).
     private(set) var bookmarks: BookmarksSnapshot?
 
+    // MARK: - Back-reference to the live-lane store (Phase 7 bridge)
+
+    /// Weak reference set by `AppEntry` after both objects are initialised.
+    /// Used to push profile snapshot updates from the kernel observer into
+    /// `HighlighterStore.profileSnapshots` so existing UI components that read
+    /// the store (rather than the kernel directly) still react to kernel-lane
+    /// profile refreshes. Weak to avoid a retain cycle: `AppEntry` (@State)
+    /// is the exclusive owner of both objects.
+    @ObservationIgnored weak var store: HighlighterStore?
+
     // MARK: - Kernel handle
 
     /// The Rust-side kernel object. Callers may dispatch actions and manage
@@ -411,6 +421,11 @@ final class HighlighterAppKernel {
             roomExplorer = s
         case .profile(let s):
             profileSnapshots[s.pubkey] = s
+            // Phase 7 bridge: push the updated profile into the live-lane
+            // store so existing UI components that read
+            // `store.profileSnapshots` continue to react when the kernel
+            // receives a fresher kind:0 from a relay.
+            store?.applyProfileSnapshot(s.asProfileMetadata())
         case .roomHome(let s):
             roomHomeSnapshots[s.groupId] = s
 

@@ -266,21 +266,14 @@ struct BookView: View {
     // MARK: - Helpers
 
     private func highlighterDisplay(_ pubkey: String) -> ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: pubkey,
-                profile: app.profileSnapshots[pubkey],
-                fallback: .pubkey8
-            )
-        )
+        ProfileDisplayProjection.from(pubkey: pubkey, profile: app.profileSnapshots[pubkey])
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
-        app.safeCore.projectRelativeTimeLabel(
-            input: RelativeTimeLabelInput(
-                unixSeconds: seconds,
-                style: .compact
-            )
-        ).label
+        guard let seconds else { return nil }
+        let date = Date(timeIntervalSince1970: TimeInterval(seconds))
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }

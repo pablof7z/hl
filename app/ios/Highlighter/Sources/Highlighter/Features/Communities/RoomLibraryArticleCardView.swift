@@ -55,15 +55,7 @@ struct RoomLibraryArticleCardView: View {
         _ projection: RoomLibraryArticleCardProjection
     ) -> ProfileDisplayProjection {
         let pubkey = projection.authorProfilePubkey
-        return app.safeCore.projectProfileDisplayWithLabel(
-            input: ProfileDisplayWithLabelProjectionInput(
-                pubkey: pubkey,
-                profile: pubkey.isEmpty ? nil : app.profileSnapshots[pubkey],
-                labelFallback: artifact.preview.author,
-                pubkeyFallback: .pubkey10,
-                emptyFallback: "Unknown"
-            )
-        )
+        return ProfileDisplayProjection.from(pubkey: pubkey, profile: pubkey.isEmpty ? nil : app.profileSnapshots[pubkey])
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
