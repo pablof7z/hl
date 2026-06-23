@@ -333,8 +333,8 @@ struct HighlightDetailView: View {
     // MARK: - Comments scope
 
     private var commentsScope: CommentScope? {
-        let snapshot = app.safeCore.getHighlightCommentScope(eventIdHex: highlight.eventId)
-        return snapshot.attach ? snapshot.scope : nil
+        guard !highlight.eventId.isEmpty else { return nil }
+        return CommentScope(rootTagName: "e", rootTagValue: highlight.eventId, rootKind: 9802)
     }
 
     /// Public web URL that the share sheet hands to other apps. The
@@ -388,13 +388,7 @@ struct HighlightDetailView: View {
     // MARK: - Profile helpers
 
     private var highlighterDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: highlight.pubkey,
-                profile: app.profileSnapshots[highlight.pubkey],
-                fallback: .pubkey10
-            )
-        )
+        ProfileDisplayProjection.from(pubkey: highlight.pubkey, profile: app.profileSnapshots[highlight.pubkey])
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {

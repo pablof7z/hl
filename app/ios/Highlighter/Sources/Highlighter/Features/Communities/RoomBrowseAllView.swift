@@ -5,13 +5,13 @@ import SwiftUI
 /// rooms" footer.
 struct RoomBrowseAllView: View {
     @Environment(HighlighterStore.self) private var appStore
+    @Environment(HighlighterAppKernel.self) private var kernel
 
     /// Called when the user taps "Open room" (or the already-joined primary
     /// button) inside the preview sheet. The parent NavigationStack owner
     /// should push the room's id onto its path.
     var onOpenRoom: ((String) -> Void)? = nil
 
-    @State private var rooms: [CommunitySummary] = []
     @State private var search: String = ""
     @State private var previewRoom: CommunitySummary?
 
@@ -19,6 +19,17 @@ struct RoomBrowseAllView: View {
         GridItem(.flexible(), spacing: 14),
         GridItem(.flexible(), spacing: 14),
     ]
+
+    /// Rooms derived from the kernel's roomExplorer snapshot, filtered by
+    /// the current search query. Updates reactively as the snapshot changes.
+    private var rooms: [CommunitySummary] {
+        let all = kernel.roomExplorer?.newNoteworthy.map { $0.asCommunitySummary() } ?? []
+        guard !search.isEmpty else { return all }
+        let q = search.lowercased()
+        return all.filter {
+            $0.name.lowercased().contains(q) || $0.about.lowercased().contains(q)
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -38,26 +49,19 @@ struct RoomBrowseAllView: View {
         .navigationTitle("Browse rooms")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always))
-        .task {
-            await appStore.safeCore.startRoomDiscovery()
-            await loadRooms()
-        }
-        .onChange(of: search) { _, _ in
-            Task {
-                await loadRooms()
-            }
-        }
         .refreshable {
-            await loadRooms()
+            kernel.refreshRoomExplorer()
         }
         .sheet(item: $previewRoom) { room in
             NavigationStack {
                 RoomPreviewSheet(
                     room: room,
                     onJoin: {
-                        Task {
-                            _ = await appStore.safeCore.requestJoinRoom(groupId: room.id, roomName: room.name)
-                        }
+                        kernel.app.dispatch(.joinRoom(
+                            groupId: room.id,
+                            hostRelayUrl: room.relayUrl,
+                            inviteCode: nil
+                        ))
                         previewRoom = nil
                     },
                     onOpenRoom: onOpenRoom.map { open in
@@ -69,20 +73,6 @@ struct RoomBrowseAllView: View {
                 )
             }
             .environment(appStore)
-        }
-    }
-
-    private func loadRooms() async {
-        let query = search
-        let snapshot = await appStore.safeCore.getRoomBrowseSnapshot(query: query, limit: 200)
-        if query == search {
-            let projection = appStore.safeCore.projectRoomBrowseSnapshotApply(
-                input: RoomBrowseSnapshotApplyInput(
-                    rooms: snapshot.rooms,
-                    error: snapshot.error
-                )
-            )
-            rooms = projection.rooms
         }
     }
 }

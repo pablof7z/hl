@@ -204,8 +204,14 @@ final class CaptureStore {
     }
 
     func updateHighlightCropBox(_ cropBox: CGRect, reupload: Bool) {
-        let fallback = highlightCropBox.map { OcrRect($0) }
-        highlightCropBox = safeCore.sanitizeHighlightCropBox(OcrRect(cropBox), fallback: fallback).cgRect
+        let sanitized: CGRect = {
+            let minX = max(0.0, min(cropBox.minX, 1.0))
+            let minY = max(0.0, min(cropBox.minY, 1.0))
+            let maxX = max(minX, min(cropBox.maxX, 1.0))
+            let maxY = max(minY, min(cropBox.maxY, 1.0))
+            return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        }()
+        highlightCropBox = sanitized
         if reupload { prepareHighlightedCrop(reupload: true) }
     }
 

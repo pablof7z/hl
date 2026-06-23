@@ -89,13 +89,10 @@ struct ShareToCommunityTarget: Identifiable {
 /// to, with an optional note.
 struct ShareToCommunitySheet: View {
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @Environment(\.dismiss) private var dismiss
 
     let target: ShareToCommunityTarget
-
-    @State private var note: String = ""
-    @State private var publishingId: String?
-    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -105,11 +102,6 @@ struct ShareToCommunitySheet: View {
                         .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                 }
 
-                Section("Note (optional)") {
-                    TextField("What caught your attention?", text: $note, axis: .vertical)
-                        .lineLimit(2...6)
-                }
-
                 Section("Share to") {
                     if app.joinedCommunities.isEmpty {
                         Text("You haven't joined any communities yet.")
@@ -117,11 +109,10 @@ struct ShareToCommunitySheet: View {
                     } else {
                         ForEach(app.joinedCommunities, id: \.id) { community in
                             Button {
-                                publish(to: community.id)
+                                publish(to: community)
                             } label: {
                                 communityRow(community)
                             }
-                            .disabled(publishingId != nil)
                         }
                     }
                 }
@@ -131,7 +122,6 @@ struct ShareToCommunitySheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
-                        .disabled(publishingId != nil)
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
@@ -144,17 +134,8 @@ struct ShareToCommunitySheet: View {
                             Image(systemName: "square.and.arrow.up")
                         }
                         .accessibilityLabel("Share article link")
-                        .disabled(publishingId != nil)
                     }
                 }
-            }
-            .alert("Couldn't share", isPresented: Binding(
-                get: { errorMessage != nil },
-                set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button("OK", role: .cancel) { errorMessage = nil }
-            } message: {
-                Text(errorMessage ?? "")
             }
         }
     }
@@ -192,12 +173,8 @@ struct ShareToCommunitySheet: View {
     // MARK: - Community row
 
     private func communityRow(_ community: CommunitySummary) -> some View {
-        let projection = app.safeCore.projectCommunityRow(
-            input: CommunityRowProjectionInput(community: community)
-        )
-
-        return HStack(spacing: 12) {
-            if let picture = projection.pictureUrl, let url = URL(string: picture) {
+        HStack(spacing: 12) {
+            if !community.picture.isEmpty, let url = URL(string: community.picture) {
                 KFImage(url)
                     .placeholder { Color.highlighterRule.opacity(0.4) }
                     .fade(duration: 0.15)
@@ -211,14 +188,10 @@ struct ShareToCommunitySheet: View {
                     .foregroundStyle(Color.highlighterInkMuted)
             }
 
-            Text(projection.displayName)
+            Text(community.name)
                 .foregroundStyle(Color.highlighterInkStrong)
 
             Spacer()
-
-            if publishingId == community.id {
-                ProgressView()
-            }
         }
     }
 
@@ -231,44 +204,26 @@ struct ShareToCommunitySheet: View {
         }
     }
 
-    private func publish(to groupId: String) {
-        guard publishingId == nil else { return }
-        publishingId = groupId
-        let rawNote = note
-        Task {
-            let result: ShareToCommunityPublishResultProjection
-            switch target.payload {
-            case .artifactShare(let preview):
-                let outcome = await app.safeCore.publishArtifact(
-                    preview: preview,
-                    groupId: groupId,
-                    note: rawNote
-                )
-                result = app.safeCore.projectShareToCommunityPublishResult(
-                    input: ShareToCommunityPublishResultInput(error: outcome.error)
-                )
-            case .highlightRepost(let eventId, let authorPubkey, let relayHint):
-                let outcome = await app.safeCore.shareHighlightToRoom(
-                    highlightId: eventId,
-                    highlightAuthorPubkeyHex: authorPubkey,
-                    highlightRelayUrl: relayHint,
-                    targetGroupId: groupId
-                )
-                result = app.safeCore.projectShareToCommunityPublishResult(
-                    input: ShareToCommunityPublishResultInput(error: outcome.error)
-                )
-            }
-            if result.didPublish {
-                await MainActor.run {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    dismiss()
-                }
-            } else {
-                await MainActor.run {
-                    publishingId = nil
-                    errorMessage = result.errorMessage
-                }
-            }
+    private func publish(to community: CommunitySummary) {
+        switch target.payload {
+        case .artifactShare(let preview):
+            kernel.app.dispatch(.shareToRoom(
+                groupId: community.id,
+                hostRelayUrl: community.relayUrl,
+                targetEventId: preview.id,
+                targetAuthorPubkey: nil,
+                repost: false
+            ))
+        case .highlightRepost(let eventId, let authorPubkey, _):
+            kernel.app.dispatch(.shareToRoom(
+                groupId: community.id,
+                hostRelayUrl: community.relayUrl,
+                targetEventId: eventId,
+                targetAuthorPubkey: authorPubkey,
+                repost: true
+            ))
         }
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        dismiss()
     }
 }
