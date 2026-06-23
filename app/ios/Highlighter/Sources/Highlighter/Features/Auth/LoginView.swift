@@ -159,15 +159,22 @@ struct LoginView: View {
 
     // MARK: - Actions
 
+    private func classifyInput(_ raw: String) -> LoginInputAction {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        let s = trimmed.hasPrefix("nostr:") ? String(trimmed.dropFirst(6)) : trimmed
+        if s.isEmpty { return .empty }
+        if s.hasPrefix("nsec1") { return .nsec(nsec: s) }
+        if s.hasPrefix("bunker://") || s.hasPrefix("nostrconnect://") { return .bunker(uri: s) }
+        return .invalid(message: "Enter an nsec1… or bunker:// URI.")
+    }
+
     private var isManualInputEmpty: Bool {
-        if case .empty = store.safeCore.classifyLoginInput(inputText) {
-            return true
-        }
+        if case .empty = classifyInput(inputText) { return true }
         return false
     }
 
     private func submitManualInput() {
-        let action = store.safeCore.classifyLoginInput(inputText)
+        let action = classifyInput(inputText)
         errorMessage = nil
 
         switch action {
