@@ -192,10 +192,19 @@ final class HighlighterStore {
     }
 
     private func articleBookmarkStateProjection(articleAddress: String) -> ArticleBookmarkStateProjection {
-        safeCore.projectArticleBookmarkState(input: ArticleBookmarkStateProjectionInput(
-            addresses: bookmarkedArticleAddresses,
-            address: articleAddress
-        ))
+        let canonical = articleAddress.trimmingCharacters(in: .whitespaces)
+        var set = Set(bookmarkedArticleAddresses
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty })
+        let canToggle = !canonical.isEmpty
+        let isBookmarked = canToggle && set.contains(canonical)
+        if canToggle { if isBookmarked { set.remove(canonical) } else { set.insert(canonical) } }
+        return ArticleBookmarkStateProjection(
+            canonicalAddress: canonical,
+            canToggle: canToggle,
+            isBookmarked: isBookmarked,
+            optimisticAddresses: set.sorted()
+        )
     }
 
     /// Reads a profile projection from Rust's local nostrdb state and sets up

@@ -159,34 +159,16 @@ struct ArticleReaderView: View {
 
     private func publish(quote: String, context: String, note: String) async {
         guard let store else { return }
-        let request = app.safeCore.projectArticleHighlightPublish(
-            input: ArticleHighlightPublishProjectionInput(note: note, error: "")
-        )
-        let outcome = await store.publishHighlight(
-            quote: quote,
-            note: request.submitNote,
-            context: context
-        )
-        let result = app.safeCore.projectArticleHighlightPublish(
-            input: ArticleHighlightPublishProjectionInput(
-                note: request.submitNote,
-                error: outcome ?? ""
-            )
-        )
-        if result.isSuccess {
-            withAnimation(.easeOut(duration: 0.2)) {
-                toast = result.toastMessage
-            }
-            toastResetTimer.schedule(after: 1.8) {
-                withAnimation(.easeIn(duration: 0.2)) { toast = nil }
-            }
-        } else {
-            withAnimation(.easeOut(duration: 0.2)) {
-                toast = result.toastMessage
-            }
-            toastResetTimer.schedule(after: 2.8) {
-                withAnimation(.easeIn(duration: 0.2)) { toast = nil }
-            }
+        let submitNote = note.trimmingCharacters(in: .whitespaces)
+        let outcome = await store.publishHighlight(quote: quote, note: submitNote, context: context)
+        let error = (outcome ?? "").trimmingCharacters(in: .whitespaces)
+        let isSuccess = error.isEmpty
+        let toastMsg = isSuccess
+            ? (submitNote.isEmpty ? "Highlighted" : "Highlighted with note")
+            : "Couldn't save — \(error)"
+        withAnimation(.easeOut(duration: 0.2)) { toast = toastMsg }
+        toastResetTimer.schedule(after: isSuccess ? 1.8 : 2.8) {
+            withAnimation(.easeIn(duration: 0.2)) { toast = nil }
         }
     }
 }
