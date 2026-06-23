@@ -7,10 +7,9 @@ import SwiftUI
 ///   3. Always allow nsec paste + manual bunker URI paste as fallback.
 struct LoginView: View {
     @Environment(HighlighterStore.self) private var store
-    /// Phase 7: the kernel surfaces restore/sign-in failures via
-    /// `appRoot.authError`. Sign-in itself stays on the live lane until Part C;
-    /// only the inline error DISPLAY reads the kernel field (e.g. a failed
-    /// restore-on-launch that routed back to Login).
+    /// Phase 7: sign-in is now kernel-dispatched. Auth failures arrive via
+    /// `appRoot.authError`; success transitions `appRoot.routeKind` to
+    /// `.rootShell`, at which point `RootSceneView` unmounts this view.
     @Environment(HighlighterAppKernel.self) private var kernel
     @Environment(\.openURL) private var openURL
 
@@ -19,7 +18,7 @@ struct LoginView: View {
     @State private var isWorking: Bool = false
     @State private var errorMessage: String?
 
-    /// The inline error to show: the live-lane sign-in error takes precedence;
+    /// The inline error to show: a local classification error takes precedence;
     /// otherwise surface a kernel-side restore/sign-in failure.
     private var displayedError: String? {
         errorMessage ?? kernel.appRoot.authError
@@ -50,6 +49,16 @@ struct LoginView: View {
             .task {
                 detectedSigner = KnownSigner.detect()
             }
+            .onChange(of: kernel.appRoot.authError) { _, error in
+                // Auth failed — re-enable the form so the user can retry.
+                if error != nil { isWorking = false }
+            }
+            .onChange(of: kernel.appRoot.nostrconnectUri) { _, uri in
+                // Kernel minted a nostrconnect:// URI — open the signer app.
+                guard let uri, let url = URL(string: uri) else { return }
+                openURL(url)
+                isWorking = false
+            }
             .navigationTitle("")
         }
     }
@@ -69,7 +78,7 @@ struct LoginView: View {
     private var primalHero: some View {
         VStack(spacing: 12) {
             Button {
-                Task { await connectViaPrimalApp() }
+                connectViaPrimalApp()
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "bolt.fill")
@@ -97,7 +106,7 @@ struct LoginView: View {
 
     private func genericSignerButton(_ signer: KnownSigner) -> some View {
         Button {
-            Task { await connectViaPrimalApp() }  // same flow, different scheme
+            connectViaPrimalApp()  // same flow, different scheme
         } label: {
             HStack {
                 Text("Continue with \(signer.name)")
@@ -127,7 +136,7 @@ struct LoginView: View {
                 .background(.thinMaterial, in: .rect(cornerRadius: 14))
 
             Button {
-                Task { await submitManualInput() }
+                submitManualInput()
             } label: {
                 Text(isWorking ? "Signing in…" : "Sign in")
                     .frame(maxWidth: .infinity)
@@ -157,69 +166,36 @@ struct LoginView: View {
         return false
     }
 
-    private func submitManualInput() async {
+    private func submitManualInput() {
         let action = store.safeCore.classifyLoginInput(inputText)
-
-        isWorking = true
         errorMessage = nil
-        defer { isWorking = false }
 
         switch action {
         case .empty:
             return
         case .nsec(let nsec):
-            let snapshot = await store.safeCore.loginNsec(nsec)
-            if snapshot.isAuthenticated, let user = snapshot.user {
-                let storage = AppSessionStore.shared.persistAuthInstructions(
-                    snapshot,
-                    core: store.safeCore
-                )
-                guard storage.succeeded else {
-                    errorMessage = storage.errorMessage
-                    return
-                }
-                _ = store.markOnboardingComplete()
-                await store.completeLogin(user: user)
-            } else {
-                errorMessage = snapshot.errorMessage
-            }
+            isWorking = true
+            store.kernel?.app.dispatch(.signInNsec(nsec: nsec))
+            // NMP adds the signer and auto-persists to its own keyring.
+            // Result arrives via kernel.appRoot: routeKind → .rootShell on
+            // success, authError set on failure (isWorking reset via .onChange).
         case .bunker(let uri):
-            let snapshot = await store.safeCore.pairBunker(uri)
-            if snapshot.isAuthenticated, let user = snapshot.user {
-                let storage = AppSessionStore.shared.persistAuthInstructions(
-                    snapshot,
-                    core: store.safeCore
-                )
-                guard storage.succeeded else {
-                    errorMessage = storage.errorMessage
-                    return
-                }
-                _ = store.markOnboardingComplete()
-                await store.completeLogin(user: user)
-            } else {
-                errorMessage = snapshot.errorMessage
-            }
+            isWorking = true
+            store.kernel?.app.dispatch(.pairBunker(uri: uri))
+            // NIP-46 broker handles the handshake async; result arrives via
+            // kernel.appRoot (same pattern as nsec above).
         case .invalid(let message):
             errorMessage = message
         }
     }
 
-    private func connectViaPrimalApp() async {
-        isWorking = true
+    private func connectViaPrimalApp() {
         errorMessage = nil
-        defer { isWorking = false }
-
-        let snapshot = await store.safeCore.startDefaultNostrConnect(callback: "highlighter://nip46")
-        guard snapshot.started else {
-            errorMessage = snapshot.errorMessage
-            return
-        }
-        let uri = snapshot.uri
-
-        if let url = URL(string: uri) {
-            openURL(url)
-        }
-        // `EventBridge` receives `.signerConnected(user)` once the remote
-        // signer responds on the relay and `completeLogin` runs from there.
+        isWorking = true
+        store.kernel?.app.dispatch(.startNostrConnect)
+        // Kernel mints a nostrconnect:// URI → sets appRoot.nostrconnectUri.
+        // .onChange above opens the URL in the signer app and resets isWorking.
+        // The signer responds on the relay; IdentityChanged fires → routeKind
+        // transitions to .rootShell and RootSceneView unmounts this view.
     }
 }

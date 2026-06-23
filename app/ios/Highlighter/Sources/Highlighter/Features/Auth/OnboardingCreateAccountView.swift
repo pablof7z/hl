@@ -93,12 +93,12 @@ struct OnboardingCreateAccountView: View {
     }
 
     private var createProjection: OnboardingCreateAccountProjection {
-        store.safeCore.projectOnboardingCreateAccount(input: OnboardingCreateAccountProjectionInput(
-            displayName: displayName,
+        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return OnboardingCreateAccountProjection(
+            displayName: trimmed,
             username: "",
-            usernameAvailable: false,
-            isWorking: isWorking
-        ))
+            canContinue: !isWorking && !trimmed.isEmpty
+        )
     }
 
     private func createAccount() {
