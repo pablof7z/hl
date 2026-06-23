@@ -184,12 +184,19 @@ struct CommentRow: View {
     // MARK: - Helpers
 
     private var actionChrome: CommentActionChromeProjection {
-        app.safeCore.projectCommentActionChrome(
-            input: CommentActionChromeProjectionInput(
-                isLiked: store.isLiked(node.record.eventId),
-                isBookmarked: store.isBookmarked(node.record.eventId),
-                likeCount: UInt32(store.likeCount(node.record.eventId))
-            )
+        let isLiked = store.isLiked(node.record.eventId)
+        let isBookmarked = store.isBookmarked(node.record.eventId)
+        let likeCount = UInt32(store.likeCount(node.record.eventId))
+        return CommentActionChromeProjection(
+            showsFooter: isLiked || likeCount > 0,
+            footerSystemImage: isLiked ? "heart.fill" : "heart",
+            footerIsAccented: isLiked,
+            showsFooterCount: likeCount > 0,
+            footerCountLabel: likeCount > 0 ? "\(likeCount)" : "",
+            likeTitle: isLiked ? "Unlike" : "Like",
+            likeSystemImage: isLiked ? "heart.slash" : "heart",
+            bookmarkTitle: isBookmarked ? "Remove bookmark" : "Bookmark",
+            bookmarkSystemImage: isBookmarked ? "bookmark.slash" : "bookmark"
         )
     }
 

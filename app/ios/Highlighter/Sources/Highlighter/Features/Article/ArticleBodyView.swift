@@ -198,13 +198,10 @@ struct ArticleBodyView: UIViewRepresentable {
             }
             let paragraphRange = NSRange(location: start, length: max(0, end - start))
             let paragraph = full.substring(with: paragraphRange)
-            let projection = parent.safeCore.projectArticleReaderSelection(
-                input: ArticleReaderSelectionProjectionInput(
-                    quote: quote,
-                    context: paragraph
-                )
-            )
-            return (projection.quote, projection.context, projection.hasQuote)
+            let trimmedQuote = quote.trimmingCharacters(in: .whitespaces)
+            let trimmedContext = paragraph.trimmingCharacters(in: .whitespaces)
+            let dedupedContext = trimmedContext == trimmedQuote ? "" : trimmedContext
+            return (trimmedQuote, dedupedContext, !trimmedQuote.isEmpty)
         }
 
         // MARK: Tap hit-testing

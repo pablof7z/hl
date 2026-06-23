@@ -442,23 +442,19 @@ struct EditProfileSheet: View {
         Task {
             defer { Task { @MainActor in saving = false } }
             let outcome = await appStore.safeCore.updateProfile(draft: projection.draft)
-            let result = appStore.safeCore.projectProfileUpdateResult(
-                input: ProfileUpdateResultInput(snapshot: outcome)
-            )
             await MainActor.run {
-                if let errorMessage = result.errorMessage {
-                    self.error = errorMessage
+                let errorStr = outcome.error.trimmingCharacters(in: .whitespaces)
+                if !errorStr.isEmpty {
+                    self.error = errorStr
                     return
                 }
-                if result.shouldEmitSuccessFeedback {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                guard let updated = outcome.profile else {
+                    self.error = "Unable to update profile."
+                    return
                 }
-                if let updated = result.profile {
-                    onSaved(updated)
-                }
-                if result.shouldDismiss {
-                    dismiss()
-                }
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                onSaved(updated)
+                dismiss()
             }
         }
     }

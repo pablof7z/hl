@@ -104,11 +104,9 @@ struct ClipThreadView: View {
                 content: projection.submitBody,
                 limit: 200
             )
-            let result = app.safeCore.projectCommentPublishResult(
-                input: CommentPublishResultInput(error: outcome.error)
-            )
-            guard result.didPublish else {
-                sendError = result.errorMessage
+            let publishErrorMsg = outcome.error.trimmingCharacters(in: .whitespaces)
+            guard publishErrorMsg.isEmpty else {
+                sendError = publishErrorMsg
                 isSending = false
                 return
             }
