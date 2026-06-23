@@ -409,7 +409,9 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         }
 
         // ── Phase 4D additions (append-only) ─────────────────────────────────
-        AppAction::RunSearch { query, scope } => search::reduce_action_run_search(state, query, scope),
+        AppAction::RunSearch { query, scope } => {
+            search::reduce_action_run_search(state, query, scope)
+        }
         AppAction::RunOmnibox { query } => omnibox::reduce_action_run_omnibox(query),
 
         // ── Phase 5A additions (append-only) ─────────────────────────────────
@@ -524,9 +526,8 @@ fn reduce_action_envelope(
         PresentSheetPayload, PublishClipPayload, PublishHighlightPayload, ReactPayload,
         ReleaseProfilePayload, RemoveBookmarkPayload, RemoveFromSetPayload, RemoveRelayPayload,
         RunOmniboxPayload, RunSearchPayload, SelectRootTabPayload, SetRelayRolePayload,
-        SetRoomsRelayListPayload,
-        ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload, ToggleReactionPayload,
-        UnfollowPayload, UnreactPayload,
+        SetRoomsRelayListPayload, ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload,
+        ToggleReactionPayload, UnfollowPayload, UnreactPayload,
     };
 
     match envelope.namespace.as_str() {
@@ -1784,10 +1785,7 @@ pub(crate) async fn run_effect(
         }
 
         // ── Phase 4D additions (append-only) ─────────────────────────────────
-        Effect::RunSearch {
-            query,
-            scope_json,
-        } => {
+        Effect::RunSearch { query, scope_json } => {
             // Open a NIP-50 search session via NMP's higher-order open_search.
             // Fire-and-forget (D6): search hits arrive back as the typed N50S
             // sidecar frame. No-op if nmp is None (test mode).

@@ -56,6 +56,7 @@
 //! until Phase 7. This module adds the relay-search path ONLY. No double-
 //! publish risk — search is read-only (no write action for search hits).
 
+use nmp_core::substrate::KernelEvent as NmpKernelEvent;
 use nmp_ffi::NmpApp;
 use nmp_nip50::{
     decode_search_results_snapshot, SearchRequest, SearchScope as NmpSearchScope, SearchTargets,
@@ -806,8 +807,7 @@ mod tests {
 
         let snapshot = SearchResultsSnapshot {
             hits: vec![SearchHit {
-                id: "aabb000000000000000000000000000000000000000000000000000000000001"
-                    .to_string(),
+                id: "aabb000000000000000000000000000000000000000000000000000000000001".to_string(),
                 author: "dead000000000000000000000000000000000000000000000000000000000001"
                     .to_string(),
                 kind: 30023,

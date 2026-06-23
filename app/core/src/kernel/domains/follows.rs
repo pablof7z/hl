@@ -43,8 +43,8 @@
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
 use nmp_core::substrate::ActionPayload;
 use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
-use nmp_nip02::{register_follow_state_runtime, PubkeyAction};
 use nmp_nip02::wire::typed_fb::decode_follow_list;
+use nmp_nip02::{register_follow_state_runtime, PubkeyAction};
 
 use crate::kernel::app::AppState;
 

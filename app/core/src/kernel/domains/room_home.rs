@@ -450,17 +450,18 @@ pub(crate) fn run_effect_dispatch_share_to_room(
                 }
             }
         }
-        "nmp.nip29.repost_in_group" => {
-            match serde_json::from_str::<RepostInGroupInput>(&json) {
-                Ok(a) => a.encode(),
-                Err(e) => {
-                    tracing::warn!(error = %e, "room_home: failed to deserialise RepostInGroupInput");
-                    return;
-                }
+        "nmp.nip29.repost_in_group" => match serde_json::from_str::<RepostInGroupInput>(&json) {
+            Ok(a) => a.encode(),
+            Err(e) => {
+                tracing::warn!(error = %e, "room_home: failed to deserialise RepostInGroupInput");
+                return;
             }
-        }
+        },
         other => {
-            tracing::warn!(namespace = other, "room_home: unknown share namespace — no-op");
+            tracing::warn!(
+                namespace = other,
+                "room_home: unknown share namespace — no-op"
+            );
             return;
         }
     };

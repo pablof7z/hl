@@ -345,13 +345,13 @@ pub(crate) fn clear_on_identity_lost(state: &mut AppState) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nmp_core::typed_projections::ProfileCardModel;
     use crate::kernel::action::{AppAction, KernelEvent};
     use crate::kernel::actor::{reduce, Cmd};
     use crate::kernel::clock::{Clock, ManualClock};
     use crate::kernel::effect::Effect;
     use crate::kernel::snapshot::ViewSnapshot;
     use crate::kernel::view::ViewId;
+    use nmp_core::typed_projections::ProfileCardModel;
 
     fn make_state() -> AppState {
         AppState::default()

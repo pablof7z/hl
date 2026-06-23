@@ -65,7 +65,9 @@ use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SC
 use nmp_core::substrate::ActionPayload;
 use nmp_core::KernelEventObserver;
 use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
-use nmp_nip25::{ReactAction, ReactionProjection, UnreactAction, KIND_REACTION, KIND_REACTION_DELETE};
+use nmp_nip25::{
+    ReactAction, ReactionProjection, UnreactAction, KIND_REACTION, KIND_REACTION_DELETE,
+};
 use tokio::sync::mpsc;
 
 use crate::kernel::action::KernelEvent;
