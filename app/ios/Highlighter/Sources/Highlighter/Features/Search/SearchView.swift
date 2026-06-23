@@ -17,6 +17,7 @@ import SwiftUI
 ///   between local and remote.
 struct SearchView: View {
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
 
     @State private var store: SearchStore?
     @FocusState private var focusedField: Bool
@@ -27,6 +28,8 @@ struct SearchView: View {
     @State private var directProfileActive = false
     @State private var directEntity: NostrEntityRef?
     @State private var directEntityActive = false
+    @State private var directGroupId: String?
+    @State private var directGroupActive = false
 
     var body: some View {
         NavigationStack {
@@ -86,22 +89,38 @@ struct SearchView: View {
                     NostrEntityReaderView(entity: directEntity)
                 }
             }
+            .navigationDestination(isPresented: $directGroupActive) {
+                if let directGroupId {
+                    RoomHomeView(groupId: directGroupId)
+                }
+            }
             .onChange(of: store?.directNavigation) { _, navigation in
                 handleDirectNavigation(navigation)
+            }
+            // Omnibox resolver outcome (#1865) → route through the store.
+            .onChange(of: kernel.search?.omnibox) { _, outcome in
+                store?.applyOmniboxOutcome(outcome)
             }
             .globalUserToolbar()
         }
         .task {
             if store == nil {
-                let s = SearchStore(safeCore: app.safeCore, eventBridge: app.eventBridge)
+                let s = SearchStore(
+                    safeCore: app.safeCore,
+                    eventBridge: app.eventBridge,
+                    kernel: kernel
+                )
                 store = s
                 await s.start()
             }
+            store?.disarmOmnibox()
+            kernel.openSearch()
             let snapshot = await app.safeCore.getSearchChromeSnapshot()
             recentQueries = snapshot.recentQueries
         }
         .onDisappear {
             store?.stop()
+            kernel.closeSearch()
         }
     }
 
@@ -109,11 +128,34 @@ struct SearchView: View {
 
     @ViewBuilder
     private func content(store: SearchStore) -> some View {
-        if store.hasQuery {
+        if store.secretRejected {
+            secretRejectedNotice
+        } else if store.hasQuery {
             results(store: store)
         } else {
             emptyState(store: store)
         }
+    }
+
+    /// Safe inline notice shown when the omnibox resolver (#1865) classifies the
+    /// input as a secret key. The secret is NEVER echoed.
+    private var secretRejectedNotice: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Rectangle()
+                .fill(Color.highlighterAccent.opacity(0.6))
+                .frame(width: 3, height: 24)
+                .clipShape(RoundedRectangle(cornerRadius: 1.5))
+            Text("Secret keys aren't accepted")
+                .font(.system(.title3, design: .default).weight(.semibold))
+                .foregroundStyle(Color.highlighterInkStrong)
+            Text("That looks like a private key (nsec). For your safety it's never searched, stored, or shown. Clear the field and paste a public reference, NIP-05 address, or search terms instead.")
+                .font(.footnote)
+                .foregroundStyle(Color.highlighterInkMuted)
+                .lineSpacing(3)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.horizontal, 20)
+        .padding(.top, 36)
     }
 
     // MARK: - Empty (discovery) state
@@ -531,6 +573,9 @@ struct SearchView: View {
         case .entity(let entity):
             directEntity = entity
             directEntityActive = true
+        case .group(let groupId):
+            directGroupId = groupId
+            directGroupActive = true
         }
         store?.consumeDirectNavigation()
     }

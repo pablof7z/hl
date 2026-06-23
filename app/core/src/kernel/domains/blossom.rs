@@ -46,10 +46,11 @@
 //! All action-result routing is guarded: unknown correlation_ids, missing
 //! status fields, and malformed result JSON are silent no-ops.
 
-use std::ffi::{c_char, CString};
-
+use nmp_blossom::UploadInput;
+use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
+use nmp_core::substrate::ActionPayload;
 use nmp_core::typed_projections::ActionResultRow;
-use nmp_ffi::{nmp_free_string, NmpApp};
+use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string};
 
 use crate::kernel::action::KernelEvent;
 use crate::kernel::app::AppState;
@@ -59,18 +60,6 @@ use crate::kernel::effect::Effect;
 /// Fallback Blossom server used when the host passes an empty `servers` list.
 /// Matches the live lane default in `blossom.rs::DEFAULT_SERVER`.
 pub(crate) const DEFAULT_BLOSSOM_SERVER: &str = "https://blossom.primal.net";
-
-// `nmp_app_dispatch_action` is #[no_mangle] extern "C" in nmp-ffi/src/action.rs.
-// Declared here (same pattern as reactions.rs / bookmarks.rs) so this module can
-// call it directly without importing the full nmp-ffi action surface.
-#[allow(improper_ctypes)] // NmpApp is opaque; the pointer is safe — nmp-ffi uses the same ABI.
-extern "C" {
-    fn nmp_app_dispatch_action(
-        app: *mut NmpApp,
-        namespace: *const c_char,
-        action_json: *const c_char,
-    ) -> *mut c_char;
-}
 
 // ─── Action reducer ─────────────────────────────────────────────────────────────
 
@@ -348,33 +337,26 @@ pub(crate) fn run_effect_blossom_upload(
         return;
     };
 
-    let action_json = serde_json::json!({
-        "file_path": image_handle,
-        "servers": servers,
-    });
-    let action_json_str = match serde_json::to_string(&action_json) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::warn!("run_effect_blossom_upload: serde_json failed: {e}");
-            return;
-        }
+    // Build the typed UploadInput and encode to FlatBuffers for the bytes
+    // doorway (ADR-0064 / Cut-B). The correlation_id is the reducer-minted
+    // placeholder; the bytes lane echoes it back verbatim so the swap logic
+    // below is a no-op (nmp_cid == correlation_id always on this lane).
+    let action = UploadInput {
+        file_path: image_handle,
+        servers,
+        content_type: None,
+        signer_pubkey: None,
     };
+    let payload_bytes = action.encode();
+    let envelope = encode_dispatch_envelope(
+        &correlation_id,
+        "nmp.blossom.upload",
+        DISPATCH_ENVELOPE_SCHEMA_VERSION,
+        &payload_bytes,
+    );
 
-    let ns_c = match CString::new("nmp.blossom.upload") {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let json_c = match CString::new(action_json_str) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. ns_c and json_c are valid CStrings
-    // alive for the duration of this call. The returned pointer is freed below
-    // via nmp_free_string (same allocator contract as reactions.rs:371-378).
     let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
+        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
 
     if result_ptr.is_null() {
         // D6: null return is an nmp bug; treat as a failure.
@@ -591,6 +573,7 @@ mod tests {
                 status: "published".to_string(),
                 error: None,
                 result: Some(r#"{"url":"https://blossom.example/img.jpg"}"#.to_string()),
+                event_id: None,
             }],
         };
 
@@ -717,6 +700,7 @@ mod tests {
                 status: "completed".to_string(),
                 error: None,
                 result: Some(r#"{"url":"https://ignored.example/img.jpg"}"#.to_string()),
+                event_id: None,
             }],
         };
 
@@ -751,6 +735,7 @@ mod tests {
                 status: "published".to_string(),
                 error: None,
                 result: None,
+                event_id: None,
             }],
         };
 
@@ -778,6 +763,7 @@ mod tests {
                 status: "success".to_string(), // WRONG — nmp never sends this
                 error: None,
                 result: None,
+                event_id: None,
             }],
         };
         apply_action_results(&mut state2, &model2);
@@ -818,6 +804,7 @@ mod tests {
                 status: "published".to_string(),
                 error: None,
                 result: Some(r#"{"url":"https://cdn.example/a.jpg"}"#.to_string()),
+                event_id: None,
             }],
         };
         apply_action_results(&mut state, &model_a);
@@ -850,6 +837,7 @@ mod tests {
                 status: "published".to_string(),
                 error: None,
                 result: Some(r#"{"url":"https://cdn.example/b.jpg"}"#.to_string()),
+                event_id: None,
             }],
         };
         apply_action_results(&mut state, &model_b);

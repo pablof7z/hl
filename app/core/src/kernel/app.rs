@@ -238,6 +238,13 @@ pub struct AppState {
     /// D1: `SearchHitRow` is raw protocol data only — no formatted strings.
     pub search_results: Vec<crate::kernel::snapshot::SearchHitRow>,
 
+    /// Most recent omnibox classification outcome (`#1865` input-intent
+    /// resolver), or `None` before any input is classified. Set by
+    /// `KernelEvent::OmniboxResolved`; surfaced in `SearchSnapshot::omnibox` so
+    /// the shell routes (navigate / resolve-nip05 / open-group / reject-secret /
+    /// free-text). Cleared on `Logout` / `IdentityChanged(None)`.
+    pub omnibox_outcome: Option<crate::kernel::snapshot::OmniboxOutcome>,
+
     // ── Phase 4F additions ────────────────────────────────────────────────────
     /// Pull-cursor state for the article feed (kind:30023 over follows).
     ///
@@ -442,6 +449,7 @@ impl Default for AppState {
             reaction_state: HashMap::new(),
             // ── Phase 4D additions ────────────────────────────────────────────
             search_results: Vec::new(),
+            omnibox_outcome: None,
             // ── Phase 4F additions ────────────────────────────────────────────
             article_feed: crate::kernel::domains::feed::FeedState::default(),
             highlight_feed: crate::kernel::domains::feed::FeedState::default(),

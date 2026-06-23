@@ -91,7 +91,7 @@ struct ChatView: View {
                         ForEach(Array(store.rows.enumerated()), id: \.element.message.eventId) { index, row in
                             let message = row.message
 
-                            ChatMessageRow(
+                            ChatMessageRowView(
                                 message: message,
                                 authorDisplay: profileDisplay(for: message.authorPubkey),
                                 showHeader: row.showHeader,
@@ -289,9 +289,9 @@ struct ChatView: View {
 
 }
 
-// MARK: - ChatMessageRow
+// MARK: - ChatMessageRowView
 
-private struct ChatMessageRow: View {
+private struct ChatMessageRowView: View {
     let message: ChatMessageRecord
     let authorDisplay: ProfileDisplayProjection
     let showHeader: Bool

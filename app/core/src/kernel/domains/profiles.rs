@@ -7,11 +7,12 @@
 //!   `b"KPRF"`. Called from `projections::dispatch_typed_frame` when the arm
 //!   matches. Decode fn: `nmp_core::typed_projections::decode_profile`.
 //!
-//! * **READ (visited profiles)** — decode the `"claimed_profiles"` typed-sidecar
-//!   into `AppState::claimed_profiles`. Schema id `"claimed_profiles"`, file id
-//!   `b"KCPR"`. Called from `projections::dispatch_typed_frame` on the matching arm.
-//!   Decode fn: `nmp_core::typed_projections::decode_claimed_profiles`.
-//!   Model: `ProfileCardModel` (raw hex pubkey, optional display fields, nip05,
+//! * **READ (visited profiles)** — populated into `AppState::claimed_profiles`
+//!   via `KernelEvent::ProfileCardUpdated` (actor.rs). The former bulk
+//!   `"claimed_profiles"` typed sidecar was deleted by NMP ADR-0063 Lane H;
+//!   visited-profile resolution is now served by the per-key `refs.profile`
+//!   row-delta projection (`nmp_core::refs::RefProfileStore`). Model:
+//!   `ProfileCardModel` (raw hex pubkey, optional display fields, nip05,
 //!   about, lud16, etc.) — no bech32 or NIP-05 label formatting (D3 / raw-data
 //!   doctrine). Swift formats every display string.
 //!
@@ -37,16 +38,15 @@
 //!
 //! ## Threading
 //!
-//! `apply_own_profile` and `apply_claimed_profiles` run on the **actor thread**
-//! inside `projections::dispatch_typed_frame` (called from `reduce_event`).
-//! Both are synchronous and non-blocking (FlatBuffers decode only — no I/O). D6:
-//! decode errors leave `AppState` fields unchanged (silent no-op).
+//! `apply_own_profile` runs on the **actor thread** inside
+//! `projections::dispatch_typed_frame` (called from `reduce_event`). It is
+//! synchronous and non-blocking (FlatBuffers decode only — no I/O). D6: decode
+//! errors leave `AppState` fields unchanged (silent no-op).
 
-use std::collections::HashMap;
 use std::ffi::CString;
 use std::os::raw::{c_char, c_int};
 
-use nmp_core::typed_projections::{decode_claimed_profiles, decode_profile, ProfileCardModel};
+use nmp_core::typed_projections::decode_profile;
 use nmp_ffi::NmpApp;
 
 use crate::kernel::actor::NmpHandle;
@@ -56,27 +56,39 @@ use crate::kernel::snapshot::{CommunityRow, ProfileSnapshot, ViewSnapshot};
 
 // ─── nmp-ffi C ABI declarations ─────────────────────────────────────────────
 
-// `nmp_app_claim_profile` is `#[no_mangle] extern "C"` in nmp-ffi/src/timeline.rs.
-// We declare it here to drive the profiles effect runner without a separate wrapper.
+// ADR-0063 Lane D/H: the per-kind `nmp_app_claim_profile` /
+// `nmp_app_release_profile` symbols were deleted; profiles now resolve through
+// the unified, origin-blind `nmp_app_resolve_ref` / `nmp_app_release_ref`
+// C-ABI (both `#[no_mangle] extern "C"` in nmp-ffi/src/resolve_ref.rs). We
+// declare them here to drive the profiles effect runner without a wrapper.
 #[allow(improper_ctypes)] // NmpApp is opaque; the pointer is safe.
 extern "C" {
-    fn nmp_app_claim_profile(
+    fn nmp_app_resolve_ref(
         app: *mut NmpApp,
-        pubkey: *const c_char,
+        namespace: c_int,
+        key: *const c_char,
         consumer_id: *const c_char,
-        force: c_int,
+        shape: c_int,
         liveness: c_int,
+    );
+    fn nmp_app_release_ref(
+        app: *mut NmpApp,
+        namespace: c_int,
+        key: *const c_char,
+        consumer_id: *const c_char,
     );
 }
 
-// `nmp_app_release_profile` is `#[no_mangle] extern "C"` in nmp-ffi/src/timeline.rs.
-#[allow(improper_ctypes)] // NmpApp is opaque; the pointer is safe.
-extern "C" {
-    fn nmp_app_release_profile(app: *mut NmpApp, pubkey: *const c_char, consumer_id: *const c_char);
-}
+// `RefNamespace` FFI code: 0 = Profile (resolve_ref.rs `decode_namespace`).
+const REF_NAMESPACE_PROFILE: c_int = 0;
 
-// `ProfileLiveness` int constants from nmp-core (D6: 0 = CacheOk, non-zero = Live).
-// We use `1` (Live/Tailing) for open profile views so profile edits arrive reactively.
+// `RefShape` FFI code: 1 = profile.card — the full `ProfileCard` shape used by
+// an open profile screen (resolve_ref.rs `decode_shape` `(0,1)`).
+const REF_SHAPE_PROFILE_CARD: c_int = 1;
+
+// `RefLiveness` int (D6: 0 = CacheOk, non-zero = Live; refs.rs `from_ffi`).
+// We use `1` (Live/Tailing) for open profile views so profile edits arrive
+// reactively while the view is open.
 const LIVENESS_LIVE: c_int = 1;
 
 /// Stable consumer-id prefix. The per-pubkey suffix makes each profile view
@@ -106,33 +118,27 @@ pub(crate) fn apply_own_profile(state: &mut AppState, payload: &[u8]) {
     }
 }
 
-// ─── READ side: claimed profiles projection ──────────────────────────────────
-
-/// Apply a decoded `"claimed_profiles"` FlatBuffers payload to
-/// `AppState::claimed_profiles`. Each entry is a `(pubkey, ProfileCardModel)`
-/// pair from the flattened BTreeMap.
-///
-/// Called from `projections::dispatch_typed_frame` when
-/// `schema_id == "claimed_profiles"`. The snapshot reflects every profile that
-/// has been claimed via `ClaimProfile` and not yet released.
-///
-/// D6: any decode error leaves `AppState::claimed_profiles` unchanged.
-pub(crate) fn apply_claimed_profiles(state: &mut AppState, payload: &[u8]) {
-    match decode_claimed_profiles(payload) {
-        Ok(model) => {
-            state.claimed_profiles = model
-                .entries
-                .into_iter()
-                .collect::<HashMap<String, ProfileCardModel>>();
-        }
-        Err(e) => {
-            tracing::trace!(
-                error = %e,
-                "profiles::apply_claimed_profiles: decode error — claimed_profiles unchanged (D6)"
-            );
-        }
-    }
-}
+// ─── READ side: claimed profiles projection (ADR-0063: removed) ──────────────
+//
+// NMP ADR-0063 Lane H deleted the bulk `"claimed_profiles"` typed sidecar
+// (`decode_claimed_profiles` / `ClaimedProfilesModel` / `CLAIMED_PROFILES_*`).
+// Visited-profile resolution is now served by the per-key `refs.profile`
+// row-delta projection (`nmp_core::refs::RefProfileStore`, sidecar key
+// `nmp_core::refs::host_store::REFS_PROFILE_KEY`), which is a STATEFUL merge
+// cache (row deltas keyed by `(session_id, snapshot_epoch)`) rather than a
+// whole-snapshot replace.
+//
+// `AppState::claimed_profiles` is retained: it still backs the
+// `ViewId::Profile{pubkey}` snapshot (`project_profile_snapshot`) and is
+// populated through `KernelEvent::ProfileCardUpdated` (actor.rs). The
+// claimed-profiles *sidecar decode path* is the only thing removed here — the
+// bulk decoder no longer exists in nmp-core.
+//
+// FOLLOW-UP (refs.profile adoption): wire `RefProfileStore` into `AppState`,
+// add a `refs.profile` arm in `projections::dispatch_typed_frame` that threads
+// the frame's `(session_id, snapshot_epoch)` into `RefProfileStore::apply_sidecar`,
+// and read visited-profile cards from it. That is a stateful-cache migration
+// (frame-identity plumbing) tracked separately from this drift fix.
 
 // ─── WRITE side: view-lifecycle helpers ─────────────────────────────────────
 
@@ -195,8 +201,9 @@ pub(crate) fn reduce_action_release_profile(pubkey: String) -> Vec<Effect> {
 
 // ─── Effect runners ──────────────────────────────────────────────────────────
 
-/// Execute `Effect::ClaimProfile` — calls `nmp_app_claim_profile` with the
-/// stable consumer-id `"hl.profile.<pubkey>"` and `liveness = Live`.
+/// Execute `Effect::ClaimProfile` — calls `nmp_app_resolve_ref` for the
+/// `(Profile, pubkey)` reference under the stable consumer-id
+/// `"hl.profile.<pubkey>"`, `shape = profile.card`, `liveness = Live`.
 ///
 /// Live liveness means a `Tailing` kind:0 subscription stays open while the
 /// view is open so profile edits arrive reactively. CacheOk would be correct
@@ -220,25 +227,26 @@ pub(crate) fn run_effect_claim_profile(pubkey: String, nmp: Option<&NmpHandle>) 
 
     // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
     // NmpHandle for the full actor lifetime. pubkey_c and consumer_c are valid
-    // CStrings alive for the duration of this call. nmp_app_claim_profile is
-    // FFI-clean (null/invalid pubkey is a silent no-op — nmp D6 contract).
+    // CStrings alive for the duration of this call. nmp_app_resolve_ref is
+    // FFI-clean (null/invalid key is a silent no-op — nmp D6 contract).
     unsafe {
-        nmp_app_claim_profile(
+        nmp_app_resolve_ref(
             handle.ptr.as_ptr(),
+            REF_NAMESPACE_PROFILE,
             pubkey_c.as_ptr(),
             consumer_c.as_ptr(),
-            0,             // force = false
+            REF_SHAPE_PROFILE_CARD,
             LIVENESS_LIVE, // liveness = Live (Tailing sub)
         );
     }
 }
 
-/// Execute `Effect::ReleaseProfile` — calls `nmp_app_release_profile` with
-/// consumer-id `"hl.profile.<pubkey>"`.
+/// Execute `Effect::ReleaseProfile` — calls `nmp_app_release_ref` for the
+/// `(Profile, pubkey)` reference under consumer-id `"hl.profile.<pubkey>"`.
 ///
 /// Decrements the per-consumer refcount. When the count reaches zero NMP
-/// cancels the kind:0 subscription and removes the profile from
-/// `claimed_profiles`. D6: null/invalid pubkey is a silent no-op in nmp-ffi.
+/// cancels the kind:0 subscription and tears down the resolver slot. D6:
+/// null/invalid key is a silent no-op in nmp-ffi.
 ///
 /// No-op if `nmp` is `None` (test mode).
 pub(crate) fn run_effect_release_profile(pubkey: String, nmp: Option<&NmpHandle>) {
@@ -258,7 +266,12 @@ pub(crate) fn run_effect_release_profile(pubkey: String, nmp: Option<&NmpHandle>
     // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
     // NmpHandle for the full actor lifetime. CStrings alive for duration of call.
     unsafe {
-        nmp_app_release_profile(handle.ptr.as_ptr(), pubkey_c.as_ptr(), consumer_c.as_ptr());
+        nmp_app_release_ref(
+            handle.ptr.as_ptr(),
+            REF_NAMESPACE_PROFILE,
+            pubkey_c.as_ptr(),
+            consumer_c.as_ptr(),
+        );
     }
 }
 
@@ -332,6 +345,7 @@ pub(crate) fn clear_on_identity_lost(state: &mut AppState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nmp_core::typed_projections::ProfileCardModel;
     use crate::kernel::action::{AppAction, KernelEvent};
     use crate::kernel::actor::{reduce, Cmd};
     use crate::kernel::clock::{Clock, ManualClock};
@@ -535,8 +549,10 @@ mod tests {
 
     // 3D-T5: malformed_profile_frame_no_ops
     //
-    // apply_own_profile and apply_claimed_profiles with garbage bytes must not
-    // panic or corrupt AppState (D6).
+    // apply_own_profile with garbage bytes must not panic or corrupt AppState (D6).
+    // (The bulk `claimed_profiles` sidecar decode path was removed by NMP
+    // ADR-0063 Lane H; `claimed_profiles` is now populated via
+    // `KernelEvent::ProfileCardUpdated`.)
     #[test]
     fn malformed_profile_frame_no_ops() {
         let mut state = make_state();
@@ -549,16 +565,6 @@ mod tests {
         assert!(
             state.own_profile.is_some(),
             "malformed payload must leave own_profile unchanged (D6)"
-        );
-        // Seed claimed_profiles.
-        state.claimed_profiles.insert(
-            "bbbb".to_string(),
-            make_profile_card("bbbb000000000000000000000000000000000000000000000000000000000001"),
-        );
-        apply_claimed_profiles(&mut state, b"NOT A VALID FLATBUFFER");
-        assert!(
-            !state.claimed_profiles.is_empty(),
-            "malformed payload must leave claimed_profiles unchanged (D6)"
         );
     }
 

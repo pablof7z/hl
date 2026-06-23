@@ -1,59 +1,52 @@
-//! Search domain — NIP-50 relay-search projection (slice 4D).
+//! Search domain — NIP-50 relay-search via NMP's higher-order `open_search`.
 //!
 //! ## Responsibilities
 //!
-//! * **READ** — wrap `SearchResultsProjection::snapshot()` (Family B in-memory
-//!   accumulator) under the hl-owned typed snapshot key `"hl.search"`. A thin
-//!   `SearchObserver` wrapper implements `KernelEventObserver` by forwarding
-//!   accepted events into the projection's `ingest_cache_event`. The registered
-//!   closure serialises the snapshot to serde JSON on each tick, which is decoded
-//!   in `projections::dispatch_typed_frame` via the `"hl.search"` schema_id arm.
-//!   Result: `KernelEvent::SearchResultsUpdated(Vec<SearchHitRow>)` →
-//!   stored in `AppState::search_results`.
+//! * **READ** — NMP's `open_search` registers a typed `N50S` sidecar under the
+//!   session key `nmp.nip50.search.<session_id>` with schema id
+//!   [`nmp_nip50::SEARCH_RESULTS_SCHEMA_ID`] (`"nmp.nip50.search"`). On each
+//!   snapshot tick the frame is decoded in `projections::dispatch_typed_frame`
+//!   via the schema-id arm and stored as raw `SearchHitRow` items in
+//!   `AppState::search_results`.
 //!
 //! * **WRITE** — `AppAction::RunSearch{query, scope}` → reducer emits
-//!   `Effect::RunSearch{query, scope_json, interest_id}` → effect runner:
-//!     1. Builds a `SearchRequest` from `query` + `scope` and derives the
-//!        `LogicalInterest` via `request.interest_shape()`.
-//!     2. Calls `NmpApp::push_interest(interest)` so the planner issues NIP-50
-//!        REQs on connected search-capable relays. nmp-nip50 has NO action
-//!        namespace — submission is via `push_interest` (confirmed on pinned
-//!        nmp b4404159 `crates/nmp-ffi/src/lib.rs:1828`).
-//!     3. Replaces the hl-owned `SearchResultsProjection` (registered under
-//!        typed snapshot key `"hl.search"`) with a fresh instance seeded from
-//!        the new `SearchRequest`, clearing stale results from the previous query.
+//!   `Effect::RunSearch{query, scope_json}` → effect runner:
+//!     1. Builds a [`SearchRequest`] from `query` + `scope`.
+//!     2. Calls [`NmpApp::open_search`] with a stable [`SEARCH_SESSION_ID`].
+//!        NMP resolves `UserPreferred` relays from the installed
+//!        `SearchRelaySource` (kind:10007 selection), runs the #1827 cache-FTS
+//!        scope to seed results, registers the per-relay pinned interests, and
+//!        owns the result projection + typed sidecar. Re-opening the same
+//!        session id is idempotent (NMP tears the prior session down first).
 //!
-//! ## NMP search seam (verified at b4404159)
+//! ## NMP search seam (verified at 6d5671f2)
 //!
-//! `nmp-nip50` crate (`crates/nmp-nip50/src/lib.rs`):
+//! `nmp-nip50` crate:
 //! - `SearchRequest::new(query, scope, targets, max_hits) -> Option<Self>` —
-//!   returns `None` for empty/whitespace queries (built-in D6 no-op gate,
-//!   via `bounded_search_query` in nmp-planner).
-//! - `SearchRequest::interest_shape() -> InterestShape` — builds the
-//!   `InterestShape{kinds, search: Some(query), limit}` for the planner.
-//! - `SearchResultsProjection::new(request)` — in-memory accumulator.
-//! - `SearchResultsProjection::ingest_cache_event(event)` — ingests a
-//!   `KernelEvent` (filters by kind + text match).
-//! - `SearchResultsProjection::snapshot() -> SearchResultsSnapshot{hits}`.
-//! - `SearchResultsProjection` does NOT implement `KernelEventObserver` —
-//!   hl wraps it in `SearchObserver` (below) which does.
+//!   returns `None` for empty/whitespace queries (`bounded_search_query`, D6).
+//! - `SearchScope::{Users, LongForm, Kinds(BTreeSet<u32>), Custom(_)}`.
+//! - `SearchTargets::{UserPreferred, AppDefault, Explicit(Vec<String>)}`.
+//! - `SearchHit { id, author, kind, created_at, content, tags, relay_provenance,
+//!   source: SearchHitSource }` — `source` is dropped at the hl boundary for
+//!   the first cut (not threaded through UniFFI; see follow-up).
+//! - `decode_search_results_snapshot(&[u8]) -> Result<SearchResultsSnapshot, _>`
+//!   decodes the typed `N50S` FlatBuffers sidecar payload.
 //!
-//! `NmpApp::push_interest` (`crates/nmp-ffi/src/lib.rs:1828`):
-//!   `pub fn push_interest(&self, interest: nmp_core::planner::LogicalInterest)`
-//!   — sends `ActorCommand::PushInterest` on the actor channel. Idempotent
-//!   for the same `InterestId` (registry replaces the prior entry).
+//! `nmp-ffi`:
+//! - `NmpApp::open_search(request, session_id) -> String` (snapshot key).
+//! - `NmpApp::close_search(session_id)` — tears down the session (idempotent).
 //!
 //! ## Bounded results
 //!
 //! `SearchRequest::new` caps `max_hits` at `HARD_MAX_SEARCH_HITS = 500`; the
-//! default is `DEFAULT_MAX_SEARCH_HITS = 200`. The projection's `insert_hit`
-//! silently ignores arrivals past the cap — Non-Negotiable #7 / D6.
+//! default is `DEFAULT_MAX_SEARCH_HITS = 200`. NMP's projection bounds the hit
+//! set — Non-Negotiable #7 / D6.
 //!
 //! ## Clear on close / logout / identity change
 //!
 //! `AppState::search_results` is cleared by:
-//!   - The `ViewId::Search` close arm in `actor_task` (inline, like
-//!     `ReleaseGroupEvents` — avoids a separate effect variant).
+//!   - The `ViewId::Search` close arm in `actor_task` (inline; also calls
+//!     `NmpApp::close_search` to tear the NMP session down).
 //!   - `auth::reduce_event_identity_changed` on `IdentityChanged(None)`.
 //!   - `AppAction::Logout` reducer arm.
 //!
@@ -63,16 +56,11 @@
 //! until Phase 7. This module adds the relay-search path ONLY. No double-
 //! publish risk — search is read-only (no write action for search hits).
 
-use std::sync::{Arc, Mutex};
-
-use nmp_core::substrate::KernelEvent as NmpKernelEvent;
-use nmp_core::KernelEventObserver;
 use nmp_ffi::NmpApp;
 use nmp_nip50::{
-    SearchRequest, SearchResultsProjection, SearchResultsSnapshot, SearchScope as NmpSearchScope,
-    SearchTargets, DEFAULT_MAX_SEARCH_HITS,
+    decode_search_results_snapshot, SearchRequest, SearchScope as NmpSearchScope, SearchTargets,
+    DEFAULT_MAX_SEARCH_HITS, SEARCH_RESULTS_SCHEMA_ID,
 };
-use nmp_planner::{InterestId, InterestLifecycle, InterestScope, LogicalInterest};
 
 use crate::kernel::action::SearchScope;
 use crate::kernel::app::AppState;
@@ -81,86 +69,42 @@ use crate::kernel::snapshot::{KernelSearchHitRow, SearchHitRow, SearchSnapshot};
 
 // ─── Schema id ───────────────────────────────────────────────────────────────
 
-/// Typed-snapshot key for the hl-owned search projection.
-/// Matched in `projections::dispatch_typed_frame`.
-pub(crate) const SEARCH_SCHEMA_ID: &str = "hl.search";
+/// Schema id of NMP's typed `N50S` search-results sidecar
+/// (`nmp_nip50::SEARCH_RESULTS_SCHEMA_ID` = `"nmp.nip50.search"`).
+/// Matched in `projections::dispatch_typed_frame` against `proj.schema_id`.
+pub(crate) const SEARCH_SCHEMA_ID: &str = SEARCH_RESULTS_SCHEMA_ID;
 
-// ─── Stable interest id for the search subscription ─────────────────────────
+// ─── Stable session id for the search subscription ───────────────────────────
 
-/// Stable planner `InterestId` for the hl NIP-50 search interest.
+/// Stable `open_search` session id for the hl NIP-50 search session.
 ///
-/// Non-zero (planner sentinel for "unassigned" is 0). Replacing the prior
-/// search interest is idempotent because the planner registry replaces on
-/// same-id re-push — no subscription leak on repeated `RunSearch` dispatches.
-/// Value is arbitrary but stable across runs.
-pub(crate) const SEARCH_INTEREST_ID: u64 = 0x0000_484c_5f53; // "HL_S" bytes
-
-// ─── KernelEventObserver wrapper ─────────────────────────────────────────────
-
-/// Thin `KernelEventObserver` wrapper over `SearchResultsProjection`.
-///
-/// `SearchResultsProjection` at b4404159 does not implement
-/// `KernelEventObserver` directly — it exposes `ingest_cache_event` and
-/// `ingest_relay_event` separately. `SearchObserver` bridges the two:
-/// on every accepted kernel event it forwards via `ingest_cache_event`
-/// (relay provenance is already embedded in `KernelEvent.relay_provenance`
-/// so the cache path carries full provenance — no information loss).
-///
-/// Interior mutability: `Mutex<SearchResultsProjection>` — the projection
-/// accumulates hits behind a lock. The observer callback is called on the
-/// actor thread (cheap: one Mutex lock + one BTreeMap insert or cap check).
-pub(crate) struct SearchObserver {
-    inner: Mutex<SearchResultsProjection>,
-}
-
-impl SearchObserver {
-    fn new(projection: SearchResultsProjection) -> Self {
-        Self {
-            inner: Mutex::new(projection),
-        }
-    }
-
-    /// Serialise the current snapshot to JSON bytes.
-    /// Returns `None` if the lock is poisoned or serialisation fails (D6).
-    pub(crate) fn snapshot_json_bytes(&self) -> Option<Vec<u8>> {
-        let guard = self.inner.lock().ok()?;
-        let snapshot: SearchResultsSnapshot = guard.snapshot();
-        serde_json::to_vec(&snapshot).ok()
-    }
-}
-
-impl KernelEventObserver for SearchObserver {
-    fn on_kernel_event(&self, event: &NmpKernelEvent) {
-        if let Ok(mut guard) = self.inner.lock() {
-            guard.ingest_cache_event(event);
-        }
-        // Poisoned lock: D6 silent no-op.
-    }
-}
+/// Re-opening the same session is idempotent — NMP tears the prior session
+/// down before re-opening, so repeated `RunSearch` dispatches never leak a
+/// subscription. Value is arbitrary but stable across runs.
+pub(crate) const SEARCH_SESSION_ID: &str = "hl_search";
 
 // ─── READ side: apply decoded snapshot ───────────────────────────────────────
 
-/// Apply a decoded `"hl.search"` JSON payload to `state`.
+/// Apply a decoded `N50S` search-results sidecar payload to `state`.
 ///
 /// Called from `projections::dispatch_typed_frame` when `schema_id ==
-/// "hl.search"`. Decodes the serde-JSON representation of
-/// `SearchResultsSnapshot { hits: Vec<SearchHit> }` and maps each hit to a
-/// `SearchHitRow` stored in `AppState::search_results`.
+/// SEARCH_SCHEMA_ID`. Decodes the typed FlatBuffers `SearchResultsSnapshot`
+/// and maps each hit to a `SearchHitRow` stored in `AppState::search_results`.
 ///
-/// Bounded by the projection's `max_hits` cap (default 200 — Non-Negotiable #7).
+/// Bounded by NMP's projection `max_hits` cap (default 200 — Non-Negotiable #7).
 /// D6: any decode error leaves `AppState::search_results` unchanged.
 /// D1: raw fields only — no "X results" count label, no formatted strings.
 ///
 /// Non-blocking — runs on the actor thread.
 pub(crate) fn apply_search_results(state: &mut AppState, payload: &[u8]) {
-    match serde_json::from_slice::<SearchResultsSnapshot>(payload) {
+    match decode_search_results_snapshot(payload) {
         Ok(snapshot) => {
             state.search_results = snapshot.hits.into_iter().map(search_hit_to_row).collect();
         }
         Err(e) => {
             tracing::trace!(
                 error = %e,
-                "search::apply_search_results: JSON decode error — AppState::search_results unchanged (D6)"
+                "search::apply_search_results: N50S decode error — AppState::search_results unchanged (D6)"
             );
         }
     }
@@ -169,6 +113,9 @@ pub(crate) fn apply_search_results(state: &mut AppState, payload: &[u8]) {
 /// Convert an `nmp_nip50::SearchHit` to the hl `SearchHitRow` representation.
 /// Raw protocol data only — no labels, no presentation formatting (D1).
 fn search_hit_to_row(hit: nmp_nip50::SearchHit) -> SearchHitRow {
+    // First cut: drop `source` (Cache vs Relay provenance). Threading it
+    // through to the UniFFI `KernelSearchHitRow` is a follow-up.
+    let _ = hit.source;
     SearchHitRow {
         id: hit.id,
         author: hit.author,
@@ -214,7 +161,6 @@ pub(crate) fn reduce_action_run_search(query: String, scope: SearchScope) -> Vec
     vec![Effect::RunSearch {
         query: trimmed,
         scope_json,
-        interest_id: SEARCH_INTEREST_ID,
     }]
 }
 
@@ -233,27 +179,25 @@ fn hl_scope_to_nmp(scope: &SearchScope) -> NmpSearchScope {
 
 // ─── Effect runner ────────────────────────────────────────────────────────────
 
-/// Execute `Effect::RunSearch` — push the NIP-50 interest and replace the
-/// hl-owned search projection.
+/// Execute `Effect::RunSearch` — open a NIP-50 search session via NMP's
+/// higher-order `open_search`.
 ///
 /// Steps:
 ///   1. Deserialise `scope_json` back to `NmpSearchScope`.
 ///   2. Build a `SearchRequest` from `query` + scope. If `SearchRequest::new`
 ///      returns `None` (blank query after nmp's `bounded_search_query` trim),
 ///      this is a no-op (D6).
-///   3. Derive `InterestShape` via `request.interest_shape()`.
-///   4. Call `nmp_ref.push_interest(LogicalInterest { id, scope, shape, .. })`.
-///      The planner replaces any prior interest with the same `InterestId`.
-///   5. Build a fresh `SearchResultsProjection`, wrap it in `SearchObserver`,
-///      register the observer with `nmp_ref.register_event_observer`, and
-///      register the typed snapshot projection under key `"hl.search"`.
+///   3. Call `nmp_ref.open_search(request, SEARCH_SESSION_ID)`. NMP resolves
+///      `UserPreferred` relays (kind:10007), runs the #1827 cache-FTS scope to
+///      seed results, opens the per-relay pinned interests, and owns the result
+///      projection + typed `N50S` sidecar. Re-opening the same session id is
+///      idempotent (NMP tears the prior session down first).
 ///
-/// No-op if `nmp` is `None` (test mode — tests inject
-/// `KernelEvent::SearchResultsUpdated` directly to drive the reducer).
+/// No-op if `nmp` is `None` (test mode — tests drive `apply_search_results`
+/// and the reducer directly).
 pub(crate) fn run_effect_run_search(
     query: String,
     scope_json: String,
-    interest_id: u64,
     nmp: Option<&crate::kernel::actor::NmpHandle>,
 ) {
     let Some(handle) = nmp else { return };
@@ -285,52 +229,15 @@ pub(crate) fn run_effect_run_search(
         }
     };
 
-    let interest_shape = request.interest_shape();
-
-    let interest = LogicalInterest {
-        id: InterestId(interest_id),
-        scope: InterestScope::ActiveAccount,
-        shape: interest_shape,
-        hints: Vec::new(),
-        lifecycle: InterestLifecycle::OneShot,
-        is_indexer_discovery: false,
-    };
-
     // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
     // NmpHandle for the full actor lifetime.
     let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
 
-    // Push the NIP-50 search interest — causes the planner to issue REQs.
-    // Idempotent on same InterestId (registry replaces prior entry).
-    nmp_ref.push_interest(interest);
-
-    // Build and register a fresh SearchObserver wrapping a new projection.
-    let projection = SearchResultsProjection::new(request);
-    let observer = Arc::new(SearchObserver::new(projection));
-
-    // Register as event observer — receives every accepted kernel event.
-    // The observer filters by kind/text via the projection's interest_shape.
-    let _obs_id =
-        nmp_ref.register_event_observer(Arc::clone(&observer) as Arc<dyn KernelEventObserver>);
-
-    // Register the typed snapshot projection under "hl.search".
-    // On each NMP snapshot tick the closure calls snapshot_json_bytes(),
-    // serialises the current hits to JSON, and the frame is decoded by
-    // `dispatch_typed_frame` → `KernelEvent::SearchResultsUpdated`.
-    // Replacing the key re-registers with a fresh projection (old closure Arc
-    // is dropped after registration; the projection behind it is abandoned).
-    let snapshot_observer = Arc::clone(&observer);
-    nmp_ref.register_typed_snapshot_projection(SEARCH_SCHEMA_ID, move || {
-        let payload = snapshot_observer.snapshot_json_bytes()?;
-        Some(nmp_core::TypedProjectionData {
-            key: SEARCH_SCHEMA_ID.to_string(),
-            schema_id: SEARCH_SCHEMA_ID.to_string(),
-            schema_version: 1,
-            file_identifier: String::new(),
-            payload,
-            ..Default::default()
-        })
-    });
+    // Open the NIP-50 search session. NMP owns the relay resolution, cache-FTS
+    // seed, per-relay pinned interests, result projection, and typed `N50S`
+    // sidecar (registered under `nmp.nip50.search.<session_id>`). Idempotent
+    // re-open on the same session id (prior session is torn down first).
+    let _key = nmp_ref.open_search(request, SEARCH_SESSION_ID);
 }
 
 // ─── Snapshot projection ─────────────────────────────────────────────────────
@@ -357,7 +264,11 @@ pub(crate) fn project_search_snapshot(
         .collect();
 
     Some(crate::kernel::snapshot::ViewSnapshot::Search(
-        SearchSnapshot { hits },
+        SearchSnapshot {
+            hits,
+            // Omnibox classification outcome (#1865) — the shell routes on this.
+            omnibox: state.omnibox_outcome.clone(),
+        },
     ))
 }
 
@@ -365,9 +276,9 @@ pub(crate) fn project_search_snapshot(
 
 /// Lifecycle effects for `ViewId::Search` open.
 ///
-/// No registration needed on view open — the `SearchResultsProjection` is
-/// wired when `AppAction::RunSearch` is dispatched. No-op provided for
-/// symmetry with other domain lifecycle hooks.
+/// No registration needed on view open — the NMP search session is opened
+/// (`NmpApp::open_search`) when `AppAction::RunSearch` is dispatched. No-op
+/// provided for symmetry with other domain lifecycle hooks.
 pub(crate) fn lifecycle_effects_for_view_open(_id: &crate::kernel::view::ViewId) -> Vec<Effect> {
     vec![]
 }
@@ -408,8 +319,8 @@ mod tests {
     // 4D-T1: run_search_pushes_search_interest
     //
     // AppAction::RunSearch{query, scope} with a non-empty query must produce
-    // exactly one Effect::RunSearch with the trimmed query, a valid scope_json,
-    // and a non-zero interest_id.
+    // exactly one Effect::RunSearch with the trimmed query and a valid
+    // scope_json (the open_search session id is a stable const, not a field).
     #[test]
     fn run_search_pushes_search_interest() {
         let mut state = make_state();
@@ -426,11 +337,7 @@ mod tests {
 
         assert_eq!(effects.len(), 1, "RunSearch must emit exactly one effect");
         match &effects[0] {
-            Effect::RunSearch {
-                query,
-                scope_json,
-                interest_id,
-            } => {
+            Effect::RunSearch { query, scope_json } => {
                 assert_eq!(query, "nostr rust", "query must be trimmed");
                 let scope: NmpSearchScope =
                     serde_json::from_str(scope_json).expect("scope_json must be valid JSON");
@@ -439,7 +346,6 @@ mod tests {
                     NmpSearchScope::LongForm,
                     "scope must map to LongForm"
                 );
-                assert_ne!(*interest_id, 0, "interest_id must be non-zero");
             }
             other => panic!("expected Effect::RunSearch, got {:?}", other),
         }
@@ -485,23 +391,27 @@ mod tests {
     // count labels, no formatted strings (D1).
     #[test]
     fn search_snapshot_no_result_count_labels() {
+        use nmp_nip50::{
+            encode_search_results_snapshot, SearchHit, SearchHitSource, SearchResultsSnapshot,
+        };
+
         let mut state = make_state();
 
-        let snapshot = serde_json::json!({
-            "hits": [
-                {
-                    "id": "aabb000000000000000000000000000000000000000000000000000000000001",
-                    "author": "dead000000000000000000000000000000000000000000000000000000000001",
-                    "kind": 30023,
-                    "created_at": 1700000000u64,
-                    "content": "article content",
-                    "tags": [["t", "nostr"]],
-                    "relay_provenance": [],
-                    "source": "Cache"
-                }
-            ]
-        });
-        let payload = serde_json::to_vec(&snapshot).unwrap();
+        let snapshot = SearchResultsSnapshot {
+            hits: vec![SearchHit {
+                id: "aabb000000000000000000000000000000000000000000000000000000000001"
+                    .to_string(),
+                author: "dead000000000000000000000000000000000000000000000000000000000001"
+                    .to_string(),
+                kind: 30023,
+                created_at: 1_700_000_000,
+                content: "article content".to_string(),
+                tags: vec![vec!["t".to_string(), "nostr".to_string()]],
+                relay_provenance: vec![],
+                source: SearchHitSource::Cache,
+            }],
+        };
+        let payload = encode_search_results_snapshot(&snapshot);
 
         apply_search_results(&mut state, &payload);
 
@@ -523,24 +433,26 @@ mod tests {
     // entries — the bounding is enforced by the projection, not by apply.
     #[test]
     fn search_results_bounded() {
+        use nmp_nip50::{
+            encode_search_results_snapshot, SearchHit, SearchHitSource, SearchResultsSnapshot,
+        };
+
         let mut state = make_state();
 
-        let hits: Vec<serde_json::Value> = (0u64..3)
-            .map(|i| {
-                serde_json::json!({
-                    "id": format!("{:064x}", i),
-                    "author": format!("{:064x}", i + 100),
-                    "kind": 30023u32,
-                    "created_at": 1_700_000_000u64 + i,
-                    "content": format!("content {}", i),
-                    "tags": [],
-                    "relay_provenance": [],
-                    "source": "Cache"
-                })
+        let hits: Vec<SearchHit> = (0u64..3)
+            .map(|i| SearchHit {
+                id: format!("{:064x}", i),
+                author: format!("{:064x}", i + 100),
+                kind: 30023,
+                created_at: 1_700_000_000 + i,
+                content: format!("content {}", i),
+                tags: vec![],
+                relay_provenance: vec![],
+                source: SearchHitSource::Cache,
             })
             .collect();
 
-        let payload = serde_json::to_vec(&serde_json::json!({ "hits": hits })).unwrap();
+        let payload = encode_search_results_snapshot(&SearchResultsSnapshot { hits });
         apply_search_results(&mut state, &payload);
 
         assert_eq!(state.search_results.len(), 3, "all 3 hits must be stored");

@@ -312,11 +312,21 @@ pub enum Effect {
         /// because the reducer no-ops empty strings).
         query: String,
         /// Serialised `nmp_nip50::SearchScope` (serde JSON). The effect runner
-        /// deserialises this to build the `SearchRequest` → `InterestShape`.
+        /// deserialises this to build the `SearchRequest`, then calls
+        /// `NmpApp::open_search` under the stable `search::SEARCH_SESSION_ID`.
         scope_json: String,
-        /// Stable `InterestId` u64 for this search session; allows the planner
-        /// to dedup or replace the prior search interest on re-query.
-        interest_id: u64,
+    },
+
+    /// Classify one omnibox / paste / search input through NMP's input-intent
+    /// resolver (`#1865`) and route it.
+    ///
+    /// The effect runner calls `nmp_app_intent_classify` (and, for a NIP-05 top
+    /// candidate, `nmp_app_intent_dispatch` to enqueue the HTTP reverse lookup;
+    /// for free text, a multi-kind `NmpApp::open_search`), then emits
+    /// `KernelEvent::OmniboxResolved`. No-op if `nmp` is `None` (test mode).
+    RunOmnibox {
+        /// Trimmed, non-empty omnibox input (the reducer no-ops empty input).
+        query: String,
     },
 
     // ── Phase 4H additions (append-only) ─────────────────────────────────────
@@ -671,4 +681,17 @@ pub enum Effect {
         /// `"i:podcast:item:guid:<guid>"`). Never empty.
         coordinate: String,
     },
+
+    // ── Auth-bridge additions (append-only) ──────────────────────────────────
+    /// Durably write `onboarding.complete = true` to `OnboardingStore`.
+    ///
+    /// Emitted by `reduce_action_complete_onboarding` so the NMP kernel's own
+    /// onboarding file reflects the completed state. Without this write, the
+    /// `LoadOnboardingFlag` effect (fired on every `RestoreSession`) would
+    /// always return `false`, preventing the post-logout route from landing on
+    /// `.login` instead of `.onboarding`.
+    ///
+    /// Fire-and-forget (D6): I/O failure is logged but never surfaced as an
+    /// error to the caller (the in-memory state is already updated).
+    SaveOnboardingFlag,
 }

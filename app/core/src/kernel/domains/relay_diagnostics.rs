@@ -19,20 +19,24 @@ use crate::kernel::app::AppState;
 
 // ─── Raw DTO types ───────────────────────────────────────────────────────────
 
-/// Connection state of a relay as seen by the NMP kernel. Derived from
-/// nmp's `connection_tone` field; represented as an enum so the Swift
-/// shell can branch on a stable machine tag rather than parsing a string.
+/// Connection state of a relay as seen by the NMP kernel. Derived from nmp's
+/// RAW `connection` lifecycle string; represented as an enum so the Swift shell
+/// can branch on a stable machine tag rather than parsing a string.
 ///
-/// The mapping is conservative: unknown tones → `Unknown`.
+/// The mapping is conservative: unrecognised values → `Unknown`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum RelayConnectionState {
-    /// `"ok"` tone — relay is connected and healthy.
+    /// `"connected"` — relay is connected and healthy.
     Connected,
-    /// `"warn"` tone — relay is reconnecting or degraded.
+    /// `"connecting"` / `"backing_off"` — relay is mid-handshake or retrying.
     Reconnecting,
-    /// `"error"` tone — relay is in an error state.
+    /// Reserved error state. NMP no longer emits a distinct error value in the
+    /// `connection` string (error detail surfaces via `last_error`), so this is
+    /// currently unreachable from `connection` alone — retained for the Swift
+    /// shell's stable tag set.
     Error,
-    /// `"muted"` or any other tone — state unknown / not yet connected.
+    /// `"closed"` / `"offline"` / `"unknown"` or any other value — state
+    /// unknown / not yet connected.
     Unknown,
 }
 
@@ -50,7 +54,7 @@ pub struct RelayDiagRow {
     /// Unix epoch milliseconds of the last successful connect; 0 when the relay
     /// has never connected. Swift shell formats as "Xs ago" at render time.
     pub last_connected_ms: u64,
-    /// Parsed connection state derived from nmp's `connection_tone` field.
+    /// Parsed connection state derived from nmp's raw `connection` lifecycle string.
     pub connection_state: RelayConnectionState,
     /// Total wire subscriptions known for this relay.
     pub total_sub_count: u32,
@@ -101,13 +105,20 @@ pub(crate) fn apply(state: &mut AppState, frame_bytes: &[u8]) -> bool {
         .relays
         .into_iter()
         .map(|r| {
-            // Map nmp's pre-formatted connection_tone to a stable enum.
-            // We read `connection_tone` (NOT `connection_label`) to stay
-            // independent of NMP's localised label strings.
-            let connection_state = match r.connection_tone.as_str() {
-                "ok" => RelayConnectionState::Connected,
-                "warn" => RelayConnectionState::Reconnecting,
-                "error" => RelayConnectionState::Error,
+            // Map nmp's RAW `connection` string to a stable enum. NMP emits the
+            // lifecycle state verbatim (set in nmp-core relay_lifecycle /
+            // relay_transport): "connected" / "connecting" / "backing_off" /
+            // "closed" / "offline" / "unknown". The shell title-cases for
+            // display and derives its own hue; hl maps to a machine tag so the
+            // Swift UI can branch on a stable enum rather than parsing strings.
+            let connection_state = match r.connection.as_str() {
+                "connected" => RelayConnectionState::Connected,
+                // Transient mid-handshake / backoff-retry states → Reconnecting.
+                "connecting" | "backing_off" => RelayConnectionState::Reconnecting,
+                // "closed" / "offline" / "unknown" (and any future value) →
+                // Unknown. NMP no longer emits a distinct "error" connection
+                // value (error detail surfaces via `last_error`), so the Error
+                // variant is currently unreachable from `connection` alone.
                 _ => RelayConnectionState::Unknown,
             };
             RelayDiagRow {

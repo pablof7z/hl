@@ -14702,6 +14702,138 @@ public func FfiConverterTypeChatLoadMoreProjectionInput_lower(_ value: ChatLoadM
 
 
 /**
+ * One raw message row in the authoritative chat buffer and in `ChatMessageRow`.
+ *
+ * D1: raw protocol fields only — no formatted timestamps, no byline strings,
+ * no `is_from_me` flag. Swift computes all display labels from raw fields.
+ */
+public struct ChatMessageRawRow {
+    /**
+     * Event id (raw 64-char hex). Dedupe key.
+     */
+    public var eventId: String
+    /**
+     * Author pubkey (raw 64-char hex).
+     */
+    public var authorPubkey: String
+    /**
+     * Event `content`, verbatim.
+     */
+    public var content: String
+    /**
+     * Event `created_at` (Unix seconds).
+     */
+    public var createdAt: UInt64
+    /**
+     * The event id this message is replying to, if any.
+     * Recovered from `["e", id, "", "reply"]` (preferred) or first `e` tag.
+     */
+    public var replyToEventId: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Event id (raw 64-char hex). Dedupe key.
+         */eventId: String,
+        /**
+         * Author pubkey (raw 64-char hex).
+         */authorPubkey: String,
+        /**
+         * Event `content`, verbatim.
+         */content: String,
+        /**
+         * Event `created_at` (Unix seconds).
+         */createdAt: UInt64,
+        /**
+         * The event id this message is replying to, if any.
+         * Recovered from `["e", id, "", "reply"]` (preferred) or first `e` tag.
+         */replyToEventId: String?) {
+        self.eventId = eventId
+        self.authorPubkey = authorPubkey
+        self.content = content
+        self.createdAt = createdAt
+        self.replyToEventId = replyToEventId
+    }
+}
+
+#if compiler(>=6)
+extension ChatMessageRawRow: Sendable {}
+#endif
+
+
+extension ChatMessageRawRow: Equatable, Hashable {
+    public static func ==(lhs: ChatMessageRawRow, rhs: ChatMessageRawRow) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.authorPubkey != rhs.authorPubkey {
+            return false
+        }
+        if lhs.content != rhs.content {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.replyToEventId != rhs.replyToEventId {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(authorPubkey)
+        hasher.combine(content)
+        hasher.combine(createdAt)
+        hasher.combine(replyToEventId)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatMessageRawRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatMessageRawRow {
+        return
+            try ChatMessageRawRow(
+                eventId: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                content: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
+                replyToEventId: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatMessageRawRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.authorPubkey, into: &buf)
+        FfiConverterString.write(value.content, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+        FfiConverterOptionString.write(value.replyToEventId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatMessageRawRow_lift(_ buf: RustBuffer) throws -> ChatMessageRawRow {
+    return try FfiConverterTypeChatMessageRawRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatMessageRawRow_lower(_ value: ChatMessageRawRow) -> RustBuffer {
+    return FfiConverterTypeChatMessageRawRow.lower(value)
+}
+
+
+/**
  * A NIP-29 kind:9 chat message inside a group. Flat conversation event —
  * distinct from kind:11 threaded discussions.
  */
@@ -14818,6 +14950,171 @@ public func FfiConverterTypeChatMessageRecord_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeChatMessageRecord_lower(_ value: ChatMessageRecord) -> RustBuffer {
     return FfiConverterTypeChatMessageRecord.lower(value)
+}
+
+
+/**
+ * One display row in `RoomChatSnapshot` — raw fields + computed `show_header`
+ * and resolved `reply_to` preview (only when the parent is in the visible window).
+ *
+ * D1: no formatted strings, no `is_from_me`. Swift formats timestamps, bylines,
+ * and profile pictures.
+ */
+public struct ChatMessageRow {
+    /**
+     * Event id (raw 64-char hex).
+     */
+    public var eventId: String
+    /**
+     * Author pubkey (raw 64-char hex).
+     */
+    public var authorPubkey: String
+    /**
+     * Event `content`, verbatim.
+     */
+    public var content: String
+    /**
+     * Event `created_at` (Unix seconds).
+     */
+    public var createdAt: UInt64
+    /**
+     * The event id this message is replying to, if any (raw hex).
+     */
+    public var replyToEventId: String?
+    /**
+     * Resolved reply preview — `Some` only when the parent event is inside the
+     * bounded visible window. `None` when not a reply or parent is older than
+     * the window.
+     */
+    public var replyTo: ChatReplyPreview?
+    /**
+     * `true` for the first row, on author change, or when `created_at` gap with
+     * the prior row exceeds 300 seconds.
+     */
+    public var showHeader: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Event id (raw 64-char hex).
+         */eventId: String,
+        /**
+         * Author pubkey (raw 64-char hex).
+         */authorPubkey: String,
+        /**
+         * Event `content`, verbatim.
+         */content: String,
+        /**
+         * Event `created_at` (Unix seconds).
+         */createdAt: UInt64,
+        /**
+         * The event id this message is replying to, if any (raw hex).
+         */replyToEventId: String?,
+        /**
+         * Resolved reply preview — `Some` only when the parent event is inside the
+         * bounded visible window. `None` when not a reply or parent is older than
+         * the window.
+         */replyTo: ChatReplyPreview?,
+        /**
+         * `true` for the first row, on author change, or when `created_at` gap with
+         * the prior row exceeds 300 seconds.
+         */showHeader: Bool) {
+        self.eventId = eventId
+        self.authorPubkey = authorPubkey
+        self.content = content
+        self.createdAt = createdAt
+        self.replyToEventId = replyToEventId
+        self.replyTo = replyTo
+        self.showHeader = showHeader
+    }
+}
+
+#if compiler(>=6)
+extension ChatMessageRow: Sendable {}
+#endif
+
+
+extension ChatMessageRow: Equatable, Hashable {
+    public static func ==(lhs: ChatMessageRow, rhs: ChatMessageRow) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.authorPubkey != rhs.authorPubkey {
+            return false
+        }
+        if lhs.content != rhs.content {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.replyToEventId != rhs.replyToEventId {
+            return false
+        }
+        if lhs.replyTo != rhs.replyTo {
+            return false
+        }
+        if lhs.showHeader != rhs.showHeader {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(authorPubkey)
+        hasher.combine(content)
+        hasher.combine(createdAt)
+        hasher.combine(replyToEventId)
+        hasher.combine(replyTo)
+        hasher.combine(showHeader)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatMessageRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatMessageRow {
+        return
+            try ChatMessageRow(
+                eventId: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                content: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
+                replyToEventId: FfiConverterOptionString.read(from: &buf),
+                replyTo: FfiConverterOptionTypeChatReplyPreview.read(from: &buf),
+                showHeader: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatMessageRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.authorPubkey, into: &buf)
+        FfiConverterString.write(value.content, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+        FfiConverterOptionString.write(value.replyToEventId, into: &buf)
+        FfiConverterOptionTypeChatReplyPreview.write(value.replyTo, into: &buf)
+        FfiConverterBool.write(value.showHeader, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatMessageRow_lift(_ buf: RustBuffer) throws -> ChatMessageRow {
+    return try FfiConverterTypeChatMessageRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatMessageRow_lower(_ value: ChatMessageRow) -> RustBuffer {
+    return FfiConverterTypeChatMessageRow.lower(value)
 }
 
 
@@ -15160,6 +15457,120 @@ public func FfiConverterTypeChatPublishSnapshot_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeChatPublishSnapshot_lower(_ value: ChatPublishSnapshot) -> RustBuffer {
     return FfiConverterTypeChatPublishSnapshot.lower(value)
+}
+
+
+/**
+ * Compact preview of a replied-to message. Only present when the parent event
+ * is within the bounded visible window (D5: bounded by open chat window).
+ */
+public struct ChatReplyPreview {
+    /**
+     * Event id of the replied-to message.
+     */
+    public var eventId: String
+    /**
+     * Author pubkey of the replied-to message.
+     */
+    public var authorPubkey: String
+    /**
+     * Content of the replied-to message (verbatim, D1).
+     */
+    public var content: String
+    /**
+     * `created_at` (Unix seconds) of the replied-to message.
+     */
+    public var createdAt: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Event id of the replied-to message.
+         */eventId: String,
+        /**
+         * Author pubkey of the replied-to message.
+         */authorPubkey: String,
+        /**
+         * Content of the replied-to message (verbatim, D1).
+         */content: String,
+        /**
+         * `created_at` (Unix seconds) of the replied-to message.
+         */createdAt: UInt64) {
+        self.eventId = eventId
+        self.authorPubkey = authorPubkey
+        self.content = content
+        self.createdAt = createdAt
+    }
+}
+
+#if compiler(>=6)
+extension ChatReplyPreview: Sendable {}
+#endif
+
+
+extension ChatReplyPreview: Equatable, Hashable {
+    public static func ==(lhs: ChatReplyPreview, rhs: ChatReplyPreview) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.authorPubkey != rhs.authorPubkey {
+            return false
+        }
+        if lhs.content != rhs.content {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(authorPubkey)
+        hasher.combine(content)
+        hasher.combine(createdAt)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatReplyPreview: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatReplyPreview {
+        return
+            try ChatReplyPreview(
+                eventId: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                content: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatReplyPreview, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.authorPubkey, into: &buf)
+        FfiConverterString.write(value.content, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatReplyPreview_lift(_ buf: RustBuffer) throws -> ChatReplyPreview {
+    return try FfiConverterTypeChatReplyPreview.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatReplyPreview_lower(_ value: ChatReplyPreview) -> RustBuffer {
+    return FfiConverterTypeChatReplyPreview.lower(value)
 }
 
 
@@ -16473,6 +16884,281 @@ public func FfiConverterTypeCommentRecord_lower(_ value: CommentRecord) -> RustB
 }
 
 
+/**
+ * A single NIP-22 kind:1111 comment record row — raw protocol data only (D1).
+ *
+ * No formatted timestamps (Swift formats), no tree nesting (Swift builds tree
+ * from `parent_tag_value`), no byline strings. `is_top_level` is a pure
+ * boolean: `parent_tag_value == root_tag_value` (NIP-22: top-level comment's
+ * parent is the root). `comment_count` is derived as `records.len() as u32`.
+ *
+ * Swift reads this flat list and reconstructs the display tree using
+ * `parent_tag_value` links without needing a recursive Rust type.
+ */
+public struct CommentRecordRow {
+    /**
+     * kind:1111 event id (raw 64-char hex). D1.
+     */
+    public var eventId: String
+    /**
+     * Comment author pubkey (raw 64-char hex). D1.
+     */
+    public var authorPubkey: String
+    /**
+     * Raw comment body text (`event.content`), untouched. D1.
+     */
+    public var body: String
+    /**
+     * Root scope tag name — uppercase `A`, `E`, or `I`. D1.
+     */
+    public var rootTagName: String
+    /**
+     * Root scope tag value (address / event-id / external-id). D1.
+     */
+    public var rootTagValue: String
+    /**
+     * Root kind string from the uppercase `K` tag (empty if absent). D1.
+     */
+    public var rootKind: String
+    /**
+     * Parent scope tag name — lowercase `a`, `e`, or `i`. D1.
+     */
+    public var parentTagName: String
+    /**
+     * Parent scope tag value. Equals `root_tag_value` for top-level comments. D1.
+     */
+    public var parentTagValue: String
+    /**
+     * Parent kind string from the lowercase `k` tag (empty if absent). D1.
+     */
+    public var parentKind: String
+    /**
+     * Event `created_at` unix seconds. D1: no formatting.
+     */
+    public var createdAt: UInt64
+    /**
+     * `true` when `parent_tag_value == root_tag_value` (top-level comment,
+     * per NIP-22 §3). Swift may use this to efficiently partition
+     * root comments from replies without re-computing the comparison.
+     */
+    public var isTopLevel: Bool
+    /**
+     * Per-comment like count from `AppState::reaction_state` (kind:7 `+`
+     * reactions to this comment's `event_id`), as projected by the global
+     * `ReactionProjection`. Raw u32 — Swift formats any label (D1). `0` when
+     * no reactions are known for this event.
+     */
+    public var likeCount: UInt32
+    /**
+     * `true` when the active viewer has liked this comment (`viewer_reacted`
+     * from `AppState::reaction_state`). Optimistic toggling lives in Swift (D1).
+     */
+    public var viewerReacted: Bool
+    /**
+     * `true` when this comment's `event_id` is in the active account's
+     * kind:10003 bookmark list (`AppState::bookmarks`). D1.
+     */
+    public var bookmarked: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * kind:1111 event id (raw 64-char hex). D1.
+         */eventId: String,
+        /**
+         * Comment author pubkey (raw 64-char hex). D1.
+         */authorPubkey: String,
+        /**
+         * Raw comment body text (`event.content`), untouched. D1.
+         */body: String,
+        /**
+         * Root scope tag name — uppercase `A`, `E`, or `I`. D1.
+         */rootTagName: String,
+        /**
+         * Root scope tag value (address / event-id / external-id). D1.
+         */rootTagValue: String,
+        /**
+         * Root kind string from the uppercase `K` tag (empty if absent). D1.
+         */rootKind: String,
+        /**
+         * Parent scope tag name — lowercase `a`, `e`, or `i`. D1.
+         */parentTagName: String,
+        /**
+         * Parent scope tag value. Equals `root_tag_value` for top-level comments. D1.
+         */parentTagValue: String,
+        /**
+         * Parent kind string from the lowercase `k` tag (empty if absent). D1.
+         */parentKind: String,
+        /**
+         * Event `created_at` unix seconds. D1: no formatting.
+         */createdAt: UInt64,
+        /**
+         * `true` when `parent_tag_value == root_tag_value` (top-level comment,
+         * per NIP-22 §3). Swift may use this to efficiently partition
+         * root comments from replies without re-computing the comparison.
+         */isTopLevel: Bool,
+        /**
+         * Per-comment like count from `AppState::reaction_state` (kind:7 `+`
+         * reactions to this comment's `event_id`), as projected by the global
+         * `ReactionProjection`. Raw u32 — Swift formats any label (D1). `0` when
+         * no reactions are known for this event.
+         */likeCount: UInt32,
+        /**
+         * `true` when the active viewer has liked this comment (`viewer_reacted`
+         * from `AppState::reaction_state`). Optimistic toggling lives in Swift (D1).
+         */viewerReacted: Bool,
+        /**
+         * `true` when this comment's `event_id` is in the active account's
+         * kind:10003 bookmark list (`AppState::bookmarks`). D1.
+         */bookmarked: Bool) {
+        self.eventId = eventId
+        self.authorPubkey = authorPubkey
+        self.body = body
+        self.rootTagName = rootTagName
+        self.rootTagValue = rootTagValue
+        self.rootKind = rootKind
+        self.parentTagName = parentTagName
+        self.parentTagValue = parentTagValue
+        self.parentKind = parentKind
+        self.createdAt = createdAt
+        self.isTopLevel = isTopLevel
+        self.likeCount = likeCount
+        self.viewerReacted = viewerReacted
+        self.bookmarked = bookmarked
+    }
+}
+
+#if compiler(>=6)
+extension CommentRecordRow: Sendable {}
+#endif
+
+
+extension CommentRecordRow: Equatable, Hashable {
+    public static func ==(lhs: CommentRecordRow, rhs: CommentRecordRow) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.authorPubkey != rhs.authorPubkey {
+            return false
+        }
+        if lhs.body != rhs.body {
+            return false
+        }
+        if lhs.rootTagName != rhs.rootTagName {
+            return false
+        }
+        if lhs.rootTagValue != rhs.rootTagValue {
+            return false
+        }
+        if lhs.rootKind != rhs.rootKind {
+            return false
+        }
+        if lhs.parentTagName != rhs.parentTagName {
+            return false
+        }
+        if lhs.parentTagValue != rhs.parentTagValue {
+            return false
+        }
+        if lhs.parentKind != rhs.parentKind {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.isTopLevel != rhs.isTopLevel {
+            return false
+        }
+        if lhs.likeCount != rhs.likeCount {
+            return false
+        }
+        if lhs.viewerReacted != rhs.viewerReacted {
+            return false
+        }
+        if lhs.bookmarked != rhs.bookmarked {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(authorPubkey)
+        hasher.combine(body)
+        hasher.combine(rootTagName)
+        hasher.combine(rootTagValue)
+        hasher.combine(rootKind)
+        hasher.combine(parentTagName)
+        hasher.combine(parentTagValue)
+        hasher.combine(parentKind)
+        hasher.combine(createdAt)
+        hasher.combine(isTopLevel)
+        hasher.combine(likeCount)
+        hasher.combine(viewerReacted)
+        hasher.combine(bookmarked)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentRecordRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentRecordRow {
+        return
+            try CommentRecordRow(
+                eventId: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                body: FfiConverterString.read(from: &buf),
+                rootTagName: FfiConverterString.read(from: &buf),
+                rootTagValue: FfiConverterString.read(from: &buf),
+                rootKind: FfiConverterString.read(from: &buf),
+                parentTagName: FfiConverterString.read(from: &buf),
+                parentTagValue: FfiConverterString.read(from: &buf),
+                parentKind: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
+                isTopLevel: FfiConverterBool.read(from: &buf),
+                likeCount: FfiConverterUInt32.read(from: &buf),
+                viewerReacted: FfiConverterBool.read(from: &buf),
+                bookmarked: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentRecordRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.authorPubkey, into: &buf)
+        FfiConverterString.write(value.body, into: &buf)
+        FfiConverterString.write(value.rootTagName, into: &buf)
+        FfiConverterString.write(value.rootTagValue, into: &buf)
+        FfiConverterString.write(value.rootKind, into: &buf)
+        FfiConverterString.write(value.parentTagName, into: &buf)
+        FfiConverterString.write(value.parentTagValue, into: &buf)
+        FfiConverterString.write(value.parentKind, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+        FfiConverterBool.write(value.isTopLevel, into: &buf)
+        FfiConverterUInt32.write(value.likeCount, into: &buf)
+        FfiConverterBool.write(value.viewerReacted, into: &buf)
+        FfiConverterBool.write(value.bookmarked, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentRecordRow_lift(_ buf: RustBuffer) throws -> CommentRecordRow {
+    return try FfiConverterTypeCommentRecordRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentRecordRow_lower(_ value: CommentRecordRow) -> RustBuffer {
+    return FfiConverterTypeCommentRecordRow.lower(value)
+}
+
+
 public struct CommentReferenceBucket {
     public var commentKey: String
     public var comments: [CommentRecord]
@@ -16832,6 +17518,109 @@ public func FfiConverterTypeCommentSnapshotApplyProjection_lift(_ buf: RustBuffe
 #endif
 public func FfiConverterTypeCommentSnapshotApplyProjection_lower(_ value: CommentSnapshotApplyProjection) -> RustBuffer {
     return FfiConverterTypeCommentSnapshotApplyProjection.lower(value)
+}
+
+
+/**
+ * Snapshot for `ViewId::CommentThread` — flat raw comment list for one root.
+ *
+ * D1: no formatted strings, no tree nesting in the snapshot. Swift builds the
+ * display tree from `parent_tag_value` links. `comment_count` = `records.len()`.
+ * Bounded by `MAX_PROJECTION_MESSAGES` from nmp-core (Non-Negotiable #7).
+ */
+public struct CommentThreadKernelSnapshot {
+    /**
+     * Root scope tag value this snapshot is for.
+     */
+    public var rootTagValue: String
+    /**
+     * Flat list of comment records for this root, newest-first. D1.
+     */
+    public var records: [CommentRecordRow]
+    /**
+     * Total comment count (`records.len() as u32`). Raw — no `"N comments"` label.
+     */
+    public var commentCount: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Root scope tag value this snapshot is for.
+         */rootTagValue: String,
+        /**
+         * Flat list of comment records for this root, newest-first. D1.
+         */records: [CommentRecordRow],
+        /**
+         * Total comment count (`records.len() as u32`). Raw — no `"N comments"` label.
+         */commentCount: UInt32) {
+        self.rootTagValue = rootTagValue
+        self.records = records
+        self.commentCount = commentCount
+    }
+}
+
+#if compiler(>=6)
+extension CommentThreadKernelSnapshot: Sendable {}
+#endif
+
+
+extension CommentThreadKernelSnapshot: Equatable, Hashable {
+    public static func ==(lhs: CommentThreadKernelSnapshot, rhs: CommentThreadKernelSnapshot) -> Bool {
+        if lhs.rootTagValue != rhs.rootTagValue {
+            return false
+        }
+        if lhs.records != rhs.records {
+            return false
+        }
+        if lhs.commentCount != rhs.commentCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rootTagValue)
+        hasher.combine(records)
+        hasher.combine(commentCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCommentThreadKernelSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CommentThreadKernelSnapshot {
+        return
+            try CommentThreadKernelSnapshot(
+                rootTagValue: FfiConverterString.read(from: &buf),
+                records: FfiConverterSequenceTypeCommentRecordRow.read(from: &buf),
+                commentCount: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CommentThreadKernelSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.rootTagValue, into: &buf)
+        FfiConverterSequenceTypeCommentRecordRow.write(value.records, into: &buf)
+        FfiConverterUInt32.write(value.commentCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentThreadKernelSnapshot_lift(_ buf: RustBuffer) throws -> CommentThreadKernelSnapshot {
+    return try FfiConverterTypeCommentThreadKernelSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCommentThreadKernelSnapshot_lower(_ value: CommentThreadKernelSnapshot) -> RustBuffer {
+    return FfiConverterTypeCommentThreadKernelSnapshot.lower(value)
 }
 
 
@@ -20218,6 +21007,154 @@ public func FfiConverterTypeDiscussionRecord_lower(_ value: DiscussionRecord) ->
 }
 
 
+/**
+ * One kind:11 discussion row from a NIP-29 room — raw protocol data only (D1).
+ *
+ * Filtered from `GroupEventsProjection` rows: kind==11 AND `["t","discussion"]`
+ * tag present. `title` comes from the `["title", _]` tag; `body` is the event
+ * `content` field. `attachment_url` is extracted from an `["r", url]` tag.
+ *
+ * D1: no `"Untitled discussion"` fallback — Swift owns display fallbacks.
+ * D1: no formatted timestamps — `created_at` is raw Unix seconds.
+ */
+public struct DiscussionRow {
+    /**
+     * Raw 64-char hex event id of the kind:11 event.
+     */
+    public var eventId: String
+    /**
+     * Raw 64-char hex author pubkey.
+     */
+    public var authorPubkey: String
+    /**
+     * `["title", _]` tag value, or empty string when absent. D1: no fallback.
+     */
+    public var title: String
+    /**
+     * Event `content` field (discussion body). May be empty.
+     */
+    public var body: String
+    /**
+     * `["r", url]` tag value if present, else `None`.
+     */
+    public var attachmentUrl: String?
+    /**
+     * Event `created_at` Unix seconds. D1: no "X ago" formatting.
+     */
+    public var createdAt: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Raw 64-char hex event id of the kind:11 event.
+         */eventId: String,
+        /**
+         * Raw 64-char hex author pubkey.
+         */authorPubkey: String,
+        /**
+         * `["title", _]` tag value, or empty string when absent. D1: no fallback.
+         */title: String,
+        /**
+         * Event `content` field (discussion body). May be empty.
+         */body: String,
+        /**
+         * `["r", url]` tag value if present, else `None`.
+         */attachmentUrl: String?,
+        /**
+         * Event `created_at` Unix seconds. D1: no "X ago" formatting.
+         */createdAt: UInt64) {
+        self.eventId = eventId
+        self.authorPubkey = authorPubkey
+        self.title = title
+        self.body = body
+        self.attachmentUrl = attachmentUrl
+        self.createdAt = createdAt
+    }
+}
+
+#if compiler(>=6)
+extension DiscussionRow: Sendable {}
+#endif
+
+
+extension DiscussionRow: Equatable, Hashable {
+    public static func ==(lhs: DiscussionRow, rhs: DiscussionRow) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.authorPubkey != rhs.authorPubkey {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.body != rhs.body {
+            return false
+        }
+        if lhs.attachmentUrl != rhs.attachmentUrl {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(authorPubkey)
+        hasher.combine(title)
+        hasher.combine(body)
+        hasher.combine(attachmentUrl)
+        hasher.combine(createdAt)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDiscussionRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DiscussionRow {
+        return
+            try DiscussionRow(
+                eventId: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                title: FfiConverterString.read(from: &buf),
+                body: FfiConverterString.read(from: &buf),
+                attachmentUrl: FfiConverterOptionString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DiscussionRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.authorPubkey, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.body, into: &buf)
+        FfiConverterOptionString.write(value.attachmentUrl, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionRow_lift(_ buf: RustBuffer) throws -> DiscussionRow {
+    return try FfiConverterTypeDiscussionRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDiscussionRow_lower(_ value: DiscussionRow) -> RustBuffer {
+    return FfiConverterTypeDiscussionRow.lower(value)
+}
+
+
 public struct EditedBookPreviewProjection {
     public var preview: ArtifactPreview?
     public var error: String
@@ -20709,6 +21646,170 @@ public func FfiConverterTypeFeedbackMessagePresentationProjection_lift(_ buf: Ru
 #endif
 public func FfiConverterTypeFeedbackMessagePresentationProjection_lower(_ value: FeedbackMessagePresentationProjection) -> RustBuffer {
     return FfiConverterTypeFeedbackMessagePresentationProjection.lower(value)
+}
+
+
+/**
+ * One message row in a feedback thread detail view.
+ *
+ * Includes the root comment and all descendant replies. Sorted oldest-first.
+ *
+ * D1: no formatted timestamps, no byline strings, no `is_from_me` flag (native
+ * computes those from the active session and profile snapshots).
+ */
+public struct FeedbackMessageRow {
+    /**
+     * kind:1111 event id (raw 64-char hex). D1.
+     */
+    public var eventId: String
+    /**
+     * Event id of the thread root comment this row belongs to. D1.
+     */
+    public var rootEventId: String
+    /**
+     * Author pubkey (raw 64-char hex). D1.
+     */
+    public var authorPubkey: String
+    /**
+     * `created_at` unix seconds. D1: no formatting.
+     */
+    public var createdAt: UInt64
+    /**
+     * Raw comment body text. D1.
+     */
+    public var content: String
+    /**
+     * Event id of the parent comment, if this is a nested reply. `None` for
+     * direct replies to the root (parent_tag_value == root_event_id). D1.
+     */
+    public var parentEventId: String?
+    /**
+     * `true` on first row, author change, or gap > 300 seconds.
+     * Swift uses this to show the author/timestamp header cell. D1: boolean only.
+     */
+    public var showHeader: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * kind:1111 event id (raw 64-char hex). D1.
+         */eventId: String,
+        /**
+         * Event id of the thread root comment this row belongs to. D1.
+         */rootEventId: String,
+        /**
+         * Author pubkey (raw 64-char hex). D1.
+         */authorPubkey: String,
+        /**
+         * `created_at` unix seconds. D1: no formatting.
+         */createdAt: UInt64,
+        /**
+         * Raw comment body text. D1.
+         */content: String,
+        /**
+         * Event id of the parent comment, if this is a nested reply. `None` for
+         * direct replies to the root (parent_tag_value == root_event_id). D1.
+         */parentEventId: String?,
+        /**
+         * `true` on first row, author change, or gap > 300 seconds.
+         * Swift uses this to show the author/timestamp header cell. D1: boolean only.
+         */showHeader: Bool) {
+        self.eventId = eventId
+        self.rootEventId = rootEventId
+        self.authorPubkey = authorPubkey
+        self.createdAt = createdAt
+        self.content = content
+        self.parentEventId = parentEventId
+        self.showHeader = showHeader
+    }
+}
+
+#if compiler(>=6)
+extension FeedbackMessageRow: Sendable {}
+#endif
+
+
+extension FeedbackMessageRow: Equatable, Hashable {
+    public static func ==(lhs: FeedbackMessageRow, rhs: FeedbackMessageRow) -> Bool {
+        if lhs.eventId != rhs.eventId {
+            return false
+        }
+        if lhs.rootEventId != rhs.rootEventId {
+            return false
+        }
+        if lhs.authorPubkey != rhs.authorPubkey {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.content != rhs.content {
+            return false
+        }
+        if lhs.parentEventId != rhs.parentEventId {
+            return false
+        }
+        if lhs.showHeader != rhs.showHeader {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(eventId)
+        hasher.combine(rootEventId)
+        hasher.combine(authorPubkey)
+        hasher.combine(createdAt)
+        hasher.combine(content)
+        hasher.combine(parentEventId)
+        hasher.combine(showHeader)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeedbackMessageRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackMessageRow {
+        return
+            try FeedbackMessageRow(
+                eventId: FfiConverterString.read(from: &buf),
+                rootEventId: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
+                content: FfiConverterString.read(from: &buf),
+                parentEventId: FfiConverterOptionString.read(from: &buf),
+                showHeader: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FeedbackMessageRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.eventId, into: &buf)
+        FfiConverterString.write(value.rootEventId, into: &buf)
+        FfiConverterString.write(value.authorPubkey, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+        FfiConverterString.write(value.content, into: &buf)
+        FfiConverterOptionString.write(value.parentEventId, into: &buf)
+        FfiConverterBool.write(value.showHeader, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackMessageRow_lift(_ buf: RustBuffer) throws -> FeedbackMessageRow {
+    return try FfiConverterTypeFeedbackMessageRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackMessageRow_lower(_ value: FeedbackMessageRow) -> RustBuffer {
+    return FfiConverterTypeFeedbackMessageRow.lower(value)
 }
 
 
@@ -21409,6 +22510,198 @@ public func FfiConverterTypeFeedbackThreadRecord_lift(_ buf: RustBuffer) throws 
 #endif
 public func FfiConverterTypeFeedbackThreadRecord_lower(_ value: FeedbackThreadRecord) -> RustBuffer {
     return FfiConverterTypeFeedbackThreadRecord.lower(value)
+}
+
+
+/**
+ * One feedback thread root visible in the feedback thread list.
+ *
+ * Derived from top-level NIP-22 kind:1111 records in
+ * `AppState::comment_threads[HIGHLIGHTER_PROJECT_COORDINATE]` whose
+ * `author_pubkey` matches the active viewer.
+ *
+ * D1: no formatted strings. `title`, `summary`, `status_label` are `None` until
+ * an explicit HL metadata source is wired. `preview` is whitespace-collapsed
+ * raw body text (≤140 chars). `last_activity_at` = max `created_at` over root
+ * + direct replies.
+ */
+public struct FeedbackThreadRow {
+    /**
+     * Event id of the top-level root kind:1111 comment (raw 64-char hex). D1.
+     */
+    public var rootEventId: String
+    /**
+     * Author pubkey of the root comment (raw 64-char hex). D1.
+     */
+    public var authorPubkey: String
+    /**
+     * `created_at` of the root comment (unix seconds). D1.
+     */
+    public var createdAt: UInt64
+    /**
+     * Max `created_at` of root + all direct replies (unix seconds). D1.
+     */
+    public var lastActivityAt: UInt64
+    /**
+     * Optional thread title — `None` without an HL metadata source. D1.
+     */
+    public var title: String?
+    /**
+     * Optional thread summary — `None` without an HL metadata source. D1.
+     */
+    public var summary: String?
+    /**
+     * Optional status label — `None` without an HL metadata source. D1.
+     */
+    public var statusLabel: String?
+    /**
+     * Whitespace-collapsed preview of the root body, capped at 140 chars. D1.
+     */
+    public var preview: String
+    /**
+     * Count of direct replies under this root. Raw u32 — no label. D1.
+     */
+    public var replyCount: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Event id of the top-level root kind:1111 comment (raw 64-char hex). D1.
+         */rootEventId: String,
+        /**
+         * Author pubkey of the root comment (raw 64-char hex). D1.
+         */authorPubkey: String,
+        /**
+         * `created_at` of the root comment (unix seconds). D1.
+         */createdAt: UInt64,
+        /**
+         * Max `created_at` of root + all direct replies (unix seconds). D1.
+         */lastActivityAt: UInt64,
+        /**
+         * Optional thread title — `None` without an HL metadata source. D1.
+         */title: String?,
+        /**
+         * Optional thread summary — `None` without an HL metadata source. D1.
+         */summary: String?,
+        /**
+         * Optional status label — `None` without an HL metadata source. D1.
+         */statusLabel: String?,
+        /**
+         * Whitespace-collapsed preview of the root body, capped at 140 chars. D1.
+         */preview: String,
+        /**
+         * Count of direct replies under this root. Raw u32 — no label. D1.
+         */replyCount: UInt32) {
+        self.rootEventId = rootEventId
+        self.authorPubkey = authorPubkey
+        self.createdAt = createdAt
+        self.lastActivityAt = lastActivityAt
+        self.title = title
+        self.summary = summary
+        self.statusLabel = statusLabel
+        self.preview = preview
+        self.replyCount = replyCount
+    }
+}
+
+#if compiler(>=6)
+extension FeedbackThreadRow: Sendable {}
+#endif
+
+
+extension FeedbackThreadRow: Equatable, Hashable {
+    public static func ==(lhs: FeedbackThreadRow, rhs: FeedbackThreadRow) -> Bool {
+        if lhs.rootEventId != rhs.rootEventId {
+            return false
+        }
+        if lhs.authorPubkey != rhs.authorPubkey {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.lastActivityAt != rhs.lastActivityAt {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.summary != rhs.summary {
+            return false
+        }
+        if lhs.statusLabel != rhs.statusLabel {
+            return false
+        }
+        if lhs.preview != rhs.preview {
+            return false
+        }
+        if lhs.replyCount != rhs.replyCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rootEventId)
+        hasher.combine(authorPubkey)
+        hasher.combine(createdAt)
+        hasher.combine(lastActivityAt)
+        hasher.combine(title)
+        hasher.combine(summary)
+        hasher.combine(statusLabel)
+        hasher.combine(preview)
+        hasher.combine(replyCount)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFeedbackThreadRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FeedbackThreadRow {
+        return
+            try FeedbackThreadRow(
+                rootEventId: FfiConverterString.read(from: &buf),
+                authorPubkey: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf),
+                lastActivityAt: FfiConverterUInt64.read(from: &buf),
+                title: FfiConverterOptionString.read(from: &buf),
+                summary: FfiConverterOptionString.read(from: &buf),
+                statusLabel: FfiConverterOptionString.read(from: &buf),
+                preview: FfiConverterString.read(from: &buf),
+                replyCount: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FeedbackThreadRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.rootEventId, into: &buf)
+        FfiConverterString.write(value.authorPubkey, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+        FfiConverterUInt64.write(value.lastActivityAt, into: &buf)
+        FfiConverterOptionString.write(value.title, into: &buf)
+        FfiConverterOptionString.write(value.summary, into: &buf)
+        FfiConverterOptionString.write(value.statusLabel, into: &buf)
+        FfiConverterString.write(value.preview, into: &buf)
+        FfiConverterUInt32.write(value.replyCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackThreadRow_lift(_ buf: RustBuffer) throws -> FeedbackThreadRow {
+    return try FfiConverterTypeFeedbackThreadRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFeedbackThreadRow_lower(_ value: FeedbackThreadRow) -> RustBuffer {
+    return FfiConverterTypeFeedbackThreadRow.lower(value)
 }
 
 
@@ -26081,6 +27374,254 @@ public func FfiConverterTypeKernelCaptureSnapshot_lift(_ buf: RustBuffer) throws
 #endif
 public func FfiConverterTypeKernelCaptureSnapshot_lower(_ value: KernelCaptureSnapshot) -> RustBuffer {
     return FfiConverterTypeKernelCaptureSnapshot.lower(value)
+}
+
+
+/**
+ * Snapshot for `ViewId::FeedbackThread { root_event_id }` — thread detail.
+ *
+ * Contains the root record + all descendant replies (ancestor-chain traversal),
+ * sorted oldest-first. Bounded by the NMP `CommentThreadProjection` cap
+ * (Non-Negotiable #7).
+ */
+public struct KernelFeedbackThreadSnapshot {
+    /**
+     * The NIP-22 root scope value (`HIGHLIGHTER_PROJECT_COORDINATE`). D1.
+     */
+    public var rootTagValue: String
+    /**
+     * Event id of the thread root comment. D1.
+     */
+    public var rootEventId: String
+    /**
+     * Thread message rows, sorted oldest-first. D1.
+     */
+    public var rows: [FeedbackMessageRow]
+    /**
+     * `true` while a `hl.feedback.post_reply` action is in flight.
+     */
+    public var isPublishing: Bool
+    /**
+     * Last publish error, if any. `None` when clean. D1.
+     */
+    public var error: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The NIP-22 root scope value (`HIGHLIGHTER_PROJECT_COORDINATE`). D1.
+         */rootTagValue: String,
+        /**
+         * Event id of the thread root comment. D1.
+         */rootEventId: String,
+        /**
+         * Thread message rows, sorted oldest-first. D1.
+         */rows: [FeedbackMessageRow],
+        /**
+         * `true` while a `hl.feedback.post_reply` action is in flight.
+         */isPublishing: Bool,
+        /**
+         * Last publish error, if any. `None` when clean. D1.
+         */error: String?) {
+        self.rootTagValue = rootTagValue
+        self.rootEventId = rootEventId
+        self.rows = rows
+        self.isPublishing = isPublishing
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension KernelFeedbackThreadSnapshot: Sendable {}
+#endif
+
+
+extension KernelFeedbackThreadSnapshot: Equatable, Hashable {
+    public static func ==(lhs: KernelFeedbackThreadSnapshot, rhs: KernelFeedbackThreadSnapshot) -> Bool {
+        if lhs.rootTagValue != rhs.rootTagValue {
+            return false
+        }
+        if lhs.rootEventId != rhs.rootEventId {
+            return false
+        }
+        if lhs.rows != rhs.rows {
+            return false
+        }
+        if lhs.isPublishing != rhs.isPublishing {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rootTagValue)
+        hasher.combine(rootEventId)
+        hasher.combine(rows)
+        hasher.combine(isPublishing)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelFeedbackThreadSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelFeedbackThreadSnapshot {
+        return
+            try KernelFeedbackThreadSnapshot(
+                rootTagValue: FfiConverterString.read(from: &buf),
+                rootEventId: FfiConverterString.read(from: &buf),
+                rows: FfiConverterSequenceTypeFeedbackMessageRow.read(from: &buf),
+                isPublishing: FfiConverterBool.read(from: &buf),
+                error: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelFeedbackThreadSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.rootTagValue, into: &buf)
+        FfiConverterString.write(value.rootEventId, into: &buf)
+        FfiConverterSequenceTypeFeedbackMessageRow.write(value.rows, into: &buf)
+        FfiConverterBool.write(value.isPublishing, into: &buf)
+        FfiConverterOptionString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelFeedbackThreadSnapshot_lift(_ buf: RustBuffer) throws -> KernelFeedbackThreadSnapshot {
+    return try FfiConverterTypeKernelFeedbackThreadSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelFeedbackThreadSnapshot_lower(_ value: KernelFeedbackThreadSnapshot) -> RustBuffer {
+    return FfiConverterTypeKernelFeedbackThreadSnapshot.lower(value)
+}
+
+
+/**
+ * Snapshot for `ViewId::FeedbackThreads` — the feedback thread list.
+ *
+ * Bounded at 256 entries (Non-Negotiable #7). Sorted newest activity first.
+ * D1: no formatted strings; `is_publishing` and `error` carry publish-FSM state
+ * for the composer only (native owns all display formatting).
+ */
+public struct KernelFeedbackThreadsSnapshot {
+    /**
+     * The NIP-22 root scope value (`HIGHLIGHTER_PROJECT_COORDINATE`). D1.
+     */
+    public var rootTagValue: String
+    /**
+     * Thread rows for the active viewer, sorted by `last_activity_at` desc. D1.
+     */
+    public var threads: [FeedbackThreadRow]
+    /**
+     * `true` while a `hl.feedback.post_root` action is in flight.
+     */
+    public var isPublishing: Bool
+    /**
+     * Last publish error, if any. `None` when clean. D1: raw error string.
+     */
+    public var error: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The NIP-22 root scope value (`HIGHLIGHTER_PROJECT_COORDINATE`). D1.
+         */rootTagValue: String,
+        /**
+         * Thread rows for the active viewer, sorted by `last_activity_at` desc. D1.
+         */threads: [FeedbackThreadRow],
+        /**
+         * `true` while a `hl.feedback.post_root` action is in flight.
+         */isPublishing: Bool,
+        /**
+         * Last publish error, if any. `None` when clean. D1: raw error string.
+         */error: String?) {
+        self.rootTagValue = rootTagValue
+        self.threads = threads
+        self.isPublishing = isPublishing
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension KernelFeedbackThreadsSnapshot: Sendable {}
+#endif
+
+
+extension KernelFeedbackThreadsSnapshot: Equatable, Hashable {
+    public static func ==(lhs: KernelFeedbackThreadsSnapshot, rhs: KernelFeedbackThreadsSnapshot) -> Bool {
+        if lhs.rootTagValue != rhs.rootTagValue {
+            return false
+        }
+        if lhs.threads != rhs.threads {
+            return false
+        }
+        if lhs.isPublishing != rhs.isPublishing {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rootTagValue)
+        hasher.combine(threads)
+        hasher.combine(isPublishing)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelFeedbackThreadsSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelFeedbackThreadsSnapshot {
+        return
+            try KernelFeedbackThreadsSnapshot(
+                rootTagValue: FfiConverterString.read(from: &buf),
+                threads: FfiConverterSequenceTypeFeedbackThreadRow.read(from: &buf),
+                isPublishing: FfiConverterBool.read(from: &buf),
+                error: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelFeedbackThreadsSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.rootTagValue, into: &buf)
+        FfiConverterSequenceTypeFeedbackThreadRow.write(value.threads, into: &buf)
+        FfiConverterBool.write(value.isPublishing, into: &buf)
+        FfiConverterOptionString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelFeedbackThreadsSnapshot_lift(_ buf: RustBuffer) throws -> KernelFeedbackThreadsSnapshot {
+    return try FfiConverterTypeKernelFeedbackThreadsSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelFeedbackThreadsSnapshot_lower(_ value: KernelFeedbackThreadsSnapshot) -> RustBuffer {
+    return FfiConverterTypeKernelFeedbackThreadsSnapshot.lower(value)
 }
 
 
@@ -36422,7 +37963,7 @@ public struct RelayDiagRow {
      */
     public var lastConnectedMs: UInt64
     /**
-     * Parsed connection state derived from nmp's `connection_tone` field.
+     * Parsed connection state derived from nmp's raw `connection` lifecycle string.
      */
     public var connectionState: RelayConnectionState
     /**
@@ -36455,7 +37996,7 @@ public struct RelayDiagRow {
          * has never connected. Swift shell formats as "Xs ago" at render time.
          */lastConnectedMs: UInt64,
         /**
-         * Parsed connection state derived from nmp's `connection_tone` field.
+         * Parsed connection state derived from nmp's raw `connection` lifecycle string.
          */connectionState: RelayConnectionState,
         /**
          * Total wire subscriptions known for this relay.
@@ -38042,6 +39583,153 @@ public func FfiConverterTypeRoomBrowseSnapshotApplyProjection_lower(_ value: Roo
 }
 
 
+/**
+ * Snapshot for `ViewId::RoomChat { group_id }` — bounded raw chat rows for one
+ * NIP-29 room.
+ *
+ * Rows are projected oldest-first for the visible window so the chat scrolls
+ * downward naturally. Window size is `page_count * 50`, hard-capped at 1000.
+ *
+ * D1: no formatted strings. D5: bounded window. D6: empty when room not open.
+ */
+public struct RoomChatSnapshot {
+    /**
+     * NIP-29 local group id.
+     */
+    public var groupId: String
+    /**
+     * Oldest-first display rows for the visible window.
+     */
+    public var rows: [ChatMessageRow]
+    /**
+     * `true` when more messages exist beyond the visible window.
+     */
+    public var hasMore: Bool
+    /**
+     * Current page count (1–20). Incremented by `hl.chat.load_more`.
+     */
+    public var pageCount: UInt32
+    /**
+     * `true` when at least one message has been received for this room.
+     */
+    public var hasActivity: Bool
+    /**
+     * Monotonic revision bumped on every `ChatRoomUpdated` for change detection.
+     */
+    public var activityRevision: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * NIP-29 local group id.
+         */groupId: String,
+        /**
+         * Oldest-first display rows for the visible window.
+         */rows: [ChatMessageRow],
+        /**
+         * `true` when more messages exist beyond the visible window.
+         */hasMore: Bool,
+        /**
+         * Current page count (1–20). Incremented by `hl.chat.load_more`.
+         */pageCount: UInt32,
+        /**
+         * `true` when at least one message has been received for this room.
+         */hasActivity: Bool,
+        /**
+         * Monotonic revision bumped on every `ChatRoomUpdated` for change detection.
+         */activityRevision: UInt64) {
+        self.groupId = groupId
+        self.rows = rows
+        self.hasMore = hasMore
+        self.pageCount = pageCount
+        self.hasActivity = hasActivity
+        self.activityRevision = activityRevision
+    }
+}
+
+#if compiler(>=6)
+extension RoomChatSnapshot: Sendable {}
+#endif
+
+
+extension RoomChatSnapshot: Equatable, Hashable {
+    public static func ==(lhs: RoomChatSnapshot, rhs: RoomChatSnapshot) -> Bool {
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.rows != rhs.rows {
+            return false
+        }
+        if lhs.hasMore != rhs.hasMore {
+            return false
+        }
+        if lhs.pageCount != rhs.pageCount {
+            return false
+        }
+        if lhs.hasActivity != rhs.hasActivity {
+            return false
+        }
+        if lhs.activityRevision != rhs.activityRevision {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groupId)
+        hasher.combine(rows)
+        hasher.combine(hasMore)
+        hasher.combine(pageCount)
+        hasher.combine(hasActivity)
+        hasher.combine(activityRevision)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomChatSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomChatSnapshot {
+        return
+            try RoomChatSnapshot(
+                groupId: FfiConverterString.read(from: &buf),
+                rows: FfiConverterSequenceTypeChatMessageRow.read(from: &buf),
+                hasMore: FfiConverterBool.read(from: &buf),
+                pageCount: FfiConverterUInt32.read(from: &buf),
+                hasActivity: FfiConverterBool.read(from: &buf),
+                activityRevision: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomChatSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterSequenceTypeChatMessageRow.write(value.rows, into: &buf)
+        FfiConverterBool.write(value.hasMore, into: &buf)
+        FfiConverterUInt32.write(value.pageCount, into: &buf)
+        FfiConverterBool.write(value.hasActivity, into: &buf)
+        FfiConverterUInt64.write(value.activityRevision, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomChatSnapshot_lift(_ buf: RustBuffer) throws -> RoomChatSnapshot {
+    return try FfiConverterTypeRoomChatSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomChatSnapshot_lower(_ value: RoomChatSnapshot) -> RustBuffer {
+    return FfiConverterTypeRoomChatSnapshot.lower(value)
+}
+
+
 public struct RoomCoverCardProjection {
     public var subtitle: String
 
@@ -38225,6 +39913,96 @@ public func FfiConverterTypeRoomDiscussionSnapshot_lift(_ buf: RustBuffer) throw
 #endif
 public func FfiConverterTypeRoomDiscussionSnapshot_lower(_ value: RoomDiscussionSnapshot) -> RustBuffer {
     return FfiConverterTypeRoomDiscussionSnapshot.lower(value)
+}
+
+
+/**
+ * Snapshot for `ViewId::RoomDiscussions{group_id}` — the per-room discussions tab.
+ *
+ * Raw protocol rows only (D1): Swift formats all display strings (title fallback,
+ * author name, date label, attachment chip, empty-state copy).
+ *
+ * Bounded at `ROOM_DISCUSSIONS_CAP` (64) rows per room, newest-first.
+ */
+public struct RoomDiscussionsSnapshot {
+    /**
+     * NIP-29 local group id this snapshot is for.
+     */
+    public var groupId: String
+    /**
+     * Filtered kind:11+discussion rows, newest-first. Bounded at 64.
+     */
+    public var rows: [DiscussionRow]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * NIP-29 local group id this snapshot is for.
+         */groupId: String,
+        /**
+         * Filtered kind:11+discussion rows, newest-first. Bounded at 64.
+         */rows: [DiscussionRow]) {
+        self.groupId = groupId
+        self.rows = rows
+    }
+}
+
+#if compiler(>=6)
+extension RoomDiscussionsSnapshot: Sendable {}
+#endif
+
+
+extension RoomDiscussionsSnapshot: Equatable, Hashable {
+    public static func ==(lhs: RoomDiscussionsSnapshot, rhs: RoomDiscussionsSnapshot) -> Bool {
+        if lhs.groupId != rhs.groupId {
+            return false
+        }
+        if lhs.rows != rhs.rows {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groupId)
+        hasher.combine(rows)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRoomDiscussionsSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomDiscussionsSnapshot {
+        return
+            try RoomDiscussionsSnapshot(
+                groupId: FfiConverterString.read(from: &buf),
+                rows: FfiConverterSequenceTypeDiscussionRow.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RoomDiscussionsSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.groupId, into: &buf)
+        FfiConverterSequenceTypeDiscussionRow.write(value.rows, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomDiscussionsSnapshot_lift(_ buf: RustBuffer) throws -> RoomDiscussionsSnapshot {
+    return try FfiConverterTypeRoomDiscussionsSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRoomDiscussionsSnapshot_lower(_ value: RoomDiscussionsSnapshot) -> RustBuffer {
+    return FfiConverterTypeRoomDiscussionsSnapshot.lower(value)
 }
 
 
@@ -43573,6 +45351,14 @@ public struct SearchSnapshot {
      * Raw fields only — no "X results" count label, no formatted strings (D1).
      */
     public var hits: [KernelSearchHitRow]
+    /**
+     * The most recent omnibox classification outcome (`#1865` input-intent
+     * resolver), or `None` if the field has not classified an input yet. The
+     * shell routes on this: `Navigate`/`OpenGroup`/`ResolveNip05` drive
+     * navigation, `RejectSecret` shows a safe-reject hint, `FreeText` keeps the
+     * result buckets. The shell consumes it after routing (one-shot).
+     */
+    public var omnibox: OmniboxOutcome?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -43580,8 +45366,16 @@ public struct SearchSnapshot {
         /**
          * Ordered (by `created_at` descending, then `id` ascending) search hit rows.
          * Raw fields only — no "X results" count label, no formatted strings (D1).
-         */hits: [KernelSearchHitRow]) {
+         */hits: [KernelSearchHitRow],
+        /**
+         * The most recent omnibox classification outcome (`#1865` input-intent
+         * resolver), or `None` if the field has not classified an input yet. The
+         * shell routes on this: `Navigate`/`OpenGroup`/`ResolveNip05` drive
+         * navigation, `RejectSecret` shows a safe-reject hint, `FreeText` keeps the
+         * result buckets. The shell consumes it after routing (one-shot).
+         */omnibox: OmniboxOutcome?) {
         self.hits = hits
+        self.omnibox = omnibox
     }
 }
 
@@ -43595,11 +45389,15 @@ extension SearchSnapshot: Equatable, Hashable {
         if lhs.hits != rhs.hits {
             return false
         }
+        if lhs.omnibox != rhs.omnibox {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(hits)
+        hasher.combine(omnibox)
     }
 }
 
@@ -43612,12 +45410,14 @@ public struct FfiConverterTypeSearchSnapshot: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SearchSnapshot {
         return
             try SearchSnapshot(
-                hits: FfiConverterSequenceTypeKernelSearchHitRow.read(from: &buf)
+                hits: FfiConverterSequenceTypeKernelSearchHitRow.read(from: &buf),
+                omnibox: FfiConverterOptionTypeOmniboxOutcome.read(from: &buf)
         )
     }
 
     public static func write(_ value: SearchSnapshot, into buf: inout [UInt8]) {
         FfiConverterSequenceTypeKernelSearchHitRow.write(value.hits, into: &buf)
+        FfiConverterOptionTypeOmniboxOutcome.write(value.omnibox, into: &buf)
     }
 }
 
@@ -47390,6 +49190,119 @@ extension ArtifactDetailTarget: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * Content type of an artifact-preview coordinate.
+ *
+ * Variants are raw protocol-level kinds — no display labels (D1). Swift formats
+ * all human-readable strings ("Article", "Book", etc.).
+ *
+ * Append-only: new variants at the bottom keep rebases mechanical.
+ */
+
+public enum ArtifactPreviewKind {
+
+    case article
+    case book
+    case podcast
+    case video
+    case paper
+    case web
+    case unknown
+}
+
+
+#if compiler(>=6)
+extension ArtifactPreviewKind: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArtifactPreviewKind: FfiConverterRustBuffer {
+    typealias SwiftType = ArtifactPreviewKind
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactPreviewKind {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .article
+
+        case 2: return .book
+
+        case 3: return .podcast
+
+        case 4: return .video
+
+        case 5: return .paper
+
+        case 6: return .web
+
+        case 7: return .unknown
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ArtifactPreviewKind, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .article:
+            writeInt(&buf, Int32(1))
+
+
+        case .book:
+            writeInt(&buf, Int32(2))
+
+
+        case .podcast:
+            writeInt(&buf, Int32(3))
+
+
+        case .video:
+            writeInt(&buf, Int32(4))
+
+
+        case .paper:
+            writeInt(&buf, Int32(5))
+
+
+        case .web:
+            writeInt(&buf, Int32(6))
+
+
+        case .unknown:
+            writeInt(&buf, Int32(7))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactPreviewKind_lift(_ buf: RustBuffer) throws -> ArtifactPreviewKind {
+    return try FfiConverterTypeArtifactPreviewKind.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArtifactPreviewKind_lower(_ value: ArtifactPreviewKind) -> RustBuffer {
+    return FfiConverterTypeArtifactPreviewKind.lower(value)
+}
+
+
+extension ArtifactPreviewKind: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * What the kernel is asking the native audio player to do.
  *
  * Append-only: new ops extend the transport surface without breaking
@@ -50713,6 +52626,179 @@ extension OcrResult: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Outcome of classifying one omnibox / paste / search input through NMP's
+ * input-intent resolver (`#1865` / `#1804`).
+ *
+ * Produced by `omnibox::classification_to_outcome` and surfaced in
+ * [`SearchSnapshot::omnibox`]. Raw protocol data only (D1): the shell formats
+ * any user-facing copy and owns the navigation routing.
+ */
+
+public enum OmniboxOutcome {
+
+    /**
+     * Free text — run the result buckets. The kernel also opened a multi-kind
+     * NIP-50 relay search (profiles + notes + articles) under the shared search
+     * session; hits stream into [`SearchSnapshot::hits`].
+     */
+    case freeText(
+        /**
+         * The trimmed query that was searched.
+         */query: String
+    )
+    /**
+     * A NIP-19/21 reference to open directly. `uri` is the canonical `nostr:`
+     * form the shell decodes and routes (profile / thread / article / group).
+     */
+    case navigate(
+        /**
+         * Canonical `nostr:`-form URI.
+         */uri: String
+    )
+    /**
+     * A NIP-05 identifier whose HTTP `.well-known/nostr.json` reverse lookup was
+     * enqueued. The resolved profile opens reactively once the claim lands.
+     */
+    case resolveNip05(
+        /**
+         * The `name@domain` identifier (SHAPE-validated; never a secret).
+         */identifier: String
+    )
+    /**
+     * A NIP-29 group reference (`host'local-id` or an `naddr` to a group).
+     */
+    case openGroup(
+        /**
+         * `wss://`-prefixed host relay URL.
+         */hostRelayUrl: String,
+        /**
+         * NIP-29 local id.
+         */localId: String
+    )
+    /**
+     * A pasted relay URL (`ws://` / `wss://`).
+     */
+    case relayUrl(
+        /**
+         * Normalized relay URL.
+         */url: String
+    )
+    /**
+     * The input was (or contained) a secret key (`nsec` / `ncryptsec`). Safe
+     * reject — the secret is NEVER carried, logged, or echoed.
+     */
+    case rejectSecret
+    /**
+     * The input matched no recognizer and is not usable as free text.
+     */
+    case noMatch
+}
+
+
+#if compiler(>=6)
+extension OmniboxOutcome: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOmniboxOutcome: FfiConverterRustBuffer {
+    typealias SwiftType = OmniboxOutcome
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OmniboxOutcome {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .freeText(query: try FfiConverterString.read(from: &buf)
+        )
+
+        case 2: return .navigate(uri: try FfiConverterString.read(from: &buf)
+        )
+
+        case 3: return .resolveNip05(identifier: try FfiConverterString.read(from: &buf)
+        )
+
+        case 4: return .openGroup(hostRelayUrl: try FfiConverterString.read(from: &buf), localId: try FfiConverterString.read(from: &buf)
+        )
+
+        case 5: return .relayUrl(url: try FfiConverterString.read(from: &buf)
+        )
+
+        case 6: return .rejectSecret
+
+        case 7: return .noMatch
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: OmniboxOutcome, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .freeText(query):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(query, into: &buf)
+
+
+        case let .navigate(uri):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(uri, into: &buf)
+
+
+        case let .resolveNip05(identifier):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(identifier, into: &buf)
+
+
+        case let .openGroup(hostRelayUrl,localId):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(hostRelayUrl, into: &buf)
+            FfiConverterString.write(localId, into: &buf)
+
+
+        case let .relayUrl(url):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(url, into: &buf)
+
+
+        case .rejectSecret:
+            writeInt(&buf, Int32(6))
+
+
+        case .noMatch:
+            writeInt(&buf, Int32(7))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOmniboxOutcome_lift(_ buf: RustBuffer) throws -> OmniboxOutcome {
+    return try FfiConverterTypeOmniboxOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOmniboxOutcome_lower(_ value: OmniboxOutcome) -> RustBuffer {
+    return FfiConverterTypeOmniboxOutcome.lower(value)
+}
+
+
+extension OmniboxOutcome: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum PodcastTimelineRowKind {
 
@@ -51218,29 +53304,33 @@ extension RelativeTimeLabelStyle: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
- * Connection state of a relay as seen by the NMP kernel. Derived from
- * nmp's `connection_tone` field; represented as an enum so the Swift
- * shell can branch on a stable machine tag rather than parsing a string.
+ * Connection state of a relay as seen by the NMP kernel. Derived from nmp's
+ * RAW `connection` lifecycle string; represented as an enum so the Swift shell
+ * can branch on a stable machine tag rather than parsing a string.
  *
- * The mapping is conservative: unknown tones → `Unknown`.
+ * The mapping is conservative: unrecognised values → `Unknown`.
  */
 
 public enum RelayConnectionState {
 
     /**
-     * `"ok"` tone — relay is connected and healthy.
+     * `"connected"` — relay is connected and healthy.
      */
     case connected
     /**
-     * `"warn"` tone — relay is reconnecting or degraded.
+     * `"connecting"` / `"backing_off"` — relay is mid-handshake or retrying.
      */
     case reconnecting
     /**
-     * `"error"` tone — relay is in an error state.
+     * Reserved error state. NMP no longer emits a distinct error value in the
+     * `connection` string (error detail surfaces via `last_error`), so this is
+     * currently unreachable from `connection` alone — retained for the Swift
+     * shell's stable tag set.
      */
     case error
     /**
-     * `"muted"` or any other tone — state unknown / not yet connected.
+     * `"closed"` / `"offline"` / `"unknown"` or any other value — state
+     * unknown / not yet connected.
      */
     case unknown
 }
@@ -52869,6 +54959,75 @@ public enum ViewId {
      * are available once the OCR round-trip completes.
      */
     case capture
+    /**
+     * NIP-22 comment thread view for a specific root anchor.
+     *
+     * `root_tag_value` is the UPPERCASE root scope value from the NIP-22 `E`/`A`/`I`
+     * tag (e.g. a 64-char hex event id for `E`, an addressable coord for `A`,
+     * or an external URI for `I`). The snapshot is
+     * `ViewSnapshot::CommentThread(CommentThreadKernelSnapshot)` — flat raw record
+     * list + `comment_count` (D1: no formatted strings; Swift builds display tree).
+     *
+     * On open: no lifecycle wiring is needed — the `CommentObserver` registered at
+     * boot automatically routes all kind:1111 events to `AppState::comment_threads`.
+     * On close: the `comment_threads` entry is NOT cleared (content is session-scoped
+     * and bounded by the NMP projection's `MAX_PROJECTION_MESSAGES` cap).
+     */
+    case commentThread(
+        /**
+         * Root scope tag value that anchors this thread (opaque from caller — D3).
+         */rootTagValue: String
+    )
+    /**
+     * Feedback thread list — top-level NIP-22 kind:1111 roots under the
+     * Highlighter project coordinate, filtered to the active account.
+     *
+     * On open: no extra observer wiring — the global `CommentObserver` already
+     * routes all kind:1111 events. `hl.feedback.open_list` dispatches this view.
+     * On close: UI flags in `AppState::feedback` are cleared; the underlying
+     * `comment_threads` entry is not cleared (content-addressed).
+     */
+    case feedbackThreads
+    /**
+     * Feedback thread detail for one root comment and its descendants.
+     *
+     * `root_event_id` identifies the top-level kind:1111 comment whose ancestor
+     * chain to project. Snapshot: `ViewSnapshot::FeedbackThread(FeedbackThreadSnapshot)`.
+     */
+    case feedbackThread(
+        /**
+         * Event id of the feedback thread's root comment (raw 64-char hex). D3.
+         */rootEventId: String
+    )
+    /**
+     * NIP-29 group chat view for a specific room.
+     *
+     * `group_id` is the NIP-29 local group id. The snapshot is
+     * `ViewSnapshot::RoomChat(RoomChatSnapshot)` — bounded raw kind:9 message
+     * rows, oldest-first in the visible window (D1: no formatted strings).
+     *
+     * On open: `hl.chat.open` dispatches `Effect::WireGroupChat` which registers
+     * a `ChatObserver` per room. On close: `hl.chat.close` dispatches
+     * `Effect::ReleaseChatRoom` which removes the room buffer.
+     */
+    case roomChat(
+        /**
+         * NIP-29 local group id.
+         */groupId: String
+    )
+    /**
+     * Per-room discussions tab view for a specific NIP-29 group.
+     *
+     * The snapshot is `ViewSnapshot::RoomDiscussions(RoomDiscussionsSnapshot)` —
+     * raw kind:11+discussion rows filtered from `AppState::room_discussions`,
+     * bounded at 64, newest-first (D1: no formatted strings; Swift formats all
+     * title fallbacks, timestamps, and attachment chips).
+     */
+    case roomDiscussions(
+        /**
+         * NIP-29 local group id.
+         */groupId: String
+    )
 }
 
 
@@ -52926,6 +55085,20 @@ public struct FfiConverterTypeViewId: FfiConverterRustBuffer {
         case 18: return .podcastListening
 
         case 19: return .capture
+
+        case 20: return .commentThread(rootTagValue: try FfiConverterString.read(from: &buf)
+        )
+
+        case 21: return .feedbackThreads
+
+        case 22: return .feedbackThread(rootEventId: try FfiConverterString.read(from: &buf)
+        )
+
+        case 23: return .roomChat(groupId: try FfiConverterString.read(from: &buf)
+        )
+
+        case 24: return .roomDiscussions(groupId: try FfiConverterString.read(from: &buf)
+        )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -53012,6 +55185,30 @@ public struct FfiConverterTypeViewId: FfiConverterRustBuffer {
 
         case .capture:
             writeInt(&buf, Int32(19))
+
+
+        case let .commentThread(rootTagValue):
+            writeInt(&buf, Int32(20))
+            FfiConverterString.write(rootTagValue, into: &buf)
+
+
+        case .feedbackThreads:
+            writeInt(&buf, Int32(21))
+
+
+        case let .feedbackThread(rootEventId):
+            writeInt(&buf, Int32(22))
+            FfiConverterString.write(rootEventId, into: &buf)
+
+
+        case let .roomChat(groupId):
+            writeInt(&buf, Int32(23))
+            FfiConverterString.write(groupId, into: &buf)
+
+
+        case let .roomDiscussions(groupId):
+            writeInt(&buf, Int32(24))
+            FfiConverterString.write(groupId, into: &buf)
 
         }
     }
@@ -53143,6 +55340,51 @@ public enum ViewRoute {
      * (reconstructed markdown + selectable words + raw lines + pending flag). D1.
      */
     case capture
+    /**
+     * NIP-22 comment thread projection — `CommentThreadKernelSnapshot` (flat
+     * raw record list keyed by `root_tag_value`). D1: no formatted strings,
+     * no tree nesting in snapshot — Swift builds the display tree from
+     * `parent_tag_value` relationships.
+     */
+    case commentThread(
+        /**
+         * Root scope tag value that anchors this thread.
+         */rootTagValue: String
+    )
+    /**
+     * Feedback thread list projection — `FeedbackThreadsSnapshot` (top-level
+     * NIP-22 roots under the Highlighter project coordinate, filtered to the
+     * active viewer). D1: no formatted strings, `None` metadata fields.
+     */
+    case feedbackThreads
+    /**
+     * Feedback thread detail projection — `FeedbackThreadSnapshot` (root +
+     * descendants for `root_event_id`, oldest-first). D1: raw fields only.
+     */
+    case feedbackThread(
+        /**
+         * Event id of the feedback thread's root comment.
+         */rootEventId: String
+    )
+    /**
+     * NIP-29 group chat projection — `RoomChatSnapshot` (bounded raw kind:9
+     * message rows, oldest-first in the visible window). D1: no formatted strings.
+     */
+    case roomChat(
+        /**
+         * NIP-29 local group id.
+         */groupId: String
+    )
+    /**
+     * Per-room discussions tab projection — `RoomDiscussionsSnapshot` (raw
+     * kind:11+discussion rows, bounded at 64, newest-first). D1: no formatted
+     * strings, no title fallbacks — Swift owns all display formatting.
+     */
+    case roomDiscussions(
+        /**
+         * NIP-29 local group id.
+         */groupId: String
+    )
 }
 
 
@@ -53200,6 +55442,20 @@ public struct FfiConverterTypeViewRoute: FfiConverterRustBuffer {
         case 18: return .podcastListening
 
         case 19: return .capture
+
+        case 20: return .commentThread(rootTagValue: try FfiConverterString.read(from: &buf)
+        )
+
+        case 21: return .feedbackThreads
+
+        case 22: return .feedbackThread(rootEventId: try FfiConverterString.read(from: &buf)
+        )
+
+        case 23: return .roomChat(groupId: try FfiConverterString.read(from: &buf)
+        )
+
+        case 24: return .roomDiscussions(groupId: try FfiConverterString.read(from: &buf)
+        )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -53286,6 +55542,30 @@ public struct FfiConverterTypeViewRoute: FfiConverterRustBuffer {
 
         case .capture:
             writeInt(&buf, Int32(19))
+
+
+        case let .commentThread(rootTagValue):
+            writeInt(&buf, Int32(20))
+            FfiConverterString.write(rootTagValue, into: &buf)
+
+
+        case .feedbackThreads:
+            writeInt(&buf, Int32(21))
+
+
+        case let .feedbackThread(rootEventId):
+            writeInt(&buf, Int32(22))
+            FfiConverterString.write(rootEventId, into: &buf)
+
+
+        case let .roomChat(groupId):
+            writeInt(&buf, Int32(23))
+            FfiConverterString.write(groupId, into: &buf)
+
+
+        case let .roomDiscussions(groupId):
+            writeInt(&buf, Int32(24))
+            FfiConverterString.write(groupId, into: &buf)
 
         }
     }
@@ -53448,6 +55728,42 @@ public enum ViewSnapshot {
      */
     case capture(KernelCaptureSnapshot
     )
+    /**
+     * NIP-22 comment thread — flat raw record list for `root_tag_value`.
+     * D1: no formatted timestamps, no tree nesting, no byline strings.
+     * Swift builds the display tree from `parent_tag_value` relationships.
+     */
+    case commentThread(CommentThreadKernelSnapshot
+    )
+    /**
+     * Feedback thread list — top-level NIP-22 roots under the Highlighter
+     * project root, filtered to the active account. Sorted by `last_activity_at`
+     * descending; capped at 256. D1: no formatted strings; `title`, `summary`,
+     * `status_label` are `None` without an explicit HL metadata source.
+     */
+    case feedbackThreads(KernelFeedbackThreadsSnapshot
+    )
+    /**
+     * Feedback thread detail — root record + descendant replies for one thread,
+     * sorted oldest-first. `show_header` follows the 300s/author grouping rule.
+     * D1: raw fields only; no bylines, no relative-time labels.
+     */
+    case feedbackThread(KernelFeedbackThreadSnapshot
+    )
+    /**
+     * NIP-29 kind:9 group chat — bounded raw message rows for one room.
+     * D1: no formatted timestamps, no byline strings, no `is_from_me`.
+     * Swift owns all display formatting and optimistic affordances.
+     */
+    case roomChat(RoomChatSnapshot
+    )
+    /**
+     * Per-room kind:11 discussions list — raw rows filtered from
+     * `GroupEventsProjection`, bounded at 64 per room, newest-first.
+     * D1: no title fallback, no formatted timestamps.
+     */
+    case roomDiscussions(RoomDiscussionsSnapshot
+    )
 }
 
 
@@ -53520,6 +55836,21 @@ public struct FfiConverterTypeViewSnapshot: FfiConverterRustBuffer {
         )
 
         case 19: return .capture(try FfiConverterTypeKernelCaptureSnapshot.read(from: &buf)
+        )
+
+        case 20: return .commentThread(try FfiConverterTypeCommentThreadKernelSnapshot.read(from: &buf)
+        )
+
+        case 21: return .feedbackThreads(try FfiConverterTypeKernelFeedbackThreadsSnapshot.read(from: &buf)
+        )
+
+        case 22: return .feedbackThread(try FfiConverterTypeKernelFeedbackThreadSnapshot.read(from: &buf)
+        )
+
+        case 23: return .roomChat(try FfiConverterTypeRoomChatSnapshot.read(from: &buf)
+        )
+
+        case 24: return .roomDiscussions(try FfiConverterTypeRoomDiscussionsSnapshot.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -53623,6 +55954,31 @@ public struct FfiConverterTypeViewSnapshot: FfiConverterRustBuffer {
         case let .capture(v1):
             writeInt(&buf, Int32(19))
             FfiConverterTypeKernelCaptureSnapshot.write(v1, into: &buf)
+
+
+        case let .commentThread(v1):
+            writeInt(&buf, Int32(20))
+            FfiConverterTypeCommentThreadKernelSnapshot.write(v1, into: &buf)
+
+
+        case let .feedbackThreads(v1):
+            writeInt(&buf, Int32(21))
+            FfiConverterTypeKernelFeedbackThreadsSnapshot.write(v1, into: &buf)
+
+
+        case let .feedbackThread(v1):
+            writeInt(&buf, Int32(22))
+            FfiConverterTypeKernelFeedbackThreadSnapshot.write(v1, into: &buf)
+
+
+        case let .roomChat(v1):
+            writeInt(&buf, Int32(23))
+            FfiConverterTypeRoomChatSnapshot.write(v1, into: &buf)
+
+
+        case let .roomDiscussions(v1):
+            writeInt(&buf, Int32(24))
+            FfiConverterTypeRoomDiscussionsSnapshot.write(v1, into: &buf)
 
         }
     }
@@ -54059,6 +56415,30 @@ fileprivate struct FfiConverterOptionTypeChatMessageRecord: FfiConverterRustBuff
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeChatMessageRecord.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeChatReplyPreview: FfiConverterRustBuffer {
+    typealias SwiftType = ChatReplyPreview?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeChatReplyPreview.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeChatReplyPreview.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -54619,6 +56999,30 @@ fileprivate struct FfiConverterOptionTypeNostrEntityRef: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeOmniboxOutcome: FfiConverterRustBuffer {
+    typealias SwiftType = OmniboxOutcome?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeOmniboxOutcome.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeOmniboxOutcome.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeViewSnapshot: FfiConverterRustBuffer {
     typealias SwiftType = ViewSnapshot?
 
@@ -54918,6 +57322,31 @@ fileprivate struct FfiConverterSequenceTypeChapter: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeChatMessageRow: FfiConverterRustBuffer {
+    typealias SwiftType = [ChatMessageRow]
+
+    public static func write(_ value: [ChatMessageRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeChatMessageRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ChatMessageRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [ChatMessageRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeChatMessageRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeChatMessageRowProjection: FfiConverterRustBuffer {
     typealias SwiftType = [ChatMessageRowProjection]
 
@@ -54985,6 +57414,31 @@ fileprivate struct FfiConverterSequenceTypeCommentRecord: FfiConverterRustBuffer
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeCommentRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeCommentRecordRow: FfiConverterRustBuffer {
+    typealias SwiftType = [CommentRecordRow]
+
+    public static func write(_ value: [CommentRecordRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeCommentRecordRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CommentRecordRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [CommentRecordRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeCommentRecordRow.read(from: &buf))
         }
         return seq
     }
@@ -55193,6 +57647,56 @@ fileprivate struct FfiConverterSequenceTypeDiscussionRecord: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeDiscussionRow: FfiConverterRustBuffer {
+    typealias SwiftType = [DiscussionRow]
+
+    public static func write(_ value: [DiscussionRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeDiscussionRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [DiscussionRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [DiscussionRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeDiscussionRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeFeedbackMessageRow: FfiConverterRustBuffer {
+    typealias SwiftType = [FeedbackMessageRow]
+
+    public static func write(_ value: [FeedbackMessageRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFeedbackMessageRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FeedbackMessageRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FeedbackMessageRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFeedbackMessageRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFeedbackMessageRowProjection: FfiConverterRustBuffer {
     typealias SwiftType = [FeedbackMessageRowProjection]
 
@@ -55235,6 +57739,31 @@ fileprivate struct FfiConverterSequenceTypeFeedbackThreadRecord: FfiConverterRus
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeFeedbackThreadRecord.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeFeedbackThreadRow: FfiConverterRustBuffer {
+    typealias SwiftType = [FeedbackThreadRow]
+
+    public static func write(_ value: [FeedbackThreadRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFeedbackThreadRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FeedbackThreadRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FeedbackThreadRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFeedbackThreadRow.read(from: &buf))
         }
         return seq
     }

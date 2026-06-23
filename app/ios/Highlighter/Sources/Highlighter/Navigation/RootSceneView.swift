@@ -25,6 +25,11 @@ struct RootSceneView: View {
         }
         .task {
             await store.bootstrap()
+            // Mirror initial onboarding state for returning users whose
+            // isOnboardingComplete was already true at init (no onChange fires).
+            if store.isOnboardingComplete {
+                kernel.app.dispatch(.completeOnboarding)
+            }
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
@@ -39,10 +44,15 @@ struct RootSceneView: View {
                 }
             }
         }
-        // Belt-and-suspenders: mirror live-lane logout/onboarding state changes
+        // Belt-and-suspenders: mirror live-lane auth/onboarding state changes
         // into the kernel so both lanes agree during Phase 1 coexistence.
         .onChange(of: store.isLoggedIn) { _, isLoggedIn in
-            if !isLoggedIn {
+            if isLoggedIn {
+                // Bridge live-lane login into the NMP kernel so routeKind
+                // transitions to .rootShell. The keychain was already written
+                // before this point, so restoreSession reads the correct secret.
+                kernel.app.dispatch(.restoreSession)
+            } else {
                 kernel.app.dispatch(.logout)
             }
         }
