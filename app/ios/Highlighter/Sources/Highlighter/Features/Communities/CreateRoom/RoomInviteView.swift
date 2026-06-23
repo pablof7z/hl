@@ -456,8 +456,6 @@ private struct AvatarView: View {
     let pubkeyHex: String
     let size: CGFloat
 
-    @Environment(HighlighterStore.self) private var appStore
-
     var body: some View {
         let avatar = avatarProjection
         let url = URL(string: avatar.pictureUrl)
@@ -488,12 +486,14 @@ private struct AvatarView: View {
     }
 
     private var avatarProjection: RoomInviteAvatarProjection {
-        appStore.safeCore.getRoomInviteAvatarProjection(
-            input: RoomInviteAvatarProjectionInput(
-                pubkeyHex: pubkeyHex,
-                profile: profile
-            )
-        )
+        let pictureUrl = profile?.picture ?? ""
+        let displayInitial: String
+        if let first = profile?.name.first {
+            displayInitial = String(first).uppercased()
+        } else {
+            displayInitial = String(pubkeyHex.prefix(1)).uppercased()
+        }
+        return RoomInviteAvatarProjection(pictureUrl: pictureUrl, displayInitial: displayInitial)
     }
 }
 

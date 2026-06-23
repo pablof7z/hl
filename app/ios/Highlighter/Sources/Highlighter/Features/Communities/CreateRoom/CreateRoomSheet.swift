@@ -30,14 +30,44 @@ struct CreateRoomSheet: View {
     private enum Field { case name, about }
 
     private var projection: CreateRoomProjection {
-        appStore.safeCore.projectCreateRoom(input: CreateRoomProjectionInput(
-            name: name,
-            about: about,
-            visibility: visibility,
-            access: access,
-            isCreating: isCreating,
-            coverIsUploading: coverIsUploading
-        ))
+        let createName = name.trimmingCharacters(in: .whitespaces)
+        let createAbout = about.trimmingCharacters(in: .whitespaces)
+        let (visibilityGlyph, visibilitySummary) = roomVisibilityDisplay(visibility: visibility, access: access)
+        return CreateRoomProjection(
+            canCreate: createName.count >= 2 && !isCreating && !coverIsUploading,
+            createName: createName,
+            createAbout: createAbout,
+            visibilityGlyph: visibilityGlyph,
+            visibilitySummary: visibilitySummary,
+            visibilityOptions: roomVisibilityOptions(selectedVisibility: visibility, selectedAccess: access)
+        )
+    }
+
+    private func roomVisibilityDisplay(visibility: RoomVisibility, access: RoomAccess) -> (String, String) {
+        switch (visibility, access) {
+        case (.`public`, .`open`): return ("globe", "Public · Anyone can join")
+        case (.`public`, .closed): return ("globe.badge.chevron.backward", "Public · You approve joins")
+        case (.`private`, _): return ("lock", "Private · Invite only")
+        }
+    }
+
+    private func roomVisibilityOptions(selectedVisibility: RoomVisibility, selectedAccess: RoomAccess) -> [CreateRoomVisibilityOption] {
+        let configs: [(String, String, String, String, RoomVisibility, RoomAccess)] = [
+            ("public-open", "Public", "Anyone can find and join this room.", "globe", .`public`, .`open`),
+            ("public-closed", "Public · By approval", "Anyone can find it, but you approve who joins.", "globe.badge.chevron.backward", .`public`, .closed),
+            ("private", "Private", "Hidden from the explorer. Invite only.", "lock", .`private`, .closed),
+        ]
+        return configs.map { id, title, summary, glyph, vis, acc in
+            CreateRoomVisibilityOption(
+                id: id,
+                title: title,
+                summary: summary,
+                glyph: glyph,
+                visibility: vis,
+                access: acc,
+                isSelected: vis == selectedVisibility && (vis == .`private` || acc == selectedAccess)
+            )
+        }
     }
 
     var body: some View {

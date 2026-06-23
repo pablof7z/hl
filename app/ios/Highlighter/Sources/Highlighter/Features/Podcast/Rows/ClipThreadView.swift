@@ -169,13 +169,7 @@ private struct CommentRowView: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: comment.pubkey,
-                profile: app.profileSnapshots[comment.pubkey],
-                fallback: .pubkey10
-            )
-        )
+        ProfileDisplayProjection.from(pubkey: comment.pubkey, profile: app.profileSnapshots[comment.pubkey])
     }
 
     private var relativeTime: String? {
