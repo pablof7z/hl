@@ -63,13 +63,17 @@ struct ReadingFeedCardView: View {
     // MARK: - Author display
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: item.article.pubkey,
-                profile: app.profileSnapshots[item.article.pubkey],
-                fallback: .pubkey10
+        {
+            let profile = app.profileSnapshots[item.article.pubkey]
+            let name = (profile?.displayName ?? "").isEmpty
+                ? ((profile?.name ?? "").isEmpty ? String(item.article.pubkey.prefix(10)) : profile!.name)
+                : profile!.displayName
+            return ProfileDisplayProjection(
+                displayName: name,
+                displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+                pictureUrl: profile?.picture ?? ""
             )
-        )
+        }()
     }
 
     private var cardProjection: ReadingFeedCardProjection {

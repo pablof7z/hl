@@ -108,7 +108,6 @@ struct RoomHomeView: View {
                     RoomInviteView(groupId: groupId, mode: .manage, onClose: nil)
                 }
                 .environment(app)
-                .environment(kernel)
                 .presentationDetents([.large])
             }
             .captureFlow(isPresented: $capturePresented, preselectedGroupId: groupId)

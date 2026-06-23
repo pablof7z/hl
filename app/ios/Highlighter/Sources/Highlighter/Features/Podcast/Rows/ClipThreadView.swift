@@ -104,22 +104,15 @@ struct ClipThreadView: View {
                 content: projection.submitBody,
                 limit: 200
             )
-            let result = app.safeCore.projectCommentPublishResult(
-                input: CommentPublishResultInput(error: outcome.error)
-            )
-            guard result.didPublish else {
-                sendError = result.errorMessage
+            let publishErrorMsg = outcome.error.trimmingCharacters(in: .whitespaces)
+            guard publishErrorMsg.isEmpty else {
+                sendError = publishErrorMsg
                 isSending = false
                 return
             }
-            let applyProjection = app.safeCore.projectCommentInlineThreadSnapshotApply(
-                input: CommentInlineThreadSnapshotApplyInput(
-                    records: outcome.snapshot.records,
-                    error: outcome.snapshot.error
-                )
-            )
-            app.podcastPlayer.comments[id] = applyProjection.records
-            sendError = applyProjection.errorMessage
+            let rawError = outcome.snapshot.error.trimmingCharacters(in: .whitespaces)
+            app.podcastPlayer.comments[id] = rawError.isEmpty ? outcome.snapshot.records : []
+            sendError = rawError.isEmpty ? nil : rawError
             replyText = ""
             isSending = false
         }
@@ -169,12 +162,14 @@ private struct CommentRowView: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: comment.pubkey,
-                profile: app.profileSnapshots[comment.pubkey],
-                fallback: .pubkey10
-            )
+        let profile = app.profileSnapshots[comment.pubkey]
+        let name = (profile?.displayName ?? "").isEmpty
+            ? ((profile?.name ?? "").isEmpty ? String(comment.pubkey.prefix(10)) : profile!.name)
+            : profile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: profile?.picture ?? ""
         )
     }
 

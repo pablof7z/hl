@@ -161,11 +161,9 @@ private struct AddBlossomServerSheet: View {
     }
 
     private var entryProjection: BlossomServerEntryProjection {
-        store.safeCore.projectBlossomServerEntry(
-            input: BlossomServerEntryProjectionInput(
-                url: urlText,
-                existingServers: existingServers
-            )
-        )
+        let submitUrl = urlText.trimmingCharacters(in: .whitespaces)
+        let isValid = submitUrl.hasPrefix("https://") || submitUrl.hasPrefix("http://")
+        let isDuplicate = existingServers.contains { $0.trimmingCharacters(in: .whitespaces) == submitUrl }
+        return BlossomServerEntryProjection(submitUrl: submitUrl, isValid: isValid, isDuplicate: isDuplicate, canAdd: isValid && !isDuplicate)
     }
 }

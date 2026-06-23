@@ -33,10 +33,14 @@ struct HighlightFeedCardView: View {
     }
 
     private var isbnFromLead: String? {
-        app.safeCore.getHighlightBookRoute(
-            externalReference: lead.highlight.externalReference,
-            artifactAddress: lead.highlight.artifactAddress
-        )?.isbn
+        for candidate in [lead.highlight.externalReference, lead.highlight.artifactAddress] {
+            let t = candidate.trimmingCharacters(in: .whitespaces)
+            if t.hasPrefix("isbn:") {
+                let isbn = String(t.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                if !isbn.isEmpty { return isbn }
+            }
+        }
+        return nil
     }
 
     var body: some View {
@@ -299,8 +303,11 @@ struct HighlightFeedCardView: View {
     }
 
     private func highlightFeedContent(for highlight: HighlightRecord) -> HighlightFeedContentProjection {
-        app.safeCore.projectHighlightFeedContent(
-            input: HighlightFeedContentProjectionInput(highlight: highlight)
+        let trimmedImage = highlight.imageUrl.trimmingCharacters(in: .whitespaces)
+        return HighlightFeedContentProjection(
+            quoteText: highlight.quote.trimmingCharacters(in: .whitespaces),
+            noteText: highlight.note.isEmpty ? nil : highlight.note,
+            pageImageUrl: trimmedImage.isEmpty ? nil : trimmedImage
         )
     }
 
@@ -396,38 +403,85 @@ struct HighlightFeedCardView: View {
     // MARK: - Derived: group projection
 
     private var groupProjection: HighlightGroupCardProjection {
-        app.safeCore.projectHighlightGroupCard(
-            input: HighlightGroupCardProjectionInput(
-                items: items,
-                highlighterProfiles: items.map { h in
-                    HighlightGroupHighlighterProfile(
-                        pubkey: h.highlight.pubkey,
-                        profile: app.profileSnapshots[h.highlight.pubkey]
-                    )
-                }
+        var seen = Set<String>()
+        var uniquePubkeys: [String] = []
+        for h in items {
+            if seen.insert(h.highlight.pubkey).inserted {
+                uniquePubkeys.append(h.highlight.pubkey)
+            }
+        }
+        let show = items.count >= 2 && uniquePubkeys.count >= 2
+        guard show else {
+            return HighlightGroupCardProjection(showHighlightersStrip: false, visibleHighlighters: [], overflowCount: 0, highlightersLabelSegments: [])
+        }
+        let highlighters = uniquePubkeys.map { pubkey -> HighlightGroupHighlighterProjection in
+            let profile = app.profileSnapshots[pubkey]
+            let name = (profile?.displayName ?? "").isEmpty
+                ? ((profile?.name ?? "").isEmpty ? String(pubkey.prefix(10)) : profile!.name)
+                : profile!.displayName
+            return HighlightGroupHighlighterProjection(
+                pubkey: pubkey,
+                displayName: name,
+                displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+                pictureUrl: profile?.picture ?? ""
             )
+        }
+        let overflow = max(0, highlighters.count - 3)
+        var segments: [HighlightGroupLabelSegment] = [HighlightGroupLabelSegment(text: "Highlighted by ", emphasized: false)]
+        switch highlighters.count {
+        case 0: break
+        case 1:
+            segments.append(HighlightGroupLabelSegment(text: highlighters[0].displayName, emphasized: true))
+        case 2:
+            segments += [
+                HighlightGroupLabelSegment(text: highlighters[0].displayName, emphasized: true),
+                HighlightGroupLabelSegment(text: " and ", emphasized: false),
+                HighlightGroupLabelSegment(text: highlighters[1].displayName, emphasized: true),
+            ]
+        default:
+            segments += [
+                HighlightGroupLabelSegment(text: highlighters[0].displayName, emphasized: true),
+                HighlightGroupLabelSegment(text: ", ", emphasized: false),
+                HighlightGroupLabelSegment(text: highlighters[1].displayName, emphasized: true),
+                HighlightGroupLabelSegment(text: " and ", emphasized: false),
+                HighlightGroupLabelSegment(text: "\(highlighters.count - 2) others", emphasized: false),
+            ]
+        }
+        return HighlightGroupCardProjection(
+            showHighlightersStrip: true,
+            visibleHighlighters: Array(highlighters.prefix(3)),
+            overflowCount: UInt32(overflow),
+            highlightersLabelSegments: segments
         )
     }
 
     // MARK: - Derived: profile helpers
 
     private func profileDisplay(for pubkey: String) -> ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: pubkey,
-                profile: app.profileSnapshots[pubkey],
-                fallback: .pubkey10
-            )
+        let profile = app.profileSnapshots[pubkey]
+        let name = (profile?.displayName ?? "").isEmpty
+            ? ((profile?.name ?? "").isEmpty ? String(pubkey.prefix(10)) : profile!.name)
+            : profile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: profile?.picture ?? ""
         )
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
-        app.safeCore.projectRelativeTimeLabel(
-            input: RelativeTimeLabelInput(
-                unixSeconds: seconds,
-                style: .compact
-            )
-        ).label
+        guard let seconds, seconds > 0 else { return nil }
+        let now = UInt64(max(0, Date().timeIntervalSince1970))
+        guard now >= seconds else { return nil }
+        let delta = now - seconds
+        if delta < 60 { return "just now" }
+        switch delta {
+        case 60 ..< 3600:   return "\(delta / 60)m"
+        case 3600 ..< 86400:  return "\(delta / 3600)h"
+        case 86400 ..< 604800:  return "\(delta / 86400)d"
+        case 604800 ..< 2592000: return "\(delta / 604800)w"
+        default: return "\(delta / 2592000)mo"
+        }
     }
 
     private func resourceSourceTaskId(_ resource: HighlightResourceHeaderProjection) -> String {
@@ -470,8 +524,12 @@ private struct HighlightQuoteCard: View {
     let highlight: HydratedHighlight
 
     var body: some View {
-        let content = app.safeCore.projectHighlightFeedContent(
-            input: HighlightFeedContentProjectionInput(highlight: highlight.highlight)
+        let h = highlight.highlight
+        let trimmedImage = h.imageUrl.trimmingCharacters(in: .whitespaces)
+        let content = HighlightFeedContentProjection(
+            quoteText: h.quote.trimmingCharacters(in: .whitespaces),
+            noteText: h.note.isEmpty ? nil : h.note,
+            pageImageUrl: trimmedImage.isEmpty ? nil : trimmedImage
         )
 
         VStack(alignment: .leading, spacing: 0) {
@@ -564,21 +622,30 @@ private struct HighlightQuoteCard: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: highlight.highlight.pubkey,
-                profile: app.profileSnapshots[highlight.highlight.pubkey],
-                fallback: .pubkey10
-            )
+        let pubkey = highlight.highlight.pubkey
+        let profile = app.profileSnapshots[pubkey]
+        let name = (profile?.displayName ?? "").isEmpty
+            ? ((profile?.name ?? "").isEmpty ? String(pubkey.prefix(10)) : profile!.name)
+            : profile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: profile?.picture ?? ""
         )
     }
 
     private var relative: String? {
-        app.safeCore.projectRelativeTimeLabel(
-            input: RelativeTimeLabelInput(
-                unixSeconds: highlight.highlight.createdAt,
-                style: .compact
-            )
-        ).label
+        guard let seconds = highlight.highlight.createdAt, seconds > 0 else { return nil }
+        let now = UInt64(max(0, Date().timeIntervalSince1970))
+        guard now >= seconds else { return nil }
+        let delta = now - seconds
+        if delta < 60 { return "just now" }
+        switch delta {
+        case 60 ..< 3600:   return "\(delta / 60)m"
+        case 3600 ..< 86400:  return "\(delta / 3600)h"
+        case 86400 ..< 604800:  return "\(delta / 86400)d"
+        case 604800 ..< 2592000: return "\(delta / 604800)w"
+        default: return "\(delta / 2592000)mo"
+        }
     }
 }

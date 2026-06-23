@@ -425,16 +425,13 @@ struct BookPicker: View {
             // Only commit the preview if we're still on the same ISBN
             // (user could have cancelled mid-flight).
             if resolvingISBN == isbn {
-                let projection = appStore.safeCore.projectIsbnPreviewLookupApply(
-                    input: IsbnPreviewLookupApplyInput(
-                        preview: outcome.preview,
-                        error: outcome.error
-                    )
-                )
-                if let preview = projection.preview {
+                let isbnError = outcome.error.trimmingCharacters(in: .whitespaces)
+                if isbnError.isEmpty, let preview = outcome.preview {
                     resolvedPreview = preview
+                } else if isbnError.isEmpty {
+                    resolveError = "Unable to resolve ISBN"
                 } else {
-                    resolveError = projection.errorMessage
+                    resolveError = isbnError
                 }
             }
         }

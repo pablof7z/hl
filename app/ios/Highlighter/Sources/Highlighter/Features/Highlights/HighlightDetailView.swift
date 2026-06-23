@@ -362,8 +362,13 @@ struct HighlightDetailView: View {
     }
 
     private var contentProjection: HighlightDetailContentProjection {
-        app.safeCore.projectHighlightDetailContent(
-            input: HighlightDetailContentProjectionInput(highlight: highlight)
+        let trimmedImage = highlight.imageUrl.trimmingCharacters(in: .whitespaces)
+        let quoteText = highlight.quote.trimmingCharacters(in: .whitespaces)
+        return HighlightDetailContentProjection(
+            quoteText: quoteText,
+            noteText: highlight.note.trimmingCharacters(in: .whitespaces).isEmpty ? nil : highlight.note,
+            pageImageUrl: trimmedImage.isEmpty ? nil : trimmedImage,
+            shareMessage: quoteText
         )
     }
 
@@ -388,21 +393,29 @@ struct HighlightDetailView: View {
     // MARK: - Profile helpers
 
     private var highlighterDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: highlight.pubkey,
-                profile: app.profileSnapshots[highlight.pubkey],
-                fallback: .pubkey10
-            )
+        let profile = app.profileSnapshots[highlight.pubkey]
+        let name = (profile?.displayName ?? "").isEmpty
+            ? ((profile?.name ?? "").isEmpty ? String(highlight.pubkey.prefix(10)) : profile!.name)
+            : profile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: profile?.picture ?? ""
         )
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
-        app.safeCore.projectRelativeTimeLabel(
-            input: RelativeTimeLabelInput(
-                unixSeconds: seconds,
-                style: .ago
-            )
-        ).label
+        guard let seconds, seconds > 0 else { return nil }
+        let now = UInt64(max(0, Date().timeIntervalSince1970))
+        guard now >= seconds else { return nil }
+        let delta = now - seconds
+        if delta < 60 { return "just now" }
+        switch delta {
+        case 60 ..< 3600:   return "\(delta / 60)m"
+        case 3600 ..< 86400:  return "\(delta / 3600)h"
+        case 86400 ..< 604800:  return "\(delta / 86400)d"
+        case 604800 ..< 2592000: return "\(delta / 604800)w"
+        default: return "\(delta / 2592000)mo"
+        }
     }
 }

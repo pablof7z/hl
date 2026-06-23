@@ -84,13 +84,11 @@ struct NostrRichText: View {
         if needsProfileRefresh {
             Task { await appStore.requestProfile(pubkeyHex: pubkeyHex) }
         }
-        return appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: pubkeyHex,
-                profile: snapshot,
-                fallback: .pubkey8
-            )
-        ).displayName
+        let name: String
+        if let s = snapshot, !s.displayName.isEmpty { name = s.displayName }
+        else if let s = snapshot, !s.name.isEmpty { name = s.name }
+        else { name = String(pubkeyHex.prefix(8)) }
+        return name
     }
 
     // MARK: - Tokenisation + blocking
@@ -181,19 +179,17 @@ final class NostrEntityCardStore {
         guard subscriptionHandle == nil else { return }
 
         let outcome = await safeCore.subscribeNostrEntity(entity)
-        let projection = safeCore.projectViewSubscriptionStart(
-            input: ViewSubscriptionStartProjectionInput(start: outcome)
-        )
-        guard projection.shouldRegister else {
+        let shouldRegister = outcome.error.trimmingCharacters(in: .whitespaces).isEmpty && outcome.handle != 0
+        guard shouldRegister else {
             // Cache-only rendering remains valid; the placeholder stays visible.
             return
         }
         guard !Task.isCancelled else {
-            await safeCore.unsubscribe(projection.handle)
+            await safeCore.unsubscribe(outcome.handle)
             return
         }
-        subscriptionHandle = projection.handle
-        eventBridge?.registerNostrEntity(self, handle: projection.handle)
+        subscriptionHandle = outcome.handle
+        eventBridge?.registerNostrEntity(self, handle: outcome.handle)
     }
 
     func stop() {
@@ -362,13 +358,16 @@ private struct ArticleEntityCard: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: event.pubkeyHex,
-                profile: profile,
-                fallback: .pubkey8
+        {
+            let name = (profile?.displayName ?? "").isEmpty
+                ? ((profile?.name ?? "").isEmpty ? String(event.pubkeyHex.prefix(8)) : profile!.name)
+                : profile!.displayName
+            return ProfileDisplayProjection(
+                displayName: name,
+                displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+                pictureUrl: profile?.picture ?? ""
             )
-        )
+        }()
     }
 }
 
@@ -417,13 +416,16 @@ private struct NoteEntityCard: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: event.pubkeyHex,
-                profile: profile,
-                fallback: .pubkey8
+        {
+            let name = (profile?.displayName ?? "").isEmpty
+                ? ((profile?.name ?? "").isEmpty ? String(event.pubkeyHex.prefix(8)) : profile!.name)
+                : profile!.displayName
+            return ProfileDisplayProjection(
+                displayName: name,
+                displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+                pictureUrl: profile?.picture ?? ""
             )
-        )
+        }()
     }
 }
 
@@ -461,13 +463,16 @@ private struct HighlightEntityCard: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: event.pubkeyHex,
-                profile: profile,
-                fallback: .pubkey8
+        {
+            let name = (profile?.displayName ?? "").isEmpty
+                ? ((profile?.name ?? "").isEmpty ? String(event.pubkeyHex.prefix(8)) : profile!.name)
+                : profile!.displayName
+            return ProfileDisplayProjection(
+                displayName: name,
+                displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+                pictureUrl: profile?.picture ?? ""
             )
-        )
+        }()
     }
 }
 
@@ -532,12 +537,13 @@ private struct ProfileCalloutFromSnapshot: View {
     }
 
     private var profileDisplay: ProfileDisplayProjection {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: pubkey,
-                profile: profile,
-                fallback: .pubkey8
-            )
+        let name = (profile?.displayName ?? "").isEmpty
+            ? ((profile?.name ?? "").isEmpty ? String(pubkey.prefix(8)) : profile!.name)
+            : profile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: profile?.picture ?? ""
         )
     }
 }
@@ -571,13 +577,7 @@ private struct GenericEntityCard: View {
     }
 
     private var authorFallback: String {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: event.pubkeyHex,
-                profile: nil,
-                fallback: .pubkey12
-            )
-        ).displayName
+        String(event.pubkeyHex.prefix(12))
     }
 }
 

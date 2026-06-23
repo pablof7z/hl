@@ -33,17 +33,36 @@ struct AddRelaySheet: View {
     }
 
     private var projection: AddRelaySheetProjection {
-        appStore.safeCore.projectAddRelaySheet(input: AddRelaySheetProjectionInput(
-            urlText: urlText,
-            clipboardText: UIPasteboard.general.string,
-            read: read,
-            write: write,
-            rooms: rooms,
-            indexer: indexer,
-            probeInFlight: probeInFlight,
-            probeResult: probeResult,
-            probeFailed: probeFailed
-        ))
+        let normalizedUrl = urlText.trimmingCharacters(in: .whitespaces)
+        let clipboardUrl: String? = UIPasteboard.general.string.flatMap { text in
+            let trimmed = text.trimmingCharacters(in: .whitespaces)
+            guard (trimmed.hasPrefix("wss://") || trimmed.hasPrefix("ws://")) && trimmed != normalizedUrl else { return nil }
+            return trimmed
+        }
+        let isValid = normalizedUrl.hasPrefix("wss://") || normalizedUrl.hasPrefix("ws://")
+        let (probeStatus, probeText): (AddRelayProbeStatus, String) = {
+            if probeInFlight { return (.checking, "Checking relay…") }
+            if let doc = probeResult {
+                let softwareLabel: String? = doc.software.map { name in
+                    doc.version.map { "\(name) \($0)" } ?? name
+                }
+                let nipCount = doc.supportedNips.isEmpty ? nil : "\(doc.supportedNips.count) NIPs"
+                let parts = [doc.name, softwareLabel, nipCount].compactMap { $0 }
+                return (.reachable, parts.isEmpty ? "Reachable (no NIP-11 metadata)" : parts.joined(separator: " • "))
+            }
+            if probeFailed { return (.unreachable, "Couldn't reach the relay — you can still add it.") }
+            return (.idle, "")
+        }()
+        return AddRelaySheetProjection(
+            normalizedUrl: normalizedUrl,
+            clipboardUrl: clipboardUrl,
+            isValid: isValid,
+            isUnencrypted: normalizedUrl.hasPrefix("ws://"),
+            canAdd: isValid,
+            addConfig: RelayConfig(url: normalizedUrl, read: read, write: write, rooms: rooms, indexer: indexer),
+            probeStatus: probeStatus,
+            probeText: probeText
+        )
     }
 
     var body: some View {
