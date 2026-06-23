@@ -2,22 +2,12 @@ import Foundation
 
 extension HighlighterStore: NostrProfileHost {
     public func profile(forPubkey pubkey: String) -> ProfileWire? {
-        guard let meta = profile(pubkeyHex: pubkey) else { return nil }
-        let display = Self.firstNonEmpty(meta.displayName, meta.name)
-        let hexShort = String(pubkey.prefix(10))
-        return ProfileWire(
-            pubkey: pubkey,
-            displayName: display,
-            about: meta.about.isEmpty ? nil : meta.about,
-            pictureUrl: meta.picture.isEmpty ? nil : meta.picture,
-            nip05: meta.nip05.isEmpty ? nil : meta.nip05,
-            npub: pubkey,
-            npubShort: hexShort
-        )
+        guard let meta = profileSnapshots[pubkey] else { return nil }
+        return Self.profileWire(from: meta, pubkeyHex: pubkey)
     }
 
     public func claimProfile(pubkey: String, consumerID: String) {
-        requestProfile(pubkeyHex: pubkey)
+        Task { await requestProfile(pubkeyHex: pubkey) }
     }
 
     public func releaseProfile(pubkey: String, consumerID: String) {}

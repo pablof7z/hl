@@ -37,15 +37,9 @@ targets:
           # runtime resources; two of them collide on the same bundle basename
           # if globbed in (root install + Vendor/nmp install).
           - "**/nmp.components.lock"
-          # Orphaned dead island: an experimental NostrUser/NostrProfile
-          # component set + stray Logging/ShareLinkRouter that the hand-edited
-          # project never compiled and nothing references. NostrUser ships its
-          # own `NostrIdenticon` which collides with the vendored nmp content
-          # renderer's. Excluded so the compiled set matches the verified build.
-          - "Components/NostrUser/**"
-          - "Core/Logging.swift"
-          - "Core/HighlighterStore+NostrProfileHost.swift"
+          # ShareLinkRouter uses old bespoke navigation not yet migrated.
           - "Navigation/ShareLinkRouter.swift"
+          - "Core/Logging.swift"
       - path: Sources/Shared
     resources:
       - path: Sources/Highlighter/Resources

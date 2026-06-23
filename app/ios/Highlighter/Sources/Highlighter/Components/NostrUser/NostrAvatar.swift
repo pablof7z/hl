@@ -91,27 +91,4 @@ public struct NostrAvatar: View {
     }
 }
 
-// MARK: - Identicon
-
-/// Deterministic color + initials from a raw pubkey hex string.
-/// Edit `palette` to match your app's brand palette.
-public enum NostrIdenticon {
-    private static let palette: [Color] = [
-        Color(red: 0.36, green: 0.20, blue: 0.81),
-        Color(red: 0.10, green: 0.53, blue: 0.82),
-        Color(red: 0.13, green: 0.55, blue: 0.42),
-        Color(red: 0.82, green: 0.33, blue: 0.18),
-        Color(red: 0.76, green: 0.15, blue: 0.45),
-        Color(red: 0.20, green: 0.20, blue: 0.20),
-    ]
-
-    public static func color(forPubkey pubkey: String) -> Color {
-        let sum = pubkey.utf8.prefix(4).reduce(0) { $0 + Int($1) }
-        return palette[sum % palette.count]
-    }
-
-    public static func initials(forPubkey pubkey: String) -> String {
-        guard pubkey.count >= 2 else { return "?" }
-        return String(pubkey.prefix(2)).uppercased()
-    }
-}
+// NostrIdenticon is defined in ContentTreeWire.swift (vendored nmp content renderer).
