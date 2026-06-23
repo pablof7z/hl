@@ -109,11 +109,12 @@ struct MemberClipRow: View {
             let id = highlight.eventId
             guard app.podcastPlayer.comments[id] == nil else { return }
             Task {
-                let scopeSnapshot = app.safeCore.getHighlightCommentScope(eventIdHex: id)
-                guard scopeSnapshot.attach, let scope = scopeSnapshot.scope else {
+                let trimmedId = id.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedId.isEmpty else {
                     app.podcastPlayer.comments[id] = []
                     return
                 }
+                let scope = CommentScope(rootTagName: "E", rootTagValue: trimmedId, rootKind: 9802)
                 let snapshot = await app.safeCore.getCommentThreadSnapshot(scope: scope, limit: 200)
                 let projection = app.safeCore.projectCommentInlineThreadSnapshotApply(
                     input: CommentInlineThreadSnapshotApplyInput(

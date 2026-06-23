@@ -78,12 +78,8 @@ struct ClipThreadView: View {
     }
 
     private var composerProjection: CommentComposerProjection {
-        app.safeCore.projectCommentComposer(
-            input: CommentComposerProjectionInput(
-                body: replyText,
-                isPublishing: isSending
-            )
-        )
+        let trimmed = replyText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return CommentComposerProjection(submitBody: trimmed, canSubmit: !trimmed.isEmpty && !isSending)
     }
 
     private func send() {
@@ -93,12 +89,13 @@ struct ClipThreadView: View {
         sendError = nil
         let id = clipEventId
         Task {
-            let scopeSnapshot = app.safeCore.getHighlightCommentScope(eventIdHex: id)
-            guard scopeSnapshot.attach, let scope = scopeSnapshot.scope else {
-                sendError = scopeSnapshot.errorMessage
+            let trimmedId = id.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedId.isEmpty else {
+                sendError = "event comment id must not be empty"
                 isSending = false
                 return
             }
+            let scope = CommentScope(rootTagName: "E", rootTagValue: trimmedId, rootKind: 9802)
             let outcome = await app.safeCore.publishCommentForScopeSnapshot(
                 scope: scope,
                 content: projection.submitBody,
