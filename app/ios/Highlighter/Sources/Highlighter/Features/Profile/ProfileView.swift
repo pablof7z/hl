@@ -355,6 +355,7 @@ private struct TabBar: View {
 private struct TabContent: View {
     let store: ProfileStore
     @Environment(HighlighterStore.self) private var appStore
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var previewRoom: CommunitySummary?
     @State private var pendingOpenRoomId: String?
     @State private var openRoomGroupId: String?
