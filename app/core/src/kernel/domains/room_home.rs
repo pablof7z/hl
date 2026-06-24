@@ -2383,7 +2383,6 @@ mod tests {
     // coordinate-precedence, or lane-assembly causes a test failure.
     mod parity {
         use super::*;
-        use crate::test_ndb::{isolated_ndb, process_event_and_wait};
         use nostr_sdk::prelude::*;
 
         fn nostr_to_kernel(e: &Event) -> nmp_core::substrate::KernelEvent {
@@ -2541,7 +2540,6 @@ mod tests {
         // agree. Fails if highlight-matching or coordinate-precedence drifts.
         #[test]
         fn parity_artifact_and_highlight_lane_counts_match() {
-            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
             let mut state = make_state();
             state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
             state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
@@ -2567,15 +2565,9 @@ mod tests {
                 .sign_with_keys(&keys)
                 .unwrap();
 
-            // bespoke path: inject into real nostrdb
-            process_event_and_wait(&ndb, &artifact_ev);
-            process_event_and_wait(&ndb, &hl_ev);
-
-            // kernel path: inject into AppState
             inject_lane_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&artifact_ev));
             inject_hl_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&hl_ev));
 
-            let bespoke = crate::room_home::query_room_home_snapshot(&ndb, TEST_GROUP);
             let ViewSnapshot::RoomHome(kernel) =
                 project_room_home_snapshot(&state, TEST_GROUP).unwrap()
             else {
@@ -2583,39 +2575,31 @@ mod tests {
             };
 
             assert_eq!(
-                bespoke.artifacts.len(),
                 kernel.artifact_library.len(),
+                1,
                 "P1: artifact count must match"
             );
             assert_eq!(
-                bespoke.highlights.len(),
                 kernel.highlights.len(),
+                1,
                 "P1: highlight count must match"
             );
             assert_eq!(
-                bespoke.highlights_by_reference.len(),
                 kernel.highlights_by_reference.len(),
+                1,
                 "P1: highlights_by_reference count must match — matching logic drifted"
             );
             assert_eq!(
-                bespoke.lanes.len(),
                 kernel.assembled_lanes.len(),
+                1,
                 "P1: assembled lane count must match"
             );
-            assert_eq!(bespoke.lanes.len(), 1, "P1: fixture must yield 1 lane");
 
             // Field-level: the lane must carry the SAME highlight identity, not
             // just an equal count.
-            let bespoke_hl_ids = sorted_ids(&bespoke.lanes[0].highlights, |h| {
-                h.highlight.event_id.clone()
-            });
             let kernel_hl_ids = sorted_ids(&kernel.assembled_lanes[0].highlights, |h| {
                 h.event_id.clone()
             });
-            assert_eq!(
-                bespoke_hl_ids, kernel_hl_ids,
-                "P1: lane highlight identities must match"
-            );
             assert_eq!(
                 kernel_hl_ids,
                 vec![hl_ev.id.to_hex()],
@@ -2636,7 +2620,6 @@ mod tests {
         // kernel (assembled_lanes dormant filter). Both must agree: 0 lanes.
         #[test]
         fn parity_dormant_lane_excluded_by_both_functions() {
-            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
             let mut state = make_state();
             state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
             state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
@@ -2655,10 +2638,8 @@ mod tests {
                 .sign_with_keys(&keys)
                 .unwrap();
 
-            process_event_and_wait(&ndb, &artifact_ev);
             inject_lane_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&artifact_ev));
 
-            let bespoke = crate::room_home::query_room_home_snapshot(&ndb, TEST_GROUP);
             let ViewSnapshot::RoomHome(kernel) =
                 project_room_home_snapshot(&state, TEST_GROUP).unwrap()
             else {
@@ -2666,19 +2647,14 @@ mod tests {
             };
 
             assert_eq!(
-                bespoke.artifacts.len(),
                 kernel.artifact_library.len(),
+                1,
                 "P2: artifact count must match"
             );
             assert_eq!(
-                bespoke.lanes.len(),
                 kernel.assembled_lanes.len(),
-                "P2: dormant filter must agree — both must exclude the lane"
-            );
-            assert_eq!(
-                bespoke.lanes.len(),
                 0,
-                "P2: dormant artifact must yield 0 lanes"
+                "P2: dormant filter must agree — both must exclude the lane"
             );
         }
 
@@ -2690,7 +2666,6 @@ mod tests {
         // state.comment_threads. Both must produce 1 lane and 1 comments_by_reference.
         #[test]
         fn parity_comment_only_lane_not_dormant() {
-            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
             let mut state = make_state();
             state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
             state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
@@ -2720,11 +2695,6 @@ mod tests {
                 .sign_with_keys(&keys)
                 .unwrap();
 
-            // bespoke path: both events into nostrdb
-            process_event_and_wait(&ndb, &artifact_ev);
-            process_event_and_wait(&ndb, &comment_ev);
-
-            // kernel path: artifact into room_lanes; comment into comment_threads
             inject_lane_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&artifact_ev));
             let record = nmp_nip22::CommentRecord {
                 event_id: comment_ev.id.to_hex(),
@@ -2747,7 +2717,6 @@ mod tests {
                 },
             );
 
-            let bespoke = crate::room_home::query_room_home_snapshot(&ndb, TEST_GROUP);
             let ViewSnapshot::RoomHome(kernel) =
                 project_room_home_snapshot(&state, TEST_GROUP).unwrap()
             else {
@@ -2755,14 +2724,13 @@ mod tests {
             };
 
             assert_eq!(
-                bespoke.lanes.len(),
                 kernel.assembled_lanes.len(),
+                1,
                 "P3: comment-only lane must survive dormant filter in both"
             );
-            assert_eq!(bespoke.lanes.len(), 1, "P3: bespoke must have 1 lane");
             assert_eq!(
-                bespoke.comments_by_reference.len(),
                 kernel.comments_by_reference.len(),
+                1,
                 "P3: comments_by_reference count must match"
             );
         }
@@ -2774,7 +2742,6 @@ mod tests {
         // lane content counts must agree between bespoke and kernel.
         #[test]
         fn parity_full_lane_all_five_sections() {
-            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
             let mut state = make_state();
             state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
             state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
@@ -2810,12 +2777,6 @@ mod tests {
                 .sign_with_keys(&keys)
                 .unwrap();
 
-            // bespoke path
-            process_event_and_wait(&ndb, &artifact_ev);
-            process_event_and_wait(&ndb, &hl_ev);
-            process_event_and_wait(&ndb, &comment_ev);
-
-            // kernel path
             inject_lane_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&artifact_ev));
             inject_hl_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&hl_ev));
             let record = nmp_nip22::CommentRecord {
@@ -2839,7 +2800,6 @@ mod tests {
                 },
             );
 
-            let bespoke = crate::room_home::query_room_home_snapshot(&ndb, TEST_GROUP);
             let ViewSnapshot::RoomHome(kernel) =
                 project_room_home_snapshot(&state, TEST_GROUP).unwrap()
             else {
@@ -2847,57 +2807,39 @@ mod tests {
             };
 
             assert_eq!(
-                bespoke.artifacts.len(),
                 kernel.artifact_library.len(),
+                1,
                 "P4: artifact count"
             );
             assert_eq!(
-                bespoke.highlights.len(),
                 kernel.highlights.len(),
+                1,
                 "P4: highlight count"
             );
             assert_eq!(
-                bespoke.highlights_by_reference.len(),
                 kernel.highlights_by_reference.len(),
+                1,
                 "P4: highlights_by_reference count"
             );
             assert_eq!(
-                bespoke.comments_by_reference.len(),
                 kernel.comments_by_reference.len(),
+                1,
                 "P4: comments_by_reference count"
             );
             assert_eq!(
-                bespoke.lanes.len(),
                 kernel.assembled_lanes.len(),
+                1,
                 "P4: assembled lane count"
             );
-            assert_eq!(bespoke.lanes.len(), 1, "P4: fixture must yield 1 lane");
             assert_eq!(
-                bespoke.lanes[0].highlights.len(),
                 kernel.assembled_lanes[0].highlights.len(),
+                1,
                 "P4: lane highlight count"
             );
             assert_eq!(
-                bespoke.lanes[0].comments.len(),
                 kernel.assembled_lanes[0].comments.len(),
+                1,
                 "P4: lane comment count"
-            );
-
-            // Field-level identity parity for both highlights and comments.
-            assert_eq!(
-                sorted_ids(&bespoke.lanes[0].highlights, |h| h
-                    .highlight
-                    .event_id
-                    .clone()),
-                sorted_ids(&kernel.assembled_lanes[0].highlights, |h| h
-                    .event_id
-                    .clone()),
-                "P4: lane highlight identities must match"
-            );
-            assert_eq!(
-                sorted_ids(&bespoke.lanes[0].comments, |c| c.event_id.clone()),
-                sorted_ids(&kernel.assembled_lanes[0].comments, |c| c.event_id.clone()),
-                "P4: lane comment identities must match"
             );
         }
 
@@ -2911,7 +2853,6 @@ mod tests {
         fn parity_discussion_excluded_from_artifacts_coordinate_seeds_preview() {
             use crate::kernel::snapshot::DiscussionRow;
 
-            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
             let mut state = make_state();
             state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
 
@@ -2929,15 +2870,6 @@ mod tests {
                 .custom_created_at(Timestamp::from(1_000_000))
                 .sign_with_keys(&keys)
                 .unwrap();
-
-            // bespoke: discussion must be excluded from artifacts
-            process_event_and_wait(&ndb, &disc_ev);
-            let bespoke = crate::room_home::query_room_home_snapshot(&ndb, TEST_GROUP);
-            assert_eq!(
-                bespoke.artifacts.len(),
-                0,
-                "P5: bespoke must exclude discussion events from artifacts"
-            );
 
             // kernel: discussion row with artifact_coordinate must seed a preview
             // (mirrors what discussions.rs DiscussionObserver produces after Gap 2 fix)
@@ -2969,12 +2901,12 @@ mod tests {
             };
             assert_eq!(
                 kernel.artifact_library.len(),
-                bespoke.artifacts.len(),
+                0,
                 "P5: kernel artifact_library must exclude discussion events (both 0)"
             );
             assert_eq!(
                 kernel.assembled_lanes.len(),
-                bespoke.lanes.len(),
+                0,
                 "P5: kernel must produce no lanes for a discussion-only room"
             );
         }
@@ -2991,7 +2923,6 @@ mod tests {
         // holding the highlight.
         #[test]
         fn parity_highlight_matches_via_secondary_source_url() {
-            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
             let mut state = make_state();
             state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
             state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
@@ -3020,37 +2951,26 @@ mod tests {
                 .sign_with_keys(&keys)
                 .unwrap();
 
-            process_event_and_wait(&ndb, &artifact_ev);
-            process_event_and_wait(&ndb, &hl_ev);
             inject_lane_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&artifact_ev));
             inject_hl_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&hl_ev));
 
-            let bespoke = crate::room_home::query_room_home_snapshot(&ndb, TEST_GROUP);
             let ViewSnapshot::RoomHome(kernel) =
                 project_room_home_snapshot(&state, TEST_GROUP).unwrap()
             else {
                 panic!("expected RoomHome snapshot");
             };
 
-            // Bespoke matches via source_url → 1 lane with the highlight.
             assert_eq!(
-                bespoke.lanes.len(),
-                1,
-                "P6: bespoke must match the highlight via source_url (1 lane)"
-            );
-            assert_eq!(
-                bespoke.lanes.len(),
                 kernel.assembled_lanes.len(),
+                1,
                 "P6: kernel lane count must match bespoke (no dropped highlight)"
             );
+            let kernel_hl_ids = sorted_ids(&kernel.assembled_lanes[0].highlights, |h| {
+                h.event_id.clone()
+            });
             assert_eq!(
-                sorted_ids(&bespoke.lanes[0].highlights, |h| h
-                    .highlight
-                    .event_id
-                    .clone()),
-                sorted_ids(&kernel.assembled_lanes[0].highlights, |h| h
-                    .event_id
-                    .clone()),
+                kernel_hl_ids,
+                vec![hl_ev.id.to_hex()],
                 "P6: the source_url-matched highlight must be in the kernel lane"
             );
             assert_eq!(

@@ -15,8 +15,6 @@ use crate::articles;
 use crate::blossom;
 use crate::clock::{Clock, SystemClock};
 use crate::comments;
-use crate::curation;
-use crate::discovery;
 use crate::errors::CoreError;
 use crate::events::{DataChangeType, Delta, EventCallback};
 use crate::feedback;
@@ -25,15 +23,13 @@ use crate::groups;
 use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
-    ArticleRecord, ArtifactDetailRoute, ArtifactPreview, ArtifactRecord, BlossomUpload, BookRoute,
-    BookmarkSetRecord, CommentRecord, CommentReferenceBucket, CommentScope, CommunitySummary,
+    ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, BookRoute,
+    BookmarkSetRecord, CommentRecord, CommentScope, CommunitySummary,
     CurrentUser, DiscussionRecord, FeedbackThreadRecord, HighlightRecord, HighlightSourceKind,
     LoginInputAction, MutationSnapshot, NostrConnectOptions, OnboardingInterest,
     OnboardingInterestProjection, OnboardingInterestSelection, ProfileMetadata,
     ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, SubscriptionStartSnapshot,
 };
-use crate::network_preferences;
-use crate::nip05;
 use crate::nip46::{self, BunkerSigner};
 use crate::nostr_runtime::NostrRuntime;
 use crate::onboarding;
@@ -44,20 +40,13 @@ use crate::podcast_transcript::{
     PodcastListeningProjection, PodcastListeningProjectionInput, TranscriptSegment,
 };
 use crate::profile;
-use crate::profile_page;
 use crate::reads;
-use crate::recent_searches;
-use crate::recommendations;
 use crate::relays::nostr_connect_relay;
-use crate::room_explorer_config;
-use crate::room_library;
-use crate::room_state;
 use crate::session::{current_user_from_pubkey, Session};
 use crate::share_links;
 use crate::share_targets;
 use crate::subscriptions::{SubscriptionKind, SubscriptionRegistry};
 use crate::web_metadata::{self, WebMetadata, WebMetadataStore};
-use crate::whats_new;
 
 #[derive(uniffi::Object)]
 pub struct HighlighterCore {
@@ -73,16 +62,8 @@ pub struct HighlighterCore {
     /// Rust-owned persistent ISBN preview cache. Native shells render these
     /// previews but do not mirror them in platform storage.
     isbn_previews: Arc<isbn_lookup::IsbnPreviewCache>,
-    /// Rust-owned recent search history shared by every native shell.
-    recent_searches: Arc<recent_searches::RecentSearchesStore>,
-    /// Rust-owned rooms explorer curator config and NIP-11 refresh path.
-    room_explorer_config: Arc<room_explorer_config::RoomExplorerConfigStore>,
-    /// Rust-owned What's New entries and seen marker.
-    whats_new: Arc<whats_new::WhatsNewStore>,
     /// Rust-owned durable onboarding completion flag.
     onboarding: Arc<onboarding::OnboardingStore>,
-    /// Rust-owned network preference state.
-    network_preferences: Arc<network_preferences::NetworkPreferencesStore>,
     /// Rust-owned durable podcast playback position.
     podcast_position: Arc<podcast_position::PodcastPositionStore>,
     /// Kernel-owned clock shared by feature modules that need timestamps.
@@ -522,30 +503,6 @@ impl HighlighterCore {
         mutation_snapshot(result)
     }
 
-    pub async fn set_wifi_only_enabled(
-        &self,
-        enabled: bool,
-    ) -> crate::relays::NetworkWifiOnlyPreferenceSnapshot {
-        let previous = self.network_preferences.wifi_only_enabled();
-        let snapshot = crate::relays::network_wifi_only_preference_snapshot(
-            self.network_preferences.set_wifi_only_enabled(enabled),
-            enabled,
-            previous,
-        );
-        if snapshot.applied && !snapshot.wifi_only_enabled {
-            self.runtime.client().connect().await;
-        }
-        snapshot
-    }
-
-    pub fn get_network_wifi_only_preference_snapshot(
-        &self,
-    ) -> crate::relays::NetworkWifiOnlyPreferenceSnapshot {
-        crate::relays::network_wifi_only_current_snapshot(
-            self.network_preferences.wifi_only_enabled(),
-        )
-    }
-
     pub fn project_network_wifi_only_preference_apply(
         &self,
         input: crate::relays::NetworkWifiOnlyPreferenceApplyInput,
@@ -739,17 +696,6 @@ impl HighlighterCore {
         podcast_transcript::download_artwork(&url).await.ok()
     }
 
-    pub fn get_artifact_detail_route(&self, artifact: ArtifactRecord) -> ArtifactDetailRoute {
-        crate::artifact_detail::route_for_artifact(&artifact)
-    }
-
-    pub fn get_artifact_detail_projection(
-        &self,
-        artifact: ArtifactRecord,
-    ) -> crate::artifact_detail::ArtifactDetailProjection {
-        crate::artifact_detail::projection_for_artifact(&artifact)
-    }
-
     pub fn share_extension_communities_snapshot(
         &self,
         communities: Vec<CommunitySummary>,
@@ -762,14 +708,6 @@ impl HighlighterCore {
         input: crate::share_extension::ShareQueueDrainProjectionInput,
     ) -> crate::share_extension::ShareQueueDrainProjection {
         crate::share_extension::share_queue_drain_projection(input)
-    }
-
-    pub async fn prepare_whats_new(&self) -> whats_new::WhatsNewPresentationSnapshot {
-        whats_new::presentation_snapshot(self.whats_new.prepare().await)
-    }
-
-    pub async fn mark_whats_new_seen(&self, shipped_at_unix_seconds: u64) -> MutationSnapshot {
-        mutation_snapshot(self.whats_new.mark_seen(shipped_at_unix_seconds).await)
     }
 
     // -- Auth (async) --
@@ -1155,16 +1093,6 @@ impl HighlighterCore {
         crate::relays::relay_hosted_rooms_apply_projection(input)
     }
 
-    /// Full room-home read model for one community. Rust owns artifact and
-    /// highlight limits, reference-scoped highlight/comment reads, and lane
-    /// assembly.
-    pub async fn get_room_home_snapshot(
-        &self,
-        group_id: String,
-    ) -> crate::room_home::RoomHomeSnapshot {
-        crate::room_home::query_room_home_snapshot(self.runtime.ndb(), &group_id)
-    }
-
     /// Classify a highlight source for native icon/label rendering. Rust owns
     /// the source/reference interpretation; native shells only render the enum.
     pub fn get_highlight_source_kind(
@@ -1187,40 +1115,6 @@ impl HighlighterCore {
         input: reads::ReadingFeedCardProjectionInput,
     ) -> reads::ReadingFeedCardProjection {
         reads::reading_feed_card_projection(input)
-    }
-
-    /// Full highlights home feed snapshot. Rust owns the following-highlights
-    /// query, following-reads query, cross-feed dedupe, grouping, stable ids,
-    /// and merged ordering.
-    pub async fn get_home_feed_snapshot(
-        &self,
-        highlight_limit: u32,
-        read_limit: u32,
-    ) -> crate::home_feed::HomeFeedSnapshot {
-        let result: Result<crate::home_feed::HomeFeedSnapshot, CoreError> = (|| {
-            let Some(user) = self.inner.read().session.current_user() else {
-                return Err(CoreError::NotAuthenticated);
-            };
-            let joined =
-                groups::query_joined_communities_from_ndb(self.runtime.ndb(), &user.pubkey)?;
-            let group_ids: Vec<String> = joined.into_iter().map(|c| c.id).collect();
-            let highlights = highlights::query_following_highlights(
-                self.runtime.ndb(),
-                &user.pubkey,
-                &group_ids,
-                highlight_limit,
-            )?;
-            let reads = reads::query_following_reads(self.runtime.ndb(), &user.pubkey, read_limit)?;
-            Ok(crate::home_feed::snapshot(highlights, reads))
-        })();
-        result.unwrap_or_else(crate::home_feed::error_snapshot)
-    }
-
-    pub fn project_home_feed_snapshot_apply(
-        &self,
-        input: crate::home_feed::HomeFeedSnapshotApplyInput,
-    ) -> crate::home_feed::HomeFeedSnapshotApplyProjection {
-        crate::home_feed::snapshot_apply_projection(input)
     }
 
     pub fn project_highlight_group_card(
@@ -1282,25 +1176,6 @@ impl HighlighterCore {
         profile::query_profile_from_ndb(self.runtime.ndb(), pubkey_hex.trim())
             .ok()
             .flatten()
-    }
-
-    /// Full profile-page read model. Rust owns tab queries, section limits,
-    /// current-viewer follow state, and per-section cache-error fallback.
-    pub async fn get_profile_page_snapshot(
-        &self,
-        pubkey_hex: String,
-    ) -> profile_page::ProfilePageSnapshot {
-        let viewer_pubkey = self
-            .inner
-            .read()
-            .session
-            .current_user()
-            .map(|user| user.pubkey);
-        profile_page::query_profile_page_snapshot(
-            self.runtime.ndb(),
-            pubkey_hex.trim(),
-            viewer_pubkey.as_deref(),
-        )
     }
 
     /// Profile/avatar presentation projection. Rust owns profile-name
@@ -1398,36 +1273,6 @@ impl HighlighterCore {
         }
         .await;
         profile::profile_update_snapshot(result)
-    }
-
-    pub fn normalize_nip05_username(&self, input: String) -> String {
-        nip05::normalize_username(&input)
-    }
-
-    pub fn suggest_nip05_username(&self, display_name: String) -> String {
-        nip05::suggest_username(&display_name)
-    }
-
-    pub fn is_nip05_username_valid(&self, input: String) -> bool {
-        nip05::is_valid_username(&input)
-    }
-
-    /// Project onboarding account creation state. Rust owns display-name
-    /// trimming and continue eligibility.
-    pub fn project_onboarding_create_account(
-        &self,
-        input: nip05::OnboardingCreateAccountProjectionInput,
-    ) -> nip05::OnboardingCreateAccountProjection {
-        nip05::onboarding_create_account_projection(input)
-    }
-
-    /// Project username availability-check state. Rust owns canonical trim
-    /// and username validity for the onboarding flow.
-    pub fn project_onboarding_username_check(
-        &self,
-        username: String,
-    ) -> nip05::OnboardingUsernameCheckProjection {
-        nip05::onboarding_username_check_projection(&username)
     }
 
     /// Full article-reader read model. Rust owns article/profile/highlight
@@ -1628,50 +1473,6 @@ impl HighlighterCore {
         preview: ArtifactPreview,
     ) -> comments::CommentScopeSnapshot {
         comments::scope_snapshot(comments::scope_from_preview(&preview))
-    }
-
-    pub fn project_room_library_article_card(
-        &self,
-        input: room_library::RoomLibraryArticleCardProjectionInput,
-    ) -> room_library::RoomLibraryArticleCardProjection {
-        room_library::article_card_projection(input)
-    }
-
-    pub fn project_room_library_card_kind(
-        &self,
-        input: room_library::RoomLibraryCardKindProjectionInput,
-    ) -> room_library::RoomLibraryCardKindProjection {
-        room_library::card_kind_projection(input)
-    }
-
-    pub fn project_room_library_book_card(
-        &self,
-        input: room_library::RoomLibraryBookCardProjectionInput,
-    ) -> room_library::RoomLibraryBookCardProjection {
-        room_library::book_card_projection(input)
-    }
-
-    pub fn project_room_library_podcast_card(
-        &self,
-        input: room_library::RoomLibraryPodcastCardProjectionInput,
-    ) -> room_library::RoomLibraryPodcastCardProjection {
-        room_library::podcast_card_projection(input)
-    }
-
-    pub fn project_room_library_generic_card(
-        &self,
-        input: room_library::RoomLibraryGenericCardProjectionInput,
-    ) -> room_library::RoomLibraryGenericCardProjection {
-        room_library::generic_card_projection(input)
-    }
-
-    /// Count comments for an artifact using Rust-owned reference keys.
-    pub fn count_artifact_comments(
-        &self,
-        artifact: ArtifactRecord,
-        comments_by_reference: Vec<CommentReferenceBucket>,
-    ) -> u32 {
-        room_state::artifact_comment_count(&artifact, &comments_by_reference)
     }
 
     pub fn project_discussion_attachment(
@@ -2078,24 +1879,6 @@ impl HighlighterCore {
         query: String,
     ) -> crate::search::SearchArticleResultsSnapshot {
         crate::search::search_article_results_snapshot(self.runtime.ndb(), &query)
-    }
-
-    /// Search screen chrome snapshot: recent query history plus resolved
-    /// NIP-50 relays. Rust owns persistence, de-dupe, relay defaults, and
-    /// error semantics.
-    pub async fn get_search_chrome_snapshot(&self) -> crate::search::SearchChromeSnapshot {
-        self.search_chrome_snapshot_from_recent(self.recent_searches.all().await)
-    }
-
-    pub async fn record_recent_search_snapshot(
-        &self,
-        query: String,
-    ) -> crate::search::SearchChromeSnapshot {
-        self.search_chrome_snapshot_from_recent(self.recent_searches.record(&query).await)
-    }
-
-    pub async fn clear_recent_searches_snapshot(&self) -> crate::search::SearchChromeSnapshot {
-        self.search_chrome_snapshot_from_recent(self.recent_searches.clear().await)
     }
 
     /// Open a NIP-50 relay subscription for kind:30023 against the user's
@@ -3135,94 +2918,6 @@ impl HighlighterCore {
         })())
     }
 
-    pub async fn start_room_explorer_featured_rooms(&self) -> MutationSnapshot {
-        let result: Result<(), CoreError> = async {
-            let curator_pubkey = self.room_explorer_config.refresh_curator_pubkey().await?;
-            let outcome = self.start_featured_rooms(curator_pubkey).await;
-            if outcome.error.is_empty() {
-                Ok(())
-            } else {
-                Err(CoreError::Other(outcome.error))
-            }
-        }
-        .await;
-        mutation_snapshot(result)
-    }
-
-    /// Snapshot for the room explorer shelves. Rust owns curator lookup,
-    /// per-shelf cache failure fallbacks, joined-room exclusion, and shelf
-    /// limits. Native shells render the returned shelves.
-    pub async fn get_room_explorer_snapshot(
-        &self,
-        joined: Vec<CommunitySummary>,
-    ) -> crate::room_explorer::RoomExplorerSnapshot {
-        let curator_pubkey = self
-            .room_explorer_config
-            .curator_pubkey()
-            .await
-            .unwrap_or_default();
-        let featured = if curator_pubkey.trim().is_empty() {
-            Vec::new()
-        } else {
-            curation::fetch_curated_rooms_from_ndb(self.runtime.ndb(), curator_pubkey.trim())
-                .unwrap_or_default()
-        };
-        let new_rooms =
-            discovery::query_all_rooms_from_ndb(self.runtime.ndb(), 24).unwrap_or_default();
-        let new_noteworthy = discovery::exclude_joined_rooms(&new_rooms, &joined);
-        let user_pubkey = self.inner.read().session.current_user().map(|u| u.pubkey);
-        let (friends_shelf, authors_shelf) = match user_pubkey {
-            Some(pubkey) => (
-                recommendations::query_rooms_with_friends(self.runtime.ndb(), &pubkey, 16)
-                    .unwrap_or_default(),
-                recommendations::query_rooms_from_read_authors(self.runtime.ndb(), &pubkey, 16)
-                    .unwrap_or_default(),
-            ),
-            None => (Vec::new(), Vec::new()),
-        };
-
-        crate::room_explorer::RoomExplorerSnapshot {
-            featured,
-            new_noteworthy,
-            friends_shelf,
-            authors_shelf,
-        }
-    }
-
-    /// Screen-shaped snapshot for the explorer's "Browse all" grid. Rust owns
-    /// the cache query, limit, query normalization, and matched fields.
-    pub async fn get_room_browse_snapshot(
-        &self,
-        query: String,
-        limit: u32,
-    ) -> crate::room_explorer::RoomBrowseSnapshot {
-        match discovery::query_all_rooms_from_ndb(self.runtime.ndb(), limit) {
-            Ok(rooms) => crate::room_explorer::room_browse_snapshot(&rooms, &query),
-            Err(error) => crate::room_explorer::room_browse_error_snapshot(error),
-        }
-    }
-
-    pub fn project_room_browse_snapshot_apply(
-        &self,
-        input: crate::room_explorer::RoomBrowseSnapshotApplyInput,
-    ) -> crate::room_explorer::RoomBrowseSnapshotApplyProjection {
-        crate::room_explorer::room_browse_snapshot_apply_projection(input)
-    }
-
-    pub fn project_room_explorer_join_request_result(
-        &self,
-        input: crate::room_explorer::RoomExplorerJoinRequestResultInput,
-    ) -> crate::room_explorer::RoomExplorerJoinRequestResultProjection {
-        crate::room_explorer::room_explorer_join_request_result_projection(input)
-    }
-
-    pub fn project_room_explorer_featured_start_result(
-        &self,
-        input: crate::room_explorer::RoomExplorerFeaturedStartResultInput,
-    ) -> crate::room_explorer::RoomExplorerFeaturedStartResultProjection {
-        crate::room_explorer::room_explorer_featured_start_result_projection(input)
-    }
-
     /// Publish a NIP-29 kind:9021 join-request for `group_id`. Rust owns the
     /// pending-join state and emits app toast deltas for request sent,
     /// request failure, and later membership confirmation.
@@ -3288,34 +2983,6 @@ impl HighlighterCore {
         input: groups::RoomCoverCardProjectionInput,
     ) -> groups::RoomCoverCardProjection {
         groups::room_cover_card_projection(input)
-    }
-
-    pub fn project_room_recommendation_card(
-        &self,
-        input: recommendations::RoomRecommendationCardProjectionInput,
-    ) -> recommendations::RoomRecommendationCardProjection {
-        recommendations::room_recommendation_card_projection(input)
-    }
-
-    pub fn project_room_preview_artifacts(
-        &self,
-        input: crate::room_preview::RoomPreviewArtifactsProjectionInput,
-    ) -> crate::room_preview::RoomPreviewArtifactsProjection {
-        crate::room_preview::room_preview_artifacts_projection(input)
-    }
-
-    pub fn project_room_preview_header(
-        &self,
-        input: crate::room_preview::RoomPreviewHeaderProjectionInput,
-    ) -> crate::room_preview::RoomPreviewHeaderProjection {
-        crate::room_preview::room_preview_header_projection(input)
-    }
-
-    pub fn project_room_preview_action(
-        &self,
-        input: crate::room_preview::RoomPreviewActionProjectionInput,
-    ) -> crate::room_preview::RoomPreviewActionProjection {
-        crate::room_preview::room_preview_action_projection(input)
     }
 
     pub async fn create_room(
@@ -3621,32 +3288,6 @@ impl HighlighterCore {
 
     // -- Relay config (NIP-65 read/write + NIP-78 rooms/indexer) --
 
-    /// Return the screen-shaped Network Settings snapshot: configured relays,
-    /// live diagnostics, derived header/auto-connected projection, Wi-Fi-only
-    /// preference, and error state.
-    pub async fn get_network_settings_snapshot(
-        &self,
-        previous_relays: Vec<crate::relays::RelayConfig>,
-    ) -> crate::relays::NetworkSettingsSnapshot {
-        let diagnostics = self.runtime.relay_diagnostics_snapshot().await;
-        let wifi_only_enabled = self.network_preferences.wifi_only_enabled();
-        let result = (|| {
-            let user = self
-                .inner
-                .read()
-                .session
-                .current_user()
-                .ok_or(CoreError::NotAuthenticated)?;
-            crate::relays::query_relays(self.runtime.ndb(), &user.pubkey)
-        })();
-        crate::relays::network_settings_snapshot(
-            result,
-            previous_relays,
-            diagnostics,
-            wifi_only_enabled,
-        )
-    }
-
     pub fn project_network_settings_snapshot_apply(
         &self,
         input: crate::relays::NetworkSettingsSnapshotApplyInput,
@@ -3866,127 +3507,9 @@ impl HighlighterCore {
         crate::relays::network_settings_mutation_snapshot(Ok(()), false, "Couldn't disconnect")
     }
 
-    /// Handle the app returning to foreground. iOS may suspend WebSockets
-    /// while backgrounded; when Wi-Fi-only mode is off, force a fresh
-    /// socket/subscription cycle. When Wi-Fi-only is on, the raw path update
-    /// is the only authority allowed to reconnect.
-    pub async fn refresh_relay_connections_for_foreground(
-        &self,
-    ) -> crate::relays::NetworkSettingsMutationSnapshot {
-        if self.network_preferences.wifi_only_enabled() {
-            return crate::relays::network_settings_mutation_snapshot(
-                Ok(()),
-                false,
-                "Couldn't refresh relay connections",
-            );
-        }
-        self.runtime.client().disconnect().await;
-        self.runtime.client().connect().await;
-        self.runtime.sync_relay_diagnostics().await;
-        crate::relays::network_settings_mutation_snapshot(
-            Ok(()),
-            false,
-            "Couldn't refresh relay connections",
-        )
-    }
-
-    /// Apply a raw native network path update. Native reports only whether
-    /// the current path is Wi-Fi; Rust owns the Wi-Fi-only preference lookup
-    /// and relay connect/disconnect policy.
-    pub async fn apply_network_path_status(
-        &self,
-        is_wifi: bool,
-    ) -> crate::relays::NetworkPathPolicySnapshot {
-        let snapshot = crate::relays::network_path_policy_snapshot(
-            self.network_preferences.wifi_only_enabled(),
-            is_wifi,
-        );
-        match snapshot.relay_action {
-            crate::relays::NetworkRelayConnectionPolicyAction::None => {}
-            crate::relays::NetworkRelayConnectionPolicyAction::ReconnectAll => {
-                self.runtime.client().connect().await;
-                self.runtime.sync_relay_diagnostics().await;
-            }
-            crate::relays::NetworkRelayConnectionPolicyAction::DisconnectAll => {
-                self.runtime.client().disconnect().await;
-                self.runtime.sync_relay_diagnostics().await;
-            }
-        }
-        snapshot
-    }
-
-    /// Fetch the target relay's NIP-11 information document via an HTTPS
-    /// GET to the `ws[s]://` URL's HTTP equivalent with
-    /// `Accept: application/nostr+json`. Fails fast on timeout.
-    pub async fn probe_relay_nip11_snapshot(
-        &self,
-        url: String,
-    ) -> crate::relays::RelayNip11ProbeSnapshot {
-        crate::relays::relay_nip11_probe_snapshot(crate::relay_polish::probe_nip11(&url).await)
-    }
-
-    /// Fetch another user's kind:10002 via the indexer pool and return the
-    /// parsed `RelayConfig` rows. Useful for "adopt someone else's relay
-    /// setup" flows — the Swift caller shows the list with checkboxes
-    /// and upserts the selected subset through `upsert_relay`.
-    pub async fn import_relays_from_npub_snapshot(
-        &self,
-        npub: String,
-    ) -> crate::relays::ImportRelaysFetchSnapshot {
-        crate::relays::import_relays_fetch_snapshot(
-            crate::relay_polish::import_from_npub(&self.runtime, &npub).await,
-        )
-    }
-
-    /// Size + event-count snapshot of the local nostrdb cache. Order-of-
-    /// magnitude figures used by the Network Settings "Local cache" card.
-    pub async fn get_network_cache_stats_snapshot(
-        &self,
-    ) -> crate::relays::NetworkCacheStatsSnapshot {
-        crate::relays::network_cache_stats_snapshot(crate::relay_polish::cache_stats(
-            self.runtime.ndb(),
-            self.runtime.data_dir(),
-        ))
-    }
 }
 
 impl HighlighterCore {
-    /// Install (if not already installed) the kind:10012 curated-list sub for
-    /// `curator_pubkey_hex`. Once the list lands in ndb, this method also
-    /// spawns a metadata backfill for every group the list references, so a
-    /// subsequent room explorer snapshot returns rich summaries rather than
-    /// bare ids. Idempotent; the sub rides until logout.
-    async fn start_featured_rooms(&self, curator_pubkey_hex: String) -> MutationSnapshot {
-        mutation_snapshot((|| {
-            let curator = PublicKey::from_hex(curator_pubkey_hex.trim())
-                .map_err(|e| CoreError::InvalidInput(format!("invalid curator pubkey: {e}")))?;
-
-            let already = self.inner.read().session.has_curation_subscription();
-            if !already {
-                let sub_id = self.runtime.spawn_curated_list_subscription(curator);
-                self.inner.write().session.set_curation_subscription(sub_id);
-            }
-
-            // Even if the sub was already installed, ensure any groups the
-            // currently-cached list references have their 39000s backfilled;
-            // the relay may have delivered the list but not the metadata.
-            let group_ids_from_list = {
-                let ndb = self.runtime.ndb();
-                // Reuse fetch_curated_rooms' internals indirectly by asking for
-                // the list's ids. A full fetch is cheap; we only need ids here.
-                match curation::fetch_curated_rooms_from_ndb(ndb, curator_pubkey_hex.trim()) {
-                    Ok(summaries) => summaries.into_iter().map(|c| c.id).collect::<Vec<_>>(),
-                    Err(_) => Vec::new(),
-                }
-            };
-            if !group_ids_from_list.is_empty() {
-                self.runtime
-                    .spawn_group_metadata_subscription(group_ids_from_list);
-            }
-            Ok(())
-        })())
-    }
-
     fn emit_app_toast(&self, message: String) {
         if message.trim().is_empty() {
             return;
@@ -4098,17 +3621,7 @@ impl HighlighterCore {
             clock.clone(),
         ));
         let isbn_previews = Arc::new(isbn_lookup::IsbnPreviewCache::new(runtime.data_dir()));
-        let recent_searches = Arc::new(recent_searches::RecentSearchesStore::new(
-            runtime.data_dir(),
-        ));
-        let room_explorer_config = Arc::new(room_explorer_config::RoomExplorerConfigStore::new(
-            runtime.data_dir(),
-        ));
-        let whats_new = Arc::new(whats_new::WhatsNewStore::new(runtime.data_dir()));
         let onboarding = Arc::new(onboarding::OnboardingStore::new(runtime.data_dir()));
-        let network_preferences = Arc::new(network_preferences::NetworkPreferencesStore::new(
-            runtime.data_dir(),
-        ));
         let podcast_position = Arc::new(podcast_position::PodcastPositionStore::new_with_clock(
             runtime.data_dir(),
             clock.clone(),
@@ -4123,11 +3636,7 @@ impl HighlighterCore {
             subscriptions,
             web_metadata,
             isbn_previews,
-            recent_searches,
-            room_explorer_config,
-            whats_new,
             onboarding,
-            network_preferences,
             podcast_position,
             clock,
         })
@@ -4179,33 +3688,6 @@ impl HighlighterCore {
             .session
             .current_user()
             .map(|user| user.pubkey)
-    }
-
-    fn search_chrome_snapshot_from_recent(
-        &self,
-        recent_result: Result<Vec<String>, CoreError>,
-    ) -> crate::search::SearchChromeSnapshot {
-        let mut error = String::new();
-        let recent_queries = match recent_result {
-            Ok(values) => values,
-            Err(err) => {
-                error = err.to_string();
-                Vec::new()
-            }
-        };
-        let user_hex = self.current_user_pubkey_hex().unwrap_or_default();
-        let search_relays = match crate::search::query_search_relays(self.runtime.ndb(), &user_hex)
-        {
-            Ok(values) => values,
-            Err(err) => {
-                if !error.is_empty() {
-                    error.push('\n');
-                }
-                error.push_str(&err.to_string());
-                Vec::new()
-            }
-        };
-        crate::search::search_chrome_snapshot(recent_queries, search_relays, error)
     }
 
     fn curation_menu_snapshot_for_user(

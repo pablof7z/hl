@@ -15,7 +15,6 @@ pub use kernel::{
 
 pub mod article_reader;
 pub mod articles;
-pub mod artifact_detail;
 pub mod artifacts;
 pub mod blossom;
 pub mod book_detail;
@@ -26,7 +25,6 @@ pub mod client;
 pub mod clock;
 pub mod comments;
 pub mod curation;
-pub mod discovery;
 pub mod discussions;
 pub mod errors;
 pub mod events;
@@ -34,12 +32,9 @@ pub mod feedback;
 pub mod follows;
 pub mod groups;
 pub mod highlights;
-pub mod home_feed;
 pub mod isbn_lookup;
 pub mod lists;
 pub mod models;
-pub mod network_preferences;
-pub mod nip05;
 pub mod nip46;
 pub mod nostr_entities;
 pub mod nostr_runtime;
@@ -51,23 +46,11 @@ pub mod podcast_playback;
 pub mod podcast_position;
 pub mod podcast_transcript;
 pub mod profile;
-pub mod profile_page;
 pub mod reactions;
 pub mod reads;
 pub mod recent_books;
-pub mod recent_searches;
-pub mod recommendations;
-pub mod reference_targets;
-pub mod relay_polish;
 pub mod relays;
-pub mod room_explorer;
-pub mod room_explorer_config;
-pub mod room_home;
 pub mod room_invites;
-pub mod room_lanes;
-pub mod room_library;
-pub mod room_preview;
-pub mod room_state;
 pub mod search;
 pub mod session;
 pub mod share_extension;
@@ -79,7 +62,6 @@ pub mod test_ndb;
 pub mod time_labels;
 pub mod waveform;
 pub mod web_metadata;
-pub mod whats_new;
 
 pub use article_reader::{
     ArticleReaderHighlightPublishSnapshot, ArticleReaderPublishResultInput,
@@ -90,7 +72,6 @@ pub use articles::{
     ArticleProfileCardProjection, ArticleProfileCardProjectionInput, ArticleReaderHeaderProjection,
     ArticleReaderHeaderProjectionInput,
 };
-pub use artifact_detail::ArtifactDetailProjection;
 pub use artifacts::ArtifactPublishSnapshot;
 pub use blossom::{
     BlossomServerEntryProjection, BlossomServerEntryProjectionInput, BlossomServerListProjection,
@@ -113,12 +94,6 @@ pub use capture::{
     CapturePublishResultProjectionInput, CapturePublishSnapshot, CaptureStashProjection,
     CaptureStashProjectionInput, CaptureUploadProjection, CaptureUploadProjectionInput,
 };
-pub use chat::{
-    ChatActivityReloadProjection, ChatActivityReloadProjectionInput, ChatComposerProjection,
-    ChatComposerProjectionInput, ChatLoadMoreProjection, ChatLoadMoreProjectionInput,
-    ChatMessageRowProjection, ChatPresenceSnapshot, ChatPublishResultInput,
-    ChatPublishResultProjection, ChatPublishSnapshot, ChatSnapshot,
-};
 pub use client::HighlighterCore;
 pub use comments::{
     CommentActionChromeProjection, CommentActionChromeProjectionInput, CommentComposerProjection,
@@ -130,21 +105,8 @@ pub use comments::{
     CommentSnapshotApplyProjection, CommentThreadSnapshot, CommentThreadViewProjection,
     CommentThreadViewProjectionInput, CommentToolbarProjection, CommentToolbarProjectionInput,
 };
-pub use discussions::{
-    DiscussionAttachmentProjection, DiscussionAttachmentProjectionInput,
-    DiscussionComposerProjection, DiscussionComposerProjectionInput,
-    DiscussionComposerPublishInput, DiscussionPublishResultInput,
-    DiscussionPublishResultProjection, DiscussionPublishSnapshot, RoomDiscussionSnapshot,
-};
 pub use errors::CoreError;
 pub use events::{DataChangeType, Delta, EventCallback};
-pub use feedback::{
-    FeedbackComposerProjection, FeedbackComposerProjectionInput, FeedbackMessagePresentationInput,
-    FeedbackMessagePresentationProjection, FeedbackMessageRowProjection,
-    FeedbackPublishResultInput, FeedbackPublishResultProjection, FeedbackReplyPublishSnapshot,
-    FeedbackRootPublishSnapshot, FeedbackSnapshotApplyInput, FeedbackSnapshotApplyProjection,
-    FeedbackThreadPresentationProjection, FeedbackThreadSnapshot, FeedbackThreadsSnapshot,
-};
 pub use groups::{
     CommunityRowProjection, CommunityRowProjectionInput, CreateRoomCoverUploadResultInput,
     CreateRoomCoverUploadResultProjection, CreateRoomProjection, CreateRoomProjectionInput,
@@ -164,9 +126,6 @@ pub use highlights::{
     HighlightGroupHighlighterProfile, HighlightGroupHighlighterProjection,
     HighlightGroupLabelSegment, HighlightResourceAuthorProfile, HighlightResourceHeaderProjection,
     HighlightResourceHeaderProjectionInput, HighlightShareUrlSnapshot,
-};
-pub use home_feed::{
-    HomeFeedSnapshot, HomeFeedSnapshotApplyInput, HomeFeedSnapshotApplyProjection,
 };
 pub use isbn_lookup::{
     BookPickerQueryProjection, BookPickerQueryProjectionInput, BookPickerSnapshot,
@@ -196,11 +155,6 @@ pub use models::{
     ProfileMetadata, ProfileUpdateDraft, ReadingFeedItem, RoomLane, RoomRecommendation,
     RoomRecommendationReason, SubscriptionStartSnapshot, ViewSubscriptionStartProjection,
     ViewSubscriptionStartProjectionInput, WebBookmarkRecord,
-};
-pub use nip05::{
-    Nip05Availability, Nip05AvailabilitySnapshot, Nip05AvailabilityState,
-    Nip05RegistrationSnapshot, OnboardingCreateAccountProjection,
-    OnboardingCreateAccountProjectionInput, OnboardingUsernameCheckProjection,
 };
 pub use nip46::NostrConnectStartSnapshot;
 pub use nostr_entities::{
@@ -234,14 +188,6 @@ pub use profile::{
     ProfileUpdateProjectionInput, ProfileUpdateResultInput, ProfileUpdateResultProjection,
     ProfileUpdateSnapshot,
 };
-pub use profile_page::ProfilePageSnapshot;
-pub use reads::{
-    ReadingFeedCardProjection, ReadingFeedCardProjectionInput, ReadingFeedInteractorProfile,
-};
-pub use recommendations::{
-    RoomRecommendationAvatarProjection, RoomRecommendationCardProjection,
-    RoomRecommendationCardProjectionInput, RoomRecommendationReasonProfile,
-};
 pub use relays::{
     AddRelayProbeStatus, AddRelaySheetProjection, AddRelaySheetProjectionInput, ImportRelayRow,
     ImportRelaysFetchApplyInput, ImportRelaysFetchApplyProjection, ImportRelaysFetchSnapshot,
@@ -258,13 +204,6 @@ pub use relays::{
     RelayNip11ProbeSnapshot, RelayRemoveProjection, RelayRemoveProjectionInput, RelayRowProjection,
     RelayRowProjectionInput, RelaySettingsProjection, RelayStatusTone,
 };
-pub use room_explorer::{
-    RoomBrowseSnapshot, RoomBrowseSnapshotApplyInput, RoomBrowseSnapshotApplyProjection,
-    RoomExplorerFeaturedStartResultInput, RoomExplorerFeaturedStartResultProjection,
-    RoomExplorerJoinRequestResultInput, RoomExplorerJoinRequestResultProjection,
-    RoomExplorerSnapshot,
-};
-pub use room_home::RoomHomeSnapshot;
 pub use room_invites::{
     RoomInviteAvatarProjection, RoomInviteAvatarProjectionInput, RoomInviteCandidate,
     RoomInviteCandidateSource, RoomInviteChip, RoomInviteInputFormat, RoomInviteProjection,
@@ -272,19 +211,6 @@ pub use room_invites::{
     RoomInviteSelectionChromeProjection, RoomInviteSelectionInput, RoomInviteSelectionProjection,
     RoomInviteSendResultProjection, RoomInviteSnapshot, RoomInviteSnapshotInput,
     RoomInviteSuggestion,
-};
-pub use room_library::{
-    RoomLibraryArticleCardProjection, RoomLibraryArticleCardProjectionInput,
-    RoomLibraryBookCardProjection, RoomLibraryBookCardProjectionInput, RoomLibraryCardKind,
-    RoomLibraryCardKindProjection, RoomLibraryCardKindProjectionInput,
-    RoomLibraryGenericCardProjection, RoomLibraryGenericCardProjectionInput,
-    RoomLibraryPodcastCardProjection, RoomLibraryPodcastCardProjectionInput,
-};
-pub use room_preview::{
-    RoomPreviewActionProjection, RoomPreviewActionProjectionInput,
-    RoomPreviewArtifactRowProjection, RoomPreviewArtifactsProjection,
-    RoomPreviewArtifactsProjectionInput, RoomPreviewHeaderProjection,
-    RoomPreviewHeaderProjectionInput, RoomPreviewSecondaryAction,
 };
 pub use search::{
     SearchArticleResultsSnapshot, SearchChromeSnapshot, SearchCommunityRowProjection,
@@ -324,4 +250,3 @@ pub use waveform::{
 pub use web_metadata::{
     WebMetadata, WebMetadataRequestProjection, WebMetadataRequestProjectionInput,
 };
-pub use whats_new::{WhatsNewEntry, WhatsNewPresentationSnapshot};
