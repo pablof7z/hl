@@ -49,7 +49,7 @@ struct NetworkSettingsView: View {
         }
         .sheet(isPresented: $showAddSheet) {
             if let store {
-                AddRelaySheet(initialDraft: appStore.safeCore.defaultAddRelayConfig()) { cfg in
+                AddRelaySheet(initialDraft: RelayConfig(url: "", read: true, write: true, rooms: false, indexer: false)) { cfg in
                     Task { await store.upsert(cfg) }
                 }
             }
