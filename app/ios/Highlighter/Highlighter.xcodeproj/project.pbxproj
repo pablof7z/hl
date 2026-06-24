@@ -36,6 +36,7 @@
 		288134279ABF7CE0B546E548 /* HighlightsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 923A12922C726646B50D25FD /* HighlightsTabView.swift */; };
 		2A7C8122C0DFE2FED18FFACC /* Color+Design.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91FC541346A385CE25897B18 /* Color+Design.swift */; };
 		2D36D9606CD3D1B52DDB4ECB /* OCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D440613F0159EB94851DA42F /* OCRService.swift */; };
+		2E144EF535909E1FB45DE133 /* LegacyProjectionTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5404A0A638EFB09ABBADA25A /* LegacyProjectionTypes.swift */; };
 		2E6CF960595A831EF8F09A07 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E16A359FC1C5B69DF399844 /* LoginView.swift */; };
 		2FB0225C4B61125BFE5C4E2A /* HighlightPageImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5C307F542E0909AA378D8B3 /* HighlightPageImage.swift */; };
 		31CABBF1F531C5239F7006DB /* ReadingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 920FC0E3AF21652B1A8FCCD5 /* ReadingCard.swift */; };
@@ -252,6 +253,7 @@
 		50D9FDAB29866D8CD3194444 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		51C1725D80C61F5BF4B8EF18 /* FeedbackThreadDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackThreadDetailView.swift; sourceTree = "<group>"; };
 		53DB38D802EBACF458DB6495 /* NostrContentGrouping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrContentGrouping.swift; sourceTree = "<group>"; };
+		5404A0A638EFB09ABBADA25A /* LegacyProjectionTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyProjectionTypes.swift; sourceTree = "<group>"; };
 		54989CA45E35C374AD2B3F1A /* CreateRoomSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateRoomSheet.swift; sourceTree = "<group>"; };
 		54E2E8D151F7A54CA505F3EE /* TranscriptSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSegment.swift; sourceTree = "<group>"; };
 		5528BD6E720FDA4BF021CD46 /* CapturePresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturePresenter.swift; sourceTree = "<group>"; };
@@ -604,6 +606,7 @@
 				335B9A66AB2D7661D29B6A60 /* HighlighterAppKernel.swift */,
 				C68126D4A3083806ED488835 /* HighlighterStore.swift */,
 				BB79225D0B5E8D7689EA0555 /* KernelCapabilityBridge.swift */,
+				5404A0A638EFB09ABBADA25A /* LegacyProjectionTypes.swift */,
 				FFB98694B90B62FBE7A589BF /* SafeHighlighterCore.swift */,
 				0B11E53320CF44FAE9BD3F4E /* ShakeDetector.swift */,
 			);
@@ -1059,6 +1062,7 @@
 				E9F21B132B5A5D5BAC626B63 /* KeychainService.swift in Sources */,
 				9F4DEE867B06C157F30B493B /* KeysView.swift in Sources */,
 				AEA757BDF87E8C48FF89B914 /* KnownSigner.swift in Sources */,
+				2E144EF535909E1FB45DE133 /* LegacyProjectionTypes.swift in Sources */,
 				2E6CF960595A831EF8F09A07 /* LoginView.swift in Sources */,
 				9B056187BF33103792720DA0 /* MainTabView.swift in Sources */,
 				D56EDC90739ADAC73F71812D /* ManualISBNEntryView.swift in Sources */,
