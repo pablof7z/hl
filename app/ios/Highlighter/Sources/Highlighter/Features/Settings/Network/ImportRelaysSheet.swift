@@ -161,10 +161,13 @@ struct ImportRelaysSheet: View {
         selectedUrls = []
         isFetching = true
         defer { isFetching = false }
-        // NOTE: importRelaysFromNpubSnapshot removed (relay_polish.rs deleted in
-        // Phase 7 teardown). Relay import is unavailable until the kernel exposes it.
-        _ = source.submitNpub
-        errorText = "Relay import is temporarily unavailable."
+        let configs = await appStore.fetchRelaysForPubkey(source.submitNpub)
+        if configs.isEmpty {
+            errorText = "No relay list found for that pubkey. Make sure you have at least one Indexer relay enabled and the user has published a kind:10002 event."
+        } else {
+            fetched = configs
+            selectedUrls = configs.map { $0.url }
+        }
     }
 
     private func applySelected() async {

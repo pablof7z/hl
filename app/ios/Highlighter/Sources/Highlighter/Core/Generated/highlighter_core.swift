@@ -1083,6 +1083,14 @@ public func FfiConverterTypeHighlighterApp_lower(_ value: HighlighterApp) -> Uns
 
 public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
+    /**
+     * Fetch another nostr user's relay list (kind:10002 NIP-65) from the
+     * indexer relay pool and return their configured relays. Used by the
+     * "Import from npub" flow. Returns an empty list on parse errors or when
+     * no kind:10002 is found within the 8-second timeout.
+     */
+    func fetchRelaysForPubkey(pubkeyHex: String) async  -> [RelayConfig]
+
     func getPodcastListeningClipsSnapshot(artifact: ArtifactRecord?, limit: UInt32) async  -> PodcastListeningClipsSnapshot
 
     func getPodcastPlaybackRehydrationSnapshot(hasCurrentArtifact: Bool)  -> PodcastPlaybackRehydrationSnapshot
@@ -1097,6 +1105,13 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * into a NIP-29 room.
      */
     func publishPodcastComposerClip(input: PodcastClipComposerPublishInput) async  -> PodcastClipPublishSnapshot
+
+    /**
+     * Read the user's configured relay list from the local event store.
+     * Source of truth: kind:10002 (NIP-65) + kind:30078 app-data. Falls
+     * back to seed defaults when no events are present. Non-blocking (ndb read).
+     */
+    func queryUserRelayConfigs(pubkeyHex: String)  -> [RelayConfig]
 
     func recordPodcastPlaybackPosition(input: PodcastPlaybackPositionInput)  -> MutationSnapshot
 
@@ -1161,6 +1176,30 @@ public convenience init() {
 
 
 
+
+    /**
+     * Fetch another nostr user's relay list (kind:10002 NIP-65) from the
+     * indexer relay pool and return their configured relays. Used by the
+     * "Import from npub" flow. Returns an empty list on parse errors or when
+     * no kind:10002 is found within the 8-second timeout.
+     */
+open func fetchRelaysForPubkey(pubkeyHex: String)async  -> [RelayConfig]  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_method_highlightercore_fetch_relays_for_pubkey(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(pubkeyHex)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceTypeRelayConfig.lift,
+            errorHandler: nil
+
+        )
+}
 
 open func getPodcastListeningClipsSnapshot(artifact: ArtifactRecord?, limit: UInt32)async  -> PodcastListeningClipsSnapshot  {
     return
@@ -1235,6 +1274,19 @@ open func publishPodcastComposerClip(input: PodcastClipComposerPublishInput)asyn
             errorHandler: nil
 
         )
+}
+
+    /**
+     * Read the user's configured relay list from the local event store.
+     * Source of truth: kind:10002 (NIP-65) + kind:30078 app-data. Falls
+     * back to seed defaults when no events are present. Non-blocking (ndb read).
+     */
+open func queryUserRelayConfigs(pubkeyHex: String) -> [RelayConfig]  {
+    return try!  FfiConverterSequenceTypeRelayConfig.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlightercore_query_user_relay_configs(self.uniffiClonePointer(),
+        FfiConverterString.lower(pubkeyHex),$0
+    )
+})
 }
 
 open func recordPodcastPlaybackPosition(input: PodcastPlaybackPositionInput) -> MutationSnapshot  {
@@ -35693,6 +35745,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlighterapp_tick() != 48249) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_fetch_relays_for_pubkey() != 45230) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_listening_clips_snapshot() != 47800) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -35706,6 +35761,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_podcast_composer_clip() != 13940) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlightercore_query_user_relay_configs() != 14303) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_record_podcast_playback_position() != 26014) {

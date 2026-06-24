@@ -1207,7 +1207,7 @@ pub(crate) fn nip65_tags(rows: &[RelayConfig]) -> Result<Vec<Tag>, CoreError> {
 }
 
 /// Parse a kind:10002 event into `(url, read, write)` rows.
-fn parse_nip65_event(event: &Event) -> Vec<(String, bool, bool)> {
+pub(crate) fn parse_nip65_event(event: &Event) -> Vec<(String, bool, bool)> {
     let mut out: Vec<(String, bool, bool)> = Vec::new();
     for tag in event.tags.iter() {
         let slice = tag.as_slice();

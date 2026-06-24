@@ -133,6 +133,66 @@ impl HighlighterCore {
         *self.callback_slot.write() = Some(callback);
     }
 
+    /// Read the user's configured relay list from the local event store.
+    /// Source of truth: kind:10002 (NIP-65) + kind:30078 app-data. Falls
+    /// back to seed defaults when no events are present. Non-blocking (ndb read).
+    pub fn query_user_relay_configs(&self, pubkey_hex: String) -> Vec<crate::relays::RelayConfig> {
+        crate::relays::query_relays(self.runtime.ndb(), &pubkey_hex)
+            .unwrap_or_else(|_| crate::relays::seed_defaults())
+    }
+
+    /// Fetch another nostr user's relay list (kind:10002 NIP-65) from the
+    /// indexer relay pool and return their configured relays. Used by the
+    /// "Import from npub" flow. Returns an empty list on parse errors or when
+    /// no kind:10002 is found within the 8-second timeout.
+    pub async fn fetch_relays_for_pubkey(
+        &self,
+        pubkey_hex: String,
+    ) -> Vec<crate::relays::RelayConfig> {
+        let result: Result<Vec<crate::relays::RelayConfig>, crate::errors::CoreError> = async {
+            // Accept hex pubkeys and npub1… bech32-encoded pubkeys.
+            let pubkey = PublicKey::from_hex(&pubkey_hex)
+                .or_else(|_| {
+                    Nip19::from_bech32(&pubkey_hex)
+                        .ok()
+                        .and_then(|decoded| {
+                            if let Nip19::Pubkey(pk) = decoded {
+                                Some(pk)
+                            } else {
+                                None
+                            }
+                        })
+                        .ok_or_else(|| nostr_sdk::key::Error::InvalidPublicKey)
+                })
+                .map_err(|e| crate::errors::CoreError::Other(format!("invalid pubkey: {e}")))?;
+            let filter = nostr_sdk::Filter::new()
+                .author(pubkey)
+                .kind(nostr_sdk::Kind::Custom(10002))
+                .limit(1);
+            let indexer_urls = self.runtime.indexer_urls();
+            let events = self
+                .runtime
+                .client()
+                .fetch_events_from(indexer_urls, filter, std::time::Duration::from_secs(8))
+                .await
+                .map_err(|e| crate::errors::CoreError::Relay(format!("fetch relays: {e}")))?;
+            let rows = events
+                .iter()
+                .flat_map(crate::relays::parse_nip65_event)
+                .map(|(url, read, write)| crate::relays::RelayConfig {
+                    url,
+                    read,
+                    write,
+                    rooms: false,
+                    indexer: false,
+                })
+                .collect();
+            Ok(rows)
+        }
+        .await;
+        result.unwrap_or_default()
+    }
+
     pub async fn publish_podcast_clip_highlight(
         &self,
         input: podcast_transcript::PodcastClipPublishInput,

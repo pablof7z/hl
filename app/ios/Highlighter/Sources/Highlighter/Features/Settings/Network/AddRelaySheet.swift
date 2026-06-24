@@ -182,12 +182,42 @@ struct AddRelaySheet: View {
             guard !Task.isCancelled else { return }
             probeInFlight = true
             defer { probeInFlight = false }
-            // NOTE: probeRelayNip11Snapshot removed (relay_polish.rs deleted in
-            // Phase 7 teardown). Probe silently returns no result; Add is still enabled.
-            _ = url
+            let result = await Self.fetchNip11(relayUrl: url)
             guard !Task.isCancelled else { return }
-            probeResult = nil
-            probeFailed = false
+            if let doc = result {
+                probeResult = doc
+                probeFailed = false
+            } else {
+                probeResult = nil
+                probeFailed = true
+            }
         }
+    }
+
+    /// Fetch NIP-11 relay metadata via HTTP GET with `Accept: application/nostr+json`.
+    /// Converts wss:// → https:// (ws:// → http://) per NIP-11 spec.
+    private static func fetchNip11(relayUrl: String) async -> Nip11Document? {
+        let httpUrl = relayUrl
+            .replacingOccurrences(of: "wss://", with: "https://")
+            .replacingOccurrences(of: "ws://", with: "http://")
+        guard let url = URL(string: httpUrl) else { return nil }
+        var request = URLRequest(url: url, timeoutInterval: 8)
+        request.setValue("application/nostr+json", forHTTPHeaderField: "Accept")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return Nip11Document(
+            url: relayUrl,
+            name: json["name"] as? String,
+            description: json["description"] as? String,
+            pubkey: json["pubkey"] as? String,
+            contact: json["contact"] as? String,
+            software: json["software"] as? String,
+            version: json["version"] as? String,
+            supportedNips: (json["supported_nips"] as? [Int])?.map { UInt32($0) } ?? [],
+            icon: json["icon"] as? String
+        )
     }
 }

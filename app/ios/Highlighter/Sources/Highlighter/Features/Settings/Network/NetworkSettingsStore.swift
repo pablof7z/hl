@@ -166,11 +166,16 @@ final class NetworkSettingsStore {
     // MARK: - Lifecycle
 
     func load() async {
-        // NOTE: getNetworkSettingsSnapshot and probeRelayNip11Snapshot were removed
-        // when relay_polish.rs was deleted in Phase 7 teardown. The relay list is
-        // maintained via optimistic in-memory updates in upsert/remove; NIP-11
-        // probing is unavailable until the kernel exposes it via dispatch.
         wifiOnlyEnabled = UserDefaults.standard.bool(forKey: "hl.network.wifi_only")
+        // Hydrate relay list from nostrdb on first load. After that, optimistic
+        // updates in upsert/remove/setRoles maintain the in-memory list so we
+        // don't clobber local mutations with a stale nostrdb read.
+        if relays.isEmpty, let store = appStore {
+            let configs = await store.getUserRelayConfigs()
+            if !configs.isEmpty {
+                relays = configs
+            }
+        }
         isLoading = false
     }
 
