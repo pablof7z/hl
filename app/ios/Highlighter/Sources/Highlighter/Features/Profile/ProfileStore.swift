@@ -41,7 +41,6 @@ final class ProfileStore {
     // Plumbing
     @ObservationIgnored let pubkey: String
     @ObservationIgnored let viewerPubkey: String?
-    @ObservationIgnored let safeCore: SafeHighlighterCore
     @ObservationIgnored weak var eventBridge: EventBridge?
     @ObservationIgnored private weak var kernel: HighlighterAppKernel?
 
@@ -69,13 +68,11 @@ final class ProfileStore {
     init(
         pubkey: String,
         viewerPubkey: String?,
-        safeCore: SafeHighlighterCore,
         eventBridge: EventBridge?,
         kernel: HighlighterAppKernel?
     ) {
         self.pubkey = pubkey
         self.viewerPubkey = viewerPubkey
-        self.safeCore = safeCore
         self.eventBridge = eventBridge
         self.kernel = kernel
     }
