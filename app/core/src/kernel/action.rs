@@ -262,6 +262,22 @@ pub(crate) struct LookupIsbnPayload {
 }
 
 #[derive(Debug, serde::Deserialize)]
+pub(crate) struct SetBookPickerQueryPayload {
+    pub query: String,
+    #[serde(default = "default_recent_limit")]
+    pub recent_limit: u32,
+    #[serde(default = "default_search_limit")]
+    pub search_limit: u32,
+}
+
+fn default_recent_limit() -> u32 {
+    24
+}
+fn default_search_limit() -> u32 {
+    20
+}
+
+#[derive(Debug, serde::Deserialize)]
 pub(crate) struct PublishHighlightPayload {
     pub content: String,
     pub source_reference: String,
@@ -986,6 +1002,13 @@ pub enum AppAction {
         isbn: String,
     },
 
+    // Doc comment omitted — mirrors LookupIsbn pattern (AppAction uniffi metadata near BUF_SIZE).
+    SetBookPickerQuery {
+        query: String,
+        recent_limit: u32,
+        search_limit: u32,
+    },
+
     // ── Phase 4D additions (append-only) ─────────────────────────────────────
     /// Run a NIP-50 relay search for `query` with the given `scope`.
     ///
@@ -1415,6 +1438,15 @@ pub enum KernelEvent {
     IsbnCacheLoaded {
         /// Deserialized (isbn13, entry) pairs from the JSON cache file.
         entries: Vec<(String, crate::kernel::domains::isbn::CachedIsbnEntry)>,
+    },
+
+    /// Scan of the NMP event store for book records completed.
+    ///
+    /// Produced by `run_effect_scan_book_picker_recents` and stored in
+    /// `AppState::isbn.recents` + `search_results`.
+    BookPickerRecentsLoaded {
+        recents: Vec<crate::kernel::models::ArtifactRecord>,
+        search_results: Vec<crate::kernel::models::ArtifactRecord>,
     },
 
     // ── Phase 5K additions (append-only) ─────────────────────────────────────

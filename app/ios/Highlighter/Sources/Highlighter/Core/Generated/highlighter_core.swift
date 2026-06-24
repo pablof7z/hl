@@ -10904,6 +10904,21 @@ public struct BookPickerKernelSnapshot {
      * Number of entries currently in the in-memory cache (diagnostic).
      */
     public var cacheSize: UInt64
+    /**
+     * Recent books (kind:11 + kind:9802) from the NMP event store. Populated
+     * by `Effect::ScanBookPickerRecents`. Empty until the first scan completes.
+     */
+    public var recents: [ArtifactRecord]
+    /**
+     * Filtered recents matching the current search query. Empty when `query`
+     * is empty (callers show `recents` instead).
+     */
+    public var searchResults: [ArtifactRecord]
+    /**
+     * Non-empty if the scan encountered an error (D6: recents is empty; error
+     * is diagnostic-only, not surfaced in UI).
+     */
+    public var error: String
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -10916,10 +10931,25 @@ public struct BookPickerKernelSnapshot {
          */lastResult: KernelArtifactPreviewResult?,
         /**
          * Number of entries currently in the in-memory cache (diagnostic).
-         */cacheSize: UInt64) {
+         */cacheSize: UInt64,
+        /**
+         * Recent books (kind:11 + kind:9802) from the NMP event store. Populated
+         * by `Effect::ScanBookPickerRecents`. Empty until the first scan completes.
+         */recents: [ArtifactRecord],
+        /**
+         * Filtered recents matching the current search query. Empty when `query`
+         * is empty (callers show `recents` instead).
+         */searchResults: [ArtifactRecord],
+        /**
+         * Non-empty if the scan encountered an error (D6: recents is empty; error
+         * is diagnostic-only, not surfaced in UI).
+         */error: String) {
         self.pendingIsbn = pendingIsbn
         self.lastResult = lastResult
         self.cacheSize = cacheSize
+        self.recents = recents
+        self.searchResults = searchResults
+        self.error = error
     }
 }
 
@@ -10939,6 +10969,15 @@ extension BookPickerKernelSnapshot: Equatable, Hashable {
         if lhs.cacheSize != rhs.cacheSize {
             return false
         }
+        if lhs.recents != rhs.recents {
+            return false
+        }
+        if lhs.searchResults != rhs.searchResults {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
         return true
     }
 
@@ -10946,6 +10985,9 @@ extension BookPickerKernelSnapshot: Equatable, Hashable {
         hasher.combine(pendingIsbn)
         hasher.combine(lastResult)
         hasher.combine(cacheSize)
+        hasher.combine(recents)
+        hasher.combine(searchResults)
+        hasher.combine(error)
     }
 }
 
@@ -10960,7 +11002,10 @@ public struct FfiConverterTypeBookPickerKernelSnapshot: FfiConverterRustBuffer {
             try BookPickerKernelSnapshot(
                 pendingIsbn: FfiConverterOptionString.read(from: &buf),
                 lastResult: FfiConverterOptionTypeKernelArtifactPreviewResult.read(from: &buf),
-                cacheSize: FfiConverterUInt64.read(from: &buf)
+                cacheSize: FfiConverterUInt64.read(from: &buf),
+                recents: FfiConverterSequenceTypeArtifactRecord.read(from: &buf),
+                searchResults: FfiConverterSequenceTypeArtifactRecord.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
         )
     }
 
@@ -10968,6 +11013,9 @@ public struct FfiConverterTypeBookPickerKernelSnapshot: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.pendingIsbn, into: &buf)
         FfiConverterOptionTypeKernelArtifactPreviewResult.write(value.lastResult, into: &buf)
         FfiConverterUInt64.write(value.cacheSize, into: &buf)
+        FfiConverterSequenceTypeArtifactRecord.write(value.recents, into: &buf)
+        FfiConverterSequenceTypeArtifactRecord.write(value.searchResults, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
     }
 }
 

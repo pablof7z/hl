@@ -47,24 +47,6 @@ actor SafeHighlighterCore {
         await core.getPodcastListeningClipsSnapshot(artifact: artifact, limit: limit)
     }
 
-    // MARK: - Reads
-
-    func getBookPickerSnapshot(
-        query: String,
-        recentLimit: UInt32 = 24,
-        searchLimit: UInt32 = 20
-    ) async -> BookPickerSnapshot {
-        await core.getBookPickerSnapshot(
-            query: query,
-            recentLimit: recentLimit,
-            searchLimit: searchLimit
-        )
-    }
-
-    func lookupIsbn(_ isbn: String) async -> IsbnPreviewLookupSnapshot {
-        await core.lookupIsbn(isbn: isbn)
-    }
-
     nonisolated func defaultHighlightCropBox(
         highlightBoxes: [OcrRect],
         imageWidth: Double,

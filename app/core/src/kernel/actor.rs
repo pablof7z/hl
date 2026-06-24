@@ -467,6 +467,11 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
 
         // ── Phase 5C additions (append-only) ─────────────────────────────────
         AppAction::LookupIsbn { isbn } => isbn::reduce_action_lookup_isbn(state, isbn),
+        AppAction::SetBookPickerQuery {
+            query,
+            recent_limit,
+            search_limit,
+        } => isbn::reduce_action_set_book_picker_query(state, query, recent_limit, search_limit),
 
         // ── Phase 5K additions (append-only) ─────────────────────────────────
         AppAction::DrainShareQueue => share::reduce_action_drain_share_queue(),
@@ -557,6 +562,7 @@ fn reduce_action_envelope(
         ClipSetStartPayload, CreateAccountPayload, CreateAndAddToSetPayload,
         CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload, JoinRoomPayload,
         LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload, PairBunkerPayload,
+        SetBookPickerQueryPayload,
         PresentSheetPayload, PublishClipPayload, PublishHighlightPayload, ReactPayload,
         ReleaseEntityRefPayload, ReleaseProfilePayload, RemoveBookmarkPayload,
         RemoveFromSetPayload, RemoveRelayPayload, ResolveEntityRefPayload, RunSearchPayload,
@@ -815,10 +821,20 @@ fn reduce_action_envelope(
             }
         }
 
-        // ── ISBN ──────────────────────────────────────────────────────────────
+        // ── ISBN / BookPicker ─────────────────────────────────────────────────
         "hl.isbn.lookup" => {
             let p = parse!(LookupIsbnPayload);
             isbn::reduce_action_lookup_isbn(state, p.isbn)
+        }
+
+        "hl.book_picker.set_query" => {
+            let p = parse!(SetBookPickerQueryPayload);
+            isbn::reduce_action_set_book_picker_query(
+                state,
+                p.query,
+                p.recent_limit,
+                p.search_limit,
+            )
         }
 
         // ── Share queue ───────────────────────────────────────────────────────
@@ -1385,6 +1401,10 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
         KernelEvent::IsbnCacheLoaded { entries } => {
             isbn::reduce_event_isbn_cache_loaded(state, entries)
         }
+        KernelEvent::BookPickerRecentsLoaded {
+            recents,
+            search_results,
+        } => isbn::reduce_event_book_picker_recents_loaded(state, recents, search_results),
 
         // ── Phase 4F additions (append-only) ─────────────────────────────────
         KernelEvent::FeedPage {
@@ -1995,6 +2015,24 @@ pub(crate) async fn run_effect(
         Effect::PersistIsbnCache { entries } => {
             let data_dir = policy.data_dir.clone();
             isbn::run_effect_persist_isbn_cache(entries, data_dir).await;
+        }
+        Effect::ScanBookPickerRecents {
+            pubkey,
+            joined_group_ids,
+            query,
+            recent_limit,
+            search_limit,
+        } => {
+            isbn::run_effect_scan_book_picker_recents(
+                nmp,
+                pubkey,
+                joined_group_ids,
+                query,
+                recent_limit,
+                search_limit,
+                tx,
+            )
+            .await;
         }
 
         // ── Phase 4F additions (append-only) ─────────────────────────────────

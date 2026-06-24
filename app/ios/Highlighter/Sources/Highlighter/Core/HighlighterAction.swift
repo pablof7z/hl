@@ -102,8 +102,9 @@ enum HighlighterAction {
         context: String?
     )
 
-    // ── ISBN ──────────────────────────────────────────────────────────────────
+    // ── ISBN / BookPicker ─────────────────────────────────────────────────────
     case lookupIsbn(isbn: String)
+    case setBookPickerQuery(query: String, recentLimit: UInt32, searchLimit: UInt32)
 
     // ── Share queue ───────────────────────────────────────────────────────────
     case drainShareQueue
@@ -402,10 +403,15 @@ enum HighlighterAction {
             if let context { dict["context"] = context }
             return AppActionEnvelope(namespace: "hl.highlight.publish", json: jsonAny(dict))
 
-        // ── ISBN ──────────────────────────────────────────────────────────────
+        // ── ISBN / BookPicker ─────────────────────────────────────────────────
         case .lookupIsbn(let isbn):
             return AppActionEnvelope(namespace: "hl.isbn.lookup",
                                      json: jsonObject(["isbn": isbn]))
+        case .setBookPickerQuery(let query, let recentLimit, let searchLimit):
+            return AppActionEnvelope(namespace: "hl.book_picker.set_query",
+                                     json: jsonAny(["query": query,
+                                                    "recent_limit": recentLimit,
+                                                    "search_limit": searchLimit]))
 
         // ── Share queue ───────────────────────────────────────────────────────
         case .drainShareQueue:

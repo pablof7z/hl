@@ -464,6 +464,22 @@ pub enum Effect {
         entries: Vec<(String, crate::kernel::domains::isbn::CachedIsbnEntry)>,
     },
 
+    /// Scan the NMP event store for kind:11 + kind:9802 book events and emit
+    /// `KernelEvent::BookPickerRecentsLoaded`. Emitted by
+    /// `reduce_action_set_book_picker_query`.
+    ScanBookPickerRecents {
+        /// Hex pubkey of the current user (for kind:9802 author filter).
+        pubkey: String,
+        /// Group IDs the user has joined (for kind:11 `h` tag filter).
+        joined_group_ids: Vec<String>,
+        /// Current search query (empty = load recents only).
+        query: String,
+        /// Maximum number of recent books to return.
+        recent_limit: u32,
+        /// Maximum number of search results to return.
+        search_limit: u32,
+    },
+
     // ── Phase 5H additions (append-only) ─────────────────────────────────────
     /// Load the saved resume position for `guid` from the
     /// `{data_dir}/podcast-position-v1.json` store and emit

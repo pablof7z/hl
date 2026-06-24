@@ -20,17 +20,20 @@ struct BookPicker: View {
 
     @Binding var selection: BookSelection?
 
-    @State private var recents: [ArtifactRecord] = []
-    @State private var searchResults: [ArtifactRecord] = []
     @State private var query: String = ""
-    @State private var loadingRecents = true
-    @State private var searching = false
     @State private var showScanner = false
     @State private var showManualEntry = false
     @State private var resolvingISBN: String?
     @State private var resolvedPreview: ArtifactPreview?
     @State private var resolveError: String?
     @FocusState private var searchFocused: Bool
+
+    private var kernel: HighlighterAppKernel? { appStore.kernel }
+    private var snapshot: BookPickerKernelSnapshot? { kernel?.bookPicker }
+    private var recents: [ArtifactRecord] { snapshot?.recents ?? [] }
+    private var searchResults: [ArtifactRecord] { snapshot?.searchResults ?? [] }
+    private var loadingRecents: Bool { snapshot == nil }
+    private var searching: Bool { queryProjection.hasQuery && snapshot != nil && searchResults.isEmpty && !query.isEmpty }
 
     var body: some View {
         NavigationStack {
@@ -55,17 +58,32 @@ struct BookPicker: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        kernel?.closeBookPicker()
+                        dismiss()
+                    }
                 }
             }
             .task {
-                if loadingRecents {
-                    apply(await appStore.safeCore.getBookPickerSnapshot(query: ""))
-                    loadingRecents = false
+                kernel?.openBookPicker()
+                kernel?.setBookPickerQuery("")
+            }
+            .onChange(of: query) { _, newQuery in
+                runSearch(query: newQuery)
+            }
+            .onChange(of: snapshot?.lastResult) { _, result in
+                guard let isbn = resolvingISBN, let result, result.isbn13 == isbn else { return }
+                let errMsg = result.error.trimmingCharacters(in: .whitespaces)
+                if errMsg.isEmpty, let kp = result.preview {
+                    resolvedPreview = kp.asArtifactPreview()
+                } else if errMsg.isEmpty {
+                    resolveError = "Unable to resolve ISBN"
+                } else {
+                    resolveError = errMsg
                 }
             }
-            .task(id: query) {
-                await runSearch()
+            .onDisappear {
+                kernel?.closeBookPicker()
             }
             .fullScreenCover(isPresented: $showScanner) {
                 BookScannerView { isbn in
@@ -423,41 +441,11 @@ struct BookPicker: View {
         resolvingISBN = isbn
         resolvedPreview = nil
         resolveError = nil
-        Task {
-            let outcome = await appStore.safeCore.lookupIsbn(isbn)
-            // Only commit the preview if we're still on the same ISBN
-            // (user could have cancelled mid-flight).
-            if resolvingISBN == isbn {
-                let isbnError = outcome.error.trimmingCharacters(in: .whitespaces)
-                if isbnError.isEmpty, let preview = outcome.preview {
-                    resolvedPreview = preview
-                } else if isbnError.isEmpty {
-                    resolveError = "Unable to resolve ISBN"
-                } else {
-                    resolveError = isbnError
-                }
-            }
-        }
+        kernel?.app.dispatch(.lookupIsbn(isbn: isbn))
     }
 
-    private func runSearch() async {
-        let projection = queryProjection
-        guard projection.hasQuery else {
-            searchResults = []
-            searching = false
-            return
-        }
-        searching = true
-        guard !Task.isCancelled, queryProjection.searchQuery == projection.searchQuery else { return }
-        let snapshot = await appStore.safeCore.getBookPickerSnapshot(query: projection.searchQuery)
-        guard !Task.isCancelled, queryProjection.searchQuery == projection.searchQuery else { return }
-        apply(snapshot)
-        searching = false
-    }
-
-    private func apply(_ snapshot: BookPickerSnapshot) {
-        recents = snapshot.recents
-        searchResults = snapshot.searchResults
+    private func runSearch(query: String) {
+        kernel?.setBookPickerQuery(query)
     }
 }
 
@@ -627,5 +615,40 @@ private struct ISBNPreviewSheet: View {
         onEditTitle(updated)
         onUse(updated)
         dismiss()
+    }
+}
+
+// MARK: - KernelArtifactPreview → ArtifactPreview bridge
+
+private extension KernelArtifactPreview {
+    func asArtifactPreview() -> ArtifactPreview {
+        ArtifactPreview(
+            id: id,
+            url: "",
+            title: title,
+            author: author,
+            image: image,
+            description: description,
+            source: "book",
+            domain: "",
+            catalogId: catalogId,
+            catalogKind: catalogKind,
+            podcastGuid: "",
+            podcastItemGuid: "",
+            podcastShowTitle: "",
+            audioUrl: "",
+            audioPreviewUrl: "",
+            transcriptUrl: "",
+            feedUrl: "",
+            publishedAt: "",
+            durationSeconds: nil,
+            referenceTagName: referenceTagName,
+            referenceTagValue: referenceTagValue,
+            referenceKind: "",
+            highlightTagName: highlightTagName,
+            highlightTagValue: highlightTagValue,
+            highlightReferenceKey: highlightReferenceKey,
+            chapters: []
+        )
     }
 }

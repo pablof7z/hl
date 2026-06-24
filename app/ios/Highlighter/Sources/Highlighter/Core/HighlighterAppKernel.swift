@@ -137,6 +137,11 @@ final class HighlighterAppKernel {
     /// (Phase 7 C1 — replaces the bespoke `safeCore.prepareWhatsNew` call).
     private(set) var whatsNew: WhatsNewSnapshot?
 
+    /// BookPicker snapshot. `nil` until the `ViewId.bookPicker` view is open.
+    /// Carries recents + search results from the NMP event store scan. BookPicker.swift
+    /// opens the view on appear and closes on dismiss (Phase 7 C teardown).
+    private(set) var bookPicker: BookPickerKernelSnapshot?
+
     // MARK: - Kernel handle
 
     /// The Rust-side kernel object. Callers may dispatch actions and manage
@@ -435,6 +440,27 @@ final class HighlighterAppKernel {
     /// stays valid.
     func closeBookmarks() {}
 
+    // MARK: - Phase 7: book picker lifecycle
+
+    /// Open the BookPicker view. The kernel scans the NMP event store for
+    /// kind:11 + kind:9802 book events and pushes `BookPickerKernelSnapshot`
+    /// into `bookPicker`. Call from `BookPicker.task`.
+    func openBookPicker() {
+        app.openView(viewId: .bookPicker, route: .bookPicker)
+    }
+
+    /// Close the BookPicker view. Call from `BookPicker.onDisappear` / dismiss.
+    func closeBookPicker() {
+        app.closeView(viewId: .bookPicker)
+        bookPicker = nil
+    }
+
+    /// Dispatch a query update to the BookPicker projection. The kernel
+    /// re-scans recents and filters search results, then pushes a new snapshot.
+    func setBookPickerQuery(_ query: String) {
+        app.dispatch(.setBookPickerQuery(query: query, recentLimit: 30, searchLimit: 20))
+    }
+
     // MARK: - Snapshot ingestion (called on main actor by KernelObserver)
 
     fileprivate func receive(viewId: ViewId, snapshot: ViewSnapshot) {
@@ -507,12 +533,16 @@ final class HighlighterAppKernel {
         case .whatsNew(let s):
             whatsNew = s
 
+        // Phase 7 teardown: BookPicker reads kernel recents + search results.
+        case .bookPicker(let s):
+            bookPicker = s
+
         // Phase 4+ snapshots — managed by their owning views / stores via
         // `current_snapshot`; the observer push is handled by those stores
         // directly. No-op here (the actor still pushes; non-resident views
         // are closed before they can receive stale data — D5).
         case .articleFeed,
-             .highlightFeed, .bookPicker, .shareComposer:
+             .highlightFeed, .shareComposer:
             break
 
         // Phase 5+ snapshots (podcast) — managed by their owning views / stores;
