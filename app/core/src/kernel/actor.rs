@@ -562,14 +562,13 @@ fn reduce_action_envelope(
         ClipSetStartPayload, CreateAccountPayload, CreateAndAddToSetPayload,
         CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload, JoinRoomPayload,
         LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload, PairBunkerPayload,
-        SetBookPickerQueryPayload,
         PresentSheetPayload, PublishClipPayload, PublishHighlightPayload, ReactPayload,
         ReleaseEntityRefPayload, ReleaseProfilePayload, RemoveBookmarkPayload,
         RemoveFromSetPayload, RemoveRelayPayload, ResolveEntityRefPayload, RunSearchPayload,
-        SelectRootTabPayload, SetRelayRolePayload, SetRoomsRelayListPayload,
-        ShareArtifactToRoomPayload, ShareHighlightToRoomPayload, ShareMintInvitePayload,
-        ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload, ToggleReactionPayload,
-        UnfollowPayload, UnreactPayload,
+        SelectRootTabPayload, SetBookPickerQueryPayload, SetRelayRolePayload,
+        SetRoomsRelayListPayload, ShareArtifactToRoomPayload, ShareHighlightToRoomPayload,
+        ShareMintInvitePayload, ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload,
+        ToggleReactionPayload, UnfollowPayload, UnreactPayload,
     };
 
     match envelope.namespace.as_str() {

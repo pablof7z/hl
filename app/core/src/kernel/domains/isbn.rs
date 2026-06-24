@@ -353,8 +353,11 @@ pub(crate) fn reduce_action_set_book_picker_query(
     };
 
     // Collect joined group IDs.
-    let joined_group_ids: Vec<String> =
-        state.communities.iter().map(|c| c.group_id.clone()).collect();
+    let joined_group_ids: Vec<String> = state
+        .communities
+        .iter()
+        .map(|c| c.group_id.clone())
+        .collect();
 
     vec![Effect::ScanBookPickerRecents {
         pubkey,
@@ -473,16 +476,14 @@ pub(crate) async fn run_effect_scan_book_picker_recents(
         };
         let key = rec.preview.reference_tag_value.clone();
         match by_isbn.get(&key) {
-            Some(existing)
-                if existing.created_at.unwrap_or(0) >= rec.created_at.unwrap_or(0) => {}
+            Some(existing) if existing.created_at.unwrap_or(0) >= rec.created_at.unwrap_or(0) => {}
             _ => {
                 by_isbn.insert(key, rec);
             }
         }
     }
 
-    let mut recents: Vec<crate::kernel::models::ArtifactRecord> =
-        by_isbn.into_values().collect();
+    let mut recents: Vec<crate::kernel::models::ArtifactRecord> = by_isbn.into_values().collect();
     recents.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     recents.truncate(recent_limit as usize);
 
