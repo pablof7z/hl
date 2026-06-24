@@ -7,18 +7,19 @@ import SwiftUI
 /// one shot.
 ///
 /// Uses SwiftUI's `Menu(primaryAction:)` so a tap stays one-tap-fast and
-/// long-press surfaces the curation choices. Loads curations lazily on
-/// the first appear; refreshes after every membership change so the
-/// checkmark state is always accurate without a full BookmarkStore.
+/// long-press surfaces the curation choices.
+///
+/// The curation-set list is read directly from `kernel.bookmarks.myCurationSets`
+/// (kernel sole writer after #1653). Membership is computed locally by checking
+/// whether `articleAddress` is present in each set's `articleAddresses`.
 struct BookmarkMenuButton: View {
     /// NIP-33 a-tag value — `"30023:<pubkey>:<d>"`.
     let articleAddress: String
 
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
 
-    @State private var curationItems: [CurationMenuItem] = []
     @State private var newCollectionPresented: Bool = false
-    @State private var errorMessage: String?
 
     var body: some View {
         Menu {
@@ -30,21 +31,20 @@ struct BookmarkMenuButton: View {
                 Label("New collection…", systemImage: "plus")
             }
         } label: {
-            Image(systemName: bookmarkChrome.toolbarSystemImage)
+            Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
                 .foregroundStyle(
-                    bookmarkChrome.usesAccentColor ? Color.highlighterAccent : Color.highlighterInkStrong
+                    isBookmarked ? Color.highlighterAccent : Color.highlighterInkStrong
                 )
         } primaryAction: {
             Task { await app.toggleBookmark(articleAddress: articleAddress) }
         }
-        .accessibilityLabel(bookmarkChrome.accessibilityLabel)
-        .task { await loadCurations() }
+        .accessibilityLabel(isBookmarked ? "Remove bookmark" : "Bookmark article")
         .sheet(isPresented: $newCollectionPresented) {
             NewCollectionSheet(
                 onCancel: { newCollectionPresented = false },
                 onCreate: { title in
                     newCollectionPresented = false
-                    Task { await createAndAdd(title: title) }
+                    kernel.app.dispatch(.createAndAddToSet(title: title, itemCoordinate: articleAddress))
                 }
             )
             .presentationDetents([.medium])
@@ -53,16 +53,17 @@ struct BookmarkMenuButton: View {
 
     @ViewBuilder
     private var curationsSection: some View {
-        if curationItems.isEmpty {
+        let items = curationItems
+        if items.isEmpty {
             // Header-only section so the menu still reads as the
             // collection picker before any sets exist.
             Text("No collections yet")
                 .font(.footnote)
         } else {
             Section("Add to collection") {
-                ForEach(curationItems, id: \.id) { item in
+                ForEach(items, id: \.id) { item in
                     Button {
-                        Task { await toggleInCuration(item) }
+                        toggleInCuration(item)
                     } label: {
                         if item.isMember {
                             Label(item.title, systemImage: "checkmark")
@@ -75,49 +76,45 @@ struct BookmarkMenuButton: View {
         }
     }
 
+    /// Compute curation menu items from the kernel snapshot. The kernel pushes
+    /// fresh snapshots whenever sets are updated, so no explicit reload is needed.
+    private var curationItems: [CurationMenuItem] {
+        let sets = kernel.bookmarks?.myCurationSets ?? []
+        return sets.map { set in
+            let isMember = set.articleAddresses.contains(articleAddress)
+            let displayTitle: String
+            if let t = set.title, !t.isEmpty {
+                displayTitle = t
+            } else if !set.dTag.isEmpty {
+                displayTitle = set.dTag
+            } else {
+                displayTitle = "Untitled"
+            }
+            return CurationMenuItem(
+                id: set.dTag,
+                title: displayTitle,
+                isMember: isMember
+            )
+        }
+    }
+
     private var isBookmarked: Bool {
         app.isBookmarked(articleAddress: articleAddress)
     }
 
-    private var bookmarkChrome: ArticleBookmarkChromeProjection {
-        app.safeCore.projectArticleBookmarkChrome(
-            input: ArticleBookmarkChromeProjectionInput(isBookmarked: isBookmarked)
-        )
-    }
-
     // MARK: - Actions
 
-    private func loadCurations() async {
-        apply(await app.safeCore.getCurationMenuSnapshot(address: articleAddress))
-    }
-
-    private func toggleInCuration(_ item: CurationMenuItem) async {
-        let snapshot = await app.safeCore.toggleCurationMenuItemSnapshot(
-            dTag: item.id,
-            address: articleAddress
-        )
-        apply(snapshot, errorPrefix: "Couldn't update collection")
-    }
-
-    private func createAndAdd(title: String) async {
-        let snapshot = await app.safeCore.createCurationSetWithAddressSnapshot(
-            title: title,
-            address: articleAddress
-        )
-        apply(snapshot, errorPrefix: "Couldn't create collection")
-    }
-
-    private func apply(_ snapshot: CurationMenuSnapshot, errorPrefix: String? = nil) {
-        let projection = app.safeCore.projectCurationMenuSnapshotApply(
-            input: CurationMenuSnapshotApplyInput(
-                items: snapshot.items,
-                error: snapshot.error,
-                errorPrefix: errorPrefix
-            )
-        )
-        curationItems = projection.items
-        if projection.shouldApplyErrorMessage {
-            errorMessage = projection.errorMessage
+    private func toggleInCuration(_ item: CurationMenuItem) {
+        // Resolve the EXACT set this row represents and build its full
+        // coordinate (kind:pubkey:d) from that set — not the first set's pubkey
+        // (#1653 NIT #8). Targets the right set even across kinds/authors.
+        guard let set = kernel.bookmarks?.myCurationSets.first(where: { $0.dTag == item.id })
+        else { return }
+        let setCoordinate = "\(set.kind):\(set.pubkey):\(set.dTag)"
+        if item.isMember {
+            kernel.app.dispatch(.removeFromSet(setCoordinate: setCoordinate, itemCoordinate: articleAddress))
+        } else {
+            kernel.app.dispatch(.addToSet(setCoordinate: setCoordinate, itemCoordinate: articleAddress))
         }
     }
 }
@@ -159,22 +156,20 @@ struct NewCollectionSheet: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") { commit() }
                         .fontWeight(.semibold)
-                        .disabled(!createProjection.canCreate)
+                        .disabled(!canCreateCollection)
                 }
             }
             .onAppear { focused = true }
         }
     }
 
-    private var createProjection: CurationSetCreateProjection {
-        app.safeCore.projectCurationSetCreate(
-            input: CurationSetCreateProjectionInput(title: title)
-        )
+    private var canCreateCollection: Bool {
+        !title.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     private func commit() {
-        let projection = createProjection
-        guard projection.canCreate else { return }
-        onCreate(projection.submitTitle)
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        onCreate(trimmed)
     }
 }

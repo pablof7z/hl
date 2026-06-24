@@ -1423,63 +1423,6 @@ mod tests {
         );
     }
 
-    /// Mirrors the iOS app's full path: spin up a real `HighlighterCore`,
-    /// call `subscribe_feedback_thread`, wait, then call
-    /// `get_feedback_thread_snapshot` — the same Swift-facing functions
-    /// `FeedbackThreadStore.start()` calls in order. Verifies the events the
-    /// user is missing actually surface end-to-end.
-    /// Requires network — run with `--ignored --nocapture`.
-    #[tokio::test(flavor = "multi_thread")]
-    #[ignore]
-    async fn live_full_ios_flow_returns_all_thread_events() {
-        let tmp = tempdir().expect("tempdir");
-        let core = crate::client::HighlighterCore::new_with_data_dir(tmp.path().to_path_buf());
-
-        let root_hex =
-            "4ab5db30418354a17fbffbdfd345b22a19dd4ceeb67cb01c08d7ec5c801ca949".to_string();
-
-        // Step 1 (cache miss expected on a fresh ndb).
-        let initial = core.get_feedback_thread_snapshot(root_hex.clone()).await;
-        assert!(initial.error.is_empty(), "initial query: {}", initial.error);
-        let initial = initial.rows;
-        eprintln!("initial cache events: {}", initial.len());
-
-        let wait_sub = core
-            .runtime()
-            .ndb()
-            .subscribe(&[NdbFilter::new().kinds([KIND_FEEDBACK_NOTE as u64]).build()])
-            .expect("subscribe ndb wait");
-
-        // Step 2: open the subscription — this is where ensure_feedback_relay
-        // adds + connects the relay and the REQ goes out.
-        let outcome = core.subscribe_feedback_thread(root_hex.clone()).await;
-        assert!(outcome.error.is_empty(), "subscribe: {}", outcome.error);
-        let _handle = outcome.handle;
-
-        tokio::time::timeout(
-            std::time::Duration::from_secs(10),
-            core.runtime().ndb().wait_for_notes(wait_sub, 3),
-        )
-        .await
-        .expect("timed out waiting for feedback notes")
-        .expect("feedback notes");
-
-        // Step 3: re-query — by now the subscription should have populated ndb.
-        let after = core.get_feedback_thread_snapshot(root_hex.clone()).await;
-        assert!(after.error.is_empty(), "after query: {}", after.error);
-        let after = after.rows;
-        eprintln!("after subscription: {} events", after.len());
-        for row in &after {
-            let e = &row.event;
-            eprintln!("  id={} content={:?}", e.event_id, e.content);
-        }
-        assert!(
-            after.len() >= 3,
-            "expected root + both replies, got {}",
-            after.len()
-        );
-    }
-
     fn feedback_thread(root_event_id: &str, last_activity_at: u64) -> FeedbackThreadRecord {
         FeedbackThreadRecord {
             root_event_id: root_event_id.into(),

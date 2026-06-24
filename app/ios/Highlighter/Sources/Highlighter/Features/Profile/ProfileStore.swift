@@ -14,8 +14,12 @@ import Observation
 /// scope); the tabbed profile page still shows their tabs but they arrive
 /// from the live lane unchanged until Phase 4 wires feed data.
 ///
-/// The live lane subscription (`subscribeUserProfile`) is intentionally
-/// kept for the articles/highlights tab content — it is removed in Phase 7.
+/// Phase 7 cutover: the bespoke `subscribeUserProfile` live-lane subscription
+/// (and its `EventBridge` registration) is removed. Profile metadata stays
+/// live via the kernel observer (`ProfileView.onChange(of: profileSnapshots)`);
+/// articles/highlights now load once on `start()` via the still-live-lane
+/// `getProfilePageSnapshot` (kernel `ProfileSnapshot` carries no
+/// articles/highlights yet — Wave 4 wires those into the feed engine).
 @MainActor
 @Observable
 final class ProfileStore {
@@ -37,34 +41,38 @@ final class ProfileStore {
     // Plumbing
     @ObservationIgnored let pubkey: String
     @ObservationIgnored let viewerPubkey: String?
-    @ObservationIgnored let safeCore: SafeHighlighterCore
     @ObservationIgnored weak var eventBridge: EventBridge?
     @ObservationIgnored private weak var kernel: HighlighterAppKernel?
-    @ObservationIgnored private var subscriptionHandle: UInt64?
 
     var isOwnProfile: Bool {
         relationshipProjection.isOwnProfile
     }
 
     var relationshipProjection: ProfileRelationshipProjection {
-        safeCore.projectProfileRelationship(
-            input: ProfileRelationshipProjectionInput(
-                profilePubkey: pubkey,
-                viewerPubkey: viewerPubkey
-            )
+        let targetPubkey = pubkey.trimmingCharacters(in: .whitespaces)
+        let viewer: String? = viewerPubkey.flatMap { v in
+            let t = v.trimmingCharacters(in: .whitespaces)
+            return t.isEmpty ? nil : t
+        }
+        let hasTarget = !targetPubkey.isEmpty
+        let isOwn = viewer.map { hasTarget && $0.caseInsensitiveCompare(targetPubkey) == .orderedSame } ?? false
+        let canShowFollow = viewer != nil && hasTarget && !isOwn
+        return ProfileRelationshipProjection(
+            targetPubkey: targetPubkey,
+            isOwnProfile: isOwn,
+            canShowFollowAction: canShowFollow,
+            shouldRefreshFollowState: canShowFollow
         )
     }
 
     init(
         pubkey: String,
         viewerPubkey: String?,
-        safeCore: SafeHighlighterCore,
         eventBridge: EventBridge?,
         kernel: HighlighterAppKernel?
     ) {
         self.pubkey = pubkey
         self.viewerPubkey = viewerPubkey
-        self.safeCore = safeCore
         self.eventBridge = eventBridge
         self.kernel = kernel
     }
@@ -83,18 +91,12 @@ final class ProfileStore {
         // Phase 3D deferred: articles and highlights still come from the live lane.
         await loadArticlesAndHighlights()
         isLoadingInitial = false
-        await installSubscription()
     }
 
     /// Called from `ProfileView.onDisappear`. Sends `ReleaseProfile` to NMP.
     func stop() {
         // Phase 3G: close kernel view — sends Effect::ReleaseProfile to NMP.
         kernel?.closeProfile(pubkey: pubkey)
-        if let handle = subscriptionHandle {
-            Task { [safeCore] in await safeCore.unsubscribe(handle) }
-            eventBridge?.unregister(handle: handle)
-            subscriptionHandle = nil
-        }
     }
 
     // MARK: - Kernel snapshot ingestion
@@ -114,18 +116,12 @@ final class ProfileStore {
     // MARK: - Live-lane loads (articles + highlights, Phase 4 deferred)
 
     func loadArticlesAndHighlights() async {
-        // Articles and highlights still come from the live lane until
-        // Phase 4 wires feed interests. Profile metadata is now kernel-owned.
-        let snapshot = await safeCore.getProfilePageSnapshot(pubkeyHex: pubkey)
-        articles = snapshot.articles
-        highlights = snapshot.highlights
-        // Fallback: if kernel hasn't delivered a profile card yet, use the
-        // live lane's profile metadata so the view renders immediately.
-        if profile == nil {
-            profile = snapshot.profile ?? profile
-            isFollowing = snapshot.isFollowing
-            communities = snapshot.communities
-        }
+        // Wave 4 stub: the kernel ProfileSnapshot does not yet carry articles or
+        // highlights, and the bespoke live-lane getProfilePageSnapshot read path
+        // is removed in Phase 7. These tabs stay empty until the feed engine
+        // wires per-pubkey article/highlight data (Wave 4).
+        articles = []
+        highlights = []
     }
 
     /// Called by `EventBridge` when a `UserProfileUpdated` delta arrives.
@@ -141,20 +137,16 @@ final class ProfileStore {
     // MARK: - Follow / Unfollow
 
     func toggleFollow() async {
+        // Phase 7 D1 inline of `profile_follow_action_projection`: a follow
+        // toggle can only start when not already mutating and the relationship
+        // permits a follow action; the requested state is the inverse of the
+        // current one (optimistically applied below).
         let relationship = relationshipProjection
-        let action = safeCore.projectProfileFollowAction(
-            relationship: relationship,
-            input: ProfileFollowActionInput(
-                isFollowing: isFollowing,
-                isMutating: isMutatingFollow
-            )
-        )
-        guard action.canStart, let mutation = action.mutation else {
-            return
-        }
+        guard !isMutatingFollow, relationship.canShowFollowAction else { return }
+        let requestedFollowState = !isFollowing
         isMutatingFollow = true
         followError = nil
-        isFollowing = action.optimisticIsFollowing
+        isFollowing = requestedFollowState
 
         // Phase 3G: dispatch Follow/Unfollow as kernel AppActions
         // (fire-and-forget, D6). The `FollowListUpdated` projection event
@@ -165,7 +157,7 @@ final class ProfileStore {
         // do NOT call the live lane's applyProfileFollowMutation here.
         // Coexistence keeps the live lane for READS only; writes must come
         // from exactly one writer (the kernel) to avoid double kind:3 publishes.
-        if mutation.requestedFollowState {
+        if requestedFollowState {
             kernel?.app.dispatch(.follow(pubkey: pubkey))
         } else {
             kernel?.app.dispatch(.unfollow(pubkey: pubkey))
@@ -176,22 +168,5 @@ final class ProfileStore {
         // also clear it here so the button never gets permanently stuck if the
         // NMP round-trip is delayed.
         isMutatingFollow = false
-    }
-
-    // MARK: - Private
-
-    private func installSubscription() async {
-        guard subscriptionHandle == nil, let bridge = eventBridge else { return }
-        let outcome = await safeCore.subscribeUserProfile(pubkeyHex: pubkey)
-        let projection = safeCore.projectViewSubscriptionStart(
-            input: ViewSubscriptionStartProjectionInput(start: outcome)
-        )
-        guard projection.shouldRegister else {
-            // Non-fatal: the profile view still has its initial load. Live
-            // updates will simply not stream in until the next visit.
-            return
-        }
-        subscriptionHandle = projection.handle
-        bridge.registerProfile(self, handle: projection.handle)
     }
 }

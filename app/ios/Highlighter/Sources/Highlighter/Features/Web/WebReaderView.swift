@@ -90,19 +90,44 @@ struct WebReaderView: View {
     private func prepareShare() async {
         sharePreparing = true
         defer { sharePreparing = false }
-        let snapshot = await app.safeCore.buildWebReaderShareTarget(url: target.url.absoluteString)
-        guard snapshot.ready, let projection = snapshot.target else {
-            await MainActor.run {
-                shareError = snapshot.errorMessage
-            }
-            return
-        }
+        // Stub: build a minimal "web" share preview from the raw URL until
+        // the kernel provides OG-metadata fetching for the share card.
+        let urlString = target.url.absoluteString
+        let domain = target.url.host ?? ""
+        let preview = ArtifactPreview(
+            id: urlString,
+            url: urlString,
+            title: "",
+            author: "",
+            image: "",
+            description: "",
+            source: "web",
+            domain: domain,
+            catalogId: "",
+            catalogKind: "",
+            podcastGuid: "",
+            podcastItemGuid: "",
+            podcastShowTitle: "",
+            audioUrl: "",
+            audioPreviewUrl: "",
+            transcriptUrl: "",
+            feedUrl: "",
+            publishedAt: "",
+            durationSeconds: nil,
+            referenceTagName: "i",
+            referenceTagValue: urlString,
+            referenceKind: "",
+            highlightTagName: "r",
+            highlightTagValue: urlString,
+            highlightReferenceKey: "r:\(urlString)",
+            chapters: []
+        )
         await MainActor.run {
             shareTarget = ShareToCommunityTarget(
-                payload: .artifactShare(preview: projection.preview),
-                displayTitle: projection.displayTitle,
-                displaySubtitle: projection.displaySubtitle,
-                imageURL: projection.imageUrl.flatMap { URL(string: $0) },
+                payload: .artifactShare(preview: preview),
+                displayTitle: domain.isEmpty ? urlString : domain,
+                displaySubtitle: urlString,
+                imageURL: nil,
                 publicShareURL: nil
             )
         }
@@ -112,16 +137,11 @@ struct WebReaderView: View {
 private struct WebCommentsScopeModifier: ViewModifier {
     let url: URL
 
-    @Environment(HighlighterStore.self) private var app
-
     @ViewBuilder
     func body(content: Content) -> some View {
-        let snapshot = app.safeCore.getWebCommentScope(url: url.absoluteString)
-        if snapshot.attach, let scope = snapshot.scope {
-            content.commentsAttachment(scope: scope)
-        } else {
-            content
-        }
+        // D1: web comment scope is always the URL itself, tag "I", kind 0.
+        let scope = CommentScope(rootTagName: "I", rootTagValue: url.absoluteString, rootKind: 0)
+        content.commentsAttachment(scope: scope)
     }
 }
 

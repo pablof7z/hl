@@ -99,11 +99,6 @@ pub(crate) struct SetRelayRolePayload {
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub(crate) struct SetRoomsRelayListPayload {
-    pub relay_urls: Vec<String>,
-}
-
-#[derive(Debug, serde::Deserialize)]
 pub(crate) struct FollowPayload {
     pub pubkey: String,
 }
@@ -133,6 +128,13 @@ pub(crate) struct JoinRoomPayload {
     pub group_id: String,
     pub host_relay_url: String,
     pub invite_code: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct LeaveRoomPayload {
+    pub(crate) group_id: String,
+    pub(crate) host_relay_url: String,
+    pub(crate) reason: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -167,6 +169,38 @@ pub(crate) struct ShareToRoomPayload {
     pub repost: bool,
 }
 
+// ── #21 share-flow payloads ───────────────────────────────────────────────────
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ShareArtifactToRoomPayload {
+    pub group_id: String,
+    pub host_relay_url: String,
+    pub preview: crate::kernel::models::ArtifactPreview,
+    #[serde(default)]
+    pub note: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ShareHighlightToRoomPayload {
+    pub group_id: String,
+    pub host_relay_url: String,
+    pub highlight_event_id: String,
+    pub highlight_author_pubkey: String,
+    #[serde(default)]
+    pub relay_hint: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ShareMintInvitePayload {
+    pub group_id: String,
+    pub host_relay_url: String,
+    #[serde(default = "one")]
+    pub count: u32,
+}
+
+fn one() -> u32 {
+    1
+}
+
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct AddBookmarkPayload {
     pub item: crate::kernel::snapshot::BookmarkRow,
@@ -181,6 +215,17 @@ pub(crate) struct RemoveBookmarkPayload {
 pub(crate) struct ReactPayload {
     pub target_event_id: String,
     pub reaction: String,
+    pub target_author_pubkey: Option<String>,
+}
+
+/// `hl.reaction.toggle` envelope payload — like-or-unlike a target by id.
+///
+/// The kernel decides react-vs-unreact from its own viewer-reaction tracking
+/// (`AppState::viewer_reaction_ids`); the reaction kind:7 event id never crosses
+/// FFI. Optional `target_author_pubkey` is used only on the react path (`["p"]`).
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ToggleReactionPayload {
+    pub target_event_id: String,
     pub target_author_pubkey: Option<String>,
 }
 
@@ -214,10 +259,30 @@ pub(crate) struct LookupIsbnPayload {
 }
 
 #[derive(Debug, serde::Deserialize)]
+pub(crate) struct SetBookPickerQueryPayload {
+    pub query: String,
+    #[serde(default = "default_recent_limit")]
+    pub recent_limit: u32,
+    #[serde(default = "default_search_limit")]
+    pub search_limit: u32,
+}
+
+fn default_recent_limit() -> u32 {
+    24
+}
+fn default_search_limit() -> u32 {
+    20
+}
+
+#[derive(Debug, serde::Deserialize)]
 pub(crate) struct PublishHighlightPayload {
     pub content: String,
     pub source_reference: String,
     pub relay_hint: Option<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+    #[serde(default)]
+    pub context: Option<String>,
 }
 
 // ── Phase 5H payload structs ─────────────────────────────────────────────────
@@ -321,6 +386,18 @@ pub(crate) struct CaptureSelectWordPayload {
 pub(crate) struct CaptureSetTargetGroupPayload {
     pub group_id: String,
 }
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CaptureSetArtifactRecordPayload {
+    /// serde-JSON of an `ArtifactRecord` (an already-published kind:11 book the
+    /// highlight/picture references). Mirrors the audio/clip `artifact_json` pattern.
+    pub artifact_json: String,
+}
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CaptureSetArtifactPreviewPayload {
+    /// serde-JSON of an `ArtifactPreview` (a pending book — published kind:11-first
+    /// on the pending-book path).
+    pub preview_json: String,
+}
 
 // ── Phase 5G payload structs ─────────────────────────────────────────────────
 
@@ -399,6 +476,61 @@ pub(crate) struct EnsureArtifactPreviewPayload {
     /// Canonical coordinate key (e.g. `"a:30023:pk:d"`, `"e:<hex>"`,
     /// `"i:isbn:<isbn13>"`, `"r:<url>"`). Must be non-empty (D6: empty → no-op).
     pub coordinate: String,
+}
+
+// ── #1653 payload structs ─────────────────────────────────────────────────────
+
+/// `hl.curation.add_to_set` payload.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct AddToSetPayload {
+    pub set_coordinate: String,
+    pub item_coordinate: String,
+}
+
+/// `hl.curation.remove_from_set` payload.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct RemoveFromSetPayload {
+    pub set_coordinate: String,
+    pub item_coordinate: String,
+}
+
+/// `hl.curation.create_and_add` payload.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CreateAndAddToSetPayload {
+    pub title: String,
+    pub item_coordinate: String,
+}
+
+// ── Phase 7 entity-ref payload structs (append-only) ─────────────────────────
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ResolveEntityRefPayload {
+    pub key: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ReleaseEntityRefPayload {
+    pub key: String,
+}
+
+// ── Phase 7 Part C additions (append-only) ───────────────────────────────────
+
+/// `hl.profile.update` envelope payload — update the active account's kind:0
+/// profile metadata.
+///
+/// All fields are optional — absent/`None` fields are NOT written to the event.
+/// `Some("")` clears a field. Unknown kind:0 fields from the existing event are
+/// preserved verbatim (round-trip safe). Fire-and-forget (D6, Non-Negotiable #3).
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct UpdateProfilePayload {
+    pub display_name: Option<String>,
+    pub name: Option<String>,
+    pub about: Option<String>,
+    pub picture_url: Option<String>,
+    pub banner_url: Option<String>,
+    pub website: Option<String>,
+    pub nip05: Option<String>,
+    pub lightning_address: Option<String>,
 }
 
 /// Every user or platform action the kernel understands.
@@ -511,18 +643,6 @@ pub enum AppAction {
         url: String,
         role: RelayRole,
     },
-    /// Persist the rooms relay list (relays that host NIP-29 rooms) as a
-    /// kind:30078 app-data event with d-tag `"com.highlighter.relays"`.
-    ///
-    /// `relay_urls` is the ordered list of room relay WebSocket URLs to store.
-    /// The kernel builds the JSON payload and publishes via
-    /// `ActorCommand::PublishRawEvent`. No wss-scheme literals are hardcoded here;
-    /// the hl-owned d-tag string `"com.highlighter.relays"` is the only
-    /// constant (it is product-controlled, not a relay URL).
-    /// Fire-and-forget: emits `Effect::PublishRoomsRelayList`.
-    SetRoomsRelayList {
-        relay_urls: Vec<String>,
-    },
 
     // ── Phase 3C additions (append-only) ─────────────────────────────────────
     /// Follow a pubkey — appends it to the active account's kind:3 follow set
@@ -572,6 +692,19 @@ pub enum AppAction {
         pubkey: String,
     },
 
+    // ── Phase 7 entity-ref additions (append-only) ────────────────────────────
+    /// Resolve an entity ref — triggers `nmp_app_resolve_ref(namespace=1)`.
+    /// Sent when `NostrRichText` renders an inline entity embed.
+    ResolveEntityRef {
+        key: String,
+    },
+
+    /// Release an entity ref — triggers `nmp_app_release_ref(namespace=1)`.
+    /// Sent when the entity embed view disappears.
+    ReleaseEntityRef {
+        key: String,
+    },
+
     // ── Phase 3F additions (append-only) ─────────────────────────────────────
     /// Join a NIP-29 group by publishing a kind:9021 join-request via
     /// `"nmp.nip29.join"`. The relay's response arrives as a joined-groups
@@ -581,8 +714,6 @@ pub enum AppAction {
     /// URL (opaque string — kernel never constructs URLs, D3). `invite_code`
     /// is required for closed groups, optional for open groups.
     ///
-    /// NOTE: LeaveRoom (kind:9022) is NOT implemented — there is no
-    /// `nmp.nip29.leave` action on pinned nmp b4404159. See nmp issue #1598.
     JoinRoom {
         /// NIP-29 local group id.
         group_id: String,
@@ -590,6 +721,21 @@ pub enum AppAction {
         host_relay_url: String,
         /// Optional preauth invite code for closed groups.
         invite_code: Option<String>,
+    },
+
+    /// Leave a NIP-29 group by publishing a kind:9022 leave-request via
+    /// `"nmp.nip29.leave"`. Fire-and-forget (D6).
+    ///
+    /// `group_id` is the NIP-29 local group id; `host_relay_url` is the host
+    /// relay WebSocket URL (opaque — D3). `reason` is an optional human-readable
+    /// reason string; empty/`None` omits the content field.
+    LeaveRoom {
+        /// NIP-29 local group id.
+        group_id: String,
+        /// Host relay WebSocket URL (opaque — D3).
+        host_relay_url: String,
+        /// Optional human-readable reason for leaving.
+        reason: Option<String>,
     },
 
     /// Create a new public NIP-29 group by publishing kind:9007 + kind:9002
@@ -711,6 +857,47 @@ pub enum AppAction {
         address: String,
     },
 
+    // ── #1653 additions (append-only) ────────────────────────────────────────
+    /// Add `item_coordinate` (a NIP-33 address like `"30023:<pk>:<d>"`) to the
+    /// kind:30004 curation set identified by `set_coordinate`
+    /// (`"30004:<active_pk>:<d>"`).
+    ///
+    /// Kernel is the sole kind:30004 writer on ported screens (no live-lane
+    /// double-publish). Fire-and-forget (D6, Non-Negotiable #3): the updated
+    /// set event arrives back as a `BookmarkSetsUpdated` frame once the NMP
+    /// relay-echo loop closes and the `SetListProjection` re-snapshots.
+    ///
+    /// No-op when the set cannot be found in `AppState::all_curation_sets` (D6).
+    AddToSet {
+        /// NIP-33 address of the curation set to modify (`"30004:<pk>:<d>"`).
+        set_coordinate: String,
+        /// NIP-33 address of the article to add (`"30023:<pk>:<d>"`).
+        item_coordinate: String,
+    },
+
+    /// Remove `item_coordinate` from the curation set identified by `set_coordinate`.
+    /// Symmetric with `AddToSet`. Kernel sole writer; fire-and-forget (D6).
+    /// No-op when the set or the item is not found (D6).
+    RemoveFromSet {
+        /// NIP-33 address of the curation set to modify.
+        set_coordinate: String,
+        /// NIP-33 address of the article to remove.
+        item_coordinate: String,
+    },
+
+    /// Create a brand-new kind:30004 curation set with the given `title` and
+    /// immediately add `item_coordinate` as its first member. The `d_tag` is
+    /// derived from `title` + the current unix timestamp so it is unique but
+    /// human-readable. Kernel sole writer; fire-and-forget (D6). The new set
+    /// appears in `myCurationSets` after the NMP relay-echo loop closes and
+    /// `SetListProjection` re-snapshots.
+    CreateAndAddToSet {
+        /// Display title for the new set.
+        title: String,
+        /// NIP-33 address of the article to add as the first member.
+        item_coordinate: String,
+    },
+
     // ── Phase 4B additions (append-only) ─────────────────────────────────────
     /// React to an event with a NIP-25 kind:7 reaction.
     ///
@@ -794,6 +981,12 @@ pub enum AppAction {
         source_reference: String,
         /// Optional relay URL hint for the `a`/`e` tag (D3: opaque from caller).
         relay_hint: Option<String>,
+        /// Optional user note → NIP-84 `comment` tag. Empty/absent = no tag.
+        /// Phase 7 (article-reader publish); mirrors build_highlight_event.
+        note: Option<String>,
+        /// Optional surrounding context → `context` tag. Emitted only when
+        /// non-empty AND different from `content` (build_highlight_event fidelity).
+        context: Option<String>,
     },
 
     // ── Phase 5C additions (append-only) ─────────────────────────────────────
@@ -801,6 +994,13 @@ pub enum AppAction {
     // limit (5A + 5K pushed it close). Full doc is in kernel/domains/isbn.rs.
     LookupIsbn {
         isbn: String,
+    },
+
+    // Doc comment omitted — mirrors LookupIsbn pattern (AppAction uniffi metadata near BUF_SIZE).
+    SetBookPickerQuery {
+        query: String,
+        recent_limit: u32,
+        search_limit: u32,
     },
 
     // ── Phase 4D additions (append-only) ─────────────────────────────────────
@@ -819,7 +1019,7 @@ pub enum AppAction {
     /// selects which event kinds to search (e.g. `LongForm`, `Users`).
     ///
     /// nmp-nip50 has NO action namespace — submission is via `push_interest`
-    /// (confirmed on pinned nmp b4404159, `crates/nmp-ffi/src/lib.rs:1828`).
+    /// (confirmed on pinned nmp d16aea60, `crates/nmp-ffi/src/lib.rs:1852`).
     /// Fire-and-forget (D6, Non-Negotiable #3): search hits arrive as
     /// `KernelEvent::SearchResultsUpdated` via the typed snapshot pipeline.
     RunSearch {
@@ -903,6 +1103,38 @@ pub enum AppAction {
         /// Resume position in seconds (finite, ≥ 0).
         seconds: f64,
     },
+
+    // ── Phase 7 Part C additions (append-only) ─────────────────────────────
+    /// Update the active account's kind:0 profile metadata.
+    ///
+    /// Rust preserves unknown kind:0 fields from the existing event (round-trip
+    /// safe). Signs and publishes a new kind:0 replaceable event. Only non-None
+    /// fields are written; `Some("")` clears a field.
+    /// Fire-and-forget (D6, Non-Negotiable #3).
+    UpdateProfile {
+        display_name: Option<String>,
+        name: Option<String>,
+        about: Option<String>,
+        picture_url: Option<String>,
+        banner_url: Option<String>,
+        website: Option<String>,
+        nip05: Option<String>,
+        lightning_address: Option<String>,
+    },
+
+    // ── Phase 7 Part C additions (append-only) ───────────────────────────────
+    /// Signal from the iOS NWPathMonitor that the network path changed.
+    ///
+    /// `is_wifi` is true when the current path is `.satisfied` AND uses a Wi-Fi
+    /// interface. `wifi_only` mirrors `UserDefaults["hl.network.wifi_only"]` —
+    /// the kernel does not own this preference; Swift reads it and passes it in.
+    ///
+    /// The effect runner disconnects relay sockets when `wifi_only && !is_wifi`
+    /// and reconnects when `wifi_only && is_wifi`. Fire-and-forget (D6).
+    ApplyNetworkPath {
+        is_wifi: bool,
+        wifi_only: bool,
+    },
 }
 
 /// NIP-50 search scope — which event kinds the relay-search targets.
@@ -917,6 +1149,14 @@ pub enum SearchScope {
     LongForm,
     /// kind:1 short text notes — search for notes.
     Notes,
+    /// kind:30023 articles + kind:9802 highlights in one query — backs the
+    /// unified search screen, which renders Articles and Highlights sections
+    /// from a single query (Swift buckets the mixed hits by kind). Phase 7.
+    ArticlesAndHighlights,
+    /// kind:0 + kind:9802 + kind:30023 in one query — unified search screen
+    /// with People, Articles, and Highlights all populated from a single
+    /// NIP-50 relay subscription. Swift buckets the mixed hits by kind.
+    ArticlesHighlightsAndUsers,
 }
 
 /// NIP-65 / kind:10002 role for a configured relay.
@@ -1076,6 +1316,27 @@ pub enum KernelEvent {
     /// No labels or formatted strings — Swift formats all bookmark UI (D1).
     BookmarksUpdated(Vec<crate::kernel::snapshot::BookmarkRow>),
 
+    // ── #1653 additions (append-only) ────────────────────────────────────────
+    /// The `"hl.bookmark_sets"` typed sidecar was decoded from an NMP snapshot
+    /// frame. Carries all observed kind:30003 and kind:30004 set rows (unfiltered
+    /// by active pubkey — filtering happens at apply time using `AppState::follows`
+    /// and the active session). Produced by
+    /// `projections::dispatch_typed_frame` (schema_id `"hl.bookmark_sets"`).
+    /// Also directly injectable from tests via `Cmd::Event` (no live NmpApp).
+    ///
+    /// D1: raw fields only — no "Untitled" fallbacks, no formatted strings.
+    BookmarkSetsUpdated {
+        /// All kind:30003 bookmark-set rows observed this session (any author).
+        all_bookmark_sets: Vec<crate::kernel::snapshot::BookmarkSetRow>,
+        /// All kind:30004 curation-set rows observed this session (any author).
+        all_curation_sets: Vec<crate::kernel::snapshot::BookmarkSetRow>,
+    },
+
+    /// The `"hl.web_bookmarks"` typed sidecar was decoded. Carries all
+    /// kind:39701 web-bookmark rows for the active account. Also injectable
+    /// from tests via `Cmd::Event`. D1: raw fields only.
+    WebBookmarksUpdated(Vec<crate::kernel::snapshot::WebBookmarkRow>),
+
     // ── Phase 4A additions (append-only) ─────────────────────────────────────
     /// The `"nmp.nip23.articles"` typed sidecar was decoded.
     ///
@@ -1104,6 +1365,11 @@ pub enum KernelEvent {
         count: u32,
         /// `true` if the active viewer has reacted.
         viewer_reacted: bool,
+        /// The active viewer's own kind:7 reaction event id for this target, if
+        /// any. Kernel-INTERNAL only (this is `KernelEvent`, not an FFI type) —
+        /// stored in `AppState::viewer_reaction_ids` so `hl.reaction.toggle` can
+        /// emit the unreact effect without ever surfacing the id across FFI.
+        viewer_reaction_event_id: Option<String>,
     },
 
     // ── Phase 4D additions (append-only) ─────────────────────────────────────
@@ -1197,6 +1463,15 @@ pub enum KernelEvent {
         entries: Vec<(String, crate::kernel::domains::isbn::CachedIsbnEntry)>,
     },
 
+    /// Scan of the NMP event store for book records completed.
+    ///
+    /// Produced by `run_effect_scan_book_picker_recents` and stored in
+    /// `AppState::isbn.recents` + `search_results`.
+    BookPickerRecentsLoaded {
+        recents: Vec<crate::kernel::models::ArtifactRecord>,
+        search_results: Vec<crate::kernel::models::ArtifactRecord>,
+    },
+
     // ── Phase 5K additions (append-only) ─────────────────────────────────────
     /// The App Group share queue was drained by the native capability bridge.
     ///
@@ -1280,6 +1555,32 @@ pub enum KernelEvent {
         placeholder_correlation_id: String,
         /// The real id nmp assigned to the upload (from the dispatch return JSON).
         nmp_correlation_id: String,
+    },
+
+    /// nmp returned a dispatch correlation_id for a share-mint invite publish
+    /// (`nmp.nip29.create_invite`) that differs from the placeholder the reducer
+    /// minted. Sent by `run_effect_dispatch_create_invite_with_correlation` after
+    /// `nmp_app_dispatch_action` returns. The actor swaps the placeholder in
+    /// `share_publish.pending_correlation_id` for the real nmp id so
+    /// `apply_action_result_row` can match the arriving `action_results` row and
+    /// drive the share-mint FSM → Done / Error (#21 finding 3).
+    SharePublishCorrelationMinted {
+        /// The reducer-minted placeholder id to replace.
+        placeholder_correlation_id: String,
+        /// The real id nmp assigned to the create-invite publish.
+        nmp_correlation_id: String,
+    },
+
+    /// nmp REJECTED a share-publish / invite-mint dispatch at validation time
+    /// (`{"error":..}` from `nmp_app_dispatch_action` — e.g. a reserved kind, or
+    /// a null/failed dispatch). Sent by `dispatch_share_publish_action`. Drives
+    /// the share FSM → Error (D6) keyed on the in-flight placeholder correlation
+    /// id (the publish never reached an `action_results` terminal). #21 finding 1.
+    ShareMintDispatchRejected {
+        /// The in-flight placeholder correlation id (matched against the FSM).
+        correlation_id: String,
+        /// Raw nmp error envelope / message. D1.
+        error: String,
     },
 
     /// A Blossom upload action result arrived via the `"action_results"` typed
@@ -1442,5 +1743,30 @@ pub enum KernelEvent {
         author_pubkey: Option<String>,
         /// Summary / description. `None` when absent.
         summary: Option<String>,
+    },
+
+    // ── Phase 7 (#1697 gate) additions (append-only) ─────────────────────────
+    /// A local kind:0 scan of the kernel-owned `EventStore` completed for the
+    /// active search query.
+    ///
+    /// Produced by the `Effect::RunSearch` runner (`run_effect_run_search`),
+    /// which scans the published `EventStore` for kind:0 events via
+    /// `EventStore::query(StoreQuery::KindTime { kinds: [0], … })` and decodes each into a
+    /// `ProfileSearchRow`. The reducer upserts these into
+    /// `AppState::profile_search_cache` (dedup by pubkey, newest wins). This is
+    /// the SOLE production driver of the search profiles bucket — relay NIP-50
+    /// search runs the articles/highlights scope (no kind:0), so the local store
+    /// scan is what populates the people results (replacing the bespoke
+    /// `crate::search::search_profiles` nostrdb scan — D4 single source).
+    ///
+    /// Raw protocol rows only (D1). Bounded by the scan limit
+    /// (`PROFILE_SEARCH_CACHE_SCAN_LIMIT`) — never unbounded (Non-Negotiable #7).
+    ///
+    /// `generation` is captured from `AppState::profile_search_generation` at
+    /// the moment `Effect::RunSearch` is dispatched. The reducer drops this event
+    /// when `generation != state.profile_search_generation` (stale scan — D5).
+    ProfileSearchScanned {
+        generation: u64,
+        rows: Vec<crate::kernel::snapshot::ProfileSearchRow>,
     },
 }

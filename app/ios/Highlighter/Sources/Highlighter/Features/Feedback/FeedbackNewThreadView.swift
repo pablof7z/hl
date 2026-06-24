@@ -18,11 +18,10 @@ struct FeedbackNewThreadView: View {
     @State private var errorMessage: String?
 
     private var composerProjection: FeedbackComposerProjection {
-        app.safeCore.projectFeedbackComposer(
-            input: FeedbackComposerProjectionInput(
-                body: draft,
-                isPublishing: isPublishing
-            )
+        let submitBody = draft.trimmingCharacters(in: .whitespaces)
+        return FeedbackComposerProjection(
+            submitBody: submitBody,
+            canSend: !submitBody.isEmpty && !isPublishing
         )
     }
 
@@ -72,22 +71,11 @@ struct FeedbackNewThreadView: View {
         let projection = composerProjection
         guard projection.canSend else { return }
 
-        isPublishing = true
-        errorMessage = nil
-        defer { isPublishing = false }
-
-        let outcome = await app.safeCore.publishFeedbackRootNoteSnapshot(
-            coordinate: FeedbackProject.coordinate,
-            body: projection.submitBody
-        )
-        let result = app.safeCore.projectFeedbackPublishResult(
-            input: FeedbackPublishResultInput(error: outcome.error)
-        )
-        guard result.didPublish else {
-            errorMessage = result.errorMessage
-            return
-        }
-        store.apply(snapshot: outcome.snapshot)
+        // Kernel is the sole writer: dispatch hl.feedback.post_root
+        // fire-and-forget. The new root note streams back into
+        // kernel.feedbackThreads, which the list re-applies. Dismiss
+        // optimistically (publish errors surface as kernel toasts).
+        store.postRoot(content: projection.submitBody)
         dismiss()
         onSent(false)
     }

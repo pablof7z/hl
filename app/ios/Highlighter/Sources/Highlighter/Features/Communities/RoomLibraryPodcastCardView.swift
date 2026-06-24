@@ -1,6 +1,17 @@
 import Kingfisher
 import SwiftUI
 
+private struct RoomLibraryPodcastCardProjection {
+    let title: String
+    let titleIsFallback: Bool
+    let showLabel: String?
+    let durationLabel: String?
+    let imageUrl: String?
+    let sharerPubkey: String
+    let relativeUnixSeconds: UInt64?
+    let commentBadgeLabel: String?
+}
+
 struct RoomLibraryPodcastCardView: View {
     @Environment(HighlighterStore.self) private var app
 
@@ -132,24 +143,34 @@ struct RoomLibraryPodcastCardView: View {
     }
 
     private var cardProjection: RoomLibraryPodcastCardProjection {
-        app.safeCore.projectRoomLibraryPodcastCard(
-            input: RoomLibraryPodcastCardProjectionInput(
-                artifact: artifact,
-                commentCount: UInt32(commentCount)
-            )
+        // D1: derive all display fields from ArtifactPreview + ArtifactRecord directly.
+        let title = artifact.preview.title
+        return RoomLibraryPodcastCardProjection(
+            title: title.isEmpty ? artifact.preview.catalogId : title,
+            titleIsFallback: title.isEmpty,
+            showLabel: artifact.preview.author.isEmpty ? nil : artifact.preview.author,
+            durationLabel: nil,
+            imageUrl: artifact.preview.image.isEmpty ? nil : artifact.preview.image,
+            sharerPubkey: artifact.pubkey,
+            relativeUnixSeconds: artifact.createdAt,
+            commentBadgeLabel: commentCount > 0 ? "\(commentCount)" : nil
         )
     }
 
     private func sharerDisplay(
         _ projection: RoomLibraryPodcastCardProjection
     ) -> ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: projection.sharerPubkey,
-                profile: app.profileSnapshots[projection.sharerPubkey],
-                fallback: .pubkey10
+        {
+            let profile = app.profileSnapshots[projection.sharerPubkey]
+            let name = (profile?.displayName ?? "").isEmpty
+                ? ((profile?.name ?? "").isEmpty ? String(projection.sharerPubkey.prefix(10)) : profile!.name)
+                : profile!.displayName
+            return ProfileDisplayProjection(
+                displayName: name,
+                displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+                pictureUrl: profile?.picture ?? ""
             )
-        )
+        }()
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {

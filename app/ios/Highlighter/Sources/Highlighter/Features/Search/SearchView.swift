@@ -98,25 +98,20 @@ struct SearchView: View {
                 handleDirectNavigation(navigation)
             }
             // Omnibox resolver outcome (#1865) → route through the store.
-            .onChange(of: kernel.search?.omnibox) { _, outcome in
+            .onChange(of: kernel.searchSnapshot?.omnibox) { _, outcome in
                 store?.applyOmniboxOutcome(outcome)
             }
             .globalUserToolbar()
         }
         .task {
             if store == nil {
-                let s = SearchStore(
-                    safeCore: app.safeCore,
-                    eventBridge: app.eventBridge,
-                    kernel: kernel
-                )
+                let s = SearchStore(kernel: kernel)
                 store = s
                 await s.start()
             }
             store?.disarmOmnibox()
             kernel.openSearch()
-            let snapshot = await app.safeCore.getSearchChromeSnapshot()
-            recentQueries = snapshot.recentQueries
+            recentQueries = UserDefaults.standard.stringArray(forKey: "hl.search.recent_queries") ?? []
         }
         .onDisappear {
             store?.stop()
@@ -490,16 +485,14 @@ struct SearchView: View {
 
     @ViewBuilder
     private func highlightRow(_ h: HighlightRecord) -> some View {
-        let projection = app.safeCore.projectSearchHighlightRow(
-            input: SearchHighlightRowProjectionInput(highlight: h)
-        )
-        if let route = projection.articleRoute {
+        let route = articleReaderRoute(for: h.artifactAddress)
+        let pageImageUrl = validPageImageUrl(h.imageUrl)
+        if let route {
             NavigationLink(value: ArticleReaderTarget(route: route)) {
                 SearchHighlightRow(
                     highlight: h,
                     query: store?.query ?? "",
-                    pageImageUrl: projection.pageImageUrl,
-                    safeCore: app.safeCore
+                    pageImageUrl: pageImageUrl
                 )
             }
             .buttonStyle(.plain)
@@ -507,10 +500,30 @@ struct SearchView: View {
             SearchHighlightRow(
                 highlight: h,
                 query: store?.query ?? "",
-                pageImageUrl: projection.pageImageUrl,
-                safeCore: app.safeCore
+                pageImageUrl: pageImageUrl
             )
         }
+    }
+
+    /// Parse a NIP-33 article address (`30023:<pubkey>:<d>`) into a reader route.
+    private func articleReaderRoute(for address: String) -> ArticleReaderRoute? {
+        let addr = address.trimmingCharacters(in: .whitespaces)
+        let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 3, parts[0] == "30023" else { return nil }
+        let pubkey = parts[1].trimmingCharacters(in: .whitespaces)
+        let dTag   = parts[2].trimmingCharacters(in: .whitespaces)
+        guard !pubkey.isEmpty, !dTag.isEmpty else { return nil }
+        return ArticleReaderRoute(address: "30023:\(pubkey):\(dTag)", pubkey: pubkey, dTag: dTag)
+    }
+
+    /// Return the URL string if it is a valid http/https URL, otherwise nil.
+    private func validPageImageUrl(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty,
+              let url = URL(string: trimmed),
+              url.scheme == "http" || url.scheme == "https"
+        else { return nil }
+        return trimmed
     }
 
     @ViewBuilder
@@ -525,21 +538,19 @@ struct SearchView: View {
     // MARK: - Helpers
 
     private func commitRecentQuery() {
-        let projection = app.safeCore.projectSearchQuery(
-            input: SearchQueryProjectionInput(query: store?.query ?? "")
-        )
-        guard projection.hasQuery else { return }
-        Task { @MainActor in
-            let snapshot = await app.safeCore.recordRecentSearchSnapshot(projection.searchQuery)
-            recentQueries = snapshot.recentQueries
-        }
+        let searchQuery = (store?.query ?? "").trimmingCharacters(in: .whitespaces)
+        guard !searchQuery.isEmpty else { return }
+        var queries = UserDefaults.standard.stringArray(forKey: "hl.search.recent_queries") ?? []
+        queries.removeAll { $0 == searchQuery }
+        queries.insert(searchQuery, at: 0)
+        if queries.count > 10 { queries = Array(queries.prefix(10)) }
+        UserDefaults.standard.set(queries, forKey: "hl.search.recent_queries")
+        recentQueries = queries
     }
 
     private func clearRecentQueries() {
-        Task { @MainActor in
-            let snapshot = await app.safeCore.clearRecentSearchesSnapshot()
-            recentQueries = snapshot.recentQueries
-        }
+        UserDefaults.standard.removeObject(forKey: "hl.search.recent_queries")
+        recentQueries = []
     }
 
     private func allEmpty(store: SearchStore) -> Bool {
@@ -550,9 +561,21 @@ struct SearchView: View {
     }
 
     private func suggestedQueries() -> [String] {
-        app.safeCore.projectSearchSuggestions(
-            input: SearchSuggestionsProjectionInput(joinedCommunities: app.joinedCommunities)
-        ).queries
+        let evergreen = ["Dostoevsky", "Bitcoin", "Attention", "Borges", "Philosophy"]
+        var queries: [String] = []
+        var seen = Set<String>()
+        for community in app.joinedCommunities.prefix(4) {
+            let name = community.name.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty, seen.insert(name.lowercased()).inserted else { continue }
+            queries.append(name)
+        }
+        for term in evergreen {
+            guard queries.count < 8 else { break }
+            let t = term.trimmingCharacters(in: .whitespaces)
+            guard !t.isEmpty, seen.insert(t.lowercased()).inserted else { continue }
+            queries.append(t)
+        }
+        return Array(queries.prefix(8))
     }
 
     private func displayRelay(_ url: String) -> String {
@@ -739,12 +762,9 @@ private struct RoomCoverArt: View {
     }
 
     private var avatarProjection: RoomAvatarProjection {
-        app.safeCore.projectRoomAvatar(
-            input: RoomAvatarProjectionInput(
-                name: name,
-                pictureUrl: picture,
-                uppercaseInitial: false
-            )
+        RoomAvatarProjection(
+            pictureUrl: picture,
+            displayInitial: name.first.map(String.init) ?? ""
         )
     }
 }
@@ -755,7 +775,6 @@ private struct SearchHighlightRow: View {
     let highlight: HighlightRecord
     let query: String
     let pageImageUrl: String?
-    let safeCore: SafeHighlighterCore
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -771,8 +790,7 @@ private struct SearchHighlightRow: View {
                 HighlightMatchedText(
                     text: highlight.quote,
                     query: query,
-                    font: .system(size: 18, design: .default).italic(),
-                    safeCore: safeCore
+                    font: .system(size: 18, design: .default).italic()
                 )
                 .foregroundStyle(Color.highlighterInkStrong)
                 .lineSpacing(3)
@@ -840,34 +858,42 @@ private struct SearchCommunityRow: View {
     }
 
     private var rowProjection: SearchCommunityRowProjection {
-        app.safeCore.projectSearchCommunityRow(
-            input: SearchCommunityRowProjectionInput(community: community)
+        SearchCommunityRowProjection(
+            displayName: community.name,
+            about: community.about.isEmpty ? nil : community.about,
+            visibilityLabel: capitalizeFirst(community.visibility),
+            accessLabel: capitalizeFirst(community.access),
+            memberCountLabel: community.memberCount.map { "\($0) members" }
         )
+    }
+
+    private func capitalizeFirst(_ s: String) -> String {
+        guard let first = s.first else { return s }
+        return first.uppercased() + s.dropFirst()
     }
 }
 
 private struct SearchProfileRow: View {
     @Environment(HighlighterStore.self) private var app
-    let profile: ProfileMetadata
+    let profile: ProfileSearchRow
+
+    private var displayName: String {
+        if !profile.displayName.isEmpty { return profile.displayName }
+        if !profile.name.isEmpty { return profile.name }
+        return String(profile.pubkey.prefix(8))
+    }
+    private var displayInitial: String { String(displayName.prefix(1)) }
 
     var body: some View {
-        let display = app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: profile.pubkey,
-                profile: profile,
-                fallback: .pubkey8
-            )
-        )
-
         HStack(spacing: 14) {
             AuthorAvatar(
                 pubkey: profile.pubkey,
-                pictureURL: display.pictureUrl,
-                displayInitial: display.displayInitial,
+                pictureURL: profile.picture,
+                displayInitial: displayInitial,
                 size: 44
             )
             VStack(alignment: .leading, spacing: 2) {
-                Text(display.displayName)
+                Text(displayName)
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(1)
@@ -902,7 +928,6 @@ private struct HighlightMatchedText: View {
     let text: String
     let query: String
     let font: Font
-    let safeCore: SafeHighlighterCore
 
     var body: some View {
         Text(attributed)
@@ -911,16 +936,21 @@ private struct HighlightMatchedText: View {
 
     private var attributed: AttributedString {
         var out = AttributedString(text)
-        let projection = safeCore.projectSearchTextMatches(
-            input: SearchTextMatchesProjectionInput(text: text, query: query)
-        )
-        for span in projection.spans {
-            if let s = out.index(out.startIndex, offsetByCharacters: Int(span.start)),
-               let e = out.index(out.startIndex, offsetByCharacters: Int(span.end)),
+        let trimmedQuery = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !trimmedQuery.isEmpty else { return out }
+        let lowerText = text.lowercased()
+        var searchFrom = lowerText.startIndex
+        while searchFrom < lowerText.endIndex,
+              let range = lowerText.range(of: trimmedQuery, range: searchFrom..<lowerText.endIndex) {
+            let startOffset = lowerText.distance(from: lowerText.startIndex, to: range.lowerBound)
+            let endOffset   = lowerText.distance(from: lowerText.startIndex, to: range.upperBound)
+            if let s = out.index(out.startIndex, offsetByCharacters: startOffset),
+               let e = out.index(out.startIndex, offsetByCharacters: endOffset),
                s < e {
                 out[s..<e].foregroundColor = .highlighterAccent
                 out[s..<e].backgroundColor = Color.laneArticleHighlightFill
             }
+            searchFrom = range.upperBound
         }
         return out
     }

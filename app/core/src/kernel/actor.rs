@@ -44,6 +44,8 @@ use crate::kernel::domains::{
     auth,
     // ── Phase 5G additions (append-only) ─────────────────────────────────────
     blossom,
+    // ── #1653 additions (append-only) ────────────────────────────────────────
+    bookmark_sets,
     bookmarks,
     // ── Phase 5E additions (append-only) ─────────────────────────────────────
     camera,
@@ -57,6 +59,8 @@ use crate::kernel::domains::{
     discovery,
     // ── Phase 7 discussions additions (append-only) ──────────────────────────
     discussions,
+    // ── Phase 7 entity-ref additions (append-only) ───────────────────────────
+    entities,
     feed,
     // ── Phase 7 feedback additions (append-only) ─────────────────────────────
     feedback,
@@ -203,6 +207,10 @@ pub(crate) struct SharedState {
     pub snapshots: Mutex<std::collections::HashMap<ViewId, ViewSnapshot>>,
     /// The registered platform observer.
     pub observer: RwLock<Option<Arc<dyn HighlighterObserver>>>,
+    /// Cloned from NMP's `configured_relays_handle()` at startup.
+    /// Used by `relay_list_snapshot()` for direct FFI reads without going
+    /// through the actor channel (Arc-shared; updated by the NMP actor).
+    pub relay_slot: Mutex<Option<nmp_core::AppRelaySlot>>,
 }
 
 impl SharedState {
@@ -210,6 +218,7 @@ impl SharedState {
         Arc::new(Self {
             snapshots: Mutex::new(std::collections::HashMap::new()),
             observer: RwLock::new(None),
+            relay_slot: Mutex::new(None),
         })
     }
 }
@@ -300,9 +309,6 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         AppAction::SetRelayRole { url, role } => {
             relays::reduce_action_set_relay_role(state, url, role)
         }
-        AppAction::SetRoomsRelayList { relay_urls } => {
-            relays::reduce_action_set_rooms_relay_list(state, relay_urls)
-        }
 
         // ── Phase 3C additions ────────────────────────────────────────────────
         AppAction::Follow { pubkey } => follows::reduce_action_follow(pubkey),
@@ -319,12 +325,26 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
 
         AppAction::ReleaseProfile { pubkey } => profiles::reduce_action_release_profile(pubkey),
 
+        // ── Phase 7 entity-ref additions (append-only) ────────────────────────
+        AppAction::ResolveEntityRef { key } => {
+            vec![Effect::ResolveEntityRef { key }]
+        }
+        AppAction::ReleaseEntityRef { key } => {
+            vec![Effect::ReleaseEntityRef { key }]
+        }
+
         // ── Phase 3F additions (append-only) ─────────────────────────────────
         AppAction::JoinRoom {
             group_id,
             host_relay_url,
             invite_code,
         } => room_home::reduce_action_join_room(group_id, host_relay_url, invite_code),
+
+        AppAction::LeaveRoom {
+            group_id,
+            host_relay_url,
+            reason,
+        } => room_home::reduce_action_leave_room(group_id, host_relay_url, reason),
 
         AppAction::CreateRoom {
             group_id,
@@ -370,6 +390,22 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
             bookmarks::reduce_action_remove_bookmark_for_state(state, item)
         }
 
+        // ── #1653 additions (append-only) ─────────────────────────────────────
+        AppAction::AddToSet {
+            set_coordinate,
+            item_coordinate,
+        } => bookmark_sets::reduce_action_add_to_set(state, set_coordinate, item_coordinate),
+
+        AppAction::RemoveFromSet {
+            set_coordinate,
+            item_coordinate,
+        } => bookmark_sets::reduce_action_remove_from_set(state, set_coordinate, item_coordinate),
+
+        AppAction::CreateAndAddToSet {
+            title,
+            item_coordinate,
+        } => bookmark_sets::reduce_action_create_and_add_to_set(state, title, item_coordinate, now),
+
         // ── Phase 4A additions ────────────────────────────────────────────────
         // OpenArticle / CloseArticle are fire-and-forget signals from native to
         // coordinate article reader lifecycle. No NMP action is needed — the
@@ -391,7 +427,9 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         }
 
         // ── Phase 4D additions (append-only) ─────────────────────────────────
-        AppAction::RunSearch { query, scope } => search::reduce_action_run_search(query, scope),
+        AppAction::RunSearch { query, scope } => {
+            search::reduce_action_run_search(state, query, scope)
+        }
         AppAction::RunOmnibox { query } => omnibox::reduce_action_run_omnibox(query),
 
         // ── Phase 5A additions (append-only) ─────────────────────────────────
@@ -421,6 +459,8 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
             content,
             source_reference,
             relay_hint,
+            note,
+            context,
         } => {
             // Empty content is a no-op (D6: invalid highlight not published).
             if content.is_empty() {
@@ -430,12 +470,19 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
                     content,
                     source_reference,
                     relay_hint,
+                    note,
+                    context,
                 )
             }
         }
 
         // ── Phase 5C additions (append-only) ─────────────────────────────────
         AppAction::LookupIsbn { isbn } => isbn::reduce_action_lookup_isbn(state, isbn),
+        AppAction::SetBookPickerQuery {
+            query,
+            recent_limit,
+            search_limit,
+        } => isbn::reduce_action_set_book_picker_query(state, query, recent_limit, search_limit),
 
         // ── Phase 5K additions (append-only) ─────────────────────────────────
         AppAction::DrainShareQueue => share::reduce_action_drain_share_queue(),
@@ -446,7 +493,7 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
             guid,
             artifact_json,
         } => {
-            let artifact = match serde_json::from_str::<crate::models::ArtifactRecord>(
+            let artifact = match serde_json::from_str::<crate::kernel::models::ArtifactRecord>(
                 &artifact_json,
             ) {
                 Ok(a) => a,
@@ -461,6 +508,33 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         AppAction::AudioPause => podcast::reduce_action_pause(state),
         AppAction::AudioSeek { seconds } => podcast::reduce_action_seek(state, seconds),
         AppAction::AudioSetResume { seconds } => podcast::reduce_action_set_resume(state, seconds),
+
+        // ── Phase 7 Part C additions (append-only) ───────────────────────────
+        AppAction::UpdateProfile {
+            display_name,
+            name,
+            about,
+            picture_url,
+            banner_url,
+            website,
+            nip05,
+            lightning_address,
+        } => {
+            vec![Effect::UpdateProfile {
+                display_name,
+                name,
+                about,
+                picture_url,
+                banner_url,
+                website,
+                nip05,
+                lightning_address,
+            }]
+        }
+
+        AppAction::ApplyNetworkPath { is_wifi, wifi_only } => {
+            vec![Effect::ApplyNetworkPath { is_wifi, wifi_only }]
+        }
     }
 }
 
@@ -490,19 +564,22 @@ fn reduce_action_envelope(
     }
 
     use crate::kernel::action::{
-        AddBookmarkPayload, AddRelayPayload, AddRoomMemberPayload, AudioPlayPayload,
-        AudioSeekPayload, AudioSetResumePayload, BlossomUploadPayload, CaptureSelectWordPayload,
-        CaptureSetContextPayload, CaptureSetNotePayload, CaptureSetQuotePayload,
-        CaptureSetTargetGroupPayload, ClaimProfilePayload, ClipExtendSegmentPayload,
-        ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload, ClipSetStartPayload,
-        CreateAccountPayload, CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload,
-        JoinRoomPayload, LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload,
+        AddBookmarkPayload, AddRelayPayload, AddRoomMemberPayload, AddToSetPayload,
+        AudioPlayPayload, AudioSeekPayload, AudioSetResumePayload, BlossomUploadPayload,
+        CaptureSelectWordPayload, CaptureSetArtifactPreviewPayload,
+        CaptureSetArtifactRecordPayload, CaptureSetContextPayload, CaptureSetNotePayload,
+        CaptureSetQuotePayload, CaptureSetTargetGroupPayload, ClaimProfilePayload,
+        ClipExtendSegmentPayload, ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload,
+        ClipSetStartPayload, CreateAccountPayload, CreateAndAddToSetPayload,
+        CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload, JoinRoomPayload,
+        LeaveRoomPayload, LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload,
         PairBunkerPayload, PresentSheetPayload, PublishClipPayload, PublishHighlightPayload,
-        ReactPayload, ReleaseProfilePayload, RemoveBookmarkPayload, RemoveRelayPayload,
-        RunOmniboxPayload, RunSearchPayload, SelectRootTabPayload, SetRelayRolePayload,
-        SetRoomsRelayListPayload,
-        ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload, UnfollowPayload,
-        UnreactPayload,
+        ReactPayload, ReleaseEntityRefPayload, ReleaseProfilePayload, RemoveBookmarkPayload,
+        RemoveFromSetPayload, RemoveRelayPayload, ResolveEntityRefPayload, RunOmniboxPayload,
+        RunSearchPayload, SelectRootTabPayload, SetBookPickerQueryPayload, SetRelayRolePayload,
+        ShareArtifactToRoomPayload, ShareHighlightToRoomPayload,
+        ShareMintInvitePayload, ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload,
+        ToggleReactionPayload, UnfollowPayload, UnreactPayload,
     };
 
     match envelope.namespace.as_str() {
@@ -561,11 +638,6 @@ fn reduce_action_envelope(
             };
             relays::reduce_action_set_relay_role(state, p.url, role)
         }
-        "hl.relay.set_rooms_relay_list" => {
-            let p = parse!(SetRoomsRelayListPayload);
-            relays::reduce_action_set_rooms_relay_list(state, p.relay_urls)
-        }
-
         // ── Follows ───────────────────────────────────────────────────────────
         "hl.profile.follow" => {
             let p = parse!(FollowPayload);
@@ -586,6 +658,16 @@ fn reduce_action_envelope(
             profiles::reduce_action_release_profile(p.pubkey)
         }
 
+        // ── Entity ref (resolve/release) ──────────────────────────────────────
+        "hl.entity.resolve" => {
+            let p = parse!(ResolveEntityRefPayload);
+            vec![Effect::ResolveEntityRef { key: p.key }]
+        }
+        "hl.entity.release" => {
+            let p = parse!(ReleaseEntityRefPayload);
+            vec![Effect::ReleaseEntityRef { key: p.key }]
+        }
+
         // ── Room discovery ────────────────────────────────────────────────────
         "hl.room.start_discovery" => {
             let p = parse!(StartRoomDiscoveryPayload);
@@ -596,6 +678,10 @@ fn reduce_action_envelope(
         "hl.room.join" => {
             let p = parse!(JoinRoomPayload);
             room_home::reduce_action_join_room(p.group_id, p.host_relay_url, p.invite_code)
+        }
+        "hl.room.leave" => {
+            let p = parse!(LeaveRoomPayload);
+            room_home::reduce_action_leave_room(p.group_id, p.host_relay_url, p.reason)
         }
         "hl.room.create" => {
             let p = parse!(CreateRoomPayload);
@@ -620,6 +706,38 @@ fn reduce_action_envelope(
             )
         }
 
+        // ── Share flow (#21) ───────────────────────────────────────────────────
+        "hl.share.artifact_to_room" => {
+            let p = parse!(ShareArtifactToRoomPayload);
+            share::reduce_action_artifact_to_room(
+                state,
+                p.group_id,
+                p.host_relay_url,
+                p.preview,
+                p.note,
+            )
+        }
+        "hl.share.highlight_to_room" => {
+            let p = parse!(ShareHighlightToRoomPayload);
+            share::reduce_action_highlight_to_room(
+                state,
+                p.group_id,
+                p.host_relay_url,
+                p.highlight_event_id,
+                p.highlight_author_pubkey,
+                p.relay_hint,
+            )
+        }
+        "hl.share.mint_invite" => {
+            let p = parse!(ShareMintInvitePayload);
+            share::reduce_action_mint_invite(state, p.group_id, p.host_relay_url, p.count)
+        }
+        // Note: `drain_queue_publish` is NOT a dispatchable namespace — the
+        // publish runs automatically inside `reduce_event_share_queue_drained`
+        // when the App Group drain capability result lands (one atomic kernel
+        // step; no Swift-side ordering race). `hl.share.drain_queue` triggers it.
+        "hl.share.reset_publish" => share::reduce_action_reset_share_publish(state),
+
         // ── Bookmarks ─────────────────────────────────────────────────────────
         "hl.bookmark.add" => {
             let p = parse!(AddBookmarkPayload);
@@ -628,6 +746,25 @@ fn reduce_action_envelope(
         "hl.bookmark.remove" => {
             let p = parse!(RemoveBookmarkPayload);
             bookmarks::reduce_action_remove_bookmark_for_state(state, p.item)
+        }
+
+        // ── Curation sets (#1653) ─────────────────────────────────────────────
+        "hl.curation.add_to_set" => {
+            let p = parse!(AddToSetPayload);
+            bookmark_sets::reduce_action_add_to_set(state, p.set_coordinate, p.item_coordinate)
+        }
+        "hl.curation.remove_from_set" => {
+            let p = parse!(RemoveFromSetPayload);
+            bookmark_sets::reduce_action_remove_from_set(state, p.set_coordinate, p.item_coordinate)
+        }
+        "hl.curation.create_and_add" => {
+            let p = parse!(CreateAndAddToSetPayload);
+            bookmark_sets::reduce_action_create_and_add_to_set(
+                state,
+                p.title,
+                p.item_coordinate,
+                now,
+            )
         }
 
         // ── Articles ──────────────────────────────────────────────────────────
@@ -643,6 +780,14 @@ fn reduce_action_envelope(
             let p = parse!(UnreactPayload);
             reactions::reduce_action_unreact(p.reaction_event_id)
         }
+        "hl.reaction.toggle" => {
+            let p = parse!(ToggleReactionPayload);
+            reactions::reduce_action_toggle_reaction(
+                state,
+                p.target_event_id,
+                p.target_author_pubkey,
+            )
+        }
 
         // ── Search ────────────────────────────────────────────────────────────
         "hl.search.run" => {
@@ -652,7 +797,7 @@ fn reduce_action_envelope(
                 Some(s) => s,
                 None => return vec![],
             };
-            search::reduce_action_run_search(p.query, scope)
+            search::reduce_action_run_search(state, p.query, scope)
         }
         "hl.search.omnibox" => {
             let p = parse!(RunOmniboxPayload);
@@ -683,14 +828,26 @@ fn reduce_action_envelope(
                     p.content,
                     p.source_reference,
                     p.relay_hint,
+                    p.note,
+                    p.context,
                 )
             }
         }
 
-        // ── ISBN ──────────────────────────────────────────────────────────────
+        // ── ISBN / BookPicker ─────────────────────────────────────────────────
         "hl.isbn.lookup" => {
             let p = parse!(LookupIsbnPayload);
             isbn::reduce_action_lookup_isbn(state, p.isbn)
+        }
+
+        "hl.book_picker.set_query" => {
+            let p = parse!(SetBookPickerQueryPayload);
+            isbn::reduce_action_set_book_picker_query(
+                state,
+                p.query,
+                p.recent_limit,
+                p.search_limit,
+            )
         }
 
         // ── Share queue ───────────────────────────────────────────────────────
@@ -699,17 +856,18 @@ fn reduce_action_envelope(
         // ── Audio / podcast ───────────────────────────────────────────────────
         "hl.audio.play" => {
             let p = parse!(AudioPlayPayload);
-            let artifact =
-                match serde_json::from_str::<crate::models::ArtifactRecord>(&p.artifact_json) {
-                    Ok(a) => a,
-                    Err(e) => {
-                        return emit_invalid_action_toast(
-                            state,
-                            format!("hl.audio.play: bad artifact_json: {e}"),
-                            now,
-                        );
-                    }
-                };
+            let artifact = match serde_json::from_str::<crate::kernel::models::ArtifactRecord>(
+                &p.artifact_json,
+            ) {
+                Ok(a) => a,
+                Err(e) => {
+                    return emit_invalid_action_toast(
+                        state,
+                        format!("hl.audio.play: bad artifact_json: {e}"),
+                        now,
+                    );
+                }
+            };
             let saved = state.podcast_resume_cache.get(&p.guid).copied();
             podcast::reduce_action_play(state, p.url, p.guid, artifact, saved)
         }
@@ -750,18 +908,19 @@ fn reduce_action_envelope(
         // ── Phase 5J additions (append-only) ──────────────────────────────────
         "hl.podcast.publish_clip" => {
             let p = parse!(PublishClipPayload);
-            let artifact =
-                match serde_json::from_str::<crate::models::ArtifactRecord>(&p.artifact_json) {
-                    Ok(a) => a,
-                    Err(e) => {
-                        tracing::warn!("hl.podcast.publish_clip: bad artifact_json: {e}");
-                        return emit_invalid_action_toast(
-                            state,
-                            format!("hl.podcast.publish_clip: bad artifact_json: {e}"),
-                            now,
-                        );
-                    }
-                };
+            let artifact = match serde_json::from_str::<crate::kernel::models::ArtifactRecord>(
+                &p.artifact_json,
+            ) {
+                Ok(a) => a,
+                Err(e) => {
+                    tracing::warn!("hl.podcast.publish_clip: bad artifact_json: {e}");
+                    return emit_invalid_action_toast(
+                        state,
+                        format!("hl.podcast.publish_clip: bad artifact_json: {e}"),
+                        now,
+                    );
+                }
+            };
             podcast::reduce_action_publish_clip(state, artifact, p.note)
         }
 
@@ -799,6 +958,39 @@ fn reduce_action_envelope(
             capture_draft::reduce_action_set_target_group(state, p.group_id, now)
         }
         "hl.capture.clear_target_group" => capture_draft::reduce_action_clear_target_group(state),
+        "hl.capture.set_artifact_record" => {
+            let p = parse!(CaptureSetArtifactRecordPayload);
+            let artifact = match serde_json::from_str::<crate::kernel::models::ArtifactRecord>(
+                &p.artifact_json,
+            ) {
+                Ok(a) => a,
+                Err(e) => {
+                    return emit_invalid_action_toast(
+                        state,
+                        format!("hl.capture.set_artifact_record: bad artifact_json: {e}"),
+                        now,
+                    );
+                }
+            };
+            capture_draft::reduce_action_set_artifact_record(state, artifact)
+        }
+        "hl.capture.set_artifact_preview" => {
+            let p = parse!(CaptureSetArtifactPreviewPayload);
+            let preview = match serde_json::from_str::<crate::kernel::models::ArtifactPreview>(
+                &p.preview_json,
+            ) {
+                Ok(a) => a,
+                Err(e) => {
+                    return emit_invalid_action_toast(
+                        state,
+                        format!("hl.capture.set_artifact_preview: bad preview_json: {e}"),
+                        now,
+                    );
+                }
+            };
+            capture_draft::reduce_action_set_artifact_preview(state, preview)
+        }
+        "hl.capture.clear_artifact" => capture_draft::reduce_action_clear_artifact(state),
         "hl.capture.publish" => capture_draft::reduce_action_publish(state, now),
         "hl.capture.reset" => capture_draft::reduce_action_reset(state),
 
@@ -888,6 +1080,41 @@ fn reduce_action_envelope(
             artifact_preview::ensure_artifact_preview(state, p.coordinate)
         }
 
+        // ── Phase 7 Part C additions (append-only) ───────────────────────────
+        // `hl.profile.update` — update the active account's kind:0 metadata.
+        // Fire-and-forget (D6, Non-Negotiable #3): the kernel merges the fields,
+        // preserves unknown keys from the existing event, signs, and publishes.
+        "hl.profile.update" => {
+            use crate::kernel::action::UpdateProfilePayload;
+            let p = parse!(UpdateProfilePayload);
+            vec![Effect::UpdateProfile {
+                display_name: p.display_name,
+                name: p.name,
+                about: p.about,
+                picture_url: p.picture_url,
+                banner_url: p.banner_url,
+                website: p.website,
+                nip05: p.nip05,
+                lightning_address: p.lightning_address,
+            }]
+        }
+
+        // `hl.network.apply_path` — apply a native network-path update.
+        // Swift reads wifi_only from UserDefaults and passes it alongside the
+        // current is_wifi flag from NWPathMonitor. Fire-and-forget (D6).
+        "hl.network.apply_path" => {
+            #[derive(serde::Deserialize)]
+            struct Payload {
+                is_wifi: bool,
+                wifi_only: bool,
+            }
+            let p = parse!(Payload);
+            vec![Effect::ApplyNetworkPath {
+                is_wifi: p.is_wifi,
+                wifi_only: p.wifi_only,
+            }]
+        }
+
         // ── Unknown namespace ─────────────────────────────────────────────────
         _ => emit_invalid_action_toast(
             state,
@@ -946,6 +1173,8 @@ fn search_scope_from_str(
         "users" => Some(SearchScope::Users),
         "long_form" => Some(SearchScope::LongForm),
         "notes" => Some(SearchScope::Notes),
+        "articles_and_highlights" => Some(SearchScope::ArticlesAndHighlights),
+        "articles_highlights_and_users" => Some(SearchScope::ArticlesHighlightsAndUsers),
         _ => {
             emit_invalid_action_toast(state, format!("{ns}: unknown search scope: {scope}"), now);
             None
@@ -954,7 +1183,7 @@ fn search_scope_from_str(
 }
 
 /// Thin dispatcher: routes each `KernelEvent` variant to its owning domain handler.
-fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effect> {
+fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effect> {
     match event {
         KernelEvent::SessionRestored { present, pubkey } => {
             session::reduce_event_session_restored(state, present, pubkey)
@@ -998,7 +1227,7 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // FlatBuffers decode — no network I/O, no allocation beyond the vec)
             // and dispatch to the projections domain handler which routes each
             // schema_id into the appropriate AppState field (or a no-op in 3A).
-            projections::dispatch_typed_frame(state, &bytes)
+            projections::dispatch_typed_frame(state, &bytes, now)
         }
 
         // ── Phase 3B additions (append-only) ─────────────────────────────────
@@ -1011,6 +1240,12 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // Store raw hex pubkeys decoded from the "nmp.nip02.follow_list"
             // typed sidecar. Also injectable directly from tests via Cmd::Event
             // (no live NmpApp needed — the reducer path is identical).
+            //
+            // Phase 7: lifecycle effects for HomeFeed follow-update (missing
+            // cursor registrations) are emitted from the actor_task after reduce
+            // because the registry is only available there. See actor_task for the
+            // `FollowListUpdated` post-reduce hook that calls
+            // `home_feed::lifecycle_effects_for_follow_update`.
             state.follows = pubkeys;
             vec![]
         }
@@ -1038,6 +1273,30 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // typed sidecar. No labels — raw fields only (D1). Also injectable
             // directly from tests via Cmd::Event (no live NmpApp needed).
             state.bookmarks = rows;
+            // Phase 7: hydrate the bookmarked-article previews (resolves from
+            // AppState::articles or emits a fetch for missing coords) so the
+            // Bookmarks "Articles" pane fills in / updates.
+            bookmarks::ensure_bookmark_article_previews(state)
+        }
+
+        // ── #1653 additions (append-only) ─────────────────────────────────────
+        KernelEvent::BookmarkSetsUpdated {
+            all_bookmark_sets,
+            all_curation_sets,
+        } => {
+            // Store raw BookmarkSetRow items decoded from the "hl.bookmark_sets"
+            // typed sidecar (all authors, unfiltered). D1: raw fields only.
+            // Injectable directly from tests via Cmd::Event.
+            state.all_bookmark_sets = all_bookmark_sets;
+            state.all_curation_sets = all_curation_sets;
+            vec![]
+        }
+
+        KernelEvent::WebBookmarksUpdated(rows) => {
+            // Store web-bookmark rows decoded from the "hl.web_bookmarks"
+            // typed sidecar (active account only). D1: raw fields only.
+            // Injectable directly from tests via Cmd::Event.
+            state.web_bookmarks = rows;
             vec![]
         }
 
@@ -1062,9 +1321,22 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             target_event_id,
             count,
             viewer_reacted,
+            viewer_reaction_event_id,
         } => {
             // Upsert raw reaction state for the target event. No optimistic
             // delta applied here — D1: Swift owns optimistic UI state.
+            // Track the viewer's own reaction event id separately (kernel-only,
+            // never FFI) so hl.reaction.toggle can unreact.
+            match viewer_reaction_event_id {
+                Some(id) => {
+                    state
+                        .viewer_reaction_ids
+                        .insert(target_event_id.clone(), id);
+                }
+                None => {
+                    state.viewer_reaction_ids.remove(&target_event_id);
+                }
+            }
             state.reaction_state.insert(
                 target_event_id.clone(),
                 crate::kernel::snapshot::ReactionRow {
@@ -1083,6 +1355,18 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // "hl.search" JSON sidecar arrives, but also injectable directly
             // from tests via Cmd::Event (no live NmpApp needed). D1: raw fields.
             state.search_results = rows;
+            // Profile-search cache upsert (Phase 7 #1697): no-op until
+            // AppState::profile_search_cache is wired up.
+            vec![]
+        }
+
+        // ── Phase 7 (#1697 gate): local kind:0 store scan completed ───────────
+        KernelEvent::ProfileSearchScanned {
+            generation: _,
+            rows: _,
+        } => {
+            // Profile-search cache merge (Phase 7 #1697): no-op until
+            // AppState::profile_search_cache is wired up.
             vec![]
         }
 
@@ -1115,6 +1399,10 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
         KernelEvent::IsbnCacheLoaded { entries } => {
             isbn::reduce_event_isbn_cache_loaded(state, entries)
         }
+        KernelEvent::BookPickerRecentsLoaded {
+            recents,
+            search_results,
+        } => isbn::reduce_event_book_picker_recents_loaded(state, recents, search_results),
 
         // ── Phase 4F additions (append-only) ─────────────────────────────────
         KernelEvent::FeedPage {
@@ -1139,11 +1427,29 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             let feed_state = match key.as_str() {
                 "hl.feed.articles" => Some(&mut state.article_feed),
                 "hl.feed.highlights" => Some(&mut state.highlight_feed),
+                // Phase 7: home-feed interaction cursor (kind:1/7/16/1111).
+                home_feed::HOME_INTERACTIONS_FEED_KEY => Some(&mut state.home_feed_interactions),
                 k if k.starts_with("hl.feed.room.") => {
                     // Lazily insert a FeedState for this group_id if not present.
                     let group_key = k.to_string();
                     state.room_lanes.entry(group_key).or_default();
                     state.room_lanes.get_mut(k)
+                }
+                k if k.starts_with(room_home::ROOM_HIGHLIGHT_FEED_KEY_PREFIX) => {
+                    // Lazily insert a FeedState for this room highlight feed.
+                    let hl_key = k.to_string();
+                    state.room_highlight_feeds.entry(hl_key).or_default();
+                    state.room_highlight_feeds.get_mut(k)
+                }
+                k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => {
+                    // Phase 7: per-article highlight feed. Lazily insert a
+                    // FeedState for this article address if not present.
+                    let article_key = k.to_string();
+                    state
+                        .article_highlight_feeds
+                        .entry(article_key)
+                        .or_default();
+                    state.article_highlight_feeds.get_mut(k)
                 }
                 _ => {
                     tracing::warn!(?key, "FeedPage: unknown feed key — no-op");
@@ -1155,12 +1461,39 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
                 feed::apply_feed_page(fs, rows, next_after_seq, exhausted, gap_rebased_to);
             }
 
+            // Phase 7 artifact-preview consumer: the home feed merges the
+            // article + highlight feeds, so a new page may introduce coordinates
+            // whose preview isn't cached yet. Ensure a (pending-or-resolved) row
+            // exists for each so the next HomeFeed snapshot can attach it
+            // (skeleton while pending). Idempotent; only for the home-feed sources.
+            // Phase 7 aggregation: interaction pages may also resolve new article
+            // coordinates that need preview entries.
+            if key == "hl.feed.articles"
+                || key == "hl.feed.highlights"
+                || key == home_feed::HOME_INTERACTIONS_FEED_KEY
+            {
+                home_feed::ensure_artifact_previews(state);
+            }
+
+            // Room-home aggregation: seed artifact_previews for kind:11 events
+            // in the room lane. Propagate the ResolveArtifactCoordinate effects so
+            // unresolved previews actually fetch (they were previously discarded).
+            let room_lane_preview_effects: Vec<Effect> =
+                if key.starts_with(room_home::ROOM_LANE_FEED_KEY_PREFIX) {
+                    let group_id = key
+                        .trim_start_matches(room_home::ROOM_LANE_FEED_KEY_PREFIX)
+                        .to_string();
+                    room_home::ensure_room_artifact_previews(state, &group_id)
+                } else {
+                    vec![]
+                };
+
             // Note: AdvancePullCursor is sent from the inline effect handler in
             // actor_task (after run_effect for DrainFeed) rather than here,
             // because we need the NmpHandle which is not available in reduce_event
             // (a pure, synchronous function — D9). The inline handler calls
             // feed::advance_feed_cursor after the FeedPage event is processed.
-            vec![]
+            room_lane_preview_effects
         }
 
         // ── Phase 5K additions (append-only) ─────────────────────────────────
@@ -1232,8 +1565,22 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             blob_url,
             error,
         } => blossom::reduce_event_blossom_upload_result(state, success, blob_url, error),
+
+        // ── #21 share-flow additions (append-only) ───────────────────────────
+        KernelEvent::SharePublishCorrelationMinted {
+            placeholder_correlation_id,
+            nmp_correlation_id,
+        } => share::reduce_event_share_publish_correlation_minted(
+            state,
+            placeholder_correlation_id,
+            nmp_correlation_id,
+        ),
+        KernelEvent::ShareMintDispatchRejected {
+            correlation_id,
+            error,
+        } => share::reduce_event_share_publish_action_result(state, correlation_id, false, error),
         KernelEvent::CapturePublishActionResult { success, error } => {
-            capture_draft::reduce_event_capture_publish_action_result(state, success, error)
+            capture_draft::reduce_event_capture_publish_action_result(state, success, error, now)
         }
 
         // ── Phase 5I additions (append-only) ─────────────────────────────────
@@ -1286,7 +1633,16 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, _now: u64) -> Vec<Effe
             // Store bounded kind:11+discussion rows in AppState::room_discussions
             // keyed by group_id. Produced by DiscussionObserver (per open room)
             // or injected directly from tests via Cmd::Event. D1: raw rows only.
-            discussions::reduce_event_room_discussions_updated(state, group_id, rows)
+            let group_id_str = group_id.clone();
+            let mut e = discussions::reduce_event_room_discussions_updated(state, group_id, rows);
+            // Seed artifact_previews for a/e/i refs in discussion rows so the
+            // next snapshot can render the rich artifact chip. Propagate the
+            // ResolveArtifactCoordinate effects so previews actually fetch.
+            e.extend(room_home::ensure_room_artifact_previews(
+                state,
+                &group_id_str,
+            ));
+            e
         }
 
         // ── Phase 7 artifact-preview additions (append-only) ─────────────────
@@ -1332,6 +1688,9 @@ pub(crate) fn project_snapshot(
         // ── Phase 3D additions (append-only) ─────────────────────────────────
         ViewId::Profile { pubkey } => profiles::project_profile_snapshot(state, pubkey),
 
+        // ── Phase 7 entity-ref additions (append-only) ────────────────────────
+        ViewId::EntityRef { key } => entities::project_entity_ref_snapshot(state, key),
+
         // ── Phase 3F additions (append-only) ─────────────────────────────────
         ViewId::RoomHome { group_id } => room_home::project_room_home_snapshot(state, group_id),
 
@@ -1339,6 +1698,12 @@ pub(crate) fn project_snapshot(
         ViewId::Bookmarks => Some(crate::kernel::snapshot::ViewSnapshot::Bookmarks(
             crate::kernel::snapshot::BookmarksSnapshot {
                 rows: state.bookmarks.clone(),
+                article_previews: bookmarks::bookmark_article_previews(state),
+                // ── #1653: sets + web panes ───────────────────────────────────
+                my_bookmark_sets: bookmark_sets::project_my_bookmark_sets(state),
+                my_curation_sets: bookmark_sets::project_my_curation_sets(state),
+                following_curation_sets: bookmark_sets::project_following_curation_sets(state),
+                my_web_bookmarks: bookmark_sets::project_my_web_bookmarks(state),
             },
         )),
 
@@ -1368,6 +1733,11 @@ pub(crate) fn project_snapshot(
         // ── Phase 5K additions (append-only) ─────────────────────────────────
         ViewId::ShareComposer => share::project_share_composer_snapshot(state)
             .map(crate::kernel::snapshot::ViewSnapshot::ShareComposer),
+
+        // ── #21 share-flow additions (append-only) ───────────────────────────
+        ViewId::SharePublish => Some(crate::kernel::snapshot::ViewSnapshot::SharePublish(
+            share::project_share_publish_snapshot(state),
+        )),
 
         // ── Phase 5H additions (append-only) ─────────────────────────────────
         ViewId::PodcastListening => podcast::project_podcast_listening_snapshot(state),
@@ -1495,9 +1865,6 @@ pub(crate) async fn run_effect(
         Effect::SetRelayRole { url, role } => {
             relays::run_effect_set_relay_role(url, role, nmp);
         }
-        Effect::PublishRoomsRelayList { content } => {
-            relays::run_effect_publish_rooms_relay_list(content, nmp);
-        }
 
         // ── Phase 3B additions (append-only) ─────────────────────────────────
         Effect::WireJoinedGroups { pubkey } => {
@@ -1545,6 +1912,14 @@ pub(crate) async fn run_effect(
             profiles::run_effect_release_profile(pubkey, nmp);
         }
 
+        // ── Phase 7 entity-ref additions (append-only) ────────────────────────
+        Effect::ResolveEntityRef { key } => {
+            entities::run_effect_resolve_entity_ref(key, nmp);
+        }
+        Effect::ReleaseEntityRef { key } => {
+            entities::run_effect_release_entity_ref(key, nmp);
+        }
+
         // ── Phase 3F additions (append-only) ─────────────────────────────────
         //
         // WireGroupEvents and ReleaseGroupEvents require access to AppState
@@ -1586,14 +1961,11 @@ pub(crate) async fn run_effect(
         }
 
         // ── Phase 4D additions (append-only) ─────────────────────────────────
-        Effect::RunSearch {
-            query,
-            scope_json,
-        } => {
+        Effect::RunSearch { query, scope_json } => {
             // Open a NIP-50 search session via NMP's higher-order open_search.
             // Fire-and-forget (D6): search hits arrive back as the typed N50S
             // sidecar frame. No-op if nmp is None (test mode).
-            search::run_effect_run_search(query, scope_json, nmp);
+            search::run_effect_run_search(query, scope_json, nmp, tx);
         }
 
         Effect::RunOmnibox { query } => {
@@ -1614,6 +1986,23 @@ pub(crate) async fn run_effect(
             highlight_feed::run_effect_publish_highlight(json, nmp);
         }
 
+        // ── #1653 additions (append-only) ─────────────────────────────────────
+        Effect::PublishSetEvent { json } => {
+            // Publish a kind:30004 curation-set update via ActorCommand::PublishRawEvent.
+            // No nmp action namespace for kind:30004 at d16aea60 — same raw
+            // publish path as PublishHighlightEvent. Fire-and-forget (D6).
+            bookmark_sets::run_effect_publish_set_event(json, nmp);
+        }
+        Effect::PushBookmarkSetsInterest { authors } => {
+            // #1653 BLOCKING #1: push the view-scoped sets/web subscription so
+            // nmp emits REQ frames and events actually arrive. Fire-and-forget (D6).
+            bookmark_sets::run_effect_push_interest(authors, nmp);
+        }
+        Effect::WithdrawBookmarkSetsInterest => {
+            // #1653 HIGH #7: withdraw the interest + clear accumulators (D5/D8).
+            bookmark_sets::run_effect_withdraw_interest(nmp);
+        }
+
         // ── Phase 5C additions (append-only) ─────────────────────────────────
         // No-op when data_dir is empty (test mode — tests inject KernelEvent::IsbnPreviewReady
         // directly). data_dir is read from policy (same pattern as 5A whats_new effects).
@@ -1628,6 +2017,24 @@ pub(crate) async fn run_effect(
         Effect::PersistIsbnCache { entries } => {
             let data_dir = policy.data_dir.clone();
             isbn::run_effect_persist_isbn_cache(entries, data_dir).await;
+        }
+        Effect::ScanBookPickerRecents {
+            pubkey,
+            joined_group_ids,
+            query,
+            recent_limit,
+            search_limit,
+        } => {
+            isbn::run_effect_scan_book_picker_recents(
+                nmp,
+                pubkey,
+                joined_group_ids,
+                query,
+                recent_limit,
+                search_limit,
+                tx,
+            )
+            .await;
         }
 
         // ── Phase 4F additions (append-only) ─────────────────────────────────
@@ -1815,6 +2222,35 @@ pub(crate) async fn run_effect(
             discussions::run_effect_publish_discussion(json, nmp);
         }
 
+        // ── Share flow (#21) ─────────────────────────────────────────────────
+        Effect::PublishShareEvent {
+            json,
+            correlation_id,
+        } => {
+            // Sign-and-publish a host-pinned in-group share/repost via
+            // validated nmp.publish. The
+            // correlation id threads the verdict back through the action_results
+            // projection → apply_action_result_row → SharePublishActionResult,
+            // driving the share FSM → Done/Error (D6). No-op when nmp is None
+            // (test mode inspects the emitted Effect directly).
+            share::run_effect_publish_share_event(json, correlation_id, nmp, tx);
+        }
+
+        Effect::DispatchCreateInviteWithCorrelation {
+            json,
+            correlation_id,
+        } => {
+            // Dispatch the validated nmp.nip29.create_invite (kind:9009) WITH a
+            // correlation id so the create-invite publish verdict drives the
+            // share-mint FSM → Done/Error (#21 finding 3). No-op when nmp is None.
+            share::run_effect_dispatch_create_invite_with_correlation(
+                json,
+                correlation_id,
+                nmp,
+                tx,
+            );
+        }
+
         // ── Phase 7 artifact-preview additions (append-only) ─────────────────
         Effect::ResolveArtifactCoordinate { coordinate } => {
             // Lower the coordinate to the appropriate nmp interest:
@@ -1847,6 +2283,84 @@ pub(crate) async fn run_effect(
                 // registration. For now, log and leave the row pending — the consumer
                 // screens tolerate pending rows with placeholder UI.
             }
+        }
+
+        // ── Phase 7 Part C additions (append-only) ───────────────────────────
+        Effect::UpdateProfile {
+            display_name,
+            name,
+            about,
+            picture_url,
+            banner_url,
+            website,
+            nip05,
+            lightning_address,
+        } => {
+            // Build kind:0 content JSON from supplied fields. The caller (EditProfileSheet)
+            // pre-populates ALL visible fields from the current profile snapshot, so the
+            // published event carries the full set the user sees — round-trip safe for
+            // known fields. Unknown fields (not surfaced in the UI) are lost here;
+            // a later wave can merge from nostrdb before publish.
+            let Some(handle) = nmp else {
+                tracing::debug!("UpdateProfile: no live NmpApp (test mode) — no-op");
+                return;
+            };
+            let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
+
+            let mut content_map: std::collections::HashMap<&str, String> =
+                std::collections::HashMap::new();
+            if let Some(v) = display_name {
+                content_map.insert("display_name", v);
+            }
+            if let Some(v) = name {
+                content_map.insert("name", v);
+            }
+            if let Some(v) = about {
+                content_map.insert("about", v);
+            }
+            if let Some(v) = picture_url {
+                content_map.insert("picture", v);
+            }
+            if let Some(v) = banner_url {
+                content_map.insert("banner", v);
+            }
+            if let Some(v) = website {
+                content_map.insert("website", v);
+            }
+            if let Some(v) = nip05 {
+                content_map.insert("nip05", v);
+            }
+            if let Some(v) = lightning_address {
+                content_map.insert("lud16", v);
+            }
+
+            let content_json = match serde_json::to_string(&content_map) {
+                Ok(j) => j,
+                Err(e) => {
+                    tracing::warn!(error = %e, "UpdateProfile: JSON encode error — no-op (D6)");
+                    return;
+                }
+            };
+
+            let _ = nmp_ref
+                .actor_sender()
+                .send(nmp_core::ActorCommand::PublishRawEvent {
+                    kind: 0,
+                    content: content_json,
+                    tags: vec![],
+                    target: nmp_core::publish::PublishTarget::Auto,
+                    signer_pubkey: None,
+                    correlation_id: None,
+                });
+        }
+
+        Effect::ApplyNetworkPath { is_wifi, wifi_only } => {
+            // Wi-Fi-only relay enforcement. NMP at the current pinned revision
+            // does not expose a disconnect/connect-all ActorCommand, so this is
+            // a no-op stub. A future NMP update (or custom ActorCommand extension)
+            // will use the is_wifi + wifi_only values to enforce relay policy.
+            // Fire-and-forget (D6). D3: no relay URL literals here.
+            let _ = (is_wifi, wifi_only);
         }
     }
 
@@ -2012,7 +2526,7 @@ async fn run_effect_load_podcast_position(
     if data_dir.is_empty() {
         return;
     }
-    use crate::models::PodcastPositionRecord;
+    use crate::kernel::models::PodcastPositionRecord;
 
     let path =
         std::path::Path::new(data_dir).join(crate::kernel::domains::podcast::POSITION_FILE_NAME);
@@ -2050,12 +2564,12 @@ async fn run_effect_save_podcast_position(
     data_dir: &str,
     guid: String,
     position_seconds: f64,
-    artifact: crate::models::ArtifactRecord,
+    artifact: crate::kernel::models::ArtifactRecord,
 ) {
     if data_dir.is_empty() {
         return;
     }
-    use crate::models::PodcastPositionRecord;
+    use crate::kernel::models::PodcastPositionRecord;
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -2125,7 +2639,16 @@ fn feed_state_cursor_id(state: &AppState, key: &str) -> u64 {
     match key {
         "hl.feed.articles" => state.article_feed.cursor_id,
         "hl.feed.highlights" => state.highlight_feed.cursor_id,
+        home_feed::HOME_INTERACTIONS_FEED_KEY => state.home_feed_interactions.cursor_id,
         k if k.starts_with("hl.feed.room.") => state.room_lanes.get(k).map_or(0, |fs| fs.cursor_id),
+        k if k.starts_with(room_home::ROOM_HIGHLIGHT_FEED_KEY_PREFIX) => state
+            .room_highlight_feeds
+            .get(k)
+            .map_or(0, |fs| fs.cursor_id),
+        k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => state
+            .article_highlight_feeds
+            .get(k)
+            .map_or(0, |fs| fs.cursor_id),
         _ => 0,
     }
 }
@@ -2139,7 +2662,16 @@ fn feed_state_after_seq(state: &AppState, key: &str) -> u64 {
     match key {
         "hl.feed.articles" => state.article_feed.after_seq,
         "hl.feed.highlights" => state.highlight_feed.after_seq,
+        home_feed::HOME_INTERACTIONS_FEED_KEY => state.home_feed_interactions.after_seq,
         k if k.starts_with("hl.feed.room.") => state.room_lanes.get(k).map_or(0, |fs| fs.after_seq),
+        k if k.starts_with(room_home::ROOM_HIGHLIGHT_FEED_KEY_PREFIX) => state
+            .room_highlight_feeds
+            .get(k)
+            .map_or(0, |fs| fs.after_seq),
+        k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => state
+            .article_highlight_feeds
+            .get(k)
+            .map_or(0, |fs| fs.after_seq),
         _ => 0,
     }
 }
@@ -2188,6 +2720,8 @@ pub(crate) async fn actor_task(
                 registry.open(id.clone(), route.clone());
                 // ── Phase 3D: claim a profile subscription when its view opens ──
                 lifecycle_effects.extend(profiles::lifecycle_effects_for_view_open(id));
+                // ── Phase 7: resolve entity ref when its view opens ──────────
+                lifecycle_effects.extend(entities::lifecycle_effects_for_view_open(id));
                 // ── Phase 3F: wire group-events projection when room-home view opens ──
                 lifecycle_effects.extend(room_home::lifecycle_effects_for_view_open(id));
                 // ── Phase 3G: auto-start room discovery when RoomExplorer opens ──
@@ -2205,6 +2739,14 @@ pub(crate) async fn actor_task(
                 lifecycle_effects.extend(highlight_feed::lifecycle_effects_for_view_open(id));
                 // ── Phase 4J: home feed — compose both underlying feed lifecycles ──
                 lifecycle_effects.extend(home_feed::lifecycle_effects_for_view_open(id, &state));
+                // ── Phase 7: bookmarks articles pane — hydrate article previews ──
+                if matches!(id, ViewId::Bookmarks) {
+                    lifecycle_effects
+                        .extend(bookmarks::ensure_bookmark_article_previews(&mut state));
+                }
+                // ── #1653: push view-scoped sets subscription (kind 30003/30004/39701) ──
+                lifecycle_effects
+                    .extend(bookmark_sets::lifecycle_effects_for_view_open(id, &state));
                 // ── Phase 7 discussions: register DiscussionObserver per room ──
                 // Inline (not an Effect) because it needs the NmpHandle directly.
                 // No-op when nmp_handle is None (test mode) or group_id is empty.
@@ -2222,6 +2764,8 @@ pub(crate) async fn actor_task(
             Cmd::CloseView(id) => {
                 // ── Phase 3D: release the profile subscription before removing from registry ──
                 lifecycle_effects.extend(profiles::lifecycle_effects_for_view_close(id));
+                // ── Phase 7: release entity ref when its view closes ─────────
+                lifecycle_effects.extend(entities::lifecycle_effects_for_view_close(id));
                 // ── Phase 3F: release group-events buffer when room-home view closes ──
                 lifecycle_effects.extend(room_home::lifecycle_effects_for_view_close(id));
                 // ── Phase 4A: article reader close lifecycle (no-op in 4A) ─────
@@ -2254,6 +2798,8 @@ pub(crate) async fn actor_task(
                 lifecycle_effects.extend(highlight_feed::lifecycle_effects_for_view_close(id));
                 // ── Phase 4J: home feed — release both underlying cursors ───────
                 lifecycle_effects.extend(home_feed::lifecycle_effects_for_view_close(id));
+                // ── #1653: withdraw sets subscription + clear accumulators (D5/D8) ──
+                lifecycle_effects.extend(bookmark_sets::lifecycle_effects_for_view_close(id));
                 registry.close(id);
             }
             Cmd::Resume => {
@@ -2267,8 +2813,48 @@ pub(crate) async fn actor_task(
 
         let now = clock.now_unix_seconds();
 
+        // Detect FollowListUpdated before reduce so we can emit post-reduce
+        // effects that need the registry (which is not available in reduce_event).
+        let is_follow_list_updated = matches!(cmd, Cmd::Event(KernelEvent::FollowListUpdated(_)));
+        // #1653 BLOCKING #2: a follow change OR account switch must refresh the
+        // bookmarks interest authors while the view is open. IdentityChanged also
+        // changes the active account (and clears/replaces follows downstream).
+        let is_identity_changed = matches!(cmd, Cmd::Event(KernelEvent::IdentityChanged(_)));
+
         // Reduce (pure, sync).
-        let effects = reduce(&mut state, cmd, now);
+        let mut effects = reduce(&mut state, cmd, now);
+
+        // Phase 7: if follows just updated and HomeFeed is open, emit any missing
+        // cursor registrations (article feed or interaction feed that were not
+        // registered at HomeFeed-open time because follows were empty). D8:
+        // effect-driven; no polling; no native close/reopen.
+        if is_follow_list_updated && registry.is_open(&ViewId::HomeFeed) {
+            effects.extend(home_feed::lifecycle_effects_for_follow_update(&state));
+        }
+
+        // #1653 codex r5 gap #1: a standalone, currently-open `HighlightFeed`
+        // view also has its cursor wiped by an account switch. The highlight feed
+        // is NOT follow-scoped, so it has no `FollowListUpdated` re-register
+        // trigger of its own; re-register it on `IdentityChanged` when it is open
+        // and its cursor was reset to 0 by the teardown, so no open view is left
+        // permanently blank. (Inside HomeFeed this is covered by the
+        // follow-update hook above; this covers the standalone case.)
+        if is_identity_changed
+            && registry.is_open(&ViewId::HighlightFeed)
+            && state.highlight_feed.cursor_id == 0
+        {
+            effects.extend(highlight_feed::lifecycle_effects_for_view_open(
+                &ViewId::HighlightFeed,
+            ));
+        }
+
+        // #1653 BLOCKING #2: re-push the bookmarks interest with the refreshed
+        // author set (current user + follows) when a follow change or account
+        // switch arrives WHILE the Bookmarks view is open. Mirrors the HomeFeed
+        // follow-update hook above. The push is idempotent (stable InterestId).
+        if (is_follow_list_updated || is_identity_changed) && registry.is_open(&ViewId::Bookmarks) {
+            effects.extend(bookmark_sets::lifecycle_effects_for_follow_update(&state));
+        }
 
         // Run lifecycle effects first (profile claim/release), then reducer effects.
         // Phase 3F: WireGroupEvents and ReleaseGroupEvents require AppState and are
@@ -2296,30 +2882,48 @@ pub(crate) async fn actor_task(
                 // ── Phase 4F inline effect handlers ──────────────────────────
                 Effect::RegisterFeedCursor {
                     key,
-                    cursor_id,
+                    cursor_id: _minted_id, // ignored — kernel allocates id
                     scope,
                 } => {
-                    // Store cursor_id in the appropriate FeedState so DrainFeed
-                    // and ReleaseFeedCursor can look it up without an actor
-                    // round-trip. Then register with the kernel.
-                    let id = *cursor_id;
+                    // NMP master: cursor ids are allocated by the kernel registry
+                    // (PullCursorRegistry::alloc_handle). run_effect_register_feed_cursor
+                    // returns the kernel-allocated id which we then store in FeedState.
                     let key_clone = key.clone();
                     let after_seq = feed_state_after_seq(&state, key);
-                    match key.as_str() {
-                        "hl.feed.articles" => state.article_feed.cursor_id = id,
-                        "hl.feed.highlights" => state.highlight_feed.cursor_id = id,
-                        k if k.starts_with("hl.feed.room.") => {
-                            state.room_lanes.entry(k.to_string()).or_default().cursor_id = id;
-                        }
-                        _ => {}
-                    }
-                    feed::run_effect_register_feed_cursor(
+                    let allocated_id = feed::run_effect_register_feed_cursor(
                         key_clone,
-                        id,
                         scope.clone(),
                         after_seq,
                         nmp_handle.as_ref(),
                     );
+                    if allocated_id != 0 {
+                        match key.as_str() {
+                            "hl.feed.articles" => state.article_feed.cursor_id = allocated_id,
+                            "hl.feed.highlights" => state.highlight_feed.cursor_id = allocated_id,
+                            home_feed::HOME_INTERACTIONS_FEED_KEY => {
+                                state.home_feed_interactions.cursor_id = allocated_id;
+                            }
+                            k if k.starts_with("hl.feed.room.") => {
+                                state.room_lanes.entry(k.to_string()).or_default().cursor_id =
+                                    allocated_id;
+                            }
+                            k if k.starts_with(room_home::ROOM_HIGHLIGHT_FEED_KEY_PREFIX) => {
+                                state
+                                    .room_highlight_feeds
+                                    .entry(k.to_string())
+                                    .or_default()
+                                    .cursor_id = allocated_id;
+                            }
+                            k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => {
+                                state
+                                    .article_highlight_feeds
+                                    .entry(k.to_string())
+                                    .or_default()
+                                    .cursor_id = allocated_id;
+                            }
+                            _ => {}
+                        }
+                    }
                     continue;
                 }
                 Effect::DrainFeed { key } => {
@@ -2340,8 +2944,21 @@ pub(crate) async fn actor_task(
                     match key.as_str() {
                         "hl.feed.articles" => state.article_feed.clear(),
                         "hl.feed.highlights" => state.highlight_feed.clear(),
+                        home_feed::HOME_INTERACTIONS_FEED_KEY => {
+                            state.home_feed_interactions.clear();
+                        }
                         k if k.starts_with("hl.feed.room.") => {
                             if let Some(fs) = state.room_lanes.get_mut(k) {
+                                fs.clear();
+                            }
+                        }
+                        k if k.starts_with(room_home::ROOM_HIGHLIGHT_FEED_KEY_PREFIX) => {
+                            if let Some(fs) = state.room_highlight_feeds.get_mut(k) {
+                                fs.clear();
+                            }
+                        }
+                        k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => {
+                            if let Some(fs) = state.article_highlight_feeds.get_mut(k) {
                                 fs.clear();
                             }
                         }
@@ -2496,6 +3113,15 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
     // observation is harmless — both projections read the same events. The write
     // actions are NOT re-registered here (nmp-defaults already wired them).
     bookmarks::register_bookmark_list_projection(nmp_ref, nmp_ref.active_account_handle());
+
+    // #1653: wire SetListProjection (kind:30003/30004, all authors) and
+    // WebBookmarkProjection (kind:39701, active account only). NMP has no
+    // built-in observers for these kinds at d16aea60 — custom registration.
+    // SetListProjection accumulates all events; identity filtering happens at
+    // apply_bookmark_sets time on the actor thread (where AppState::follows is
+    // available). WebBookmarkProjection uses the live active-account slot so
+    // it auto-tracks identity switches.
+    bookmark_sets::register_set_projections(nmp_ref, nmp_ref.active_account_handle());
 
     // Phase 3A: register the update callback so NMP snapshot frames are
     // forwarded into the actor as KernelEvent::NmpSnapshotFrame. The

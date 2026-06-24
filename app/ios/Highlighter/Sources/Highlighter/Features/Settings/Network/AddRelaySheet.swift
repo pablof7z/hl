@@ -4,7 +4,6 @@ import SwiftUI
 /// Read + Write on, Rooms and Indexer off. A user can tap chips after the
 /// relay is in the list if they want to change the roles.
 struct AddRelaySheet: View {
-    @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
 
     let onAdd: (RelayConfig) -> Void
@@ -33,17 +32,36 @@ struct AddRelaySheet: View {
     }
 
     private var projection: AddRelaySheetProjection {
-        appStore.safeCore.projectAddRelaySheet(input: AddRelaySheetProjectionInput(
-            urlText: urlText,
-            clipboardText: UIPasteboard.general.string,
-            read: read,
-            write: write,
-            rooms: rooms,
-            indexer: indexer,
-            probeInFlight: probeInFlight,
-            probeResult: probeResult,
-            probeFailed: probeFailed
-        ))
+        let normalizedUrl = urlText.trimmingCharacters(in: .whitespaces)
+        let clipboardUrl: String? = UIPasteboard.general.string.flatMap { text in
+            let trimmed = text.trimmingCharacters(in: .whitespaces)
+            guard (trimmed.hasPrefix("wss://") || trimmed.hasPrefix("ws://")) && trimmed != normalizedUrl else { return nil }
+            return trimmed
+        }
+        let isValid = normalizedUrl.hasPrefix("wss://") || normalizedUrl.hasPrefix("ws://")
+        let (probeStatus, probeText): (AddRelayProbeStatus, String) = {
+            if probeInFlight { return (.checking, "Checking relay…") }
+            if let doc = probeResult {
+                let softwareLabel: String? = doc.software.map { name in
+                    doc.version.map { "\(name) \($0)" } ?? name
+                }
+                let nipCount = doc.supportedNips.isEmpty ? nil : "\(doc.supportedNips.count) NIPs"
+                let parts = [doc.name, softwareLabel, nipCount].compactMap { $0 }
+                return (.reachable, parts.isEmpty ? "Reachable (no NIP-11 metadata)" : parts.joined(separator: " • "))
+            }
+            if probeFailed { return (.unreachable, "Couldn't reach the relay — you can still add it.") }
+            return (.idle, "")
+        }()
+        return AddRelaySheetProjection(
+            normalizedUrl: normalizedUrl,
+            clipboardUrl: clipboardUrl,
+            isValid: isValid,
+            isUnencrypted: normalizedUrl.hasPrefix("ws://"),
+            canAdd: isValid,
+            addConfig: RelayConfig(url: normalizedUrl, read: read, write: write, rooms: rooms, indexer: indexer),
+            probeStatus: probeStatus,
+            probeText: probeText
+        )
     }
 
     var body: some View {
@@ -160,15 +178,46 @@ struct AddRelaySheet: View {
         let currentProjection = projection
         guard currentProjection.isValid else { return }
         let url = currentProjection.normalizedUrl
-        let core = appStore.safeCore
         probeTask = Task { [url] in
             guard !Task.isCancelled else { return }
             probeInFlight = true
             defer { probeInFlight = false }
-            let snapshot = await core.probeRelayNip11Snapshot(url)
+            let result = await Self.fetchNip11(relayUrl: url)
             guard !Task.isCancelled else { return }
-            probeResult = snapshot.document
-            probeFailed = snapshot.probeFailed
+            if let doc = result {
+                probeResult = doc
+                probeFailed = false
+            } else {
+                probeResult = nil
+                probeFailed = true
+            }
         }
+    }
+
+    /// Fetch NIP-11 relay metadata via HTTP GET with `Accept: application/nostr+json`.
+    /// Converts wss:// → https:// (ws:// → http://) per NIP-11 spec.
+    private static func fetchNip11(relayUrl: String) async -> Nip11Document? {
+        let httpUrl = relayUrl
+            .replacingOccurrences(of: "wss://", with: "https://")
+            .replacingOccurrences(of: "ws://", with: "http://")
+        guard let url = URL(string: httpUrl) else { return nil }
+        var request = URLRequest(url: url, timeoutInterval: 8)
+        request.setValue("application/nostr+json", forHTTPHeaderField: "Accept")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return Nip11Document(
+            url: relayUrl,
+            name: json["name"] as? String,
+            description: json["description"] as? String,
+            pubkey: json["pubkey"] as? String,
+            contact: json["contact"] as? String,
+            software: json["software"] as? String,
+            version: json["version"] as? String,
+            supportedNips: (json["supported_nips"] as? [Int])?.map { UInt32($0) } ?? [],
+            icon: json["icon"] as? String
+        )
     }
 }

@@ -20,17 +20,20 @@ struct BookPicker: View {
 
     @Binding var selection: BookSelection?
 
-    @State private var recents: [ArtifactRecord] = []
-    @State private var searchResults: [ArtifactRecord] = []
     @State private var query: String = ""
-    @State private var loadingRecents = true
-    @State private var searching = false
     @State private var showScanner = false
     @State private var showManualEntry = false
     @State private var resolvingISBN: String?
     @State private var resolvedPreview: ArtifactPreview?
     @State private var resolveError: String?
     @FocusState private var searchFocused: Bool
+
+    private var kernel: HighlighterAppKernel? { appStore.kernel }
+    private var snapshot: BookPickerKernelSnapshot? { kernel?.bookPicker }
+    private var recents: [ArtifactRecord] { snapshot?.recents ?? [] }
+    private var searchResults: [ArtifactRecord] { snapshot?.searchResults ?? [] }
+    private var loadingRecents: Bool { snapshot == nil }
+    private var searching: Bool { queryProjection.hasQuery && snapshot != nil && searchResults.isEmpty && !query.isEmpty }
 
     var body: some View {
         NavigationStack {
@@ -55,17 +58,32 @@ struct BookPicker: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        kernel?.closeBookPicker()
+                        dismiss()
+                    }
                 }
             }
             .task {
-                if loadingRecents {
-                    apply(await appStore.safeCore.getBookPickerSnapshot(query: ""))
-                    loadingRecents = false
+                kernel?.openBookPicker()
+                kernel?.setBookPickerQuery("")
+            }
+            .onChange(of: query) { _, newQuery in
+                runSearch(query: newQuery)
+            }
+            .onChange(of: snapshot?.lastResult) { _, result in
+                guard let isbn = resolvingISBN, let result, result.isbn13 == isbn else { return }
+                let errMsg = result.error.trimmingCharacters(in: .whitespaces)
+                if errMsg.isEmpty, let kp = result.preview {
+                    resolvedPreview = kp.asArtifactPreview()
+                } else if errMsg.isEmpty {
+                    resolveError = "Unable to resolve ISBN"
+                } else {
+                    resolveError = errMsg
                 }
             }
-            .task(id: query) {
-                await runSearch()
+            .onDisappear {
+                kernel?.closeBookPicker()
             }
             .fullScreenCover(isPresented: $showScanner) {
                 BookScannerView { isbn in
@@ -328,10 +346,12 @@ struct BookPicker: View {
     }
 
     private func searchRow(_ book: ArtifactRecord) -> some View {
-        let projection = bookDisplay(book.preview)
+        let displayTitle = book.preview.title.isEmpty ? "Untitled" : book.preview.title
+        let imageUrl: String? = book.preview.image.isEmpty ? nil : book.preview.image
+        let author: String? = book.preview.author.isEmpty ? nil : book.preview.author
 
         return HStack(spacing: 12) {
-            if let imageURL = projection.imageUrl, let url = URL(string: imageURL) {
+            if let imageURL = imageUrl, let url = URL(string: imageURL) {
                 KFImage(url)
                     .placeholder { coverPlaceholder(title: book.preview.title) }
                     .fade(duration: 0.15)
@@ -345,11 +365,11 @@ struct BookPicker: View {
                     .clipShape(RoundedRectangle(cornerRadius: 4))
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(projection.displayTitle)
+                Text(displayTitle)
                     .font(.body)
                     .foregroundStyle(Color.highlighterInkStrong)
                     .lineLimit(2)
-                if let author = projection.author {
+                if let author {
                     Text(author)
                         .font(.caption)
                         .foregroundStyle(Color.highlighterInkMuted)
@@ -362,12 +382,6 @@ struct BookPicker: View {
         }
         .padding(12)
         .background(Color.white.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
-    }
-
-    private func bookDisplay(_ preview: ArtifactPreview) -> CaptureBookDisplayProjection {
-        appStore.safeCore.projectCaptureBookDisplay(
-            input: CaptureBookDisplayProjectionInput(preview: preview)
-        )
     }
 
     // MARK: - Photo-only
@@ -398,8 +412,15 @@ struct BookPicker: View {
     // MARK: - Actions
 
     private var queryProjection: BookPickerQueryProjection {
-        appStore.safeCore.projectBookPickerQuery(
-            input: BookPickerQueryProjectionInput(query: query)
+        // D1: mirrors isbn_lookup::book_picker_query_projection.
+        // ISBN detection uses digit count only (no check-digit validation).
+        let searchQuery = query.trimmingCharacters(in: .whitespaces)
+        let digits = searchQuery.filter { $0.isNumber }
+        let normalizedIsbn: String? = (digits.count == 10 || digits.count == 13) ? digits : nil
+        return BookPickerQueryProjection(
+            searchQuery: searchQuery,
+            hasQuery: !searchQuery.isEmpty,
+            normalizedIsbn: normalizedIsbn
         )
     }
 
@@ -410,7 +431,7 @@ struct BookPicker: View {
     }
 
     private func beginResolve(_ isbn: String) {
-        if let existing = appStore.safeCore.findExistingBookForIsbn(isbn, recents: recents) {
+        if let existing = findExistingBookForIsbn(isbn: isbn, records: recents) {
             selection = .existing(existing)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             dismiss()
@@ -420,44 +441,11 @@ struct BookPicker: View {
         resolvingISBN = isbn
         resolvedPreview = nil
         resolveError = nil
-        Task {
-            let outcome = await appStore.safeCore.lookupIsbn(isbn)
-            // Only commit the preview if we're still on the same ISBN
-            // (user could have cancelled mid-flight).
-            if resolvingISBN == isbn {
-                let projection = appStore.safeCore.projectIsbnPreviewLookupApply(
-                    input: IsbnPreviewLookupApplyInput(
-                        preview: outcome.preview,
-                        error: outcome.error
-                    )
-                )
-                if let preview = projection.preview {
-                    resolvedPreview = preview
-                } else {
-                    resolveError = projection.errorMessage
-                }
-            }
-        }
+        kernel?.app.dispatch(.lookupIsbn(isbn: isbn))
     }
 
-    private func runSearch() async {
-        let projection = queryProjection
-        guard projection.hasQuery else {
-            searchResults = []
-            searching = false
-            return
-        }
-        searching = true
-        guard !Task.isCancelled, queryProjection.searchQuery == projection.searchQuery else { return }
-        let snapshot = await appStore.safeCore.getBookPickerSnapshot(query: projection.searchQuery)
-        guard !Task.isCancelled, queryProjection.searchQuery == projection.searchQuery else { return }
-        apply(snapshot)
-        searching = false
-    }
-
-    private func apply(_ snapshot: BookPickerSnapshot) {
-        recents = snapshot.recents
-        searchResults = snapshot.searchResults
+    private func runSearch(query: String) {
+        kernel?.setBookPickerQuery(query)
     }
 }
 
@@ -529,12 +517,9 @@ private struct ISBNPreviewSheet: View {
     }
 
     private var manualProjection: IsbnManualPreviewProjection {
-        appStore.safeCore.projectIsbnManualPreview(
-            input: IsbnManualPreviewProjectionInput(
-                title: manualTitle,
-                author: manualAuthor
-            )
-        )
+        let title = manualTitle.trimmingCharacters(in: .whitespaces)
+        let author = manualAuthor.trimmingCharacters(in: .whitespaces)
+        return IsbnManualPreviewProjection(title: title, author: author, canUse: !title.isEmpty)
     }
 
     @ViewBuilder
@@ -620,7 +605,7 @@ private struct ISBNPreviewSheet: View {
     private func commit() {
         let projection = manualProjection
         guard projection.canUse else { return }
-        let outcome = appStore.safeCore.buildEditedBookPreview(
+        let outcome = buildEditedBookPreview(
             isbn: isbn,
             basePreview: preview,
             title: projection.title,
@@ -630,5 +615,40 @@ private struct ISBNPreviewSheet: View {
         onEditTitle(updated)
         onUse(updated)
         dismiss()
+    }
+}
+
+// MARK: - KernelArtifactPreview → ArtifactPreview bridge
+
+private extension KernelArtifactPreview {
+    func asArtifactPreview() -> ArtifactPreview {
+        ArtifactPreview(
+            id: id,
+            url: "",
+            title: title,
+            author: author,
+            image: image,
+            description: description,
+            source: "book",
+            domain: "",
+            catalogId: catalogId,
+            catalogKind: catalogKind,
+            podcastGuid: "",
+            podcastItemGuid: "",
+            podcastShowTitle: "",
+            audioUrl: "",
+            audioPreviewUrl: "",
+            transcriptUrl: "",
+            feedUrl: "",
+            publishedAt: "",
+            durationSeconds: nil,
+            referenceTagName: referenceTagName,
+            referenceTagValue: referenceTagValue,
+            referenceKind: "",
+            highlightTagName: highlightTagName,
+            highlightTagValue: highlightTagValue,
+            highlightReferenceKey: highlightReferenceKey,
+            chapters: []
+        )
     }
 }

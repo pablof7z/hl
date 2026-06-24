@@ -11,15 +11,45 @@
 //!
 //! ## Types
 //!
-//! `OcrLine`, `OcrWord`, and `OcrRect` are the canonical types defined in the live
-//! bespoke lane (`crate::ocr`). They are re-exported here so all kernel-domain code
-//! can import them from one place (`crate::capabilities::ocr`) without duplicating
-//! the `uniffi::Record` definitions (which would create FFI symbol conflicts).
+//! `OcrLine`, `OcrWord`, and `OcrRect` are the canonical OCR observation types
+//! that cross the capability boundary. They are DEFINED here in the kernel lane
+//! (Phase 7 — Part-C prep: relocated out of the bespoke `crate::ocr` so the
+//! kernel no longer depends on the bespoke lane). The native Vision bridge
+//! returns them via `OcrResult::Lines`; the kernel domain
+//! (`kernel/domains/ocr.rs`) reconstructs markdown and projects selectable
+//! words from them.
+//!
+//! The bespoke `crate::ocr` module re-imports these definitions while it still
+//! exists; it owns the geometry `impl OcrRect` helpers it uses internally.
 
-/// Re-export the canonical OCR geometry and observation types from the live lane.
-/// The kernel domain's `reconstruct_markdown` and `selectable_words` work with
-/// these types end-to-end; native Vision bridge returns them via `OcrResult::Lines`.
-pub use crate::ocr::{OcrLine, OcrRect, OcrWord};
+/// Normalized bounding rect for an OCR observation. Coordinates are in Vision's
+/// normalized image space (origin bottom-left, `[0, 1]`).
+#[derive(Debug, Clone, Copy, PartialEq, uniffi::Record)]
+pub struct OcrRect {
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+/// A single recognized word with its bounding box and confidence.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct OcrWord {
+    pub text: String,
+    pub bbox: OcrRect,
+    pub confidence: f32,
+}
+
+/// A recognized line of text with its bounding box, confidence, and the words
+/// it contains. The native Vision bridge produces these; the kernel domain
+/// reconstructs structure from them.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct OcrLine {
+    pub text: String,
+    pub bbox: OcrRect,
+    pub confidence: f32,
+    pub words: Vec<OcrWord>,
+}
 
 /// What the kernel is asking the native OCR bridge to do.
 #[derive(Debug, Clone, uniffi::Enum)]

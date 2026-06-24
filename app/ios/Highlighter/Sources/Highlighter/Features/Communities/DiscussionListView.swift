@@ -6,6 +6,7 @@ struct DiscussionListView: View {
     @Binding var composerPresented: Bool
 
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var store = DiscussionStore()
 
     var body: some View {
@@ -38,7 +39,10 @@ struct DiscussionListView: View {
             }
         }
         .task {
-            await store.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
+            await store.start(groupId: groupId, kernel: kernel)
+        }
+        .onChange(of: kernel.roomDiscussions[groupId]) { _, _ in
+            store.applyKernelSnapshot()
         }
         .onDisappear { store.stop() }
         .sheet(isPresented: $composerPresented) {
@@ -109,12 +113,27 @@ private struct DiscussionRowView: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: discussion.pubkey,
-                profile: app.profileSnapshots[discussion.pubkey],
-                fallback: .pubkey8
-            )
+        let profile = app.profileSnapshots[discussion.pubkey]
+        let name: String
+        if let p = profile, !p.displayName.isEmpty {
+            name = p.displayName
+        } else if let p = profile, !p.name.isEmpty {
+            name = p.name
+        } else {
+            name = String(discussion.pubkey.prefix(8))
+        }
+        let displayInitial: String
+        if let p = profile, !p.displayName.isEmpty {
+            displayInitial = String(p.displayName.prefix(1))
+        } else if let p = profile, !p.name.isEmpty {
+            displayInitial = String(p.name.prefix(1))
+        } else {
+            displayInitial = String(discussion.pubkey.prefix(1))
+        }
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: displayInitial,
+            pictureUrl: profile?.picture ?? ""
         )
     }
 
@@ -127,10 +146,8 @@ private struct DiscussionRowView: View {
 
     @ViewBuilder
     private func attachmentChip(_ a: DiscussionAttachment) -> some View {
-        let projection = app.safeCore.projectDiscussionAttachment(
-            input: DiscussionAttachmentProjectionInput(attachment: a)
-        )
-        if let label = projection.label {
+        let label: String? = !a.title.isEmpty ? a.title : (!a.url.isEmpty ? a.url : nil)
+        if let label {
             HStack(spacing: 5) {
                 Image(systemName: "link")
                     .font(.caption2.weight(.medium))

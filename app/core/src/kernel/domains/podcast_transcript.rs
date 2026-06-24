@@ -635,13 +635,13 @@ Hello.
         use crate::kernel::actor::{reduce, Cmd};
         use crate::kernel::app::AppState;
         use crate::kernel::clock::{Clock as KClock, ManualClock};
-        use crate::models::{ArtifactPreview, Chapter};
+        use crate::kernel::models::{ArtifactPreview, Chapter};
 
         let mut state = AppState::default();
         let clk = ManualClock::default();
         clk.set(1_000);
 
-        let artifact = crate::models::ArtifactRecord {
+        let artifact = crate::kernel::models::ArtifactRecord {
             preview: ArtifactPreview {
                 id: "pod-1".into(),
                 url: "https://podcast.example/episode".into(),
@@ -1000,7 +1000,6 @@ Hello.
                 matches!(
                     e,
                     Effect::PublishHighlightEvent { .. }
-                        | Effect::PublishRoomsRelayList { .. }
                         | Effect::DispatchNip29Action { .. }
                         | Effect::DispatchFollowAction { .. }
                         | Effect::DispatchShareToRoom { .. }
@@ -1144,9 +1143,9 @@ Hello.
         );
     }
 
-    fn minimal_artifact(guid: &str, audio_url: &str) -> crate::models::ArtifactRecord {
-        use crate::models::{ArtifactPreview, Chapter};
-        crate::models::ArtifactRecord {
+    fn minimal_artifact(guid: &str, audio_url: &str) -> crate::kernel::models::ArtifactRecord {
+        use crate::kernel::models::{ArtifactPreview, Chapter};
+        crate::kernel::models::ArtifactRecord {
             preview: ArtifactPreview {
                 id: "pod-1".into(),
                 url: "https://podcast.example/episode".into(),

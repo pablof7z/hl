@@ -7,12 +7,19 @@ import SwiftUI
 ///   3. Always allow nsec paste + manual bunker URI paste as fallback.
 struct LoginView: View {
     @Environment(HighlighterStore.self) private var store
+    @Environment(HighlighterAppKernel.self) private var kernel
     @Environment(\.openURL) private var openURL
 
     @State private var detectedSigner: KnownSigner?
     @State private var inputText: String = ""
     @State private var isWorking: Bool = false
     @State private var errorMessage: String?
+
+    /// The inline error to show: the live-lane sign-in error takes precedence;
+    /// otherwise surface a kernel-side restore/sign-in failure.
+    private var displayedError: String? {
+        errorMessage ?? kernel.appRoot.authError
+    }
 
     var body: some View {
         NavigationStack {
@@ -28,8 +35,8 @@ struct LoginView: View {
 
                     manualEntry
 
-                    if let errorMessage {
-                        Text(errorMessage)
+                    if let displayedError {
+                        Text(displayedError)
                             .font(.footnote)
                             .foregroundStyle(.red)
                     }
@@ -38,6 +45,19 @@ struct LoginView: View {
             }
             .task {
                 detectedSigner = KnownSigner.detect()
+            }
+            .onChange(of: kernel.appRoot) { _, appRoot in
+                guard isWorking else { return }
+                if appRoot.sessionPresent {
+                    isWorking = false
+                } else if let error = appRoot.authError {
+                    errorMessage = error
+                    isWorking = false
+                }
+                if let uri = appRoot.nostrconnectUri, let url = URL(string: uri) {
+                    openURL(url)
+                    isWorking = false
+                }
             }
             .navigationTitle("")
         }
@@ -58,7 +78,7 @@ struct LoginView: View {
     private var primalHero: some View {
         VStack(spacing: 12) {
             Button {
-                Task { await connectViaPrimalApp() }
+                connectViaPrimalApp()
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "bolt.fill")
@@ -86,7 +106,7 @@ struct LoginView: View {
 
     private func genericSignerButton(_ signer: KnownSigner) -> some View {
         Button {
-            Task { await connectViaPrimalApp() }  // same flow, different scheme
+            connectViaPrimalApp()
         } label: {
             HStack {
                 Text("Continue with \(signer.name)")
@@ -116,7 +136,7 @@ struct LoginView: View {
                 .background(.thinMaterial, in: .rect(cornerRadius: 14))
 
             Button {
-                Task { await submitManualInput() }
+                submitManualInput()
             } label: {
                 Text(isWorking ? "Signing in…" : "Sign in")
                     .frame(maxWidth: .infinity)
@@ -140,75 +160,31 @@ struct LoginView: View {
     // MARK: - Actions
 
     private var isManualInputEmpty: Bool {
-        if case .empty = store.safeCore.classifyLoginInput(inputText) {
-            return true
-        }
-        return false
+        inputText.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    private func submitManualInput() async {
-        let action = store.safeCore.classifyLoginInput(inputText)
+    private func submitManualInput() {
+        let trimmed = inputText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
 
         isWorking = true
         errorMessage = nil
-        defer { isWorking = false }
 
-        switch action {
-        case .empty:
-            return
-        case .nsec(let nsec):
-            let snapshot = await store.safeCore.loginNsec(nsec)
-            if snapshot.isAuthenticated, let user = snapshot.user {
-                let storage = AppSessionStore.shared.persistAuthInstructions(
-                    snapshot,
-                    core: store.safeCore
-                )
-                guard storage.succeeded else {
-                    errorMessage = storage.errorMessage
-                    return
-                }
-                _ = store.markOnboardingComplete()
-                await store.completeLogin(user: user)
-            } else {
-                errorMessage = snapshot.errorMessage
-            }
-        case .bunker(let uri):
-            let snapshot = await store.safeCore.pairBunker(uri)
-            if snapshot.isAuthenticated, let user = snapshot.user {
-                let storage = AppSessionStore.shared.persistAuthInstructions(
-                    snapshot,
-                    core: store.safeCore
-                )
-                guard storage.succeeded else {
-                    errorMessage = storage.errorMessage
-                    return
-                }
-                _ = store.markOnboardingComplete()
-                await store.completeLogin(user: user)
-            } else {
-                errorMessage = snapshot.errorMessage
-            }
-        case .invalid(let message):
-            errorMessage = message
+        if trimmed.hasPrefix("nsec1") {
+            kernel.app.dispatch(.signInNsec(nsec: trimmed))
+        } else if trimmed.hasPrefix("bunker://") || trimmed.hasPrefix("nostrconnect://") {
+            kernel.app.dispatch(.pairBunker(uri: trimmed))
+        } else {
+            errorMessage = "Unrecognized input — paste an nsec1…, bunker://, or nostrconnect:// URI"
+            isWorking = false
         }
     }
 
-    private func connectViaPrimalApp() async {
+    private func connectViaPrimalApp() {
         isWorking = true
         errorMessage = nil
-        defer { isWorking = false }
-
-        let snapshot = await store.safeCore.startDefaultNostrConnect(callback: "highlighter://nip46")
-        guard snapshot.started else {
-            errorMessage = snapshot.errorMessage
-            return
-        }
-        let uri = snapshot.uri
-
-        if let url = URL(string: uri) {
-            openURL(url)
-        }
-        // `EventBridge` receives `.signerConnected(user)` once the remote
-        // signer responds on the relay and `completeLogin` runs from there.
+        kernel.app.dispatch(.startNostrConnect)
+        // The NostrConnect URI arrives asynchronously via kernel.appRoot.nostrconnectUri;
+        // the onChange above opens it and clears isWorking.
     }
 }

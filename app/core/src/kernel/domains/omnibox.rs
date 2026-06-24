@@ -172,12 +172,10 @@ pub(crate) fn classification_to_outcome(
             OmniboxOutcome::RejectSecret
         }
         InputIntentClassification::Rejection(_) => OmniboxOutcome::NoMatch,
-        InputIntentClassification::Candidates(candidates) => {
-            match candidates.into_iter().next() {
-                None => OmniboxOutcome::NoMatch,
-                Some(candidate) => target_to_outcome(query, candidate.target),
-            }
-        }
+        InputIntentClassification::Candidates(candidates) => match candidates.into_iter().next() {
+            None => OmniboxOutcome::NoMatch,
+            Some(candidate) => target_to_outcome(query, candidate.target),
+        },
     }
 }
 
@@ -281,7 +279,10 @@ fn classify_ffi(app_ptr: *mut NmpApp, request_json: &str) -> Option<InputIntentC
     if raw.is_null() {
         return None;
     }
-    let json = unsafe { CStr::from_ptr(raw) }.to_str().ok().map(str::to_owned);
+    let json = unsafe { CStr::from_ptr(raw) }
+        .to_str()
+        .ok()
+        .map(str::to_owned);
     nmp_free_string(raw);
     let response: ClassifyResponse = serde_json::from_str(&json?).ok()?;
     if !response.ok {
@@ -413,10 +414,7 @@ mod tests {
     #[test]
     fn unparseable_is_no_match() {
         let c = InputIntentClassification::Rejection(InputIntentRejection::Unparseable);
-        assert_eq!(
-            classification_to_outcome("", c),
-            OmniboxOutcome::NoMatch
-        );
+        assert_eq!(classification_to_outcome("", c), OmniboxOutcome::NoMatch);
     }
 
     // OB-T8: a malformed group payload degrades to NoMatch (D6).
@@ -425,10 +423,7 @@ mod tests {
         let c = candidates(InputIntentTarget::Registered {
             payload_json: "not json".to_string(),
         });
-        assert_eq!(
-            classification_to_outcome("x", c),
-            OmniboxOutcome::NoMatch
-        );
+        assert_eq!(classification_to_outcome("x", c), OmniboxOutcome::NoMatch);
     }
 
     // OB-T9: the scope allow-list is exactly the five omnibox classes.

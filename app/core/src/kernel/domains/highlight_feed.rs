@@ -65,7 +65,7 @@ pub const HIGHLIGHT_FEED_KEY: &str = "hl.feed.highlights";
 /// D1: extracts raw protocol fields only — no byline formatting, no "Highlighted
 /// by {name}" string, no avatar URL composition, no source-kind label. Swift owns
 /// all presentation.
-fn decode_highlight_row(event: &NmpKernelEvent) -> Option<HighlightRow> {
+pub(crate) fn decode_highlight_row(event: &NmpKernelEvent) -> Option<HighlightRow> {
     // Only kind:9802 events belong in the highlight feed.
     if event.kind != 9802 {
         return None;
@@ -100,13 +100,100 @@ fn decode_highlight_row(event: &NmpKernelEvent) -> Option<HighlightRow> {
         }
     };
 
+    // Optional user note from the NIP-84 `comment` tag (mirrors the live lane's
+    // `first_tag_value(event, "comment")`). Empty/absent → None (D1).
+    let note: Option<String> = event
+        .tags
+        .iter()
+        .find(|t| t.first().map(|s| s == "comment").unwrap_or(false))
+        .and_then(|t| t.get(1))
+        .filter(|s| !s.is_empty())
+        .cloned();
+
+    // ── Phase 7 enrichment: mirror highlights.rs::record_from_cached_event ────
+    // Raw NIP-84/NIP-73 source + clip + image fields so the highlight card can
+    // render the resource header, podcast-clip chrome, and page-scan image.
+    let tag = |name: &str| -> String {
+        event
+            .tags
+            .iter()
+            .find(|t| t.first().map(|s| s == name).unwrap_or(false))
+            .and_then(|t| t.get(1))
+            .cloned()
+            .unwrap_or_default()
+    };
+    let artifact_address = tag("a");
+    let event_reference = tag("e");
+    let external_reference = tag("i");
+    let source_url = tag("r");
+    let context = tag("context");
+    let source_reference_key = if !artifact_address.is_empty() {
+        format!("a:{artifact_address}")
+    } else if !event_reference.is_empty() {
+        format!("e:{event_reference}")
+    } else if !external_reference.is_empty() {
+        format!("i:{external_reference}")
+    } else if !source_url.is_empty() {
+        format!("r:{source_url}")
+    } else {
+        String::new()
+    };
+    let clip_start_seconds = {
+        let s = tag("start");
+        s.trim().parse().ok()
+    };
+    let clip_end_seconds = {
+        let s = tag("end");
+        s.trim().parse().ok()
+    };
+    let clip_speaker = tag("speaker");
+    let clip_transcript_segment_ids: Vec<String> = event
+        .tags
+        .iter()
+        .filter(|t| t.first().map(|s| s == "segment").unwrap_or(false))
+        .filter_map(|t| t.get(1).cloned())
+        .collect();
+    let image_url = imeta_image_url(event);
+
     Some(HighlightRow {
         event_id: event.id.clone(),
         author_pubkey: event.author.clone(),
         content: event.content.clone(),
         source_reference,
+        note,
         created_at: event.created_at,
+        context,
+        artifact_address,
+        event_reference,
+        external_reference,
+        source_url,
+        source_reference_key,
+        clip_start_seconds,
+        clip_end_seconds,
+        clip_speaker,
+        clip_transcript_segment_ids,
+        image_url,
     })
+}
+
+/// Extract the NIP-92 `imeta` image URL from a raw kernel event's tags.
+/// Tag shape: `["imeta", "url <url>", "m <mime>", …]`. Mirrors the live lane's
+/// `highlights.rs::imeta_image_url`. Empty when no imeta tag carries a url.
+fn imeta_image_url(event: &NmpKernelEvent) -> String {
+    for tag in event.tags.iter() {
+        if tag.first().map(|s| s != "imeta").unwrap_or(true) {
+            continue;
+        }
+        for part in tag.iter().skip(1) {
+            if let Some(rest) = part.strip_prefix("url ") {
+                let url = rest.trim();
+                if !url.is_empty() {
+                    return url.to_string();
+                }
+            }
+        }
+    }
+    String::new()
 }
 
 // ─── Snapshot projection ─────────────────────────────────────────────────────
@@ -202,10 +289,25 @@ pub(crate) fn lifecycle_effects_for_view_close(id: &ViewId) -> Vec<Effect> {
 /// so content with quotes or backslashes is safe (D-rule: serde, not format).
 /// The `kind`, `tags`, and `created_at` fields are kernel responsibility; the
 /// `id`, `sig`, and `pubkey` are filled by nmp's signer on publish.
+/// Trim an optional note/context string; return `Some(trimmed)` only when the
+/// result is non-empty (mirrors build_highlight_event's `.trim()` + `is_empty()`
+/// gates so empty/whitespace-only values never produce a tag — gotcha #7 edge
+/// fidelity).
+fn note_context_trimmed(value: Option<&str>) -> Option<String> {
+    let trimmed = value?.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
 pub(crate) fn reduce_action_publish_highlight(
     content: String,
     source_reference: String,
     relay_hint: Option<String>,
+    note: Option<String>,
+    context: Option<String>,
 ) -> Vec<Effect> {
     // Build the NIP-84 tags: ["a", "<coordinate>", "<relay_hint>"] or
     // ["e", "<event_id>", "<relay_hint>"] depending on whether the source_reference
@@ -213,7 +315,7 @@ pub(crate) fn reduce_action_publish_highlight(
     let is_address = source_reference.contains(':');
     let tag_name = if is_address { "a" } else { "e" };
 
-    let tag: serde_json::Value = match relay_hint.as_deref() {
+    let source_tag: serde_json::Value = match relay_hint.as_deref() {
         Some(hint) if !hint.is_empty() => {
             serde_json::json!([tag_name, source_reference, hint])
         }
@@ -222,10 +324,26 @@ pub(crate) fn reduce_action_publish_highlight(
         }
     };
 
+    let mut tags: Vec<serde_json::Value> = vec![source_tag];
+
+    // `context` tag — emitted only when non-empty AND different from `content`
+    // (parity with the bespoke build_highlight_event: a context equal to the
+    // quote is redundant and never published).
+    if let Some(ctx) = note_context_trimmed(context.as_deref()) {
+        if ctx != content.trim() {
+            tags.push(serde_json::json!(["context", ctx]));
+        }
+    }
+
+    // `comment` tag (the user note) — emitted only when non-empty.
+    if let Some(n) = note_context_trimmed(note.as_deref()) {
+        tags.push(serde_json::json!(["comment", n]));
+    }
+
     let event_json = serde_json::json!({
         "kind": 9802,
         "content": content,
-        "tags": [tag],
+        "tags": tags,
     });
 
     let Ok(json) = serde_json::to_string(&event_json) else {
@@ -322,6 +440,45 @@ mod tests {
             content: content.to_string(),
             relay_provenance: vec![],
         }
+    }
+
+    // 7-HD: decode_highlight_row extracts the NIP-84 `comment` tag into `note`
+    // (parity with the live lane's `first_tag_value(event, "comment")`), and
+    // leaves `note = None` when absent or empty.
+    #[test]
+    fn highlight_row_extracts_note_from_comment_tag() {
+        let mut ev = highlight_event(
+            "aa00000000000000000000000000000000000000000000000000000000000001",
+            "bb00000000000000000000000000000000000000000000000000000000000002",
+            "the highlighted text",
+            "30023:author:slug",
+            1_000_000,
+        );
+        ev.tags
+            .push(vec!["comment".to_string(), "my note".to_string()]);
+        let row = decode_highlight_row(&ev).expect("kind:9802 decodes");
+        assert_eq!(row.note.as_deref(), Some("my note"));
+
+        // Absent comment tag → None.
+        let no_comment = highlight_event(
+            "aa00000000000000000000000000000000000000000000000000000000000003",
+            "bb00000000000000000000000000000000000000000000000000000000000002",
+            "text",
+            "30023:author:slug",
+            1_000_001,
+        );
+        assert_eq!(decode_highlight_row(&no_comment).unwrap().note, None);
+
+        // Empty comment value → None (D1).
+        let mut empty = highlight_event(
+            "aa00000000000000000000000000000000000000000000000000000000000004",
+            "bb00000000000000000000000000000000000000000000000000000000000002",
+            "text",
+            "30023:author:slug",
+            1_000_002,
+        );
+        empty.tags.push(vec!["comment".to_string(), "".to_string()]);
+        assert_eq!(decode_highlight_row(&empty).unwrap().note, None);
     }
 
     // 4H-T1: highlight_feed_registers_cursor
@@ -598,5 +755,99 @@ mod tests {
             }
             other => panic!("expected HighlightFeed, got {:?}", other),
         }
+    }
+
+    // Helper: pull the emitted kind:9802 event JSON out of the publish effect.
+    fn publish_event_value(effects: &[Effect]) -> serde_json::Value {
+        let Some(Effect::PublishHighlightEvent { json }) = effects.first() else {
+            panic!("expected PublishHighlightEvent effect, got {:?}", effects);
+        };
+        serde_json::from_str(json).expect("event json")
+    }
+
+    fn tag_values<'a>(event: &'a serde_json::Value, name: &str) -> Vec<&'a str> {
+        event["tags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|t| {
+                let arr = t.as_array()?;
+                if arr.first()?.as_str()? == name {
+                    arr.get(1)?.as_str()
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    // Phase 7: publishing a highlight with a note + context emits the `comment`
+    // and `context` tags (the article-reader publish surface). The round-trip
+    // (publish → record_from_cached_event) is the parity check — no hardcoded
+    // tag positions, and it proves the kernel emits what the bespoke parser reads.
+    #[test]
+    fn publish_highlight_emits_comment_and_context_tags() {
+        let effects = reduce_action_publish_highlight(
+            "the quoted text".to_string(),
+            "30023:aabbcc:my-article".to_string(),
+            None,
+            Some("  my note  ".to_string()), // trims to "my note"
+            Some("surrounding paragraph".to_string()),
+        );
+        let event = publish_event_value(&effects);
+        assert_eq!(event["kind"], 9802);
+        assert_eq!(
+            tag_values(&event, "comment"),
+            vec!["my note"],
+            "trimmed comment"
+        );
+        assert_eq!(
+            tag_values(&event, "context"),
+            vec!["surrounding paragraph"],
+            "context tag"
+        );
+        assert_eq!(
+            tag_values(&event, "a"),
+            vec!["30023:aabbcc:my-article"],
+            "source a-tag preserved"
+        );
+    }
+
+    // Edge fidelity (gotcha #7), mirroring build_highlight_event:
+    // - empty/whitespace note or context emits NO tag;
+    // - a context equal to the content is redundant → skipped.
+    #[test]
+    fn publish_highlight_skips_empty_and_redundant_tags() {
+        // Empty note, whitespace context → neither tag.
+        let e1 = reduce_action_publish_highlight(
+            "quote".to_string(),
+            "evt".to_string(),
+            None,
+            Some("".to_string()),
+            Some("   ".to_string()),
+        );
+        let v1 = publish_event_value(&e1);
+        assert!(
+            tag_values(&v1, "comment").is_empty(),
+            "empty note → no comment tag"
+        );
+        assert!(
+            tag_values(&v1, "context").is_empty(),
+            "whitespace context → no context tag"
+        );
+
+        // Context equal to content → skipped (redundant).
+        let e2 = reduce_action_publish_highlight(
+            "same text".to_string(),
+            "evt".to_string(),
+            None,
+            None,
+            Some("same text".to_string()),
+        );
+        let v2 = publish_event_value(&e2);
+        assert!(
+            tag_values(&v2, "context").is_empty(),
+            "context == content → skipped (build_highlight_event parity)"
+        );
     }
 }

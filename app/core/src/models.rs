@@ -2,8 +2,6 @@
 //! `web/src/lib/ndk/{groups,artifacts,highlights}.ts` so Swift/Rust/TS agree on
 //! the shape of a community, artifact, and highlight.
 
-use serde::{Deserialize, Serialize};
-
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CurrentUser {
     pub pubkey: String,
@@ -230,65 +228,11 @@ pub struct CommunitySummary {
     pub created_at: Option<u64>,
 }
 
-/// Mirrors `ArtifactPreview` in `web/src/lib/ndk/artifacts.ts:19-53`.
-#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
-pub struct ArtifactPreview {
-    pub id: String,
-    pub url: String,
-    pub title: String,
-    pub author: String,
-    pub image: String,
-    pub description: String,
-    /// "article" | "book" | "podcast" | "video" | "paper" | "web"
-    pub source: String,
-    pub domain: String,
-    pub catalog_id: String,
-    pub catalog_kind: String,
-    /// NIP-73 feed GUID (from `<podcast:guid>` in the RSS feed). Identifies
-    /// the show. Emitted on shares as a secondary `i podcast:guid:<feed-guid>`
-    /// so discovery-by-feed still works alongside the episode identifier.
-    pub podcast_guid: String,
-    /// NIP-73 episode GUID (from `<item><guid>` in the RSS feed). Identifies
-    /// a specific episode — the canonical NIP-73 target for podcast
-    /// highlights and NIP-22 comments: `i podcast:item:guid:<episode-guid>`.
-    pub podcast_item_guid: String,
-    pub podcast_show_title: String,
-    pub audio_url: String,
-    pub audio_preview_url: String,
-    pub transcript_url: String,
-    pub feed_url: String,
-    pub published_at: String,
-    pub duration_seconds: Option<i64>,
-    /// Primary reference tag: "a" | "e" | "i"
-    pub reference_tag_name: String,
-    pub reference_tag_value: String,
-    pub reference_kind: String,
-    /// Highlight reference tag: "a" | "e" | "r"
-    pub highlight_tag_name: String,
-    pub highlight_tag_value: String,
-    pub highlight_reference_key: String,
-    /// NIP-73 podcast chapter list (from `chapter` tags on the kind:11
-    /// share). Each entry: `["chapter", "<seconds>", "<title>"]`. Empty when
-    /// the source has no chapters or the publisher didn't capture them.
-    pub chapters: Vec<Chapter>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
-pub struct Chapter {
-    pub start_seconds: f64,
-    pub title: String,
-}
-
-/// Mirrors `ArtifactRecord` in `web/src/lib/ndk/artifacts.ts`.
-#[derive(Debug, Clone, Serialize, Deserialize, uniffi::Record)]
-pub struct ArtifactRecord {
-    pub preview: ArtifactPreview,
-    pub group_id: String,
-    pub share_event_id: String,
-    pub pubkey: String,
-    pub created_at: Option<u64>,
-    pub note: String,
-}
+// Phase 7 — Part-C prep: ArtifactPreview, Chapter, and ArtifactRecord were
+// relocated into the kernel lane (`crate::kernel::models`) because the kernel
+// uses them directly. Re-imported here so the ~24 bespoke files that reference
+// `crate::models::{ArtifactRecord, ArtifactPreview, Chapter}` keep resolving.
+pub use crate::kernel::models::{ArtifactPreview, ArtifactRecord, Chapter};
 
 /// Native-shell destination for an artifact detail tap. Rust owns the
 /// NIP/source/reference interpretation; platform shells only render the
@@ -314,16 +258,9 @@ pub struct ArtifactDetailRoute {
     pub url: String,
 }
 
-/// Last podcast playback position persisted by the Rust core. Native shells
-/// own AV playback handles, but durable playback state and the cold-launch
-/// episode projection live here so every platform resumes the same episode.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PodcastPositionRecord {
-    pub guid: String,
-    pub position_seconds: f64,
-    pub last_played_at_unix_seconds: u64,
-    pub artifact: ArtifactRecord,
-}
+// Phase 7 — Part-C prep: relocated into the kernel lane
+// (`crate::kernel::models`); re-imported here for the bespoke lane.
+pub use crate::kernel::models::PodcastPositionRecord;
 
 /// Mirrors `RoomDiscussionRecord` in
 /// `web/src/lib/features/discussions/roomDiscussion.ts` — a kind:11 thread
@@ -501,40 +438,11 @@ pub struct HydratedHighlight {
     pub shared_by_pubkey: Option<String>,
 }
 
-/// A pending highlight to publish — text + optional context/note.
-#[derive(Debug, Clone)]
-pub struct HighlightDraft {
-    pub quote: String,
-    pub context: String,
-    pub note: String,
-    /// Optional clip bounds for audio/video (seconds).
-    pub clip_start_seconds: Option<f64>,
-    pub clip_end_seconds: Option<f64>,
-    /// Speaker name for audio clips — empty if unknown or N/A.
-    pub clip_speaker: String,
-    /// Transcript segment IDs that the clip spans. Empty for non-clip highlights.
-    pub clip_transcript_segment_ids: Vec<String>,
-    /// Optional photo accompanying the highlight (e.g. the page captured for an
-    /// OCR'd book quote). When set, the published kind:9802 carries an
-    /// `imeta` tag (NIP-92) referencing the Blossom-hosted blob.
-    pub image: Option<BlossomUpload>,
-}
-
-/// Result of a successful Blossom upload — what to put in an `imeta` tag.
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct BlossomUpload {
-    /// Public URL the server returned (e.g. `https://blossom.primal.net/<sha>.jpg`).
-    pub url: String,
-    /// Lowercase hex SHA-256 of the uploaded bytes.
-    pub sha256_hex: String,
-    /// MIME type the client uploaded as.
-    pub mime: String,
-    pub size_bytes: u64,
-    pub width: u32,
-    pub height: u32,
-    /// Optional alt text — for OCR captures, the recognized text. Empty if none.
-    pub alt: String,
-}
+// Phase 7 — Part-C prep: HighlightDraft and BlossomUpload were relocated into
+// the kernel lane (`crate::kernel::models`) because the kernel uses them
+// directly. Re-imported here so the bespoke files that reference
+// `crate::models::{HighlightDraft, BlossomUpload}` keep resolving.
+pub use crate::kernel::models::{BlossomUpload, HighlightDraft};
 
 /// A pending NIP-68 picture (kind:20) to publish into a community.
 /// Used as the OCR-fallback path: when the user couldn't or didn't want to
@@ -826,6 +734,11 @@ pub struct BookmarkSetRecord {
     pub article_addresses: Vec<String>,
     /// `e`-tag references — event ids of kind:1 notes.
     pub note_ids: Vec<String>,
+    /// `r`-tag references — NIP-51 web/URL references. Carried so the read
+    /// model is lossless (previously dropped — #1653 codex BLOCKING #2).
+    pub r_refs: Vec<String>,
+    /// `t`-tag values — topic/hashtag labels on the set.
+    pub topics: Vec<String>,
     pub created_at: Option<u64>,
 }
 

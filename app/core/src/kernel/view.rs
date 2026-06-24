@@ -131,6 +131,14 @@ pub enum ViewId {
     /// for the pending share item and the available community picker rows (D1).
     ShareComposer,
 
+    /// In-flight share-to-room / drain / invite publish status (#21).
+    ///
+    /// Snapshot: `ViewSnapshot::SharePublish(SharePublishSnapshot)` — the
+    /// publishing / done / error phase the iOS share sheet renders, plus any
+    /// invite codes minted by `hl.share.mint_invite` (D1: Swift composes the
+    /// share link). Always present (never `None`).
+    SharePublish,
+
     // ── Phase 5H additions (append-only) ─────────────────────────────────────
     /// Full-screen podcast player view.
     ///
@@ -207,6 +215,16 @@ pub enum ViewId {
     RoomDiscussions {
         /// NIP-29 local group id.
         group_id: String,
+    },
+
+    // ── Phase 7 additions (append-only) ─────────────────────────────────────
+    /// Entity ref view for an inline event card — event id, coordinate, or
+    /// external id. Opened by `NostrRichText` when rendering an entity embed.
+    /// Key format: 64-char hex event id, `"kind:pubkey:d"` coordinate, or
+    /// `"i:<external-id>"`.
+    EntityRef {
+        /// Entity key (event id, NIP-19 coordinate, or external id).
+        key: String,
     },
 }
 
@@ -295,6 +313,11 @@ pub enum ViewRoute {
     /// strings, no community name fallbacks, no URL validation strings.
     ShareComposer,
 
+    // ── #21 share-flow additions (append-only) ───────────────────────────────
+    /// In-flight share-to-room / drain / invite publish status route.
+    /// Snapshot: `ViewSnapshot::SharePublish(SharePublishSnapshot)`.
+    SharePublish,
+
     // ── Phase 5H additions (append-only) ─────────────────────────────────────
     /// Podcast player projection — `PodcastListeningSnapshot` (now-playing +
     /// position/duration/is_playing + clip range). D1: raw f64 seconds, no
@@ -342,6 +365,15 @@ pub enum ViewRoute {
     RoomDiscussions {
         /// NIP-29 local group id.
         group_id: String,
+    },
+
+    // ── Phase 7 additions (append-only) ─────────────────────────────────────
+    /// Entity ref projection — `KernelEntitySnapshot` (raw event fields for
+    /// inline event cards). D1: no formatted strings; Swift formats author
+    /// bylines, timestamps, content truncation.
+    EntityRef {
+        /// Entity key (event id, NIP-19 coordinate, or external id).
+        key: String,
     },
 }
 

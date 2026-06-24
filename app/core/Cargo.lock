@@ -1076,6 +1076,7 @@ dependencies = [
  "nmp-nip78",
  "nmp-planner",
  "nmp-signers",
+ "nmp-store",
  "nostr",
  "nostr-ndb",
  "nostr-sdk",

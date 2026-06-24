@@ -33,8 +33,6 @@ enum HighlighterAction {
     case addRelay(url: String, role: String)
     case removeRelay(url: String)
     case setRelayRole(url: String, role: String)
-    case setRoomsRelayList(relayUrls: [String])
-
     // ── Follows ───────────────────────────────────────────────────────────────
     case follow(pubkey: String)
     case unfollow(pubkey: String)
@@ -48,10 +46,24 @@ enum HighlighterAction {
 
     // ── Room actions ──────────────────────────────────────────────────────────
     case joinRoom(groupId: String, hostRelayUrl: String, inviteCode: String?)
+    /// Leave a NIP-29 group (kind:9022 leave-request). Fire-and-forget.
+    case leaveRoom(groupId: String, hostRelayUrl: String, reason: String?)
     case createRoom(groupId: String, hostRelayUrl: String, name: String, about: String?)
     case addRoomMember(groupId: String, hostRelayUrl: String, pubkey: String, role: String?)
     case createRoomInvites(groupId: String, hostRelayUrl: String, codes: [String])
     case shareToRoom(groupId: String, hostRelayUrl: String, targetEventId: String, targetAuthorPubkey: String?, repost: Bool)
+
+    // ── Share flow (#21) ────────────────────────────────────────────────────────
+    /// Publish a kind:11 artifact/article/podcast share into a room. `previewJson`
+    /// is the serde-JSON of an `ArtifactPreview` (via `captureArtifactPreviewJson`).
+    case shareArtifactToRoom(groupId: String, hostRelayUrl: String, previewJson: String, note: String)
+    /// Publish a kind:16 generic repost of an existing highlight into a room.
+    case shareHighlightToRoom(groupId: String, hostRelayUrl: String, highlightEventId: String, highlightAuthorPubkey: String, relayHint: String)
+    /// Mint `count` invite codes + publish kind:9009; read codes from the
+    /// SharePublish snapshot.
+    case shareMintInvite(groupId: String, hostRelayUrl: String, count: UInt32)
+    /// Clear a terminal share-publish state (sheet dismissed / reopened).
+    case shareResetPublish
 
     // ── Bookmarks ─────────────────────────────────────────────────────────────
     case addBookmark(item: BookmarkRow)
@@ -65,6 +77,10 @@ enum HighlighterAction {
     // ── Reactions ─────────────────────────────────────────────────────────────
     case react(targetEventId: String, reaction: String, targetAuthorPubkey: String?)
     case unreact(reactionEventId: String)
+    /// Like-or-unlike a target by event id. The kernel decides react vs unreact
+    /// from its own viewer-reaction tracking (the reaction event id stays
+    /// kernel-internal). Reused by every like-button.
+    case toggleReaction(targetEventId: String, targetAuthorPubkey: String?)
 
     // ── Search ────────────────────────────────────────────────────────────────
     case runSearch(query: String, scope: HLSearchScope)
@@ -79,10 +95,17 @@ enum HighlighterAction {
 
     // ── Highlight feed ────────────────────────────────────────────────────────
     case drainHighlightFeed
-    case publishHighlight(content: String, sourceReference: String, relayHint: String?)
+    case publishHighlight(
+        content: String,
+        sourceReference: String,
+        relayHint: String?,
+        note: String?,
+        context: String?
+    )
 
-    // ── ISBN ──────────────────────────────────────────────────────────────────
+    // ── ISBN / BookPicker ─────────────────────────────────────────────────────
     case lookupIsbn(isbn: String)
+    case setBookPickerQuery(query: String, recentLimit: UInt32, searchLimit: UInt32)
 
     // ── Share queue ───────────────────────────────────────────────────────────
     case drainShareQueue
@@ -106,8 +129,97 @@ enum HighlighterAction {
     case captureClearSelection
     case captureSetTargetGroup(groupId: String)
     case captureClearTargetGroup
+    /// Set the book the capture references — an existing published artifact
+    /// (`artifactJson` = serde-JSON of an ArtifactRecord, via captureArtifactRecordJson).
+    case captureSetArtifactRecord(artifactJson: String)
+    /// Set a pending book (`previewJson` = serde-JSON of an ArtifactPreview, via
+    /// captureArtifactPreviewJson) — published kind:11-first on the pending-book path.
+    case captureSetArtifactPreview(previewJson: String)
+    /// Drop any selected book (standalone capture).
+    case captureClearArtifact
     case capturePublish
     case captureReset
+
+    // ── Capture capability triggers (Phase 7 cutover) ─────────────────────────────
+    /// Start a document-scan capture (kernel emits the camera CapabilityRequest →
+    /// CapturePresenter presents the scanner → provide_capability_result).
+    case cameraCapturePage
+    /// Start a barcode scan (→ ISBN lookup).
+    case cameraScanBarcode
+    /// Cancel an in-flight camera capability.
+    case cameraCancel
+    /// Run OCR on a native-written page image handle (kernel emits the OCR
+    /// CapabilityRequest → Vision via the bridge → KernelCaptureSnapshot).
+    case ocrRecognize(imageHandle: String)
+    /// Upload a (native-rendered) image handle via Blossom; descriptor returns
+    /// via the action-results projection.
+    case blossomUpload(imageHandle: String, servers: [String])
+
+    // ── Chat (Phase 7 cutover) ──────────────────────────────────────────────────
+    /// Open a room's chat: wires the per-room ChatObserver (kernel is sole writer).
+    case chatOpen(groupId: String, hostRelayUrl: String)
+    /// Close a room's chat: releases the room buffer.
+    case chatClose(groupId: String)
+    /// Expand the loaded chat window by one page (bounded by the kernel).
+    case chatLoadMore(groupId: String)
+    /// Publish a kind:9 chat message into the room (optional reply parent).
+    case postChat(groupId: String, hostRelayUrl: String, content: String, replyToEventId: String?)
+
+    // ── Comments (Phase 7 cutover) ──────────────────────────────────────────────
+    /// Publish a NIP-22 kind:1111 comment. `parentEventId == nil` posts a
+    /// top-level comment (parent mirrors root); otherwise replies to that comment.
+    case postComment(
+        rootTagName: String,
+        rootTagValue: String,
+        rootKind: UInt32,
+        parentEventId: String?,
+        rootAuthorPubkey: String?,
+        parentAuthorPubkey: String?,
+        content: String
+    )
+
+    // ── Discussions (Phase 7 cutover) ───────────────────────────────────────────
+    /// Publish a kind:11 discussion thread into a NIP-29 room.
+    case postDiscussion(groupId: String, title: String, body: String, attachmentUrl: String?)
+
+    // ── Curation sets (#1653) ────────────────────────────────────────────────────
+    /// Add `itemCoordinate` (a NIP-33 address like `"30023:<pk>:<d>"`) to the
+    /// kind:30004 curation set identified by `setCoordinate`.
+    /// Kernel is the sole kind:30004 writer; fire-and-forget.
+    case addToSet(setCoordinate: String, itemCoordinate: String)
+    /// Remove `itemCoordinate` from the curation set identified by `setCoordinate`.
+    case removeFromSet(setCoordinate: String, itemCoordinate: String)
+    /// Create a brand-new kind:30004 curation set with `title` and immediately
+    /// add `itemCoordinate` as its first member. Fire-and-forget.
+    case createAndAddToSet(title: String, itemCoordinate: String)
+
+    // ── Profile update (Phase 7 Part C) ──────────────────────────────────────────
+    /// Publish an updated kind:0 profile metadata event via the kernel.
+    /// Fire-and-forget (D6). Rust preserves unknown kind:0 fields (round-trip safe).
+    /// `nil` fields are omitted; `Some("")` clears a field.
+    case updateProfile(
+        displayName: String?,
+        name: String?,
+        about: String?,
+        pictureUrl: String?,
+        bannerUrl: String?,
+        website: String?,
+        nip05: String?,
+        lightningAddress: String?
+    )
+    /// Inform the kernel that the iOS NWPathMonitor detected a path change.
+    /// `wifiOnly` mirrors `UserDefaults["hl.network.wifi_only"]`. Fire-and-forget (D6).
+    case applyNetworkPath(isWifi: Bool, wifiOnly: Bool)
+
+    // ── Feedback / shake-to-share (Phase 7 cutover) ─────────────────────────────
+    case feedbackOpenList
+    case feedbackCloseList
+    case feedbackOpenThread(rootEventId: String)
+    case feedbackCloseThread
+    /// Publish a new feedback root note (NIP-22 kind:1111 under the project root).
+    case feedbackPostRoot(content: String)
+    /// Reply into an open feedback thread.
+    case feedbackPostReply(rootEventId: String, content: String, parentAuthorPubkey: String?)
 
     // MARK: - Envelope serialization
 
@@ -158,10 +270,6 @@ enum HighlighterAction {
         case .setRelayRole(let url, let role):
             return AppActionEnvelope(namespace: "hl.relay.set_role",
                                      json: jsonObject(["url": url, "role": role]))
-        case .setRoomsRelayList(let relayUrls):
-            return AppActionEnvelope(namespace: "hl.relay.set_rooms_relay_list",
-                                     json: jsonArray(["relay_urls": relayUrls]))
-
         // ── Follows ───────────────────────────────────────────────────────────
         case .follow(let pubkey):
             return AppActionEnvelope(namespace: "hl.profile.follow",
@@ -188,6 +296,10 @@ enum HighlighterAction {
             var dict: [String: Any] = ["group_id": groupId, "host_relay_url": hostRelayUrl]
             if let code = inviteCode { dict["invite_code"] = code }
             return AppActionEnvelope(namespace: "hl.room.join", json: jsonAny(dict))
+        case .leaveRoom(let groupId, let hostRelayUrl, let reason):
+            var dict: [String: Any] = ["group_id": groupId, "host_relay_url": hostRelayUrl]
+            if let reason = reason { dict["reason"] = reason }
+            return AppActionEnvelope(namespace: "hl.room.leave", json: jsonAny(dict))
         case .createRoom(let groupId, let hostRelayUrl, let name, let about):
             var dict: [String: Any] = ["group_id": groupId, "host_relay_url": hostRelayUrl, "name": name]
             if let about = about { dict["about"] = about }
@@ -208,6 +320,33 @@ enum HighlighterAction {
             ]
             if let author = targetAuthorPubkey { dict["target_author_pubkey"] = author }
             return AppActionEnvelope(namespace: "hl.room.share_to_room", json: jsonAny(dict))
+
+        // ── Share flow (#21) ────────────────────────────────────────────────────
+        case .shareArtifactToRoom(let groupId, let hostRelayUrl, let previewJson, let note):
+            // preview_json is the serde-JSON of an ArtifactPreview; embed it as a
+            // nested object so the kernel deserializes `preview` directly.
+            let json = """
+            {"group_id":\(jsonString(groupId)),"host_relay_url":\(jsonString(hostRelayUrl)),"preview":\(previewJson),"note":\(jsonString(note))}
+            """
+            return AppActionEnvelope(namespace: "hl.share.artifact_to_room", json: json)
+        case .shareHighlightToRoom(let groupId, let hostRelayUrl, let eventId, let author, let relayHint):
+            let dict: [String: Any] = [
+                "group_id": groupId,
+                "host_relay_url": hostRelayUrl,
+                "highlight_event_id": eventId,
+                "highlight_author_pubkey": author,
+                "relay_hint": relayHint,
+            ]
+            return AppActionEnvelope(namespace: "hl.share.highlight_to_room", json: jsonAny(dict))
+        case .shareMintInvite(let groupId, let hostRelayUrl, let count):
+            let dict: [String: Any] = [
+                "group_id": groupId,
+                "host_relay_url": hostRelayUrl,
+                "count": count,
+            ]
+            return AppActionEnvelope(namespace: "hl.share.mint_invite", json: jsonAny(dict))
+        case .shareResetPublish:
+            return AppActionEnvelope(namespace: "hl.share.reset_publish", json: "{}")
 
         // ── Bookmarks ─────────────────────────────────────────────────────────
         case .addBookmark(let item):
@@ -235,6 +374,10 @@ enum HighlighterAction {
         case .unreact(let reactionEventId):
             return AppActionEnvelope(namespace: "hl.reaction.unreact",
                                      json: jsonObject(["reaction_event_id": reactionEventId]))
+        case .toggleReaction(let targetEventId, let targetAuthorPubkey):
+            var dict: [String: Any] = ["target_event_id": targetEventId]
+            if let author = targetAuthorPubkey { dict["target_author_pubkey"] = author }
+            return AppActionEnvelope(namespace: "hl.reaction.toggle", json: jsonAny(dict))
 
         // ── Search ────────────────────────────────────────────────────────────
         case .runSearch(let query, let scope):
@@ -254,15 +397,22 @@ enum HighlighterAction {
         // ── Highlight feed ────────────────────────────────────────────────────
         case .drainHighlightFeed:
             return AppActionEnvelope(namespace: "hl.highlight.drain_feed", json: "{}")
-        case .publishHighlight(let content, let sourceReference, let relayHint):
+        case .publishHighlight(let content, let sourceReference, let relayHint, let note, let context):
             var dict: [String: Any] = ["content": content, "source_reference": sourceReference]
             if let hint = relayHint { dict["relay_hint"] = hint }
+            if let note { dict["note"] = note }
+            if let context { dict["context"] = context }
             return AppActionEnvelope(namespace: "hl.highlight.publish", json: jsonAny(dict))
 
-        // ── ISBN ──────────────────────────────────────────────────────────────
+        // ── ISBN / BookPicker ─────────────────────────────────────────────────
         case .lookupIsbn(let isbn):
             return AppActionEnvelope(namespace: "hl.isbn.lookup",
                                      json: jsonObject(["isbn": isbn]))
+        case .setBookPickerQuery(let query, let recentLimit, let searchLimit):
+            return AppActionEnvelope(namespace: "hl.book_picker.set_query",
+                                     json: jsonAny(["query": query,
+                                                    "recent_limit": recentLimit,
+                                                    "search_limit": searchLimit]))
 
         // ── Share queue ───────────────────────────────────────────────────────
         case .drainShareQueue:
@@ -301,10 +451,130 @@ enum HighlighterAction {
                                      json: jsonObject(["group_id": groupId]))
         case .captureClearTargetGroup:
             return AppActionEnvelope(namespace: "hl.capture.clear_target_group", json: "{}")
+        case .captureSetArtifactRecord(let artifactJson):
+            return AppActionEnvelope(namespace: "hl.capture.set_artifact_record",
+                                     json: jsonObject(["artifact_json": artifactJson]))
+        case .captureSetArtifactPreview(let previewJson):
+            return AppActionEnvelope(namespace: "hl.capture.set_artifact_preview",
+                                     json: jsonObject(["preview_json": previewJson]))
+        case .captureClearArtifact:
+            return AppActionEnvelope(namespace: "hl.capture.clear_artifact", json: "{}")
         case .capturePublish:
             return AppActionEnvelope(namespace: "hl.capture.publish", json: "{}")
         case .captureReset:
             return AppActionEnvelope(namespace: "hl.capture.reset", json: "{}")
+        case .cameraCapturePage:
+            return AppActionEnvelope(namespace: "hl.camera.capture_page", json: "{}")
+        case .cameraScanBarcode:
+            return AppActionEnvelope(namespace: "hl.camera.scan_barcode", json: "{}")
+        case .cameraCancel:
+            return AppActionEnvelope(namespace: "hl.camera.cancel", json: "{}")
+        case .ocrRecognize(let imageHandle):
+            return AppActionEnvelope(
+                namespace: "hl.ocr.recognize",
+                json: jsonAny(["image_handle": imageHandle])
+            )
+        case .blossomUpload(let imageHandle, let servers):
+            return AppActionEnvelope(
+                namespace: "hl.blossom.upload",
+                json: jsonAny(["image_handle": imageHandle, "servers": servers])
+            )
+
+        // ── Chat (Phase 7 cutover) ──────────────────────────────────────────
+        case .chatOpen(let groupId, let hostRelayUrl):
+            return AppActionEnvelope(namespace: "hl.chat.open",
+                                     json: jsonObject(["group_id": groupId, "host_relay_url": hostRelayUrl]))
+        case .chatClose(let groupId):
+            return AppActionEnvelope(namespace: "hl.chat.close",
+                                     json: jsonObject(["group_id": groupId]))
+        case .chatLoadMore(let groupId):
+            return AppActionEnvelope(namespace: "hl.chat.load_more",
+                                     json: jsonObject(["group_id": groupId]))
+        case .postChat(let groupId, let hostRelayUrl, let content, let replyToEventId):
+            var dict: [String: Any] = [
+                "group_id": groupId,
+                "host_relay_url": hostRelayUrl,
+                "content": content,
+            ]
+            if let replyTo = replyToEventId { dict["reply_to_event_id"] = replyTo }
+            return AppActionEnvelope(namespace: "hl.chat.post", json: jsonAny(dict))
+
+        // ── Comments (Phase 7 cutover) ──────────────────────────────────────
+        case .postComment(let rootTagName, let rootTagValue, let rootKind,
+                          let parentEventId, let rootAuthorPubkey,
+                          let parentAuthorPubkey, let content):
+            var dict: [String: Any] = [
+                "root_tag_name": rootTagName,
+                "root_tag_value": rootTagValue,
+                "root_kind": rootKind,
+                "content": content,
+            ]
+            if let parent = parentEventId { dict["parent_event_id"] = parent }
+            if let rootAuthor = rootAuthorPubkey { dict["root_author_pubkey"] = rootAuthor }
+            if let parentAuthor = parentAuthorPubkey { dict["parent_author_pubkey"] = parentAuthor }
+            return AppActionEnvelope(namespace: "hl.comment.post", json: jsonAny(dict))
+
+        // ── Discussions (Phase 7 cutover) ───────────────────────────────────
+        case .postDiscussion(let groupId, let title, let body, let attachmentUrl):
+            var dict: [String: Any] = ["group_id": groupId, "title": title, "body": body]
+            if let url = attachmentUrl, !url.isEmpty { dict["attachment_url"] = url }
+            return AppActionEnvelope(namespace: "hl.discussion.post", json: jsonAny(dict))
+
+        // ── Feedback (Phase 7 cutover) ──────────────────────────────────────
+        case .feedbackOpenList:
+            return AppActionEnvelope(namespace: "hl.feedback.open_list", json: "{}")
+        case .feedbackCloseList:
+            return AppActionEnvelope(namespace: "hl.feedback.close_list", json: "{}")
+        case .feedbackOpenThread(let rootEventId):
+            return AppActionEnvelope(namespace: "hl.feedback.open_thread",
+                                     json: jsonObject(["root_event_id": rootEventId]))
+        case .feedbackCloseThread:
+            return AppActionEnvelope(namespace: "hl.feedback.close_thread", json: "{}")
+        case .feedbackPostRoot(let content):
+            return AppActionEnvelope(namespace: "hl.feedback.post_root",
+                                     json: jsonObject(["content": content]))
+        case .feedbackPostReply(let rootEventId, let content, let parentAuthorPubkey):
+            var dict: [String: Any] = ["root_event_id": rootEventId, "content": content]
+            if let author = parentAuthorPubkey { dict["parent_author_pubkey"] = author }
+            return AppActionEnvelope(namespace: "hl.feedback.post_reply", json: jsonAny(dict))
+
+        // ── Curation sets (#1653) ─────────────────────────────────────────────
+        case .addToSet(let setCoordinate, let itemCoordinate):
+            return AppActionEnvelope(
+                namespace: "hl.curation.add_to_set",
+                json: jsonObject(["set_coordinate": setCoordinate, "item_coordinate": itemCoordinate])
+            )
+        case .removeFromSet(let setCoordinate, let itemCoordinate):
+            return AppActionEnvelope(
+                namespace: "hl.curation.remove_from_set",
+                json: jsonObject(["set_coordinate": setCoordinate, "item_coordinate": itemCoordinate])
+            )
+        case .createAndAddToSet(let title, let itemCoordinate):
+            return AppActionEnvelope(
+                namespace: "hl.curation.create_and_add",
+                json: jsonObject(["title": title, "item_coordinate": itemCoordinate])
+            )
+
+        // ── Profile update (Phase 7 Part C) ──────────────────────────────────
+        case .updateProfile(let displayName, let name, let about, let pictureUrl,
+                            let bannerUrl, let website, let nip05, let lightningAddress):
+            var dict: [String: Any] = [:]
+            if let v = displayName { dict["display_name"] = v }
+            if let v = name { dict["name"] = v }
+            if let v = about { dict["about"] = v }
+            if let v = pictureUrl { dict["picture_url"] = v }
+            if let v = bannerUrl { dict["banner_url"] = v }
+            if let v = website { dict["website"] = v }
+            if let v = nip05 { dict["nip05"] = v }
+            if let v = lightningAddress { dict["lightning_address"] = v }
+            return AppActionEnvelope(namespace: "hl.profile.update", json: jsonAny(dict))
+
+        // ── Network (Phase 7 Part C) ──────────────────────────────────────────
+        case .applyNetworkPath(let isWifi, let wifiOnly):
+            return AppActionEnvelope(
+                namespace: "hl.network.apply_path",
+                json: jsonAny(["is_wifi": isWifi, "wifi_only": wifiOnly])
+            )
         }
     }
 }
@@ -317,6 +587,12 @@ enum HLSearchScope: String {
     case users = "users"
     case longForm = "long_form"
     case notes = "notes"
+    /// kind:30023 articles + kind:9802 highlights in one query — backs the
+    /// unified search screen (Swift buckets the mixed hits by kind).
+    case articlesAndHighlights = "articles_and_highlights"
+    /// kind:0 + kind:9802 + kind:30023 in one NIP-50 query — unified search
+    /// with People, Articles, and Highlights all from a single relay subscription.
+    case articlesHighlightsAndUsers = "articles_highlights_and_users"
 }
 
 // MARK: - HighlighterApp dispatch facade
@@ -377,6 +653,18 @@ private func jsonAny(_ dict: [String: Any]) -> String {
         return "{}"
     }
     return str
+}
+
+/// Encode a Swift `String` as a JSON string literal (with proper escaping).
+/// Used when hand-building JSON that embeds a pre-serialized nested object
+/// (e.g. `preview` in `hl.share.artifact_to_room`).
+private func jsonString(_ value: String) -> String {
+    guard let data = try? JSONSerialization.data(withJSONObject: [value], options: []),
+          let arr = String(data: data, encoding: .utf8) else {
+        return "\"\""
+    }
+    // arr is `["escaped"]`; strip the surrounding brackets to get the bare string.
+    return String(arr.dropFirst().dropLast())
 }
 
 /// Encode a `BookmarkRow` as `{ "item": <serde-tagged-variant> }` JSON.

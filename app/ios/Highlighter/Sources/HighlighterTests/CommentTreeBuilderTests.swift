@@ -2,132 +2,98 @@ import Foundation
 import Testing
 @testable import Highlighter
 
-/// Pure-logic coverage for `CommentTreeBuilder`. Rust owns NIP-22 parentage and
-/// ordering; Swift's job is only to assemble flat records + child-link lists
-/// into a display forest. These tests pin that assembly: nesting, ordering as
-/// given, orphan handling (a child id with no record is silently dropped), and
-/// the derived helpers (`totalCount`, `mostRecentReply`).
+/// Pure-logic coverage for `CommentTreeBuilder` (Phase 7 flat-rows API). The
+/// kernel emits raw `[CommentRecordRow]` with NIP-22 `parent_tag_value` links;
+/// Swift owns only the tree assembly. These tests pin that assembly: child
+/// linking by parent event id, root selection (top-level OR orphan promotion so
+/// nothing is dropped), and oldest-first ordering of siblings and roots by
+/// `created_at`. Display chrome (reply counts, most-recent-reply) is kernel-owned
+/// now (`CommentNodeChromeProjection`) and is not this builder's concern.
 struct CommentTreeBuilderTests {
 
     // MARK: - Fixtures
 
-    private func record(_ id: String, body: String = "") -> CommentRecord {
-        CommentRecord(
-            eventId: id,
-            pubkey: "pk-\(id)",
-            body: body.isEmpty ? "body-\(id)" : body,
-            rootTagName: "E",
-            rootTagValue: "root",
-            parentTagName: "e",
-            parentTagValue: "root",
-            rootKind: "1",
-            createdAt: nil
-        )
-    }
+    private static let rootValue = "root"
 
-    private func snapshot(
-        records: [CommentRecord],
-        topLevel: [String],
-        childLinks: [(String, [String])]
-    ) -> HighlighterCommentsSnapshot {
-        HighlighterCommentsSnapshot(
+    /// A kind:1111 comment row. `parent == nil` makes it top-level (its
+    /// `parentTagValue` equals the root value, matching the kernel's
+    /// `is_top_level` rule); otherwise `parent` is the parent event id.
+    private func row(_ id: String, parent: String? = nil, createdAt: UInt64) -> CommentRecordRow {
+        CommentRecordRow(
+            eventId: id,
+            authorPubkey: "pk-\(id)",
+            body: "body-\(id)",
             rootTagName: "E",
-            rootTagValue: "root",
-            rootKind: 1,
-            records: records,
-            recordCount: UInt64(records.count),
-            topLevelEventIds: topLevel,
-            childLinks: childLinks.map { HighlighterCommentChildLinks(eventId: $0.0, childEventIds: $0.1) },
-            interactions: [],
-            drafts: [],
-            isLoading: false,
-            errorMessage: nil,
-            isPublishing: false,
-            publishErrorMessage: nil,
-            lastPublishedEventId: nil,
-            interactionErrorMessage: nil
+            rootTagValue: Self.rootValue,
+            rootKind: "1",
+            parentTagName: parent == nil ? "E" : "e",
+            parentTagValue: parent ?? Self.rootValue,
+            parentKind: "1",
+            createdAt: createdAt,
+            isTopLevel: parent == nil,
+            likeCount: 0,
+            viewerReacted: false,
+            bookmarked: false
         )
     }
 
     // MARK: - Empty / trivial
 
-    @Test func emptySnapshotProducesEmptyForest() {
-        let forest = CommentTreeBuilder.build(snapshot: snapshot(records: [], topLevel: [], childLinks: []))
-        #expect(forest.isEmpty)
+    @Test func emptyRowsProduceEmptyForest() {
+        #expect(CommentTreeBuilder.build(from: []).isEmpty)
     }
 
     @Test func singleTopLevelCommentHasNoChildren() {
-        let forest = CommentTreeBuilder.build(snapshot: snapshot(
-            records: [record("a")],
-            topLevel: ["a"],
-            childLinks: []
-        ))
+        let forest = CommentTreeBuilder.build(from: [row("a", createdAt: 100)])
         #expect(forest.count == 1)
         #expect(forest[0].record.eventId == "a")
         #expect(forest[0].children.isEmpty)
-        #expect(forest[0].totalCount == 1)
-        #expect(forest[0].mostRecentReply == nil)
     }
 
     // MARK: - Nesting
 
     @Test func buildsNestedThreeLevelThread() {
-        // a -> b -> c
-        let forest = CommentTreeBuilder.build(snapshot: snapshot(
-            records: [record("a"), record("b"), record("c")],
-            topLevel: ["a"],
-            childLinks: [("a", ["b"]), ("b", ["c"])]
-        ))
+        // a (top) -> b (parent a) -> c (parent b)
+        let forest = CommentTreeBuilder.build(from: [
+            row("a", createdAt: 100),
+            row("b", parent: "a", createdAt: 200),
+            row("c", parent: "b", createdAt: 300),
+        ])
         #expect(forest.count == 1)
         let a = forest[0]
         #expect(a.children.map(\.id) == ["b"])
         #expect(a.children[0].children.map(\.id) == ["c"])
-        // totalCount is inclusive of self at every level.
-        #expect(a.totalCount == 3)
-        #expect(a.children[0].totalCount == 2)
     }
 
-    @Test func preservesChildLinkOrderAsGiven() {
-        // Swift must not reorder; ordering is Rust's responsibility.
-        let forest = CommentTreeBuilder.build(snapshot: snapshot(
-            records: [record("a"), record("b"), record("c"), record("d")],
-            topLevel: ["a"],
-            childLinks: [("a", ["c", "b", "d"])]
-        ))
-        #expect(forest[0].children.map(\.id) == ["c", "b", "d"])
-        // mostRecentReply is the chronologically-last child (as ordered).
-        #expect(forest[0].mostRecentReply?.id == "d")
+    @Test func siblingsAreSortedOldestFirstByCreatedAt() {
+        // Kernel ordering is by created_at; input order must not leak through.
+        let forest = CommentTreeBuilder.build(from: [
+            row("a", createdAt: 100),
+            row("c", parent: "a", createdAt: 300),
+            row("b", parent: "a", createdAt: 200),
+            row("d", parent: "a", createdAt: 400),
+        ])
+        #expect(forest[0].children.map(\.id) == ["b", "c", "d"])
     }
 
-    @Test func multipleTopLevelCommentsKeepTheirOrder() {
-        let forest = CommentTreeBuilder.build(snapshot: snapshot(
-            records: [record("a"), record("b")],
-            topLevel: ["b", "a"],
-            childLinks: []
-        ))
-        #expect(forest.map(\.id) == ["b", "a"])
+    @Test func rootsAreSortedOldestFirstByCreatedAt() {
+        let forest = CommentTreeBuilder.build(from: [
+            row("b", createdAt: 200),
+            row("a", createdAt: 100),
+        ])
+        #expect(forest.map(\.id) == ["a", "b"])
     }
 
-    // MARK: - Malformed / dangling references
+    // MARK: - Orphan promotion (nothing is dropped)
 
-    @Test func danglingChildIdIsDroppedNotCrashed() {
-        // "ghost" is referenced as a child but has no record — it must be
-        // skipped via compactMap rather than producing a phantom node.
-        let forest = CommentTreeBuilder.build(snapshot: snapshot(
-            records: [record("a"), record("b")],
-            topLevel: ["a"],
-            childLinks: [("a", ["ghost", "b"])]
-        ))
-        #expect(forest[0].children.map(\.id) == ["b"])
-        #expect(forest[0].totalCount == 2)
-    }
-
-    @Test func topLevelIdWithoutRecordIsDropped() {
-        let forest = CommentTreeBuilder.build(snapshot: snapshot(
-            records: [record("a")],
-            topLevel: ["missing", "a"],
-            childLinks: []
-        ))
-        #expect(forest.map(\.id) == ["a"])
+    @Test func orphanReplyWhoseParentIsMissingIsPromotedToRoot() {
+        // "b" replies to a comment that isn't in the visible window. It must be
+        // promoted to a root rather than silently dropped.
+        let forest = CommentTreeBuilder.build(from: [
+            row("a", createdAt: 100),
+            row("b", parent: "ghost", createdAt: 200),
+        ])
+        #expect(forest.map(\.id) == ["a", "b"])
+        #expect(forest.allSatisfy { $0.children.isEmpty })
     }
 }

@@ -2,12 +2,13 @@ import Foundation
 import Observation
 
 /// View-scoped reactive state for the NIP-22 comment thread on a single
-/// artifact. Rust owns the flat record list, built tree, and per-comment
-/// reaction + bookmark snapshot; Swift keeps only transient composer drafts.
+/// artifact. Phase 7: the kernel owns the flat record list + per-comment
+/// interaction state (`ViewId.commentThread`); Swift builds the display tree
+/// (`CommentTreeBuilder`) and keeps only transient composer drafts.
 ///
-/// Pattern follows `RoomStore` — allocated by the consuming view in a
-/// `.task { }`, deallocated on disappear; reads NostrDB via the Rust
-/// core; never fabricates data the core doesn't have.
+/// Allocated by the consuming view in a `.task { }`, torn down on disappear.
+/// Kernel is the sole writer — posts/likes/bookmarks dispatch envelope actions;
+/// the authoritative thread streams back via `kernel.commentThreads`.
 @MainActor
 @Observable
 final class CommentsStore {
@@ -16,67 +17,53 @@ final class CommentsStore {
     private(set) var isLoading: Bool = true
     private(set) var loadError: String?
 
-    /// kind:7 like counts for any visible comment id. Updated optimistically
-    /// on toggle and reconciled on refresh.
+    /// kind:7 like counts for any visible comment id (from the kernel rows).
     private(set) var likeCounts: [String: Int] = [:]
-    /// Comment event ids the current user has liked. Rust owns canonicalization,
-    /// dedupe, optimistic membership, and publish-vs-delete decisions.
+    /// Comment event ids the active viewer has liked (kernel `viewer_reacted`).
     private(set) var likedCommentIds: [String] = []
-    /// Bookmark membership for any visible comment id. Rust owns event-id
-    /// canonicalization, dedupe, and optimistic membership projection.
+    /// Bookmark membership for any visible comment id (kernel `bookmarked`).
     private(set) var bookmarked: [String] = []
 
-    /// Drafts keyed by `parentEventId ?? "root"`. In-memory only — survives
-    /// detent transitions but not view recreation. (Persistent drafts are
-    /// deferred per design doc.)
+    /// Drafts keyed by `parentEventId ?? "root"`. In-memory only.
     private(set) var drafts: [String: String] = [:]
 
     @ObservationIgnored private var scope: CommentScope?
-    @ObservationIgnored private var core: SafeHighlighterCore?
+    @ObservationIgnored private weak var kernel: HighlighterAppKernel?
 
     // MARK: - Lifecycle
 
-    func start(
-        scope: CommentScope,
-        core: SafeHighlighterCore
-    ) async {
+    func start(scope: CommentScope, kernel: HighlighterAppKernel) async {
         self.scope = scope
-        self.core = core
-        await refresh()
-    }
-
-    func refresh() async {
-        guard let core, let scope else { return }
+        self.kernel = kernel
         isLoading = true
         loadError = nil
-        let snapshot = await core.getCommentThreadSnapshot(scope: scope)
-        let applyProjection = core.projectCommentSnapshotApply(
-            input: CommentSnapshotApplyInput(error: snapshot.error)
-        )
-        if applyProjection.shouldApplySnapshot {
-            apply(snapshot: snapshot, projection: applyProjection)
-        } else {
-            loadError = applyProjection.loadError
-        }
+        kernel.openCommentThread(rootTagValue: scope.rootTagValue)
+        applyKernelSnapshot()
         isLoading = false
     }
 
-    private func apply(
-        snapshot: CommentThreadSnapshot,
-        projection: CommentSnapshotApplyProjection
-    ) {
-        records = snapshot.records
-        tree = snapshot.tree
-        apply(interactions: snapshot.interactions)
-        loadError = projection.loadError
+    func stop() {
+        if let scope {
+            kernel?.closeCommentThread(rootTagValue: scope.rootTagValue)
+        }
+        scope = nil
+        kernel = nil
     }
 
-    private func apply(interactions snapshot: CommentInteractionSnapshot) {
+    /// Re-apply the latest kernel snapshot. Called by the owning view's
+    /// `onChange(of: kernel.commentThreads[rootTagValue])` so live kind:1111 /
+    /// kind:7 / kind:10003 deltas flow into the rendered tree.
+    func applyKernelSnapshot() {
+        guard let scope, let snapshot = kernel?.commentThreads[scope.rootTagValue] else { return }
+        let rows = snapshot.records
+        records = rows.map(CommentTreeBuilder.record(from:))
+        tree = CommentTreeBuilder.build(from: rows)
         likeCounts = Dictionary(
-            uniqueKeysWithValues: snapshot.rows.map { ($0.eventId, Int($0.likeCount)) }
+            rows.map { ($0.eventId, Int($0.likeCount)) },
+            uniquingKeysWith: { a, _ in a }
         )
-        likedCommentIds = snapshot.likedEventIds
-        bookmarked = snapshot.bookmarkedEventIds
+        likedCommentIds = rows.filter { $0.viewerReacted }.map { $0.eventId }
+        bookmarked = rows.filter { $0.bookmarked }.map { $0.eventId }
     }
 
     // MARK: - Drafts
@@ -94,33 +81,35 @@ final class CommentsStore {
         }
     }
 
-    // MARK: - Publish
+    // MARK: - Publish (kind:1111)
 
-    /// Publish a comment scoped to the artifact. `parentEventId == nil`
-    /// posts a top-level thread; otherwise posts as a reply to that
-    /// kind:1111 comment. Rust returns the rebuilt snapshot.
+    /// Publish a comment scoped to the artifact via the kernel (sole writer).
+    /// `parentEventId == nil` posts a top-level comment; otherwise replies to
+    /// that kind:1111 comment. Fire-and-forget — the rebuilt thread streams
+    /// back through `kernel.commentThreads`. Returns `true` once dispatched.
     @discardableResult
-    func publish(content: String, parentEventId: String?) async -> CommentPublishSnapshot? {
-        guard let core, let scope else {
-            return nil
+    func publish(content: String, parentEventId: String?) async -> Bool {
+        guard let scope, let kernel else { return false }
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        // Resolve the parent comment's author (for the lowercase `p` tag) from
+        // the visible records when replying.
+        let parentAuthor = parentEventId.flatMap { id in
+            records.first(where: { $0.eventId == id })?.pubkey
         }
 
-        let outcome = await core.publishCommentForScopeSnapshot(
-            scope: scope,
+        kernel.app.dispatch(.postComment(
+            rootTagName: scope.rootTagName,
+            rootTagValue: scope.rootTagValue,
+            rootKind: UInt32(scope.rootKind),
             parentEventId: parentEventId,
-            content: content
-        )
-        let result = core.projectCommentPublishResult(
-            input: CommentPublishResultInput(error: outcome.error)
-        )
-        guard result.didPublish else { return outcome }
-        let applyProjection = core.projectCommentSnapshotApply(
-            input: CommentSnapshotApplyInput(error: outcome.snapshot.error)
-        )
-        guard applyProjection.shouldApplySnapshot else { return outcome }
-        apply(snapshot: outcome.snapshot, projection: applyProjection)
+            rootAuthorPubkey: nil,
+            parentAuthorPubkey: parentAuthor,
+            content: trimmed
+        ))
         setDraft("", forParent: parentEventId)
-        return outcome
+        return true
     }
 
     // MARK: - Like (kind:7)
@@ -133,16 +122,16 @@ final class CommentsStore {
         likeCounts[commentId] ?? 0
     }
 
-    /// Toggle a like on `comment`. Rust publishes/deletes and returns the
-    /// interaction snapshot to render.
+    /// Toggle a like on `comment` via the kernel (kind:7 `+`). The kernel
+    /// decides react-vs-unreact from its own viewer-reaction tracking (the
+    /// reaction event id stays kernel-internal); the reaction projection updates
+    /// `viewer_reacted` / `count` and the next snapshot push re-renders.
     func toggleLike(_ comment: CommentRecord) async {
-        guard let core else { return }
-        let outcome = await core.toggleCommentLikeSnapshot(
-            records: records,
-            eventId: comment.eventId,
-            authorPubkeyHex: comment.pubkey
-        )
-        apply(interactions: outcome.interactions)
+        guard let kernel else { return }
+        kernel.app.dispatch(.toggleReaction(
+            targetEventId: comment.eventId,
+            targetAuthorPubkey: comment.pubkey
+        ))
     }
 
     // MARK: - Bookmark (kind:10003)
@@ -151,12 +140,14 @@ final class CommentsStore {
         bookmarked.contains(commentId)
     }
 
+    /// Toggle a kind:10003 bookmark on `comment` via the kernel (sole writer).
     func toggleBookmark(_ comment: CommentRecord) async {
-        guard let core else { return }
-        let outcome = await core.toggleCommentBookmarkSnapshot(
-            records: records,
-            eventIdHex: comment.eventId
-        )
-        apply(interactions: outcome.interactions)
+        guard let kernel else { return }
+        let item = BookmarkRow.event(eventId: comment.eventId, relay: nil)
+        if isBookmarked(comment.eventId) {
+            kernel.app.dispatch(.removeBookmark(item: item))
+        } else {
+            kernel.app.dispatch(.addBookmark(item: item))
+        }
     }
 }

@@ -2,11 +2,11 @@ import SwiftUI
 
 struct OnboardingCreateAccountView: View {
     @Environment(HighlighterStore.self) private var store
+    @Environment(HighlighterAppKernel.self) private var kernel
 
     @State private var displayName: String = ""
     @State private var isWorking = false
     @State private var errorMessage: String?
-    @State private var createdAccount: GeneratedAccount?
     @State private var navigateToInterests = false
 
     @FocusState private var focusedField: Field?
@@ -70,7 +70,7 @@ struct OnboardingCreateAccountView: View {
                         .padding(.vertical, 14)
                     }
                     .buttonStyle(.glassProminent)
-                    .disabled(!createProjection.canContinue)
+                    .disabled(!canContinue)
                     .padding(.horizontal, 32)
 
                     NavigationLink {
@@ -85,61 +85,39 @@ struct OnboardingCreateAccountView: View {
             }
         }
         .navigationDestination(isPresented: $navigateToInterests) {
-            if let account = createdAccount {
-                OnboardingInterestsView(account: account)
+            OnboardingInterestsView()
+        }
+        .onChange(of: kernel.appRoot.sessionPresent) { _, isPresent in
+            if isPresent && isWorking {
+                isWorking = false
+                navigateToInterests = true
+            }
+        }
+        .onChange(of: kernel.appRoot.authError) { _, error in
+            if let error, isWorking {
+                errorMessage = error
+                isWorking = false
             }
         }
         .onAppear { focusedField = .displayName }
     }
 
-    private var createProjection: OnboardingCreateAccountProjection {
-        store.safeCore.projectOnboardingCreateAccount(input: OnboardingCreateAccountProjectionInput(
-            displayName: displayName,
-            username: "",
-            usernameAvailable: false,
-            isWorking: isWorking
-        ))
+    private var trimmedDisplayName: String {
+        displayName.trimmingCharacters(in: .whitespaces)
+    }
+
+    private var canContinue: Bool {
+        !isWorking && !trimmedDisplayName.isEmpty
     }
 
     private func createAccount() {
-        let projection = createProjection
-        let name = projection.displayName
-        guard projection.canContinue else { return }
-
+        let name = trimmedDisplayName
+        guard canContinue else { return }
         isWorking = true
         errorMessage = nil
-
-        Task {
-            defer { isWorking = false }
-            let accountSnapshot = await store.safeCore.generateAccount()
-            guard accountSnapshot.succeeded, let account = accountSnapshot.account else {
-                errorMessage = accountSnapshot.errorMessage
-                return
-            }
-            let storage = AppSessionStore.shared.persistAccountInstructions(
-                accountSnapshot,
-                core: store.safeCore
-            )
-            guard storage.succeeded else {
-                errorMessage = storage.errorMessage
-                return
-            }
-
-            Task {
-                _ = await store.safeCore.updateProfile(
-                    name: "",
-                    displayName: name,
-                    about: "",
-                    picture: "",
-                    banner: "",
-                    nip05: "",
-                    website: "",
-                    lud16: ""
-                )
-            }
-
-            createdAccount = account
-            navigateToInterests = true
-        }
+        // Fire-and-forget (D6): kernel generates the keypair, persists to NMP
+        // keyring, and publishes the kind:0 profile event. Session transitions
+        // to Present → onChange above navigates to interests.
+        kernel.app.dispatch(.createAccount(profileName: name))
     }
 }

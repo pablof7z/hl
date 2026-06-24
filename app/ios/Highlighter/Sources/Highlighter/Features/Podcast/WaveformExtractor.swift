@@ -24,11 +24,10 @@ enum WaveformExtractor {
     /// was skipped or failed for any reason — callers tolerate absent peaks.
     static func peaks(
         forAudioURL url: URL,
-        durationSeconds: TimeInterval,
-        core: SafeHighlighterCore
+        durationSeconds: TimeInterval
     ) async -> [Float]? {
         let audioUrl = url.absoluteString
-        let keyProjection = core.projectWaveformCacheKey(
+        let keyProjection = cacheKeyProjection(
             input: WaveformCacheKeyProjectionInput(audioUrl: audioUrl)
         )
         guard keyProjection.isUsable else {
@@ -36,7 +35,7 @@ enum WaveformExtractor {
         }
 
         let stored = WaveformPeakStore.read(cacheKey: keyProjection.cacheKey)
-        var plan = core.planWaveformPeaks(
+        var plan = peaksPlan(
             input: WaveformPeaksPlanInput(
                 audioUrl: audioUrl,
                 durationSeconds: durationSeconds,
@@ -50,7 +49,7 @@ enum WaveformExtractor {
         }
 
         if plan.shouldCheckWifiStatus {
-            plan = core.planWaveformPeaks(
+            plan = peaksPlan(
                 input: WaveformPeaksPlanInput(
                     audioUrl: audioUrl,
                     durationSeconds: durationSeconds,
@@ -73,6 +72,15 @@ enum WaveformExtractor {
         }
         WaveformPeakStore.write(peaks, cacheKey: plan.cacheKey)
         return peaks
+    }
+
+    /// Raw, uncached waveform extraction for the kernel audio capability bridge
+    /// (Phase 7). Bypasses the bespoke `SafeHighlighterCore` planning/caching
+    /// path — the kernel owns waveform caching policy. Returns normalized peaks
+    /// in `[0, 1]`, or an empty array on failure (the kernel tolerates absent
+    /// peaks; D6: errors are data).
+    static func rawPeaks(forAudioURL url: URL, bucketCount: Int) async -> [Float] {
+        await extractPeaks(from: url, bucketCount: bucketCount) ?? []
     }
 
     private static func extractPeaks(from url: URL, bucketCount: Int) async -> [Float]? {

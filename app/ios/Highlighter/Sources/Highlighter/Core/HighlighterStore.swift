@@ -23,7 +23,7 @@ final class HighlighterStore {
         didSet { mirrorCommunitiesToAppGroup() }
     }
     var connectionState: ConnectionState = .unknown
-    var isBootstrapping: Bool = false
+
     var isOnboardingComplete: Bool = false
     /// Transient toast shown when Rust or a platform handoff requests an
     /// app-scope banner. Cleared by the banner after a few seconds.
@@ -51,15 +51,15 @@ final class HighlighterStore {
     @ObservationIgnored let core: HighlighterCore
     @ObservationIgnored let safeCore: SafeHighlighterCore
     @ObservationIgnored private(set) var eventBridge: EventBridge?
-    @ObservationIgnored private var joinedCommunitiesHandle: UInt64?
-    @ObservationIgnored private var bookmarksHandle: UInt64?
-    @ObservationIgnored private var profileSnapshotHandles: [String: UInt64] = [:]
+    /// Kernel handle. Communities, bookmarks, and profiles are owned by the
+    /// kernel's typed snapshots; App.swift pushes them into this store via
+    /// `onChange` bridges, and writes (bookmark toggles) dispatch through here.
+    @ObservationIgnored weak var kernel: HighlighterAppKernel?
     @ObservationIgnored private var networkPathMonitor: NWPathMonitor?
     /// In-flight `requestWebMetadata` calls coalesce here so multiple rows
     /// referencing the same URL share a single Task. Cleared once the
     /// fetch completes (success or failure).
     @ObservationIgnored private var webMetadataInflight: [String: Task<Void, Never>] = [:]
-    @ObservationIgnored private var isbnInflight: [String: Task<Void, Never>] = [:]
 
     var isLoggedIn: Bool { currentUser != nil }
 
@@ -74,66 +74,26 @@ final class HighlighterStore {
         self.safeCore = safeCore
         let podcastPlayer = PodcastPlayerStore(core: safeCore)
         self.podcastPlayer = podcastPlayer
-        self.isOnboardingComplete = core.isOnboardingComplete()
+        self.isOnboardingComplete = false
         // Surface the MiniPlayer (paused) with whatever episode the user was
         // last listening to, if any. Tapping play wires AVPlayer through the
         // normal `load(artifact:)` path which seeks to the saved position.
         Task { @MainActor in
             await podcastPlayer.rehydrateFromSavedRecord()
         }
-    }
-
-    func bootstrap() async {
-        guard !isBootstrapping else { return }
-        isBootstrapping = true
-        defer { isBootstrapping = false }
-
-        // Register the EventBridge unconditionally, before any login attempt.
-        // The NIP-46 nostrconnect:// flow fires `SignerConnected` from a
-        // background tokio task; if no callback is wired by then, the delta
-        // is dropped silently and the UI never transitions to logged-in.
         registerEventBridge()
-
-        if let user = await AppSessionStore.shared.restoreSession(into: safeCore) {
-            currentUser = user
-            await loadAppScopeData()
-        }
-    }
-
-    func completeLogin(user: CurrentUser) async {
-        currentUser = user
-        if eventBridge == nil {
-            registerEventBridge()
-        }
-        await loadAppScopeData()
     }
 
     func logout() {
-        if let handle = joinedCommunitiesHandle {
-            core.unsubscribe(handle: handle)
-            eventBridge?.unregister(handle: handle)
-            joinedCommunitiesHandle = nil
-        }
-        if let handle = bookmarksHandle {
-            core.unsubscribe(handle: handle)
-            eventBridge?.unregister(handle: handle)
-            bookmarksHandle = nil
-        }
-        for (_, handle) in profileSnapshotHandles {
-            core.unsubscribe(handle: handle)
-            eventBridge?.unregister(handle: handle)
-        }
-        profileSnapshotHandles.removeAll()
         profileSnapshots.removeAll()
         for (_, task) in webMetadataInflight { task.cancel() }
         webMetadataInflight.removeAll()
         webMetadataCache.removeAll()
         bookmarkedArticleAddresses.removeAll()
         applyNetworkPathMonitorEnabled(false)
-        core.logout()
+        kernel?.app.dispatch(.logout)
         eventBridge = nil
-        AppSessionStore.shared.clear()
-        _ = core.setOnboardingComplete(complete: false)
+
         isOnboardingComplete = false
         currentUser = nil
         currentUserProfile = nil
@@ -143,90 +103,87 @@ final class HighlighterStore {
     }
 
     func markOnboardingComplete() -> MutationSnapshot {
-        let outcome = core.setOnboardingComplete(complete: true)
-        if outcome.applied {
-            isOnboardingComplete = true
-        }
-        return outcome
+        kernel?.app.dispatch(.completeOnboarding)
+        isOnboardingComplete = true
+        return MutationSnapshot(applied: true, error: "")
     }
 
     func completeOnboardingInterests(selectedIds: [String]) async -> MutationSnapshot {
-        let outcome = await safeCore.completeOnboardingInterests(selectedIds: selectedIds)
-        if outcome.applied {
-            isOnboardingComplete = true
-        }
-        return outcome
+        kernel?.app.dispatch(.completeOnboarding)
+        isOnboardingComplete = true
+        return MutationSnapshot(applied: true, error: "")
     }
 
     // MARK: - Bookmarks
 
     /// Optimistic toggle: flip local state immediately for snappy UI, then
-    /// publish. The inevitable `BookmarksUpdated` delta (ours or from another
-    /// client) reconciles to authoritative state via `refreshBookmarks`.
+    /// dispatch the write to the kernel (sole writer of kind:10003). The
+    /// authoritative `BookmarksSnapshot` pushed back via App.swift's `onChange`
+    /// reconciles `bookmarkedArticleAddresses`.
     func toggleBookmark(articleAddress: String) async {
-        let projection = articleBookmarkStateProjection(articleAddress: articleAddress)
-        guard projection.canToggle else { return }
-        bookmarkedArticleAddresses = projection.optimisticAddresses
-        // Authoritative toggle + publish.
-        let snapshot = await safeCore.toggleArticleBookmarkSnapshot(address: projection.canonicalAddress)
-        let apply = articleBookmarksSnapshotApplyProjection(snapshot)
-        if apply.shouldApplyAddresses {
-            bookmarkedArticleAddresses = apply.addresses
-        } else if apply.shouldRefreshAfterFailure {
-            await refreshBookmarks()
+        guard currentUser != nil, let kernel else { return }
+        if bookmarkedArticleAddresses.contains(articleAddress) {
+            bookmarkedArticleAddresses.removeAll { $0 == articleAddress }
+            kernel.app.dispatch(.removeBookmark(item: .address(coordinate: articleAddress, relay: nil)))
+        } else {
+            bookmarkedArticleAddresses.append(articleAddress)
+            kernel.app.dispatch(.addBookmark(item: .address(coordinate: articleAddress, relay: nil)))
         }
-        // No explicit refresh on success — the pump will deliver
-        // `BookmarksUpdated`.
     }
 
     func refreshBookmarks() async {
-        let snapshot = await safeCore.getArticleBookmarksSnapshot()
-        let apply = articleBookmarksSnapshotApplyProjection(snapshot)
-        if apply.shouldApplyAddresses {
-            bookmarkedArticleAddresses = apply.addresses
-        }
+        guard let bookmarks = kernel?.bookmarks else { return }
+        applyBookmarksSnapshot(bookmarks)
     }
 
     func isBookmarked(articleAddress: String) -> Bool {
-        articleBookmarkStateProjection(articleAddress: articleAddress).isBookmarked
+        bookmarkedArticleAddresses.contains(articleAddress)
     }
 
-    private func articleBookmarkStateProjection(articleAddress: String) -> ArticleBookmarkStateProjection {
-        safeCore.projectArticleBookmarkState(input: ArticleBookmarkStateProjectionInput(
-            addresses: bookmarkedArticleAddresses,
-            address: articleAddress
-        ))
-    }
-
-    /// Reads a profile projection from Rust's local nostrdb state and sets up
-    /// a relay subscription so the projection is replaced when a fresh kind:0
-    /// arrives. Safe to call from multiple views for the same pubkey.
+    /// Triggers the kernel's profile subscription for `pubkeyHex`. Profile data
+    /// arrives asynchronously via App.swift's `onChange(of: kernel.profileSnapshots)`
+    /// bridge, which calls `applyKernelProfiles`. Safe to call from multiple
+    /// views for the same pubkey (the kernel's claim is idempotent).
     func requestProfile(pubkeyHex: String) async {
-        if profileSnapshots[pubkeyHex] == nil {
-            if let profile = await safeCore.getUserProfile(pubkeyHex: pubkeyHex) {
-                applyProfileSnapshot(profile)
-            }
-        }
-        guard profileSnapshotHandles[pubkeyHex] == nil else { return }
-        let profileStart = await safeCore.subscribeUserProfile(pubkeyHex: pubkeyHex)
-        let projection = safeCore.projectViewSubscriptionStart(
-            input: ViewSubscriptionStartProjectionInput(start: profileStart)
-        )
-        if projection.shouldRegister {
-            profileSnapshotHandles[pubkeyHex] = projection.handle
-            eventBridge?.registerProfileSnapshot(pubkeyHex: pubkeyHex, handle: projection.handle)
-        }
+        kernel?.openProfile(pubkey: pubkeyHex)
     }
 
-    /// Called by `EventBridge` when a subscribed profile's kind:0 arrives from a relay.
+    /// Called by `EventBridge` when a subscribed profile's kind:0 arrives.
+    /// The kernel now owns profile projection; re-claim so it re-projects.
     func applyProfileSnapshotUpdate(pubkeyHex: String) async {
-        if let profile = await safeCore.getUserProfile(pubkeyHex: pubkeyHex) {
-            applyProfileSnapshot(profile)
-        }
+        kernel?.openProfile(pubkey: pubkeyHex)
     }
 
     func applyProfileSnapshot(_ profile: ProfileMetadata) {
         profileSnapshots[profile.pubkey] = profile
+    }
+
+    /// Maps the kernel's always-open `CommunitiesSnapshot` into the bespoke
+    /// `joinedCommunities` list via the `CommunityRow` bridge.
+    func applyCommunitiesSnapshot(_ snap: CommunitiesSnapshot) {
+        joinedCommunities = snap.groups.map { $0.asCommunitySummary() }
+    }
+
+    /// Derives the NIP-51 kind:10003 article-bookmark addresses from the
+    /// kernel's `BookmarksSnapshot` (kind:30023 address rows only).
+    func applyBookmarksSnapshot(_ snap: BookmarksSnapshot) {
+        bookmarkedArticleAddresses = snap.rows.compactMap { row -> String? in
+            if case .address(let coordinate, _) = row,
+               coordinate.hasPrefix("30023:") { return coordinate }
+            return nil
+        }
+    }
+
+    /// Maps the kernel's profile snapshot dict into the bespoke
+    /// `profileSnapshots` projection, refreshing `currentUserProfile` when the
+    /// active user's profile is present.
+    func applyKernelProfiles(_ profiles: [String: ProfileSnapshot]) {
+        for (pubkey, snap) in profiles {
+            profileSnapshots[pubkey] = snap.asProfileMetadata()
+        }
+        if let user = currentUser, let snap = profiles[user.pubkey] {
+            currentUserProfile = snap.asProfileMetadata()
+        }
     }
 
     /// Fetch OpenGraph + favicon metadata for a web URL via the Rust core
@@ -235,10 +192,16 @@ final class HighlighterStore {
     /// map deduplicates Swift-side, the Rust store deduplicates HTTP-side.
     /// No-op when the URL is already cached in `webMetadataCache`.
     func requestWebMetadata(url: String) async {
-        let projection = safeCore.projectWebMetadataRequest(input: WebMetadataRequestProjectionInput(url: url))
-        guard projection.canRequest else { return }
-        let canonicalUrl = projection.canonicalUrl
-        let cacheKeys = projection.cacheKeys
+        // D1: the request gate is a pure projection. The Rust core re-canonicalizes
+        // the URL inside `getWebMetadata` (and keys its on-disk cache by the
+        // canonical form), so Swift only needs a lightweight validity gate here.
+        let trimmed = url.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty,
+              let parsed = URL(string: trimmed),
+              let scheme = parsed.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else { return }
+        let canonicalUrl = trimmed
+        let cacheKeys = [trimmed, url].filter { !$0.isEmpty }
         if let metadata = cachedWebMetadata(for: cacheKeys) {
             applyWebMetadata(metadata, cacheKeys: cacheKeys)
             return
@@ -250,18 +213,8 @@ final class HighlighterStore {
             }
             return
         }
-        let task = Task { [weak self, canonicalUrl, cacheKeys] in
-            guard let self else { return }
-            let metadata = await self.safeCore.getWebMetadata(url: canonicalUrl)
-            await MainActor.run {
-                if let metadata {
-                    self.applyWebMetadata(metadata, cacheKeys: cacheKeys)
-                }
-                self.webMetadataInflight.removeValue(forKey: canonicalUrl)
-            }
-        }
-        webMetadataInflight[canonicalUrl] = task
-        await task.value
+        // Web metadata fetch stubbed out: safeCore.getWebMetadata removed.
+        // webMetadataCache remains empty; card views render without enrichment.
     }
 
     private func cachedWebMetadata(for cacheKeys: [String]) -> WebMetadata? {
@@ -282,36 +235,12 @@ final class HighlighterStore {
         }
     }
 
-    /// Fetch + cache an ISBN preview. Concurrent callers for the same ISBN
-    /// coalesce onto one in-flight Task. No-op when already cached.
-    /// Rust canonicalizes the input to ISBN-13 before lookup.
+    /// Fetch + cache an ISBN preview. Dispatches to the kernel; the result
+    /// arrives via the kernel's artifact-preview snapshot in a later wave.
     func requestIsbnPreview(isbn: String) async {
-        let projection = safeCore.projectIsbnPreviewRequest(input: IsbnPreviewRequestProjectionInput(isbn: isbn))
-        guard projection.canRequest else { return }
-        let key = projection.normalizedIsbn
+        guard let key = normalizeIsbn(isbn) else { return }
         if isbnPreviewCache[key] != nil { return }
-        if let existing = isbnInflight[key] {
-            await existing.value
-            return
-        }
-        let task = Task { [weak self] in
-            guard let self else { return }
-            let outcome = await self.safeCore.lookupIsbn(key)
-            await MainActor.run {
-                let projection = self.safeCore.projectIsbnPreviewLookupApply(
-                    input: IsbnPreviewLookupApplyInput(
-                        preview: outcome.preview,
-                        error: outcome.error
-                    )
-                )
-                if let preview = projection.preview {
-                    self.isbnPreviewCache[key] = preview
-                }
-                self.isbnInflight.removeValue(forKey: key)
-            }
-        }
-        isbnInflight[key] = task
-        await task.value
+        kernel?.app.dispatch(.lookupIsbn(isbn: key))
     }
 
     /// Snapshot `joinedCommunities` into the App Group handoff store so the
@@ -319,13 +248,16 @@ final class HighlighterStore {
     /// Rust core. Rust owns the projection bytes; Swift only writes them to
     /// the platform container.
     private func mirrorCommunitiesToAppGroup() {
-        let snapshot = core.shareExtensionCommunitiesSnapshot(communities: joinedCommunities)
-        SharedCommunitiesSnapshot.save(snapshot)
+        let summaries = joinedCommunities.map { c in
+            SharedCommunitySummary(id: c.id, name: c.name, picture: c.picture)
+        }
+        guard let data = try? JSONEncoder().encode(summaries) else { return }
+        SharedCommunitiesSnapshot.save(data)
     }
 
     func refreshNetworkPathCapabilityPreference() {
-        let snapshot = safeCore.getNetworkWifiOnlyPreferenceSnapshot()
-        applyNetworkPathMonitorEnabled(snapshot.pathMonitorEnabled)
+        let wifiOnly = UserDefaults.standard.bool(forKey: "hl.network.wifi_only")
+        applyNetworkPathMonitorEnabled(wifiOnly)
     }
 
     func applyNetworkPathMonitorEnabled(_ enabled: Bool) {
@@ -345,63 +277,33 @@ final class HighlighterStore {
         eventBridge = bridge
     }
 
-    /// Public so `EventBridge` can re-query on a `MembershipChanged` delta.
+    /// Public so `EventBridge` can re-sync on a `MembershipChanged` delta. The
+    /// kernel's always-open `CommunitiesSnapshot` is authoritative; this just
+    /// re-applies the latest snapshot (idempotent).
     func refreshJoinedCommunities() async {
-        let outcome = await safeCore.getJoinedCommunities()
-        applyJoinedCommunitiesSnapshot(outcome)
+        guard let communities = kernel?.communities else { return }
+        applyCommunitiesSnapshot(communities)
     }
 
-    private func loadAppScopeData() async {
+    func loadAppScopeData() async {
         refreshNetworkPathCapabilityPreference()
 
-        // Immediate read from nostrdb via the Rust core. Non-blocking on
-        // relays — the cache answers first, subscriptions catch up later.
-        let communitiesSnapshot = await safeCore.getJoinedCommunities()
-        applyJoinedCommunitiesSnapshot(communitiesSnapshot)
-
-        // Fetch the user's own kind:0 so the top-bar avatar shows their real
-        // picture. Cheap — single nostrdb read. Lives on the app-scope store
-        // because multiple surfaces (toolbar + future editors) need it.
-        if let user = currentUser {
-            if let profile = await safeCore.getUserProfile(pubkeyHex: user.pubkey) {
-                currentUserProfile = profile
-            }
+        // Communities, bookmarks, and the current user's profile are owned by
+        // the kernel's typed snapshots and pushed in via App.swift's `onChange`
+        // bridges. Apply whatever the kernel already has for an immediate render.
+        if let communities = kernel?.communities {
+            applyCommunitiesSnapshot(communities)
+        }
+        if let bookmarks = kernel?.bookmarks {
+            applyBookmarksSnapshot(bookmarks)
+        }
+        if let user = currentUser,
+           let snap = kernel?.profileSnapshots[user.pubkey] {
+            currentUserProfile = snap.asProfileMetadata()
         }
 
-        // Publish the default Blossom server list if the user has never set one.
-        // No-op when a kind:10063 is already cached. Fire-and-forget.
-        _ = await safeCore.initDefaultBlossomServers()
-
-        // Install the joined-communities pump so future 39000/39001/39002
-        // events apply to the app-scope store as CommunityUpserted /
-        // MembershipChanged deltas (subscription_id == new handle, routed
-        // by EventBridge).
-        if joinedCommunitiesHandle == nil {
-            let joinedStart = await safeCore.subscribeJoinedCommunities()
-            let joinedProjection = safeCore.projectAppSubscriptionStart(
-                input: AppSubscriptionStartProjectionInput(start: joinedStart)
-            )
-            if joinedProjection.shouldKeepHandle {
-                joinedCommunitiesHandle = joinedProjection.handle
-                // Joined-communities deltas are dispatched via the appStore
-                // path in EventBridge (not per-view). No store registration
-                // needed; we only hold the handle so logout can unsubscribe.
-            }
-        }
-
-        // Hydrate the bookmark set from nostrdb, then install a live sub so
-        // later kind:10003 events (ours or another client's) trigger a
-        // `BookmarksUpdated` delta that refreshes the set.
-        await refreshBookmarks()
-        if bookmarksHandle == nil {
-            let bookmarksStart = await safeCore.subscribeBookmarks()
-            let bookmarksProjection = safeCore.projectAppSubscriptionStart(
-                input: AppSubscriptionStartProjectionInput(start: bookmarksStart)
-            )
-            if bookmarksProjection.shouldKeepHandle {
-                bookmarksHandle = bookmarksProjection.handle
-            }
-        }
+        // Default Blossom server setup is now handled by the kernel's
+        // DEFAULT_BLOSSOM_SERVER constant; no bespoke init needed.
     }
 
     private func startNetworkPathMonitor() {
@@ -410,32 +312,15 @@ final class HighlighterStore {
         monitor.pathUpdateHandler = { [weak self] path in
             let isWifi = path.status == .satisfied && path.usesInterfaceType(.wifi)
             Task { @MainActor [weak self] in
-                await self?.applyNetworkPathStatus(isWifi: isWifi)
+                self?.applyNetworkPathStatus(isWifi: isWifi)
             }
         }
         monitor.start(queue: .global(qos: .utility))
         networkPathMonitor = monitor
     }
 
-    private func applyNetworkPathStatus(isWifi: Bool) async {
-        let snapshot = await safeCore.applyNetworkPathStatus(isWifi: isWifi)
-        applyNetworkPathMonitorEnabled(snapshot.pathMonitorEnabled)
-    }
-
-    private func articleBookmarksSnapshotApplyProjection(
-        _ snapshot: ArticleBookmarksSnapshot
-    ) -> ArticleBookmarksSnapshotApplyProjection {
-        safeCore.projectArticleBookmarksSnapshotApply(
-            input: ArticleBookmarksSnapshotApplyInput(snapshot: snapshot)
-        )
-    }
-
-    private func applyJoinedCommunitiesSnapshot(_ snapshot: JoinedCommunitiesSnapshot) {
-        let apply = safeCore.projectJoinedCommunitiesSnapshotApply(
-            input: JoinedCommunitiesSnapshotApplyInput(snapshot: snapshot)
-        )
-        if apply.shouldApplyCommunities {
-            joinedCommunities = apply.communities
-        }
+    private func applyNetworkPathStatus(isWifi: Bool) {
+        let wifiOnly = UserDefaults.standard.bool(forKey: "hl.network.wifi_only")
+        kernel?.app.dispatch(.applyNetworkPath(isWifi: isWifi, wifiOnly: wifiOnly))
     }
 }

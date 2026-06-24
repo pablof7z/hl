@@ -8,6 +8,7 @@ struct FeedbackThreadDetailView: View {
     let listStore: FeedbackStore
 
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var detailStore = FeedbackThreadStore()
     @State private var draft: String = ""
     @State private var sendError: String?
@@ -21,12 +22,10 @@ struct FeedbackThreadDetailView: View {
         .navigationTitle(threadPresentation.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            await detailStore.start(
-                rootEventId: thread.rootEventId,
-                coordinate: FeedbackProject.coordinate,
-                core: app.safeCore,
-                bridge: app.eventBridge
-            )
+            await detailStore.start(rootEventId: thread.rootEventId, kernel: kernel)
+        }
+        .onChange(of: kernel.feedbackThread[thread.rootEventId]) { _, _ in
+            detailStore.applyKernelSnapshot()
         }
         .onDisappear { detailStore.stop() }
     }
@@ -103,46 +102,64 @@ struct FeedbackThreadDetailView: View {
     }
 
     private var composerProjection: FeedbackComposerProjection {
-        app.safeCore.projectFeedbackComposer(
-            input: FeedbackComposerProjectionInput(
-                body: draft,
-                isPublishing: detailStore.isPublishing
-            )
+        let submitBody = draft.trimmingCharacters(in: .whitespaces)
+        return FeedbackComposerProjection(
+            submitBody: submitBody,
+            canSend: !submitBody.isEmpty && !detailStore.isPublishing
         )
     }
 
     private var threadPresentation: FeedbackThreadPresentationProjection {
-        app.safeCore.projectFeedbackThreadPresentation(thread: thread)
+        let rowTitle = thread.title ?? thread.preview
+        let navigationTitle = thread.title ?? "Feedback"
+        let rowSecondaryText: String? = {
+            if let summary = thread.summary, !summary.isEmpty { return summary }
+            if thread.title != nil && !thread.preview.isEmpty { return thread.preview }
+            return nil
+        }()
+        let detailSummary: String? = (thread.summary?.isEmpty == false) ? thread.summary : nil
+        let statusLabel: String? = (thread.statusLabel?.isEmpty == false) ? thread.statusLabel : nil
+        return FeedbackThreadPresentationProjection(
+            navigationTitle: navigationTitle,
+            rowTitle: rowTitle,
+            rowSecondaryText: rowSecondaryText,
+            detailSummary: detailSummary,
+            statusLabel: statusLabel
+        )
     }
 
     private func send() async {
         let projection = composerProjection
         guard projection.canSend else { return }
 
+        // Kernel is the sole writer: dispatch hl.feedback.post_reply
+        // fire-and-forget. The reply streams back into
+        // kernel.feedbackThread[rootEventId] (and bumps the list's activity),
+        // which the views re-apply. Clear the draft optimistically.
         sendError = nil
-        let outcome = await detailStore.sendReply(body: projection.submitBody)
-        guard let outcome else { return }
-        let result = app.safeCore.projectFeedbackPublishResult(
-            input: FeedbackPublishResultInput(error: outcome.error)
-        )
-        if result.didPublish {
-            draft = ""
-            await listStore.refreshThreads()
-        } else {
-            sendError = result.errorMessage
-        }
+        await detailStore.sendReply(body: projection.submitBody)
+        draft = ""
     }
 
     private func messagePresentation(
         for row: FeedbackMessageRowProjection
     ) -> FeedbackMessagePresentationProjection {
-        app.safeCore.projectFeedbackMessagePresentation(
-            input: FeedbackMessagePresentationInput(
-                event: row.event,
-                showHeader: row.showHeader,
-                currentUserPubkey: app.currentUser?.pubkey,
-                profile: app.profileSnapshots[row.event.authorPubkey]
-            )
+        let profile = app.profileSnapshots[row.event.authorPubkey]
+        let isFromMe = app.currentUser.map { $0.pubkey == row.event.authorPubkey } ?? false
+        let displayName: String = {
+            if let p = profile {
+                if !p.displayName.isEmpty { return p.displayName }
+                if !p.name.isEmpty { return p.name }
+            }
+            return String(row.event.authorPubkey.prefix(8))
+        }()
+        let displayInitial = displayName.first.map { String($0).uppercased() } ?? ""
+        return FeedbackMessagePresentationProjection(
+            isFromMe: isFromMe,
+            showHeader: row.showHeader,
+            displayName: displayName,
+            displayInitial: displayInitial,
+            pictureUrl: profile?.picture ?? ""
         )
     }
 }

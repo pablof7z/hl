@@ -57,7 +57,11 @@ use nmp_nip29::GroupId;
 
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
-use crate::kernel::snapshot::{KernelRoomHomeSnapshot, RoomLaneRow, ViewSnapshot};
+use crate::kernel::models::{ArtifactPreview, ArtifactRecord, Chapter};
+use crate::kernel::snapshot::{
+    CommentRecordRow, HighlightRow, KernelCommentReferenceBucket, KernelHighlightReferenceBucket,
+    KernelRoomHomeSnapshot, KernelRoomLane, KernelRoomLibraryRow, RoomLaneRow, ViewSnapshot,
+};
 use crate::kernel::view::ViewId;
 
 // Re-export schema ID so projections.rs can match without importing nmp_nip29 directly.
@@ -76,6 +80,16 @@ pub(crate) const ROOM_LANE_FEED_KEY_PREFIX: &str = "hl.feed.room.";
 /// Maximum raw rows buffered per room-lane feed in `AppState::room_lanes`.
 /// Prevents unbounded growth — the UI shows the most recent N events.
 const ROOM_LANE_ROW_CAP: usize = 100;
+
+/// Feed key prefix for room highlight feeds (kind:9802 with `#h` tag).
+/// Concatenated with `group_id` to form the full feed key.
+pub(crate) const ROOM_HIGHLIGHT_FEED_KEY_PREFIX: &str = "hl.feed.room_highlights.";
+
+/// Maximum highlight rows surfaced in `KernelRoomHomeSnapshot::highlights`.
+const ROOM_HOME_HIGHLIGHT_CAP: usize = 64;
+
+/// Maximum artifact-library entries in `KernelRoomHomeSnapshot::artifact_library`.
+const ROOM_HOME_ARTIFACT_LIB_CAP: usize = 32;
 
 // ─── Lifecycle effects (called by actor loop on OpenView / CloseView) ─────────
 
@@ -109,6 +123,14 @@ pub(crate) fn lifecycle_effects_for_view_open(id: &ViewId) -> Vec<Effect> {
             scope,
         ));
         effects.extend(crate::kernel::domains::feed::reduce_drain_feed(feed_key));
+        // ── Room-home aggregation: register room highlight feed ────────────────
+        let hl_feed_key = format!("{ROOM_HIGHLIGHT_FEED_KEY_PREFIX}{group_id}");
+        let hl_scope = crate::kernel::domains::feed::room_highlight_feed_scope(group_id);
+        effects.extend(crate::kernel::domains::feed::reduce_register_feed_cursor(
+            hl_feed_key.clone(),
+            hl_scope,
+        ));
+        effects.extend(crate::kernel::domains::feed::reduce_drain_feed(hl_feed_key));
         effects
     } else {
         Vec::new()
@@ -133,6 +155,11 @@ pub(crate) fn lifecycle_effects_for_view_close(id: &ViewId) -> Vec<Effect> {
         // ── Phase 4I: release the feed cursor to unregister and free memory ──
         effects.extend(crate::kernel::domains::feed::reduce_release_feed_cursor(
             feed_key,
+        ));
+        // ── Room-home aggregation: release room highlight feed cursor ──────────
+        let hl_feed_key = format!("{ROOM_HIGHLIGHT_FEED_KEY_PREFIX}{group_id}");
+        effects.extend(crate::kernel::domains::feed::reduce_release_feed_cursor(
+            hl_feed_key,
         ));
         effects
     } else {
@@ -243,6 +270,34 @@ pub(crate) fn reduce_action_join_room(
     .to_string();
     vec![Effect::DispatchNip29Action {
         namespace: "nmp.nip29.join".to_string(),
+        json,
+    }]
+}
+
+/// Handle `AppAction::LeaveRoom { group_id, host_relay_url, reason }`.
+///
+/// Dispatches `"nmp.nip29.leave"` via `Effect::DispatchNip29Action`.
+///
+/// `LeaveGroupInput` fields (nmp-nip29 `action/leave.rs`):
+/// - `group`: `{ host_relay_url, local_id }` (GroupId)
+/// - `reason`: `Option<String>`
+///
+/// Emits kind:9022 leave-request to the host relay. Fire-and-forget (D6).
+pub(crate) fn reduce_action_leave_room(
+    group_id: String,
+    host_relay_url: String,
+    reason: Option<String>,
+) -> Vec<Effect> {
+    let json = serde_json::json!({
+        "group": {
+            "host_relay_url": host_relay_url,
+            "local_id": group_id
+        },
+        "reason": reason
+    })
+    .to_string();
+    vec![Effect::DispatchNip29Action {
+        namespace: "nmp.nip29.leave".to_string(),
         json,
     }]
 }
@@ -423,17 +478,18 @@ pub(crate) fn run_effect_dispatch_share_to_room(
                 }
             }
         }
-        "nmp.nip29.repost_in_group" => {
-            match serde_json::from_str::<RepostInGroupInput>(&json) {
-                Ok(a) => a.encode(),
-                Err(e) => {
-                    tracing::warn!(error = %e, "room_home: failed to deserialise RepostInGroupInput");
-                    return;
-                }
+        "nmp.nip29.repost_in_group" => match serde_json::from_str::<RepostInGroupInput>(&json) {
+            Ok(a) => a.encode(),
+            Err(e) => {
+                tracing::warn!(error = %e, "room_home: failed to deserialise RepostInGroupInput");
+                return;
             }
-        }
+        },
         other => {
-            tracing::warn!(namespace = other, "room_home: unknown share namespace — no-op");
+            tracing::warn!(
+                namespace = other,
+                "room_home: unknown share namespace — no-op"
+            );
             return;
         }
     };
@@ -452,6 +508,424 @@ pub(crate) fn run_effect_dispatch_share_to_room(
     if !result_ptr.is_null() {
         nmp_free_string(result_ptr);
     }
+}
+
+// ─── Room-home aggregation helpers ────────────────────────────────────────────
+
+/// Extract the primary artifact coordinate from a kind:11 event.
+///
+/// Priority: i → a → e → r tags (matches bespoke artifacts.rs:496 which
+/// prefers NIP-73 external ids over addressable coordinates). Returns
+/// `"<tag_name>:<value>"` or `None` when no recognised reference tag is
+/// present (D6 no-op).
+fn extract_artifact_coordinate(event: &nmp_core::substrate::KernelEvent) -> Option<String> {
+    let tag_val = |name: &str| -> Option<String> {
+        event
+            .tags
+            .iter()
+            .find(|t| t.first().map(|s| s == name).unwrap_or(false))
+            .and_then(|t| t.get(1))
+            .filter(|v| !v.is_empty())
+            .cloned()
+    };
+    // Priority i → a → e → r mirrors bespoke artifacts.rs coordinate extraction.
+    if let Some(v) = tag_val("i") {
+        return Some(format!("i:{v}"));
+    }
+    if let Some(v) = tag_val("a") {
+        return Some(format!("a:{v}"));
+    }
+    if let Some(v) = tag_val("e") {
+        return Some(format!("e:{v}"));
+    }
+    if let Some(v) = tag_val("r") {
+        return Some(format!("r:{v}"));
+    }
+    None
+}
+
+/// First value of the first tag named `name`, mirroring bespoke
+/// `artifacts::first_tag_value` exactly: `Some` only when the tag is present
+/// AND carries a value slot (a bare `["i"]` yields `None`; `["i", ""]` yields
+/// `Some("")`).
+fn first_tag(event: &nmp_core::substrate::KernelEvent, name: &str) -> Option<String> {
+    event
+        .tags
+        .iter()
+        .find(|t| t.first().map(|s| s == name).unwrap_or(false))
+        .and_then(|t| t.get(1).cloned())
+}
+
+/// Internal (non-FFI) matching surface for one kind:11 artifact share.
+///
+/// Mirrors the subset of bespoke `ArtifactPreview`
+/// (`artifacts::artifact_record_from_event`, artifacts.rs:486) that
+/// `highlight_matches_artifact` (room_lanes.rs:95) consults. Collapsing an
+/// artifact to a single `coordinate` is lossy — bespoke matches a highlight
+/// against *all* of these surfaces (e.g. a web `source_url == preview.url`
+/// even when the artifact's primary coordinate is `a:<addr>`), so lane
+/// assembly must match against the full surface, not just the coordinate.
+struct ArtifactMatchSurface {
+    reference_tag_name: String,
+    reference_tag_value: String,
+    highlight_tag_value: String,
+    url: String,
+    audio_url: String,
+    podcast_item_guid: String,
+    share_event_id: String,
+}
+
+/// Derive the full match surface from a kind:11 event, mirroring
+/// `artifacts::artifact_record_from_event` (artifacts.rs:486) field-for-field
+/// for every field `highlight_matches_artifact` reads.
+fn artifact_match_surface(event: &nmp_core::substrate::KernelEvent) -> ArtifactMatchSurface {
+    let url = first_tag(event, "r").unwrap_or_default();
+    let k = first_tag(event, "k").unwrap_or_default();
+
+    // Reference tag: i → a → e (mirrors artifact_record_from_event:496; note
+    // `r` is NOT a reference tag — it feeds `url`/`highlight_tag` instead).
+    let (reference_tag_name, reference_tag_value) = if let Some(i) = first_tag(event, "i") {
+        ("i".to_string(), i)
+    } else if let Some(a) = first_tag(event, "a") {
+        ("a".to_string(), a)
+    } else if let Some(e_val) = first_tag(event, "e") {
+        ("e".to_string(), e_val)
+    } else {
+        (String::new(), String::new())
+    };
+
+    // NIP-73 episode GUID: dedicated tag, else the `i` tag prefix (mirrors
+    // artifact_record_from_event:508).
+    let podcast_item_guid = first_tag(event, "podcast_item_guid").unwrap_or_else(|| {
+        reference_tag_value
+            .strip_prefix("podcast:item:guid:")
+            .map(str::to_string)
+            .unwrap_or_default()
+    });
+
+    let (_highlight_tag_name, highlight_tag_value) = kernel_highlight_reference_for_artifact(
+        &reference_tag_name,
+        &reference_tag_value,
+        &k,
+        &url,
+    );
+
+    ArtifactMatchSurface {
+        reference_tag_name,
+        reference_tag_value,
+        highlight_tag_value,
+        url,
+        audio_url: first_tag(event, "audio").unwrap_or_default(),
+        podcast_item_guid,
+        share_event_id: event.id.clone(),
+    }
+}
+
+/// Port of `artifacts::highlight_reference_for_artifact` (artifacts.rs:580).
+fn kernel_highlight_reference_for_artifact(
+    reference_tag_name: &str,
+    reference_tag_value: &str,
+    reference_kind: &str,
+    url: &str,
+) -> (String, String) {
+    let reference_tag_name = reference_tag_name.trim();
+    let reference_tag_value = reference_tag_value.trim();
+    match reference_tag_name {
+        "a" | "e" if !reference_tag_value.is_empty() => (
+            reference_tag_name.to_string(),
+            reference_tag_value.to_string(),
+        ),
+        "i" if kernel_is_external_content_reference(reference_tag_value, reference_kind) => (
+            reference_tag_name.to_string(),
+            reference_tag_value.to_string(),
+        ),
+        _ if !url.trim().is_empty() => ("r".to_string(), url.trim().to_string()),
+        "i" if !reference_tag_value.is_empty() => (
+            reference_tag_name.to_string(),
+            reference_tag_value.to_string(),
+        ),
+        _ => (String::new(), String::new()),
+    }
+}
+
+/// Port of `artifacts::is_external_content_reference` (artifacts.rs:606).
+fn kernel_is_external_content_reference(value: &str, kind: &str) -> bool {
+    let value = value.to_ascii_lowercase();
+    let kind = kind.to_ascii_lowercase();
+    value.starts_with("isbn:")
+        || value.starts_with("podcast:")
+        || value.starts_with("spotify:")
+        || kind.starts_with("isbn")
+        || kind.starts_with("podcast")
+        || kind.starts_with("spotify")
+}
+
+/// Port of `artifacts::reference_key_for_tag` (artifacts.rs:775). `clean` is a
+/// plain `trim` in the bespoke source.
+fn kernel_reference_key_for_tag(tag_name: &str, value: &str) -> String {
+    let cleaned = value.trim();
+    if cleaned.is_empty() {
+        String::new()
+    } else {
+        format!("{tag_name}:{cleaned}")
+    }
+}
+
+/// Port of `artifacts::read_chapters` (artifacts.rs:450). Lifts `chapter` tags
+/// (`["chapter", "<start_seconds>", "<title>"]`) off a kind:11 podcast share,
+/// skipping malformed entries, sorted by start time. Field-for-field with the
+/// bespoke source so podcast listening chapters survive the room cut.
+fn kernel_read_chapters(event: &nmp_core::substrate::KernelEvent) -> Vec<Chapter> {
+    let mut chapters: Vec<Chapter> = event
+        .tags
+        .iter()
+        .filter_map(|tag| {
+            if tag.first().map(String::as_str) != Some("chapter") {
+                return None;
+            }
+            let start = tag.get(1)?.parse::<f64>().ok()?;
+            if !start.is_finite() || start < 0.0 {
+                return None;
+            }
+            let title = tag.get(2).map(String::as_str).unwrap_or("").trim();
+            if title.is_empty() {
+                return None;
+            }
+            Some(Chapter {
+                start_seconds: start,
+                title: title.to_string(),
+            })
+        })
+        .collect();
+    chapters.sort_by(|a, b| {
+        a.start_seconds
+            .partial_cmp(&b.start_seconds)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    chapters
+}
+
+/// Build the full rich `ArtifactRecord` from a kind:11 share `KernelEvent`,
+/// mirroring `artifacts::artifact_record_from_event` (artifacts.rs:486)
+/// field-for-field. Every tag the bespoke reader lifts is lifted here, or
+/// downstream iOS views see empty strings (e.g. an empty `audio_url` makes the
+/// podcast player refuse to load anything). Reads tags via the same `first_tag`
+/// helper as `artifact_match_surface` (matches `first_tag_value` semantics).
+///
+/// The bespoke fn returns `Option` but its body is infallible (always `Some`);
+/// this returns the record directly since the caller already resolved a valid
+/// kind:11 coordinate. Parity-tested against the bespoke fn in `tests`.
+fn kernel_artifact_record_from_event(
+    event: &nmp_core::substrate::KernelEvent,
+    group_id: &str,
+) -> ArtifactRecord {
+    let title = first_tag(event, "title").unwrap_or_default();
+    let url = first_tag(event, "r").unwrap_or_default();
+    let source = first_tag(event, "source").unwrap_or_default();
+    let author = first_tag(event, "author").unwrap_or_default();
+    let image = first_tag(event, "image").unwrap_or_default();
+    let summary = first_tag(event, "summary").unwrap_or_default();
+    let d = first_tag(event, "d").unwrap_or_default();
+    let k = first_tag(event, "k").unwrap_or_default();
+
+    // Reference tag: i → a → e (mirrors artifact_record_from_event:496; `r`
+    // is NOT a reference tag — it feeds `url`/`highlight_tag`).
+    let (ref_name, ref_value) = if let Some(i) = first_tag(event, "i") {
+        ("i".to_string(), i)
+    } else if let Some(a) = first_tag(event, "a") {
+        ("a".to_string(), a)
+    } else if let Some(e_val) = first_tag(event, "e") {
+        ("e".to_string(), e_val)
+    } else {
+        (String::new(), String::new())
+    };
+
+    // NIP-73 episode/feed GUIDs: dedicated tags, else parse the `i` tag prefix.
+    let podcast_item_guid = first_tag(event, "podcast_item_guid").unwrap_or_else(|| {
+        ref_value
+            .strip_prefix("podcast:item:guid:")
+            .map(str::to_string)
+            .unwrap_or_default()
+    });
+    let podcast_guid = first_tag(event, "podcast_guid").unwrap_or_else(|| {
+        ref_value
+            .strip_prefix("podcast:guid:")
+            .map(str::to_string)
+            .unwrap_or_default()
+    });
+
+    let (highlight_tag_name, highlight_tag_value) =
+        kernel_highlight_reference_for_artifact(&ref_name, &ref_value, &k, &url);
+    let highlight_reference_key =
+        kernel_reference_key_for_tag(&highlight_tag_name, &highlight_tag_value);
+
+    let preview = ArtifactPreview {
+        id: d,
+        url,
+        title,
+        author,
+        image,
+        description: summary,
+        source,
+        domain: String::new(),
+        catalog_id: if ref_name == "i" {
+            ref_value.clone()
+        } else {
+            String::new()
+        },
+        catalog_kind: k.clone(),
+        podcast_guid,
+        podcast_item_guid,
+        podcast_show_title: first_tag(event, "podcast_show_title").unwrap_or_default(),
+        audio_url: first_tag(event, "audio").unwrap_or_default(),
+        audio_preview_url: first_tag(event, "audio_preview").unwrap_or_default(),
+        transcript_url: first_tag(event, "transcript").unwrap_or_default(),
+        feed_url: first_tag(event, "feed").unwrap_or_default(),
+        published_at: first_tag(event, "published_at").unwrap_or_default(),
+        duration_seconds: first_tag(event, "duration").and_then(|v| v.parse::<i64>().ok()),
+        reference_tag_name: ref_name,
+        reference_tag_value: ref_value,
+        reference_kind: k,
+        highlight_tag_name,
+        highlight_tag_value,
+        highlight_reference_key,
+        chapters: kernel_read_chapters(event),
+    };
+
+    ArtifactRecord {
+        preview,
+        group_id: group_id.to_string(),
+        share_event_id: event.id.clone(),
+        pubkey: event.author.clone(),
+        created_at: Some(event.created_at),
+        note: event.content.clone(),
+    }
+}
+
+/// Returns `true` when a kernel highlight row matches a lane artifact.
+///
+/// Exact port of bespoke `highlight_matches_artifact` (room_lanes.rs:95):
+/// the highlight is tested against every reference surface of the artifact
+/// (primary reference key, NIP-84 `artifact_address`, NIP-22 `external_reference`
+/// incl. podcast GUID, `event_reference` incl. the kind:11 share id, and
+/// `source_url` incl. `audio_url`). Any single match attaches the highlight.
+fn kernel_highlight_matches_surface(hl: &HighlightRow, surface: &ArtifactMatchSurface) -> bool {
+    if !surface.reference_tag_name.is_empty() && !surface.reference_tag_value.is_empty() {
+        let artifact_key = format!(
+            "{}:{}",
+            surface.reference_tag_name, surface.reference_tag_value
+        );
+        if !hl.source_reference_key.is_empty() && hl.source_reference_key == artifact_key {
+            return true;
+        }
+    }
+
+    if !hl.artifact_address.is_empty() {
+        if hl.artifact_address == surface.reference_tag_value {
+            return true;
+        }
+        if hl.artifact_address == surface.highlight_tag_value {
+            return true;
+        }
+    }
+
+    if !hl.external_reference.is_empty() {
+        if hl.external_reference == surface.reference_tag_value {
+            return true;
+        }
+        if hl.external_reference == surface.highlight_tag_value {
+            return true;
+        }
+        if !surface.podcast_item_guid.is_empty()
+            && hl.external_reference == format!("podcast:item:guid:{}", surface.podcast_item_guid)
+        {
+            return true;
+        }
+    }
+
+    if !hl.event_reference.is_empty() {
+        if hl.event_reference == surface.reference_tag_value {
+            return true;
+        }
+        if hl.event_reference == surface.share_event_id {
+            return true;
+        }
+    }
+
+    if !hl.source_url.is_empty() {
+        if hl.source_url == surface.url {
+            return true;
+        }
+        if !surface.audio_url.is_empty() && hl.source_url == surface.audio_url {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Return `true` if the event has a `["t", "discussion"]` tag (marks a
+/// kind:11 as a room discussion post rather than an artifact share).
+fn is_discussion_event(event: &nmp_core::substrate::KernelEvent) -> bool {
+    event.tags.iter().any(|t| {
+        t.first().map(|s| s == "t").unwrap_or(false)
+            && t.get(1).map(|s| s == "discussion").unwrap_or(false)
+    })
+}
+
+/// Convert an artifact coordinate (e.g. `"a:30023:pk:d"`) to the NIP-22
+/// `root_tag_value` form (e.g. `"30023:pk:d"`) by stripping the tag-prefix
+/// and the separating colon.
+///
+/// Returns `None` if the coordinate has no colon (malformed).
+fn root_tag_value_for_coordinate(coordinate: &str) -> Option<String> {
+    coordinate.split_once(':').map(|x| x.1.to_string())
+}
+
+/// Ensure `AppState::artifact_previews` has an entry for every artifact
+/// coordinate referenced by kind:11 (non-discussion) events in the room lane.
+///
+/// Idempotent — `ensure_artifact_preview` is a no-op when the coordinate is
+/// already present. Called from `actor.rs` on each new room-lane `FeedPage`.
+/// Returns any resolver effects that need to be dispatched (e.g.
+/// `Effect::ResolveArtifactCoordinate`).
+pub(crate) fn ensure_room_artifact_previews(state: &mut AppState, group_id: &str) -> Vec<Effect> {
+    let feed_key = format!("{ROOM_LANE_FEED_KEY_PREFIX}{group_id}");
+
+    // Coordinates from kind:11 non-discussion artifact shares in the lane feed.
+    let mut coordinates: Vec<String> = state
+        .room_lanes
+        .get(&feed_key)
+        .map(|fs| {
+            fs.rows
+                .iter()
+                .filter(|e| e.kind == 11 && !is_discussion_event(e))
+                .filter_map(extract_artifact_coordinate)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Also seed from discussions' artifact_coordinate refs (Gap 2 / discussion chip).
+    // A discussion post may reference an artifact via a/e/i tags — the resolved
+    // preview enables the rich artifact chip in the discussion row.
+    let discussion_coords: Vec<String> = state
+        .room_discussions
+        .get(group_id)
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|d| d.artifact_coordinate.clone())
+                .collect()
+        })
+        .unwrap_or_default();
+    coordinates.extend(discussion_coords);
+
+    let mut effects = Vec::new();
+    for coord in coordinates {
+        effects.extend(
+            crate::kernel::domains::artifact_preview::ensure_artifact_preview(state, coord),
+        );
+    }
+    effects
 }
 
 // ─── Snapshot projection ─────────────────────────────────────────────────────
@@ -505,6 +979,210 @@ pub(crate) fn project_room_home_snapshot(state: &AppState, group_id: &str) -> Op
         vec![group_id.to_string()]
     };
 
+    // ── Room-home aggregation ─────────────────────────────────────────────────
+
+    // Artifact library: kind:11 non-discussion events from the lane feed.
+    // Each row is paired with its full `ArtifactMatchSurface` (derived from the
+    // raw kind:11 tags) so lane assembly can match highlights against every
+    // reference surface — not just the single collapsed coordinate.
+    let artifact_library_pairs: Vec<(KernelRoomLibraryRow, ArtifactMatchSurface)> = state
+        .room_lanes
+        .get(&feed_key)
+        .map(|fs| {
+            fs.rows
+                .iter()
+                .filter(|e| e.kind == 11 && !is_discussion_event(e))
+                .filter_map(|e| {
+                    let coordinate = extract_artifact_coordinate(e)?;
+                    let preview = state.artifact_previews.get(&coordinate).cloned();
+                    Some((
+                        KernelRoomLibraryRow {
+                            coordinate,
+                            share_event_id: e.id.clone(),
+                            preview,
+                            artifact_record: kernel_artifact_record_from_event(e, group_id),
+                        },
+                        artifact_match_surface(e),
+                    ))
+                })
+                .take(ROOM_HOME_ARTIFACT_LIB_CAP)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let artifact_library: Vec<KernelRoomLibraryRow> = artifact_library_pairs
+        .iter()
+        .map(|(row, _)| row.clone())
+        .collect();
+
+    // Highlights: kind:9802 events from the room highlight feed, newest-first.
+    let hl_feed_key = format!("{ROOM_HIGHLIGHT_FEED_KEY_PREFIX}{group_id}");
+    let mut highlights: Vec<HighlightRow> = state
+        .room_highlight_feeds
+        .get(&hl_feed_key)
+        .map(|fs| {
+            fs.rows
+                .iter()
+                .filter_map(crate::kernel::domains::highlight_feed::decode_highlight_row)
+                .collect()
+        })
+        .unwrap_or_default();
+    highlights.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    highlights.truncate(ROOM_HOME_HIGHLIGHT_CAP);
+
+    // Highlights grouped by artifact coordinate.
+    let highlights_by_reference: Vec<KernelHighlightReferenceBucket> = {
+        let mut buckets: Vec<KernelHighlightReferenceBucket> = Vec::new();
+        for lib_row in &artifact_library {
+            let coord = &lib_row.coordinate;
+            let matching: Vec<HighlightRow> = highlights
+                .iter()
+                .filter(|h| &h.source_reference_key == coord)
+                .cloned()
+                .collect();
+            if !matching.is_empty() {
+                buckets.push(KernelHighlightReferenceBucket {
+                    coordinate: coord.clone(),
+                    highlights: matching,
+                });
+            }
+        }
+        buckets
+    };
+
+    // Comments grouped by artifact coordinate (via root_tag_value mapping).
+    let comments_by_reference: Vec<KernelCommentReferenceBucket> = {
+        let mut buckets: Vec<KernelCommentReferenceBucket> = Vec::new();
+        for lib_row in &artifact_library {
+            let Some(root_val) = root_tag_value_for_coordinate(&lib_row.coordinate) else {
+                continue;
+            };
+            if let Some(thread) = state.comment_threads.get(&root_val) {
+                let comments: Vec<CommentRecordRow> = thread
+                    .records
+                    .iter()
+                    .map(|r| {
+                        let reaction = state.reaction_state.get(&r.event_id);
+                        CommentRecordRow {
+                            event_id: r.event_id.clone(),
+                            author_pubkey: r.author_pubkey.clone(),
+                            body: r.body.clone(),
+                            root_tag_name: r.root_tag_name.clone(),
+                            root_tag_value: r.root_tag_value.clone(),
+                            root_kind: r.root_kind.clone(),
+                            parent_tag_name: r.parent_tag_name.clone(),
+                            parent_tag_value: r.parent_tag_value.clone(),
+                            parent_kind: r.parent_kind.clone(),
+                            created_at: r.created_at,
+                            is_top_level: r.is_top_level(),
+                            like_count: reaction.map(|x| x.count).unwrap_or(0),
+                            viewer_reacted: reaction.map(|x| x.viewer_reacted).unwrap_or(false),
+                            bookmarked: state.bookmarks.iter().any(|b| {
+                                matches!(
+                                    b,
+                                    crate::kernel::snapshot::BookmarkRow::Event { event_id, .. }
+                                        if event_id == &r.event_id
+                                )
+                            }),
+                        }
+                    })
+                    .collect();
+                let count = comments.len() as u32;
+                buckets.push(KernelCommentReferenceBucket {
+                    root_tag_value: root_val,
+                    comments,
+                    count,
+                });
+            }
+        }
+        buckets
+    };
+
+    // ── Assembled lanes: mirror build_visible_room_lanes from room_lanes.rs ─────
+    //
+    // One lane per artifact in the library. Dormant lanes (no highlights AND no
+    // comments) are excluded. Lanes sorted by latest_activity_at desc so iOS
+    // renders the most-active artifact at the top.
+    //
+    // Highlight match is two-pass (mirrors bespoke room_lanes.rs:38-65):
+    //   Pass 1 — from the pre-built highlights_by_reference bucket (coordinate key).
+    //   Pass 2 — full kernel_highlight_matches_lane scan for any remaining
+    //            highlights not captured by the bucket (e.g. artifact_address /
+    //            event_reference / external_reference / source_url cross-matches).
+    // Dedup by event_id HashSet across both passes.
+    // Comment match: by root_tag_value (coordinate stripped of tag prefix).
+    let assembled_lanes: Vec<KernelRoomLane> = {
+        let mut lanes: Vec<KernelRoomLane> = Vec::with_capacity(artifact_library_pairs.len());
+        for (lib_row, surface) in &artifact_library_pairs {
+            let coord = &lib_row.coordinate;
+
+            // Pass 1: highlights from the pre-built bucket (source_reference_key
+            // match — mirrors bespoke's per-primary-target query_for_reference).
+            let mut lane_highlights: Vec<HighlightRow> = highlights_by_reference
+                .iter()
+                .find(|b| &b.coordinate == coord)
+                .map(|b| b.highlights.clone())
+                .unwrap_or_default();
+
+            // Pass 2: full-surface match for highlights not captured by the
+            // bucket (artifact_address / external_reference incl. podcast GUID /
+            // event_reference incl. share id / source_url incl. audio_url).
+            // Mirrors bespoke highlight_matches_artifact fallback (room_lanes.rs:58-65).
+            {
+                let mut seen: std::collections::HashSet<String> =
+                    lane_highlights.iter().map(|h| h.event_id.clone()).collect();
+                for hl in &highlights {
+                    if kernel_highlight_matches_surface(hl, surface)
+                        && seen.insert(hl.event_id.clone())
+                    {
+                        lane_highlights.push(hl.clone());
+                    }
+                }
+            }
+
+            // Comments for this lane (from the pre-built bucket by root_tag_value).
+            let lane_comments: Vec<CommentRecordRow> = root_tag_value_for_coordinate(coord)
+                .as_deref()
+                .and_then(|rv| {
+                    comments_by_reference
+                        .iter()
+                        .find(|b| b.root_tag_value == rv)
+                })
+                .map(|b| b.comments.clone())
+                .unwrap_or_default();
+
+            // Dormant filter: skip lanes with no highlights AND no comments.
+            // Mirrors bespoke room_lanes.rs:75 `if lane_highlights.is_empty() && …`.
+            if lane_highlights.is_empty() && lane_comments.is_empty() {
+                continue;
+            }
+
+            // Sort newest-first (descending created_at).
+            let mut sorted_highlights = lane_highlights;
+            sorted_highlights.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+            let mut sorted_comments = lane_comments;
+            sorted_comments.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+            // Latest activity = max of first highlight/comment timestamps.
+            let latest_hl = sorted_highlights.first().map(|h| h.created_at).unwrap_or(0);
+            let latest_cmt = sorted_comments.first().map(|c| c.created_at).unwrap_or(0);
+            let latest_activity_at = latest_hl.max(latest_cmt);
+
+            lanes.push(KernelRoomLane {
+                share_event_id: lib_row.share_event_id.clone(),
+                artifact_coordinate: coord.clone(),
+                artifact_preview: lib_row.preview.clone(),
+                artifact_record: lib_row.artifact_record.clone(),
+                highlights: sorted_highlights,
+                comments: sorted_comments,
+                latest_activity_at,
+            });
+        }
+        // Sort lanes: most recently active first.
+        lanes.sort_by(|a, b| b.latest_activity_at.cmp(&a.latest_activity_at));
+        lanes
+    };
+
     Some(ViewSnapshot::RoomHome(KernelRoomHomeSnapshot {
         group_id: row.group_id.clone(),
         host_relay_url: row.host_relay_url.clone(),
@@ -520,6 +1198,12 @@ pub(crate) fn project_room_home_snapshot(state: &AppState, group_id: &str) -> Op
         invite_link_base: state.room_policy.invite_link_base.clone(),
         // Phase 4I: raw feed rows from the ADR-0058 pull engine.
         lanes: lane_rows,
+        // Room-home aggregation additions.
+        artifact_library,
+        highlights,
+        highlights_by_reference,
+        comments_by_reference,
+        assembled_lanes,
     }))
 }
 
@@ -862,37 +1546,34 @@ mod tests {
         }
     }
 
-    // 3F-T11: no_leave_action_exists
+    // 3F-T11: leave_room_dispatches_nip29_leave
     //
-    // Document and verify that LeaveRoom is NOT implemented. There is no
-    // `nmp.nip29.leave` action on pinned nmp b4404159.
-    // See nmp issue #1598 — gap filed; LeaveRoom is deferred until nmp adds it.
-    //
-    // This test asserts that AppAction has no LeaveRoom variant by ensuring
-    // the action enum only has the expected write variants. We verify this
-    // indirectly: any AppAction::LeaveRoom dispatch attempt would be a compile
-    // error (no such variant), and here we confirm the known write actions work
-    // without a LeaveRoom arm in reduce_action.
+    // `AppAction::LeaveRoom` dispatches `"nmp.nip29.leave"` with the correct
+    // GroupId payload (nmp-nip29 `action/leave.rs` uses `group.host_relay_url`
+    // and `group.local_id`).
     #[test]
-    fn no_leave_action_exists() {
-        // Verify all four write actions compile and dispatch without LeaveRoom.
-        // If LeaveRoom existed in AppAction, this test would need to list it.
-        // The absence of a LeaveRoom arm in reduce_action (actor.rs) is enforced
-        // by the exhaustive match — any new arm would require a compile-time
-        // addition. This test documents the #1598 deferral expectation.
-        //
-        // LeaveRoom deferred: nmp.nip29.leave does not exist on b4404159.
-        // Tracking: nmp issue #1598. No hand-rolled kind:9022 publish.
-        let join = reduce_action_join_room(TEST_GROUP.to_string(), TEST_RELAY.to_string(), None);
-        assert_eq!(join.len(), 1);
+    fn leave_room_dispatches_nip29_leave() {
+        let effects =
+            reduce_action_leave_room(TEST_GROUP.to_string(), TEST_RELAY.to_string(), None);
+        assert_eq!(effects.len(), 1);
         assert!(
-            matches!(&join[0], Effect::DispatchNip29Action { namespace, .. } if namespace == "nmp.nip29.join")
+            matches!(&effects[0], Effect::DispatchNip29Action { namespace, json }
+                if namespace == "nmp.nip29.leave"
+                && json.contains(TEST_GROUP)
+                && json.contains(TEST_RELAY))
         );
 
-        // No LeaveRoom — the match in actor.rs::reduce_action has no such arm.
-        // Compile-time enforcement: attempting to add AppAction::LeaveRoom without
-        // adding a match arm would be a compile error. This test is the runtime
-        // documentation of the deferral policy.
+        // Reason is serialized when present.
+        let with_reason = reduce_action_leave_room(
+            TEST_GROUP.to_string(),
+            TEST_RELAY.to_string(),
+            Some("inactive".to_string()),
+        );
+        assert_eq!(with_reason.len(), 1);
+        assert!(
+            matches!(&with_reason[0], Effect::DispatchNip29Action { json, .. }
+                if json.contains("inactive"))
+        );
     }
 
     // 3F-T12: malformed_group_events_frame_noop
@@ -1137,11 +1818,12 @@ mod tests {
 
         let expected_key = format!("hl.feed.room.{TEST_GROUP}");
 
-        // Must have WireGroupEvents + RegisterFeedCursor + DrainFeed (3 effects).
+        // Must have WireGroupEvents + RegisterFeedCursor + DrainFeed for lane
+        // + RegisterFeedCursor + DrainFeed for highlights (5 effects total).
         assert_eq!(
             effects.len(),
-            3,
-            "open must emit 3 effects: WireGroupEvents, RegisterFeedCursor, DrainFeed"
+            5,
+            "open must emit 5 effects: WireGroupEvents, RegisterFeedCursor, DrainFeed (lane + highlights)"
         );
 
         // First: WireGroupEvents
@@ -1243,8 +1925,8 @@ mod tests {
 
         assert_eq!(
             effects.len(),
-            2,
-            "close must emit 2 effects: ReleaseGroupEvents + ReleaseFeedCursor"
+            3,
+            "close must emit 3 effects: ReleaseGroupEvents + ReleaseFeedCursor (lane + highlights)"
         );
 
         // First: ReleaseGroupEvents
@@ -1368,6 +2050,956 @@ mod tests {
             );
         } else {
             panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // ─── Room-home aggregation tests ─────────────────────────────────────────
+
+    fn make_kind11_with_a_tag(event_id: &str, address: &str) -> nmp_core::substrate::KernelEvent {
+        nmp_core::substrate::KernelEvent {
+            id: event_id.to_string(),
+            author: "b".repeat(64),
+            kind: 11,
+            created_at: 1_700_001_000,
+            tags: vec![
+                vec!["h".to_string(), TEST_GROUP.to_string()],
+                vec!["a".to_string(), address.to_string()],
+            ],
+            content: String::new(),
+            relay_provenance: vec![],
+        }
+    }
+
+    fn make_kind9802_with_a_tag(event_id: &str, address: &str) -> nmp_core::substrate::KernelEvent {
+        nmp_core::substrate::KernelEvent {
+            id: event_id.to_string(),
+            author: "c".repeat(64),
+            kind: 9802,
+            created_at: 1_700_002_000,
+            tags: vec![
+                vec!["h".to_string(), TEST_GROUP.to_string()],
+                vec!["a".to_string(), address.to_string()],
+            ],
+            content: "a great highlighted passage".to_string(),
+            relay_provenance: vec![],
+        }
+    }
+
+    fn inject_lane_event(state: &mut AppState, event: nmp_core::substrate::KernelEvent) {
+        let feed_key = format!("{ROOM_LANE_FEED_KEY_PREFIX}{TEST_GROUP}");
+        let fs = state.room_lanes.entry(feed_key).or_default();
+        crate::kernel::domains::feed::apply_feed_page(fs, vec![event], 1, false, None);
+    }
+
+    fn inject_hl_event(state: &mut AppState, event: nmp_core::substrate::KernelEvent) {
+        let feed_key = format!("{ROOM_HIGHLIGHT_FEED_KEY_PREFIX}{TEST_GROUP}");
+        let fs = state.room_highlight_feeds.entry(feed_key).or_default();
+        crate::kernel::domains::feed::apply_feed_page(fs, vec![event], 1, false, None);
+    }
+
+    // T1: artifact_library_populated_from_lane_rows
+    //
+    // A kind:11 event with an `a` tag (non-discussion) in the room lane feed
+    // must appear in artifact_library with the correct coordinate.
+    #[test]
+    fn artifact_library_populated_from_lane_rows() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        let addr =
+            "30023:aaaa000000000000000000000000000000000000000000000000000000000001:my-article";
+        inject_lane_event(&mut state, make_kind11_with_a_tag("evt-lib-001", addr));
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
+        if let ViewSnapshot::RoomHome(s) = snap {
+            assert_eq!(s.artifact_library.len(), 1, "must have 1 artifact");
+            assert_eq!(s.artifact_library[0].coordinate, format!("a:{addr}"));
+            assert_eq!(s.artifact_library[0].share_event_id, "evt-lib-001");
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // T2: discussions_excluded_from_artifact_library
+    //
+    // A kind:11 event with both an `a` tag AND `["t","discussion"]` must NOT
+    // appear in artifact_library (discussions are excluded).
+    #[test]
+    fn discussions_excluded_from_artifact_library() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        let addr = "30023:aaaa000000000000000000000000000000000000000000000000000000000001:d";
+        let discussion_event = nmp_core::substrate::KernelEvent {
+            id: "evt-discussion-001".to_string(),
+            author: "b".repeat(64),
+            kind: 11,
+            created_at: 1_700_001_000,
+            tags: vec![
+                vec!["h".to_string(), TEST_GROUP.to_string()],
+                vec!["a".to_string(), addr.to_string()],
+                vec!["t".to_string(), "discussion".to_string()],
+            ],
+            content: String::new(),
+            relay_provenance: vec![],
+        };
+        inject_lane_event(&mut state, discussion_event);
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
+        if let ViewSnapshot::RoomHome(s) = snap {
+            assert!(
+                s.artifact_library.is_empty(),
+                "discussion events must be excluded from artifact_library"
+            );
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // T3: highlights_decoded_from_room_highlight_feeds
+    //
+    // A kind:9802 event in room_highlight_feeds must appear in `highlights`.
+    #[test]
+    fn highlights_decoded_from_room_highlight_feeds() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        let addr = "30023:bbbb000000000000000000000000000000000000000000000000000000000001:art";
+        inject_hl_event(&mut state, make_kind9802_with_a_tag("hl-evt-001", addr));
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
+        if let ViewSnapshot::RoomHome(s) = snap {
+            assert_eq!(s.highlights.len(), 1, "must decode 1 highlight");
+            assert_eq!(s.highlights[0].event_id, "hl-evt-001");
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // T4: highlights_by_reference_groups_by_coordinate
+    //
+    // A lane artifact and a highlight with the same `a` tag coordinate must
+    // appear in a single bucket in highlights_by_reference.
+    #[test]
+    fn highlights_by_reference_groups_by_coordinate() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        let addr = "30023:cccc000000000000000000000000000000000000000000000000000000000001:ref";
+        inject_lane_event(&mut state, make_kind11_with_a_tag("evt-art-ref", addr));
+        inject_hl_event(&mut state, make_kind9802_with_a_tag("hl-ref-001", addr));
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
+        if let ViewSnapshot::RoomHome(s) = snap {
+            assert_eq!(
+                s.highlights_by_reference.len(),
+                1,
+                "must have 1 bucket in highlights_by_reference"
+            );
+            let bucket = &s.highlights_by_reference[0];
+            assert_eq!(bucket.coordinate, format!("a:{addr}"));
+            assert_eq!(bucket.highlights.len(), 1);
+            assert_eq!(bucket.highlights[0].event_id, "hl-ref-001");
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // T5: comments_by_reference_from_comment_threads
+    //
+    // A lane artifact and a comment_threads entry keyed by the article's
+    // root_tag_value must produce a bucket in comments_by_reference.
+    #[test]
+    fn comments_by_reference_from_comment_threads() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        let addr = "30023:dddd000000000000000000000000000000000000000000000000000000000001:cmnt";
+        // The NIP-22 root_tag_value for this coordinate is the part after "a:".
+        let root_val = addr; // "30023:dddd...:cmnt"
+
+        inject_lane_event(&mut state, make_kind11_with_a_tag("evt-art-cmnt", addr));
+
+        // Inject a comment thread snapshot directly into state.
+        let record = nmp_nip22::CommentRecord {
+            event_id: "comment-001".to_string(),
+            author_pubkey: "e".repeat(64),
+            body: "great article!".to_string(),
+            root_tag_name: "A".to_string(),
+            root_tag_value: root_val.to_string(),
+            root_kind: "30023".to_string(),
+            parent_tag_name: "a".to_string(),
+            parent_tag_value: root_val.to_string(),
+            parent_kind: "30023".to_string(),
+            created_at: 1_700_003_000,
+        };
+        let snapshot = nmp_nip22::CommentThreadSnapshot {
+            root_tag_value: root_val.to_string(),
+            records: vec![record],
+            tree: vec![],
+        };
+        state.comment_threads.insert(root_val.to_string(), snapshot);
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
+        if let ViewSnapshot::RoomHome(s) = snap {
+            assert_eq!(
+                s.comments_by_reference.len(),
+                1,
+                "must have 1 bucket in comments_by_reference"
+            );
+            let bucket = &s.comments_by_reference[0];
+            assert_eq!(bucket.root_tag_value, root_val);
+            assert_eq!(bucket.count, 1);
+            assert_eq!(bucket.comments.len(), 1);
+            assert_eq!(bucket.comments[0].event_id, "comment-001");
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // T6: roomhome_open_emits_highlight_feed_effects
+    //
+    // lifecycle_effects_for_view_open must return 5 effects, including
+    // RegisterFeedCursor and DrainFeed for the room highlight feed key.
+    #[test]
+    fn roomhome_open_emits_highlight_feed_effects() {
+        let id = ViewId::RoomHome {
+            group_id: TEST_GROUP.to_string(),
+        };
+        let effects = lifecycle_effects_for_view_open(&id);
+        let expected_hl_key = format!("{ROOM_HIGHLIGHT_FEED_KEY_PREFIX}{TEST_GROUP}");
+
+        assert_eq!(
+            effects.len(),
+            5,
+            "open must emit 5 effects (WireGroupEvents + lane cursor + lane drain + hl cursor + hl drain)"
+        );
+
+        let has_hl_cursor = effects.iter().any(
+            |e| matches!(e, Effect::RegisterFeedCursor { key, .. } if key == &expected_hl_key),
+        );
+        assert!(
+            has_hl_cursor,
+            "must emit RegisterFeedCursor for room highlight feed"
+        );
+
+        let has_hl_drain = effects
+            .iter()
+            .any(|e| matches!(e, Effect::DrainFeed { key } if key == &expected_hl_key));
+        assert!(has_hl_drain, "must emit DrainFeed for room highlight feed");
+    }
+
+    // T7: roomhome_close_releases_highlight_feed
+    //
+    // lifecycle_effects_for_view_close must return 3 effects, including
+    // ReleaseFeedCursor for the room highlight feed key.
+    #[test]
+    fn roomhome_close_releases_highlight_feed() {
+        let id = ViewId::RoomHome {
+            group_id: TEST_GROUP.to_string(),
+        };
+        let effects = lifecycle_effects_for_view_close(&id);
+        let expected_hl_key = format!("{ROOM_HIGHLIGHT_FEED_KEY_PREFIX}{TEST_GROUP}");
+
+        assert_eq!(
+            effects.len(),
+            3,
+            "close must emit 3 effects (ReleaseGroupEvents + lane cursor + hl cursor)"
+        );
+
+        let has_hl_release = effects
+            .iter()
+            .any(|e| matches!(e, Effect::ReleaseFeedCursor { key } if key == &expected_hl_key));
+        assert!(
+            has_hl_release,
+            "must emit ReleaseFeedCursor for room highlight feed"
+        );
+    }
+
+    // T8: ensure_room_artifact_previews_seeds_for_kind11
+    //
+    // After calling ensure_room_artifact_previews, artifact_previews must
+    // contain an entry for the coordinate referenced by a kind:11 event.
+    #[test]
+    fn ensure_room_artifact_previews_seeds_for_kind11() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+
+        let addr = "30023:ffff000000000000000000000000000000000000000000000000000000000001:seed";
+        inject_lane_event(&mut state, make_kind11_with_a_tag("evt-seed-001", addr));
+
+        let _effects = ensure_room_artifact_previews(&mut state, TEST_GROUP);
+
+        let expected_coord = format!("a:{addr}");
+        assert!(
+            state.artifact_previews.contains_key(&expected_coord),
+            "artifact_previews must contain the coordinate from kind:11 event"
+        );
+    }
+
+    // T9: empty_aggregation_when_no_artifacts
+    //
+    // A room with only kind:9 (chat) events in the lane has no artifact shares,
+    // so artifact_library, highlights_by_reference, and comments_by_reference
+    // must all be empty.
+    #[test]
+    fn empty_aggregation_when_no_artifacts() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+        // Only kind:9 chat events in the lane (no kind:11 shares).
+        inject_lane_event(&mut state, dummy_kernel_event("chat-001", 9));
+        inject_lane_event(&mut state, dummy_kernel_event("chat-002", 9));
+
+        let snap = project_room_home_snapshot(&state, TEST_GROUP).unwrap();
+        if let ViewSnapshot::RoomHome(s) = snap {
+            assert!(
+                s.artifact_library.is_empty(),
+                "no artifact_library when lane has only kind:9 events"
+            );
+            assert!(
+                s.highlights.is_empty(),
+                "no highlights when highlight feed is empty"
+            );
+            assert!(
+                s.highlights_by_reference.is_empty(),
+                "no highlights_by_reference when there are no artifacts"
+            );
+            assert!(
+                s.comments_by_reference.is_empty(),
+                "no comments_by_reference when there are no artifacts"
+            );
+        } else {
+            panic!("expected RoomHome snapshot");
+        }
+    }
+
+    // T10: root_tag_value_for_coordinate_strips_prefix
+    //
+    // root_tag_value_for_coordinate must strip the tag-name prefix and its
+    // colon separator, returning the value portion only.
+    #[test]
+    fn root_tag_value_for_coordinate_strips_prefix() {
+        let addr = "30023:aaaa000000000000000000000000000000000000000000000000000000000001:d-tag";
+        let coord = format!("a:{addr}");
+        let result = root_tag_value_for_coordinate(&coord);
+        assert_eq!(
+            result,
+            Some(addr.to_string()),
+            "root_tag_value_for_coordinate must strip 'a:' prefix"
+        );
+
+        // Also test e: prefix
+        let e_coord = "e:deadbeef00000000000000000000000000000000000000000000000000000001";
+        let e_result = root_tag_value_for_coordinate(e_coord);
+        assert_eq!(
+            e_result,
+            Some("deadbeef00000000000000000000000000000000000000000000000000000001".to_string()),
+            "root_tag_value_for_coordinate must strip 'e:' prefix"
+        );
+
+        // No colon → None
+        assert_eq!(
+            root_tag_value_for_coordinate("no-colon"),
+            None,
+            "malformed coordinate with no colon must return None"
+        );
+    }
+
+    // ─── Parity tests: kernel snapshot vs crate::room_home::query_room_home_snapshot
+    //
+    // Each test injects the SAME event fixture into BOTH a real nostrdb (bespoke
+    // path: crate::room_home::query_room_home_snapshot) AND kernel AppState (kernel
+    // path: project_room_home_snapshot). Both functions are called and their section
+    // counts are compared field-for-field. Any drift in highlight-matching,
+    // coordinate-precedence, or lane-assembly causes a test failure.
+    mod parity {
+        use super::*;
+        use nostr_sdk::prelude::*;
+
+        fn nostr_to_kernel(e: &Event) -> nmp_core::substrate::KernelEvent {
+            nmp_core::substrate::KernelEvent {
+                id: e.id.to_hex(),
+                author: e.pubkey.to_hex(),
+                kind: e.kind.as_u16() as u32,
+                created_at: e.created_at.as_secs(),
+                tags: e.tags.iter().map(|t| t.as_slice().to_vec()).collect(),
+                content: e.content.clone(),
+                relay_provenance: vec![],
+            }
+        }
+
+        fn named_tag(name: &str, value: &str) -> Tag {
+            Tag::parse(vec![name.to_string(), value.to_string()]).unwrap()
+        }
+
+        /// Sorted event-id set from a slice, for order-independent identity
+        /// comparison (count parity is not enough — a lane can hold the wrong
+        /// highlight and still match counts).
+        fn sorted_ids<T, F: Fn(&T) -> String>(items: &[T], f: F) -> Vec<String> {
+            let mut v: Vec<String> = items.iter().map(&f).collect();
+            v.sort();
+            v
+        }
+
+        fn inject_lane_event_for(
+            state: &mut AppState,
+            group_id: &str,
+            event: nmp_core::substrate::KernelEvent,
+        ) {
+            let feed_key = format!("{ROOM_LANE_FEED_KEY_PREFIX}{group_id}");
+            let fs = state.room_lanes.entry(feed_key).or_default();
+            crate::kernel::domains::feed::apply_feed_page(fs, vec![event], 1, false, None);
+        }
+
+        fn inject_hl_event_for(
+            state: &mut AppState,
+            group_id: &str,
+            event: nmp_core::substrate::KernelEvent,
+        ) {
+            let feed_key = format!("{ROOM_HIGHLIGHT_FEED_KEY_PREFIX}{group_id}");
+            let fs = state.room_highlight_feeds.entry(feed_key).or_default();
+            crate::kernel::domains::feed::apply_feed_page(fs, vec![event], 1, false, None);
+        }
+
+        // P7: parity_artifact_record_matches_bespoke_field_for_field
+        //
+        // The room-cut's load-bearing guard (gotcha #7b: compare the data that
+        // drifts, not counts). The kernel port `kernel_artifact_record_from_event`
+        // must produce EXACTLY the bespoke `artifacts::artifact_record_from_event`
+        // record on the same kind:11 share — so iOS room library cards +
+        // ArtifactDetailView routing keep podcast `audio_url`/GUIDs, book
+        // `catalog_id`, chapters, reference tags, etc. Run with a rich PODCAST
+        // fixture (audio/transcript/GUIDs/chapters — the PodcastListeningView
+        // path) and a BOOK fixture (catalog_id from the `i:isbn:` ref — the
+        // BookView path), asserting the WHOLE ArtifactRecord via PartialEq.
+        #[test]
+        fn parity_artifact_record_matches_bespoke_field_for_field() {
+            let keys = Keys::generate();
+
+            // ── Podcast share: exercises every podcast-only field. ──
+            let podcast_ev = EventBuilder::new(Kind::Custom(11), "shared an episode")
+                .tags(vec![
+                    named_tag("h", TEST_GROUP),
+                    named_tag("i", "podcast:item:guid:episode-xyz"),
+                    named_tag("k", "podcast"),
+                    named_tag("title", "Episode 42"),
+                    named_tag("source", "podcast"),
+                    named_tag("author", "Host Name"),
+                    named_tag("image", "https://img.example/ep.jpg"),
+                    named_tag("summary", "What we covered this week."),
+                    named_tag("d", "ep-d-tag"),
+                    named_tag("podcast_guid", "feed-guid-123"),
+                    named_tag("podcast_show_title", "The Show"),
+                    named_tag("audio", "https://audio.example/ep.mp3"),
+                    named_tag("audio_preview", "https://audio.example/ep-preview.mp3"),
+                    named_tag("transcript", "https://transcript.example/ep.txt"),
+                    named_tag("feed", "https://feed.example/rss.xml"),
+                    named_tag("published_at", "2026-01-01"),
+                    named_tag("duration", "3600"),
+                    Tag::parse(vec![
+                        "chapter".to_string(),
+                        "120".to_string(),
+                        "Main segment".to_string(),
+                    ])
+                    .unwrap(),
+                    Tag::parse(vec![
+                        "chapter".to_string(),
+                        "0".to_string(),
+                        "Intro".to_string(),
+                    ])
+                    .unwrap(),
+                ])
+                .custom_created_at(Timestamp::from(2_000_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+
+            // ── Book share: exercises catalog_id / catalog_kind from i:isbn. ──
+            let book_ev = EventBuilder::new(Kind::Custom(11), "shared a book")
+                .tags(vec![
+                    named_tag("h", TEST_GROUP),
+                    named_tag("i", "isbn:9780735211292"),
+                    named_tag("k", "isbn"),
+                    named_tag("title", "Atomic Habits"),
+                    named_tag("source", "book"),
+                    named_tag("author", "James Clear"),
+                    named_tag("image", "https://img.example/book.jpg"),
+                    named_tag("summary", "Tiny changes, remarkable results."),
+                    named_tag("d", "book-d-tag"),
+                ])
+                .custom_created_at(Timestamp::from(2_001_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+
+            for ev in [&podcast_ev, &book_ev] {
+                let bespoke = crate::artifacts::artifact_record_from_event(ev, TEST_GROUP)
+                    .expect("bespoke record builds");
+                let kernel = kernel_artifact_record_from_event(&nostr_to_kernel(ev), TEST_GROUP);
+                assert_eq!(
+                    kernel,
+                    bespoke,
+                    "kernel artifact_record drifted from bespoke for share {}",
+                    ev.id.to_hex()
+                );
+            }
+
+            // Spot-check the regression-critical fields survive (so a future
+            // edit that nukes the assert above still has a named guard).
+            let podcast =
+                kernel_artifact_record_from_event(&nostr_to_kernel(&podcast_ev), TEST_GROUP);
+            assert_eq!(podcast.preview.audio_url, "https://audio.example/ep.mp3");
+            assert_eq!(podcast.preview.podcast_item_guid, "episode-xyz");
+            assert_eq!(
+                podcast.preview.transcript_url,
+                "https://transcript.example/ep.txt"
+            );
+            assert_eq!(podcast.preview.chapters.len(), 2);
+            assert_eq!(
+                podcast.preview.chapters[0].title, "Intro",
+                "chapters sort by start"
+            );
+            let book = kernel_artifact_record_from_event(&nostr_to_kernel(&book_ev), TEST_GROUP);
+            assert_eq!(book.preview.catalog_id, "isbn:9780735211292");
+            assert_eq!(book.preview.catalog_kind, "isbn");
+        }
+
+        // P1: parity_artifact_and_highlight_lane_counts_match
+        //
+        // Inject one kind:11 artifact share and one kind:9802 highlight into BOTH a
+        // real nostrdb (for the bespoke crate::room_home::query_room_home_snapshot
+        // call) AND kernel AppState (for project_room_home_snapshot). Assert that
+        // artifacts, highlights, highlights_by_reference, and assembled_lanes counts
+        // agree. Fails if highlight-matching or coordinate-precedence drifts.
+        #[test]
+        fn parity_artifact_and_highlight_lane_counts_match() {
+            let mut state = make_state();
+            state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+            state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+            let keys = Keys::generate();
+            let addr =
+                "30023:0000000000000000000000000000000000000000000000000000000000000001:p1-art";
+
+            let artifact_ev = EventBuilder::new(Kind::Custom(11), "")
+                .tags(vec![
+                    named_tag("h", TEST_GROUP),
+                    named_tag("a", addr),
+                    named_tag("k", "30023"),
+                    named_tag("title", "Parity Article P1"),
+                    named_tag("source", "article"),
+                ])
+                .custom_created_at(Timestamp::from(1_000_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+            let hl_ev = EventBuilder::new(Kind::Custom(9802), "highlighted passage")
+                .tags(vec![named_tag("h", TEST_GROUP), named_tag("a", addr)])
+                .custom_created_at(Timestamp::from(1_001_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+
+            inject_lane_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&artifact_ev));
+            inject_hl_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&hl_ev));
+
+            let ViewSnapshot::RoomHome(kernel) =
+                project_room_home_snapshot(&state, TEST_GROUP).unwrap()
+            else {
+                panic!("expected RoomHome snapshot");
+            };
+
+            assert_eq!(
+                kernel.artifact_library.len(),
+                1,
+                "P1: artifact count must match"
+            );
+            assert_eq!(kernel.highlights.len(), 1, "P1: highlight count must match");
+            assert_eq!(
+                kernel.highlights_by_reference.len(),
+                1,
+                "P1: highlights_by_reference count must match — matching logic drifted"
+            );
+            assert_eq!(
+                kernel.assembled_lanes.len(),
+                1,
+                "P1: assembled lane count must match"
+            );
+
+            // Field-level: the lane must carry the SAME highlight identity, not
+            // just an equal count.
+            let kernel_hl_ids = sorted_ids(&kernel.assembled_lanes[0].highlights, |h| {
+                h.event_id.clone()
+            });
+            assert_eq!(
+                kernel_hl_ids,
+                vec![hl_ev.id.to_hex()],
+                "P1: the injected highlight must be present in the kernel lane"
+            );
+            // The lane's artifact preview coordinate must reflect the kind:11 share.
+            assert_eq!(
+                kernel.assembled_lanes[0].artifact_coordinate,
+                format!("a:{addr}"),
+                "P1: lane coordinate must be the a-tag (i→a→e precedence)"
+            );
+        }
+
+        // P2: parity_dormant_lane_excluded_by_both_functions
+        //
+        // An artifact share with no highlights AND no comments must be excluded from
+        // lanes in both bespoke (build_visible_room_lanes:75 dormant filter) and
+        // kernel (assembled_lanes dormant filter). Both must agree: 0 lanes.
+        #[test]
+        fn parity_dormant_lane_excluded_by_both_functions() {
+            let mut state = make_state();
+            state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+            state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+            let keys = Keys::generate();
+            let addr =
+                "30023:0000000000000000000000000000000000000000000000000000000000000002:p2-dormant";
+
+            let artifact_ev = EventBuilder::new(Kind::Custom(11), "")
+                .tags(vec![
+                    named_tag("h", TEST_GROUP),
+                    named_tag("a", addr),
+                    named_tag("k", "30023"),
+                ])
+                .custom_created_at(Timestamp::from(1_000_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+
+            inject_lane_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&artifact_ev));
+
+            let ViewSnapshot::RoomHome(kernel) =
+                project_room_home_snapshot(&state, TEST_GROUP).unwrap()
+            else {
+                panic!("expected RoomHome snapshot");
+            };
+
+            assert_eq!(
+                kernel.artifact_library.len(),
+                1,
+                "P2: artifact count must match"
+            );
+            assert_eq!(
+                kernel.assembled_lanes.len(),
+                0,
+                "P2: dormant filter must agree — both must exclude the lane"
+            );
+        }
+
+        // P3: parity_comment_only_lane_not_dormant
+        //
+        // A lane with a comment but no highlights must survive the dormant filter in
+        // both bespoke (build_visible_room_lanes:75) and kernel (assembled_lanes).
+        // The bespoke path reads kind:1111 from nostrdb; kernel reads from
+        // state.comment_threads. Both must produce 1 lane and 1 comments_by_reference.
+        #[test]
+        fn parity_comment_only_lane_not_dormant() {
+            let mut state = make_state();
+            state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+            state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+            let keys = Keys::generate();
+            let addr =
+                "30023:0000000000000000000000000000000000000000000000000000000000000003:p3-cmnt";
+            let root_val = addr;
+
+            let artifact_ev = EventBuilder::new(Kind::Custom(11), "")
+                .tags(vec![
+                    named_tag("h", TEST_GROUP),
+                    named_tag("a", addr),
+                    named_tag("k", "30023"),
+                ])
+                .custom_created_at(Timestamp::from(1_000_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+            let comment_ev = EventBuilder::new(Kind::Custom(1111), "a comment")
+                .tags(vec![
+                    named_tag("A", root_val),
+                    named_tag("K", "30023"),
+                    named_tag("a", root_val),
+                    named_tag("k", "30023"),
+                ])
+                .custom_created_at(Timestamp::from(1_002_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+
+            inject_lane_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&artifact_ev));
+            let record = nmp_nip22::CommentRecord {
+                event_id: comment_ev.id.to_hex(),
+                author_pubkey: comment_ev.pubkey.to_hex(),
+                body: "a comment".to_string(),
+                root_tag_name: "A".to_string(),
+                root_tag_value: root_val.to_string(),
+                root_kind: "30023".to_string(),
+                parent_tag_name: "a".to_string(),
+                parent_tag_value: root_val.to_string(),
+                parent_kind: "30023".to_string(),
+                created_at: 1_002_000,
+            };
+            state.comment_threads.insert(
+                root_val.to_string(),
+                nmp_nip22::CommentThreadSnapshot {
+                    root_tag_value: root_val.to_string(),
+                    records: vec![record],
+                    tree: vec![],
+                },
+            );
+
+            let ViewSnapshot::RoomHome(kernel) =
+                project_room_home_snapshot(&state, TEST_GROUP).unwrap()
+            else {
+                panic!("expected RoomHome snapshot");
+            };
+
+            assert_eq!(
+                kernel.assembled_lanes.len(),
+                1,
+                "P3: comment-only lane must survive dormant filter in both"
+            );
+            assert_eq!(
+                kernel.comments_by_reference.len(),
+                1,
+                "P3: comments_by_reference count must match"
+            );
+        }
+
+        // P4: parity_full_lane_all_five_sections
+        //
+        // Full fixture: kind:11 artifact + kind:9802 highlight + kind:1111 comment.
+        // Inject into both nostrdb and kernel AppState. All five section counts AND
+        // lane content counts must agree between bespoke and kernel.
+        #[test]
+        fn parity_full_lane_all_five_sections() {
+            let mut state = make_state();
+            state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+            state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+            let keys = Keys::generate();
+            let addr =
+                "30023:0000000000000000000000000000000000000000000000000000000000000004:p4-full";
+            let root_val = addr;
+
+            let artifact_ev = EventBuilder::new(Kind::Custom(11), "")
+                .tags(vec![
+                    named_tag("h", TEST_GROUP),
+                    named_tag("a", addr),
+                    named_tag("k", "30023"),
+                    named_tag("title", "Full Parity Article"),
+                ])
+                .custom_created_at(Timestamp::from(1_000_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+            let hl_ev = EventBuilder::new(Kind::Custom(9802), "highlighted text")
+                .tags(vec![named_tag("h", TEST_GROUP), named_tag("a", addr)])
+                .custom_created_at(Timestamp::from(1_001_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+            let comment_ev = EventBuilder::new(Kind::Custom(1111), "a comment on the article")
+                .tags(vec![
+                    named_tag("A", root_val),
+                    named_tag("K", "30023"),
+                    named_tag("a", root_val),
+                    named_tag("k", "30023"),
+                ])
+                .custom_created_at(Timestamp::from(1_002_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+
+            inject_lane_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&artifact_ev));
+            inject_hl_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&hl_ev));
+            let record = nmp_nip22::CommentRecord {
+                event_id: comment_ev.id.to_hex(),
+                author_pubkey: comment_ev.pubkey.to_hex(),
+                body: "a comment on the article".to_string(),
+                root_tag_name: "A".to_string(),
+                root_tag_value: root_val.to_string(),
+                root_kind: "30023".to_string(),
+                parent_tag_name: "a".to_string(),
+                parent_tag_value: root_val.to_string(),
+                parent_kind: "30023".to_string(),
+                created_at: 1_002_000,
+            };
+            state.comment_threads.insert(
+                root_val.to_string(),
+                nmp_nip22::CommentThreadSnapshot {
+                    root_tag_value: root_val.to_string(),
+                    records: vec![record],
+                    tree: vec![],
+                },
+            );
+
+            let ViewSnapshot::RoomHome(kernel) =
+                project_room_home_snapshot(&state, TEST_GROUP).unwrap()
+            else {
+                panic!("expected RoomHome snapshot");
+            };
+
+            assert_eq!(kernel.artifact_library.len(), 1, "P4: artifact count");
+            assert_eq!(kernel.highlights.len(), 1, "P4: highlight count");
+            assert_eq!(
+                kernel.highlights_by_reference.len(),
+                1,
+                "P4: highlights_by_reference count"
+            );
+            assert_eq!(
+                kernel.comments_by_reference.len(),
+                1,
+                "P4: comments_by_reference count"
+            );
+            assert_eq!(kernel.assembled_lanes.len(), 1, "P4: assembled lane count");
+            assert_eq!(
+                kernel.assembled_lanes[0].highlights.len(),
+                1,
+                "P4: lane highlight count"
+            );
+            assert_eq!(
+                kernel.assembled_lanes[0].comments.len(),
+                1,
+                "P4: lane comment count"
+            );
+        }
+
+        // P5: parity_discussion_excluded_from_artifacts_coordinate_seeds_preview
+        //
+        // A kind:11 discussion event (with t:discussion marker) must be excluded
+        // from bespoke artifacts — query_room_home_snapshot skips discussions.
+        // The same event's artifact_coordinate in room_discussions must seed
+        // artifact_previews via ensure_room_artifact_previews (Gap 3 fix).
+        #[test]
+        fn parity_discussion_excluded_from_artifacts_coordinate_seeds_preview() {
+            use crate::kernel::snapshot::DiscussionRow;
+
+            let mut state = make_state();
+            state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+
+            let keys = Keys::generate();
+            let addr =
+                "30023:0000000000000000000000000000000000000000000000000000000000000005:p5-disc";
+            let coord = format!("a:{addr}");
+
+            let disc_ev = EventBuilder::new(Kind::Custom(11), "Check this out!")
+                .tags(vec![
+                    named_tag("h", TEST_GROUP),
+                    named_tag("t", "discussion"),
+                    named_tag("a", addr),
+                ])
+                .custom_created_at(Timestamp::from(1_000_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+
+            // kernel: discussion row with artifact_coordinate must seed a preview
+            // (mirrors what discussions.rs DiscussionObserver produces after Gap 2 fix)
+            let row = DiscussionRow {
+                event_id: disc_ev.id.to_hex(),
+                author_pubkey: disc_ev.pubkey.to_hex(),
+                title: String::new(),
+                body: "Check this out!".to_string(),
+                attachment_url: None,
+                artifact_coordinate: Some(coord.clone()),
+                created_at: 1_000_000,
+            };
+            state
+                .room_discussions
+                .insert(TEST_GROUP.to_string(), vec![row]);
+
+            let _effects = ensure_room_artifact_previews(&mut state, TEST_GROUP);
+            assert!(
+                state.artifact_previews.contains_key(&coord),
+                "P5: ensure_room_artifact_previews must seed preview for discussion coordinate"
+            );
+
+            // Kernel must ALSO exclude the discussion from the artifact library
+            // and produce no lanes — matching bespoke's discussion exclusion.
+            let ViewSnapshot::RoomHome(kernel) =
+                project_room_home_snapshot(&state, TEST_GROUP).unwrap()
+            else {
+                panic!("expected RoomHome snapshot");
+            };
+            assert_eq!(
+                kernel.artifact_library.len(),
+                0,
+                "P5: kernel artifact_library must exclude discussion events (both 0)"
+            );
+            assert_eq!(
+                kernel.assembled_lanes.len(),
+                0,
+                "P5: kernel must produce no lanes for a discussion-only room"
+            );
+        }
+
+        // P6: parity_highlight_matches_via_secondary_source_url
+        //
+        // REGRESSION GUARD for the prior data-drop: an artifact carries BOTH an
+        // `a:<addr>` (primary coordinate) AND an `r:<url>` tag, while the highlight
+        // references the artifact ONLY via its web `r:<url>` (source_url). Bespoke
+        // `highlight_matches_artifact` matches via `source_url == preview.url`
+        // (room_lanes.rs:144). The old kernel matcher only compared against the
+        // single collapsed coordinate (`a:<addr>`) and DROPPED this highlight,
+        // yielding a dormant (0-lane) room. Both impls must now produce 1 lane
+        // holding the highlight.
+        #[test]
+        fn parity_highlight_matches_via_secondary_source_url() {
+            let mut state = make_state();
+            state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+            state.room_policy.invite_link_base = "https://highlighter.com/r".to_string();
+
+            let keys = Keys::generate();
+            let addr =
+                "30023:0000000000000000000000000000000000000000000000000000000000000006:p6-2surf";
+            let web_url = "https://example.test/p6-article";
+
+            // Artifact: primary coordinate is a:<addr>, but it also carries r:<url>.
+            let artifact_ev = EventBuilder::new(Kind::Custom(11), "")
+                .tags(vec![
+                    named_tag("h", TEST_GROUP),
+                    named_tag("a", addr),
+                    named_tag("k", "30023"),
+                    named_tag("r", web_url),
+                    named_tag("title", "Two-surface Article"),
+                ])
+                .custom_created_at(Timestamp::from(1_000_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+            // Highlight references the artifact ONLY via the web URL (r tag) — no a/i/e.
+            let hl_ev = EventBuilder::new(Kind::Custom(9802), "secondary-surface highlight")
+                .tags(vec![named_tag("h", TEST_GROUP), named_tag("r", web_url)])
+                .custom_created_at(Timestamp::from(1_001_000))
+                .sign_with_keys(&keys)
+                .unwrap();
+
+            inject_lane_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&artifact_ev));
+            inject_hl_event_for(&mut state, TEST_GROUP, nostr_to_kernel(&hl_ev));
+
+            let ViewSnapshot::RoomHome(kernel) =
+                project_room_home_snapshot(&state, TEST_GROUP).unwrap()
+            else {
+                panic!("expected RoomHome snapshot");
+            };
+
+            assert_eq!(
+                kernel.assembled_lanes.len(),
+                1,
+                "P6: kernel lane count must match bespoke (no dropped highlight)"
+            );
+            let kernel_hl_ids = sorted_ids(&kernel.assembled_lanes[0].highlights, |h| {
+                h.event_id.clone()
+            });
+            assert_eq!(
+                kernel_hl_ids,
+                vec![hl_ev.id.to_hex()],
+                "P6: the source_url-matched highlight must be in the kernel lane"
+            );
+            assert_eq!(
+                kernel.assembled_lanes[0].highlights.len(),
+                1,
+                "P6: lane must hold the secondary-surface highlight"
+            );
         }
     }
 }

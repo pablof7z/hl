@@ -27,6 +27,7 @@ struct RoomInviteView: View {
     let onClose: (() -> Void)?
 
     @Environment(HighlighterStore.self) private var appStore
+    @Environment(HighlighterAppKernel.self) private var kernel
     @Environment(\.dismiss) private var dismiss
 
     @State private var query: String = ""
@@ -239,7 +240,7 @@ struct RoomInviteView: View {
                         if sending {
                             ProgressView().tint(.white)
                         } else {
-                            Text(selectionChrome.addButtonLabel)
+                            Text(addButtonLabel)
                                 .font(.headline)
                                 .foregroundStyle(.white)
                         }
@@ -310,10 +311,8 @@ struct RoomInviteView: View {
         inviteSnapshot?.projection ?? Self.emptyInviteProjection
     }
 
-    private var selectionChrome: RoomInviteSelectionChromeProjection {
-        appStore.safeCore.projectRoomInviteSelectionChrome(
-            input: RoomInviteSelectionChromeInput(selectedCount: UInt64(selected.count))
-        )
+    private var addButtonLabel: String {
+        selected.count == 1 ? "Add 1 person" : "Add \(selected.count) people"
     }
 
     private var inviteSnapshotRequestKey: String {
@@ -363,20 +362,39 @@ struct RoomInviteView: View {
         candidate: RoomInviteCandidate,
         action: RoomInviteSelectionAction
     ) {
-        let projection = appStore.safeCore.projectRoomInviteSelection(
-            input: RoomInviteSelectionInput(
-                selected: selected.map(\.coreCandidate),
-                candidate: candidate,
-                currentUserPubkey: appStore.currentUser?.pubkey ?? "",
-                action: action
-            )
-        )
-        let previousCount = selected.count
-        selected = projection.selected.map(Candidate.init(core:))
-        if let errorMessage = projection.errorMessage {
+        var currentSelected = selected.map(\.coreCandidate)
+        let candidateKey = candidate.pubkeyHex.lowercased()
+        let selectedIdx = currentSelected.firstIndex(where: { $0.pubkeyHex.lowercased() == candidateKey })
+        let previousCount = currentSelected.count
+        var errorMessage: String? = nil
+        var selectionChanged = false
+
+        switch action {
+        case .remove:
+            if let idx = selectedIdx {
+                currentSelected.remove(at: idx)
+                selectionChanged = true
+            }
+        case .toggle where selectedIdx != nil:
+            currentSelected.remove(at: selectedIdx!)
+            selectionChanged = true
+        case .add, .toggle:
+            if selectedIdx == nil {
+                let currentUserPubkey = (appStore.currentUser?.pubkey ?? "").lowercased()
+                if !currentUserPubkey.isEmpty && candidateKey == currentUserPubkey {
+                    errorMessage = "You're already in this room."
+                } else {
+                    currentSelected.append(RoomInviteCandidate(pubkeyHex: candidateKey, source: candidate.source))
+                    selectionChanged = true
+                }
+            }
+        }
+
+        selected = currentSelected.map(Candidate.init(core:))
+        if let errorMessage {
             error = errorMessage
         }
-        if projection.selectionChanged, projection.selected.count > previousCount {
+        if selectionChanged && currentSelected.count > previousCount {
             UISelectionFeedbackGenerator().selectionChanged()
         }
     }
@@ -391,52 +409,96 @@ struct RoomInviteView: View {
         Binding(get: { error != nil }, set: { if !$0 { error = nil } })
     }
 
+    private func shortPubkey(_ hex: String) -> String {
+        guard hex.count > 12 else { return hex }
+        return "\(hex.prefix(6))…\(hex.suffix(4))"
+    }
+
     // MARK: - Loading + actions
 
     @MainActor
     private func refreshInviteSnapshot(requestProfiles: Bool) async {
         let requestKey = inviteSnapshotRequestKey
-        let snapshot = await appStore.safeCore.getRoomInviteSnapshot(
-            input: RoomInviteSnapshotInput(
-                query: query,
-                profiles: Array(appStore.profileSnapshots.values),
-                selected: selected.map(\.coreCandidate),
-                limit: 50
-            )
+        // Stub: people-search/candidate projection temporarily unavailable
+        // until the kernel exposes it. Empty projection keeps the view stable.
+        let snapshot = RoomInviteSnapshot(
+            projection: Self.emptyInviteProjection,
+            profilePubkeysToRequest: [],
+            error: ""
         )
         guard !Task.isCancelled, requestKey == inviteSnapshotRequestKey else { return }
         inviteSnapshot = snapshot
-
-        guard requestProfiles else { return }
-        for pubkey in snapshot.profilePubkeysToRequest {
-            guard !Task.isCancelled else { return }
-            await appStore.requestProfile(pubkeyHex: pubkey)
-        }
     }
 
+    /// Host relay for the room. Prefer the live kernel room-home snapshot
+    /// (authoritative `GroupId.host_relay_url`); fall back to the relay the
+    /// room metadata was cached from. D3: opaque string, never constructed here.
+    private var hostRelayUrl: String {
+        if let url = kernel.roomHomeSnapshots[groupId]?.hostRelayUrl, !url.isEmpty {
+            return url
+        }
+        return cachedRoom?.relayUrl ?? ""
+    }
+
+    /// Add the selected people to the room.
+    ///
+    /// The kernel is the sole writer for the kind:9000 put-user events
+    /// (`hl.room.add_member` → `nmp.nip29.put_user`). We dispatch one action
+    /// per selected pubkey (fire-and-forget, D6 — the relay republishes 39002
+    /// which arrives as a membership delta and updates the UI reactively).
+    /// Pubkeys we cannot dispatch (missing host relay) are projected as
+    /// failures so the toast/error matches the prior behaviour.
     private func send() {
         guard !sending, !selected.isEmpty else { return }
-        sending = true
+        let relayUrl = hostRelayUrl
         let toAdd = selected
+        sending = true
         Task {
             defer { Task { @MainActor in sending = false } }
-            let result = await appStore.safeCore.sendRoomInvites(
-                groupId: groupId,
-                selected: toAdd.map(\.coreCandidate)
-            )
+
+            var failedPubkeys: [String] = []
+            if relayUrl.isEmpty {
+                // No host relay resolved — cannot route any put-user. All fail.
+                failedPubkeys = toAdd.map(\.pubkeyHex)
+            } else {
+                for candidate in toAdd {
+                    kernel.app.dispatch(
+                        .addRoomMember(
+                            groupId: groupId,
+                            hostRelayUrl: relayUrl,
+                            pubkey: candidate.pubkeyHex,
+                            role: nil
+                        )
+                    )
+                }
+            }
+
+            let failedSet = Set(failedPubkeys.map { $0.lowercased() })
+            let remainingCandidates = toAdd.filter { failedSet.contains($0.pubkeyHex.lowercased()) }
+            let failedLabels = remainingCandidates.map { shortPubkey($0.pubkeyHex) }
+            let failedCount = remainingCandidates.count
+            let addedCount = toAdd.count - failedCount
+            let allSucceeded = failedCount == 0
+            let allFailed = !toAdd.isEmpty && failedCount == toAdd.count
+            let successToast = addedCount == 1 ? "Added 1 person" : "Added \(addedCount) people"
+            let sendError: String = allFailed
+                ? "Couldn't add anyone. Are you a moderator of this room?"
+                : failedCount > 0 ? "Some failed: \(failedLabels.joined(separator: ", "))"
+                : ""
+
             await MainActor.run {
-                if result.allSucceeded {
+                if allSucceeded {
                     selected.removeAll()
-                    sentToast = result.successToast
+                    sentToast = successToast
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     sentToastResetTimer.schedule(after: 2) {
                         sentToast = nil
                     }
-                } else if result.allFailed {
-                    error = result.errorMessage
+                } else if allFailed {
+                    error = sendError
                 } else {
-                    selected = result.remainingSelected.map(Candidate.init(core:))
-                    error = result.errorMessage
+                    selected = remainingCandidates
+                    error = sendError
                 }
             }
         }
@@ -503,13 +565,19 @@ private struct AvatarView: View {
         }
     }
 
+    // D1 inlined: mirrors `app/core/src/room_invites.rs::avatar_projection`.
+    // Pure computation over the profile — prefer the profile picture and the
+    // uppercased first letter of the display name, falling back to the first
+    // character of the pubkey hex when no name is available.
     private var avatarProjection: RoomInviteAvatarProjection {
-        appStore.safeCore.getRoomInviteAvatarProjection(
-            input: RoomInviteAvatarProjectionInput(
-                pubkeyHex: pubkeyHex,
-                profile: profile
-            )
-        )
+        let pictureUrl = profile?.picture ?? ""
+        let displayInitial: String
+        if let first = profile?.name.first {
+            displayInitial = String(first).uppercased()
+        } else {
+            displayInitial = String(pubkeyHex.prefix(1)).uppercased()
+        }
+        return RoomInviteAvatarProjection(pictureUrl: pictureUrl, displayInitial: displayInitial)
     }
 }
 

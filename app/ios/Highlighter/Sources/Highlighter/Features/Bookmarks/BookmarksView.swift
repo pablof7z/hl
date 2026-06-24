@@ -3,6 +3,8 @@ import SwiftUI
 
 struct BookmarksView: View {
     @Environment(HighlighterStore.self) private var app
+    /// Phase 7: the kernel owns the Articles pane (bookmarked kind:30023).
+    @Environment(HighlighterAppKernel.self) private var kernel
     @Environment(\.dismiss) private var dismiss
     @State private var store = BookmarkStore()
     @State private var filter: BookmarkLibraryFilter = .articles
@@ -36,14 +38,13 @@ struct BookmarksView: View {
             }
         }
         .task {
-            guard let bridge = app.eventBridge else { return }
-            await store.start(
-                core: app.safeCore,
-                bridge: bridge
-            )
+            await store.start(kernel: kernel)
         }
         .onChange(of: app.bookmarkedArticleAddresses) {
             Task { await store.reload() }
+        }
+        .onChange(of: kernel.bookmarks) { _, _ in
+            store.applyKernelSnapshot()
         }
         .onDisappear { store.stop() }
     }
@@ -138,7 +139,7 @@ struct BookmarksView: View {
             unavailableState(projection)
         } else {
             LazyVStack(spacing: 0) {
-                ForEach(store.myArticles, id: \.eventId) { article in
+                ForEach(store.myArticles, id: \.address) { article in
                     NavigationLink(value: ArticleReaderTarget(article: article, seed: article)) {
                         BookmarkedArticleRow(article: article)
                             .padding(.horizontal, 16)
@@ -158,7 +159,7 @@ struct BookmarksView: View {
         } else {
             LazyVStack(spacing: 0) {
                 ForEach(store.myWebBookmarks, id: \.url) { bookmark in
-                    WebBookmarkRow(bookmark: bookmark)
+                    WebBookmarkRowView(bookmark: bookmark)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
                     Divider().padding(.leading, 16)
@@ -208,15 +209,63 @@ struct BookmarksView: View {
     }
 
     private var libraryProjection: BookmarkLibraryProjection {
-        app.safeCore.projectBookmarkLibrary(
-            input: BookmarkLibraryProjectionInput(
-                scope: store.scope,
-                selectedFilter: filter,
-                articleCount: UInt64(store.myArticles.count),
-                collectionCount: UInt64(store.myBookmarkSets.count + store.myCurationSets.count),
-                webBookmarkCount: UInt64(store.myWebBookmarks.count),
-                exploreCount: UInt64(store.followingCurationSets.count)
-            )
+        let selectedPane: BookmarkLibraryPane
+        switch store.scope {
+        case .mine:
+            switch filter {
+            case .articles:    selectedPane = .articles
+            case .collections: selectedPane = .collections
+            case .web:         selectedPane = .web
+            }
+        case .explore:
+            selectedPane = .explore
+        }
+
+        let itemCount: UInt64
+        switch selectedPane {
+        case .articles:    itemCount = UInt64(store.myArticles.count)
+        case .collections: itemCount = UInt64(store.myBookmarkSets.count + store.myCurationSets.count)
+        case .web:         itemCount = UInt64(store.myWebBookmarks.count)
+        case .explore:     itemCount = UInt64(store.followingCurationSets.count)
+        }
+
+        let emptyIcon: String
+        let emptyTitle: String
+        let emptyMessage: String
+        switch selectedPane {
+        case .articles:
+            emptyIcon    = "bookmark"
+            emptyTitle   = "No bookmarks yet"
+            emptyMessage = "Save articles from anywhere in Highlighter to find them here."
+        case .collections:
+            emptyIcon    = "rectangle.stack"
+            emptyTitle   = "No collections yet"
+            emptyMessage = "Create bookmark or curation sets to organise your saved content."
+        case .web:
+            emptyIcon    = "globe"
+            emptyTitle   = "No web bookmarks yet"
+            emptyMessage = "Web pages you bookmark via Nostr will appear here."
+        case .explore:
+            emptyIcon    = "rectangle.stack"
+            emptyTitle   = "Nothing to explore"
+            emptyMessage = "People you follow haven't created any curation sets yet."
+        }
+
+        return BookmarkLibraryProjection(
+            scopeOptions: [
+                BookmarkLibraryScopeOptionProjection(scope: .mine, label: "Mine"),
+                BookmarkLibraryScopeOptionProjection(scope: .explore, label: "Explore")
+            ],
+            filterChips: [
+                BookmarkLibraryFilterChipProjection(filter: .articles,    label: "Articles",    iconSystemName: "doc.text"),
+                BookmarkLibraryFilterChipProjection(filter: .collections, label: "Collections", iconSystemName: "rectangle.stack"),
+                BookmarkLibraryFilterChipProjection(filter: .web,         label: "Web",         iconSystemName: "globe")
+            ],
+            selectedPane: selectedPane,
+            isEmpty: itemCount == 0,
+            emptyIconSystemName: emptyIcon,
+            emptyTitle: emptyTitle,
+            emptyMessage: emptyMessage
         )
     }
 }
@@ -302,28 +351,43 @@ struct BookmarkedArticleRow: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: article.pubkey,
-                profile: app.profileSnapshots[article.pubkey],
-                fallback: .pubkey10
-            )
+        let pubkey = article.pubkey
+        let profile = app.profileSnapshots[pubkey]
+        let displayName: String
+        let displayInitial: String
+        if let p = profile, !p.displayName.isEmpty {
+            displayName = p.displayName
+            displayInitial = String(p.displayName.prefix(1))
+        } else if let p = profile, !p.name.isEmpty {
+            displayName = p.name
+            displayInitial = String(p.name.prefix(1))
+        } else {
+            displayName = String(pubkey.prefix(10))
+            displayInitial = String(pubkey.prefix(1))
+        }
+        return ProfileDisplayProjection(
+            displayName: displayName,
+            displayInitial: displayInitial,
+            pictureUrl: profile?.picture ?? ""
         )
     }
 
     private var rowProjection: BookmarkedArticleRowProjection {
-        app.safeCore.projectBookmarkedArticleRow(
-            input: BookmarkedArticleRowProjectionInput(article: article)
+        BookmarkedArticleRowProjection(
+            title: article.title.isEmpty ? "Untitled" : article.title,
+            summary: article.summary.isEmpty ? nil : article.summary,
+            imageUrl: article.image.isEmpty ? nil : article.image,
+            displayUnixSeconds: article.publishedAt ?? article.createdAt
         )
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
-        return app.safeCore.projectRelativeTimeLabel(
-            input: RelativeTimeLabelInput(
-                unixSeconds: seconds,
-                style: .bookmarkCompact
-            )
-        ).label
+        guard let seconds, seconds > 0 else { return nil }
+        let date = Date(timeIntervalSince1970: TimeInterval(seconds))
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        formatter.dateTimeStyle = .numeric
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 
@@ -392,23 +456,42 @@ struct CollectionRow: View {
     }
 
     private var curatorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: record.pubkey,
-                profile: app.profileSnapshots[record.pubkey],
-                fallback: .pubkey10
-            )
+        let pubkey = record.pubkey
+        let profile = app.profileSnapshots[pubkey]
+        let displayName: String
+        let displayInitial: String
+        if let p = profile, !p.displayName.isEmpty {
+            displayName = p.displayName
+            displayInitial = String(p.displayName.prefix(1))
+        } else if let p = profile, !p.name.isEmpty {
+            displayName = p.name
+            displayInitial = String(p.name.prefix(1))
+        } else {
+            displayName = String(pubkey.prefix(10))
+            displayInitial = String(pubkey.prefix(1))
+        }
+        return ProfileDisplayProjection(
+            displayName: displayName,
+            displayInitial: displayInitial,
+            pictureUrl: profile?.picture ?? ""
         )
     }
 
     private var rowProjection: BookmarkSetRowProjection {
-        app.safeCore.projectBookmarkSetRow(
-            input: BookmarkSetRowProjectionInput(record: record)
+        let isBookmarkSet = record.kind == 30003
+        let itemCount = record.articleAddresses.count + record.noteIds.count
+        let displayTitle = !record.title.isEmpty ? record.title
+            : (!record.id.isEmpty ? record.id : "Untitled")
+        return BookmarkSetRowProjection(
+            displayTitle: displayTitle,
+            kindLabel: isBookmarkSet ? "Bookmarks" : "Curation",
+            kindIconSystemName: isBookmarkSet ? "bookmark.fill" : "rectangle.stack.fill",
+            itemCountLabel: itemCount == 0 ? nil : "\(itemCount) item\(itemCount == 1 ? "" : "s")"
         )
     }
 }
 
-struct WebBookmarkRow: View {
+struct WebBookmarkRowView: View {
     @Environment(HighlighterStore.self) private var app
     let bookmark: WebBookmarkRecord
 
@@ -469,17 +552,20 @@ struct WebBookmarkRow: View {
     }
 
     private var rowProjection: WebBookmarkRowProjection {
-        app.safeCore.projectWebBookmarkRow(
-            input: WebBookmarkRowProjectionInput(bookmark: bookmark)
+        WebBookmarkRowProjection(
+            displayTitle: bookmark.title.isEmpty ? bookmark.url : bookmark.title,
+            host: URL(string: bookmark.url)?.host,
+            description: bookmark.description.isEmpty ? nil : bookmark.description,
+            displayUnixSeconds: bookmark.publishedAt ?? bookmark.createdAt
         )
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
-        return app.safeCore.projectRelativeTimeLabel(
-            input: RelativeTimeLabelInput(
-                unixSeconds: seconds,
-                style: .bookmarkCompact
-            )
-        ).label
+        guard let seconds, seconds > 0 else { return nil }
+        let date = Date(timeIntervalSince1970: TimeInterval(seconds))
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        formatter.dateTimeStyle = .numeric
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }

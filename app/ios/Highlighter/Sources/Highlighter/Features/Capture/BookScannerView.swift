@@ -50,7 +50,7 @@ struct BookScannerView: View {
                 return
             }
             await model.start { payload in
-                guard let isbn = appStore.safeCore.normalizeIsbnInput(payload) else {
+                guard let isbn = normalizeIsbn(payload) else {
                     model.flashNotABook()
                     return
                 }
@@ -389,3 +389,9 @@ struct ScannerReticleView: View {
         }
     }
 }
+
+// MARK: - ISBN normalization (D1 inlined)
+//
+// ISBN normalization has been consolidated into LegacyProjectionTypes.swift
+// to avoid duplication. BookScannerView and ManualISBNEntryView both use the
+// normalizeIsbn function from there.

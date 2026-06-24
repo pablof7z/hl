@@ -31,7 +31,6 @@ struct ProfileView: View {
                 store = ProfileStore(
                     pubkey: pubkey,
                     viewerPubkey: appStore.currentUser?.pubkey,
-                    safeCore: appStore.safeCore,
                     eventBridge: appStore.eventBridge,
                     kernel: kernel
                 )
@@ -192,12 +191,30 @@ private struct IdentityBlock: View {
     }
 
     private var profileIdentity: ProfileIdentityProjection {
-        store.safeCore.projectProfileIdentity(
-            input: ProfileIdentityProjectionInput(
-                pubkey: pubkey,
-                profile: store.profile,
-                fallback: .pubkey12
-            )
+        let profile = store.profile
+        let displayName: String = {
+            if let dn = profile?.displayName, !dn.isEmpty { return dn }
+            if let n = profile?.name, !n.isEmpty { return n }
+            return String(pubkey.prefix(12))
+        }()
+        let displayInitial: String = {
+            if let dn = profile?.displayName, !dn.isEmpty { return String(dn.prefix(1)) }
+            if let n = profile?.name, !n.isEmpty { return String(n.prefix(1)) }
+            return String(pubkey.prefix(1))
+        }()
+        let pictureUrl = profile?.picture ?? ""
+        let bio = profile?.about ?? ""
+        let verifiedNip05: String? = {
+            guard let raw = profile?.nip05, !raw.isEmpty else { return nil }
+            if raw.hasPrefix("_@") { return String(raw.dropFirst(2)) }
+            return raw
+        }()
+        return ProfileIdentityProjection(
+            displayName: displayName,
+            displayInitial: displayInitial,
+            pictureUrl: pictureUrl,
+            bio: bio,
+            verifiedNip05: verifiedNip05
         )
     }
 }
@@ -348,6 +365,7 @@ private struct TabBar: View {
 private struct TabContent: View {
     let store: ProfileStore
     @Environment(HighlighterStore.self) private var appStore
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var previewRoom: CommunitySummary?
     @State private var pendingOpenRoomId: String?
     @State private var openRoomGroupId: String?
@@ -444,9 +462,7 @@ private struct TabContent: View {
                     RoomPreviewSheet(
                         room: room,
                         onJoin: {
-                            Task {
-                                _ = await appStore.safeCore.requestJoinRoom(groupId: room.id, roomName: room.name)
-                            }
+                            kernel.app.dispatch(.joinRoom(groupId: room.id, hostRelayUrl: room.relayUrl, inviteCode: nil))
                             previewRoom = nil
                         },
                         onOpenRoom: {

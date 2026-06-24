@@ -1,5 +1,4 @@
 import Kingfisher
-import Observation
 import SwiftUI
 
 /// Renders plain text that may contain `nostr:` URI mentions and event
@@ -84,55 +83,69 @@ struct NostrRichText: View {
         if needsProfileRefresh {
             Task { await appStore.requestProfile(pubkeyHex: pubkeyHex) }
         }
-        return appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: pubkeyHex,
-                profile: snapshot,
-                fallback: .pubkey8
-            )
-        ).displayName
+        let name: String
+        if let s = snapshot, !s.displayName.isEmpty { name = s.displayName }
+        else if let s = snapshot, !s.name.isEmpty { name = s.name }
+        else { name = String(pubkeyHex.prefix(8)) }
+        return name
     }
 
     // MARK: - Tokenisation + blocking
 
     private var blocks: [Block] {
+        let json = tokenizeNostrContent(content: content)
+        guard let data = json.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let ok = root["ok"] as? Bool, ok,
+              let tree = root["tree"] as? [String: Any],
+              let rawBlocks = tree["blocks"] as? [[String: Any]] else {
+            return [.paragraph([.text(content)])]
+        }
+
         var blocks: [Block] = []
-        var currentRuns: [Run] = []
-        for token in appStore.safeCore.tokenizeNostrContent(content) {
-            switch token {
-            case .text(let value):
-                currentRuns.append(.text(value))
-            case .entity(let ref):
-                switch ref {
-                case .profile:
-                    currentRuns.append(.entity(ref))
-                case .event, .address:
-                    if !currentRuns.isEmpty {
-                        blocks.append(.paragraph(currentRuns))
-                        currentRuns.removeAll()
+        for rawBlock in rawBlocks {
+            var currentRuns: [Run] = []
+            if let inlines = rawBlock["inlines"] as? [[String: Any]] {
+                for inline in inlines {
+                    let type_ = inline["type"] as? String ?? ""
+                    if type_ == "text", let text = inline["text"] as? String {
+                        currentRuns.append(.text(text))
+                    } else if type_ == "nostr_ref", let key = inline["key"] as? String {
+                        if let ref = nostrEntityRef(fromKey: key) {
+                            switch ref {
+                            case .profile:
+                                currentRuns.append(.entity(ref))
+                            case .event, .address:
+                                if !currentRuns.isEmpty {
+                                    blocks.append(.paragraph(currentRuns))
+                                    currentRuns.removeAll()
+                                }
+                                blocks.append(.eventRef(ref))
+                            }
+                        }
                     }
-                    blocks.append(.eventRef(ref))
                 }
             }
-        }
-        if !currentRuns.isEmpty {
-            blocks.append(.paragraph(currentRuns))
+            if !currentRuns.isEmpty {
+                blocks.append(.paragraph(currentRuns))
+            }
         }
         return blocks
     }
 
-    /// Pull every `nostr:` event-reference entity (`note1…`, `nevent1…`,
-    /// `naddr1…`) out of `content`, deduped by reference key, in the
-    /// order they first appeared. Profile mentions (`npub1…`,
-    /// `nprofile1…`) are excluded — those render inline via the main
-    /// `body`. Used by the article reader to render a "Referenced"
-    /// section after the article body without doing a full mid-stream
-    /// markdown refactor.
-    static func extractEventRefs(
-        from content: String,
-        using core: HighlighterCore
-    ) -> [NostrEntityRef] {
-        core.extractNostrEventRefs(content: content)
+    private func nostrEntityRef(fromKey key: String) -> NostrEntityRef? {
+        if key.hasPrefix("p:") {
+            let pubkey = String(key.dropFirst(2))
+            return .profile(pubkeyHex: pubkey, relays: [])
+        } else if key.hasPrefix("e:") {
+            let eventId = String(key.dropFirst(2))
+            return .event(eventIdHex: eventId, relays: [], authorHintHex: nil, kindHint: nil)
+        } else if key.hasPrefix("a:") {
+            let parts = key.dropFirst(2).split(separator: ":", maxSplits: 2).map(String.init)
+            guard parts.count == 3, let kind = UInt32(parts[0]) else { return nil }
+            return .address(kind: kind, pubkeyHex: parts[1], dTag: parts[2], relays: [])
+        }
+        return nil
     }
 
     // MARK: - Run / Block models
@@ -151,83 +164,80 @@ struct NostrRichText: View {
 // MARK: - Card
 
 @MainActor
-@Observable
 final class NostrEntityCardStore {
-    private(set) var resolved: NostrEntityEvent?
-
     @ObservationIgnored let entity: NostrEntityRef
-    @ObservationIgnored let safeCore: SafeHighlighterCore
-    @ObservationIgnored weak var eventBridge: EventBridge?
-    @ObservationIgnored private var subscriptionHandle: UInt64?
+    @ObservationIgnored let kernel: HighlighterAppKernel
 
-    init(
-        entity: NostrEntityRef,
-        safeCore: SafeHighlighterCore,
-        eventBridge: EventBridge?
-    ) {
+    init(entity: NostrEntityRef, kernel: HighlighterAppKernel) {
         self.entity = entity
-        self.safeCore = safeCore
-        self.eventBridge = eventBridge
+        self.kernel = kernel
     }
 
-    func start() async {
-        let snapshot = await safeCore.resolveNostrEntity(entity)
-        if snapshot.resolved, let event = snapshot.event {
-            resolved = event
-            return
-        }
-
-        guard !Task.isCancelled else { return }
-        guard subscriptionHandle == nil else { return }
-
-        let outcome = await safeCore.subscribeNostrEntity(entity)
-        let projection = safeCore.projectViewSubscriptionStart(
-            input: ViewSubscriptionStartProjectionInput(start: outcome)
-        )
-        guard projection.shouldRegister else {
-            // Cache-only rendering remains valid; the placeholder stays visible.
-            return
-        }
-        guard !Task.isCancelled else {
-            await safeCore.unsubscribe(projection.handle)
-            return
-        }
-        subscriptionHandle = projection.handle
-        eventBridge?.registerNostrEntity(self, handle: projection.handle)
+    func start() {
+        kernel.resolveEntityRef(key: entityKey)
     }
 
     func stop() {
-        if let handle = subscriptionHandle {
-            Task { [safeCore] in await safeCore.unsubscribe(handle) }
-            eventBridge?.unregister(handle: handle)
-        }
-        subscriptionHandle = nil
+        kernel.releaseEntityRef(key: entityKey)
     }
 
-    func apply(event: NostrEntityEvent) {
-        resolved = event
+    var entityKey: String {
+        switch entity {
+        case .profile(let pubkeyHex, _): return "p:\(pubkeyHex)"
+        case .event(let eventIdHex, _, _, _): return "e:\(eventIdHex)"
+        case .address(let kind, let pubkeyHex, let dTag, _): return "a:\(kind):\(pubkeyHex):\(dTag)"
+        }
     }
 }
 
 /// Block-level card for `nevent1…` / `naddr1…` references. Resolves
-/// against the local nostrdb first, then subscribes through Rust when cold.
-/// Per-entity rendering is selected by the Rust projection.
+/// via the kernel entity projection. Per-entity rendering is selected by kind.
 struct NostrEntityCard: View {
     let entity: NostrEntityRef
 
     @Environment(HighlighterStore.self) private var appStore
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var store: NostrEntityCardStore?
 
     var body: some View {
         Group {
-            if let resolved = store?.resolved {
-                resolvedCard(resolved)
+            if let snapshot = kernel.entitySnapshots[entityIdentityKey],
+               let event = nostrEntityEvent(from: snapshot) {
+                resolvedCard(event)
             } else {
                 placeholder
             }
         }
-        .task(id: appStore.safeCore.nostrEntityIdentityKey(entity: entity)) { await start() }
+        .task(id: entityIdentityKey) { start() }
         .onDisappear { stop() }
+    }
+
+    private var entityIdentityKey: String {
+        switch entity {
+        case .profile(let pubkeyHex, _): return "p:\(pubkeyHex)"
+        case .event(let eventIdHex, _, _, _): return "e:\(eventIdHex)"
+        case .address(let kind, let pubkeyHex, let dTag, _): return "a:\(kind):\(pubkeyHex):\(dTag)"
+        }
+    }
+
+    private func nostrEntityEvent(from snapshot: KernelEntitySnapshot) -> NostrEntityEvent? {
+        let renderKind: NostrEntityRenderKind
+        switch snapshot.kind {
+        case 0: renderKind = .profile
+        case 1: renderKind = .note
+        case 9802: renderKind = .highlight
+        case 30023: renderKind = .article
+        default: renderKind = .generic
+        }
+        return NostrEntityEvent(
+            eventIdHex: snapshot.key,
+            kind: snapshot.kind,
+            renderKind: renderKind,
+            pubkeyHex: snapshot.pubkeyHex,
+            content: snapshot.content,
+            createdAt: snapshot.createdAt,
+            tagsJson: snapshot.tagsJson
+        )
     }
 
     @ViewBuilder
@@ -259,18 +269,25 @@ struct NostrEntityCard: View {
     }
 
     private var entityLabel: String {
-        appStore.core.nostrEntityFallbackLabel(entity: entity)
+        switch entity {
+        case .profile(let pubkeyHex, _):
+            return "Profile · \(pubkeyHex.prefix(12))…"
+        case .event(let eventIdHex, _, _, let kindHint):
+            if let kind = kindHint {
+                return "Event kind \(kind) · \(eventIdHex.prefix(12))…"
+            } else {
+                return "Event · \(eventIdHex.prefix(12))…"
+            }
+        case .address(let kind, _, let dTag, _):
+            return "Kind \(kind) · \(dTag)"
+        }
     }
 
-    private func start() async {
+    private func start() {
         store?.stop()
-        let next = NostrEntityCardStore(
-            entity: entity,
-            safeCore: appStore.safeCore,
-            eventBridge: appStore.eventBridge
-        )
+        let next = NostrEntityCardStore(entity: entity, kernel: kernel)
         store = next
-        await next.start()
+        next.start()
     }
 
     private func stop() {
@@ -288,9 +305,7 @@ private struct ArticleEntityCard: View {
     @State private var profile: ProfileMetadata?
 
     var body: some View {
-        let projection = appStore.safeCore.projectNostrEntityArticleCard(
-            input: NostrEntityArticleCardProjectionInput(event: event)
-        )
+        let projection = articleCardProjection
         let target = projection.readerRoute.map { ArticleReaderTarget(route: $0) }
         return Group {
             if let target {
@@ -361,14 +376,40 @@ private struct ArticleEntityCard: View {
         )
     }
 
-    private var authorDisplay: ProfileDisplayProjection {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: event.pubkeyHex,
-                profile: profile,
-                fallback: .pubkey8
-            )
+    private var articleCardProjection: NostrEntityArticleCardProjection {
+        // D1: mirrors nostr_entities::article_card_projection
+        let tags = (try? JSONDecoder().decode([[String]].self, from: Data(event.tagsJson.utf8))) ?? []
+        func tagValue(_ name: String) -> String {
+            tags.first { $0.first == name && $0.count > 1 }?[1] ?? ""
+        }
+        let dTag = tagValue("d")
+        let title = tagValue("title")
+        let pubkey = event.pubkeyHex.trimmingCharacters(in: .whitespaces)
+        let dTagTrimmed = dTag.trimmingCharacters(in: .whitespaces)
+        let readerRoute: ArticleReaderRoute? = (!pubkey.isEmpty && !dTagTrimmed.isEmpty)
+            ? ArticleReaderRoute(address: "30023:\(pubkey):\(dTagTrimmed)", pubkey: pubkey, dTag: dTagTrimmed)
+            : nil
+        let imageRaw = tagValue("image")
+        let summaryRaw = tagValue("summary")
+        return NostrEntityArticleCardProjection(
+            displayTitle: title.isEmpty ? "Untitled" : title,
+            imageUrl: imageRaw.isEmpty ? nil : imageRaw,
+            summary: summaryRaw.isEmpty ? nil : summaryRaw,
+            readerRoute: readerRoute
         )
+    }
+
+    private var authorDisplay: ProfileDisplayProjection {
+        {
+            let name = (profile?.displayName ?? "").isEmpty
+                ? ((profile?.name ?? "").isEmpty ? String(event.pubkeyHex.prefix(8)) : profile!.name)
+                : profile!.displayName
+            return ProfileDisplayProjection(
+                displayName: name,
+                displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+                pictureUrl: profile?.picture ?? ""
+            )
+        }()
     }
 }
 
@@ -417,13 +458,16 @@ private struct NoteEntityCard: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: event.pubkeyHex,
-                profile: profile,
-                fallback: .pubkey8
+        {
+            let name = (profile?.displayName ?? "").isEmpty
+                ? ((profile?.name ?? "").isEmpty ? String(event.pubkeyHex.prefix(8)) : profile!.name)
+                : profile!.displayName
+            return ProfileDisplayProjection(
+                displayName: name,
+                displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+                pictureUrl: profile?.picture ?? ""
             )
-        )
+        }()
     }
 }
 
@@ -461,13 +505,16 @@ private struct HighlightEntityCard: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: event.pubkeyHex,
-                profile: profile,
-                fallback: .pubkey8
+        {
+            let name = (profile?.displayName ?? "").isEmpty
+                ? ((profile?.name ?? "").isEmpty ? String(event.pubkeyHex.prefix(8)) : profile!.name)
+                : profile!.displayName
+            return ProfileDisplayProjection(
+                displayName: name,
+                displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+                pictureUrl: profile?.picture ?? ""
             )
-        )
+        }()
     }
 }
 
@@ -532,12 +579,13 @@ private struct ProfileCalloutFromSnapshot: View {
     }
 
     private var profileDisplay: ProfileDisplayProjection {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: pubkey,
-                profile: profile,
-                fallback: .pubkey8
-            )
+        let name = (profile?.displayName ?? "").isEmpty
+            ? ((profile?.name ?? "").isEmpty ? String(pubkey.prefix(8)) : profile!.name)
+            : profile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: profile?.picture ?? ""
         )
     }
 }
@@ -571,13 +619,7 @@ private struct GenericEntityCard: View {
     }
 
     private var authorFallback: String {
-        appStore.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: event.pubkeyHex,
-                profile: nil,
-                fallback: .pubkey12
-            )
-        ).displayName
+        String(event.pubkeyHex.prefix(12))
     }
 }
 

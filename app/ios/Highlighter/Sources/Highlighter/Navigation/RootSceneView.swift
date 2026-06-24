@@ -24,24 +24,18 @@ struct RootSceneView: View {
             }
         }
         .task {
-            await store.bootstrap()
+            await store.loadAppScopeData()
             // Mirror initial onboarding state for returning users whose
             // isOnboardingComplete was already true at init (no onChange fires).
             if store.isOnboardingComplete {
                 kernel.app.dispatch(.completeOnboarding)
             }
         }
-        .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
-                Task { await ShareQueueProcessor.drain(app: store) }
-                // iOS suspends WebSockets while we're backgrounded; nostr-sdk's
-                // foreground refresh path forces a fresh socket/subscription
-                // cycle when Rust policy allows it. Without this the NIP-46
-                // nostrconnect:// flow misses Primal's response when the user
-                // comes back from the signer app.
-                Task {
-                    _ = await store.safeCore.refreshRelayConnectionsForForeground()
-                }
+        .onChange(of: scenePhase) {
+            if scenePhase == .active {
+                ShareQueueProcessor.drain(app: store, kernel: kernel)
+                // Relay reconnection on foreground is now kernel-managed; the
+                // NMP pool handles its own lifecycle (see kernel resume()).
             }
         }
         // Belt-and-suspenders: mirror live-lane auth/onboarding state changes
@@ -61,6 +55,7 @@ struct RootSceneView: View {
                 kernel.app.dispatch(.completeOnboarding)
             }
         }
+
         // Kernel-owned toast: auto-dismissed by the Rust clock, no Swift Timer.
         .overlay(alignment: .top) {
             if let toast = kernel.rootShell.toast {

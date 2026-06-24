@@ -20,7 +20,7 @@ struct ClipComposerSheet: View {
     // MARK: - Computed
 
     private var composerProjection: PodcastClipComposerProjection {
-        app.safeCore.getPodcastClipComposerProjection(
+        clipComposerProjection(input: PodcastClipComposerInput(
             segments: player.transcriptSegments,
             transcriptAvailable: player.transcriptAvailability == .available,
             clipStartSeconds: startSeconds,
@@ -28,7 +28,7 @@ struct ClipComposerSheet: View {
             durationSeconds: player.duration,
             selectedGroupId: selectedGroupId,
             joinedCommunities: app.joinedCommunities
-        )
+        ))
     }
 
     private var extractedFragment: String {
@@ -313,18 +313,12 @@ struct ClipComposerSheet: View {
             )
             await MainActor.run {
                 isPublishing = false
-                let result = app.safeCore.projectPodcastClipPublishResult(
-                    input: PodcastClipPublishResultInput(snapshot: outcome)
-                )
-                if !result.didPublish {
-                    publishError = result.errorMessage
+                let errorMessage = outcome.error.trimmingCharacters(in: .whitespaces)
+                if errorMessage.isEmpty {
+                    app.shareToast = "Clip shared"
+                    dismiss()
                 } else {
-                    if let toast = result.shareToast {
-                        app.shareToast = toast
-                    }
-                    if result.shouldDismiss {
-                        dismiss()
-                    }
+                    publishError = errorMessage
                 }
             }
         }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MemberClipRow: View {
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
 
     let highlight: HighlightRecord
     let rangeLabel: String
@@ -104,35 +105,17 @@ struct MemberClipRow: View {
         .task(id: highlight.pubkey) {
             await app.requestProfile(pubkeyHex: highlight.pubkey)
         }
-        .onChange(of: isExpanded) { _, expanded in
-            guard expanded else { return }
-            let id = highlight.eventId
-            guard app.podcastPlayer.comments[id] == nil else { return }
-            Task {
-                let scopeSnapshot = app.safeCore.getHighlightCommentScope(eventIdHex: id)
-                guard scopeSnapshot.attach, let scope = scopeSnapshot.scope else {
-                    app.podcastPlayer.comments[id] = []
-                    return
-                }
-                let snapshot = await app.safeCore.getCommentThreadSnapshot(scope: scope, limit: 200)
-                let projection = app.safeCore.projectCommentInlineThreadSnapshotApply(
-                    input: CommentInlineThreadSnapshotApplyInput(
-                        records: snapshot.records,
-                        error: snapshot.error
-                    )
-                )
-                app.podcastPlayer.comments[id] = projection.records
-            }
-        }
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: highlight.pubkey,
-                profile: app.profileSnapshots[highlight.pubkey],
-                fallback: .pubkey10
-            )
+        let profile = app.profileSnapshots[highlight.pubkey]
+        let name = (profile?.displayName ?? "").isEmpty
+            ? ((profile?.name ?? "").isEmpty ? String(highlight.pubkey.prefix(10)) : profile!.name)
+            : profile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: profile?.picture ?? ""
         )
     }
 }

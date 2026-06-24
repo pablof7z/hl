@@ -6,73 +6,61 @@ import Observation
 /// tab is even shown — we want to know without spinning up the full chat
 /// list view first.
 ///
-/// The probe asks Rust for a tiny presence snapshot on `start` and installs
-/// the same room-chat subscription as `ChatStore` so that a freshly-arriving
-/// kind:9 unhides the tab live. Once activity is signalled the probe stays
-/// subscribed (cheap) until `stop`.
+/// Phase 7: reads the kernel `RoomChatSnapshot.hasActivity` flag. Opening the
+/// kernel chat view wires the per-room `ChatObserver`, so a freshly-arriving
+/// kind:9 flips `hasActivity` live. The probe keeps the view open (cheap —
+/// bounded window) until `stop`.
 @MainActor
 @Observable
 final class ChatPresenceProbe {
     @ObservationIgnored private var groupId: String?
-    @ObservationIgnored private var core: SafeHighlighterCore?
-    @ObservationIgnored private weak var bridge: EventBridge?
-    @ObservationIgnored private var subscriptionHandle: UInt64?
+    @ObservationIgnored private weak var kernel: HighlighterAppKernel?
     @ObservationIgnored private var onActivity: (() -> Void)?
 
     func start(
         groupId: String,
-        core: SafeHighlighterCore,
-        bridge: EventBridge?,
+        hostRelayUrl: String,
+        kernel: HighlighterAppKernel,
         onActivity: @escaping () -> Void
     ) async {
         if self.groupId != nil, self.groupId != groupId {
             stop()
         }
         self.groupId = groupId
-        self.core = core
-        self.bridge = bridge
+        self.kernel = kernel
         self.onActivity = onActivity
 
-        // Cache peek first — instant if any kind:9 is already locally cached.
-        let presence = await core.getChatPresenceSnapshot(groupId: groupId)
-        if presence.hasActivity {
+        // Opening the kernel chat view wires the ChatObserver and streams a
+        // RoomChatSnapshot into `kernel.roomChatSnapshots[groupId]`.
+        kernel.openRoomChat(groupId: groupId, hostRelayUrl: hostRelayUrl)
+        if kernel.roomChatSnapshots[groupId]?.hasActivity == true {
             onActivity()
         }
-
-        guard subscriptionHandle == nil else { return }
-        let presenceStart = await core.subscribeRoomChat(groupId: groupId)
-        let presenceProjection = core.projectViewSubscriptionStart(
-            input: ViewSubscriptionStartProjectionInput(start: presenceStart)
-        )
-        guard presenceProjection.shouldRegister else {
-            // No live promotion if the subscription failed; the cache peek
-            // result still applies.
-            return
-        }
-        subscriptionHandle = presenceProjection.handle
-        bridge?.registerChatPresence(self, handle: presenceProjection.handle)
     }
 
     func stop() {
-        if let handle = subscriptionHandle, let core {
-            Task { await core.unsubscribe(handle) }
-            bridge?.unregister(handle: handle)
+        if let groupId {
+            kernel?.closeRoomChat(groupId: groupId)
         }
-        subscriptionHandle = nil
+        groupId = nil
         onActivity = nil
     }
 
-    /// Called by `EventBridge` for the first `ChatMessageUpserted` after
-    /// `start`. Idempotent — repeat calls just re-fire the closure (harmless
-    /// because the consumer flips a Bool to true).
-    func notifyActivity() {
-        onActivity?()
+    /// Re-evaluate activity from the latest kernel snapshot. Called by the
+    /// owning view's `onChange(of: kernel.roomChatSnapshots[groupId])`.
+    func refreshActivity() {
+        guard let groupId else { return }
+        if kernel?.roomChatSnapshots[groupId]?.hasActivity == true {
+            onActivity?()
+        }
     }
 }
 
-/// View-scoped reactive state for a room's Chat tab. Rust owns the bounded
-/// chat snapshot; this store keeps only view lifecycle and scroll activity
-/// state around that snapshot.
+/// View-scoped reactive state for a room's Chat tab. Phase 7: the kernel owns
+/// the bounded chat snapshot (`ViewId.roomChat`); this store opens the kernel
+/// view, mirrors `kernel.roomChatSnapshots[groupId]` into the view-model rows
+/// the existing UI renders, and dispatches writes through the kernel envelope
+/// actions (kernel is sole writer — no live-lane publish).
 @MainActor
 @Observable
 final class ChatStore {
@@ -85,108 +73,97 @@ final class ChatStore {
     var sendError: String?
 
     @ObservationIgnored private var groupId: String?
-    @ObservationIgnored private var core: SafeHighlighterCore?
-    @ObservationIgnored private weak var bridge: EventBridge?
-    @ObservationIgnored private var subscriptionHandle: UInt64?
-    @ObservationIgnored private var loadedPageCount: UInt32 = 1
+    @ObservationIgnored private var hostRelayUrl: String = ""
+    @ObservationIgnored private weak var kernel: HighlighterAppKernel?
+    @ObservationIgnored private var lastRevision: UInt64 = 0
 
-    func start(groupId: String, core: SafeHighlighterCore, bridge: EventBridge?) async {
-        if self.groupId != nil, self.groupId != groupId {
-            stop()
-        }
+    /// Bind to a room's kernel chat view. The kernel `roomChat` view lifecycle
+    /// is owned by `ChatPresenceProbe` (resident for the whole RoomHome screen),
+    /// so this store does NOT open/close it — it only mirrors the snapshot and
+    /// dispatches writes. This avoids double open/close when the chat tab is
+    /// shown and hidden while the room stays on screen.
+    func start(groupId: String, hostRelayUrl: String, kernel: HighlighterAppKernel) async {
         self.groupId = groupId
-        self.core = core
-        self.bridge = bridge
-        loadedPageCount = 1
+        self.hostRelayUrl = hostRelayUrl
+        self.kernel = kernel
         isLoading = true
-        await reloadSnapshot(pageCount: loadedPageCount)
+        applyKernelSnapshot()
         isLoading = false
-
-        guard subscriptionHandle == nil else { return }
-        let outcome = await core.subscribeRoomChat(groupId: groupId)
-        let projection = core.projectViewSubscriptionStart(
-            input: ViewSubscriptionStartProjectionInput(start: outcome)
-        )
-        guard projection.shouldRegister else {
-            // Subscription failure leaves cache-only rendering working.
-            return
-        }
-        subscriptionHandle = projection.handle
-        bridge?.registerChat(self, handle: projection.handle)
     }
 
-    /// Expand the loaded window by one page. Replaces `messages` with a
-    /// larger slice from the DB; the caller is responsible for restoring
-    /// the scroll position to the previously-topmost visible message.
+    /// Expand the loaded window by one page. The kernel increments `page_count`
+    /// (bounded) and pushes a fresh snapshot; `applyKernelSnapshot` mirrors it.
     func loadMore() async {
-        guard let core else { return }
-        let projection = core.projectChatLoadMore(
-            input: ChatLoadMoreProjectionInput(
-                isLoadingMore: isLoadingMore,
-                hasMore: hasMore,
-                currentPageCount: loadedPageCount
-            )
-        )
-        guard projection.shouldLoad else { return }
-        isLoadingMore = projection.isLoadingMore
-        await reloadSnapshot(pageCount: projection.requestedPageCount)
-        isLoadingMore = false
+        guard let groupId, let kernel, hasMore, !isLoadingMore else { return }
+        isLoadingMore = true
+        kernel.app.dispatch(.chatLoadMore(groupId: groupId))
+        // The kernel pushes a new snapshot asynchronously; the owning view's
+        // onChange(of:) re-applies it and clears `isLoadingMore`.
     }
 
     func stop() {
-        if let handle = subscriptionHandle, let core {
-            Task { await core.unsubscribe(handle) }
-            bridge?.unregister(handle: handle)
-        }
-        subscriptionHandle = nil
+        groupId = nil
+        kernel = nil
     }
 
+    /// Re-apply the latest kernel snapshot. Called by the owning view's
+    /// `onChange(of: kernel.roomChatSnapshots[groupId])` so live kind:9 deltas
+    /// and `load_more`/`post` results flow into the rendered rows.
     func reloadFromCache(activityEventId: String? = nil) async {
-        let activityProjection = core?.projectChatActivityReload(
-            input: ChatActivityReloadProjectionInput(
-                activityEventId: activityEventId ?? "",
-                visibleEventIds: rows.map(\.message.eventId),
-                currentActivityRevision: activityRevision
-            )
-        )
-        await reloadSnapshot(pageCount: loadedPageCount)
-        if let activityProjection, activityProjection.shouldMarkActivity {
-            activityDelta = Int(activityProjection.activityDelta)
-            activityRevision = activityProjection.activityRevision
-        }
+        applyKernelSnapshot()
     }
 
-    /// Send a chat message into the room. Rust publishes and returns the
-    /// refreshed bounded snapshot, including the signed record if the relay
-    /// echo has not landed locally yet.
+    /// Send a chat message into the room. The kernel publishes the kind:9 and
+    /// streams the refreshed snapshot back (sole writer — no live-lane publish).
     func send(text: String, replyTo: ChatMessageRecord? = nil) async {
-        guard let groupId, let core else { return }
+        guard let groupId, let kernel else { return }
         sendError = nil
-        let outcome = await core.publishChatMessageSnapshot(
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        kernel.app.dispatch(.postChat(
             groupId: groupId,
-            content: text,
-            replyToEventId: replyTo?.eventId,
-            pageCount: loadedPageCount
-        )
-        let result = core.projectChatPublishResult(
-            input: ChatPublishResultInput(error: outcome.error)
-        )
-        guard result.didPublish else {
-            sendError = result.errorMessage
-            return
+            hostRelayUrl: hostRelayUrl,
+            content: trimmed,
+            replyToEventId: replyTo?.eventId
+        ))
+    }
+
+    /// Mirror `kernel.roomChatSnapshots[groupId]` into the rendered view model.
+    /// Builds `ChatMessageRowProjection` rows Swift-side from the raw kernel rows
+    /// (D1: kernel emits raw data; Swift shapes the view model).
+    func applyKernelSnapshot() {
+        guard let groupId, let snapshot = kernel?.roomChatSnapshots[groupId] else { return }
+        rows = snapshot.rows.map { row in
+            ChatMessageRowProjection(
+                message: ChatMessageRecord(
+                    eventId: row.eventId,
+                    groupId: groupId,
+                    authorPubkey: row.authorPubkey,
+                    content: row.content,
+                    createdAt: row.createdAt,
+                    replyToEventId: row.replyToEventId
+                ),
+                showHeader: row.showHeader,
+                replyToMessage: row.replyTo.map { preview in
+                    ChatMessageRecord(
+                        eventId: preview.eventId,
+                        groupId: groupId,
+                        authorPubkey: preview.authorPubkey,
+                        content: preview.content,
+                        createdAt: preview.createdAt,
+                        replyToEventId: nil
+                    )
+                }
+            )
         }
-        apply(snapshot: outcome.snapshot)
-    }
-
-    private func reloadSnapshot(pageCount: UInt32) async {
-        guard let groupId, let core else { return }
-        let snapshot = await core.getChatSnapshot(groupId: groupId, pageCount: pageCount)
-        apply(snapshot: snapshot)
-    }
-
-    private func apply(snapshot: ChatSnapshot) {
-        rows = snapshot.rows
         hasMore = snapshot.hasMore
-        loadedPageCount = snapshot.pageCount
+        isLoadingMore = false
+        // Surface a monotonic activity revision so the view can drive its
+        // scroll-to-bottom / "new messages" pill (same semantics as before).
+        if snapshot.activityRevision != lastRevision {
+            activityDelta = max(0, Int(snapshot.activityRevision) - Int(lastRevision))
+            lastRevision = snapshot.activityRevision
+            activityRevision = snapshot.activityRevision
+        }
     }
 }

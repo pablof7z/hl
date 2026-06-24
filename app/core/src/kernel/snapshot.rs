@@ -8,6 +8,7 @@
 //! renders them without performing any business logic (D4 / D5).
 
 use crate::kernel::domains::relay_diagnostics::RelayDiagRow;
+use crate::kernel::models::ArtifactRecord;
 
 /// Which screen the root shell should display.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
@@ -36,6 +37,25 @@ pub struct AppRootSnapshot {
     /// directly. Cleared when `IdentityChanged` fires or on `Logout`.
     /// Bounded: one string ≤ 512 bytes (NIP-46 spec limit).
     pub nostrconnect_uri: Option<String>,
+
+    // ── Phase 7 additions ─────────────────────────────────────────────────────
+    /// Raw error from a failed restore or sign-in (`SessionState::RestoreFailed`
+    /// / `SignInFailed`), or `None`. Gives LoginView's inline error a kernel
+    /// source. Naturally cleared (→ `None`) the moment the session transitions
+    /// to a new attempt (Restoring/SigningIn), success (Present), or Absent — so
+    /// no explicit clear-on-route-change is needed. D1: raw error; Swift formats
+    /// the display copy.
+    pub auth_error: Option<String>,
+
+    // ── Phase 7 Part C additions (auth port) ─────────────────────────────────
+    /// Raw 64-char hex pubkey of the active session. `None` when no session is
+    /// present. Exposed so Swift can build `CurrentUser` after kernel sign-in
+    /// without a bespoke lane call. D1: raw hex; Swift formats npub for display.
+    pub active_pubkey_hex: Option<String>,
+    /// bech32 `npub` of the active session (for Settings / KeysView display).
+    /// Pre-encoded in Rust so Swift avoids a bespoke bech32 dependency.
+    /// `None` when no session is present.
+    pub active_pubkey_npub: Option<String>,
 }
 
 /// A transient toast message visible in the root shell.
@@ -187,6 +207,11 @@ pub enum ViewSnapshot {
     /// raw snapshot.
     ShareComposer(crate::kernel::domains::share::ShareComposerSnapshot),
 
+    // ── #21 share-flow additions (append-only) ───────────────────────────────
+    /// In-flight share-to-room / drain / invite publish status — publishing /
+    /// done / error phase + minted invite codes (D1: Swift composes the link).
+    SharePublish(crate::kernel::domains::share::SharePublishSnapshot),
+
     // ── Phase 5H additions (append-only) ─────────────────────────────────────
     /// Full-screen podcast player — now-playing fields + position/duration/
     /// is_playing + clip range (empty for 5H; populated by Phase 5I/5J).
@@ -225,6 +250,33 @@ pub enum ViewSnapshot {
     /// `GroupEventsProjection`, bounded at 64 per room, newest-first.
     /// D1: no title fallback, no formatted timestamps.
     RoomDiscussions(RoomDiscussionsSnapshot),
+
+    // ── Phase 7 entity-ref additions (append-only) ────────────────────────────
+    /// Entity ref — raw event fields for an inline event card.
+    /// D1: no formatted strings; Swift formats all display output.
+    EntityRef(KernelEntitySnapshot),
+}
+
+// ── Phase 7 entity-ref additions (append-only) ───────────────────────────────
+
+/// Raw entity ref data for an inline event card.
+///
+/// D1: Swift formats all display strings (author name, timestamp, content truncation).
+/// `tags_json` is a JSON-encoded `Vec<Vec<String>>` so Swift can parse NIP-10 markers.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelEntitySnapshot {
+    /// Entity key (event id, NIP-19 coordinate, or external id).
+    pub key: String,
+    /// Nostr event kind (e.g. 1 for notes, 30023 for articles).
+    pub kind: u32,
+    /// Raw event content — D1: no truncation or formatting.
+    pub content: String,
+    /// Author raw hex pubkey (64 lowercase chars).
+    pub pubkey_hex: String,
+    /// JSON-encoded tags array `Vec<Vec<String>>` — Swift parses NIP-10 markers.
+    pub tags_json: String,
+    /// Event created_at Unix timestamp (seconds).
+    pub created_at: u64,
 }
 
 // ── Phase 7 artifact-preview additions (append-only) ─────────────────────────
@@ -255,7 +307,7 @@ pub enum ArtifactPreviewKind {
 ///
 /// `display_url` carries the raw URL for `r:` web coordinates. For all other
 /// coordinate types it is `None`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct ArtifactPreviewRow {
     /// Canonical coordinate key (e.g. `"a:30023:pk:d"`, `"e:<hex>"`,
     /// `"i:isbn:9780735211292"`, `"r:https://…"`).
@@ -497,6 +549,86 @@ pub struct KernelRoomHomeSnapshot {
     /// Bounded at `ROOM_LANE_ROW_CAP` rows per group in `room_home.rs`.
     /// Empty until the first feed page arrives.
     pub lanes: Vec<RoomLaneRow>,
+
+    // ── Room-home aggregation additions (append-only) ─────────────────────────
+    /// Artifact library: kind:11 share events (non-discussion) from the lane feed
+    /// with artifact coordinates resolved through `AppState::artifact_previews`.
+    pub artifact_library: Vec<KernelRoomLibraryRow>,
+    /// All highlights (kind:9802) received via the room highlight feed, sorted
+    /// newest-first. Bounded at `ROOM_HOME_HIGHLIGHT_CAP` rows.
+    pub highlights: Vec<HighlightRow>,
+    /// Highlights grouped by artifact coordinate (matching entries in artifact_library).
+    pub highlights_by_reference: Vec<KernelHighlightReferenceBucket>,
+    /// Comment counts + rows grouped by artifact coordinate.
+    pub comments_by_reference: Vec<KernelCommentReferenceBucket>,
+    /// Assembled visible lanes — one per artifact in the library, sorted by
+    /// `latest_activity_at` desc. Dormant lanes (no highlights AND no comments)
+    /// are excluded, mirroring the bespoke `build_visible_room_lanes` filter.
+    pub assembled_lanes: Vec<KernelRoomLane>,
+}
+
+// ── Room-home aggregation additions (append-only) ─────────────────────────────
+
+/// One artifact in the room's library — a kind:11 share event (not a discussion)
+/// whose artifact coordinate is resolved through `AppState::artifact_previews`.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelRoomLibraryRow {
+    pub coordinate: String,
+    pub share_event_id: String,
+    /// Thin keystone preview (title/image/author), `None` while pending.
+    pub preview: Option<ArtifactPreviewRow>,
+    /// Full rich artifact record from the kind:11 share tags — the data the
+    /// iOS library cards + `ArtifactDetailView` routing consume. See
+    /// `KernelRoomLane::artifact_record`.
+    pub artifact_record: ArtifactRecord,
+}
+
+/// Highlights grouped by artifact coordinate.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelHighlightReferenceBucket {
+    pub coordinate: String,
+    pub highlights: Vec<HighlightRow>,
+}
+
+/// Comment counts + rows grouped by artifact coordinate.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelCommentReferenceBucket {
+    pub root_tag_value: String,
+    pub comments: Vec<CommentRecordRow>,
+    pub count: u32,
+}
+
+/// One assembled room lane — per-artifact aggregate of hydrated highlights and
+/// comments. Mirrors the bespoke `RoomLane` from `room_lanes.rs` using kernel
+/// types. Dormant lanes (no highlights AND no comments) are excluded by
+/// `project_room_home_snapshot`. Sorted by `latest_activity_at` desc.
+///
+/// D1: raw protocol data only — no formatted strings, no "X ago" labels.
+/// D4: reuses `HighlightRow` and `CommentRecordRow` already in the snapshot.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelRoomLane {
+    /// kind:11 event id of the artifact share that opened this lane.
+    pub share_event_id: String,
+    /// Canonical artifact coordinate (e.g. `"a:30023:pk:d"`, `"i:isbn:..."`, `"r:url"`).
+    pub artifact_coordinate: String,
+    /// Resolved thin artifact preview, or `None` while pending / not yet fetched.
+    /// Kept as the lightweight keystone projection for surfaces where only
+    /// title/image/author are needed (e.g. discussion chips).
+    pub artifact_preview: Option<ArtifactPreviewRow>,
+    /// Full rich artifact record built directly from the kind:11 share tags
+    /// (mirrors bespoke `artifacts::artifact_record_from_event`). Carries the
+    /// fields the iOS room library cards + `ArtifactDetailView` routing need
+    /// (podcast `audio_url`/GUIDs, book `catalog_id`, source, reference tags,
+    /// chapters) that the thin `artifact_preview` does not. Self-contained — the
+    /// share event embeds all artifact metadata, so no async resolution.
+    pub artifact_record: ArtifactRecord,
+    /// Hydrated highlight rows for this lane, deduped by event_id, newest-first.
+    pub highlights: Vec<HighlightRow>,
+    /// Comment rows for this artifact, sorted newest-first.
+    pub comments: Vec<CommentRecordRow>,
+    /// UNIX seconds of the most recent highlight or comment in this lane.
+    /// Used by the outer sort to place most-active lanes first.
+    pub latest_activity_at: u64,
 }
 
 // ── Phase 4I additions (append-only) ─────────────────────────────────────────
@@ -561,6 +693,77 @@ pub enum BookmarkRow {
     },
 }
 
+// ── #1653 additions (append-only) ────────────────────────────────────────────
+
+/// One NIP-51 Bookmark set (kind:30003) or Curation set (kind:30004) row
+/// projected by the kernel. Parameterized-replaceable — keyed by
+/// `(pubkey, d_tag)` with supersession (newest `created_at` wins).
+///
+/// Raw protocol data only (D1): no "Untitled" fallback for absent titles,
+/// no count labels. Swift formats all display strings.
+///
+/// `uniffi::Record` so Swift can decode snapshots across FFI.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, uniffi::Record)]
+pub struct BookmarkSetRow {
+    /// `d` tag — stable identifier within the author's sets.
+    pub d_tag: String,
+    /// Raw 64-char hex author pubkey.
+    pub pubkey: String,
+    /// 30003 for bookmark sets, 30004 for curation sets.
+    pub kind: u32,
+    /// `title` tag value, or `None` when absent (D1: no "Untitled" fallback).
+    pub title: Option<String>,
+    /// `description` tag value, or `None` when absent.
+    pub description: Option<String>,
+    /// `image` tag URL, or `None` when absent.
+    pub image: Option<String>,
+    /// `a`-tag values — NIP-33 article addresses like `"30023:<pubkey>:<d>"`.
+    pub article_addresses: Vec<String>,
+    /// `e`-tag values — event ids of bookmarked kind:1 notes.
+    pub note_ids: Vec<String>,
+    /// `r`-tag values — NIP-51 web/URL references. Previously dropped (#1653
+    /// codex BLOCKING #2) — carried so user data round-trips losslessly.
+    pub r_refs: Vec<String>,
+    /// `t`-tag values — topic/hashtag labels on the set.
+    pub topics: Vec<String>,
+    /// The complete raw tag list from the source event (one entry per tag,
+    /// each `[key, value, ...]`). The kernel set-writer (`AddToSet`/
+    /// `RemoveFromSet`) round-trips every non-`a` tag verbatim from here so
+    /// description, image, `e`/`r`/`t`, relay hints, and custom client tags are
+    /// never truncated (#1653 codex BLOCKING #3). Empty for rows synthesised in
+    /// tests that do not exercise the write path.
+    pub raw_tags: Vec<Vec<String>>,
+    /// The source event `content` field, preserved verbatim for lossless
+    /// re-publish (#1653 codex BLOCKING #3).
+    pub content: String,
+    /// Event creation time as Unix seconds (0 when unknown).
+    pub created_at: u64,
+}
+
+/// One NIP-B0 web bookmark (kind:39701) row.
+///
+/// `d` tag is the URL without the `https://` scheme; the kernel prepends it
+/// when building the `url` field. Raw protocol data only (D1).
+///
+/// `uniffi::Record` so Swift can decode snapshots across FFI.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, uniffi::Record)]
+pub struct WebBookmarkRow {
+    /// Full URL — `"https://"` prepended to the `d` tag.
+    pub url: String,
+    /// Raw 64-char hex author pubkey.
+    pub pubkey: String,
+    /// `title` tag value, or `None` when absent.
+    pub title: Option<String>,
+    /// Detailed description from the event `content` field, or `None` when empty.
+    pub description: Option<String>,
+    /// `t` tags — topic/hashtag values.
+    pub topics: Vec<String>,
+    /// `published_at` tag as Unix seconds, or `None` when absent / unparseable.
+    pub published_at: Option<u64>,
+    /// Event creation time as Unix seconds (0 when unknown).
+    pub created_at: u64,
+}
+
 /// Snapshot for `ViewId::Bookmarks` — the active account's NIP-51 kind:10003
 /// bookmark list.
 ///
@@ -573,6 +776,32 @@ pub struct BookmarksSnapshot {
     /// Bookmark items from the active account's kind:10003 list.
     /// Raw `BookmarkRow` values — no labels or presentation formatting (D1).
     pub rows: Vec<BookmarkRow>,
+    // ── Phase 7 (articles pane) additions (append-only) ──────────────────────
+    /// Artifact previews for the bookmarked kind:30023 article coordinates
+    /// (`BookmarkRow::Address` with a `30023:` coordinate), in bookmark order.
+    /// Hydrated via the shared artifact-preview keystone (`ensure_artifact_
+    /// preview`): resolved immediately when the article is in `AppState::articles`,
+    /// otherwise `pending` with a `ResolveArtifactCoordinate` fetch in flight so
+    /// bookmarked-but-unloaded articles fill in over time. Backs the Bookmarks
+    /// "Articles" pane.
+    pub article_previews: Vec<ArtifactPreviewRow>,
+    // ── #1653 additions (sets + web panes, append-only) ──────────────────────
+    /// Active account's own NIP-51 kind:30003 bookmark sets.
+    /// Projected from `AppState::all_bookmark_sets` filtered by active pubkey.
+    /// Sorted by `created_at` descending (newest first). D1: raw fields.
+    pub my_bookmark_sets: Vec<BookmarkSetRow>,
+    /// Active account's own NIP-51 kind:30004 curation sets.
+    /// Projected from `AppState::all_curation_sets` filtered by active pubkey.
+    /// Sorted by `created_at` descending. D1: raw fields.
+    pub my_curation_sets: Vec<BookmarkSetRow>,
+    /// kind:30004 curation sets authored by accounts the active user follows.
+    /// Projected from `AppState::all_curation_sets` filtered by `AppState::follows`.
+    /// Sorted by `created_at` descending. D1: raw fields.
+    pub following_curation_sets: Vec<BookmarkSetRow>,
+    /// Active account's own NIP-B0 kind:39701 web bookmarks.
+    /// Stored directly in `AppState::web_bookmarks`. Sorted by `created_at`
+    /// descending. D1: raw fields.
+    pub my_web_bookmarks: Vec<WebBookmarkRow>,
 }
 
 // ── Phase 4A additions (append-only) ─────────────────────────────────────────
@@ -651,6 +880,17 @@ pub struct KernelArticleReaderSnapshot {
     /// Empty until the full document arrives. Swift / platform decodes via
     /// `nmp_content::wire::decode_content_tree`.
     pub content_tree_bytes: Vec<u8>,
+    /// The article body content tree as serde-JSON (Phase 7, option β). Swift's
+    /// vendored nmp `ContentTreeWire.swift` is JSON-`Decodable` and feeds
+    /// `NostrContentRenderer` — this is the body render path (replacing raw
+    /// markdown). Empty string until the document arrives / on decode failure.
+    pub content_tree_json: String,
+    /// Overlay highlights anchored to this article (kind:9802 tagged `#a ==
+    /// address`), newest-first, deduped by event id. Carries the SAME enriched
+    /// NIP-84/NIP-73 fields as the highlight feed (decoded via the shared
+    /// `decode_highlight_row`). Empty in the brief window between OpenView and
+    /// the first highlight-feed page (Phase 7).
+    pub highlights: Vec<HighlightRow>,
 }
 
 // ── Phase 4D additions (append-only) ─────────────────────────────────────────
@@ -679,11 +919,77 @@ pub struct SearchHitRow {
     pub relay_provenance: Vec<String>,
 }
 
-/// Snapshot for `ViewId::Search` — NIP-50 relay search results view.
+/// One local-scan community result row for the Search screen communities bucket.
+///
+/// Derived from `AppState::discovered_groups` merged with `AppState::communities`.
+/// Raw protocol data only (D1 / ADR-0032): Swift formats all display strings
+/// (name fallback to group_id, `"{n} members"` label, avatar initials, etc.).
+///
+/// `member_count` is raw `u64` — no `"N members"` label (D1). Widened from the
+/// `u32` in `CommunityRow` / `DiscoveredRow` source types.
+/// `public` and `open` are omitted: the kernel already filters to public+open
+/// rows before emitting, so Swift never needs to render a closed/private row.
+///
+/// Append-only: new fields at the bottom keep rebases mechanical.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct CommunitySearchRow {
+    /// NIP-29 local group id (the `["d", _]` tag value).
+    pub group_id: String,
+    /// Host relay URL. Together with `group_id` forms the stable `GroupId`.
+    pub host_relay_url: String,
+    /// `["name", _]` tag value from kind:39000, if present.
+    /// D1: no fallback to group_id — Swift owns the fallback display logic.
+    pub name: Option<String>,
+    /// `["about", _]` tag value from kind:39000, if present.
+    pub about: Option<String>,
+    /// `["picture", _]` tag value from kind:39000, if present.
+    pub picture: Option<String>,
+    /// Cardinality of `["p", _]` tags on the latest kind:39002 (member list).
+    /// Raw `u64` — no `"N members"` label (D1).
+    pub member_count: u64,
+}
+
+/// One kind:0 profile row for the Search screen profiles bucket.
+///
+/// Derived from `AppState::profile_search_cache` via `project_profile_search_rows`
+/// (same local-scan algorithm as `crate::search::search_profiles`). Raw protocol
+/// fields only (D1 / ADR-0032): Swift formats all display strings, avatar
+/// initials, NIP-05 labels, etc. No `"npub"` encoding, no fallback strings.
+///
+/// `created_at` is the kind:0 event's UNIX-second timestamp. Kernel uses it to
+/// deduplicate replaceable events (newest wins); Swift may render a "last active"
+/// label from the raw value.
+///
+/// Append-only: new fields at the bottom keep rebases mechanical.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ProfileSearchRow {
+    /// 64-character hex pubkey. Swift formats bech32 `npub` for display.
+    pub pubkey: String,
+    /// `name` field from kind:0 content JSON (trimmed). May be empty.
+    pub name: String,
+    /// `display_name` / `displayName` / `displayname` from kind:0 content JSON (trimmed).
+    pub display_name: String,
+    /// `nip05` verification address from kind:0 content JSON (trimmed).
+    pub nip05: String,
+    /// `picture` or `image` URL from kind:0 content JSON (trimmed).
+    pub picture: String,
+    /// `about` biography from kind:0 content JSON (trimmed).
+    pub about: String,
+    /// Event creation timestamp as Unix seconds. D1: Swift formats dates.
+    pub created_at: u64,
+}
+
+/// Snapshot for `ViewId::Search` — NIP-50 relay search results + local buckets.
 ///
 /// Raw protocol data only (D1): Swift formats all display strings.
 /// Bounded by `SearchResultsProjection`'s `max_hits` cap
-/// (default `DEFAULT_MAX_SEARCH_HITS = 200` from nmp-nip50 — Non-Negotiable #7).
+/// (default `DEFAULT_MAX_SEARCH_HITS = 200` from nmp-nip50 — Non-Negotiable #7)
+/// for `hits`; `communities` is bounded at 20 (COMMUNITY_SEARCH_CAP in search.rs);
+/// `profiles` is bounded at 20 (PROFILE_SEARCH_CAP in search domain).
+///
+/// Append-only: `communities` is the Phase 7 gate #4 addition;
+/// `highlights` is the Phase 7 highlights-bucket addition;
+/// `profiles` is the Phase 7 (#1697 gate) profiles-bucket addition.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct SearchSnapshot {
     /// Ordered (by `created_at` descending, then `id` ascending) search hit rows.
@@ -794,11 +1100,13 @@ pub struct ArticleFeedSnapshot {
     pub exhausted: bool,
 }
 
-/// uniffi-compatible search hit row for FFI (uniffi::Record requires simple types).
+/// uniffi-compatible search hit row for FFI.
 ///
-/// Mirrors `SearchHitRow` with `tags` flattened to `Vec<String>` (uniffi
-/// does not support `Vec<Vec<String>>`). The Rust-internal `SearchHitRow`
-/// uses the native 2D Vec; this struct is for the snapshot FFI boundary only.
+/// Mirrors the Rust-internal `SearchHitRow`. `tags` is the raw NIP-01 tag array
+/// (`Vec<Vec<String>>`, which uniffi DOES support — see `KernelEventRow`/
+/// `ArtifactPreview` precedents), so Swift can bucket hits by `kind` and extract
+/// the fields each result card needs (article title/summary/image/d, highlight
+/// a/e/context, etc.) — D1: raw protocol data only, Swift owns all formatting.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct KernelSearchHitRow {
     /// 64-character hex event id.
@@ -811,6 +1119,9 @@ pub struct KernelSearchHitRow {
     pub created_at: u64,
     /// Raw event `content` field.
     pub content: String,
+    /// Raw NIP-01 tags (`[[name, value, ...], ...]`). Swift extracts per-kind
+    /// fields from these to hydrate the result-bucket cards.
+    pub tags: Vec<Vec<String>>,
     /// Relay URLs this event was observed on.
     pub relay_provenance: Vec<String>,
 }
@@ -846,8 +1157,40 @@ pub struct HighlightRow {
     ///
     /// D3: opaque string from the protocol — kernel never constructs references.
     pub source_reference: Option<String>,
+    /// Optional user note attached to the highlight, from the NIP-84 `comment`
+    /// tag of the kind:9802 event. `None` when absent or empty. Raw UTF-8 (D1:
+    /// Swift owns blank-note display rules). Mirrors the live lane's `note`.
+    pub note: Option<String>,
     /// Event creation time as Unix seconds. D1: Swift formats the display date.
     pub created_at: u64,
+
+    // ── Phase 7 enrichment: NIP-84/NIP-73 source + clip + image fields ────────
+    // Mirrors the bespoke `highlights.rs::record_from_cached_event` parse so the
+    // highlight CARD (resource header, podcast-clip chrome, page-scan image) can
+    // render from kernel rows. Empty string / None when the tag is absent (D1).
+    /// `context` tag — the paragraph the quote was lifted from.
+    pub context: String,
+    /// `a` tag — addressable artifact coordinate `kind:pubkey:d` (NIP-23 etc).
+    pub artifact_address: String,
+    /// `e` tag — non-addressable source event id.
+    pub event_reference: String,
+    /// `i` tag — NIP-73 external content id (`podcast:item:guid:…`, `isbn:…`).
+    pub external_reference: String,
+    /// `r` tag — source URL (web highlight).
+    pub source_url: String,
+    /// Canonical source key: `a:…` / `e:…` / `i:…` / `r:…` in priority order,
+    /// or empty when no source tag is present (mirrors the live lane).
+    pub source_reference_key: String,
+    /// `start` tag — podcast-clip start in seconds. `None` when absent.
+    pub clip_start_seconds: Option<f64>,
+    /// `end` tag — podcast-clip end in seconds. `None` when absent.
+    pub clip_end_seconds: Option<f64>,
+    /// `speaker` tag — podcast-clip speaker. Empty when absent.
+    pub clip_speaker: String,
+    /// All `segment` tag values — transcript segment ids for a podcast clip.
+    pub clip_transcript_segment_ids: Vec<String>,
+    /// NIP-92 `imeta` image URL — the page-scan photo. Empty when absent.
+    pub image_url: String,
 }
 
 /// Snapshot for `ViewId::HighlightFeed` — the home/own highlights feed.
@@ -957,6 +1300,41 @@ pub struct KernelHomeFeedRow {
     /// D1: Swift formats the display date.
     /// `None` for `KernelHomeFeedRowKind::Highlight` rows.
     pub article_created_at: Option<u64>,
+
+    /// Canonical artifact-preview coordinate key this row references, if any
+    /// (Phase 7 artifact-preview consumer). For Article rows: the `a:` article
+    /// coordinate. For Highlight rows: the canonicalized `source_reference`
+    /// (`a:`/`e:`/`i:`/`r:`), or `None` for free-standing highlights with no
+    /// source. Swift looks this up in `KernelHomeFeedSnapshot.artifact_previews`
+    /// to render the resource card (skeleton while the preview is pending). D3.
+    pub artifact_coordinate: Option<String>,
+
+    // ── Phase 7 home-feed aggregation additions (append-only) ────────────────
+    /// `true` iff the article author is in the active account's follow set
+    /// (`state.is_following(article_author_pubkey)`).
+    /// D1: a boolean fact, not a display label ("Following" copy is Swift-side).
+    /// Always `false` for `KernelHomeFeedRowKind::Highlight` rows (no article author
+    /// to surface — may change in a future product iteration).
+    pub author_followed: bool,
+
+    /// Hex pubkeys of follows who have interacted with this article (kind 1, 7, 16,
+    /// or 1111 with `#k=30023`), deduped and sorted: latest-interaction-time
+    /// descending, then pubkey ascending as a tie-break.
+    /// D1: raw hex pubkeys — Swift formats bech32 / display names.
+    /// Empty for `KernelHomeFeedRowKind::Highlight` rows.
+    pub interactor_pubkeys: Vec<String>,
+
+    /// The latest-activity timestamp for this row — max of the article
+    /// `created_at` and all matching interaction `created_at` values.
+    /// Equals `sort_key` for both row kinds. Unix seconds (D1: no "X ago" label).
+    pub latest_activity_at: u64,
+
+    /// Enriched highlight rows for this group, sorted oldest-first within the
+    /// group (matches the bespoke live lane ordering). Populated from the same
+    /// raw kind:9802 events as `highlight_event_ids`, decoded via the shared
+    /// `decode_highlight_row` so they carry the full NIP-84/NIP-73 fields.
+    /// Empty for `KernelHomeFeedRowKind::Article` rows.
+    pub highlights: Vec<HighlightRow>,
 }
 
 /// Snapshot for `ViewId::HomeFeed` — the merged home feed.
@@ -981,6 +1359,12 @@ pub struct KernelHomeFeedRow {
 pub struct KernelHomeFeedSnapshot {
     /// Merged rows sorted by `sort_key` descending. Raw structural fields only (D1).
     pub rows: Vec<KernelHomeFeedRow>,
+    /// Artifact-preview rows for the coordinates these feed rows reference
+    /// (Phase 7 artifact-preview consumer). Filtered to only the
+    /// `artifact_coordinate` values present in `rows`. Swift keys by
+    /// `coordinate` to render each row's resource card; a `pending` row (or a
+    /// missing coordinate) renders as a skeleton. D1: raw preview fields only.
+    pub artifact_previews: Vec<ArtifactPreviewRow>,
 }
 
 // ── Phase 5A additions (append-only) ─────────────────────────────────────────
@@ -1208,6 +1592,11 @@ pub struct DiscussionRow {
     pub body: String,
     /// `["r", url]` tag value if present, else `None`.
     pub attachment_url: Option<String>,
+    /// Canonical artifact coordinate extracted from `a`/`e`/`i` reference tags
+    /// (priority: a → e → i). `None` when no recognized reference tag is present.
+    /// Swift uses this to resolve and render the artifact chip for the discussion.
+    /// D1: raw canonical form only — no URL formatting.
+    pub artifact_coordinate: Option<String>,
     /// Event `created_at` Unix seconds. D1: no "X ago" formatting.
     pub created_at: u64,
 }
@@ -1224,6 +1613,12 @@ pub struct RoomDiscussionsSnapshot {
     pub group_id: String,
     /// Filtered kind:11+discussion rows, newest-first. Bounded at 64.
     pub rows: Vec<DiscussionRow>,
+    /// Thin resolved previews for the artifact coordinates referenced by the
+    /// rows (`DiscussionRow::artifact_coordinate`). Lets Swift render a rich
+    /// discussion attachment chip (title/image/author) instead of a bare URL.
+    /// Thin is sufficient here — a chip needs no podcast/book detail fields.
+    /// Seeded by `ensure_room_artifact_previews` on `RoomDiscussionsUpdated`.
+    pub artifact_previews: Vec<ArtifactPreviewRow>,
 }
 
 // ── Phase 7 additions (append-only) ─────────────────────────────────────────

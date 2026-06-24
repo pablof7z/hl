@@ -21,6 +21,7 @@ struct HighlightDetailTarget: Hashable {
 ///   - add to room (kind:16 repost into one of the user's NIP-29 rooms)
 struct HighlightDetailView: View {
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
 
     let item: HydratedHighlight
 
@@ -70,11 +71,12 @@ struct HighlightDetailView: View {
         .task {
             guard !commentsStarted, let commentsScope else { return }
             commentsStarted = true
-            await commentsStore.start(
-                scope: commentsScope,
-                core: app.safeCore
-            )
+            await commentsStore.start(scope: commentsScope, kernel: kernel)
         }
+        .onChange(of: commentsScope.map { kernel.commentThreads[$0.rootTagValue] }) { _, _ in
+            commentsStore.applyKernelSnapshot()
+        }
+        .onDisappear { commentsStore.stop() }
         .task(id: highlight.eventId) {
             await refreshShareURL()
         }
@@ -282,7 +284,7 @@ struct HighlightDetailView: View {
             }
 
             Button {
-                shareTarget = .highlight(highlight, core: app.safeCore)
+                shareTarget = .highlight(highlight)
             } label: {
                 actionIcon(systemName: "rectangle.stack.badge.plus")
             }
@@ -301,9 +303,9 @@ struct HighlightDetailView: View {
     }
 
     private var commentsButton: some View {
-        let projection = app.safeCore.projectCommentToolbar(
-            input: CommentToolbarProjectionInput(records: commentsStore.records)
-        )
+        let count = commentsStore.records.count
+        let countLabel = count > 99 ? "99+" : "\(count)"
+        let a11yLabel = count == 0 ? "Comments" : "\(count) comment\(count == 1 ? "" : "s")"
 
         return Button {
             showComments = true
@@ -311,15 +313,15 @@ struct HighlightDetailView: View {
             HStack(spacing: 5) {
                 Image(systemName: "bubble.left")
                     .font(.system(size: 20, weight: .medium))
-                if projection.showsCount {
-                    Text(projection.countLabel)
+                if count > 0 {
+                    Text(countLabel)
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                 }
             }
             .foregroundStyle(Color.highlighterInkStrong)
         }
-        .accessibilityLabel(projection.accessibilityLabel)
+        .accessibilityLabel(a11yLabel)
     }
 
     private func actionIcon(systemName: String) -> some View {
@@ -331,8 +333,8 @@ struct HighlightDetailView: View {
     // MARK: - Comments scope
 
     private var commentsScope: CommentScope? {
-        let snapshot = app.safeCore.getHighlightCommentScope(eventIdHex: highlight.eventId)
-        return snapshot.attach ? snapshot.scope : nil
+        // D1: highlight comment scope is always event-id + kind 9802.
+        CommentScope(rootTagName: "E", rootTagValue: highlight.eventId, rootKind: 9802)
     }
 
     /// Public web URL that the share sheet hands to other apps. The
@@ -340,28 +342,163 @@ struct HighlightDetailView: View {
     /// server-rendered with full Open Graph + Twitter Card meta so the
     /// link unfurls into a social card built around the quote.
     private func refreshShareURL() async {
-        let snapshot = await app.safeCore.getHighlightShareUrlSnapshot(
-            eventIdHex: highlight.eventId,
-            authorPubkeyHex: highlight.pubkey
-        )
-        guard snapshot.ready, let url = snapshot.shareUrl else {
-            shareURL = nil
-            return
-        }
-        shareURL = URL(string: url)
+        // Stub: use the hex event ID URL until the kernel provides NIP-19
+        // nevent encoding (bech32 + TLV). The server resolves by hex too.
+        shareURL = URL(string: "https://beta.highlighter.com/highlight/\(highlight.eventId)")
     }
 
     // MARK: - Resource projection
 
     private var resourceProjection: HighlightDetailResourceProjection {
-        app.safeCore.projectHighlightDetailResource(
-            input: HighlightDetailResourceProjectionInput(item: item)
+        // D1: inline highlight_detail_resource_projection.
+        let preview = item.artifact?.preview
+        let artAddr = highlight.artifactAddress.trimmingCharacters(in: .whitespaces)
+
+        let kind = Self.highlightSourceKind(
+            previewSource: preview?.source ?? "",
+            externalReference: highlight.externalReference,
+            artifactAddress: artAddr,
+            sourceUrl: highlight.sourceUrl
+        )
+
+        // URL host used as title/author fallback for web highlights.
+        let urlHost = Self.urlHostFromString(highlight.sourceUrl)
+
+        // Article route: valid "30023:pk:d" address only.
+        let articleRoute: ArticleReaderRoute? = Self.parseArticleRoute(artAddr)
+
+        // Book catalog id: "isbn:..." from externalReference or artifactAddress.
+        let bookCatalogId: String? = Self.bookCatalogId(
+            externalReference: highlight.externalReference,
+            artifactAddress: artAddr
+        )
+
+        // Web URL: http/https only.
+        let webUrl: String? = {
+            let t = highlight.sourceUrl.trimmingCharacters(in: .whitespaces)
+            guard !t.isEmpty,
+                  let url = URL(string: t),
+                  url.scheme == "http" || url.scheme == "https" else { return nil }
+            return t
+        }()
+
+        let title: String = {
+            if let t = preview?.title, !t.isEmpty { return t }
+            if let h = urlHost { return h }
+            return "Untitled"
+        }()
+
+        let author: String = {
+            if let a = preview?.author, !a.isEmpty { return a }
+            if let d = preview?.domain, !d.isEmpty { return d }
+            if let h = urlHost { return h }
+            return ""
+        }()
+
+        let coverUrl: String? = preview.flatMap { !$0.image.isEmpty ? $0.image : nil }
+
+        return HighlightDetailResourceProjection(
+            sourceKind: kind,
+            kindLabel: Self.highlightKindLabel(kind),
+            iconSystemName: Self.highlightSourceKindIconName(kind),
+            title: title,
+            author: author,
+            coverUrl: coverUrl,
+            articleRoute: articleRoute,
+            bookCatalogId: bookCatalogId,
+            webUrl: webUrl
         )
     }
 
+    // MARK: - Highlight source kind helpers (D1 inlined from Rust highlights.rs)
+
+    private static func highlightSourceKind(
+        previewSource: String,
+        externalReference: String,
+        artifactAddress: String,
+        sourceUrl: String
+    ) -> HighlightSourceKind {
+        switch previewSource.trimmingCharacters(in: .whitespaces).lowercased() {
+        case "article": return .article
+        case "web":     return .web
+        case "podcast": return .podcast
+        case "book":    return .book
+        case "video":   return .video
+        case "paper":   return .paper
+        case "":        break
+        default:        return .unknown
+        }
+        if externalReference.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("isbn:") {
+            return .book
+        }
+        if parseArticleRoute(artifactAddress) != nil { return .article }
+        if artifactAddress.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("isbn:") {
+            return .book
+        }
+        if !sourceUrl.trimmingCharacters(in: .whitespaces).isEmpty { return .web }
+        return .unknown
+    }
+
+    private static func parseArticleRoute(_ address: String) -> ArticleReaderRoute? {
+        let t = address.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty else { return nil }
+        let parts = t.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+        guard parts.count == 3,
+              parts[0] == "30023" else { return nil }
+        let pubkey = String(parts[1]).trimmingCharacters(in: .whitespaces)
+        let dTag   = String(parts[2]).trimmingCharacters(in: .whitespaces)
+        guard !pubkey.isEmpty, !dTag.isEmpty else { return nil }
+        return ArticleReaderRoute(address: t, pubkey: pubkey, dTag: dTag)
+    }
+
+    private static func bookCatalogId(externalReference: String, artifactAddress: String) -> String? {
+        for ref in [externalReference, artifactAddress] {
+            let t = ref.trimmingCharacters(in: .whitespaces)
+            guard t.lowercased().hasPrefix("isbn:") else { continue }
+            let isbn = String(t.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+            if !isbn.isEmpty { return "isbn:\(isbn)" }
+        }
+        return nil
+    }
+
+    private static func urlHostFromString(_ rawUrl: String) -> String? {
+        let t = rawUrl.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty else { return nil }
+        return URL(string: t)?.host
+    }
+
+    private static func highlightKindLabel(_ kind: HighlightSourceKind) -> String {
+        switch kind {
+        case .article: return "Article"
+        case .book:    return "Book"
+        case .podcast: return "Podcast"
+        case .web:     return "Web"
+        case .video:   return "Video"
+        case .paper:   return "Paper"
+        case .unknown: return "Source"
+        }
+    }
+
+    private static func highlightSourceKindIconName(_ kind: HighlightSourceKind) -> String {
+        switch kind {
+        case .article: return "doc.text"
+        case .web:     return "globe"
+        case .podcast: return "waveform"
+        case .book:    return "book.closed"
+        case .video:   return "play.rectangle"
+        case .paper:   return "doc.richtext"
+        case .unknown: return "quote.bubble"
+        }
+    }
+
     private var contentProjection: HighlightDetailContentProjection {
-        app.safeCore.projectHighlightDetailContent(
-            input: HighlightDetailContentProjectionInput(highlight: highlight)
+        let trimmedImage = highlight.imageUrl.trimmingCharacters(in: .whitespaces)
+        let quoteText = highlight.quote.trimmingCharacters(in: .whitespaces)
+        return HighlightDetailContentProjection(
+            quoteText: quoteText,
+            noteText: highlight.note.trimmingCharacters(in: .whitespaces).isEmpty ? nil : highlight.note,
+            pageImageUrl: trimmedImage.isEmpty ? nil : trimmedImage,
+            shareMessage: quoteText
         )
     }
 
@@ -386,21 +523,29 @@ struct HighlightDetailView: View {
     // MARK: - Profile helpers
 
     private var highlighterDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: highlight.pubkey,
-                profile: app.profileSnapshots[highlight.pubkey],
-                fallback: .pubkey10
-            )
+        let profile = app.profileSnapshots[highlight.pubkey]
+        let name = (profile?.displayName ?? "").isEmpty
+            ? ((profile?.name ?? "").isEmpty ? String(highlight.pubkey.prefix(10)) : profile!.name)
+            : profile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: profile?.picture ?? ""
         )
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
-        app.safeCore.projectRelativeTimeLabel(
-            input: RelativeTimeLabelInput(
-                unixSeconds: seconds,
-                style: .ago
-            )
-        ).label
+        guard let seconds, seconds > 0 else { return nil }
+        let now = UInt64(max(0, Date().timeIntervalSince1970))
+        guard now >= seconds else { return nil }
+        let delta = now - seconds
+        if delta < 60 { return "just now" }
+        switch delta {
+        case 60 ..< 3600:   return "\(delta / 60)m"
+        case 3600 ..< 86400:  return "\(delta / 3600)h"
+        case 86400 ..< 604800:  return "\(delta / 86400)d"
+        case 604800 ..< 2592000: return "\(delta / 604800)w"
+        default: return "\(delta / 2592000)mo"
+        }
     }
 }

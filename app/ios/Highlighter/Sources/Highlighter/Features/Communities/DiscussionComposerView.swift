@@ -17,6 +17,7 @@ struct DiscussionComposerView: View {
     }
 
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @Environment(\.dismiss) private var dismiss
 
     @State private var title: String = ""
@@ -75,13 +76,15 @@ struct DiscussionComposerView: View {
     }
 
     private var composerProjection: DiscussionComposerProjection {
-        app.safeCore.projectDiscussionComposer(
-            input: DiscussionComposerProjectionInput(
-                title: title,
-                body: messageBody,
-                attachmentUrl: attachmentURL,
-                isPublishing: isPublishing
-            )
+        let submitTitle = title.trimmingCharacters(in: .whitespaces)
+        let submitBody = messageBody.trimmingCharacters(in: .whitespaces)
+        let trimmedUrl = attachmentURL.trimmingCharacters(in: .whitespaces)
+        let submitAttachmentUrl: String? = trimmedUrl.isEmpty ? nil : trimmedUrl
+        return DiscussionComposerProjection(
+            submitTitle: submitTitle,
+            submitBody: submitBody,
+            submitAttachmentUrl: submitAttachmentUrl,
+            canPublish: !submitTitle.isEmpty && !isPublishing
         )
     }
 
@@ -92,24 +95,17 @@ struct DiscussionComposerView: View {
         errorMessage = nil
         defer { isPublishing = false }
 
-        let outcome = await app.safeCore.publishDiscussionFromComposer(
-            input: DiscussionComposerPublishInput(
-                groupId: groupId,
-                title: projection.submitTitle,
-                body: projection.submitBody,
-                attachmentUrl: projection.submitAttachmentUrl
-            )
-        )
-        let result = app.safeCore.projectDiscussionPublishResult(
-            input: DiscussionPublishResultInput(
-                error: outcome.error,
-                hasDiscussion: outcome.discussion != nil
-            )
-        )
-        guard result.didPublish else {
-            errorMessage = result.errorMessage
-            return
-        }
+        // Kernel is the sole writer: dispatch hl.discussion.post fire-and-forget.
+        // The new kind:11 streams back into kernel.roomDiscussions, which the
+        // list re-applies; dismiss optimistically (publish errors surface as
+        // kernel toasts, same as other kernel actions).
+        let attachment = projection.submitAttachmentUrl.flatMap { $0.isEmpty ? nil : $0 }
+        kernel.app.dispatch(.postDiscussion(
+            groupId: groupId,
+            title: projection.submitTitle,
+            body: projection.submitBody,
+            attachmentUrl: attachment
+        ))
         onPublished()
         dismiss()
     }

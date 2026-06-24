@@ -38,22 +38,26 @@ struct EditProfileSheet: View {
     @State private var error: String?
 
     private var updateProjection: ProfileUpdateProjection {
-        appStore.safeCore.projectProfileUpdate(
-            input: ProfileUpdateProjectionInput(
-                initial: initial,
-                name: name,
-                displayName: displayName,
-                about: about,
-                picture: picture,
-                banner: banner,
-                nip05: nip05,
-                website: website,
-                lud16: lud16,
-                saving: saving,
-                pictureUploading: pictureUploading,
-                bannerUploading: bannerUploading
-            )
+        let isDirty = displayName != (initial?.displayName ?? "")
+            || name != (initial?.name ?? "")
+            || about != (initial?.about ?? "")
+            || picture != (initial?.picture ?? "")
+            || banner != (initial?.banner ?? "")
+            || nip05 != (initial?.nip05 ?? "")
+            || website != (initial?.website ?? "")
+            || lud16 != (initial?.lud16 ?? "")
+        let canSave = isDirty && !saving && !pictureUploading && !bannerUploading
+        let draft = ProfileUpdateDraft(
+            name: name.trimmingCharacters(in: .whitespaces),
+            displayName: displayName.trimmingCharacters(in: .whitespaces),
+            about: about.trimmingCharacters(in: .whitespaces),
+            picture: picture.trimmingCharacters(in: .whitespaces),
+            banner: banner.trimmingCharacters(in: .whitespaces),
+            nip05: nip05.trimmingCharacters(in: .whitespaces),
+            website: website.trimmingCharacters(in: .whitespaces),
+            lud16: lud16.trimmingCharacters(in: .whitespaces)
         )
+        return ProfileUpdateProjection(draft: draft, isDirty: isDirty, canSave: canSave)
     }
 
     var body: some View {
@@ -394,33 +398,11 @@ struct EditProfileSheet: View {
         commit: @escaping (String) -> Void,
         uploading: @escaping (Bool) -> Void
     ) async {
-        uploading(true)
-        defer { uploading(false) }
-        do {
-            guard let data = try await item.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data) else {
-                error = "Couldn't read that image."
-                return
-            }
-            let prepared = await prepareForUpload(image: image)
-            let outcome = await appStore.safeCore.uploadPhoto(
-                bytes: prepared.data,
-                mime: "image/jpeg",
-                width: UInt32(prepared.width),
-                height: UInt32(prepared.height),
-                alt: ""
-            )
-            let projection = appStore.safeCore.projectProfileImageUploadResult(
-                input: ProfileImageUploadResultInput(snapshot: outcome)
-            )
-            guard let imageURL = projection.imageUrl else {
-                error = projection.errorMessage
-                return
-            }
-            commit(imageURL)
-        } catch {
-            self.error = "Upload failed: \(error.localizedDescription)"
-        }
+        // Phase 7 stub: Blossom upload requires NMP signing which isn't yet wired
+        // for non-capture flows. Users can paste an image URL directly in the text
+        // field. Kernel upload-by-purpose will restore the photo picker in Wave 2.
+        _ = item
+        error = "Image upload not yet supported — paste a URL instead."
     }
 
     private struct PreparedImage { let data: Data; let width: Int; let height: Int }
@@ -438,28 +420,37 @@ struct EditProfileSheet: View {
     private func save() {
         let projection = updateProjection
         guard projection.canSave else { return }
-        saving = true
-        Task {
-            defer { Task { @MainActor in saving = false } }
-            let outcome = await appStore.safeCore.updateProfile(draft: projection.draft)
-            let result = appStore.safeCore.projectProfileUpdateResult(
-                input: ProfileUpdateResultInput(snapshot: outcome)
-            )
-            await MainActor.run {
-                if let errorMessage = result.errorMessage {
-                    self.error = errorMessage
-                    return
-                }
-                if result.shouldEmitSuccessFeedback {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                }
-                if let updated = result.profile {
-                    onSaved(updated)
-                }
-                if result.shouldDismiss {
-                    dismiss()
-                }
-            }
-        }
+        let draft = projection.draft
+        // Fire-and-forget kernel dispatch (D6). Rust preserves unknown kind:0 fields
+        // and publishes the new metadata event; the kernel observer loop delivers
+        // the updated ProfileSnapshot back via App.swift's onChange bridge.
+        appStore.kernel?.app.dispatch(.updateProfile(
+            displayName: draft.displayName.isEmpty ? nil : draft.displayName,
+            name: draft.name.isEmpty ? nil : draft.name,
+            about: draft.about.isEmpty ? nil : draft.about,
+            pictureUrl: draft.picture.isEmpty ? nil : draft.picture,
+            bannerUrl: draft.banner.isEmpty ? nil : draft.banner,
+            website: draft.website.isEmpty ? nil : draft.website,
+            nip05: draft.nip05.isEmpty ? nil : draft.nip05,
+            lightningAddress: draft.lud16.isEmpty ? nil : draft.lud16
+        ))
+        // Optimistic: build a ProfileMetadata from the form fields so the caller
+        // can refresh its display without waiting for the relay echo.
+        let pubkey = initial?.pubkey ?? ""
+        let updated = ProfileMetadata(
+            pubkey: pubkey,
+            name: draft.name,
+            displayName: draft.displayName,
+            about: draft.about,
+            picture: draft.picture,
+            banner: draft.banner,
+            nip05: draft.nip05,
+            website: draft.website,
+            lud16: draft.lud16,
+            createdAt: nil
+        )
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        onSaved(updated)
+        dismiss()
     }
 }

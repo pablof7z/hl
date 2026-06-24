@@ -9,6 +9,7 @@ struct ArticleReaderView: View {
     let target: ArticleReaderTarget
 
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var store: ArticleReaderStore?
     @State private var pendingHighlight: PendingHighlight?
     @State private var highlightDetail: HighlightRecord?
@@ -50,7 +51,7 @@ struct ArticleReaderView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        shareTarget = ShareToCommunityTarget.article(article, core: app.safeCore)
+                        shareTarget = ShareToCommunityTarget.article(article)
                     } label: {
                         Image(systemName: "square.and.arrow.up")
                     }
@@ -66,15 +67,18 @@ struct ArticleReaderView: View {
             if store == nil {
                 let s = ArticleReaderStore(
                     target: target,
-                    safeCore: app.safeCore,
-                    eventBridge: app.eventBridge
+                    kernel: kernel
                 )
                 store = s
                 await s.start()
+                s.applyKernelSnapshot()
             }
         }
         .task(id: target.pubkey) {
             await app.requestProfile(pubkeyHex: target.pubkey)
+        }
+        .onChange(of: kernel.articleReader[target.address]) { _, _ in
+            store?.applyKernelSnapshot()
         }
         .onDisappear {
             store?.stop()
@@ -123,6 +127,7 @@ struct ArticleReaderView: View {
         } else if let article = store.article {
             ReaderScroll(
                 article: article,
+                contentTree: store.contentTree,
                 authorProfile: app.profileSnapshots[target.pubkey] ?? store.authorProfile,
                 highlights: store.highlights,
                 scrollAnchor: scrollAnchor,
@@ -153,30 +158,27 @@ struct ArticleReaderView: View {
 
     private func publish(quote: String, context: String, note: String) async {
         guard let store else { return }
-        let request = app.safeCore.projectArticleHighlightPublish(
-            input: ArticleHighlightPublishProjectionInput(note: note, error: "")
-        )
+        let submitNote = note.trimmingCharacters(in: .whitespaces)
         let outcome = await store.publishHighlight(
             quote: quote,
-            note: request.submitNote,
+            note: submitNote,
             context: context
         )
-        let result = app.safeCore.projectArticleHighlightPublish(
-            input: ArticleHighlightPublishProjectionInput(
-                note: request.submitNote,
-                error: outcome.error
-            )
-        )
-        if result.isSuccess {
+        let error = (outcome ?? "").trimmingCharacters(in: .whitespaces)
+        let isSuccess = error.isEmpty
+        let toastMessage = isSuccess
+            ? (submitNote.isEmpty ? "Highlighted" : "Highlighted with note")
+            : "Couldn't save — \(error)"
+        if isSuccess {
             withAnimation(.easeOut(duration: 0.2)) {
-                toast = result.toastMessage
+                toast = toastMessage
             }
             toastResetTimer.schedule(after: 1.8) {
                 withAnimation(.easeIn(duration: 0.2)) { toast = nil }
             }
         } else {
             withAnimation(.easeOut(duration: 0.2)) {
-                toast = result.toastMessage
+                toast = toastMessage
             }
             toastResetTimer.schedule(after: 2.8) {
                 withAnimation(.easeIn(duration: 0.2)) { toast = nil }
@@ -199,15 +201,14 @@ private struct ArticleCommentsAttachmentModifier: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        let snapshot = app.safeCore.getArticleCommentScope(address: target.address)
-        if snapshot.attach, let scope = snapshot.scope {
-            content.commentsAttachment(
-                scope: scope,
-                artifactAuthorPubkey: target.pubkey
-            )
-        } else {
-            content
-        }
+        // D1: CommentScope is a plain struct — rootTagName/rootTagValue/rootKind are always
+        // deterministic for an article address (NIP-23 kind:30023) and need no Rust call.
+        // Articles always attach comments.
+        let scope = CommentScope(rootTagName: "A", rootTagValue: target.address, rootKind: 30023)
+        content.commentsAttachment(
+            scope: scope,
+            artifactAuthorPubkey: target.pubkey
+        )
     }
 }
 
@@ -215,6 +216,10 @@ private struct ArticleCommentsAttachmentModifier: ViewModifier {
 
 private struct ReaderScroll: View {
     let article: ArticleRecord
+    /// The article body as the nmp `content_tree` (#22). `nil` until the kernel
+    /// snapshot's `content_tree` arrives — the body shows nothing until then
+    /// (D6, same cold-start window as the bespoke empty-body read).
+    let contentTree: ContentTreeWire?
     let authorProfile: ProfileMetadata?
     let highlights: [HighlightRecord]
     let scrollAnchor: ArticleReaderView.ScrollAnchor
@@ -238,6 +243,13 @@ private struct ReaderScroll: View {
     private var coverURL: URL? {
         guard !article.image.isEmpty else { return nil }
         return URL(string: article.image)
+    }
+
+    /// Re-render key for the body task: the article id plus the content-tree
+    /// node count so the body re-renders when the kernel `content_tree` arrives
+    /// (cold-start → populated) without re-rendering on every unrelated tick.
+    private var treeRenderKey: String {
+        "\(article.eventId)-\(contentTree?.nodes.count ?? 0)"
     }
 
     var body: some View {
@@ -271,43 +283,48 @@ private struct ReaderScroll: View {
         .fullScreenCover(item: $imageToOpen) { item in
             ImageZoomView(url: item.url, onDismiss: { imageToOpen = nil })
         }
-        .task(id: "\(article.eventId)-\(highlights.count)-\(app.profileSnapshots.count)") {
-            let safeCore = app.safeCore
+        // #22: render the body from the nmp `content_tree` (kernel snapshot)
+        // via `ContentTreeBodyRenderer` — replacing the bespoke
+        // `MarkdownRenderer.render(content: article.content)` markdown read. The
+        // native select-to-highlight overlay (`ArticleBodyView`) renders on top
+        // of the resulting attributed body unchanged.
+        .task(id: "\(treeRenderKey)-\(highlights.count)-\(app.profileSnapshots.count)") {
+            guard let contentTree else {
+                rendered = nil
+                return
+            }
             let profileSnapshot = Dictionary(
                 uniqueKeysWithValues: app.profileSnapshots.map { (pk, meta) -> (String, String) in
-                    let display = safeCore.projectProfileDisplay(
-                        input: ProfileDisplayProjectionInput(
-                            pubkey: pk,
-                            profile: meta,
-                            fallback: .pubkey8
-                        )
-                    )
-                    return (pk, display.displayName)
+                    let name = meta.displayName.isEmpty
+                        ? (meta.name.isEmpty ? String(pk.prefix(8)) : meta.name)
+                        : meta.displayName
+                    return (pk, name)
                 }
             )
             rendered = await Task.detached(priority: .userInitiated) {
-                MarkdownRenderer.render(
-                    content: article.content,
+                ContentTreeBodyRenderer.render(
+                    tree: contentTree,
                     highlights: highlights,
                     accent: UIColor(Color.highlighterAccent),
                     tint: UIColor(Color.highlighterAccent),
                     ink: UIColor(Color.highlighterInkStrong),
                     muted: UIColor(Color.highlighterInkMuted),
-                    nostrStandaloneEntity: { input in
-                        safeCore.standaloneNostrEntity(input)
-                    },
-                    nostrInlineTokens: { input in
-                        safeCore.tokenizeNostrMarkdownInline(input)
-                    },
-                    nostrInlineRender: { ref in
-                        safeCore.nostrEntityInlineRender(entity: ref)
-                    },
                     highlightContent: { highlight in
-                        safeCore.projectHighlightDetailContent(
-                            input: HighlightDetailContentProjectionInput(highlight: highlight)
+                        let quoteText = highlight.quote.trimmingCharacters(in: .whitespaces)
+                        let noteText = highlight.note.trimmingCharacters(in: .whitespaces)
+                        let imageUrl = highlight.imageUrl.trimmingCharacters(in: .whitespaces)
+                        return HighlightDetailContentProjection(
+                            quoteText: quoteText,
+                            noteText: noteText.isEmpty ? nil : highlight.note,
+                            pageImageUrl: imageUrl.isEmpty ? nil : imageUrl,
+                            shareMessage: quoteText
                         )
                     },
-                    profileNames: profileSnapshot
+                    profileNames: profileSnapshot,
+                    // resolveEntity is stubbed to nil — nostr: URIs in article
+                    // bodies fall back to plain links until the kernel exposes
+                    // a nonisolated entity resolver.
+                    resolveEntity: nil
                 )
             }.value
         }
@@ -325,7 +342,6 @@ private struct ReaderScroll: View {
                     footnoteBackAnchors: [:],
                     highlightsById: output.highlightsById,
                     paperColor: UIColor(Color.highlighterPaper),
-                    safeCore: app.safeCore,
                     onPublishHighlight: onPublishHighlight,
                     onRequestNote: onRequestNote,
                     onHighlightTap: onHighlightTap,
@@ -342,6 +358,20 @@ private struct ReaderScroll: View {
                 InlineArticleImage(url: url, alt: alt)
             case .nostrEntity(let ref):
                 NostrEntityCard(entity: ref)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 4)
+            case .media(let urls, let kind):
+                // Video / audio block — reuse `NostrContentView`'s native media
+                // affordance (VideoPlayer / audio row) by rendering a one-node
+                // wire slice. Full fidelity for media nodes (#22); these blocks
+                // are interactive (playback), not selectable text.
+                ContentTreeBlockSlice(node: .media(urls: urls, kind: kind))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 4)
+            case .placeholder(let reason):
+                // Preserve `content_tree` placeholders — reuse `NostrContentView`'s
+                // placeholder chip rather than dropping the node (#22).
+                ContentTreeBlockSlice(node: .placeholder(reason: reason))
                     .padding(.horizontal, 20)
                     .padding(.vertical, 4)
             }
@@ -369,6 +399,37 @@ private struct ReaderScroll: View {
         out.append(output.footnotes)
         return out
     }
+}
+
+// MARK: - Content-tree rich block slice
+
+/// Renders a single `content_tree` block node (video / audio media, placeholder)
+/// by wrapping it in a one-node `ContentTreeWire` and handing it to the vendored
+/// `NostrContentView` — so the article body reuses the exact native media player
+/// / audio row / placeholder chip `NostrContentView` ships rather than
+/// reinventing them. Themed to the reader's serif/ink palette via a
+/// `NostrContentRenderer` environment value. (#22 fidelity.)
+private struct ContentTreeBlockSlice: View {
+    let node: NostrWireNode
+
+    var body: some View {
+        NostrContentView(tree: ContentTreeWire(nodes: [node], roots: [0]))
+            .nostrContentRenderer(Self.readerRenderer)
+    }
+
+    private static let readerRenderer = NostrContentRenderer(
+        textColor: .highlighterInkStrong,
+        secondaryTextColor: .highlighterInkMuted,
+        mentionColor: .highlighterAccent,
+        hashtagColor: .highlighterAccent,
+        linkColor: .highlighterAccent,
+        quoteBorderColor: .highlighterRule,
+        codeBackgroundColor: Color.highlighterInkMuted.opacity(0.1),
+        placeholderColor: .highlighterInkMuted,
+        callbacks: NostrContentCallbacks(
+            onLinkTap: { url in UIApplication.shared.open(url) }
+        )
+    )
 }
 
 // MARK: - Inline image
@@ -515,18 +576,25 @@ private struct Header: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: article.pubkey,
-                profile: authorProfile,
-                fallback: .pubkey10
-            )
+        let name = (authorProfile?.displayName ?? "").isEmpty
+            ? ((authorProfile?.name ?? "").isEmpty ? String(article.pubkey.prefix(10)) : authorProfile!.name)
+            : authorProfile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: authorProfile?.picture ?? ""
         )
     }
 
     private var headerProjection: ArticleReaderHeaderProjection {
-        app.safeCore.projectArticleReaderHeader(
-            input: ArticleReaderHeaderProjectionInput(article: article)
+        let words = article.content.split(whereSeparator: \.isWhitespace).count
+        let readTime: UInt32? = words > 60 ? UInt32(max(1, words / 240)) : nil
+        let displaySeconds = (article.publishedAt ?? article.createdAt).flatMap { $0 > 0 ? $0 : nil }
+        return ArticleReaderHeaderProjection(
+            title: article.title.isEmpty ? "Untitled" : article.title,
+            hashtagLabels: Array(article.hashtags.prefix(12)).map { "#\($0)" },
+            displayUnixSeconds: displaySeconds,
+            readTimeMinutes: readTime
         )
     }
 
@@ -648,12 +716,14 @@ private struct HighlightDetailSheet: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: highlight.pubkey,
-                profile: app.profileSnapshots[highlight.pubkey],
-                fallback: .pubkey10
-            )
+        let profile = app.profileSnapshots[highlight.pubkey]
+        let name = (profile?.displayName ?? "").isEmpty
+            ? ((profile?.name ?? "").isEmpty ? String(highlight.pubkey.prefix(10)) : profile!.name)
+            : profile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: profile?.picture ?? ""
         )
     }
 

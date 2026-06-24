@@ -54,7 +54,7 @@ use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::{CommunityRow, ProfileSnapshot, ViewSnapshot};
 
-// ─── nmp-ffi C ABI declarations ─────────────────────────────────────────────
+// ─── nmp-ffi resolve_ref constants (ADR-0063 Lane H) ────────────────────────
 
 // ADR-0063 Lane D/H: the per-kind `nmp_app_claim_profile` /
 // `nmp_app_release_profile` symbols were deleted; profiles now resolve through
@@ -345,13 +345,13 @@ pub(crate) fn clear_on_identity_lost(state: &mut AppState) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nmp_core::typed_projections::ProfileCardModel;
     use crate::kernel::action::{AppAction, KernelEvent};
     use crate::kernel::actor::{reduce, Cmd};
     use crate::kernel::clock::{Clock, ManualClock};
     use crate::kernel::effect::Effect;
     use crate::kernel::snapshot::ViewSnapshot;
     use crate::kernel::view::ViewId;
+    use nmp_core::typed_projections::ProfileCardModel;
 
     fn make_state() -> AppState {
         AppState::default()

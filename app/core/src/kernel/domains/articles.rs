@@ -47,8 +47,15 @@ use std::collections::BTreeMap;
 use nmp_content::wire::longform_fb::decode_longform_articles;
 
 use crate::kernel::app::AppState;
-use crate::kernel::snapshot::{ArticleRow, KernelArticleReaderSnapshot, ViewSnapshot};
+use crate::kernel::snapshot::{
+    ArticleRow, HighlightRow, KernelArticleReaderSnapshot, ViewSnapshot,
+};
 use crate::kernel::view::ViewId;
+
+/// Feed-key prefix for an article's highlight feed (kind:9802 tagged `#a`).
+/// The full key is `"hl.feed.article_highlights.<article_address>"`. Mirrors the
+/// `"hl.feed.room.<group_id>"` room-lane convention (Phase 4I). Phase 7.
+pub(crate) const ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX: &str = "hl.feed.article_highlights.";
 
 // Re-export so `projections.rs` can match without importing nmp_content directly.
 pub(crate) use nmp_content::wire::longform_fb::SCHEMA_ID as ARTICLES_SCHEMA_ID;
@@ -167,22 +174,77 @@ pub(crate) fn project_article_reader_snapshot(
         d_tag: row.d_tag.clone(),
         created_at: row.created_at,
         content_tree_bytes: row.content_tree_bytes.clone(),
+        content_tree_json: content_tree_json(&row.content_tree_bytes),
+        highlights: article_highlight_rows(state, address),
     }))
+}
+
+/// Decode the FlatBuffers `content_tree_bytes` into the serde-JSON representation
+/// of `ContentTreeWire` (Phase 7, option β). Swift's vendored nmp content renderer
+/// (`NostrContentRenderer` + `ContentTreeWire.swift`) is JSON-`Decodable`, so the
+/// kernel ships the tree as JSON for the body render path. Empty string when the
+/// body has not arrived yet or decode/serialize fails (D6 — Swift shows nothing
+/// until the document loads, same as the bespoke empty-body window).
+fn content_tree_json(bytes: &[u8]) -> String {
+    if bytes.is_empty() {
+        return String::new();
+    }
+    match nmp_content::wire::decode_content_tree(bytes) {
+        Ok(tree) => serde_json::to_string(&tree).unwrap_or_default(),
+        Err(_) => String::new(),
+    }
+}
+
+/// Build the overlay highlight rows for an article from its per-article feed
+/// (`AppState::article_highlight_feeds["hl.feed.article_highlights.<address>"]`).
+///
+/// Decodes the accumulated kind:9802 events via the shared
+/// `highlight_feed::decode_highlight_row` (so the overlay carries the SAME
+/// enriched NIP-84/NIP-73 fields the highlight feed does — quote/context/clip/
+/// image), sorted newest-first and deduped by event id. Empty when the feed has
+/// not been registered yet (the brief window between OpenView and the first
+/// page) — the bespoke lane likewise shows the seeded article with no overlays
+/// until ndb answers. Mirrors `highlights::query_for_article` (kind:9802 `#a`).
+fn article_highlight_rows(state: &AppState, address: &str) -> Vec<HighlightRow> {
+    let key = format!("{ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX}{address}");
+    let Some(fs) = state.article_highlight_feeds.get(&key) else {
+        return Vec::new();
+    };
+    let mut rows: Vec<HighlightRow> = fs
+        .rows
+        .iter()
+        .filter_map(crate::kernel::domains::highlight_feed::decode_highlight_row)
+        .collect();
+    rows.sort_unstable_by(|a, b| {
+        b.created_at
+            .cmp(&a.created_at)
+            .then_with(|| a.event_id.cmp(&b.event_id))
+    });
+    let mut seen = std::collections::HashSet::new();
+    rows.retain(|r| seen.insert(r.event_id.clone()));
+    rows
 }
 
 // ─── Lifecycle helpers ────────────────────────────────────────────────────────
 
 /// Return lifecycle effects for `Cmd::OpenView(ViewId::ArticleReader{..})`.
 ///
-/// In Phase 4A the longform projection is already flowing via the nmp-defaults
-/// boot registration — no per-address claim effect is needed. Returns an empty
-/// vec (reserved for future fetch-on-demand if the address is not yet in state).
+/// The article BODY auto-populates `AppState::articles` via the longform
+/// projection (Phase 4A) — no claim effect needed for that. Phase 7 ALSO
+/// registers a per-article highlight feed (kind:9802 tagged `#a == address`)
+/// and triggers its first drain so the overlay highlights fill on open —
+/// mirroring the room-lane feed (4I) and the bespoke `query_for_article`.
 pub(crate) fn lifecycle_effects_for_view_open(id: &ViewId) -> Vec<crate::kernel::effect::Effect> {
     match id {
-        ViewId::ArticleReader { .. } => {
+        ViewId::ArticleReader { address } => {
             // Longform projection auto-populates AppState::articles on every
-            // NMP snapshot tick. No explicit claim is needed for 4A.
-            vec![]
+            // NMP snapshot tick. No explicit claim is needed for the body.
+            let feed_key = format!("{ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX}{address}");
+            let scope = crate::kernel::domains::feed::article_highlight_feed_scope(address);
+            let mut effects =
+                crate::kernel::domains::feed::reduce_register_feed_cursor(feed_key.clone(), scope);
+            effects.extend(crate::kernel::domains::feed::reduce_drain_feed(feed_key));
+            effects
         }
         _ => vec![],
     }
@@ -190,11 +252,16 @@ pub(crate) fn lifecycle_effects_for_view_open(id: &ViewId) -> Vec<crate::kernel:
 
 /// Return lifecycle effects for `Cmd::CloseView(ViewId::ArticleReader{..})`.
 ///
-/// No release effect is needed — the longform projection accumulates articles
-/// for the session lifetime without per-address ref-counts.
+/// Releases the per-article highlight feed cursor (Phase 7) so the nmp kernel
+/// unregisters the slot and the `FeedState.rows` buffer is cleared inline in
+/// `actor_task` (same pattern as the room-lane feed). The article BODY stays in
+/// `AppState::articles` for the session (longform projection, no ref-count).
 pub(crate) fn lifecycle_effects_for_view_close(id: &ViewId) -> Vec<crate::kernel::effect::Effect> {
     match id {
-        ViewId::ArticleReader { .. } => vec![],
+        ViewId::ArticleReader { address } => {
+            let feed_key = format!("{ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX}{address}");
+            crate::kernel::domains::feed::reduce_release_feed_cursor(feed_key)
+        }
         _ => vec![],
     }
 }
@@ -451,21 +518,179 @@ mod tests {
         );
     }
 
-    // 4A-T6: article_reader_none_when_absent
-    //
-    // Redundant with T4 but exercises the ViewId dispatch path explicitly.
+    // 4A-T6 (updated for Phase 7): the ArticleReader lifecycle now registers a
+    // per-article highlight feed on open (RegisterFeedCursor + DrainFeed) and
+    // releases it on close (ReleaseFeedCursor). The article BODY still needs no
+    // claim (longform projection auto-populates AppState::articles).
     #[test]
-    fn article_reader_none_when_absent() {
+    fn article_reader_lifecycle_registers_highlight_feed() {
+        let address = "30023:nobody:nowhere";
         let id = ViewId::ArticleReader {
-            address: "30023:nobody:nowhere".to_string(),
+            address: address.to_string(),
         };
-        // Confirm lifecycle helpers return empty effects for the ViewId.
+        let expected_key = format!("{ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX}{address}");
+
         let open_effects = lifecycle_effects_for_view_open(&id);
-        assert!(open_effects.is_empty(), "no lifecycle effects for 4A open");
+        // RegisterFeedCursor + DrainFeed for the per-article highlight feed.
+        assert!(
+            open_effects.iter().any(|e| matches!(
+                e,
+                crate::kernel::effect::Effect::RegisterFeedCursor { key, .. } if *key == expected_key
+            )),
+            "open must register the per-article highlight feed cursor"
+        );
+        assert!(
+            open_effects.iter().any(|e| matches!(
+                e,
+                crate::kernel::effect::Effect::DrainFeed { key } if *key == expected_key
+            )),
+            "open must drain the per-article highlight feed"
+        );
+
         let close_effects = lifecycle_effects_for_view_close(&id);
         assert!(
-            close_effects.is_empty(),
-            "no lifecycle effects for 4A close"
+            close_effects.iter().any(|e| matches!(
+                e,
+                crate::kernel::effect::Effect::ReleaseFeedCursor { key } if *key == expected_key
+            )),
+            "close must release the per-article highlight feed cursor"
         );
+    }
+
+    // Phase 7: the article-highlight feed scope is the kind:9802 `#a` filter that
+    // mirrors the bespoke `highlights::query_for_article` NdbFilter exactly.
+    #[test]
+    fn article_highlight_feed_scope_filters_kind_and_address() {
+        use nmp_core::PullScope;
+        let address = "30023:aabbcc:my-article";
+        let scope = crate::kernel::domains::feed::article_highlight_feed_scope(address);
+        let PullScope::InterestShape(shape) = scope else {
+            panic!("expected InterestShape scope");
+        };
+        assert!(shape.kinds.contains(&9802), "scope must filter kind:9802");
+        assert_eq!(
+            shape.tags.get("a").map(|s| s.iter().any(|v| v == address)),
+            Some(true),
+            "scope must filter `#a == article address`"
+        );
+    }
+
+    // Phase 7 parity (gotcha #7): the kernel ArticleReader overlay highlights must
+    // decode to the SAME fields as the bespoke per-event parse
+    // (highlights::record_from_cached_event — what query_for_article calls). Build
+    // ONE kind:9802 event with rich tags, push it into the per-article feed, project
+    // the snapshot, and assert each overlay row matches the bespoke parse — no
+    // hardcoded expectations.
+    #[test]
+    fn article_reader_overlay_highlights_match_bespoke_parse() {
+        use nostr_sdk::prelude::*;
+
+        let mut state = make_state();
+        let address = "30023:aabbcc:my-article";
+        let id = "deadbeef0000000000000000000000000000000000000000000000000000dead";
+        let pubkey = "aabbcc0000000000000000000000000000000000000000000000000000000001";
+        // The article body must be present for the snapshot to project.
+        state.articles.insert(
+            address.to_string(),
+            ArticleRow {
+                address: address.to_string(),
+                id: id.to_string(),
+                author_pubkey: pubkey.to_string(),
+                author_display_name: None,
+                author_picture_url: None,
+                title: None,
+                summary: None,
+                hero_image_url: None,
+                d_tag: "my-article".to_string(),
+                created_at: 1_700_000_000,
+                content_tree_bytes: Vec::new(),
+            },
+        );
+
+        // Build a real kind:9802 highlight anchored to this article, with rich tags.
+        let keys = Keys::generate();
+        let event = EventBuilder::new(Kind::Custom(9802), "the quoted text")
+            .tags(vec![
+                Tag::parse(vec!["a".to_string(), address.to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "context".to_string(),
+                    "surrounding paragraph".to_string(),
+                ])
+                .unwrap(),
+                Tag::parse(vec!["comment".to_string(), "my note".to_string()]).unwrap(),
+            ])
+            .sign_with_keys(&keys)
+            .expect("sign");
+
+        // Push it into the per-article highlight feed as a raw kernel event.
+        let key = format!("{ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX}{address}");
+        let fs = state.article_highlight_feeds.entry(key).or_default();
+        fs.rows.push(nmp_core::substrate::KernelEvent {
+            id: event.id.to_hex(),
+            author: event.pubkey.to_hex(),
+            kind: 9802,
+            created_at: event.created_at.as_secs(),
+            content: event.content.clone(),
+            tags: event.tags.iter().map(|t| t.as_slice().to_vec()).collect(),
+            relay_provenance: vec![],
+        });
+
+        // Project the reader snapshot.
+        let snap = project_article_reader_snapshot(&state, address).expect("snapshot");
+        let ViewSnapshot::ArticleReader(s) = snap else {
+            panic!("expected ArticleReader snapshot");
+        };
+        assert_eq!(s.highlights.len(), 1, "one overlay highlight");
+        let row = &s.highlights[0];
+
+        // Bespoke parse of the same event — the parity reference.
+        let bespoke = crate::highlights::record_from_cached_event(&event).expect("bespoke record");
+        assert_eq!(row.content, bespoke.quote, "quote");
+        assert_eq!(row.context, bespoke.context, "context");
+        assert_eq!(row.note.clone().unwrap_or_default(), bespoke.note, "note");
+        assert_eq!(
+            row.artifact_address, bespoke.artifact_address,
+            "artifact_address"
+        );
+        assert_eq!(
+            row.source_reference_key, bespoke.source_reference_key,
+            "source_reference_key"
+        );
+    }
+
+    // Phase 7 (β): the article-reader snapshot exposes the body content tree as
+    // serde-JSON (content_tree_json) so Swift's vendored nmp ContentTreeWire
+    // decoder + NostrContentRenderer can render it. Round-trip: encode a tree to
+    // FB bytes → content_tree_json → decode the JSON → must equal the original.
+    #[test]
+    fn content_tree_json_round_trips_from_fb_bytes() {
+        use nmp_content::wire::{ContentTreeWire, WireNode};
+        use nmp_content::RenderMode;
+
+        let tree = ContentTreeWire {
+            nodes: vec![WireNode::Text {
+                text: "Hello, article body.".to_string(),
+            }],
+            roots: vec![0],
+            mode: RenderMode::Markdown,
+        };
+        let fb_bytes = nmp_content::wire::encode_content_tree(&tree);
+        assert!(!fb_bytes.is_empty(), "encoded FB bytes non-empty");
+
+        let json = content_tree_json(&fb_bytes);
+        assert!(
+            !json.is_empty(),
+            "content_tree_json must be non-empty for a real tree"
+        );
+
+        let decoded: ContentTreeWire = serde_json::from_str(&json)
+            .expect("content_tree_json must be valid ContentTreeWire JSON");
+        assert_eq!(
+            decoded, tree,
+            "JSON must round-trip back to the original tree"
+        );
+
+        // Empty bytes → empty string (cold-start window, D6).
+        assert_eq!(content_tree_json(&[]), "", "empty bytes → empty json");
     }
 }

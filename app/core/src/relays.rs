@@ -1183,7 +1183,10 @@ const KIND_RELAY_LIST: u16 = 10002;
 /// Build the `["r", url, marker?]` tags for the provided rows. Rows with
 /// neither `read` nor `write` are skipped — NIP-65 has no concept of a
 /// "disabled" relay entry, only "inbox/outbox/both".
-fn nip65_tags(rows: &[RelayConfig]) -> Result<Vec<Tag>, CoreError> {
+///
+/// `pub(crate)` so the kernel `nip65_relay_role` parity test asserts the kernel's
+/// role-marker decision matches this bespoke reference (gotcha #7).
+pub(crate) fn nip65_tags(rows: &[RelayConfig]) -> Result<Vec<Tag>, CoreError> {
     let mut tags: Vec<Tag> = Vec::new();
     for row in rows {
         let marker = match (row.read, row.write) {
@@ -1204,7 +1207,7 @@ fn nip65_tags(rows: &[RelayConfig]) -> Result<Vec<Tag>, CoreError> {
 }
 
 /// Parse a kind:10002 event into `(url, read, write)` rows.
-fn parse_nip65_event(event: &Event) -> Vec<(String, bool, bool)> {
+pub(crate) fn parse_nip65_event(event: &Event) -> Vec<(String, bool, bool)> {
     let mut out: Vec<(String, bool, bool)> = Vec::new();
     for tag in event.tags.iter() {
         let slice = tag.as_slice();
@@ -1277,7 +1280,10 @@ struct AppDataEntry {
 
 /// JSON content for the kind:30078 event. Skips rows with neither flag — no
 /// point persisting empty entries.
-fn app_data_content(rows: &[RelayConfig]) -> String {
+///
+/// `pub(crate)` so the kernel relay-app-data parity test can assert the kernel's
+/// `relay_app_data_content` matches this bespoke format byte-for-byte (gotcha #7).
+pub(crate) fn app_data_content(rows: &[RelayConfig]) -> String {
     let entries: Vec<AppDataEntry> = rows
         .iter()
         .filter(|r| r.rooms || r.indexer)

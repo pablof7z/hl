@@ -37,6 +37,7 @@ nmp-nip51 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev 
 nmp-nip78 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "452eb843d" }
 nmp-blossom = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "452eb843d" }
 nmp-content = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "452eb843d" }
+nmp-store = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "452eb843d" }
 nmp-kinds = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "452eb843d" }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }

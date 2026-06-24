@@ -162,6 +162,11 @@ pub struct AppState {
     /// `IdentityChanged(None)` and `Logout`.
     pub claimed_profiles: HashMap<String, nmp_core::typed_projections::ProfileCardModel>,
 
+    // ── Phase 7 entity-ref additions (append-only) ────────────────────────────
+    /// Events claimed via `nmp_app_resolve_ref(namespace=1)` for entity cards.
+    /// Keyed by event key (hex event id or coordinate). Cleared on identity lost.
+    pub claimed_events: HashMap<String, nmp_core::typed_projections::ClaimedEventRow>,
+
     // ── Phase 3F additions ────────────────────────────────────────────────────
     /// Raw group events for open RoomHome views, decoded from the
     /// `"nmp.nip29.group_events"` typed sidecar. Keyed by `group_id` (local id).
@@ -173,6 +178,29 @@ pub struct AppState {
     /// Phase 3F — the events are buffered so Phase 4 can decode feed content
     /// without re-opening a subscription (Non-Negotiable #7).
     pub room_home_events: HashMap<String, Vec<nmp_nip29::GroupEventRow>>,
+
+    // ── #1653 additions ──────────────────────────────────────────────────────
+    /// All kind:30003 bookmark-set rows observed this session, keyed by
+    /// `(author_pubkey, d_tag)` internally — stored as a flat `Vec` sorted by
+    /// `created_at` descending. Includes events from ANY observed author (not
+    /// filtered by active account) so `project_bookmarks_snapshot` can split
+    /// into "my sets" vs "following sets" without re-parsing.
+    ///
+    /// Populated by `apply_bookmark_sets` via `"hl.bookmark_sets"` sidecar.
+    /// Cleared on `Logout` / `IdentityChanged(None)`. Bounded by the number of
+    /// unique `(author, d_tag)` combinations observed — parameterized-replaceable
+    /// supersession keeps only the newest event per key (Non-Negotiable #7).
+    pub all_bookmark_sets: Vec<crate::kernel::snapshot::BookmarkSetRow>,
+
+    /// All kind:30004 curation-set rows observed this session (any author).
+    /// Same shape and lifecycle as `all_bookmark_sets`.
+    pub all_curation_sets: Vec<crate::kernel::snapshot::BookmarkSetRow>,
+
+    /// Active account's kind:39701 web-bookmark rows decoded from the
+    /// `"hl.web_bookmarks"` typed sidecar. Only the active account's events
+    /// are stored (filtered in `apply_web_bookmarks`). Newest-first.
+    /// Cleared on `Logout` / `IdentityChanged(None)`.
+    pub web_bookmarks: Vec<crate::kernel::snapshot::WebBookmarkRow>,
 
     // ── Phase 4C additions ────────────────────────────────────────────────────
     /// Active account's NIP-51 kind:10003 bookmark list, decoded from the
@@ -218,6 +246,13 @@ pub struct AppState {
     /// Bounded by the number of events whose reaction projection has fired —
     /// in practice bounded by opened views (Non-Negotiable #7).
     pub reaction_state: HashMap<String, crate::kernel::snapshot::ReactionRow>,
+
+    /// The active viewer's own kind:7 reaction event id per target event id.
+    /// Kernel-INTERNAL (never crosses FFI): populated from the reaction observer
+    /// via `KernelEvent::ReactionStateUpdated` so `hl.reaction.toggle` can emit
+    /// the unreact effect with the correct reaction_event_id. Cleared alongside
+    /// `reaction_state` on identity loss.
+    pub viewer_reaction_ids: HashMap<String, String>,
 
     // ── Phase 4D additions ────────────────────────────────────────────────────
     /// NIP-50 relay search results for the current active search query.
@@ -269,6 +304,35 @@ pub struct AppState {
     /// Cleared on `Logout` / `IdentityChanged(None)`.
     pub room_lanes: HashMap<String, crate::kernel::domains::feed::FeedState>,
 
+    /// Pull-cursor state per room highlight feed, keyed by group_id.
+    ///
+    /// Each entry is registered when `ViewId::RoomHome{group_id}` opens — pulls
+    /// kind:9802 events tagged `#h == <group_id>`. Key is
+    /// `"hl.feed.room_highlights.<group_id>"`. Bounded by open room views.
+    /// Cleared on `Logout` / `IdentityChanged(None)`.
+    pub room_highlight_feeds: HashMap<String, crate::kernel::domains::feed::FeedState>,
+
+    /// Pull-cursor state per article-highlight feed, keyed by article address.
+    ///
+    /// Each entry is registered (Phase 7) when a `ViewId::ArticleReader{address}`
+    /// opens — kind:9802 events tagged `#a == <address>`. Key is
+    /// `"hl.feed.article_highlights.<address>"`. Bounded by open reader views;
+    /// released on close. Cleared on `Logout` / `IdentityChanged(None)`.
+    pub article_highlight_feeds: HashMap<String, crate::kernel::domains::feed::FeedState>,
+
+    // ── Phase 7 home-feed aggregation additions (append-only) ────────────────
+    /// Pull-cursor state for follow-authored article interactions.
+    ///
+    /// Registered when `ViewId::HomeFeed` opens (via
+    /// `lifecycle_effects_for_view_open` emitting `Effect::RegisterFeedCursor`
+    /// with key `"hl.feed.home_interactions"`). Carries kind:1/7/16/1111 events
+    /// authored by follows with `#k=30023`, used by `home_feed.rs` to compute
+    /// `interactor_pubkeys` and `latest_activity_at` for article rows.
+    ///
+    /// Fail-closed: not registered when `AppState::follows` is empty — no broad
+    /// scan (D5). Cleared on `Logout` / `IdentityChanged(None)`.
+    pub home_feed_interactions: crate::kernel::domains::feed::FeedState,
+
     // ── Phase 5A additions ────────────────────────────────────────────────────
     /// What's New seen-state — device-local, never published to Nostr.
     ///
@@ -295,6 +359,13 @@ pub struct AppState {
     /// leak into the next session. The App Group file is the durable handoff
     /// store; this field is the in-kernel working set for the current session.
     pub share_queue: crate::kernel::domains::share::ShareQueueState,
+
+    /// In-flight share-to-room / drain / invite publish FSM (#21).
+    ///
+    /// DEVICE-LOCAL — the publish itself produces a nostr fact, but the FSM
+    /// tracking its phase + pending correlation id is transient. Cleared on
+    /// `Logout` / `IdentityChanged(None)` alongside `share_queue`.
+    pub share_publish: crate::kernel::domains::share::SharePublishState,
 
     // ── Phase 5H additions ────────────────────────────────────────────────────
     /// Podcast playback state — transient, DEVICE-LOCAL.
@@ -439,14 +510,20 @@ impl Default for AppState {
             room_policy: RoomPolicy::default(),
             own_profile: None,
             claimed_profiles: HashMap::new(),
+            claimed_events: HashMap::new(),
             // ── Phase 3F additions ────────────────────────────────────────────
             room_home_events: HashMap::new(),
+            // ── #1653 additions ───────────────────────────────────────────────
+            all_bookmark_sets: Vec::new(),
+            all_curation_sets: Vec::new(),
+            web_bookmarks: Vec::new(),
             // ── Phase 4C additions ────────────────────────────────────────────
             bookmarks: Vec::new(),
             // ── Phase 4A additions ────────────────────────────────────────────
             articles: BTreeMap::new(),
             // ── Phase 4B additions ────────────────────────────────────────────
             reaction_state: HashMap::new(),
+            viewer_reaction_ids: HashMap::new(),
             // ── Phase 4D additions ────────────────────────────────────────────
             search_results: Vec::new(),
             omnibox_outcome: None,
@@ -454,12 +531,17 @@ impl Default for AppState {
             article_feed: crate::kernel::domains::feed::FeedState::default(),
             highlight_feed: crate::kernel::domains::feed::FeedState::default(),
             room_lanes: HashMap::new(),
+            room_highlight_feeds: HashMap::new(),
+            article_highlight_feeds: HashMap::new(),
+            // ── Phase 7 home-feed aggregation additions ───────────────────────
+            home_feed_interactions: crate::kernel::domains::feed::FeedState::default(),
             // ── Phase 5A additions ────────────────────────────────────────────
             whats_new: crate::kernel::domains::whats_new::WhatsNewState::default(),
             // ── Phase 5C additions ────────────────────────────────────────────
             isbn: crate::kernel::domains::isbn::IsbnState::default(),
             // ── Phase 5K additions ────────────────────────────────────────────
             share_queue: crate::kernel::domains::share::ShareQueueState::default(),
+            share_publish: crate::kernel::domains::share::SharePublishState::default(),
             // ── Phase 5H additions ────────────────────────────────────────────
             podcast: crate::kernel::domains::podcast::PodcastState::default(),
             podcast_resume_cache: std::collections::HashMap::new(),

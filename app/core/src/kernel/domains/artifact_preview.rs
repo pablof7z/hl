@@ -472,7 +472,7 @@ mod tests {
     #[test]
     fn article_coordinate_resolves_from_existing_articles() {
         let mut state = AppState::default();
-        let now = t();
+        let _now = t();
 
         let address = format!("30023:{}:{}", "b".repeat(64), "my-article");
         let coordinate = format!("a:{address}");

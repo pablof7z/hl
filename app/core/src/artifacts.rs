@@ -293,7 +293,13 @@ pub fn query_for_group(
         if h != group_id {
             continue;
         }
-        if crate::discussions::is_discussion(&event) {
+        if event.kind.as_u16() == 11
+            && event.tags.iter().any(|t| {
+                let s = t.as_slice();
+                s.first().map(String::as_str) == Some("t")
+                    && s.get(1).map(String::as_str) == Some("discussion")
+            })
+        {
             continue;
         }
         if let Some(rec) = artifact_record_from_event(&event, group_id) {
@@ -331,7 +337,13 @@ pub fn search_cached(ndb: &Ndb, query: &str, limit: u32) -> Result<Vec<ArtifactR
         let Some(group_id) = first_tag_value(&event, "h") else {
             continue;
         };
-        if crate::discussions::is_discussion(&event) {
+        if event.kind.as_u16() == 11
+            && event.tags.iter().any(|t| {
+                let s = t.as_slice();
+                s.first().map(String::as_str) == Some("t")
+                    && s.get(1).map(String::as_str) == Some("discussion")
+            })
+        {
             continue;
         }
         let Some(record) = artifact_record_from_event(&event, group_id) else {
@@ -836,7 +848,7 @@ fn first_non_empty(values: &[&str]) -> String {
 
 /// Pure builder for the kind:11 artifact share event. Mirrors
 /// `buildArtifactShareEvent` (`web/src/lib/ndk/artifacts.ts:509-590`).
-fn build_share_event(
+pub(crate) fn build_share_event(
     group_id: &str,
     preview: &ArtifactPreview,
     note: Option<&str>,

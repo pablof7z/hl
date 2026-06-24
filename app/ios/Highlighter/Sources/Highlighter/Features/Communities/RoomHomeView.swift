@@ -1,5 +1,7 @@
 import SwiftUI
 
+private enum RoomLibraryCardKind { case article, book, podcast, generic }
+
 struct RoomHomeView: View {
     enum Tab: Hashable { case home, library, discussions, chat }
 
@@ -57,6 +59,20 @@ struct RoomHomeView: View {
                     Button { inviteSheetPresented = true } label: {
                         Image(systemName: "person.badge.plus")
                     }
+                    Menu {
+                        Button(role: .destructive) {
+                            let relay = kernelRoomSnapshot?.hostRelayUrl ?? ""
+                            kernel.app.dispatch(.leaveRoom(
+                                groupId: groupId,
+                                hostRelayUrl: relay,
+                                reason: nil
+                            ))
+                        } label: {
+                            Label("Leave Room", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
                 }
             }
             .onChange(of: selectedTab) { _, tab in
@@ -67,16 +83,27 @@ struct RoomHomeView: View {
                 // GroupEventsProjection and pushes KernelRoomHomeSnapshot.
                 kernel.openRoomHome(groupId: groupId)
 
-                await room.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
+                room.start(groupId: groupId, kernel: kernel)
                 await chatPresenceProbe.start(
                     groupId: groupId,
-                    core: app.safeCore,
-                    bridge: app.eventBridge,
+                    hostRelayUrl: kernelRoomSnapshot?.hostRelayUrl ?? "",
+                    kernel: kernel,
                     onActivity: {
                         hasChatActivity = true
                         if selectedTab != .chat { chatUnread = true }
                     }
                 )
+            }
+            .onChange(of: kernel.roomHomeSnapshots[groupId]) { _, _ in
+                // Kernel pushed a new room-home snapshot (lanes/library/highlights/
+                // resolved artifact previews) — re-mirror into the view models.
+                room.applyKernelSnapshot()
+            }
+            .onChange(of: kernel.roomChatSnapshots[groupId]) { _, _ in
+                // Kernel pushed a new chat snapshot — re-evaluate room activity
+                // so the Chat tab unhides live on the first kind:9 (the probe
+                // owns the kernel chat view lifecycle for this room).
+                chatPresenceProbe.refreshActivity()
             }
             .onDisappear {
                 // Phase 3G: close the kernel view, releasing the GroupEventsProjection.
@@ -179,7 +206,7 @@ struct RoomHomeView: View {
             artifactCount: room.artifacts.count,
             isLoading: room.isLoading,
             onShareToCommunity: { artifact in
-                shareTarget = .artifact(artifact, core: app.safeCore)
+                shareTarget = .artifact(artifact)
             }
         )
     }
@@ -208,7 +235,7 @@ struct RoomHomeView: View {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 Button {
-                                    shareTarget = .artifact(a, core: app.safeCore)
+                                    shareTarget = .artifact(a)
                                 } label: {
                                     Label("Share to community", systemImage: "square.and.arrow.up")
                                 }
@@ -232,13 +259,18 @@ struct RoomHomeView: View {
         }
     }
 
+    private func cardKind(for a: ArtifactRecord) -> RoomLibraryCardKind {
+        switch a.preview.source.trimmingCharacters(in: .whitespaces).lowercased() {
+        case "article": return .article
+        case "book":    return .book
+        case "podcast": return .podcast
+        default:        return .generic
+        }
+    }
+
     @ViewBuilder
     private func artifactRow(_ a: ArtifactRecord, commentCount: Int) -> some View {
-        let projection = app.safeCore.projectRoomLibraryCardKind(
-            input: RoomLibraryCardKindProjectionInput(artifact: a)
-        )
-
-        switch projection.cardKind {
+        switch cardKind(for: a) {
         case .article:
             RoomLibraryArticleCardView(artifact: a, commentCount: commentCount)
         case .book:
@@ -251,12 +283,11 @@ struct RoomHomeView: View {
     }
 
     private func genericArtifactRow(_ artifact: ArtifactRecord) -> some View {
-        let projection = app.safeCore.projectRoomLibraryGenericCard(
-            input: RoomLibraryGenericCardProjectionInput(artifact: artifact)
-        )
+        let trimmed = artifact.preview.title.trimmingCharacters(in: .whitespaces)
+        let title = trimmed.isEmpty ? "Untitled" : trimmed
 
         return HStack {
-            Text(projection.title)
+            Text(title)
                 .foregroundStyle(Color.highlighterInkStrong)
             Spacer()
             Image(systemName: "chevron.right")

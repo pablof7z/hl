@@ -114,6 +114,23 @@ pub(crate) fn reduce_action_blossom_upload(
     }]
 }
 
+// ─── Helpers ────────────────────────────────────────────────────────────────────
+
+/// Parse a NIP-94 `dim` value (e.g. `"1024x768"`) into `(width, height)`.
+/// Returns `(0, 0)` for any unparseable input.
+fn parse_dim(dim: &str) -> (u32, u32) {
+    let mut parts = dim.splitn(2, 'x');
+    let w = parts
+        .next()
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+    let h = parts
+        .next()
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+    (w, h)
+}
+
 // ─── Action-result routing ──────────────────────────────────────────────────────
 
 /// Apply all settled rows from a decoded `ActionResultsModel` to `AppState`.
@@ -130,11 +147,14 @@ pub(crate) fn reduce_action_blossom_upload(
 pub(crate) fn apply_action_results(
     state: &mut AppState,
     model: &nmp_core::typed_projections::ActionResultsModel,
+    now: u64,
 ) -> Vec<Effect> {
+    let mut effects = Vec::new();
     for row in &model.results {
-        apply_action_result_row(state, row);
+        let mut row_effects = apply_action_result_row(state, row, now);
+        effects.append(&mut row_effects);
     }
-    vec![]
+    effects
 }
 
 /// Apply one settled `ActionResultRow` to `AppState`.
@@ -143,7 +163,7 @@ pub(crate) fn apply_action_results(
 /// 1. Match `pending_upload_correlation_id` → upload result state change.
 /// 2. Match `pending_publish_correlation_id` → publish FSM state change.
 /// 3. No match → silent no-op (D6), logged at trace level.
-fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow) {
+fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow, now: u64) -> Vec<Effect> {
     use crate::kernel::domains::capture_draft::reduce_event_capture_publish_action_result;
 
     let cid = &row.correlation_id;
@@ -165,20 +185,61 @@ fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow) {
             .pending_upload_correlation_ids
             .remove(cid.as_str());
 
-        // Parse blob URL from the opaque result JSON (ADR-0043 Decision 4).
-        // nmp.blossom.upload sets result = `{"url":"…","sha256":"…",…}`.
-        let blob_url = if success {
-            row.result
+        // Parse the blob descriptor from the opaque result JSON.
+        // nmp.blossom.upload sets result = `{"url":"…","sha256":"…","size":…,
+        // "type":"image/jpeg","nip94":{"dim":"WxH","alt":"…"}}`.
+        let (blob_url, blossom_upload) = if success {
+            let parsed = row
+                .result
                 .as_deref()
-                .and_then(|r| serde_json::from_str::<serde_json::Value>(r).ok())
-                .and_then(|v| {
-                    v.get("url")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_string)
-                })
+                .and_then(|r| serde_json::from_str::<serde_json::Value>(r).ok());
+
+            let url = parsed
+                .as_ref()
+                .and_then(|v| v.get("url").and_then(serde_json::Value::as_str))
                 .unwrap_or_default()
+                .to_string();
+
+            let upload = if !url.is_empty() {
+                let sha256_hex = parsed
+                    .as_ref()
+                    .and_then(|v| v.get("sha256").and_then(serde_json::Value::as_str))
+                    .unwrap_or_default()
+                    .to_string();
+                let mime = parsed
+                    .as_ref()
+                    .and_then(|v| v.get("type").and_then(serde_json::Value::as_str))
+                    .unwrap_or("image/jpeg")
+                    .to_string();
+                let size_bytes = parsed
+                    .as_ref()
+                    .and_then(|v| v.get("size").and_then(serde_json::Value::as_u64))
+                    .unwrap_or(0);
+                let dim = parsed
+                    .as_ref()
+                    .and_then(|v| v.pointer("/nip94/dim").and_then(serde_json::Value::as_str))
+                    .unwrap_or_default();
+                let (width, height) = parse_dim(dim);
+                let alt = parsed
+                    .as_ref()
+                    .and_then(|v| v.pointer("/nip94/alt").and_then(serde_json::Value::as_str))
+                    .unwrap_or_default()
+                    .to_string();
+                Some(crate::kernel::models::BlossomUpload {
+                    url: url.clone(),
+                    sha256_hex,
+                    mime,
+                    size_bytes,
+                    width,
+                    height,
+                    alt,
+                })
+            } else {
+                None
+            };
+            (url, upload)
         } else {
-            String::new()
+            (String::new(), None)
         };
         tracing::debug!(
             %cid,
@@ -186,8 +247,8 @@ fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow) {
             %blob_url,
             "apply_action_result_row: blossom upload result"
         );
-        reduce_event_blossom_upload_result_inner(state, success, blob_url);
-        return;
+        reduce_event_blossom_upload_result_inner(state, success, blob_url, blossom_upload);
+        return Vec::new();
     }
 
     // 2. Capture publish correlation_id?
@@ -204,8 +265,8 @@ fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow) {
             error = %error,
             "apply_action_result_row: capture publish result"
         );
-        reduce_event_capture_publish_action_result(state, success, error);
-        return;
+        let effects = reduce_event_capture_publish_action_result(state, success, error, now);
+        return effects;
     }
 
     // 3. Podcast clip publish correlation_id? (Phase 5J)
@@ -217,18 +278,36 @@ fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow) {
             error = %error,
             "apply_action_result_row: clip publish result"
         );
-        crate::kernel::domains::podcast::reduce_event_clip_publish_action_result(
+        let effects = crate::kernel::domains::podcast::reduce_event_clip_publish_action_result(
             state, success, error,
         );
-        return;
+        return effects;
     }
 
-    // 4. Unknown correlation_id — silent no-op (D6).
+    // 4. Share-to-room / drain / invite publish correlation_id? (#21)
+    if state.share_publish.pending_correlation_id.as_deref() == Some(cid.as_str()) {
+        let error = row.error.clone().unwrap_or_default();
+        tracing::debug!(
+            %cid,
+            %success,
+            error = %error,
+            "apply_action_result_row: share publish result"
+        );
+        return crate::kernel::domains::share::reduce_event_share_publish_action_result(
+            state,
+            cid.clone(),
+            success,
+            error,
+        );
+    }
+
+    // 5. Unknown correlation_id — silent no-op (D6).
     tracing::trace!(
         %cid,
         status = %row.status,
         "apply_action_result_row: unrecognised correlation_id — no-op"
     );
+    Vec::new()
 }
 
 // ─── Event reducers ─────────────────────────────────────────────────────────────
@@ -246,7 +325,9 @@ pub(crate) fn reduce_event_blossom_upload_result(
     blob_url: String,
     _error: String,
 ) -> Vec<Effect> {
-    reduce_event_blossom_upload_result_inner(state, success, blob_url);
+    // Test-injection path: only the URL is available; blossom_upload is None.
+    // The action_results path (apply_action_result_row) provides the full descriptor.
+    reduce_event_blossom_upload_result_inner(state, success, blob_url, None);
     vec![]
 }
 
@@ -254,11 +335,21 @@ pub(crate) fn reduce_event_blossom_upload_result(
 /// `apply_action_result_row` path AFTER the matching id has already been
 /// removed from `pending_upload_correlation_ids`. The `KernelEvent` path
 /// (test injection via `KernelEvent::BlossomUploadResult`) calls this
-/// directly since it has no correlation_id to remove from the set.
-fn reduce_event_blossom_upload_result_inner(state: &mut AppState, success: bool, blob_url: String) {
+/// with `blossom_upload = None` since the test event only carries `blob_url`.
+fn reduce_event_blossom_upload_result_inner(
+    state: &mut AppState,
+    success: bool,
+    blob_url: String,
+    blossom_upload: Option<crate::kernel::models::BlossomUpload>,
+) {
     if success {
         state.capture_draft.has_upload = true;
         state.capture_draft.blossom_image_url = blob_url;
+        // Store the full upload descriptor when available (action_results path).
+        // `None` on the test-injection path (KernelEvent::BlossomUploadResult)
+        // which only carries the URL; `blossom_image_url` still makes the URL
+        // accessible for the view snapshot.
+        state.capture_draft.blossom_upload = blossom_upload;
     } else {
         // On failure: clear stale URL and has_upload so the UI can offer a retry.
         // If a previous upload succeeded (has_upload=true) and this is a
@@ -266,6 +357,7 @@ fn reduce_event_blossom_upload_result_inner(state: &mut AppState, success: bool,
         // only clear when no prior successful URL exists.
         if !state.capture_draft.has_upload {
             state.capture_draft.blossom_image_url = String::new();
+            state.capture_draft.blossom_upload = None;
         }
     }
 }
@@ -577,7 +669,7 @@ mod tests {
             }],
         };
 
-        apply_action_results(&mut state, &model);
+        apply_action_results(&mut state, &model, 0);
 
         assert!(
             state.capture_draft.has_upload,
@@ -704,7 +796,7 @@ mod tests {
             }],
         };
 
-        apply_action_results(&mut state, &model);
+        apply_action_results(&mut state, &model, 0);
 
         // has_upload must still be false — the unknown row must be silently ignored.
         assert!(!state.capture_draft.has_upload);
@@ -739,7 +831,7 @@ mod tests {
             }],
         };
 
-        apply_action_results(&mut state, &model);
+        apply_action_results(&mut state, &model, 0);
 
         assert_eq!(
             state.capture_draft.publish_phase,
@@ -766,7 +858,7 @@ mod tests {
                 event_id: None,
             }],
         };
-        apply_action_results(&mut state2, &model2);
+        apply_action_results(&mut state2, &model2, 0);
         assert!(
             !matches!(state2.capture_draft.publish_phase, CaptureDraftPhase::Done),
             "status=\"success\" must NOT drive FSM to Done (nmp sends \"published\", not \"success\")"
@@ -807,7 +899,7 @@ mod tests {
                 event_id: None,
             }],
         };
-        apply_action_results(&mut state, &model_a);
+        apply_action_results(&mut state, &model_a, 0);
 
         assert!(
             state.capture_draft.has_upload,
@@ -840,7 +932,7 @@ mod tests {
                 event_id: None,
             }],
         };
-        apply_action_results(&mut state, &model_b);
+        apply_action_results(&mut state, &model_b, 0);
 
         assert!(state.capture_draft.has_upload);
         assert_eq!(

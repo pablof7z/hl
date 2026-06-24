@@ -48,6 +48,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use nmp_ffi::NmpApp;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::mpsc::UnboundedSender;
@@ -167,6 +168,15 @@ pub struct BookPickerKernelSnapshot {
     pub last_result: Option<KernelArtifactPreviewResult>,
     /// Number of entries currently in the in-memory cache (diagnostic).
     pub cache_size: u64,
+    /// Recent books (kind:11 + kind:9802) from the NMP event store. Populated
+    /// by `Effect::ScanBookPickerRecents`. Empty until the first scan completes.
+    pub recents: Vec<crate::kernel::models::ArtifactRecord>,
+    /// Filtered recents matching the current search query. Empty when `query`
+    /// is empty (callers show `recents` instead).
+    pub search_results: Vec<crate::kernel::models::ArtifactRecord>,
+    /// Non-empty if the scan encountered an error (D6: recents is empty; error
+    /// is diagnostic-only, not surfaced in UI).
+    pub error: String,
 }
 
 // ─── AppState sub-state ──────────────────────────────────────────────────────
@@ -185,6 +195,12 @@ pub struct IsbnState {
     pub pending_lookup: Option<String>,
     /// Outcome of the most recent lookup — exposed via `BookPickerKernelSnapshot`.
     pub last_result: Option<KernelArtifactPreviewResult>,
+    /// Cached book records from the NMP event store (kind:11 + kind:9802).
+    pub recents: Vec<crate::kernel::models::ArtifactRecord>,
+    /// Search-filtered subset of `recents` matching `query`.
+    pub search_results: Vec<crate::kernel::models::ArtifactRecord>,
+    /// Last query dispatched via `SetBookPickerQuery`.
+    pub query: String,
 }
 
 // ─── Reducer: AppAction::LookupIsbn ──────────────────────────────────────────
@@ -309,7 +325,280 @@ pub(crate) fn project_book_picker_snapshot(state: &AppState) -> Option<ViewSnaps
         pending_isbn: state.isbn.pending_lookup.clone(),
         last_result: state.isbn.last_result.clone(),
         cache_size: state.isbn.cache.len() as u64,
+        recents: state.isbn.recents.clone(),
+        search_results: state.isbn.search_results.clone(),
+        error: String::new(),
     }))
+}
+
+// ─── Reducer: AppAction::SetBookPickerQuery ──────────────────────────────────
+
+/// Handle `AppAction::SetBookPickerQuery { query, recent_limit, search_limit }`.
+///
+/// Stores the query in `AppState::isbn.query` and emits
+/// `Effect::ScanBookPickerRecents` so the effect runner can scan the NMP event
+/// store (kind:11 + kind:9802) and emit `KernelEvent::BookPickerRecentsLoaded`.
+pub(crate) fn reduce_action_set_book_picker_query(
+    state: &mut AppState,
+    query: String,
+    recent_limit: u32,
+    search_limit: u32,
+) -> Vec<Effect> {
+    state.isbn.query = query.clone();
+
+    // Collect session pubkey.
+    let pubkey = match &state.session {
+        crate::kernel::app::SessionState::Present { pubkey, .. } => pubkey.clone(),
+        _ => return vec![],
+    };
+
+    // Collect joined group IDs.
+    let joined_group_ids: Vec<String> = state
+        .communities
+        .iter()
+        .map(|c| c.group_id.clone())
+        .collect();
+
+    vec![Effect::ScanBookPickerRecents {
+        pubkey,
+        joined_group_ids,
+        query,
+        recent_limit,
+        search_limit,
+    }]
+}
+
+// ─── Reducer: KernelEvent::BookPickerRecentsLoaded ──────────────────────────
+
+/// Handle `KernelEvent::BookPickerRecentsLoaded`.
+///
+/// Stores recents + search_results into `AppState::isbn`.
+pub(crate) fn reduce_event_book_picker_recents_loaded(
+    state: &mut AppState,
+    recents: Vec<crate::kernel::models::ArtifactRecord>,
+    search_results: Vec<crate::kernel::models::ArtifactRecord>,
+) -> Vec<Effect> {
+    state.isbn.recents = recents;
+    state.isbn.search_results = search_results;
+    vec![]
+}
+
+// ─── Effect runner: ScanBookPickerRecents ────────────────────────────────────
+
+/// Scan the NMP event store for kind:11 + kind:9802 book events and emit
+/// `KernelEvent::BookPickerRecentsLoaded`.
+///
+/// - kind:11 events in joined groups that have an `i isbn:…` tag are book shares.
+/// - kind:9802 events by the current user with an `i isbn:…` tag are highlights.
+/// - Both are converted to `ArtifactRecord`, deduped by ISBN reference key,
+///   and sorted newest-first. D6: any store error yields an empty recents.
+pub(crate) async fn run_effect_scan_book_picker_recents(
+    nmp: Option<&crate::kernel::actor::NmpHandle>,
+    pubkey: String,
+    joined_group_ids: Vec<String>,
+    query: String,
+    recent_limit: u32,
+    search_limit: u32,
+    tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
+) {
+    use nmp_store::{EventStore, StoreQuery};
+
+    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
+    // NmpHandle for the full actor lifetime.
+    let Some(handle) = nmp else {
+        let _ = tx.send(crate::kernel::actor::Cmd::Event(
+            crate::kernel::action::KernelEvent::BookPickerRecentsLoaded {
+                recents: vec![],
+                search_results: vec![],
+            },
+        ));
+        return;
+    };
+    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+
+    let store: std::sync::Arc<dyn EventStore> = {
+        let slot = nmp_ref.event_store_handle();
+        let Ok(guard) = slot.lock() else {
+            let _ = tx.send(crate::kernel::actor::Cmd::Event(
+                crate::kernel::action::KernelEvent::BookPickerRecentsLoaded {
+                    recents: vec![],
+                    search_results: vec![],
+                },
+            ));
+            return;
+        };
+        match guard.clone() {
+            Some(s) => s,
+            None => {
+                let _ = tx.send(crate::kernel::actor::Cmd::Event(
+                    crate::kernel::action::KernelEvent::BookPickerRecentsLoaded {
+                        recents: vec![],
+                        search_results: vec![],
+                    },
+                ));
+                return;
+            }
+        }
+    };
+
+    let cap = ((recent_limit.saturating_mul(8)).max(256)) as usize;
+    let stored = match store.query(
+        &StoreQuery::KindTime {
+            kinds: vec![11, 9802],
+            since: None,
+            until: None,
+        },
+        cap,
+    ) {
+        Ok(events) => events,
+        Err(_) => {
+            let _ = tx.send(crate::kernel::actor::Cmd::Event(
+                crate::kernel::action::KernelEvent::BookPickerRecentsLoaded {
+                    recents: vec![],
+                    search_results: vec![],
+                },
+            ));
+            return;
+        }
+    };
+
+    let joined_set: std::collections::HashSet<&str> =
+        joined_group_ids.iter().map(|s| s.as_str()).collect();
+
+    // Dedupe by isbn reference key, newest wins.
+    let mut by_isbn: std::collections::HashMap<String, crate::kernel::models::ArtifactRecord> =
+        std::collections::HashMap::new();
+
+    for ev in &stored {
+        let raw = &ev.raw;
+        let Some(rec) = book_artifact_from_raw(raw, &pubkey, &joined_set) else {
+            continue;
+        };
+        let key = rec.preview.reference_tag_value.clone();
+        match by_isbn.get(&key) {
+            Some(existing) if existing.created_at.unwrap_or(0) >= rec.created_at.unwrap_or(0) => {}
+            _ => {
+                by_isbn.insert(key, rec);
+            }
+        }
+    }
+
+    let mut recents: Vec<crate::kernel::models::ArtifactRecord> = by_isbn.into_values().collect();
+    recents.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    recents.truncate(recent_limit as usize);
+
+    let search_results = if !query.trim().is_empty() {
+        let q = query.to_lowercase();
+        let mut filtered: Vec<crate::kernel::models::ArtifactRecord> = recents
+            .iter()
+            .filter(|r| {
+                r.preview.title.to_lowercase().contains(&q)
+                    || r.preview.author.to_lowercase().contains(&q)
+                    || r.preview.reference_tag_value.to_lowercase().contains(&q)
+            })
+            .cloned()
+            .collect();
+        filtered.truncate(search_limit as usize);
+        filtered
+    } else {
+        vec![]
+    };
+
+    let _ = tx.send(crate::kernel::actor::Cmd::Event(
+        crate::kernel::action::KernelEvent::BookPickerRecentsLoaded {
+            recents,
+            search_results,
+        },
+    ));
+}
+
+// ─── Private helpers ─────────────────────────────────────────────────────────
+
+fn first_raw_tag(tags: &[Vec<String>], name: &str) -> Option<String> {
+    tags.iter()
+        .find(|t| t.len() >= 2 && t[0] == name)
+        .map(|t| t[1].clone())
+}
+
+/// Convert a `RawEvent` into an `ArtifactRecord` if it is a book artifact
+/// (has `i isbn:…` tag) and passes the relevant author/group filter:
+/// - kind:11: must have an `h` tag in `joined_groups`
+/// - kind:9802: must be authored by `user_pubkey`
+fn book_artifact_from_raw(
+    raw: &nmp_store::RawEvent,
+    user_pubkey: &str,
+    joined_groups: &std::collections::HashSet<&str>,
+) -> Option<crate::kernel::models::ArtifactRecord> {
+    let tags = &raw.tags;
+
+    let i_tag = first_raw_tag(tags, "i").unwrap_or_default();
+    if !i_tag.starts_with("isbn:") {
+        return None;
+    }
+
+    let group_id = match raw.kind {
+        11 => {
+            let h = first_raw_tag(tags, "h").unwrap_or_default();
+            if !joined_groups.contains(h.as_str()) {
+                return None;
+            }
+            h
+        }
+        9802 => {
+            if raw.pubkey != user_pubkey {
+                return None;
+            }
+            String::new()
+        }
+        _ => return None,
+    };
+
+    let title = first_raw_tag(tags, "title").unwrap_or_default();
+    let author = first_raw_tag(tags, "author").unwrap_or_default();
+    let image = first_raw_tag(tags, "image").unwrap_or_default();
+    let description = first_raw_tag(tags, "summary").unwrap_or_default();
+    let source = first_raw_tag(tags, "source").unwrap_or("book".to_string());
+
+    let catalog_id = i_tag.clone();
+    let highlight_reference_key = format!("i:{catalog_id}");
+
+    let preview = crate::kernel::models::ArtifactPreview {
+        id: first_raw_tag(tags, "d").unwrap_or_default(),
+        url: first_raw_tag(tags, "r").unwrap_or_default(),
+        title,
+        author,
+        image,
+        description,
+        source,
+        domain: String::new(),
+        catalog_id: catalog_id.clone(),
+        catalog_kind: "isbn".to_string(),
+        podcast_guid: String::new(),
+        podcast_item_guid: String::new(),
+        podcast_show_title: String::new(),
+        audio_url: String::new(),
+        audio_preview_url: String::new(),
+        transcript_url: String::new(),
+        feed_url: String::new(),
+        published_at: first_raw_tag(tags, "published_at").unwrap_or_default(),
+        duration_seconds: None,
+        reference_tag_name: "i".to_string(),
+        reference_tag_value: catalog_id.clone(),
+        reference_kind: first_raw_tag(tags, "k").unwrap_or_default(),
+        highlight_tag_name: "i".to_string(),
+        highlight_tag_value: catalog_id,
+        highlight_reference_key,
+        chapters: vec![],
+    };
+
+    Some(crate::kernel::models::ArtifactRecord {
+        preview,
+        group_id,
+        share_event_id: raw.id.clone(),
+        pubkey: raw.pubkey.clone(),
+        created_at: Some(raw.created_at),
+        note: raw.content.clone(),
+    })
 }
 
 // ─── Effect runners ──────────────────────────────────────────────────────────

@@ -89,20 +89,6 @@ pub enum Effect {
     /// single `ActorCommand::AddRelay` with the new role (nmp upserts).
     /// Fire-and-forget. D3: no wss-scheme literals.
     SetRelayRole { url: String, role: String },
-    /// Sign and publish a kind:30078 app-data event via
-    /// `ActorCommand::PublishRawEvent`.
-    ///
-    /// Used to persist the hl rooms relay list under the hl-owned d-tag
-    /// `"com.highlighter.relays"`. The kernel builds the JSON `content` and
-    /// the `["d", "com.highlighter.relays"]` tag; the active signer signs it
-    /// through nmp's standard publish path. Fire-and-forget: nmp handles relay
-    /// routing via `PublishTarget::Auto` (NIP-65 outbox; D3). No wss-scheme
-    /// literals in the kernel — relay URLs are embedded inside `content` only.
-    PublishRoomsRelayList {
-        /// JSON-serialized rooms relay list to embed in the event content.
-        content: String,
-    },
-
     // ── Phase 3B additions (append-only) ─────────────────────────────────────
     /// Call `nmp_nip29::register::wire_joined_groups(nmp_ref, pubkey, "")`.
     ///
@@ -183,6 +169,13 @@ pub enum Effect {
         /// Raw 64-char lowercase hex pubkey to release.
         pubkey: String,
     },
+
+    // ── Phase 7 entity-ref additions (append-only) ────────────────────────────
+    /// Call `nmp_app_resolve_ref(namespace=1, key, "hl.entity.<key>", shape=2, liveness=Live)`.
+    ResolveEntityRef { key: String },
+
+    /// Call `nmp_app_release_ref(namespace=1, key, "hl.entity.<key>")`.
+    ReleaseEntityRef { key: String },
 
     // ── Phase 3F additions (append-only) ─────────────────────────────────────
     /// Call `nmp_nip29::register::wire_group_events(nmp_ref, GroupId{..})` to
@@ -288,7 +281,7 @@ pub enum Effect {
     ///      lifecycle: OneShot, scope: ActiveAccount, id: InterestId(search_id), .. })`
     ///      to cause the planner to issue NIP-50 REQ frames on connected
     ///      search-capable relays. nmp-nip50 has NO action namespace —
-    ///      submission is via `push_interest` (confirmed b4404159
+    ///      submission is via `push_interest` (confirmed d16aea60
     ///      `crates/nmp-ffi/src/lib.rs:1828`).
     ///   2. Replaces the hl-owned `SearchResultsProjection` registered under
     ///      typed snapshot key `"hl.search"` with a fresh instance seeded from
@@ -343,6 +336,29 @@ pub enum Effect {
     /// The kernel is the sole kind:9802 writer for ported screens.
     PublishHighlightEvent {
         /// serde_json-serialised event template: `{ kind: 9802, content, tags }`.
+        json: String,
+    },
+
+    // ── #1653 additions (append-only) ────────────────────────────────────────
+    /// Publish a kind:30004 curation-set update (add or remove an article) via
+    /// `ActorCommand::PublishRawEvent`. Same raw-publish path as
+    /// `PublishHighlightEvent` — NMP has no built-in action namespace for
+    /// kind:30004 at d16aea60 (verified by grep on origin/master).
+    ///
+    /// The `json` field is a serde_json-serialised event template
+    /// `{ kind: 30004, content: "", tags: [...] }` (kind, content, tags only —
+    /// nmp's signer fills `id`, `sig`, `pubkey`, `created_at`). Built in the
+    /// reducer with `serde_json::json!` (never `format!` — D-rule).
+    ///
+    /// Fire-and-forget (D6, Non-Negotiable #3): the updated set event arrives
+    /// back as a `BookmarkSetsUpdated` frame once the relay echoes the event
+    /// and the `SetListProjection` re-snapshots. Kernel is the sole
+    /// kind:30004 writer for ported screens.
+    ///
+    /// No-op when `nmp` is `None` (test mode — tests inspect the `Effect`
+    /// directly to verify the event template).
+    PublishSetEvent {
+        /// serde_json-serialised event template: `{ kind, content, tags }`.
         json: String,
     },
 
@@ -438,6 +454,22 @@ pub enum Effect {
         entries: Vec<(String, crate::kernel::domains::isbn::CachedIsbnEntry)>,
     },
 
+    /// Scan the NMP event store for kind:11 + kind:9802 book events and emit
+    /// `KernelEvent::BookPickerRecentsLoaded`. Emitted by
+    /// `reduce_action_set_book_picker_query`.
+    ScanBookPickerRecents {
+        /// Hex pubkey of the current user (for kind:9802 author filter).
+        pubkey: String,
+        /// Group IDs the user has joined (for kind:11 `h` tag filter).
+        joined_group_ids: Vec<String>,
+        /// Current search query (empty = load recents only).
+        query: String,
+        /// Maximum number of recent books to return.
+        recent_limit: u32,
+        /// Maximum number of search results to return.
+        search_limit: u32,
+    },
+
     // ── Phase 5H additions (append-only) ─────────────────────────────────────
     /// Load the saved resume position for `guid` from the
     /// `{data_dir}/podcast-position-v1.json` store and emit
@@ -470,7 +502,7 @@ pub enum Effect {
         /// Full `ArtifactRecord` snapshot (needed to reconstruct
         /// `PodcastPositionRecord` for cold-launch rehydration).
         /// Boxed to keep the `Effect` enum variant size manageable.
-        artifact: Box<crate::models::ArtifactRecord>,
+        artifact: Box<crate::kernel::models::ArtifactRecord>,
     },
 
     // ── Phase 5F additions (append-only) ─────────────────────────────────────
@@ -681,6 +713,130 @@ pub enum Effect {
         /// `"i:podcast:item:guid:<guid>"`). Never empty.
         coordinate: String,
     },
+
+    // ── #1653 bookmark-sets subscription additions (append-only) ─────────────
+    /// Push a view-scoped `LogicalInterest` for NIP-51 bookmark/curation SETS
+    /// (kind:30003 + kind:30004) and NIP-B0 web bookmarks (kind:39701) so nmp
+    /// emits REQ frames and matching events actually arrive (#1653 codex
+    /// BLOCKING #1). Without this the `SetListProjection`/`WebBookmarkProjection`
+    /// observers only see accepted-event fanout — the data is starved.
+    ///
+    /// The effect runner builds `InterestShape{ authors, kinds:[30003,30004,
+    /// 39701] }` (Tailing, ActiveAccount) and calls `NmpApp::push_interest`
+    /// with the stable [`bookmark_sets::BOOKMARK_SETS_INTEREST_ID`]. Emitted on
+    /// `ViewId::Bookmarks` open. Idempotent: the registry replaces the prior
+    /// entry on the same `InterestId`.
+    ///
+    /// `authors` = active account + follows (raw 64-char hex). Empty `authors`
+    /// is tolerated (wildcard) but the reducer only emits when an account is
+    /// present. Fire-and-forget (D6). No-op when `nmp` is `None` (test mode).
+    PushBookmarkSetsInterest {
+        /// Raw hex pubkeys whose sets/web bookmarks are wanted (active + follows).
+        authors: Vec<String>,
+    },
+
+    /// Withdraw the view-scoped bookmark-sets interest pushed by
+    /// [`PushBookmarkSetsInterest`] and clear the accumulated projection state so
+    /// the observers do not grow unbounded across the session (#1653 codex
+    /// HIGH #7, D5/D8). Emitted on `ViewId::Bookmarks` close.
+    ///
+    /// Sends `ActorCommand::WithdrawInterest(InterestId(BOOKMARK_SETS_INTEREST_ID))`
+    /// and clears the live `SetListProjection`/`WebBookmarkProjection` accumulators
+    /// via the boot-registered controller. Fire-and-forget (D6). No-op when `nmp`
+    /// is `None`.
+    WithdrawBookmarkSetsInterest,
+
+    // ── #21 share-flow additions (append-only) ───────────────────────────────
+    /// Publish an in-group share/repost event (kind:11 artifact share, kind:16
+    /// highlight repost) through the VALIDATED `nmp.publish` `PublishRaw` ingress
+    /// (`nmp_app_dispatch_action`, NOT the raw `ActorCommand::PublishRawEvent`
+    /// door directly — finding 1), host-pinned to the group's host relay
+    /// (`PublishTarget::Explicit`, D3 fail-closed), threaded with a
+    /// `correlation_id` so the publish verdict routes back through
+    /// `apply_action_result_row` → `reduce_event_share_publish_action_result`
+    /// and drives the share FSM → Done / Error (D6).
+    ///
+    /// Routing through `nmp.publish` means the pinned-nmp `PublishModule::start`
+    /// validation applies to this ingress too — reserved replaceable-list kinds
+    /// (0/3/10003) are rejected, never silently signed.
+    ///
+    /// Replaces the bespoke `artifacts::publish` (kind:11 artifact share) and
+    /// `highlights::share_to_community` (kind:16 highlight repost) publish paths.
+    /// The kind:9009 invite mint uses the TYPED `nmp.nip29.create_invite` action
+    /// via [`Effect::DispatchCreateInviteWithCorrelation`] instead. The kernel is
+    /// the sole writer for these events on ported screens — no double-publish
+    /// with the bespoke lane.
+    ///
+    /// At pinned nmp d16aea60 the NIP-29 typed actions
+    /// (`nmp.nip29.share_event_in_group`, `repost_in_group`) cannot reproduce
+    /// these events field-completely: `share_event_in_group` mandates an `e`
+    /// target tag (the standalone kind:11 artifact has none) and offers no slot
+    /// for the rich `d`/`title`/`source`/`i`/`k`/`r`/`author`/`image`/`summary`/
+    /// podcast tags; `repost_in_group` drops the `e`-tag relay hint. The generic
+    /// `nmp.publish` `PublishRaw` path signs an arbitrary `{kind, tags, content}`
+    /// for the active account and accepts an explicit relay set — the
+    /// field-complete door for both.
+    ///
+    /// The `json` field is a serde_json-serialised template
+    /// `{ kind, content, tags, host_relay_url }`; nmp fills
+    /// `id`/`sig`/`pubkey`/`created_at`. Built with `serde_json::json!` (never
+    /// `format!` — D-rule). No-op when nmp is `None` (test mode inspects the
+    /// emitted `Effect` directly).
+    PublishShareEvent {
+        /// serde_json template: `{ kind, content, tags, host_relay_url }`.
+        json: String,
+        /// Correlation id threaded through nmp for action_results routing.
+        correlation_id: String,
+    },
+
+    /// Dispatch `nmp.nip29.create_invite` (kind:9009 invite mint) via
+    /// `nmp_app_dispatch_action`, threading a `correlation_id` so the create-invite
+    /// publish verdict drives the share-mint FSM (`SharePublishState`).
+    ///
+    /// Unlike the fire-and-forget `DispatchNip29Action`, this runner parses the
+    /// nmp-minted dispatch correlation id and (if it differs from the reducer
+    /// placeholder) emits `KernelEvent::SharePublishCorrelationMinted` to swap it
+    /// into `share_publish.pending_correlation_id`. When nmp rejects the dispatch
+    /// (`{"error":..}`, e.g. validation failure), the runner drives the FSM to
+    /// Error directly (D6). The create-invite action's per-relay publish terminal
+    /// later arrives in `apply_action_result_row` keyed on the correlation id,
+    /// driving the FSM → Done / Error — so the mint is not marked Done until the
+    /// publish actually succeeds.
+    ///
+    /// `json` is the `nmp.nip29.create_invite` payload
+    /// (`{ group: { host_relay_url, local_id }, codes: [..] }`). No-op when nmp
+    /// is `None` (test mode inspects the emitted `Effect` directly).
+    DispatchCreateInviteWithCorrelation {
+        /// `nmp.nip29.create_invite` payload JSON.
+        json: String,
+        /// Reducer-minted placeholder correlation id (swapped for the nmp id).
+        correlation_id: String,
+    },
+
+    // ── Phase 7 Part C additions (append-only) ───────────────────────────────
+    /// Update the active account's kind:0 profile metadata.
+    ///
+    /// The effect runner reads the existing kind:0 from nostrdb, merges the
+    /// supplied fields (preserving unknown fields — round-trip safe), signs,
+    /// and publishes a new kind:0 replaceable event.
+    ///
+    /// Phase 7 Part C stub: no-op until the bespoke lane is deleted.
+    /// Fire-and-forget (D6, Non-Negotiable #3).
+    UpdateProfile {
+        display_name: Option<String>,
+        name: Option<String>,
+        about: Option<String>,
+        picture_url: Option<String>,
+        banner_url: Option<String>,
+        website: Option<String>,
+        nip05: Option<String>,
+        lightning_address: Option<String>,
+    },
+
+    /// Apply a native network-path update. The runner disconnects or reconnects
+    /// NMP's relay sockets according to the Wi-Fi-only policy.
+    /// Fire-and-forget (D6). Phase 7 Part C.
+    ApplyNetworkPath { is_wifi: bool, wifi_only: bool },
 
     // ── Auth-bridge additions (append-only) ──────────────────────────────────
     /// Durably write `onboarding.complete = true` to `OnboardingStore`.

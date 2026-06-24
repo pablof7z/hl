@@ -6,7 +6,6 @@ use std::collections::{BTreeMap, HashSet};
 use nostr_sdk::prelude::*;
 use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 
-use crate::articles;
 use crate::errors::CoreError;
 use crate::models::{
     ArtifactRecord, BlossomUpload, BookRoute, HighlightDraft, HighlightRecord, HighlightSourceKind,
@@ -18,7 +17,6 @@ use crate::profile::{
     ProfileDisplayProjectionInput, ProfileDisplayWithLabelProjectionInput,
 };
 use crate::relays::highlighter_relay;
-use crate::web_metadata::WebMetadata;
 use ::url::Url;
 
 /// NIP-84 highlight event.
@@ -73,7 +71,6 @@ pub struct HighlightResourceHeaderProjectionInput {
     pub source_article_author_pubkey: String,
     pub article_author_profiles: Vec<HighlightResourceAuthorProfile>,
     pub book_preview: Option<crate::models::ArtifactPreview>,
-    pub web_metadata: Option<WebMetadata>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -299,7 +296,7 @@ pub fn source_kind(
     if is_isbn_reference(external_reference) {
         return HighlightSourceKind::Book;
     }
-    if articles::article_reader_route_from_address(artifact_address).is_some() {
+    if is_nip23_article_address(artifact_address) {
         return HighlightSourceKind::Article;
     }
     if is_isbn_reference(artifact_address) {
@@ -351,14 +348,12 @@ pub fn highlight_resource_header_projection(
             preview,
             input.source_article.as_ref(),
             input.book_preview.as_ref(),
-            input.web_metadata.as_ref(),
             url_host.as_deref(),
         ),
         author_or_domain: resource_author_or_domain(
             source_kind,
             preview,
             input.book_preview.as_ref(),
-            input.web_metadata.as_ref(),
             url_host.as_deref(),
             &article_author_pubkey,
             article_author_profile,
@@ -369,7 +364,6 @@ pub fn highlight_resource_header_projection(
             preview,
             input.source_article.as_ref(),
             input.book_preview.as_ref(),
-            input.web_metadata.as_ref(),
         ),
         book_isbn: book_route.map(|route| route.isbn),
         article_address,
@@ -470,12 +464,20 @@ pub fn highlight_share_url_snapshot(
     event_id_hex: &str,
     author_pubkey_hex: &str,
 ) -> HighlightShareUrlSnapshot {
-    match crate::nostr_entities::encode_event_to_nevent(
-        event_id_hex.to_string(),
-        Some(author_pubkey_hex.to_string()),
-        vec![highlighter_relay().to_string()],
-        Some(KIND_HIGHLIGHT as u32),
-    ) {
+    match (|| -> Result<String, CoreError> {
+        let id = nostr_sdk::prelude::EventId::from_hex(event_id_hex)
+            .map_err(|e| CoreError::InvalidInput(format!("bad event id: {e}")))?;
+        let author = nostr_sdk::prelude::PublicKey::from_hex(author_pubkey_hex.trim())
+            .map_err(|e| CoreError::InvalidInput(format!("bad author pubkey: {e}")))?;
+        let relay = nostr_sdk::prelude::RelayUrl::parse(highlighter_relay())
+            .map_err(|e| CoreError::InvalidInput(format!("bad relay: {e}")))?;
+        let nevent = nostr_sdk::nips::nip19::Nip19Event::new(id)
+            .author(author)
+            .kind(nostr_sdk::prelude::Kind::from(KIND_HIGHLIGHT as u16))
+            .relays([relay]);
+        nostr_sdk::nips::nip19::ToBech32::to_bech32(&nevent)
+            .map_err(|e| CoreError::InvalidInput(format!("encode nevent: {e}")))
+    })() {
         Ok(nevent) => HighlightShareUrlSnapshot {
             share_url: Some(format!("https://beta.highlighter.com/highlight/{nevent}")),
             ready: true,
@@ -538,12 +540,33 @@ fn is_isbn_reference(value: &str) -> bool {
     value.trim().to_ascii_lowercase().starts_with("isbn:")
 }
 
+/// Return true when `address` is a NIP-23 article address (`30023:<pubkey>:<d-tag>`).
+fn is_nip23_article_address(address: &str) -> bool {
+    article_reader_route_from_address(address).is_some()
+}
+
+/// Parse a NIP-23 article address (`30023:<pubkey>:<d-tag>`) into an
+/// `ArticleReaderRoute`. Returns `None` for any other address format.
+fn article_reader_route_from_address(address: &str) -> Option<crate::models::ArticleReaderRoute> {
+    let rest = address.strip_prefix("30023:")?;
+    let colon = rest.find(':')?;
+    let pubkey = &rest[..colon];
+    let d_tag = &rest[colon + 1..];
+    if pubkey.is_empty() || d_tag.is_empty() {
+        return None;
+    }
+    Some(crate::models::ArticleReaderRoute {
+        address: address.to_string(),
+        pubkey: pubkey.to_string(),
+        d_tag: d_tag.to_string(),
+    })
+}
+
 fn resource_cover_url(
     source_kind: HighlightSourceKind,
     preview: Option<&crate::models::ArtifactPreview>,
     source_article: Option<&crate::models::ArticleRecord>,
     book_preview: Option<&crate::models::ArtifactPreview>,
-    web_metadata: Option<&WebMetadata>,
 ) -> Option<String> {
     if let Some(image) = preview.and_then(|p| non_empty(&p.image)) {
         return Some(image);
@@ -558,16 +581,6 @@ fn resource_cover_url(
             return Some(image);
         }
     }
-    if source_kind == HighlightSourceKind::Web {
-        if let Some(metadata) = web_metadata {
-            if let Some(image) = non_empty(&metadata.image) {
-                return Some(image);
-            }
-            if let Some(favicon) = non_empty(&metadata.favicon) {
-                return Some(favicon);
-            }
-        }
-    }
     None
 }
 
@@ -575,7 +588,6 @@ fn resource_author_or_domain(
     source_kind: HighlightSourceKind,
     preview: Option<&crate::models::ArtifactPreview>,
     book_preview: Option<&crate::models::ArtifactPreview>,
-    web_metadata: Option<&WebMetadata>,
     url_host: Option<&str>,
     article_author_pubkey: &str,
     article_author_profile: Option<ProfileMetadata>,
@@ -604,10 +616,8 @@ fn resource_author_or_domain(
             .map(|p| p.author.clone())
             .or_else(|| book_preview.map(|p| p.author.clone()))
             .unwrap_or_default(),
-        HighlightSourceKind::Web => web_metadata
-            .and_then(|metadata| non_empty(&metadata.site_name))
-            .or_else(|| web_metadata.and_then(|metadata| non_empty(&metadata.author)))
-            .or_else(|| preview.and_then(|p| non_empty(&p.domain)))
+        HighlightSourceKind::Web => preview
+            .and_then(|p| non_empty(&p.domain))
             .or_else(|| url_host.map(str::to_string))
             .unwrap_or_default(),
         HighlightSourceKind::Video | HighlightSourceKind::Paper => preview
@@ -623,7 +633,6 @@ fn resource_title(
     preview: Option<&crate::models::ArtifactPreview>,
     source_article: Option<&crate::models::ArticleRecord>,
     book_preview: Option<&crate::models::ArtifactPreview>,
-    web_metadata: Option<&WebMetadata>,
     url_host: Option<&str>,
 ) -> String {
     match source_kind {
@@ -640,9 +649,8 @@ fn resource_title(
             .and_then(|p| non_empty(&p.title))
             .or_else(|| book_preview.and_then(|p| non_empty(&p.title)))
             .unwrap_or_else(|| "Untitled".into()),
-        HighlightSourceKind::Web => web_metadata
-            .and_then(|metadata| non_empty(&metadata.title))
-            .or_else(|| preview.and_then(|p| non_empty(&p.title)))
+        HighlightSourceKind::Web => preview
+            .and_then(|p| non_empty(&p.title))
             .or_else(|| url_host.map(str::to_string))
             .unwrap_or_else(|| "Web page".into()),
         HighlightSourceKind::Unknown => preview
@@ -693,7 +701,7 @@ fn format_duration(seconds: i64) -> String {
 
 fn article_address_for_highlight(artifact_address: &str) -> Option<String> {
     let trimmed = artifact_address.trim();
-    if articles::article_reader_route_from_address(trimmed).is_some() {
+    if is_nip23_article_address(trimmed) {
         Some(trimmed.to_string())
     } else {
         None
@@ -703,7 +711,7 @@ fn article_address_for_highlight(artifact_address: &str) -> Option<String> {
 fn article_route_for_highlight(
     artifact_address: &str,
 ) -> Option<crate::models::ArticleReaderRoute> {
-    articles::article_reader_route_from_address(artifact_address.trim())
+    article_reader_route_from_address(artifact_address.trim())
 }
 
 fn article_author_pubkey(
@@ -848,49 +856,10 @@ pub async fn publish_and_share(
     Ok(records)
 }
 
-/// Port of `shareHighlightToCommunity` (`highlights.ts:321-357`).
-/// Publishes a kind:16 repost referencing an existing highlight into another group.
-pub async fn share_to_community(
-    runtime: &NostrRuntime,
-    highlight_id: &str,
-    highlight_author_pubkey: &str,
-    highlight_relay_url: &str,
-    target_group_id: &str,
-) -> Result<(), CoreError> {
-    if target_group_id.trim().is_empty() {
-        return Err(CoreError::InvalidInput(
-            "target_group_id must not be empty".into(),
-        ));
-    }
-    let event_id = EventId::from_hex(highlight_id)
-        .map_err(|e| CoreError::InvalidInput(format!("invalid highlight id: {e}")))?;
-    // Validate (but don't retain) the author pubkey.
-    PublicKey::from_hex(highlight_author_pubkey)
-        .map_err(|e| CoreError::InvalidInput(format!("invalid author pubkey: {e}")))?;
-
-    let relay_hint = if highlight_relay_url.trim().is_empty() {
-        highlighter_relay()
-    } else {
-        highlight_relay_url
-    };
-
-    let client = runtime.client();
-    let builder = build_repost_event(
-        event_id,
-        highlight_author_pubkey,
-        target_group_id,
-        relay_hint,
-    )?;
-    let event = client
-        .sign_event_builder(builder)
-        .await
-        .map_err(|e| CoreError::Signer(format!("sign repost: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish repost: {e}")))?;
-    Ok(())
-}
+// #21: bespoke `share_to_community` (kind:16 highlight repost publish) DELETED —
+// the kernel `hl.share.highlight_to_room` action is now the sole writer. The
+// pure builder `build_repost_event` below is retained as the parity oracle and
+// the field-complete reference for the kernel port.
 
 /// Hydrate cached highlights with cached artifact share projections.
 /// The returned list preserves the input highlight order.
@@ -935,9 +904,6 @@ pub fn hydrate(
         let Ok(event) = Event::from_json(&json) else {
             continue;
         };
-        if crate::discussions::is_discussion(&event) {
-            continue;
-        }
         let Some(group_id) = first_tag_value(&event, "h") else {
             continue;
         };
@@ -1305,130 +1271,10 @@ pub fn query_highlights_by_author(
     Ok(records)
 }
 
-/// Unified "Highlights" feed — kind:9802 events from people the user follows
-/// plus highlights in rooms they've joined. Dedupes by event id, sorts by
-/// `created_at` descending. Returns `HydratedHighlight`s with `artifact=None`;
-/// the Swift side resolves the artifact on render via the `artifact_address`
-/// (or falls back to `source_url` / `event_reference`).
-pub fn query_following_highlights(
-    ndb: &Ndb,
-    user_pubkey_hex: &str,
-    joined_group_ids: &[String],
-    limit: u32,
-) -> Result<Vec<HydratedHighlight>, CoreError> {
-    let user_pubkey_hex = user_pubkey_hex.trim();
-    if user_pubkey_hex.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let per_stream_cap = (limit.saturating_mul(4)).max(128) as i32;
-
-    // Resolve follows BEFORE opening our txn — nostrdb allows only one
-    // transaction per thread, and `query_follows` opens its own internally.
-    // Stream A: highlights authored by follows plus the user themselves
-    // (since nobody lists themselves in their own kind:3 and we want "my
-    // highlights" in the home feed).
-    let follows_hex = crate::follows::query_follows(ndb, user_pubkey_hex)?;
-    let mut follows_pks: Vec<PublicKey> = follows_hex
-        .iter()
-        .filter_map(|s| PublicKey::from_hex(s.trim()).ok())
-        .collect();
-    if let Ok(me) = PublicKey::from_hex(user_pubkey_hex) {
-        if !follows_pks.contains(&me) {
-            follows_pks.push(me);
-        }
-    }
-
-    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
-
-    let mut by_event_id: std::collections::BTreeMap<String, HydratedHighlight> =
-        std::collections::BTreeMap::new();
-
-    if !follows_pks.is_empty() {
-        let follow_bytes: Vec<[u8; 32]> = follows_pks.iter().map(|pk| pk.to_bytes()).collect();
-        let follow_refs: Vec<&[u8; 32]> = follow_bytes.iter().collect();
-        let filter = NdbFilter::new()
-            .kinds([KIND_HIGHLIGHT as u64])
-            .authors(follow_refs.iter().copied())
-            .build();
-        let results = ndb
-            .query(&txn, &[filter], per_stream_cap)
-            .map_err(|e| CoreError::Cache(format!("query follow highlights: {e}")))?;
-        for r in &results {
-            let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
-                continue;
-            };
-            let Ok(json) = note.json() else { continue };
-            let Ok(event) = Event::from_json(&json) else {
-                continue;
-            };
-            let Some(rec) = record_from_cached_event(&event) else {
-                continue;
-            };
-            by_event_id.insert(
-                rec.event_id.clone(),
-                HydratedHighlight {
-                    highlight: rec,
-                    artifact: None,
-                    shared_by_event_id: None,
-                    shared_by_pubkey: None,
-                },
-            );
-        }
-    }
-
-    // Stream B: highlights from joined rooms (kind:9802 with matching `#h`).
-    // ndb's `#h` index is unreliable, so we scan kind:9802 and filter in Rust.
-    if !joined_group_ids.is_empty() {
-        let group_set: std::collections::HashSet<&str> =
-            joined_group_ids.iter().map(|s| s.as_str()).collect();
-        let filter = NdbFilter::new().kinds([KIND_HIGHLIGHT as u64]).build();
-        let results = ndb
-            .query(&txn, &[filter], per_stream_cap)
-            .map_err(|e| CoreError::Cache(format!("query room highlights: {e}")))?;
-        for r in &results {
-            let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
-                continue;
-            };
-            let Ok(json) = note.json() else { continue };
-            let Ok(event) = Event::from_json(&json) else {
-                continue;
-            };
-            let Some(h) = first_tag_value(&event, "h") else {
-                continue;
-            };
-            if !group_set.contains(h) {
-                continue;
-            }
-            let Some(rec) = record_from_cached_event(&event) else {
-                continue;
-            };
-            by_event_id
-                .entry(rec.event_id.clone())
-                .or_insert(HydratedHighlight {
-                    highlight: rec,
-                    artifact: None,
-                    shared_by_event_id: None,
-                    shared_by_pubkey: None,
-                });
-        }
-    }
-
-    let mut out: Vec<HydratedHighlight> = by_event_id.into_values().collect();
-    out.sort_by(|a, b| {
-        b.highlight
-            .created_at
-            .unwrap_or(0)
-            .cmp(&a.highlight.created_at.unwrap_or(0))
-    });
-    out.truncate(limit as usize);
-    Ok(out)
-}
-
 /// Pure: build a `HighlightRecord` from an already-cached kind:9802 event.
 /// Separate from `record_from_event` above, which relies on the draft for
 /// clip fields known up front.
-fn record_from_cached_event(event: &Event) -> Option<HighlightRecord> {
+pub(crate) fn record_from_cached_event(event: &Event) -> Option<HighlightRecord> {
     if event.kind.as_u16() != KIND_HIGHLIGHT {
         return None;
     }
@@ -1541,7 +1387,7 @@ pub fn article_reader_highlight_draft(
 
 /// Build the kind:9802 highlight `EventBuilder`. Pure — safe to unit test.
 /// Matches `publishCanonicalHighlight` (highlights.ts:359-423).
-fn build_highlight_event(
+pub(crate) fn build_highlight_event(
     draft: &HighlightDraft,
     artifact: &ArtifactRecord,
 ) -> Result<EventBuilder, CoreError> {
@@ -1671,7 +1517,7 @@ pub(crate) fn build_imeta_tag(image: &BlossomUpload) -> Result<Tag, CoreError> {
 
 /// Build the kind:16 repost `EventBuilder` that shares a highlight into a
 /// NIP-29 community. Pure — safe to unit test.
-fn build_repost_event(
+pub(crate) fn build_repost_event(
     highlight_event_id: EventId,
     highlight_author_pubkey_hex: &str,
     target_group_id: &str,
@@ -1915,7 +1761,6 @@ mod tests {
                     )),
                 }],
                 book_preview: None,
-                web_metadata: None,
             });
 
         assert_eq!(projection.source_kind, HighlightSourceKind::Article);
@@ -1933,14 +1778,11 @@ mod tests {
     }
 
     #[test]
-    fn highlight_resource_header_projects_web_metadata() {
+    fn highlight_resource_header_projects_web_source() {
         let mut artifact = artifact_with_source("web");
         artifact.preview.url = "https://example.com/read".into();
         artifact.preview.domain = "preview.example".into();
-        let mut metadata = web_metadata("https://example.com/read");
-        metadata.title = "OpenGraph title".into();
-        metadata.site_name = "Example Site".into();
-        metadata.favicon = "https://example.com/favicon.ico".into();
+        artifact.preview.title = "Preview title".into();
 
         let projection =
             highlight_resource_header_projection(HighlightResourceHeaderProjectionInput {
@@ -1952,17 +1794,13 @@ mod tests {
                 source_article_author_pubkey: String::new(),
                 article_author_profiles: Vec::new(),
                 book_preview: None,
-                web_metadata: Some(metadata),
             });
 
         assert_eq!(projection.source_kind, HighlightSourceKind::Web);
         assert_eq!(projection.icon_system_name, "globe");
-        assert_eq!(projection.title, "OpenGraph title");
-        assert_eq!(projection.author_or_domain, "Example Site");
-        assert_eq!(
-            projection.cover_url,
-            Some("https://example.com/favicon.ico".into())
-        );
+        assert_eq!(projection.title, "Preview title");
+        assert_eq!(projection.author_or_domain, "preview.example");
+        assert_eq!(projection.cover_url, None);
         assert_eq!(
             projection.web_metadata_url,
             Some("https://example.com/read".into())
@@ -1982,7 +1820,6 @@ mod tests {
                 source_article_author_pubkey: String::new(),
                 article_author_profiles: Vec::new(),
                 book_preview: None,
-                web_metadata: None,
             });
 
         assert_eq!(projection.source_kind, HighlightSourceKind::Podcast);
@@ -2011,7 +1848,6 @@ mod tests {
                 source_article_author_pubkey: String::new(),
                 article_author_profiles: Vec::new(),
                 book_preview: Some(book_preview),
-                web_metadata: None,
             });
 
         assert_eq!(projection.source_kind, HighlightSourceKind::Book);
@@ -2255,19 +2091,6 @@ mod tests {
         std::iter::repeat_n("word", count)
             .collect::<Vec<_>>()
             .join(" ")
-    }
-
-    fn web_metadata(url: &str) -> WebMetadata {
-        WebMetadata {
-            url: url.into(),
-            title: String::new(),
-            description: String::new(),
-            image: String::new(),
-            site_name: String::new(),
-            author: String::new(),
-            favicon: String::new(),
-            fetched_at: 1_700_000_000,
-        }
     }
 
     fn draft_with_clip() -> HighlightDraft {
@@ -3253,5 +3076,98 @@ mod tests {
         let records = query_for_group(&ndb, "alpha", 32).expect("query");
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].highlight.quote, "alpha hl");
+    }
+
+    // Phase 7 parity (gotcha #7): the kernel `decode_highlight_row` must extract
+    // the SAME NIP-84/NIP-73 source/clip/image fields as the bespoke
+    // `record_from_cached_event`. Build ONE kind:9802 event, parse it BOTH ways
+    // from the same tags, assert field-by-field equality (no hardcoded expected
+    // values — both impls are exercised against the real fixture).
+    #[test]
+    fn kernel_highlight_row_matches_bespoke_record_parse() {
+        let keys = Keys::generate();
+        let context = "The surrounding paragraph.";
+        let comment = "my note";
+        let artifact = "30023:aaaa:my-article";
+        let isbn = "isbn:9780735211292";
+        let segment_a = "seg-1";
+        let segment_b = "seg-2";
+        let image = "https://example.com/scan.jpg";
+
+        let event = EventBuilder::new(Kind::Custom(KIND_HIGHLIGHT), "the quoted text")
+            .tags(vec![
+                Tag::parse(vec!["a".to_string(), artifact.to_string()]).unwrap(),
+                Tag::parse(vec!["i".to_string(), isbn.to_string()]).unwrap(),
+                Tag::parse(vec!["context".to_string(), context.to_string()]).unwrap(),
+                Tag::parse(vec!["comment".to_string(), comment.to_string()]).unwrap(),
+                Tag::parse(vec!["start".to_string(), "12.5".to_string()]).unwrap(),
+                Tag::parse(vec!["end".to_string(), "30.0".to_string()]).unwrap(),
+                Tag::parse(vec!["speaker".to_string(), "Alice".to_string()]).unwrap(),
+                Tag::parse(vec!["segment".to_string(), segment_a.to_string()]).unwrap(),
+                Tag::parse(vec!["segment".to_string(), segment_b.to_string()]).unwrap(),
+                Tag::parse(vec![
+                    "imeta".to_string(),
+                    format!("url {image}"),
+                    "m image/jpeg".to_string(),
+                ])
+                .unwrap(),
+            ])
+            .sign_with_keys(&keys)
+            .expect("sign");
+
+        // Bespoke parse.
+        let bespoke = record_from_cached_event(&event).expect("bespoke record");
+
+        // Equivalent raw kernel event from the SAME tags.
+        let kernel_event = nmp_core::substrate::KernelEvent {
+            id: event.id.to_hex(),
+            author: event.pubkey.to_hex(),
+            kind: KIND_HIGHLIGHT as u32,
+            created_at: event.created_at.as_secs(),
+            content: event.content.clone(),
+            tags: event.tags.iter().map(|t| t.as_slice().to_vec()).collect(),
+            relay_provenance: vec![],
+        };
+        let kernel = crate::kernel::domains::highlight_feed::decode_highlight_row(&kernel_event)
+            .expect("kernel row");
+
+        assert_eq!(kernel.content, bespoke.quote, "quote/content");
+        assert_eq!(kernel.context, bespoke.context, "context");
+        assert_eq!(
+            kernel.note.unwrap_or_default(),
+            bespoke.note,
+            "note/comment"
+        );
+        assert_eq!(
+            kernel.artifact_address, bespoke.artifact_address,
+            "artifact_address (a)"
+        );
+        assert_eq!(
+            kernel.event_reference, bespoke.event_reference,
+            "event_reference (e)"
+        );
+        assert_eq!(
+            kernel.external_reference, bespoke.external_reference,
+            "external_reference (i)"
+        );
+        assert_eq!(kernel.source_url, bespoke.source_url, "source_url (r)");
+        assert_eq!(
+            kernel.source_reference_key, bespoke.source_reference_key,
+            "source_reference_key"
+        );
+        assert_eq!(
+            kernel.clip_start_seconds, bespoke.clip_start_seconds,
+            "clip_start_seconds"
+        );
+        assert_eq!(
+            kernel.clip_end_seconds, bespoke.clip_end_seconds,
+            "clip_end_seconds"
+        );
+        assert_eq!(kernel.clip_speaker, bespoke.clip_speaker, "clip_speaker");
+        assert_eq!(
+            kernel.clip_transcript_segment_ids, bespoke.clip_transcript_segment_ids,
+            "clip_transcript_segment_ids"
+        );
+        assert_eq!(kernel.image_url, bespoke.image_url, "image_url (imeta)");
     }
 }

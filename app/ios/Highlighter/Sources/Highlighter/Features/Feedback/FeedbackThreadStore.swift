@@ -1,8 +1,12 @@
 import Foundation
 import Observation
 
-/// View-scoped store backing the open-thread chat view. Rust owns the bounded
-/// row snapshot and message grouping; Swift keeps composer/subscription flags.
+/// View-scoped store backing the open feedback-thread chat view. Phase 7: the
+/// kernel owns the bounded row snapshot + message grouping
+/// (`ViewId.feedbackThread`); this store opens the kernel view, mirrors
+/// `kernel.feedbackThread[rootEventId]` into the existing
+/// `FeedbackMessageRowProjection` rows (built Swift-side), and posts replies via
+/// `hl.feedback.post_reply`.
 @MainActor
 @Observable
 final class FeedbackThreadStore {
@@ -12,100 +16,66 @@ final class FeedbackThreadStore {
     private(set) var isPublishing: Bool = false
 
     @ObservationIgnored private var rootEventId: String?
-    @ObservationIgnored private var coordinate: String?
-    @ObservationIgnored private var core: SafeHighlighterCore?
-    @ObservationIgnored private weak var bridge: EventBridge?
-    @ObservationIgnored private var subscriptionHandle: UInt64?
+    @ObservationIgnored private weak var kernel: HighlighterAppKernel?
 
-    func start(
-        rootEventId: String,
-        coordinate: String,
-        core: SafeHighlighterCore,
-        bridge: EventBridge?
-    ) async {
+    func start(rootEventId: String, kernel: HighlighterAppKernel) async {
         if self.rootEventId != nil, self.rootEventId != rootEventId {
             stop()
         }
         self.rootEventId = rootEventId
-        self.coordinate = coordinate
-        self.core = core
-        self.bridge = bridge
+        self.kernel = kernel
         isLoading = true
         loadError = nil
-
-        let snapshot = await core.getFeedbackThreadSnapshot(rootEventId: rootEventId)
-        let applyProjection = core.projectFeedbackSnapshotApply(
-            input: FeedbackSnapshotApplyInput(error: snapshot.error)
-        )
-        if applyProjection.shouldApplySnapshot {
-            apply(snapshot: snapshot)
-        } else {
-            loadError = applyProjection.loadError
-        }
+        kernel.openFeedbackThread(rootEventId: rootEventId)
+        applyKernelSnapshot()
         isLoading = false
-
-        guard subscriptionHandle == nil else { return }
-        let outcome = await core.subscribeFeedbackThread(rootEventId: rootEventId)
-        let projection = core.projectViewSubscriptionStart(
-            input: ViewSubscriptionStartProjectionInput(start: outcome)
-        )
-        guard projection.shouldRegister else {
-            // Cache-only rendering still works.
-            return
-        }
-        subscriptionHandle = projection.handle
-        bridge?.registerFeedbackThread(self, handle: projection.handle)
     }
 
     func stop() {
-        if let handle = subscriptionHandle, let core {
-            Task { await core.unsubscribe(handle) }
-            bridge?.unregister(handle: handle)
+        if let rootEventId {
+            kernel?.closeFeedbackThread(rootEventId: rootEventId)
         }
-        subscriptionHandle = nil
+        rootEventId = nil
+        kernel = nil
     }
 
+    /// Re-apply the latest kernel snapshot. Called by the owning view's
+    /// `onChange(of: kernel.feedbackThread[rootEventId])`.
     func refreshThread() async {
-        guard let core, let rootEventId else { return }
-        let snapshot = await core.getFeedbackThreadSnapshot(rootEventId: rootEventId)
-        let applyProjection = core.projectFeedbackSnapshotApply(
-            input: FeedbackSnapshotApplyInput(error: snapshot.error)
-        )
-        if applyProjection.shouldApplySnapshot {
-            apply(snapshot: snapshot)
-        }
+        applyKernelSnapshot()
     }
 
-    func apply(snapshot: FeedbackThreadSnapshot) {
-        let applyProjection = core?.projectFeedbackSnapshotApply(
-            input: FeedbackSnapshotApplyInput(error: snapshot.error)
-        )
-        rows = snapshot.rows
-        loadError = applyProjection?.loadError
+    /// Mirror `kernel.feedbackThread[rootEventId]` into the rendered rows,
+    /// mapping each raw kernel `FeedbackMessageRow` into the bespoke
+    /// `FeedbackMessageRowProjection` the view renders.
+    func applyKernelSnapshot() {
+        guard let rootEventId, let snapshot = kernel?.feedbackThread[rootEventId] else { return }
+        rows = snapshot.rows.map { row in
+            FeedbackMessageRowProjection(
+                event: FeedbackEventRecord(
+                    eventId: row.eventId,
+                    rootEventId: row.rootEventId,
+                    authorPubkey: row.authorPubkey,
+                    createdAt: row.createdAt,
+                    content: row.content
+                ),
+                showHeader: row.showHeader
+            )
+        }
+        loadError = snapshot.error
+        isPublishing = snapshot.isPublishing
     }
 
-    /// Send a reply into the open thread. Rust resolves feedback agent
-    /// routing and NIP-10 root tagging.
-    @discardableResult
-    func sendReply(body: String) async -> FeedbackReplyPublishSnapshot? {
-        guard let core, let coordinate, let rootEventId else {
-            return nil
-        }
-
-        isPublishing = true
-        defer { isPublishing = false }
-
-        let outcome = await core.publishFeedbackThreadReplySnapshot(
-            coordinate: coordinate,
-            parentEventId: rootEventId,
-            body: body
-        )
-        let result = core.projectFeedbackPublishResult(
-            input: FeedbackPublishResultInput(error: outcome.error)
-        )
-        if result.didPublish {
-            apply(snapshot: outcome.snapshot)
-        }
-        return outcome
+    /// Send a reply into the open thread via the kernel (sole writer). The
+    /// kernel resolves NIP-22 root tagging; the rebuilt thread streams back.
+    func sendReply(body: String) async {
+        guard let rootEventId, let kernel else { return }
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        kernel.app.dispatch(.feedbackPostReply(
+            rootEventId: rootEventId,
+            content: trimmed,
+            parentAuthorPubkey: nil
+        ))
     }
 }

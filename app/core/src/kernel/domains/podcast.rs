@@ -46,11 +46,11 @@ use crate::errors::CoreError;
 use crate::kernel::app::AppState;
 use crate::kernel::domains::capture_draft::new_correlation_id;
 use crate::kernel::effect::Effect;
+use crate::kernel::models::{ArtifactRecord, PodcastPositionRecord};
 use crate::kernel::snapshot::{
     KernelClipPublishPhase, KernelTranscriptAvailability, KernelTranscriptSegment,
     PodcastListeningSnapshot, ViewSnapshot,
 };
-use crate::models::{ArtifactRecord, PodcastPositionRecord};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -977,8 +977,8 @@ mod tests {
     use crate::kernel::actor::{reduce, Cmd};
     use crate::kernel::clock::{Clock as KClock, ManualClock};
     use crate::kernel::effect::Effect;
+    use crate::kernel::models::{ArtifactPreview, Chapter};
     use crate::kernel::snapshot::ViewSnapshot;
-    use crate::models::{ArtifactPreview, Chapter};
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -1244,7 +1244,6 @@ mod tests {
                 matches!(
                     e,
                     Effect::PublishHighlightEvent { .. }
-                        | Effect::PublishRoomsRelayList { .. }
                         | Effect::DispatchNip29Action { .. }
                         | Effect::DispatchFollowAction { .. }
                         | Effect::DispatchShareToRoom { .. }

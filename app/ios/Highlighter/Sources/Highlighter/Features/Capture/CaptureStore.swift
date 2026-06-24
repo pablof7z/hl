@@ -4,208 +4,173 @@ import UIKit
 
 /// Orchestrates capture → OCR + upload → review → publish.
 ///
-/// The moment a photo is captured the store kicks off OCR (Vision, on-device)
-/// and Blossom upload in parallel. OCR output is structurally reconstructed
-/// into markdown so the review screen can typeset it like a book page; the
-/// user selects a span from the rendered page to "stash" as a pending
-/// highlight, then taps Publish.
+/// Phase 7 (β cut): the KERNEL owns OCR reconstruction, the capture draft
+/// (quote/context/note/target-group/artifact), the publish FSM, and is the SOLE
+/// WRITER of every nostr event (kind:9802 highlight / kind:20 picture / kind:11
+/// artifact / kind:16 share — full parity in reduce_action_publish + the blossom
+/// upload). NATIVE owns only PIXEL work: EXIF strip, the two-page-spread
+/// crop-to-page, and the highlight crop/annotate — all device-capability steps
+/// (NOT a second nostr lane). Native writes a `data_dir` image handle and hands
+/// the path to the kernel (hl.ocr.recognize / hl.blossom.upload); no raw bytes
+/// cross the FFI. The view reads draft/markdown/words/canPublish from
+/// `kernel.captureSnapshot`.
 ///
-/// Photo-always invariant: every successful publish carries the photo. If the
-/// upload fails, the user can retry; we never silently fall back to a
-/// no-photo publish.
+/// Photo-always invariant: every publish carries the photo (kernel enforces it;
+/// the annotated image is uploaded via Blossom before publish becomes enabled).
 @MainActor
 @Observable
 final class CaptureStore {
     enum Phase: Equatable {
         case idle
-        case processing       // OCR + upload in flight
+        case processing       // native EXIF/crop + kernel OCR in flight
         case reviewing
         case publishing
-        case done(String?)    // event id, if meaningful for navigation
+        case done(String?)
         case error(String)
     }
 
-    var phase: Phase = .idle
-    /// Locally-processed JPEG (post EXIF strip + resize). Kept so the review
-    /// screen can show a thumbnail + zoom view before upload completes.
-    var thumbnail: UIImage?
-    /// Structurally reconstructed markdown derived from OCR. Editable via the
-    /// review screen's pencil escape hatch; re-rendered on change.
-    var ocrMarkdown: String = ""
-    /// Raw OCR lines with normalized bounding boxes — used by the photo-canvas
-    /// review screen so the user can drag to select text directly on the image.
-    var ocrLines: [OCRLine] = []
-    /// The quote the user stashed by selecting text + tapping Highlight.
-    /// `nil` means no stash — publishing becomes a kind:20 picture.
-    var stashedQuote: String?
-    /// Paragraph surrounding the stashed quote (for `context` on the highlight
-    /// event). Empty when the selection is already a whole paragraph.
-    var stashedContext: String = ""
-    /// Free-form note attached to the publish.
-    var note: String = ""
-    /// Picked book. Optional — picture-only posts without an artifact are
-    /// valid. `.pending` selections (from ISBN scan/lookup) get their kind:11
-    /// share auto-published at the moment the user hits Publish.
-    var selectedBook: BookSelection?
-    /// Target room. Required to enable Publish.
-    var selectedGroupId: String?
-    /// Blossom upload result. Publish is disabled until this exists.
-    var upload: BlossomUpload?
-    /// Last upload error — surfaces a retry control.
-    var uploadError: String?
-    /// Margin used when cropping around a selected passage. Larger values keep
-    /// more surrounding page context.
-    var highlightCropMarginFraction: Double = 0.08
-    /// Current crop box for the selected passage, in Vision normalized
-    /// coordinates. `nil` means the full scanned page is the active image.
-    var highlightCropBox: CGRect?
+    private(set) var phase: Phase = .idle
+    /// Locally-processed JPEG (post EXIF strip + crop-to-page). Native — the
+    /// review canvas shows it; the annotate step crops/marks it for upload.
+    private(set) var thumbnail: UIImage?
+    /// Kernel-reconstructed markdown (captureSnapshot.markdown).
+    private(set) var ocrMarkdown: String = ""
+    /// Kernel raw OCR lines (captureSnapshot.rawLines) — the drag-select canvas.
+    private(set) var ocrLines: [OCRLine] = []
+    /// Kernel selectable words (captureSnapshot.selectableWords). Indices into
+    /// THIS array are what `captureSelectWord` expects (kernel is the authority).
+    private(set) var selectableWords: [OcrWord] = []
+    /// The stashed quote (captureSnapshot.draftQuote); `nil` → publishing is a
+    /// kind:20 picture.
+    private(set) var stashedQuote: String?
+    private(set) var stashedContext: String = ""
 
-    private let safeCore: SafeHighlighterCore
-    private var processedJPEG: ImageProcessing.Result?
-    private var preparedUploadJPEG: ImageProcessing.Result?
-    private var selectedHighlightBoxes: [CGRect] = []
-    private var uploadGeneration: UInt64 = 0
-
-    init(safeCore: SafeHighlighterCore) {
-        self.safeCore = safeCore
-    }
-
-    var isUploading: Bool {
-        switch phase {
-        case .processing, .reviewing:
-            return upload == nil && uploadError == nil
-        default:
-            break
+    /// Free-form note. User input → kernel (hl.capture.set_note); the kernel is
+    /// authoritative, this is the editable mirror the TextField binds to.
+    var note: String = "" {
+        didSet {
+            guard note != oldValue else { return }
+            kernel.app.dispatch(.captureSetNote(note: note))
         }
-        return false
+    }
+    /// Picked book. User input → kernel artifact-setter (bec363da).
+    var selectedBook: BookSelection? {
+        didSet { dispatchSelectedBook() }
+    }
+    /// Target room. User input → kernel (hl.capture.set_target_group).
+    var selectedGroupId: String? {
+        didSet {
+            if let id = selectedGroupId, !id.isEmpty {
+                kernel.app.dispatch(.captureSetTargetGroup(groupId: id))
+            } else {
+                kernel.app.dispatch(.captureClearTargetGroup)
+            }
+        }
     }
 
+    /// `true` while a Blossom upload (of the annotated image) is in flight. The
+    /// kernel owns the upload; this is the Swift-side spinner hint, cleared when
+    /// the next snapshot reflects the result (canPublish flips).
+    private(set) var isUploading: Bool = false
+    private(set) var uploadError: String?
+    /// Current crop box for the selected passage (Vision normalized). Native.
+    private(set) var highlightCropBox: CGRect?
+
+    @ObservationIgnored private let kernel: HighlighterAppKernel
+    @ObservationIgnored private var processedJPEG: ImageProcessing.Result?
+    @ObservationIgnored private var selectedHighlightBoxes: [CGRect] = []
+    @ObservationIgnored private var highlightCropMarginFraction: Double = 0.08
+
+    init(kernel: HighlighterAppKernel) {
+        self.kernel = kernel
+    }
+
+    /// `canPublish` is kernel-owned (draft FSM + has_upload gating).
     var canPublish: Bool {
-        safeCore.projectCapturePublish(
-            input: CapturePublishProjectionInput(
-                phase: capturePublishPhase,
-                hasUpload: upload != nil
-            )
-        ).canPublish
+        kernel.captureSnapshot?.canPublish ?? false
     }
 
-    /// Entry point: user just snapped a photo. Strip metadata, kick OCR +
-    /// upload in parallel, reconstruct structure once OCR returns, then sit
-    /// in reviewing until the user hits Publish.
+    // MARK: - Kernel snapshot
+
+    /// Apply the kernel capture snapshot. Wired from CapturePageView's
+    /// `.onChange(of: kernel.captureSnapshot)`. The kernel owns OCR/draft/FSM;
+    /// native owns thumbnail/crop/upload-flag.
+    func applyKernelSnapshot() {
+        guard let snap = kernel.captureSnapshot else { return }
+        ocrMarkdown = snap.markdown
+        ocrLines = snap.rawLines
+        selectableWords = snap.selectableWords
+        stashedQuote = snap.draftQuote.isEmpty ? nil : snap.draftQuote
+        stashedContext = snap.draftContext
+        // A snapshot with reconstructed words means OCR finished → reviewing.
+        if phase == .processing, !snap.pending, !snap.selectableWords.isEmpty {
+            phase = .reviewing
+        }
+        // The snapshot reflecting the latest blossom/publish state clears the
+        // transient upload spinner.
+        if snap.canPublish { isUploading = false }
+        switch snap.publishPhase {
+        case .publishing: phase = .publishing
+        case .done: phase = .done(nil)
+        case .error: phase = .error(snap.publishError)
+        case .idle, .reviewing: break
+        }
+    }
+
+    // MARK: - Capture entry (native pixel pipeline → kernel OCR)
+
+    /// User snapped a photo. Native: strip EXIF, then hand the handle
+    /// to the kernel for authoritative OCR → snapshot.
     func handleCapturedImage(_ image: UIImage) {
         reset(keepingPickerSelection: false)
         phase = .processing
         thumbnail = image
-        prefillRecentBook()
+        kernel.openCapture()
 
         Task {
-            guard let initial = ImageProcessing.stripMetadataAndEncode(image) else {
+            guard let processed = ImageProcessing.stripMetadataAndEncode(image) else {
                 self.uploadError = ImageProcessing.failureMessage
                 self.phase = .reviewing
                 return
             }
-
-            // Run OCR first so we can decide whether the capture is a
-            // two-page book spread that should be auto-cropped down to
-            // the dominant page before we upload. The sequential cost
-            // (~1-2s) buys us a single canonical image: the user sees
-            // just the page they meant to capture, OCR doesn't carry
-            // text from the other side, and we don't waste an upload.
-            let initialLines = await recognize(processed: initial)
-
-            let processed: ImageProcessing.Result
-            let lines: [OCRLine]
-            if let detection = safeCore.detectOcrActivePage(initialLines),
-               let cropped = ImageProcessing.cropToPage(initial, pageRect: detection.pageRect.cgRect) {
-                processed = cropped
-                lines = safeCore.cropOcrLines(initialLines, to: detection.pageRect)
-                if let croppedThumb = UIImage(data: cropped.data) {
-                    self.thumbnail = croppedThumb
-                }
-            } else {
-                processed = initial
-                lines = initialLines
-            }
-
             self.processedJPEG = processed
-            self.preparedUploadJPEG = processed
-            self.ocrLines = lines
-            let markdown = safeCore.reconstructOcrMarkdown(lines)
-            self.ocrMarkdown = markdown
-
-            // The imeta alt is a one-line summary; flatten the markdown
-            // for it (paragraph breaks → spaces).
-            let altText = safeCore.ocrAltText(from: markdown)
-            let generation = nextUploadGeneration()
-            let uploadSnapshot = await upload(processed: processed, alt: altText)
-            applyUploadProjection(safeCore.projectCaptureUpload(
-                input: CaptureUploadProjectionInput(
-                    snapshot: uploadSnapshot,
-                    requestGeneration: generation,
-                    currentGeneration: uploadGeneration
-                )
-            ))
-            self.phase = .reviewing
-        }
-    }
-
-    /// Default the picker to the user's most recent book — typically the one
-    /// they're actively reading. Skipped if a selection already exists, and
-    /// we re-check before assigning so we never overwrite a deliberate pick.
-    private func prefillRecentBook() {
-        guard selectedBook == nil else { return }
-        Task {
-            let snapshot = await safeCore.getBookPickerSnapshot(
-                query: "",
-                recentLimit: 1,
-                searchLimit: 0
-            )
-            guard let book = snapshot.recents.first else { return }
-            if self.selectedBook == nil {
-                self.selectedBook = .existing(book)
+            // Hand the image to the kernel: write a data_dir handle, then
+            // hl.ocr.recognize → kernel OCR → captureSnapshot (markdown/words).
+            guard let handle = CapturePresenter.writeHandle(processed.data, ext: "jpg") else {
+                self.uploadError = ImageProcessing.failureMessage
+                self.phase = .reviewing
+                return
             }
+            self.kernel.app.dispatch(.ocrRecognize(imageHandle: handle))
+            // Upload the un-annotated page now so a picture-only (no-quote)
+            // publish has its photo; a later stash re-uploads the annotated crop.
+            self.startUpload(processed: processed)
         }
     }
 
-    func retryUpload() {
-        guard let processed = preparedUploadJPEG ?? processedJPEG else { return }
-        startUpload(processed: processed)
-    }
+    // MARK: - Highlight stash (word-index selection + native annotate → blossom)
 
-    /// Stash the user's current text selection as a pending highlight. Does
-    /// not publish — Publish is the terminal action.
-    func stashHighlight(quote: String, context: String, selectedBoxes: [CGRect] = []) {
-        let projection = safeCore.projectCaptureStash(
-            input: CaptureStashProjectionInput(
-                quote: quote,
-                context: context
-            )
-        )
-        guard projection.shouldStash else { return }
-        stashedQuote = projection.quote
-        stashedContext = projection.context
+    /// Stash the current word selection: the kernel builds the draft quote from
+    /// the selected word INDICES (selectWord); native crops/annotates the boxes
+    /// and uploads the marked image via Blossom (kernel sole writer of the blob).
+    func stashHighlight(wordIndices: [Int], selectedBoxes: [CGRect]) {
+        kernel.app.dispatch(.captureClearSelection)
+        for idx in wordIndices where idx >= 0 {
+            kernel.app.dispatch(.captureSelectWord(wordIndex: UInt64(idx)))
+        }
         selectedHighlightBoxes = selectedBoxes
         if let processedJPEG {
             highlightCropBox = defaultHighlightCropBox(processed: processedJPEG)
         }
-        prepareHighlightedCrop(reupload: true)
+        prepareHighlightedCrop()
     }
 
     func clearStash() {
-        stashedQuote = nil
-        stashedContext = ""
+        kernel.app.dispatch(.captureClearSelection)
         selectedHighlightBoxes = []
         highlightCropMarginFraction = 0.08
         highlightCropBox = nil
-        preparedUploadJPEG = processedJPEG
-        if let processedJPEG, let image = UIImage(data: processedJPEG.data) {
-            thumbnail = image
-        }
-        upload = nil
-        uploadError = nil
-        if let processedJPEG {
-            startUpload(processed: processedJPEG)
-        }
+        if let processedJPEG { startUpload(processed: processedJPEG) }
     }
 
     func updateHighlightCropMargin(_ margin: Double, reupload: Bool) {
@@ -215,84 +180,43 @@ final class CaptureStore {
     }
 
     func updateHighlightCropBox(_ cropBox: CGRect, reupload: Bool) {
-        let fallback = highlightCropBox.map { OcrRect($0) }
-        highlightCropBox = safeCore.sanitizeHighlightCropBox(
-            OcrRect(cropBox),
-            fallback: fallback
-        ).cgRect
-        if reupload {
+        highlightCropBox = Self.sanitizeHighlightCropBox(cropBox, fallback: highlightCropBox)
+        if reupload { prepareHighlightedCrop(reupload: true) }
+    }
+
+    func retryUpload() {
+        if !selectedHighlightBoxes.isEmpty {
             prepareHighlightedCrop(reupload: true)
+        } else if let processedJPEG {
+            startUpload(processed: processedJPEG)
         }
     }
 
-    /// Publish the capture. Rust owns the highlight-vs-picture decision,
-    /// artifact-share creation, and final event id projection.
+    // MARK: - Publish (kernel sole writer)
+
+    /// Publish the capture — kernel-sole-writer via the full-parity
+    /// reduce_action_publish (highlight+imeta+artifact / kind:20 picture /
+    /// pending-book multi-event / kind:16 share). The draft (quote/context/note/
+    /// target-group/artifact) + the uploaded blob are already on the kernel.
     func publish() {
-        guard let upload else { return }
-        let selection = selectedBook
-        let groupId = selectedGroupId
-        let existingArtifact: ArtifactRecord?
-        let pendingPreview: ArtifactPreview?
-        switch selection {
-        case .existing(let record):
-            existingArtifact = record
-            pendingPreview = nil
-        case .pending(let preview):
-            existingArtifact = nil
-            pendingPreview = preview
-        case nil:
-            existingArtifact = nil
-            pendingPreview = nil
-        }
-
-        // Refresh the imeta alt to reflect the current (possibly edited) OCR.
-        let imageWithAlt = BlossomUpload(
-            url: upload.url,
-            sha256Hex: upload.sha256Hex,
-            mime: upload.mime,
-            sizeBytes: upload.sizeBytes,
-            width: upload.width,
-            height: upload.height,
-            alt: safeCore.ocrAltText(from: ocrMarkdown)
-        )
-
         phase = .publishing
-        Task {
-            let outcome = await safeCore.publishCapture(
-                input: CapturePublishInput(
-                    image: imageWithAlt,
-                    quote: stashedQuote ?? "",
-                    context: stashedContext,
-                    note: note,
-                    existingArtifact: existingArtifact,
-                    pendingPreview: pendingPreview,
-                    targetGroupId: groupId
-                )
-            )
-            let projection = safeCore.projectCapturePublishResult(
-                input: CapturePublishResultProjectionInput(
-                    eventId: outcome.eventId,
-                    error: outcome.error
-                )
-            )
-            self.phase = phase(from: projection)
-        }
+        kernel.app.dispatch(.capturePublish)
     }
 
     func reset(keepingPickerSelection: Bool) {
+        kernel.app.dispatch(.captureReset)
         phase = .idle
         thumbnail = nil
         ocrMarkdown = ""
         ocrLines = []
+        selectableWords = []
         stashedQuote = nil
         stashedContext = ""
         note = ""
-        upload = nil
+        isUploading = false
         uploadError = nil
         processedJPEG = nil
-        preparedUploadJPEG = nil
         selectedHighlightBoxes = []
-        uploadGeneration = 0
         highlightCropMarginFraction = 0.08
         highlightCropBox = nil
         if !keepingPickerSelection {
@@ -303,132 +227,116 @@ final class CaptureStore {
 
     // MARK: - Internals
 
-    private func recognize(processed: ImageProcessing.Result) async -> [OCRLine] {
-        guard let provider = CGDataProvider(data: processed.data as CFData),
-              let cgImage = CGImage(
-                jpegDataProviderSource: provider,
-                decode: nil,
-                shouldInterpolate: true,
-                intent: .defaultIntent
-              ) else {
-            return []
+    private func dispatchSelectedBook() {
+        switch selectedBook {
+        case .existing(let record):
+            kernel.app.dispatch(.captureSetArtifactRecord(artifactJson: captureArtifactRecordJson(artifact: record)))
+        case .pending(let preview):
+            kernel.app.dispatch(.captureSetArtifactPreview(previewJson: captureArtifactPreviewJson(preview: preview)))
+        case nil:
+            kernel.app.dispatch(.captureClearArtifact)
         }
-        return await OCRService.recognizeLines(in: cgImage)
     }
 
-    private func upload(
-        processed: ImageProcessing.Result,
-        alt: String
-    ) async -> BlossomUploadSnapshot {
-        await safeCore.uploadPhoto(
-            bytes: processed.data,
-            mime: processed.mime,
-            width: UInt32(processed.width),
-            height: UInt32(processed.height),
-            alt: alt
-        )
-    }
-
-    private func prepareHighlightedCrop(reupload: Bool) {
+    /// Crop + annotate the selected boxes into the upload image, write the
+    /// handle, and hand it to the kernel's Blossom upload (sole blob writer).
+    private func prepareHighlightedCrop(reupload: Bool = true) {
         guard !selectedHighlightBoxes.isEmpty, let processed = processedJPEG else { return }
-
         if highlightCropBox == nil {
             highlightCropBox = defaultHighlightCropBox(processed: processed)
         }
-        guard let highlightCropBox else {
-            preparedUploadJPEG = processed
-            if reupload {
-                startUpload(processed: processed)
-            }
-            return
-        }
-
-        guard let highlighted = ImageProcessing.cropAndAnnotateHighlight(
-            processed,
-            highlightBoxes: selectedHighlightBoxes,
-            cropBox: highlightCropBox
-        ) else {
-            upload = nil
+        guard let highlightCropBox,
+              let highlighted = ImageProcessing.cropAndAnnotateHighlight(
+                processed,
+                highlightBoxes: selectedHighlightBoxes,
+                cropBox: highlightCropBox
+              ) else {
             uploadError = ImageProcessing.failureMessage
             return
         }
-        preparedUploadJPEG = highlighted
-        upload = nil
         uploadError = nil
-        if reupload {
-            startUpload(processed: highlighted)
-        }
+        if reupload { startUpload(processed: highlighted) }
     }
 
+    /// Write the image to a data_dir handle and dispatch hl.blossom.upload
+    /// (kernel uploads + records the blob descriptor on the draft).
     private func startUpload(processed: ImageProcessing.Result) {
-        let generation = nextUploadGeneration()
-        upload = nil
         uploadError = nil
-
-        Task {
-            let altText = safeCore.ocrAltText(from: ocrMarkdown)
-            let outcome = await upload(processed: processed, alt: altText)
-            applyUploadProjection(safeCore.projectCaptureUpload(
-                input: CaptureUploadProjectionInput(
-                    snapshot: outcome,
-                    requestGeneration: generation,
-                    currentGeneration: uploadGeneration
-                )
-            ))
+        guard let handle = CapturePresenter.writeHandle(processed.data, ext: "jpg") else {
+            uploadError = ImageProcessing.failureMessage
+            return
         }
-    }
-
-    private func nextUploadGeneration() -> UInt64 {
-        uploadGeneration &+= 1
-        return uploadGeneration
-    }
-
-    private func applyUploadProjection(_ projection: CaptureUploadProjection) {
-        guard projection.shouldApply else { return }
-        upload = projection.upload
-        uploadError = projection.uploadError
+        isUploading = true
+        kernel.app.dispatch(.blossomUpload(imageHandle: handle, servers: []))
     }
 
     private func defaultHighlightCropBox(processed: ImageProcessing.Result) -> CGRect? {
-        safeCore.defaultHighlightCropBox(
-            highlightBoxes: selectedHighlightBoxes.map { OcrRect($0) },
+        Self.defaultHighlightCropBox(
+            highlightBoxes: selectedHighlightBoxes,
             imageWidth: Double(processed.width),
             imageHeight: Double(processed.height),
             marginFraction: highlightCropMarginFraction
-        )?.cgRect
+        )
     }
 
-    private var capturePublishPhase: CapturePublishPhase {
-        switch phase {
-        case .idle:
-            return .idle
-        case .processing:
-            return .processing
-        case .reviewing:
-            return .reviewing
-        case .publishing:
-            return .publishing
-        case .done:
-            return .done
-        case .error:
-            return .error
-        }
+    // MARK: - Crop-box geometry (Phase 7 D1 inline of ocr.rs pure projections)
+
+    /// Normalized (0...1) unit rectangle — the image bounds in Vision space.
+    private static let unitRect = CGRect(x: 0, y: 0, width: 1, height: 1)
+
+    /// Mirrors `OcrRect::is_usable`: finite, positive-area. `CGRect.null`
+    /// (returned by an empty `intersection`) reports `false` here.
+    private static func isUsable(_ rect: CGRect) -> Bool {
+        rect.minX.isFinite && rect.minY.isFinite
+            && rect.width.isFinite && rect.height.isFinite
+            && rect.width > 0 && rect.height > 0
     }
 
-    private func phase(from projection: CapturePublishResultProjection) -> Phase {
-        switch projection.phase {
-        case .idle:
-            return .idle
-        case .processing:
-            return .processing
-        case .reviewing:
-            return .reviewing
-        case .publishing:
-            return .publishing
-        case .done:
-            return .done(projection.eventId)
-        case .error:
-            return .error(projection.errorMessage)
+    /// Inline of `ocr::default_highlight_crop_box` — the normalized crop around
+    /// the selected passage, padded by a margin and clipped to the image.
+    private static func defaultHighlightCropBox(
+        highlightBoxes: [CGRect],
+        imageWidth: Double,
+        imageHeight: Double,
+        marginFraction: Double
+    ) -> CGRect? {
+        let usable = highlightBoxes.filter { isUsable($0) }
+        guard var bounds = usable.first else { return nil }
+        for rect in usable.dropFirst() { bounds = bounds.union(rect) }
+
+        let safeMarginFraction = marginFraction.isFinite ? max(marginFraction, 0) : 0.08
+        let safeWidth = max(imageWidth, 1.0)
+        let safeHeight = max(imageHeight, 1.0)
+        let marginX = max(safeMarginFraction, 48.0 / safeWidth)
+        let marginY = max(max(safeMarginFraction, Double(bounds.height) * 0.55), 48.0 / safeHeight)
+
+        let expanded = bounds.insetBy(dx: CGFloat(-marginX), dy: CGFloat(-marginY))
+        let result = expanded.intersection(unitRect)
+        return isUsable(result) ? result : nil
+    }
+
+    /// Inline of `ocr::sanitize_highlight_crop_box` — clamp a user-edited crop
+    /// rect back into the unit image, enforcing a minimum size.
+    private static func sanitizeHighlightCropBox(_ cropBox: CGRect, fallback: CGRect?) -> CGRect {
+        let unit = unitRect
+        let clipped = cropBox.standardized.intersection(unit)
+        guard isUsable(clipped) else { return fallback ?? unit }
+
+        var rect = clipped
+        let minSize: CGFloat = 0.08
+        if rect.width < minSize {
+            let center = rect.midX
+            rect.origin.x = center - minSize / 2
+            rect.size.width = minSize
         }
+        if rect.height < minSize {
+            let center = rect.midY
+            rect.origin.y = center - minSize / 2
+            rect.size.height = minSize
+        }
+        rect.origin.x = min(max(rect.minX, 0), max(1 - rect.width, 0))
+        rect.origin.y = min(max(rect.minY, 0), max(1 - rect.height, 0))
+        let result = rect.intersection(unit)
+        return isUsable(result) ? result : unit
     }
 }

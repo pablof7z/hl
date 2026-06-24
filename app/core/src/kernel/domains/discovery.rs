@@ -189,23 +189,40 @@ pub(crate) fn run_effect_dispatch_nip29_action(
     let payload_bytes: Vec<u8> = match namespace.as_str() {
         "nmp.nip29.discover" => match serde_json::from_str::<DiscoverGroupsInput>(&json) {
             Ok(a) => a.encode(),
-            Err(e) => { tracing::warn!(error = %e, "nip29: failed to deserialise DiscoverGroupsInput"); return; }
+            Err(e) => {
+                tracing::warn!(error = %e, "nip29: failed to deserialise DiscoverGroupsInput");
+                return;
+            }
         },
         "nmp.nip29.join" => match serde_json::from_str::<JoinGroupInput>(&json) {
             Ok(a) => a.encode(),
-            Err(e) => { tracing::warn!(error = %e, "nip29: failed to deserialise JoinGroupInput"); return; }
+            Err(e) => {
+                tracing::warn!(error = %e, "nip29: failed to deserialise JoinGroupInput");
+                return;
+            }
         },
-        "nmp.nip29.create_public_group" => match serde_json::from_str::<CreatePublicGroupInput>(&json) {
-            Ok(a) => a.encode(),
-            Err(e) => { tracing::warn!(error = %e, "nip29: failed to deserialise CreatePublicGroupInput"); return; }
-        },
+        "nmp.nip29.create_public_group" => {
+            match serde_json::from_str::<CreatePublicGroupInput>(&json) {
+                Ok(a) => a.encode(),
+                Err(e) => {
+                    tracing::warn!(error = %e, "nip29: failed to deserialise CreatePublicGroupInput");
+                    return;
+                }
+            }
+        }
         "nmp.nip29.put_user" => match serde_json::from_str::<PutUserInput>(&json) {
             Ok(a) => a.encode(),
-            Err(e) => { tracing::warn!(error = %e, "nip29: failed to deserialise PutUserInput"); return; }
+            Err(e) => {
+                tracing::warn!(error = %e, "nip29: failed to deserialise PutUserInput");
+                return;
+            }
         },
         "nmp.nip29.create_invite" => match serde_json::from_str::<CreateInviteInput>(&json) {
             Ok(a) => a.encode(),
-            Err(e) => { tracing::warn!(error = %e, "nip29: failed to deserialise CreateInviteInput"); return; }
+            Err(e) => {
+                tracing::warn!(error = %e, "nip29: failed to deserialise CreateInviteInput");
+                return;
+            }
         },
         other => {
             tracing::warn!(namespace = other, "nip29: unknown namespace — no-op");

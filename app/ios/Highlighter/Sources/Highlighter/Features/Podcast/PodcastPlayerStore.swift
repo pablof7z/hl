@@ -87,7 +87,7 @@ final class PodcastPlayerStore {
                 hasLoadedPlayer: player != nil
             )
         )
-        let playback = core.projectPodcastPlaybackSessionApply(
+        let playback = sessionApplyProjection(
             input: PodcastPlaybackSessionApplyInput(plan: plan)
         )
         guard playback.canLoad, let url = URL(string: playback.audioUrl) else {
@@ -112,7 +112,7 @@ final class PodcastPlayerStore {
         loadedTimeRanges = []
         transcriptSegments = []
         transcriptAvailability = .unavailable
-        applyClipSelection(core.clearPodcastClipSelection())
+        applyClipSelection(clearClipSelection())
         publishError = nil
         currentTime = 0
         duration = 0
@@ -153,12 +153,10 @@ final class PodcastPlayerStore {
         waveformPeaks = []
         waveformTask?.cancel()
         let dur = playback.previewDurationSeconds
-        let safeCore = core
-        waveformTask = Task(priority: .background) { [weak self, url, safeCore] in
+        waveformTask = Task(priority: .background) { [weak self, url] in
             let peaks = await WaveformExtractor.peaks(
                 forAudioURL: url,
-                durationSeconds: dur,
-                core: safeCore
+                durationSeconds: dur
             )
             guard let self, !Task.isCancelled, let peaks else { return }
             await MainActor.run { self.waveformPeaks = peaks }
@@ -194,7 +192,7 @@ final class PodcastPlayerStore {
         isBuffering = false
         loadedTimeRanges = []
         lastError = nil
-        applyClipSelection(core.clearPodcastClipSelection())
+        applyClipSelection(clearClipSelection())
         publishError = nil
         transcriptSegments = []
         transcriptAvailability = .unavailable
@@ -231,7 +229,7 @@ final class PodcastPlayerStore {
     }
 
     func seek(to seconds: TimeInterval) {
-        let projection = core.projectPodcastPlaybackSeek(
+        let projection = seekProjection(
             input: PodcastPlaybackSeekInput(
                 targetSeconds: seconds,
                 durationSeconds: duration
@@ -268,7 +266,7 @@ final class PodcastPlayerStore {
 
     func markIn() {
         applyClipSelection(
-            core.markPodcastClipIn(
+            markPodcastClipIn(
                 selection: clipSelection,
                 currentTime: currentTime
             )
@@ -277,7 +275,7 @@ final class PodcastPlayerStore {
 
     func markOut() {
         applyClipSelection(
-            core.markPodcastClipOut(
+            markPodcastClipOut(
                 selection: clipSelection,
                 currentTime: currentTime
             )
@@ -285,12 +283,12 @@ final class PodcastPlayerStore {
     }
 
     func clearClip() {
-        applyClipSelection(core.clearPodcastClipSelection())
+        applyClipSelection(clearClipSelection())
     }
 
     func extendClipToSegment(_ segment: TranscriptSegment) {
         applyClipSelection(
-            core.extendPodcastClipToSegment(
+            extendPodcastClipToSegment(
                 selection: clipSelection,
                 segment: segment
             )
@@ -299,7 +297,7 @@ final class PodcastPlayerStore {
 
     func setClipStart(_ value: TimeInterval) {
         applyClipSelection(
-            core.setPodcastClipStart(
+            setPodcastClipStart(
                 selection: clipSelection,
                 value: value
             )
@@ -308,7 +306,7 @@ final class PodcastPlayerStore {
 
     func setClipEnd(_ value: TimeInterval) {
         applyClipSelection(
-            core.setPodcastClipEnd(
+            setPodcastClipEnd(
                 selection: clipSelection,
                 value: value,
                 durationSeconds: duration
@@ -339,7 +337,7 @@ final class PodcastPlayerStore {
             clipEndSeconds: clipEnd,
             clipSpeaker: speaker
         ))
-        let result = core.projectPodcastClipPublishResult(
+        let result = clipPublishResultProjection(
             input: PodcastClipPublishResultInput(snapshot: outcome)
         )
         guard result.didPublish else {
@@ -353,8 +351,8 @@ final class PodcastPlayerStore {
 
     func loadTranscript(from url: String) async {
         transcriptAvailability = .loading
-        let snapshot = await core.loadPodcastTranscript(url: url)
-        let projection = core.projectPodcastTranscriptLoadApply(
+        let snapshot = await loadPodcastTranscript(url: url)
+        let projection = transcriptLoadApplyProjection(
             input: PodcastTranscriptLoadApplyInput(snapshot: snapshot)
         )
         if projection.shouldLogError {
@@ -415,7 +413,7 @@ final class PodcastPlayerStore {
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                let tick = self.core.projectPodcastPlaybackTick(
+                let tick = tickProjection(
                     input: PodcastPlaybackTickInput(
                         previousTimeSeconds: self.currentTime,
                         currentTimeSeconds: time.seconds,
@@ -603,7 +601,7 @@ final class PodcastPlayerStore {
             return
         }
 
-        let projection = core.getPodcastNowPlayingProjection(
+        let projection = nowPlayingProjection(
             input: PodcastNowPlayingProjectionInput(artifact: artifact)
         )
         var info: [String: Any] = [:]
@@ -632,8 +630,8 @@ final class PodcastPlayerStore {
     /// Runs entirely off the main thread; hops back to update state.
     private func fetchAndApplyArtwork(from urlString: String) {
         guard !urlString.isEmpty, let url = URL(string: urlString) else { return }
-        Task(priority: .userInitiated) { [weak self, core] in
-            guard let data = await core.downloadPodcastArtwork(url: url.absoluteString),
+        Task(priority: .userInitiated) { [weak self] in
+            guard let data = await downloadPodcastArtwork(url: url.absoluteString),
                   let uiImage = UIImage(data: data) else { return }
             let artwork = MPMediaItemArtwork(boundsSize: uiImage.size) { _ in uiImage }
             await MainActor.run { [weak self] in

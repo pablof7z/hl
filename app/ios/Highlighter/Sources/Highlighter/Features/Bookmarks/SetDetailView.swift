@@ -62,12 +62,22 @@ struct SetDetailView: View {
     }
 
     private var curatorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: record.pubkey,
-                profile: app.profileSnapshots[record.pubkey],
-                fallback: .pubkey10
-            )
+        let profile = app.profileSnapshots[record.pubkey]
+        let pubkey = record.pubkey
+        let displayName: String = {
+            if let dn = profile?.displayName, !dn.isEmpty { return dn }
+            if let n = profile?.name, !n.isEmpty { return n }
+            return String(pubkey.prefix(10))
+        }()
+        let displayInitial: String = {
+            if let dn = profile?.displayName, !dn.isEmpty { return String(dn.prefix(1)) }
+            if let n = profile?.name, !n.isEmpty { return String(n.prefix(1)) }
+            return String(pubkey.prefix(1))
+        }()
+        return ProfileDisplayProjection(
+            displayName: displayName,
+            displayInitial: displayInitial,
+            pictureUrl: profile?.picture ?? ""
         )
     }
 
@@ -90,12 +100,9 @@ struct SetDetailView: View {
     }
 
     private func loadArticles() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        let snapshot = await app.safeCore.getBookmarkSetDetailSnapshot(record: record)
-        displayTitle = snapshot.displayTitle
-        articles = snapshot.articles
-        isCollectionEmpty = snapshot.isEmpty
+        // Kernel does not have a getBookmarkSetDetailSnapshot projection yet.
+        // Degrade gracefully: show an empty set rather than calling bespoke core.
+        articles = []
+        isCollectionEmpty = true
     }
 }

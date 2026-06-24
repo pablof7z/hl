@@ -331,7 +331,7 @@ pub(crate) fn register_comment_projection(nmp_ref: &NmpApp, tx: mpsc::UnboundedS
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kernel::action::{AppAction, KernelEvent};
+    use crate::kernel::action::KernelEvent;
     use crate::kernel::actor::{reduce, Cmd};
     use crate::kernel::clock::{Clock, ManualClock};
     use crate::kernel::effect::Effect;

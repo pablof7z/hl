@@ -59,7 +59,11 @@ use crate::kernel::effect::Effect;
 ///
 /// Decode errors are silent no-ops. Unknown `schema_id` values are logged at
 /// trace level and skipped. Neither case corrupts `AppState`.
-pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> Vec<Effect> {
+pub(crate) fn dispatch_typed_frame(
+    state: &mut AppState,
+    frame_bytes: &[u8],
+    now: u64,
+) -> Vec<Effect> {
     // Decode the full typed-projection sidecar from the frame.
     // A frame that fails to decode (wrong file identifier, truncated, etc.)
     // is silently dropped — D6. We also catch FlatBuffers panics (e.g. on
@@ -185,7 +189,7 @@ pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> 
             // Append-only: new arms go BELOW this one.
             ACTION_RESULTS_SCHEMA_ID => match decode_action_results(&proj.payload) {
                 Ok(model) => {
-                    let mut new_effects = blossom::apply_action_results(state, &model);
+                    let mut new_effects = blossom::apply_action_results(state, &model, now);
                     effects.append(&mut new_effects);
                 }
                 Err(e) => {
@@ -195,6 +199,39 @@ pub(crate) fn dispatch_typed_frame(state: &mut AppState, frame_bytes: &[u8]) -> 
                     );
                 }
             },
+
+            // ── #1653 arm: "hl.bookmark_sets" ────────────────────────────────
+            // Decode the hl-owned serde-JSON sets snapshot (registered by
+            // `bookmark_sets::register_set_projections`) and store raw
+            // BookmarkSetRow items in AppState::all_bookmark_sets /
+            // all_curation_sets (unfiltered — projection helpers in
+            // `bookmark_sets` do identity-based filtering at snapshot time).
+            // D6: decode errors are silent no-ops. D1: raw fields only.
+            super::bookmark_sets::BOOKMARK_SETS_SCHEMA_ID => {
+                super::bookmark_sets::apply_bookmark_sets(state, &proj.payload);
+            }
+
+            // ── #1653 arm: "hl.web_bookmarks" ────────────────────────────────
+            // Decode the hl-owned serde-JSON web-bookmarks snapshot and store
+            // raw WebBookmarkRow items in AppState::web_bookmarks.
+            // D6: decode errors are silent no-ops.
+            super::bookmark_sets::WEB_BOOKMARKS_SCHEMA_ID => {
+                super::bookmark_sets::apply_web_bookmarks(state, &proj.payload);
+            }
+
+            // ── Phase 7 arm: "refs.profile" ──────────────────────────────────
+            // ADR-0063 Lane H: visited-profile cards now arrive as per-key
+            // row-delta projection (`RefProfileStore`). The bulk apply path
+            // has been removed; this arm is a no-op until the
+            // `RefProfileStore::apply_sidecar` wire-up lands as a follow-up.
+            "refs.profile" => {
+                // TODO(refs.profile): wire RefProfileStore when ADR-0063 Lane H lands.
+            }
+
+            // ── Phase 7 arm: "refs.event" ─────────────────────────────────────
+            "refs.event" => {
+                super::entities::apply_refs_event(state, &proj.payload);
+            }
 
             // ── Default: unknown schema_id — silent no-op (D6) ────────────────
             // Projections registered by nmp-defaults that hl has not opted into
@@ -228,7 +265,7 @@ mod tests {
     #[test]
     fn decode_dispatch_handles_unknown_schema_id_gracefully() {
         let mut state = make_state();
-        let effects = dispatch_typed_frame(&mut state, &[]);
+        let effects = dispatch_typed_frame(&mut state, &[], 0);
         assert!(
             effects.is_empty(),
             "unknown/empty frame must produce no effects (D6)"
@@ -242,7 +279,7 @@ mod tests {
     fn malformed_frame_does_not_panic() {
         let mut state = make_state();
         let garbage = b"NOT A VALID FLATBUFFER FRAME AT ALL \x00\xFF\xFE";
-        let effects = dispatch_typed_frame(&mut state, garbage);
+        let effects = dispatch_typed_frame(&mut state, garbage, 0);
         assert!(
             effects.is_empty(),
             "malformed frame must produce no effects"
@@ -257,7 +294,7 @@ mod tests {
     fn dispatch_is_sync_pure() {
         let result = std::thread::spawn(|| {
             let mut state = make_state();
-            let _effects: Vec<Effect> = dispatch_typed_frame(&mut state, &[]);
+            let _effects: Vec<Effect> = dispatch_typed_frame(&mut state, &[], 0);
         })
         .join();
         assert!(

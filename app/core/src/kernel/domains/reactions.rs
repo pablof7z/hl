@@ -65,7 +65,9 @@ use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SC
 use nmp_core::substrate::ActionPayload;
 use nmp_core::KernelEventObserver;
 use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
-use nmp_nip25::{ReactAction, ReactionProjection, UnreactAction, KIND_REACTION, KIND_REACTION_DELETE};
+use nmp_nip25::{
+    ReactAction, ReactionProjection, UnreactAction, KIND_REACTION, KIND_REACTION_DELETE,
+};
 use tokio::sync::mpsc;
 
 use crate::kernel::action::KernelEvent;
@@ -214,10 +216,17 @@ impl ReactionObserver {
         let snapshot = self.projection.snapshot_for(target_event_id);
         let count = snapshot.reactions.len() as u32;
         let viewer_reacted = snapshot.viewer_reaction.is_some();
+        // Carry the viewer's own reaction event id into the actor so toggle can
+        // unreact later. Kernel-internal — never surfaced across FFI (D1).
+        let viewer_reaction_event_id = snapshot
+            .viewer_reaction
+            .as_ref()
+            .map(|v| v.reaction_event_id.clone());
         let _ = self.tx.send(Cmd::Event(KernelEvent::ReactionStateUpdated {
             target_event_id: target_event_id.to_string(),
             count,
             viewer_reacted,
+            viewer_reaction_event_id,
         }));
     }
 }
@@ -244,6 +253,7 @@ fn first_tag_value(tags: &[Vec<String>], name: &str) -> Option<String> {
 /// account never surface under a new identity.
 pub(crate) fn clear_on_identity_lost(state: &mut AppState) {
     state.reaction_state.clear();
+    state.viewer_reaction_ids.clear();
 }
 
 // ─── WRITE side: reduce_action helpers ──────────────────────────────────────
@@ -287,6 +297,40 @@ pub(crate) fn reduce_action_react(
         namespace: "nmp.nip25.react".to_string(),
         json,
     }]
+}
+
+/// Handle `hl.reaction.toggle { target_event_id, target_author_pubkey? }`.
+///
+/// Like-or-unlike decided from the kernel's own viewer-reaction tracking:
+/// - If the active viewer already has a kind:7 `+` on `target_event_id`
+///   (`AppState::reaction_state[target].viewer_reacted` true and we hold the
+///   reaction event id in `AppState::viewer_reaction_ids`), emit the UNREACT
+///   effect (same path as `hl.reaction.unreact`) using that stored id — which
+///   NEVER crosses FFI.
+/// - Otherwise emit the REACT effect (publish `+` on the target).
+///
+/// Fire-and-forget (Non-Negotiable #3). The authoritative count/viewer_reacted
+/// correction arrives back via `KernelEvent::ReactionStateUpdated`.
+pub(crate) fn reduce_action_toggle_reaction(
+    state: &AppState,
+    target_event_id: String,
+    target_author_pubkey: Option<String>,
+) -> Vec<crate::kernel::effect::Effect> {
+    let already_reacted = state
+        .reaction_state
+        .get(&target_event_id)
+        .is_some_and(|row| row.viewer_reacted);
+
+    if already_reacted {
+        if let Some(reaction_event_id) = state.viewer_reaction_ids.get(&target_event_id) {
+            return reduce_action_unreact(reaction_event_id.clone());
+        }
+        // viewer_reacted is true but we somehow lack the id — fall through to
+        // react is wrong (would double-like); D6: no-op rather than misfire.
+        return vec![];
+    }
+
+    reduce_action_react(target_event_id, "+".to_string(), target_author_pubkey)
 }
 
 /// Handle `AppAction::Unreact{reaction_event_id}`.
@@ -468,6 +512,7 @@ mod tests {
                 target_event_id: target.to_string(),
                 count: 42,
                 viewer_reacted: true,
+                viewer_reaction_event_id: None,
             }),
         );
 
@@ -646,6 +691,7 @@ mod tests {
                 target_event_id: target.to_string(),
                 count: 1,
                 viewer_reacted: true,
+                viewer_reaction_event_id: None,
             }),
         );
 
@@ -699,6 +745,7 @@ mod tests {
                 target_event_id,
                 count,
                 viewer_reacted,
+                ..
             }) => {
                 assert_eq!(
                     target_event_id, target,
@@ -858,6 +905,7 @@ mod tests {
                 target_event_id: target.to_string(),
                 count: 99,
                 viewer_reacted: false,
+                viewer_reaction_event_id: None,
             }),
         );
 
@@ -1060,5 +1108,80 @@ mod tests {
             }
             _ => panic!("expected ReactionStateUpdated"),
         }
+    }
+
+    // hl.reaction.toggle: first toggle on a not-yet-reacted target → REACT;
+    // a second toggle (after the viewer's reaction id is known) → UNREACT with
+    // that exact reaction_event_id. The id never crosses FFI — it lives only in
+    // AppState::viewer_reaction_ids.
+    #[test]
+    fn toggle_reacts_then_unreacts_same_target() {
+        let target = "tttt000000000000000000000000000000000000000000000000000000000001";
+        let reaction_id = "7777000000000000000000000000000000000000000000000000000000000001";
+
+        // State 1: viewer has NOT reacted → toggle emits a react ("+").
+        let mut state = make_state();
+        let effects = reduce_action_toggle_reaction(&state, target.to_string(), None);
+        assert_eq!(effects.len(), 1, "toggle must emit exactly one effect");
+        match &effects[0] {
+            Effect::DispatchReactAction { namespace, json } => {
+                assert_eq!(namespace, "nmp.nip25.react", "first toggle → react");
+                let parsed: serde_json::Value = serde_json::from_str(json).unwrap();
+                assert_eq!(parsed["target_event_id"].as_str().unwrap(), target);
+                assert_eq!(parsed["reaction"].as_str().unwrap(), "+");
+            }
+            _ => panic!("expected DispatchReactAction (react)"),
+        }
+
+        // State 2: the reaction landed — reaction_state.viewer_reacted = true and
+        // viewer_reaction_ids holds the kind:7 id (as the observer would record).
+        state.reaction_state.insert(
+            target.to_string(),
+            crate::kernel::snapshot::ReactionRow {
+                target_event_id: target.to_string(),
+                count: 1,
+                viewer_reacted: true,
+            },
+        );
+        state
+            .viewer_reaction_ids
+            .insert(target.to_string(), reaction_id.to_string());
+
+        let effects = reduce_action_toggle_reaction(&state, target.to_string(), None);
+        assert_eq!(
+            effects.len(),
+            1,
+            "second toggle must emit exactly one effect"
+        );
+        match &effects[0] {
+            Effect::DispatchReactAction { namespace, json } => {
+                assert_eq!(namespace, "nmp.nip25.unreact", "second toggle → unreact");
+                let parsed: serde_json::Value = serde_json::from_str(json).unwrap();
+                assert_eq!(
+                    parsed["reaction_event_id"].as_str().unwrap(),
+                    reaction_id,
+                    "unreact must use the stored reaction_event_id"
+                );
+            }
+            _ => panic!("expected DispatchReactAction (unreact)"),
+        }
+    }
+
+    // D6: viewer_reacted true but no stored reaction id → toggle is a no-op
+    // (never double-likes).
+    #[test]
+    fn toggle_noop_when_reacted_but_id_missing() {
+        let target = "tttt000000000000000000000000000000000000000000000000000000000002";
+        let mut state = make_state();
+        state.reaction_state.insert(
+            target.to_string(),
+            crate::kernel::snapshot::ReactionRow {
+                target_event_id: target.to_string(),
+                count: 1,
+                viewer_reacted: true,
+            },
+        );
+        let effects = reduce_action_toggle_reaction(&state, target.to_string(), None);
+        assert!(effects.is_empty(), "no id → no-op, never a double-like");
     }
 }

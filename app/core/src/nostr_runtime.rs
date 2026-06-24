@@ -26,9 +26,12 @@ use tokio::task::JoinHandle;
 
 use crate::errors::CoreError;
 use crate::events::{DataChangeType, Delta, EventCallback};
-use crate::groups::{KIND_GROUP_ADMINS, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA};
 use crate::models::{RelayDiagnostic, RelayStatus as AppRelayStatus};
 
+const KIND_GROUP_METADATA: u16 = 39000;
+const KIND_GROUP_ADMINS: u16 = 39001;
+const KIND_GROUP_MEMBERS: u16 = 39002;
+const KIND_CURATED_COMMUNITIES: u16 = 10009;
 /// NIP-51 "simple groups" list (replaceable). A user publishes this to
 /// enumerate the NIP-29 groups they're a member of; each entry is a
 /// `group` tag with the group id and relay.
@@ -549,7 +552,7 @@ impl NostrRuntime {
         let urls = self.indexer_urls();
         self.rt().spawn(async move {
             let filter = Filter::new()
-                .kinds([Kind::Custom(crate::curation::KIND_CURATED_COMMUNITIES)])
+                .kinds([Kind::Custom(KIND_CURATED_COMMUNITIES)])
                 .author(curator);
             subscribe_routed(&client, id_clone, filter, urls, "indexer/curated-list").await;
         });

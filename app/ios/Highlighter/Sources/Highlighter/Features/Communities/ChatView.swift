@@ -4,6 +4,7 @@ struct ChatView: View {
     let groupId: String
 
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var store = ChatStore()
     @State private var draft: String = ""
     @FocusState private var inputFocused: Bool
@@ -31,9 +32,13 @@ struct ChatView: View {
         }
         .background(Color.highlighterPaper.ignoresSafeArea())
         .task {
-            await store.start(groupId: groupId, core: app.safeCore, bridge: app.eventBridge)
+            let hostRelayUrl = kernel.roomHomeSnapshots[groupId]?.hostRelayUrl ?? ""
+            await store.start(groupId: groupId, hostRelayUrl: hostRelayUrl, kernel: kernel)
         }
         .onDisappear { store.stop() }
+        .onChange(of: kernel.roomChatSnapshots[groupId]) { _, _ in
+            store.applyKernelSnapshot()
+        }
         .onChange(of: store.activityRevision) { _, _ in
             let added = max(1, store.activityDelta)
             if isAtBottom {
@@ -260,8 +265,10 @@ struct ChatView: View {
     // MARK: - Helpers
 
     private var composerProjection: ChatComposerProjection {
-        app.safeCore.projectChatComposer(
-            input: ChatComposerProjectionInput(body: draft)
+        let submitBody = draft.trimmingCharacters(in: .whitespaces)
+        return ChatComposerProjection(
+            submitBody: submitBody,
+            canSend: !submitBody.isEmpty
         )
     }
 
@@ -277,13 +284,17 @@ struct ChatView: View {
     }
 
     private func profileDisplay(for pubkey: String) -> ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: pubkey,
-                profile: app.profileSnapshots[pubkey],
-                fallback: .pubkey8
+        {
+            let profile = app.profileSnapshots[pubkey]
+            let name = (profile?.displayName ?? "").isEmpty
+                ? ((profile?.name ?? "").isEmpty ? String(pubkey.prefix(8)) : profile!.name)
+                : profile!.displayName
+            return ProfileDisplayProjection(
+                displayName: name,
+                displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+                pictureUrl: profile?.picture ?? ""
             )
-        )
+        }()
     }
 
 

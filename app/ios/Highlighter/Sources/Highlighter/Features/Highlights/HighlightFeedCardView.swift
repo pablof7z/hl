@@ -33,10 +33,14 @@ struct HighlightFeedCardView: View {
     }
 
     private var isbnFromLead: String? {
-        app.safeCore.getHighlightBookRoute(
-            externalReference: lead.highlight.externalReference,
-            artifactAddress: lead.highlight.artifactAddress
-        )?.isbn
+        for candidate in [lead.highlight.externalReference, lead.highlight.artifactAddress] {
+            let t = candidate.trimmingCharacters(in: .whitespaces)
+            if t.hasPrefix("isbn:") {
+                let isbn = String(t.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                if !isbn.isEmpty { return isbn }
+            }
+        }
+        return nil
     }
 
     var body: some View {
@@ -299,8 +303,11 @@ struct HighlightFeedCardView: View {
     }
 
     private func highlightFeedContent(for highlight: HighlightRecord) -> HighlightFeedContentProjection {
-        app.safeCore.projectHighlightFeedContent(
-            input: HighlightFeedContentProjectionInput(highlight: highlight)
+        let trimmedImage = highlight.imageUrl.trimmingCharacters(in: .whitespaces)
+        return HighlightFeedContentProjection(
+            quoteText: highlight.quote.trimmingCharacters(in: .whitespaces),
+            noteText: highlight.note.isEmpty ? nil : highlight.note,
+            pageImageUrl: trimmedImage.isEmpty ? nil : trimmedImage
         )
     }
 
@@ -347,87 +354,281 @@ struct HighlightFeedCardView: View {
     // MARK: - Derived: resource projection
 
     private var resourceProjection: HighlightResourceHeaderProjection {
-        let base = app.safeCore.projectHighlightResourceHeader(
-            input: resourceProjectionInput(webMetadata: nil)
+        // D1: inline highlight_resource_header_projection. Web metadata is read from the
+        // cache in a single pass — SwiftUI re-renders when the cache updates, so the
+        // two-pass Rust pattern is naturally replaced by observation.
+        let preview = lead.artifact?.preview
+        let h = lead.highlight
+
+        let kind = Self.hlSourceKind(
+            previewSource: preview?.source ?? "",
+            externalReference: h.externalReference,
+            artifactAddress: h.artifactAddress,
+            sourceUrl: h.sourceUrl
         )
-        guard let url = base.webMetadataUrl,
-              let metadata = app.webMetadataCache[url] else {
-            return base
-        }
-        return app.safeCore.projectHighlightResourceHeader(
-            input: resourceProjectionInput(webMetadata: metadata)
+
+        let urlHost: String? = {
+            let t = h.sourceUrl.trimmingCharacters(in: .whitespaces)
+            return t.isEmpty ? nil : URL(string: t)?.host
+        }()
+
+        // Book ISBN (bare, without "isbn:" prefix; used by requestIsbnPreview / isbnPreviewCache)
+        let bookIsbn: String? = {
+            for ref in [h.externalReference, h.artifactAddress] {
+                let t = ref.trimmingCharacters(in: .whitespaces)
+                guard t.lowercased().hasPrefix("isbn:") else { continue }
+                let isbn = String(t.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                if !isbn.isEmpty { return isbn }
+            }
+            return nil
+        }()
+
+        // Article address: valid "30023:pk:d" trimmed string, or nil.
+        let articleAddress: String? = {
+            let t = h.artifactAddress.trimmingCharacters(in: .whitespaces)
+            guard !t.isEmpty else { return nil }
+            let parts = t.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+            guard parts.count == 3, parts[0] == "30023",
+                  !String(parts[1]).trimmingCharacters(in: .whitespaces).isEmpty,
+                  !String(parts[2]).trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+            return t
+        }()
+
+        // Article author pubkey: prefer sourceArticle.pubkey, then sourceArticleAuthorPubkey.
+        let artAuthorPk: String = {
+            if let pk = sourceArticle?.pubkey, !pk.isEmpty { return pk }
+            return sourceArticleAuthorPubkey ?? ""
+        }()
+
+        // Web metadata URL (nil for non-web kinds) and cached metadata.
+        let webMetadataUrl: String? = {
+            guard kind == .web else { return nil }
+            if let url = preview?.url, !url.isEmpty { return url }
+            let t = h.sourceUrl.trimmingCharacters(in: .whitespaces)
+            return t.isEmpty ? nil : t
+        }()
+        let webMetadata: WebMetadata? = webMetadataUrl.flatMap { app.webMetadataCache[$0] }
+
+        let title: String = {
+            switch kind {
+            case .article:
+                if let t = sourceArticle?.title, !t.isEmpty { return t }
+                if let t = preview?.title, !t.isEmpty { return t }
+                return "Untitled"
+            case .podcast, .video, .paper:
+                if let t = preview?.title, !t.isEmpty { return t }
+                return "Untitled"
+            case .book:
+                if let t = preview?.title, !t.isEmpty { return t }
+                if let t = bookPreview?.title, !t.isEmpty { return t }
+                return "Untitled"
+            case .web:
+                if let t = webMetadata?.title, !t.isEmpty { return t }
+                if let t = preview?.title, !t.isEmpty { return t }
+                return urlHost ?? "Web page"
+            case .unknown:
+                if let t = preview?.title, !t.isEmpty { return t }
+                return urlHost ?? "Highlight"
+            }
+        }()
+
+        let authorOrDomain: String = {
+            switch kind {
+            case .article:
+                let profile = artAuthorPk.isEmpty ? nil : app.profileSnapshots[artAuthorPk]
+                if let dn = profile?.displayName, !dn.isEmpty { return dn }
+                if let n  = profile?.name, !n.isEmpty { return n }
+                return preview?.author ?? ""
+            case .podcast:
+                if let s = preview?.podcastShowTitle, !s.isEmpty { return s }
+                return preview?.author ?? ""
+            case .book:
+                // Mirror Rust: if preview exists, use preview.author even if empty.
+                if let prev = preview { return prev.author }
+                return bookPreview?.author ?? ""
+            case .web:
+                if let s = webMetadata?.siteName, !s.isEmpty { return s }
+                if let a = webMetadata?.author, !a.isEmpty { return a }
+                if let d = preview?.domain, !d.isEmpty { return d }
+                return urlHost ?? ""
+            case .video, .paper:
+                if let a = preview?.author, !a.isEmpty { return a }
+                return preview?.domain ?? ""
+            case .unknown:
+                return urlHost ?? ""
+            }
+        }()
+
+        let timeLabel: String? = {
+            switch kind {
+            case .article:
+                guard let content = sourceArticle?.content, !content.isEmpty else { return nil }
+                let words = content.split(whereSeparator: \.isWhitespace).count
+                guard words > 60 else { return nil }
+                return "\(max(1, words / 240)) min"
+            case .podcast:
+                guard let secs = preview?.durationSeconds, secs > 0 else { return nil }
+                let hrs = secs / 3600, mins = (secs % 3600) / 60
+                return hrs > 0 ? "\(hrs)h \(mins)m" : "\(mins)m"
+            default:
+                return nil
+            }
+        }()
+
+        let coverUrl: String? = {
+            if let img = preview?.image, !img.isEmpty { return img }
+            if kind == .book, let img = bookPreview?.image, !img.isEmpty { return img }
+            if kind == .article, let img = sourceArticle?.image, !img.isEmpty { return img }
+            if kind == .web {
+                if let img = webMetadata?.image, !img.isEmpty { return img }
+                if let fav = webMetadata?.favicon, !fav.isEmpty { return fav }
+            }
+            return nil
+        }()
+
+        return HighlightResourceHeaderProjection(
+            sourceKind: kind,
+            iconSystemName: Self.hlSourceKindIconName(kind),
+            title: title,
+            authorOrDomain: authorOrDomain,
+            timeLabel: timeLabel,
+            coverUrl: coverUrl,
+            bookIsbn: bookIsbn,
+            articleAddress: articleAddress,
+            articleAuthorPubkey: artAuthorPk,
+            webMetadataUrl: webMetadataUrl
         )
     }
 
-    private func resourceProjectionInput(webMetadata: WebMetadata?) -> HighlightResourceHeaderProjectionInput {
-        HighlightResourceHeaderProjectionInput(
-            lead: lead,
-            sourceArticle: sourceArticle,
-            sourceArticleAuthorPubkey: sourceArticleAuthorPubkey ?? "",
-            articleAuthorProfiles: articleAuthorProfileCandidates,
-            bookPreview: bookPreview,
-            webMetadata: webMetadata
-        )
+    // MARK: - Highlight source kind helpers (D1 inlined from Rust highlights.rs)
+
+    private static func hlSourceKind(
+        previewSource: String,
+        externalReference: String,
+        artifactAddress: String,
+        sourceUrl: String
+    ) -> HighlightSourceKind {
+        switch previewSource.trimmingCharacters(in: .whitespaces).lowercased() {
+        case "article": return .article
+        case "web":     return .web
+        case "podcast": return .podcast
+        case "book":    return .book
+        case "video":   return .video
+        case "paper":   return .paper
+        case "":        break
+        default:        return .unknown
+        }
+        if externalReference.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("isbn:") {
+            return .book
+        }
+        let addr = artifactAddress.trimmingCharacters(in: .whitespaces)
+        if !addr.isEmpty {
+            let parts = addr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+            if parts.count == 3, parts[0] == "30023",
+               !String(parts[1]).trimmingCharacters(in: .whitespaces).isEmpty,
+               !String(parts[2]).trimmingCharacters(in: .whitespaces).isEmpty {
+                return .article
+            }
+            if addr.lowercased().hasPrefix("isbn:") { return .book }
+        }
+        if !sourceUrl.trimmingCharacters(in: .whitespaces).isEmpty { return .web }
+        return .unknown
     }
 
-    private var articleAuthorProfileCandidates: [HighlightResourceAuthorProfile] {
-        var candidates: [HighlightResourceAuthorProfile] = []
-        if let pubkey = sourceArticle?.pubkey, !pubkey.isEmpty {
-            candidates.append(
-                HighlightResourceAuthorProfile(
-                    pubkey: pubkey,
-                    profile: app.profileSnapshots[pubkey]
-                )
-            )
+    private static func hlSourceKindIconName(_ kind: HighlightSourceKind) -> String {
+        switch kind {
+        case .article: return "doc.text"
+        case .web:     return "globe"
+        case .podcast: return "waveform"
+        case .book:    return "book.closed"
+        case .video:   return "play.rectangle"
+        case .paper:   return "doc.richtext"
+        case .unknown: return "quote.bubble"
         }
-        if let pubkey = sourceArticleAuthorPubkey,
-           !pubkey.isEmpty,
-           !candidates.contains(where: { $0.pubkey == pubkey }) {
-            candidates.append(
-                HighlightResourceAuthorProfile(
-                    pubkey: pubkey,
-                    profile: app.profileSnapshots[pubkey]
-                )
-            )
-        }
-        return candidates
     }
 
     // MARK: - Derived: group projection
 
     private var groupProjection: HighlightGroupCardProjection {
-        app.safeCore.projectHighlightGroupCard(
-            input: HighlightGroupCardProjectionInput(
-                items: items,
-                highlighterProfiles: items.map { h in
-                    HighlightGroupHighlighterProfile(
-                        pubkey: h.highlight.pubkey,
-                        profile: app.profileSnapshots[h.highlight.pubkey]
-                    )
-                }
+        var seen = Set<String>()
+        var uniquePubkeys: [String] = []
+        for h in items {
+            if seen.insert(h.highlight.pubkey).inserted {
+                uniquePubkeys.append(h.highlight.pubkey)
+            }
+        }
+        let show = items.count >= 2 && uniquePubkeys.count >= 2
+        guard show else {
+            return HighlightGroupCardProjection(showHighlightersStrip: false, visibleHighlighters: [], overflowCount: 0, highlightersLabelSegments: [])
+        }
+        let highlighters = uniquePubkeys.map { pubkey -> HighlightGroupHighlighterProjection in
+            let profile = app.profileSnapshots[pubkey]
+            let name = (profile?.displayName ?? "").isEmpty
+                ? ((profile?.name ?? "").isEmpty ? String(pubkey.prefix(10)) : profile!.name)
+                : profile!.displayName
+            return HighlightGroupHighlighterProjection(
+                pubkey: pubkey,
+                displayName: name,
+                displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+                pictureUrl: profile?.picture ?? ""
             )
+        }
+        let overflow = max(0, highlighters.count - 3)
+        var segments: [HighlightGroupLabelSegment] = [HighlightGroupLabelSegment(text: "Highlighted by ", emphasized: false)]
+        switch highlighters.count {
+        case 0: break
+        case 1:
+            segments.append(HighlightGroupLabelSegment(text: highlighters[0].displayName, emphasized: true))
+        case 2:
+            segments += [
+                HighlightGroupLabelSegment(text: highlighters[0].displayName, emphasized: true),
+                HighlightGroupLabelSegment(text: " and ", emphasized: false),
+                HighlightGroupLabelSegment(text: highlighters[1].displayName, emphasized: true),
+            ]
+        default:
+            segments += [
+                HighlightGroupLabelSegment(text: highlighters[0].displayName, emphasized: true),
+                HighlightGroupLabelSegment(text: ", ", emphasized: false),
+                HighlightGroupLabelSegment(text: highlighters[1].displayName, emphasized: true),
+                HighlightGroupLabelSegment(text: " and ", emphasized: false),
+                HighlightGroupLabelSegment(text: "\(highlighters.count - 2) others", emphasized: false),
+            ]
+        }
+        return HighlightGroupCardProjection(
+            showHighlightersStrip: true,
+            visibleHighlighters: Array(highlighters.prefix(3)),
+            overflowCount: UInt32(overflow),
+            highlightersLabelSegments: segments
         )
     }
 
     // MARK: - Derived: profile helpers
 
     private func profileDisplay(for pubkey: String) -> ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: pubkey,
-                profile: app.profileSnapshots[pubkey],
-                fallback: .pubkey10
-            )
+        let profile = app.profileSnapshots[pubkey]
+        let name = (profile?.displayName ?? "").isEmpty
+            ? ((profile?.name ?? "").isEmpty ? String(pubkey.prefix(10)) : profile!.name)
+            : profile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: profile?.picture ?? ""
         )
     }
 
     private func relativeDate(_ seconds: UInt64?) -> String? {
-        app.safeCore.projectRelativeTimeLabel(
-            input: RelativeTimeLabelInput(
-                unixSeconds: seconds,
-                style: .compact
-            )
-        ).label
+        guard let seconds, seconds > 0 else { return nil }
+        let now = UInt64(max(0, Date().timeIntervalSince1970))
+        guard now >= seconds else { return nil }
+        let delta = now - seconds
+        if delta < 60 { return "just now" }
+        switch delta {
+        case 60 ..< 3600:   return "\(delta / 60)m"
+        case 3600 ..< 86400:  return "\(delta / 3600)h"
+        case 86400 ..< 604800:  return "\(delta / 86400)d"
+        case 604800 ..< 2592000: return "\(delta / 604800)w"
+        default: return "\(delta / 2592000)mo"
+        }
     }
 
     private func resourceSourceTaskId(_ resource: HighlightResourceHeaderProjection) -> String {
@@ -445,13 +646,11 @@ struct HighlightFeedCardView: View {
 
         guard let addr = resource.articleAddress else { return }
 
-        sourceArticle = await app.safeCore.getArticleByAddress(address: addr)
-        if let pubkey = sourceArticle?.pubkey, !pubkey.isEmpty {
-            sourceArticleAuthorPubkey = pubkey
-            await app.requestProfile(pubkeyHex: pubkey)
-            return
-        }
-        if let pubkey = await app.safeCore.getArticleAddressAuthor(address: addr), !pubkey.isEmpty {
+        // Pure parse of "30023:pubkeyHex:d-tag" — the author pubkey is the
+        // second segment. Replaces the nostrdb article lookup (D1 inline).
+        let parts = addr.split(separator: ":", maxSplits: 2).map(String.init)
+        if parts.count >= 3, !parts[1].isEmpty {
+            let pubkey = parts[1]
             sourceArticleAuthorPubkey = pubkey
             await app.requestProfile(pubkeyHex: pubkey)
         }
@@ -470,8 +669,12 @@ private struct HighlightQuoteCard: View {
     let highlight: HydratedHighlight
 
     var body: some View {
-        let content = app.safeCore.projectHighlightFeedContent(
-            input: HighlightFeedContentProjectionInput(highlight: highlight.highlight)
+        let h = highlight.highlight
+        let trimmedImage = h.imageUrl.trimmingCharacters(in: .whitespaces)
+        let content = HighlightFeedContentProjection(
+            quoteText: h.quote.trimmingCharacters(in: .whitespaces),
+            noteText: h.note.isEmpty ? nil : h.note,
+            pageImageUrl: trimmedImage.isEmpty ? nil : trimmedImage
         )
 
         VStack(alignment: .leading, spacing: 0) {
@@ -564,21 +767,30 @@ private struct HighlightQuoteCard: View {
     }
 
     private var authorDisplay: ProfileDisplayProjection {
-        app.safeCore.projectProfileDisplay(
-            input: ProfileDisplayProjectionInput(
-                pubkey: highlight.highlight.pubkey,
-                profile: app.profileSnapshots[highlight.highlight.pubkey],
-                fallback: .pubkey10
-            )
+        let pubkey = highlight.highlight.pubkey
+        let profile = app.profileSnapshots[pubkey]
+        let name = (profile?.displayName ?? "").isEmpty
+            ? ((profile?.name ?? "").isEmpty ? String(pubkey.prefix(10)) : profile!.name)
+            : profile!.displayName
+        return ProfileDisplayProjection(
+            displayName: name,
+            displayInitial: name.first.map { String($0).uppercased() } ?? "?",
+            pictureUrl: profile?.picture ?? ""
         )
     }
 
     private var relative: String? {
-        app.safeCore.projectRelativeTimeLabel(
-            input: RelativeTimeLabelInput(
-                unixSeconds: highlight.highlight.createdAt,
-                style: .compact
-            )
-        ).label
+        guard let seconds = highlight.highlight.createdAt, seconds > 0 else { return nil }
+        let now = UInt64(max(0, Date().timeIntervalSince1970))
+        guard now >= seconds else { return nil }
+        let delta = now - seconds
+        if delta < 60 { return "just now" }
+        switch delta {
+        case 60 ..< 3600:   return "\(delta / 60)m"
+        case 3600 ..< 86400:  return "\(delta / 3600)h"
+        case 86400 ..< 604800:  return "\(delta / 86400)d"
+        case 604800 ..< 2592000: return "\(delta / 604800)w"
+        default: return "\(delta / 2592000)mo"
+        }
     }
 }

@@ -179,6 +179,47 @@ pub fn highlight_feed_scope() -> PullScope {
     PullScope::InterestShape(shape)
 }
 
+/// Build a `PullScope` for an article's highlight feed (kind:9802 tagged with
+/// `#a` == the article's addressable coordinate).
+///
+/// Phase 7: the article reader overlay needs the highlights anchored to the
+/// article being read. Mirrors the bespoke `highlights::query_for_article`
+/// NdbFilter (`kinds([9802]).tags([address], 'a')`) — but expressed as an
+/// `InterestShape` so it flows through the same feed-pull engine the room-lane
+/// (4I) and home (4G/4H) feeds use. `address` is the `"<kind>:<pubkey>:<d>"`
+/// coordinate (D3: opaque from the caller, never constructed by the kernel).
+pub fn article_highlight_feed_scope(address: &str) -> PullScope {
+    let mut shape = InterestShape::default();
+    shape.kinds = [9802].into_iter().collect();
+    shape
+        .tags
+        .insert("a".to_string(), [address.to_string()].into_iter().collect());
+    PullScope::InterestShape(shape)
+}
+
+/// Build a `PullScope` for the home-feed interaction cursor.
+///
+/// Phase 7 home-feed aggregation: returns kind:1/7/16/1111 events authored by
+/// the active account's follows, filtered by `#k=30023` (interaction with a
+/// long-form article). Fail-closed: returns `None` when the follow set is empty
+/// so no broad scan is issued (D5).
+///
+/// Mirrors the legacy `reads.rs` interaction stream but expressed as an
+/// `InterestShape` so it flows through the same feed-pull engine as the other
+/// home-feed cursors. Feed key: `"hl.feed.home_interactions"`.
+pub fn home_interaction_feed_scope(follow_pubkeys: &[String]) -> Option<PullScope> {
+    if follow_pubkeys.is_empty() {
+        return None;
+    }
+    let mut shape = InterestShape::default();
+    shape.kinds = [1, 7, 16, 1111].into_iter().collect();
+    shape.authors = follow_pubkeys.iter().cloned().collect();
+    shape
+        .tags
+        .insert("k".to_string(), ["30023".to_string()].into_iter().collect());
+    Some(PullScope::InterestShape(shape))
+}
+
 /// Build a `PullScope` for a room-lane feed (kind:9 and kind:11 tagged with `#h`).
 ///
 /// Used by Phase 4I. `group_id` is the NIP-29 local group id (the `#h` tag value).
@@ -188,6 +229,21 @@ pub fn highlight_feed_scope() -> PullScope {
 pub fn room_lane_scope(group_id: &str) -> PullScope {
     let mut shape = InterestShape::default();
     shape.kinds = [9, 11].into_iter().collect();
+    shape.tags.insert(
+        "h".to_string(),
+        [group_id.to_string()].into_iter().collect(),
+    );
+    PullScope::InterestShape(shape)
+}
+
+/// Pull scope for the room highlight feed (kind:9802 with `#h == group_id`).
+///
+/// Used by the room-home aggregation slice to pull highlights scoped to a room.
+/// Public for room_home.rs; unused until that slice lands.
+#[allow(dead_code)]
+pub fn room_highlight_feed_scope(group_id: &str) -> PullScope {
+    let mut shape = InterestShape::default();
+    shape.kinds = [9802].into_iter().collect();
     shape.tags.insert(
         "h".to_string(),
         [group_id.to_string()].into_iter().collect(),
@@ -257,22 +313,22 @@ pub fn reduce_release_feed_cursor(key: FeedKey) -> Vec<Effect> {
 /// session) resets `after_seq` to the provided value — consumers should pass
 /// the current `FeedState::after_seq` so the cursor resumes rather than
 /// rewinding (0 = start from the beginning).
+/// Returns the cursor id (for storage in FeedState), or 0 in test mode.
 pub(crate) fn run_effect_register_feed_cursor(
     key: FeedKey,
-    cursor_id: u64,
     scope: PullScope,
     after_seq: u64,
     nmp: Option<&NmpHandle>,
-) {
+) -> u64 {
     let Some(handle) = nmp else {
         tracing::debug!(?key, "RegisterFeedCursor: no live NmpApp (test mode)");
-        return;
+        return 0;
     };
     let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
 
-    // Use GapAllowed mode: the feed can tolerate a gap rebase (old events
-    // pruned by the GC); the reducer clears scoped rows on a Gap. Protected
-    // mode is for consumers that cannot tolerate data loss (not feeds).
+    // Mint a deterministic cursor id from the feed key (same as mint_cursor_id).
+    let cursor_id = mint_cursor_id(&key);
+
     let page_size =
         NonZeroUsize::new(FEED_PAGE_SIZE as usize).unwrap_or(NonZeroUsize::new(20).unwrap());
     let scan_budget =
@@ -291,6 +347,7 @@ pub(crate) fn run_effect_register_feed_cursor(
                 max_scan_entries: scan_budget,
             },
         });
+    cursor_id
 }
 
 /// Call `nmp_app_pull_page` and emit a `KernelEvent::FeedPage` with the decoded rows.

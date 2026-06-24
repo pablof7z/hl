@@ -7,7 +7,6 @@ import SwiftUI
 struct ImportRelaysSheet: View {
     let store: NetworkSettingsStore
 
-    @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var npubText: String = ""
@@ -18,17 +17,42 @@ struct ImportRelaysSheet: View {
     @State private var isApplying = false
 
     private var projection: ImportRelaysProjection {
-        appStore.safeCore.projectImportRelays(input: ImportRelaysProjectionInput(
-            fetched: fetched,
-            selectedUrls: selectedUrls
-        ))
+        // D1: inline import_relays_projection — map fetched relays to rows, compute counts.
+        let selectedSet = Set(selectedUrls)
+        var selectedConfigs: [RelayConfig] = []
+        let rows: [ImportRelayRow] = fetched.map { config in
+            let isSelected = selectedSet.contains(config.url)
+            if isSelected { selectedConfigs.append(config) }
+            let displayUrl = config.url.hasPrefix("wss://")
+                ? String(config.url.dropFirst(6))
+                : config.url
+            let roleLabel: String
+            switch (config.read, config.write) {
+            case (true, true):  roleLabel = "Read + Write"
+            case (true, false): roleLabel = "Read"
+            case (false, true): roleLabel = "Write"
+            default:            roleLabel = "No roles"
+            }
+            return ImportRelayRow(
+                config: config,
+                displayUrl: displayUrl,
+                roleLabel: roleLabel,
+                isSelected: isSelected
+            )
+        }
+        let foundCount = rows.count
+        return ImportRelaysProjection(
+            rows: rows,
+            selectedCount: UInt64(selectedConfigs.count),
+            foundTitle: "Found \(foundCount) relay\(foundCount == 1 ? "" : "s")",
+            canApply: !selectedConfigs.isEmpty,
+            selectedConfigs: selectedConfigs
+        )
     }
 
     private var sourceProjection: ImportRelaysSourceProjection {
-        appStore.safeCore.projectImportRelaysSource(input: ImportRelaysSourceProjectionInput(
-            npub: npubText,
-            isFetching: isFetching
-        ))
+        let submitNpub = npubText.trimmingCharacters(in: .whitespaces)
+        return ImportRelaysSourceProjection(submitNpub: submitNpub, canFetch: !submitNpub.isEmpty && !isFetching)
     }
 
     var body: some View {
@@ -136,14 +160,13 @@ struct ImportRelaysSheet: View {
         selectedUrls = []
         isFetching = true
         defer { isFetching = false }
-        let snapshot = await appStore.safeCore
-            .importRelaysFromNpubSnapshot(source.submitNpub)
-        let apply = appStore.safeCore.projectImportRelaysFetchApply(
-            input: ImportRelaysFetchApplyInput(snapshot: snapshot)
-        )
-        fetched = apply.fetched
-        selectedUrls = apply.selectedUrls
-        errorText = apply.errorMessage
+        let configs = await store.fetchRelaysForPubkey(source.submitNpub)
+        if configs.isEmpty {
+            errorText = "No relay list found for that pubkey. Make sure you have at least one Indexer relay enabled and the user has published a kind:10002 event."
+        } else {
+            fetched = configs
+            selectedUrls = configs.map { $0.url }
+        }
     }
 
     private func applySelected() async {
@@ -157,10 +180,14 @@ struct ImportRelaysSheet: View {
     }
 
     private func toggle(_ url: String) {
-        selectedUrls = appStore.safeCore.toggleImportRelaySelection(
-            fetched: fetched,
-            selectedUrls: selectedUrls,
-            url: url
-        )
+        // D1: toggle url in selectedUrls while preserving fetched order.
+        if selectedUrls.contains(url) {
+            selectedUrls = selectedUrls.filter { $0 != url }
+        } else {
+            let fetchedOrder = fetched.map { $0.url }
+            selectedUrls = (selectedUrls + [url]).sorted { a, b in
+                (fetchedOrder.firstIndex(of: a) ?? Int.max) < (fetchedOrder.firstIndex(of: b) ?? Int.max)
+            }
+        }
     }
 }

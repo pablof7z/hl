@@ -1,6 +1,19 @@
 import Kingfisher
 import SwiftUI
 
+private struct RoomRecommendationAvatarProjection {
+    let pubkey: String
+    let pictureUrl: String
+    let displayInitial: String
+}
+
+private struct RoomRecommendationCardProjection {
+    let byline: String
+    let visibleAvatars: [RoomRecommendationAvatarProjection]
+    let preloadPubkeys: [String]
+    let overflowLabel: String?
+}
+
 /// 3:4 cover card with an overlapping avatar cluster in the bottom-left —
 /// the social-proof shelf for "Friends are here". Caption reads
 /// "@alice, @bob + 2" or just "@alice + 1" depending on count.
@@ -53,16 +66,49 @@ struct FriendsOnRoomCard: View {
     }
 
     private var cardProjection: RoomRecommendationCardProjection {
-        store.safeCore.projectRoomRecommendationCard(
-            input: RoomRecommendationCardProjectionInput(
-                recommendation: recommendation,
-                reasonProfiles: recommendation.reasonPubkeys.map { pubkey in
-                    RoomRecommendationReasonProfile(
-                        pubkey: pubkey,
-                        profile: store.profileSnapshots[pubkey]
-                    )
-                }
+        let reasonPubkeys = recommendation.reasonPubkeys
+        let total = reasonPubkeys.count
+
+        // Build byline using profile_handle order: name > displayName > pubkey[:6]
+        let byline: String
+        if let firstPubkey = reasonPubkeys.first {
+            let profile = store.profileSnapshots[firstPubkey]
+            let handle: String
+            if let p = profile, !p.name.isEmpty {
+                handle = p.name
+            } else if let p = profile, !p.displayName.isEmpty {
+                handle = p.displayName
+            } else {
+                handle = String(firstPubkey.prefix(6))
+            }
+            switch total {
+            case 1:  byline = "@\(handle) is here"
+            case 2:  byline = "@\(handle) + 1 you follow"
+            default: byline = "@\(handle) + \(total - 1) you follow"
+            }
+        } else {
+            let about = recommendation.summary.about.trimmingCharacters(in: .whitespaces)
+            byline = about.isEmpty ? "Rooms you may like" : about
+        }
+
+        // Up to 3 visible avatars; displayInitial is always first char of pubkey
+        let visiblePubkeys = Array(reasonPubkeys.prefix(3))
+        let visibleAvatars: [RoomRecommendationAvatarProjection] = visiblePubkeys.map { pubkey in
+            RoomRecommendationAvatarProjection(
+                pubkey: pubkey,
+                pictureUrl: store.profileSnapshots[pubkey]?.picture ?? "",
+                displayInitial: String(pubkey.prefix(1))
             )
+        }
+
+        let overflowCount = total - 3
+        let overflowLabel: String? = overflowCount > 0 ? "+\(overflowCount)" : nil
+
+        return RoomRecommendationCardProjection(
+            byline: byline,
+            visibleAvatars: visibleAvatars,
+            preloadPubkeys: visiblePubkeys,
+            overflowLabel: overflowLabel
         )
     }
 

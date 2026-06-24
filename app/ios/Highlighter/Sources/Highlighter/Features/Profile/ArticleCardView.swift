@@ -69,8 +69,19 @@ struct ArticleCardView: View {
     }
 
     private var cardProjection: ArticleProfileCardProjection {
-        app.safeCore.projectArticleProfileCard(
-            input: ArticleProfileCardProjectionInput(article: article)
+        let titleIsFallback = article.title.isEmpty
+        let title = titleIsFallback ? "Untitled" : article.title
+        let displayUnixSeconds: UInt64? = [article.publishedAt, article.createdAt]
+            .compactMap { $0 }
+            .first { $0 > 0 }
+        let hashtagSummary: String? = article.hashtags.isEmpty
+            ? nil
+            : article.hashtags.prefix(2).map { "#\($0)" }.joined(separator: " ")
+        return ArticleProfileCardProjection(
+            title: title,
+            titleIsFallback: titleIsFallback,
+            displayUnixSeconds: displayUnixSeconds,
+            hashtagSummary: hashtagSummary
         )
     }
 

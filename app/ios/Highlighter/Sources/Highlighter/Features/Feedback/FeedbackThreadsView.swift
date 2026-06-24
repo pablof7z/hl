@@ -4,6 +4,7 @@ import SwiftUI
 /// user has started, with a "New thread" entry point.
 struct FeedbackThreadsView: View {
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @Environment(\.dismiss) private var dismiss
     @State private var feedbackStore = FeedbackStore()
     @State private var composerPresented = false
@@ -27,11 +28,10 @@ struct FeedbackThreadsView: View {
                 }
         }
         .task {
-            await feedbackStore.start(
-                coordinate: FeedbackProject.coordinate,
-                core: app.safeCore,
-                bridge: app.eventBridge
-            )
+            await feedbackStore.start(kernel: kernel)
+        }
+        .onChange(of: kernel.feedbackThreads) { _, _ in
+            feedbackStore.applyKernelSnapshot()
         }
         .onDisappear { feedbackStore.stop() }
         .sheet(isPresented: $composerPresented) {
@@ -107,7 +107,22 @@ private struct FeedbackThreadRowView: View {
     }
 
     private var projection: FeedbackThreadPresentationProjection {
-        app.safeCore.projectFeedbackThreadPresentation(thread: thread)
+        let rowTitle = thread.title ?? thread.preview
+        let navigationTitle = thread.title ?? "Feedback"
+        let rowSecondaryText: String? = {
+            if let summary = thread.summary, !summary.isEmpty { return summary }
+            if thread.title != nil && !thread.preview.isEmpty { return thread.preview }
+            return nil
+        }()
+        let detailSummary: String? = (thread.summary?.isEmpty == false) ? thread.summary : nil
+        let statusLabel: String? = (thread.statusLabel?.isEmpty == false) ? thread.statusLabel : nil
+        return FeedbackThreadPresentationProjection(
+            navigationTitle: navigationTitle,
+            rowTitle: rowTitle,
+            rowSecondaryText: rowSecondaryText,
+            detailSummary: detailSummary,
+            statusLabel: statusLabel
+        )
     }
 
     private func relativeTime(_ ts: UInt64) -> String {

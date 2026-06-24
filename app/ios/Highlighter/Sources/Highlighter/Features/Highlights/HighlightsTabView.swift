@@ -7,6 +7,7 @@ import SwiftUI
 /// signals fall through to the existing `ReadingFeedCardView`.
 struct HighlightsTabView: View {
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @State private var store: HomeFeedStore?
     @State private var shareTarget: ShareToCommunityTarget?
     @State private var capturePresented: Bool = false
@@ -58,9 +59,12 @@ struct HighlightsTabView: View {
         .captureFlow(isPresented: $capturePresented)
         .task {
             guard store == nil else { return }
-            let s = HomeFeedStore(safeCore: app.safeCore, eventBridge: app.eventBridge)
+            let s = HomeFeedStore(kernel: kernel)
             store = s
             await s.start()
+        }
+        .onChange(of: kernel.homeFeed) { _, _ in
+            store?.applyKernelSnapshot()
         }
         .onDisappear {
             store?.stop()
@@ -141,7 +145,7 @@ struct HighlightsTabView: View {
     @ViewBuilder
     private func highlightContextMenu(_ item: HydratedHighlight) -> some View {
         Button {
-            shareTarget = .highlight(item.highlight, core: app.safeCore)
+            shareTarget = .highlight(item.highlight)
         } label: {
             Label("Share quote to room", systemImage: "quote.bubble")
         }
@@ -168,7 +172,7 @@ struct HighlightsTabView: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button {
-                shareTarget = ShareToCommunityTarget.article(item.article, core: app.safeCore)
+                shareTarget = ShareToCommunityTarget.article(item.article)
             } label: {
                 Label("Share to community", systemImage: "square.and.arrow.up")
             }
@@ -179,18 +183,51 @@ struct HighlightsTabView: View {
     /// highlights today — we reshare the source article, not the quote.
     private func shareTargetForHighlight(_ item: HydratedHighlight) -> ShareToCommunityTarget? {
         if let existing = item.artifact {
-            return .artifact(existing, core: app.safeCore)
+            return .artifact(existing)
         }
-        guard let projection = app.safeCore.projectShareHighlightArticleTarget(
-            input: ShareHighlightArticleTargetProjectionInput(highlight: item.highlight)
-        ) else {
-            return nil
-        }
+        // D1: inline highlight_article_target_projection — parse the NIP-23
+        // address, build a minimal ArtifactPreview with "a"-tag references.
+        let address = item.highlight.artifactAddress.trimmingCharacters(in: .whitespaces)
+        guard !address.isEmpty else { return nil }
+        let parts = address.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+        guard parts.count == 3,
+              parts[0] == "30023",
+              !String(parts[1]).trimmingCharacters(in: .whitespaces).isEmpty,
+              !String(parts[2]).trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        let dTag = String(parts[2]).trimmingCharacters(in: .whitespaces)
+        let preview = ArtifactPreview(
+            id: dTag,
+            url: "",
+            title: "",
+            author: "",
+            image: "",
+            description: "",
+            source: "article",
+            domain: "",
+            catalogId: "",
+            catalogKind: "",
+            podcastGuid: "",
+            podcastItemGuid: "",
+            podcastShowTitle: "",
+            audioUrl: "",
+            audioPreviewUrl: "",
+            transcriptUrl: "",
+            feedUrl: "",
+            publishedAt: "",
+            durationSeconds: nil,
+            referenceTagName: "a",
+            referenceTagValue: address,
+            referenceKind: "30023",
+            highlightTagName: "a",
+            highlightTagValue: address,
+            highlightReferenceKey: "a:\(address)",
+            chapters: []
+        )
         return ShareToCommunityTarget(
-            payload: .artifactShare(preview: projection.preview),
-            displayTitle: projection.displayTitle,
-            displaySubtitle: projection.displaySubtitle,
-            imageURL: projection.imageUrl.flatMap { URL(string: $0) },
+            payload: .artifactShare(preview: preview),
+            displayTitle: "Article",
+            displaySubtitle: item.highlight.quote,
+            imageURL: nil,
             publicShareURL: nil
         )
     }

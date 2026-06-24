@@ -83,24 +83,61 @@ struct ThreadView: View {
     // MARK: - Projection
 
     private var threadProjection: CommentThreadViewProjection {
-        app.safeCore.projectCommentThreadView(
-            input: CommentThreadViewProjectionInput(
-                tree: store.tree,
-                focused: focused
-            )
+        let resolvedFocused = focused.map { node in
+            findNode(in: store.tree, eventId: node.record.eventId) ?? node
+        }
+        let children = resolvedFocused?.children ?? store.tree
+        let replyCount = resolvedFocused?.children.count ?? 0
+        let totalCount = countAllNodes(store.tree)
+        let navTitle: String = {
+            guard resolvedFocused == nil else { return "Reply thread" }
+            switch totalCount {
+            case 0: return "Comments"
+            case 1: return "1 comment"
+            default: return "\(totalCount) comments"
+            }
+        }()
+        let replyCountLabel: String = {
+            switch replyCount {
+            case 0: return "Be the first to reply"
+            case 1: return "1 reply"
+            default: return "\(replyCount) replies"
+            }
+        }()
+        return CommentThreadViewProjection(
+            focused: resolvedFocused,
+            children: children,
+            navTitle: navTitle,
+            emptyStateLabel: resolvedFocused != nil ? "Be the first to reply." : "Start the conversation.",
+            composerPlaceholder: resolvedFocused != nil ? "Reply…" : "Add to the conversation",
+            replyCountLabel: replyCountLabel
         )
+    }
+
+    private func countAllNodes(_ nodes: [CommentNode]) -> Int {
+        nodes.reduce(0) { $0 + 1 + countAllNodes($1.children) }
+    }
+
+    private func findNode(in nodes: [CommentNode], eventId: String) -> CommentNode? {
+        for node in nodes {
+            if node.record.eventId == eventId { return node }
+            if let found = findNode(in: node.children, eventId: eventId) { return found }
+        }
+        return nil
     }
 
     // MARK: - Inline reply preview
 
     @ViewBuilder
     private func inlineReplyPreview(for parent: CommentNode) -> some View {
-        let chrome = app.safeCore.projectCommentNodeChrome(
-            input: CommentNodeChromeProjectionInput(
-                node: parent,
-                artifactAuthorPubkey: artifactAuthorPubkey
-            )
-        )
+        let nodeChildren = parent.children
+        let replyCount = nodeChildren.count
+        let moreCount = replyCount > 1 ? replyCount - 1 : 0
+        let mostRecentReply = nodeChildren.last
+        let authorPubkey = artifactAuthorPubkey?.trimmingCharacters(in: .whitespaces) ?? ""
+        let isMostRecentAuthorReply = !authorPubkey.isEmpty && (mostRecentReply.map { $0.record.pubkey == authorPubkey } ?? false)
+        let moreLabel = moreCount == 0 ? "" : moreCount == 1 ? "View 1 more reply" : "View \(moreCount) more replies"
+        let chrome = CommentNodeChromeProjection(replyCount: UInt32(replyCount), showsReplyChevron: replyCount > 0, mostRecentReply: mostRecentReply, hasMoreReplies: moreCount > 0, moreRepliesLabel: moreLabel, isMostRecentAuthorReply: isMostRecentAuthorReply)
         if let mostRecent = chrome.mostRecentReply {
             CommentRow(
                 node: mostRecent,
