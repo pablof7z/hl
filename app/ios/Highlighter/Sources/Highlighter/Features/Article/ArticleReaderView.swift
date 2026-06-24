@@ -67,8 +67,6 @@ struct ArticleReaderView: View {
             if store == nil {
                 let s = ArticleReaderStore(
                     target: target,
-                    safeCore: app.safeCore,
-                    eventBridge: app.eventBridge,
                     kernel: kernel
                 )
                 store = s

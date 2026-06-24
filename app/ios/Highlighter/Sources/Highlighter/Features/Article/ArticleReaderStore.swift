@@ -75,26 +75,20 @@ final class ArticleReaderStore {
 
     // Plumbing.
     @ObservationIgnored let target: ArticleReaderTarget
-    @ObservationIgnored let safeCore: SafeHighlighterCore
-    @ObservationIgnored weak var eventBridge: EventBridge?
-    @ObservationIgnored private var subscriptionHandle: UInt64?
-    /// The kernel owns the overlay highlights (per-article kind:9802 feed) and
-    /// is the SOLE WRITER for publishing highlights (D5). #22: the article BODY
-    /// is now read from the kernel snapshot's `contentTreeJson` (nmp
-    /// `content_tree`) — the bespoke `ArticleRecord.content` markdown read is no
-    /// longer the body source. The kernel snapshot's `highlights` + `content_tree`
-    /// drive the reader while the view is open.
+    /// The kernel is the SOLE data source for the reader (Phase 7 C1). It owns
+    /// the overlay highlights (per-article kind:9802 feed), is the SOLE WRITER
+    /// for publishing highlights (D5), and `KernelArticleReaderSnapshot` carries
+    /// the COMPLETE article metadata + author profile (#22 already moved the
+    /// BODY to the snapshot's `contentTreeJson`). The bespoke
+    /// subscribeArticle/getArticleReaderSnapshot/projectArticleReaderSnapshot
+    /// path is gone — `applyKernelSnapshot()` populates everything.
     @ObservationIgnored let kernel: HighlighterAppKernel
 
     init(
         target: ArticleReaderTarget,
-        safeCore: SafeHighlighterCore,
-        eventBridge: EventBridge?,
         kernel: HighlighterAppKernel
     ) {
         self.target = target
-        self.safeCore = safeCore
-        self.eventBridge = eventBridge
         self.kernel = kernel
         self.article = target.seed
     }
@@ -103,18 +97,12 @@ final class ArticleReaderStore {
         // Open the kernel article-reader view (registers the per-article
         // highlight feed; pushes KernelArticleReaderSnapshot.highlights).
         kernel.openArticleReader(address: target.address)
-        await loadAll()
+        applyKernelSnapshot()   // apply any seed already present in the kernel
         isLoadingInitial = false
-        await installSubscription()
     }
 
     func stop() {
         kernel.closeArticleReader(address: target.address)
-        if let handle = subscriptionHandle {
-            Task { [safeCore] in await safeCore.unsubscribe(handle) }
-            eventBridge?.unregister(handle: handle)
-            subscriptionHandle = nil
-        }
     }
 
     /// Apply the kernel article-reader snapshot's overlay highlights AND the nmp
@@ -134,44 +122,24 @@ final class ArticleReaderStore {
         if let tree = ContentTreeBodyRenderer.decodeTree(json: snap.contentTreeJson) {
             contentTree = tree
         }
+        // C1: article metadata + author profile now come straight from the
+        // kernel snapshot, replacing the bespoke
+        // getArticleReaderSnapshot/projectArticleReaderSnapshot path. The kernel
+        // snapshot is enriched (author kind:0 display name + picture, title,
+        // hero image, etc.), so the reader header + author chip render from it.
+        // Only overwrite once the snapshot carries a real event (`id` non-empty)
+        // so a transient highlight-only tick doesn't clobber the seed.
+        if !snap.id.isEmpty {
+            article = ArticleRecord(kernelSnapshot: snap)
+            authorProfile = ProfileMetadata(kernelSnapshot: snap)
+        }
     }
 
-    // MARK: - Loads
-
-    func loadAll() async {
-        let snapshot = await safeCore.getArticleReaderSnapshot(
-            pubkeyHex: target.pubkey,
-            dTag: target.dTag
-        )
-        apply(snapshot: snapshot)
-    }
-
-    private func apply(snapshot: ArticleReaderSnapshot) {
-        let projection = safeCore.projectArticleReaderSnapshot(
-            input: ArticleReaderSnapshotApplyInput(
-                snapshot: snapshot,
-                currentArticle: article,
-                currentAuthorProfile: authorProfile
-            )
-        )
-        apply(projection: projection)
-    }
-
-    private func apply(projection: ArticleReaderSnapshotProjection) {
-        article = projection.article
-        authorProfile = projection.authorProfile
-        // The live-lane projection seeds highlights for the cold-start window;
-        // the kernel overlay (per-article kind:9802 feed) is authoritative and
-        // overrides as soon as its snapshot is present (Phase 7).
-        highlights = projection.highlights
-        applyKernelSnapshot()
-    }
-
-    /// Called by `EventBridge` when an `ArticleUpdated` delta arrives.
-    /// Re-queries Rust's full reader snapshot so native code does not branch
-    /// on protocol event kinds.
+    /// Called by `EventBridge` when an `ArticleUpdated` delta arrives. Phase 7
+    /// C1: re-applies the kernel snapshot (the sole data source) rather than
+    /// re-querying the retired bespoke reader snapshot.
     func applyUpdate() async {
-        await loadAll()
+        applyKernelSnapshot()
     }
 
     // MARK: - Writes
@@ -200,30 +168,56 @@ final class ArticleReaderStore {
         )
         return nil
     }
+}
 
-    // MARK: - Private
+// MARK: - Kernel snapshot → bespoke record mapping (Phase 7)
 
-    private func installSubscription() async {
-        guard subscriptionHandle == nil, let bridge = eventBridge else { return }
-        let outcome = await safeCore.subscribeArticle(
-            pubkeyHex: target.pubkey,
-            dTag: target.dTag
+extension ArticleRecord {
+    /// Build the bespoke `ArticleRecord` the reader header + share sheet render
+    /// from the enriched `KernelArticleReaderSnapshot` (Phase 7 C1). The kernel
+    /// snapshot carries the complete article metadata, so the bespoke
+    /// getArticleReaderSnapshot path is no longer needed. The BODY is rendered
+    /// from `snapshot.contentTreeJson` (#22), so `content` stays empty here —
+    /// markdown is no longer the body source. `hashtags`/`publishedAt` aren't on
+    /// the snapshot yet, so they default empty/`createdAt`.
+    init(kernelSnapshot snap: KernelArticleReaderSnapshot) {
+        self.init(
+            eventId: snap.id,
+            address: snap.address,
+            pubkey: snap.authorPubkey,
+            identifier: snap.dTag,
+            title: snap.title ?? "",
+            summary: snap.summary ?? "",
+            image: snap.heroImageUrl ?? "",
+            content: "",
+            hashtags: [],
+            publishedAt: snap.createdAt,
+            createdAt: snap.createdAt
         )
-        let projection = safeCore.projectViewSubscriptionStart(
-            input: ViewSubscriptionStartProjectionInput(start: outcome)
-        )
-        guard projection.shouldRegister else {
-            // Non-fatal: cold ndb path still shows the seeded article and
-            // its cached highlights. Live updates will resume on the next
-            // visit.
-            return
-        }
-        subscriptionHandle = projection.handle
-        bridge.registerArticle(self, handle: projection.handle)
     }
 }
 
-// MARK: - Kernel row → bespoke record mapping (Phase 7)
+extension ProfileMetadata {
+    /// Build the author `ProfileMetadata` chip from the enriched
+    /// `KernelArticleReaderSnapshot` (Phase 7 C1). The kernel enriches the
+    /// snapshot with the author's kind:0 display name + picture; the remaining
+    /// profile fields aren't carried on the article snapshot, so they default
+    /// empty (the profile feed fills them in via `app.profileSnapshots`).
+    init(kernelSnapshot snap: KernelArticleReaderSnapshot) {
+        self.init(
+            pubkey: snap.authorPubkey,
+            name: "",
+            displayName: snap.authorDisplayName ?? "",
+            about: "",
+            picture: snap.authorPictureUrl ?? "",
+            banner: "",
+            nip05: "",
+            website: "",
+            lud16: "",
+            createdAt: nil
+        )
+    }
+}
 
 extension HighlightRecord {
     /// Map an enriched kernel `HighlightRow` (from `KernelArticleReaderSnapshot.highlights`)
