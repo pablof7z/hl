@@ -204,8 +204,7 @@ final class CaptureStore {
     }
 
     func updateHighlightCropBox(_ cropBox: CGRect, reupload: Bool) {
-        let fallback = highlightCropBox.map { OcrRect($0) }
-        highlightCropBox = safeCore.sanitizeHighlightCropBox(OcrRect(cropBox), fallback: fallback).cgRect
+        highlightCropBox = Self.sanitizeHighlightCropBox(cropBox, fallback: highlightCropBox)
         if reupload { prepareHighlightedCrop(reupload: true) }
     }
 
@@ -309,11 +308,72 @@ final class CaptureStore {
     }
 
     private func defaultHighlightCropBox(processed: ImageProcessing.Result) -> CGRect? {
-        safeCore.defaultHighlightCropBox(
-            highlightBoxes: selectedHighlightBoxes.map { OcrRect($0) },
+        Self.defaultHighlightCropBox(
+            highlightBoxes: selectedHighlightBoxes,
             imageWidth: Double(processed.width),
             imageHeight: Double(processed.height),
             marginFraction: highlightCropMarginFraction
-        )?.cgRect
+        )
+    }
+
+    // MARK: - Crop-box geometry (Phase 7 D1 inline of ocr.rs pure projections)
+
+    /// Normalized (0...1) unit rectangle — the image bounds in Vision space.
+    private static let unitRect = CGRect(x: 0, y: 0, width: 1, height: 1)
+
+    /// Mirrors `OcrRect::is_usable`: finite, positive-area. `CGRect.null`
+    /// (returned by an empty `intersection`) reports `false` here.
+    private static func isUsable(_ rect: CGRect) -> Bool {
+        rect.minX.isFinite && rect.minY.isFinite
+            && rect.width.isFinite && rect.height.isFinite
+            && rect.width > 0 && rect.height > 0
+    }
+
+    /// Inline of `ocr::default_highlight_crop_box` — the normalized crop around
+    /// the selected passage, padded by a margin and clipped to the image.
+    private static func defaultHighlightCropBox(
+        highlightBoxes: [CGRect],
+        imageWidth: Double,
+        imageHeight: Double,
+        marginFraction: Double
+    ) -> CGRect? {
+        let usable = highlightBoxes.filter { isUsable($0) }
+        guard var bounds = usable.first else { return nil }
+        for rect in usable.dropFirst() { bounds = bounds.union(rect) }
+
+        let safeMarginFraction = marginFraction.isFinite ? max(marginFraction, 0) : 0.08
+        let safeWidth = max(imageWidth, 1.0)
+        let safeHeight = max(imageHeight, 1.0)
+        let marginX = max(safeMarginFraction, 48.0 / safeWidth)
+        let marginY = max(max(safeMarginFraction, Double(bounds.height) * 0.55), 48.0 / safeHeight)
+
+        let expanded = bounds.insetBy(dx: CGFloat(-marginX), dy: CGFloat(-marginY))
+        let result = expanded.intersection(unitRect)
+        return isUsable(result) ? result : nil
+    }
+
+    /// Inline of `ocr::sanitize_highlight_crop_box` — clamp a user-edited crop
+    /// rect back into the unit image, enforcing a minimum size.
+    private static func sanitizeHighlightCropBox(_ cropBox: CGRect, fallback: CGRect?) -> CGRect {
+        let unit = unitRect
+        let clipped = cropBox.standardized.intersection(unit)
+        guard isUsable(clipped) else { return fallback ?? unit }
+
+        var rect = clipped
+        let minSize: CGFloat = 0.08
+        if rect.width < minSize {
+            let center = rect.midX
+            rect.origin.x = center - minSize / 2
+            rect.size.width = minSize
+        }
+        if rect.height < minSize {
+            let center = rect.midY
+            rect.origin.y = center - minSize / 2
+            rect.size.height = minSize
+        }
+        rect.origin.x = min(max(rect.minX, 0), max(1 - rect.width, 0))
+        rect.origin.y = min(max(rect.minY, 0), max(1 - rect.height, 0))
+        let result = rect.intersection(unit)
+        return isUsable(result) ? result : unit
     }
 }
