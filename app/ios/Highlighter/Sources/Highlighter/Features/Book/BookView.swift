@@ -251,17 +251,8 @@ struct BookView: View {
     // MARK: - Data loading
 
     private func load() async {
-        let snapshot = await app.safeCore.getBookDetailSnapshot(catalogId: catalogId, limit: 64)
-        let hasError = !snapshot.error.trimmingCharacters(in: .whitespaces).isEmpty
-        let isbnPreviewRequest = snapshot.route?.isbn
-        let projectedHighlights: [HighlightRecord] = (hasError || snapshot.route == nil) ? [] : snapshot.highlights
-        if let isbn = isbnPreviewRequest {
-            await app.requestIsbnPreview(isbn: isbn)
-        }
-        await MainActor.run {
-            loadedRoute = snapshot.route
-            highlights = projectedHighlights
-        }
+        // Book highlights projection not yet available via kernel; show empty list.
+        highlights = []
     }
 
     // MARK: - Helpers

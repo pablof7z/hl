@@ -110,8 +110,12 @@ struct MiniPlayerView: View {
     }
 
     private func podcastNowPlaying(_ artifact: ArtifactRecord) -> PodcastNowPlayingProjection {
-        app.safeCore.getPodcastNowPlayingProjection(
-            input: PodcastNowPlayingProjectionInput(artifact: artifact)
+        // D1: derive show/episode titles from the ArtifactPreview fields directly.
+        // preview.author = podcast show name; preview.title = episode title.
+        PodcastNowPlayingProjection(
+            showTitle: artifact.preview.author,
+            episodeTitle: artifact.preview.title,
+            imageUrl: artifact.preview.image
         )
     }
 
