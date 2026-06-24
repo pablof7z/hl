@@ -1481,7 +1481,6 @@ mod tests {
     // one field and proves the equality assertion fails.
     mod parity {
         use super::*;
-        use crate::test_ndb::{isolated_ndb, process_event_and_wait};
         use nostr_sdk::prelude::*;
 
         fn nostr_to_kernel(e: &Event) -> nmp_core::substrate::KernelEvent {
@@ -1598,105 +1597,60 @@ mod tests {
             (tags, content)
         }
 
-        // P-READ: bespoke parse vs kernel parse on the SAME rich fixture event —
-        // assert_eq on id, title, ALL `a`/`e`/`r` coordinates (incl. `r` which
-        // both parsers must now carry) and pubkey/kind. Values, not counts.
+        // SET-READ: kernel parse of the rich fixture event carries id, title, and
+        // EVERY coordinate dimension (incl. `r`) with the exact fixture values.
         #[test]
-        fn parity_set_read_all_coordinates_incl_r() {
+        fn set_read_all_coordinates_incl_r() {
             let keys = make_keys();
-            let user_hex = keys.public_key().to_hex();
+            let pubkey_hex = keys.public_key().to_hex();
             let set_ev = fixture_set_event(&keys, 30004, "reading-list");
 
-            // ── Bespoke path (NostrDB read model) ────────────────────────────
-            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
-            process_event_and_wait(&ndb, &set_ev);
-            let bespoke = crate::lists::query_bookmark_library_snapshot(&ndb, &user_hex);
-            assert_eq!(bespoke.my_curation_sets.len(), 1, "bespoke: one set");
-            let b = &bespoke.my_curation_sets[0];
-
-            // ── Kernel path (KernelEvent parse) ──────────────────────────────
             let kernel_ev = nostr_to_kernel(&set_ev);
             let k = parse_set_row_from_kernel(&kernel_ev).expect("kernel set parses");
 
-            // Identity, title, and EVERY coordinate dimension must agree.
-            assert_eq!(k.d_tag, b.id, "set id (d) must match");
+            // Identity, title, and EVERY coordinate dimension match the fixture.
+            assert_eq!(k.d_tag, "reading-list", "set id (d) must match");
+            assert_eq!(k.title.as_deref(), Some("Reading List"), "title must match");
+            assert_eq!(k.pubkey, pubkey_hex, "pubkey must match");
+            assert_eq!(k.kind, 30004, "kind must match");
             assert_eq!(
-                k.title.as_deref().unwrap_or(""),
-                b.title,
-                "title must match"
-            );
-            assert_eq!(k.pubkey, b.pubkey, "pubkey must match");
-            assert_eq!(k.kind, b.kind, "kind must match");
-            assert_eq!(
-                k.article_addresses, b.article_addresses,
+                k.article_addresses,
+                vec![A1.to_string(), A2.to_string()],
                 "a coordinates must match exactly"
             );
-            assert_eq!(k.note_ids, b.note_ids, "e coordinates must match exactly");
-            assert_eq!(k.r_refs, b.r_refs, "r coordinates must match exactly");
-            assert_eq!(k.topics, b.topics, "t topics must match exactly");
-            // The fixture's full set is present (not just a subset).
-            assert_eq!(k.article_addresses, vec![A1.to_string(), A2.to_string()]);
-            assert_eq!(k.r_refs, vec![R1.to_string(), R2.to_string()]);
+            assert_eq!(k.note_ids, vec![E1.to_string()], "e coordinates must match");
+            assert_eq!(
+                k.r_refs,
+                vec![R1.to_string(), R2.to_string()],
+                "r coordinates must match exactly"
+            );
+            assert_eq!(k.topics, vec!["nostr".to_string()], "t topics must match");
         }
 
-        // P-WEB: bespoke vs kernel web parse on the SAME fixture — url + title.
+        // WEB-READ: kernel web parse of the fixture — url + title.
         #[test]
-        fn parity_web_read_url_and_title() {
+        fn web_read_url_and_title() {
             let keys = make_keys();
-            let user_hex = keys.public_key().to_hex();
+            let pubkey_hex = keys.public_key().to_hex();
             let web_ev = fixture_web_event(&keys, "example.com/article", "Great Article");
-
-            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
-            process_event_and_wait(&ndb, &web_ev);
-            let bespoke = crate::lists::query_bookmark_library_snapshot(&ndb, &user_hex);
-            assert_eq!(
-                bespoke.my_web_bookmarks.len(),
-                1,
-                "bespoke: one web bookmark"
-            );
-            let b = &bespoke.my_web_bookmarks[0];
 
             let kernel_ev = nostr_to_kernel(&web_ev);
             let k = parse_web_row_from_kernel(&kernel_ev).expect("kernel web parses");
 
-            assert_eq!(k.url, b.url, "web url must match");
-            assert_eq!(k.pubkey, b.pubkey, "pubkey must match");
-            let b_title = if b.title.is_empty() {
-                None
-            } else {
-                Some(b.title.as_str())
-            };
-            assert_eq!(k.title.as_deref(), b_title, "web title must match");
-            assert_eq!(k.url, "https://example.com/article");
-            assert_eq!(k.title.as_deref(), Some("Great Article"));
+            assert_eq!(k.url, "https://example.com/article", "web url must match");
+            assert_eq!(k.pubkey, pubkey_hex, "pubkey must match");
+            assert_eq!(k.title.as_deref(), Some("Great Article"), "web title must match");
         }
 
-        // P-FOLLOWS: kernel follows filter matches bespoke explorable set.
+        // FOLLOWS: kernel follows filter includes a followed author's set.
         #[test]
-        fn parity_following_curation_sets_identity() {
+        fn following_curation_sets_identity() {
             let my_keys = make_keys();
             let followed_keys = make_keys();
             let user_hex = my_keys.public_key().to_hex();
             let followed_hex = followed_keys.public_key().to_hex();
 
             let cur_ev = fixture_set_event(&followed_keys, 30004, "fol-curations");
-
-            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
-            let follow_ev = {
-                let tags = vec![Tag::parse(vec!["p".to_string(), followed_hex.clone()]).unwrap()];
-                EventBuilder::new(Kind::ContactList, "")
-                    .tags(tags)
-                    .sign_with_keys(&my_keys)
-                    .unwrap()
-            };
-            process_event_and_wait(&ndb, &follow_ev);
-            process_event_and_wait(&ndb, &cur_ev);
-
-            let bespoke = crate::lists::query_bookmark_library_snapshot(&ndb, &user_hex);
-            let bespoke_has = bespoke
-                .following_curation_sets
-                .iter()
-                .any(|s| s.id == "fol-curations" && s.pubkey == followed_hex);
 
             let mut state = make_state_with_session(&user_hex);
             state.follows = vec![followed_hex.clone()];
@@ -1707,7 +1661,6 @@ mod tests {
                 .iter()
                 .any(|s| s.d_tag == "fol-curations" && s.pubkey == followed_hex);
 
-            assert!(bespoke_has, "bespoke must include the followed set");
             assert!(kernel_has, "kernel must include the followed set");
         }
 
@@ -1788,30 +1741,25 @@ mod tests {
             assert!(has(&kernel_tags, "a", new_item), "new a added");
         }
 
-        // GUARD: prove the read-parity assertion BITES — corrupt the kernel row's
-        // `r_refs` and confirm the equality check would fail.
+        // GUARD: prove the read assertion BITES — corrupt the kernel row's
+        // `r_refs` and confirm the equality check against the fixture would fail.
         #[test]
         fn guard_bites_when_r_refs_diverge() {
             let keys = make_keys();
-            let user_hex = keys.public_key().to_hex();
             let set_ev = fixture_set_event(&keys, 30004, "reading-list");
-
-            let (ndb, _tmp) = isolated_ndb(64 * 1024 * 1024);
-            process_event_and_wait(&ndb, &set_ev);
-            let bespoke = crate::lists::query_bookmark_library_snapshot(&ndb, &user_hex);
-            let b = &bespoke.my_curation_sets[0];
+            let expected_r_refs = vec![R1.to_string(), R2.to_string()];
 
             let kernel_ev = nostr_to_kernel(&set_ev);
             let mut k = parse_set_row_from_kernel(&kernel_ev).expect("parses");
 
             // Sanity: they agree before corruption.
-            assert_eq!(k.r_refs, b.r_refs, "precondition: r_refs agree");
+            assert_eq!(k.r_refs, expected_r_refs, "precondition: r_refs agree");
 
             // Corrupt one field — the guard must now see a difference.
             k.r_refs.push("https://evil.example/injected".to_string());
             assert_ne!(
-                k.r_refs, b.r_refs,
-                "guard bites: a divergent r_refs must fail the parity equality"
+                k.r_refs, expected_r_refs,
+                "guard bites: a divergent r_refs must fail the read equality"
             );
         }
 

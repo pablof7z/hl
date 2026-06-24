@@ -3,21 +3,15 @@
 //! Native shells choose the visual route, but the durable "has completed
 //! onboarding" flag lives in the shared core so iOS and Android agree.
 
-use std::{
-    collections::HashSet,
-    path::{Path, PathBuf},
-};
+use std::collections::HashSet;
 
-use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
-
-use crate::errors::CoreError;
 use crate::models::{
     OnboardingInterest, OnboardingInterestChip, OnboardingInterestProjection,
     OnboardingInterestSelection,
 };
 
-const STATE_FILE_NAME: &str = "onboarding-state-v1.json";
+pub use crate::kernel::onboarding::OnboardingStore;
+
 const MINIMUM_INTERESTS: u32 = 3;
 const JACK_PUBKEY: &str = "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2";
 const FIATJAF_PUBKEY: &str = "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d";
