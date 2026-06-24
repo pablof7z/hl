@@ -10,26 +10,10 @@ actor SafeHighlighterCore {
         self.core = core
     }
 
-    // MARK: - Auth
-
-    func loginNsec(_ nsec: String) -> AuthSessionSnapshot {
-        core.loginNsec(nsec: nsec)
-    }
+    // MARK: - Auth (read-only helpers; sign-in/restore owned by kernel)
 
     nonisolated func classifyLoginInput(_ input: String) -> LoginInputAction {
         core.classifyLoginInput(input: input)
-    }
-
-    func startDefaultNostrConnect(callback: String) async -> NostrConnectStartSnapshot {
-        await core.startDefaultNostrConnect(callback: callback)
-    }
-
-    func restoreSessionSnapshot(nsec: String?, bunkerUri: String?) async -> AuthSessionRestoreSnapshot {
-        await core.restoreSessionSnapshot(nsec: nsec, bunkerUri: bunkerUri)
-    }
-
-    func pairBunker(_ uri: String) async -> AuthSessionSnapshot {
-        await core.pairBunker(uri: uri)
     }
 
     func generateAccount() -> AccountGenerationSnapshot {

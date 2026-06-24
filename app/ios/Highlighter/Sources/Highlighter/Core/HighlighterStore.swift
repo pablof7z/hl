@@ -23,7 +23,7 @@ final class HighlighterStore {
         didSet { mirrorCommunitiesToAppGroup() }
     }
     var connectionState: ConnectionState = .unknown
-    var isBootstrapping: Bool = false
+
     var isOnboardingComplete: Bool = false
     /// Transient toast shown when Rust or a platform handoff requests an
     /// app-scope banner. Cleared by the banner after a few seconds.
@@ -83,28 +83,6 @@ final class HighlighterStore {
         }
     }
 
-    func bootstrap() async {
-        guard !isBootstrapping else { return }
-        isBootstrapping = true
-        defer { isBootstrapping = false }
-
-        // Register the EventBridge unconditionally before any kernel session
-        // restoration fires. Podcast / EventBridge callbacks use the bespoke lane;
-        // the kernel owns the auth / routing side.
-        registerEventBridge()
-        // Session restore is driven by the kernel (hl.auth.restore_session
-        // dispatched in App.swift); `currentUser` is set via the
-        // `onChange(of: kernel.appRoot)` bridge there.
-    }
-
-    func completeLogin(user: CurrentUser) async {
-        currentUser = user
-        if eventBridge == nil {
-            registerEventBridge()
-        }
-        await loadAppScopeData()
-    }
-
     func logout() {
         profileSnapshots.removeAll()
         for (_, task) in webMetadataInflight { task.cancel() }
@@ -114,7 +92,7 @@ final class HighlighterStore {
         applyNetworkPathMonitorEnabled(false)
         kernel?.app.dispatch(.logout)
         eventBridge = nil
-        AppSessionStore.shared.clear()
+
         isOnboardingComplete = false
         currentUser = nil
         currentUserProfile = nil

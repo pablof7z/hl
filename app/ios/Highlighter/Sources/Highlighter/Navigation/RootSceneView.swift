@@ -23,9 +23,6 @@ struct RootSceneView: View {
                 NavigationStack { OnboardingView() }
             }
         }
-        .task {
-            await store.bootstrap()
-        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 ShareQueueProcessor.drain(app: store, kernel: kernel)
@@ -33,18 +30,7 @@ struct RootSceneView: View {
                 // in App.swift's scenePhase onChange (belt-and-suspenders).
             }
         }
-        // Belt-and-suspenders: mirror live-lane logout/onboarding state changes
-        // into the kernel so both lanes agree during Phase 1 coexistence.
-        .onChange(of: store.isLoggedIn) { _, isLoggedIn in
-            if !isLoggedIn {
-                kernel.app.dispatch(.logout)
-            }
-        }
-        .onChange(of: store.isOnboardingComplete) { _, complete in
-            if complete {
-                kernel.app.dispatch(.completeOnboarding)
-            }
-        }
+
         // Kernel-owned toast: auto-dismissed by the Rust clock, no Swift Timer.
         .overlay(alignment: .top) {
             if let toast = kernel.rootShell.toast {

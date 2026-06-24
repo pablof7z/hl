@@ -1,6 +1,19 @@
 import Kingfisher
 import SwiftUI
 
+private struct RoomRecommendationAvatarProjection {
+    let pubkey: String
+    let pictureUrl: String
+    let displayInitial: String
+}
+
+private struct RoomRecommendationCardProjection {
+    let byline: String
+    let visibleAvatars: [RoomRecommendationAvatarProjection]
+    let preloadPubkeys: [String]
+    let overflowLabel: String?
+}
+
 /// 3:4 cover card with an overlapping avatar cluster in the bottom-left —
 /// the social-proof shelf for "Friends are here". Caption reads
 /// "@alice, @bob + 2" or just "@alice + 1" depending on count.

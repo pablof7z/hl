@@ -1084,13 +1084,6 @@ public func FfiConverterTypeHighlighterApp_lower(_ value: HighlighterApp) -> Uns
 public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     /**
-     * Apply a raw native network path update. Native reports only whether
-     * the current path is Wi-Fi; Rust owns the Wi-Fi-only preference lookup
-     * and relay connect/disconnect policy.
-     */
-    func applyNetworkPathStatus(isWifi: Bool) async  -> NetworkPathPolicySnapshot
-
-    /**
      * Publish the Rust-projected profile follow mutation and return the
      * post-action screen state. Rust owns rollback on error; the shell only
      * applies the returned snapshot.
@@ -1114,8 +1107,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func clearPodcastClipSelection()  -> PodcastClipSelection
 
-    func clearRecentSearchesSnapshot() async  -> SearchChromeSnapshot
-
     func completeOnboardingInterests(selectedIds: [String]) async  -> MutationSnapshot
 
     /**
@@ -1124,11 +1115,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * should be shown.
      */
     func confirmPendingJoin(groupId: String)
-
-    /**
-     * Count comments for an artifact using Rust-owned reference keys.
-     */
-    func countArtifactComments(artifact: ArtifactRecord, commentsByReference: [CommentReferenceBucket])  -> UInt32
 
     func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess) async  -> CreateRoomPublishSnapshot
 
@@ -1212,10 +1198,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * preview's Rust-owned protocol reference fields.
      */
     func getArtifactCommentScope(preview: ArtifactPreview)  -> CommentScopeSnapshot
-
-    func getArtifactDetailProjection(artifact: ArtifactRecord)  -> ArtifactDetailProjection
-
-    func getArtifactDetailRoute(artifact: ArtifactRecord)  -> ArtifactDetailRoute
 
     /**
      * Return the screen-shaped media settings snapshot. Rust owns error
@@ -1321,29 +1303,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func getHighlightSourceKind(previewSource: String, externalReference: String, artifactAddress: String, sourceUrl: String)  -> HighlightSourceKind
 
-    /**
-     * Full highlights home feed snapshot. Rust owns the following-highlights
-     * query, following-reads query, cross-feed dedupe, grouping, stable ids,
-     * and merged ordering.
-     */
-    func getHomeFeedSnapshot(highlightLimit: UInt32, readLimit: UInt32) async  -> HomeFeedSnapshot
-
     func getJoinedCommunities() async  -> JoinedCommunitiesSnapshot
-
-    /**
-     * Size + event-count snapshot of the local nostrdb cache. Order-of-
-     * magnitude figures used by the Network Settings "Local cache" card.
-     */
-    func getNetworkCacheStatsSnapshot() async  -> NetworkCacheStatsSnapshot
-
-    /**
-     * Return the screen-shaped Network Settings snapshot: configured relays,
-     * live diagnostics, derived header/auto-connected projection, Wi-Fi-only
-     * preference, and error state.
-     */
-    func getNetworkSettingsSnapshot(previousRelays: [RelayConfig]) async  -> NetworkSettingsSnapshot
-
-    func getNetworkWifiOnlyPreferenceSnapshot()  -> NetworkWifiOnlyPreferenceSnapshot
 
     func getOnboardingInterestProjection(selectedIds: [String])  -> OnboardingInterestProjection
 
@@ -1362,12 +1322,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getPodcastPlaybackRehydrationSnapshot(hasCurrentArtifact: Bool)  -> PodcastPlaybackRehydrationSnapshot
 
     /**
-     * Full profile-page read model. Rust owns tab queries, section limits,
-     * current-viewer follow state, and per-section cache-error fallback.
-     */
-    func getProfilePageSnapshot(pubkeyHex: String) async  -> ProfilePageSnapshot
-
-    /**
      * Classify a subscription event kind into the exact profile slice that
      * native shells should refresh.
      */
@@ -1375,27 +1329,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func getRelayHostedRoomsSnapshot(url: String) async  -> RelayHostedRoomsSnapshot
 
-    /**
-     * Screen-shaped snapshot for the explorer's "Browse all" grid. Rust owns
-     * the cache query, limit, query normalization, and matched fields.
-     */
-    func getRoomBrowseSnapshot(query: String, limit: UInt32) async  -> RoomBrowseSnapshot
-
     func getRoomDiscussionSnapshot(groupId: String) async  -> RoomDiscussionSnapshot
-
-    /**
-     * Snapshot for the room explorer shelves. Rust owns curator lookup,
-     * per-shelf cache failure fallbacks, joined-room exclusion, and shelf
-     * limits. Native shells render the returned shelves.
-     */
-    func getRoomExplorerSnapshot(joined: [CommunitySummary]) async  -> RoomExplorerSnapshot
-
-    /**
-     * Full room-home read model for one community. Rust owns artifact and
-     * highlight limits, reference-scoped highlight/comment reads, and lane
-     * assembly.
-     */
-    func getRoomHomeSnapshot(groupId: String) async  -> RoomHomeSnapshot
 
     func getRoomInviteAvatarProjection(input: RoomInviteAvatarProjectionInput)  -> RoomInviteAvatarProjection
 
@@ -1407,13 +1341,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * without re-running unrelated sections.
      */
     func getSearchArticleResultsSnapshot(query: String) async  -> SearchArticleResultsSnapshot
-
-    /**
-     * Search screen chrome snapshot: recent query history plus resolved
-     * NIP-50 relays. Rust owns persistence, de-dupe, relay defaults, and
-     * error semantics.
-     */
-    func getSearchChromeSnapshot() async  -> SearchChromeSnapshot
 
     /**
      * Local search snapshot for the main search screen. Rust owns section
@@ -1440,20 +1367,10 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func getWebMetadata(url: String) async  -> WebMetadata?
 
     /**
-     * Fetch another user's kind:10002 via the indexer pool and return the
-     * parsed `RelayConfig` rows. Useful for "adopt someone else's relay
-     * setup" flows — the Swift caller shows the list with checkboxes
-     * and upserts the selected subset through `upsert_relay`.
-     */
-    func importRelaysFromNpubSnapshot(npub: String) async  -> ImportRelaysFetchSnapshot
-
-    /**
      * Publish the default Blossom server list only if the user has no cached
      * kind:10063. Called once after login; no-op when the list already exists.
      */
     func initDefaultBlossomServers() async  -> MutationSnapshot
-
-    func isNip05UsernameValid(input: String)  -> Bool
 
     func isOnboardingComplete()  -> Bool
 
@@ -1471,16 +1388,12 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func markPodcastClipOut(selection: PodcastClipSelection, currentTime: Double)  -> PodcastClipSelection
 
-    func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async  -> MutationSnapshot
-
     /**
      * Normalize user-entered or scanned ISBN input. Native shells use this
      * only to enable/route capture UI; Rust remains the source of truth for
      * ISBN validity and canonical ISBN-13 conversion.
      */
     func normalizeIsbnInput(raw: String)  -> String?
-
-    func normalizeNip05Username(input: String)  -> String
 
     func nostrEntityFallbackLabel(entity: NostrEntityRef)  -> String
 
@@ -1497,15 +1410,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func planRelayNip11Probes(input: RelayNip11ProbePlanInput)  -> RelayNip11ProbePlan
 
     func planWaveformPeaks(input: WaveformPeaksPlanInput)  -> WaveformPeaksPlan
-
-    func prepareWhatsNew() async  -> WhatsNewPresentationSnapshot
-
-    /**
-     * Fetch the target relay's NIP-11 information document via an HTTPS
-     * GET to the `ws[s]://` URL's HTTP equivalent with
-     * `Accept: application/nostr+json`. Fails fast on timeout.
-     */
-    func probeRelayNip11Snapshot(url: String) async  -> RelayNip11ProbeSnapshot
 
     func projectAddRelaySheet(input: AddRelaySheetProjectionInput)  -> AddRelaySheetProjection
 
@@ -1702,8 +1606,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectHighlightResourceHeader(input: HighlightResourceHeaderProjectionInput)  -> HighlightResourceHeaderProjection
 
-    func projectHomeFeedSnapshotApply(input: HomeFeedSnapshotApplyInput)  -> HomeFeedSnapshotApplyProjection
-
     func projectImportRelays(input: ImportRelaysProjectionInput)  -> ImportRelaysProjection
 
     func projectImportRelaysFetchApply(input: ImportRelaysFetchApplyInput)  -> ImportRelaysFetchApplyProjection
@@ -1737,18 +1639,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
     func projectNetworkWifiOnlyPreferenceApply(input: NetworkWifiOnlyPreferenceApplyInput)  -> NetworkWifiOnlyPreferenceApplyProjection
 
     func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionInput)  -> NostrEntityArticleCardProjection
-
-    /**
-     * Project onboarding account creation state. Rust owns display-name
-     * trimming and continue eligibility.
-     */
-    func projectOnboardingCreateAccount(input: OnboardingCreateAccountProjectionInput)  -> OnboardingCreateAccountProjection
-
-    /**
-     * Project username availability-check state. Rust owns canonical trim
-     * and username validity for the onboarding flow.
-     */
-    func projectOnboardingUsernameCheck(username: String)  -> OnboardingUsernameCheckProjection
 
     func projectPodcastClipPublishResult(input: PodcastClipPublishResultInput)  -> PodcastClipPublishResultProjection
 
@@ -1825,13 +1715,7 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func projectRoomAvatar(input: RoomAvatarProjectionInput)  -> RoomAvatarProjection
 
-    func projectRoomBrowseSnapshotApply(input: RoomBrowseSnapshotApplyInput)  -> RoomBrowseSnapshotApplyProjection
-
     func projectRoomCoverCard(input: RoomCoverCardProjectionInput)  -> RoomCoverCardProjection
-
-    func projectRoomExplorerFeaturedStartResult(input: RoomExplorerFeaturedStartResultInput)  -> RoomExplorerFeaturedStartResultProjection
-
-    func projectRoomExplorerJoinRequestResult(input: RoomExplorerJoinRequestResultInput)  -> RoomExplorerJoinRequestResultProjection
 
     func projectRoomInviteSelection(input: RoomInviteSelectionInput)  -> RoomInviteSelectionProjection
 
@@ -1847,24 +1731,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * On the happy path `failed_pubkeys` is empty ⇒ all-success toast.
      */
     func projectRoomInviteSendResult(selected: [RoomInviteCandidate], failedPubkeys: [String])  -> RoomInviteSendResultProjection
-
-    func projectRoomLibraryArticleCard(input: RoomLibraryArticleCardProjectionInput)  -> RoomLibraryArticleCardProjection
-
-    func projectRoomLibraryBookCard(input: RoomLibraryBookCardProjectionInput)  -> RoomLibraryBookCardProjection
-
-    func projectRoomLibraryCardKind(input: RoomLibraryCardKindProjectionInput)  -> RoomLibraryCardKindProjection
-
-    func projectRoomLibraryGenericCard(input: RoomLibraryGenericCardProjectionInput)  -> RoomLibraryGenericCardProjection
-
-    func projectRoomLibraryPodcastCard(input: RoomLibraryPodcastCardProjectionInput)  -> RoomLibraryPodcastCardProjection
-
-    func projectRoomPreviewAction(input: RoomPreviewActionProjectionInput)  -> RoomPreviewActionProjection
-
-    func projectRoomPreviewArtifacts(input: RoomPreviewArtifactsProjectionInput)  -> RoomPreviewArtifactsProjection
-
-    func projectRoomPreviewHeader(input: RoomPreviewHeaderProjectionInput)  -> RoomPreviewHeaderProjection
-
-    func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionInput)  -> RoomRecommendationCardProjection
 
     /**
      * Project a community search row. Rust owns display copy and optional
@@ -2004,16 +1870,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
 
     func recordPodcastPlaybackPosition(input: PodcastPlaybackPositionInput)  -> MutationSnapshot
 
-    func recordRecentSearchSnapshot(query: String) async  -> SearchChromeSnapshot
-
-    /**
-     * Handle the app returning to foreground. iOS may suspend WebSockets
-     * while backgrounded; when Wi-Fi-only mode is off, force a fresh
-     * socket/subscription cycle. When Wi-Fi-only is on, the raw path update
-     * is the only authority allowed to reconnect.
-     */
-    func refreshRelayConnectionsForForeground() async  -> NetworkSettingsMutationSnapshot
-
     /**
      * Remove a relay by URL.
      */
@@ -2060,8 +1916,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async  -> NetworkSettingsMutationSnapshot
 
-    func setWifiOnlyEnabled(enabled: Bool) async  -> NetworkWifiOnlyPreferenceSnapshot
-
     func shareExtensionCommunitiesSnapshot(communities: [CommunitySummary])  -> Data
 
     func standaloneNostrEntity(content: String)  -> NostrEntityRef?
@@ -2089,8 +1943,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * Idempotent; the sub rides until logout.
      */
     func startRoomDiscovery() async
-
-    func startRoomExplorerFeaturedRooms() async  -> MutationSnapshot
 
     /**
      * Article-reader view-scope subscription. Fires `ArticleUpdated` deltas
@@ -2224,8 +2076,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func subscribeWebBookmarks() async  -> SubscriptionStartSnapshot
 
-    func suggestNip05Username(displayName: String)  -> String
-
     /**
      * Toggle `address` in the user's kind:10003 list and return the
      * post-toggle article bookmark snapshot. Rust owns the read-modify-write;
@@ -2346,29 +2196,6 @@ public convenience init() {
 
 
     /**
-     * Apply a raw native network path update. Native reports only whether
-     * the current path is Wi-Fi; Rust owns the Wi-Fi-only preference lookup
-     * and relay connect/disconnect policy.
-     */
-open func applyNetworkPathStatus(isWifi: Bool)async  -> NetworkPathPolicySnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_apply_network_path_status(
-                    self.uniffiClonePointer(),
-                    FfiConverterBool.lower(isWifi)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeNetworkPathPolicySnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
      * Publish the Rust-projected profile follow mutation and return the
      * post-action screen state. Rust owns rollback on error; the shell only
      * applies the returned snapshot.
@@ -2456,24 +2283,6 @@ open func clearPodcastClipSelection() -> PodcastClipSelection  {
 })
 }
 
-open func clearRecentSearchesSnapshot()async  -> SearchChromeSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_clear_recent_searches_snapshot(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSearchChromeSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
 open func completeOnboardingInterests(selectedIds: [String])async  -> MutationSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -2502,18 +2311,6 @@ open func confirmPendingJoin(groupId: String)  {try! rustCall() {
         FfiConverterString.lower(groupId),$0
     )
 }
-}
-
-    /**
-     * Count comments for an artifact using Rust-owned reference keys.
-     */
-open func countArtifactComments(artifact: ArtifactRecord, commentsByReference: [CommentReferenceBucket]) -> UInt32  {
-    return try!  FfiConverterUInt32.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_count_artifact_comments(self.uniffiClonePointer(),
-        FfiConverterTypeArtifactRecord_lower(artifact),
-        FfiConverterSequenceTypeCommentReferenceBucket.lower(commentsByReference),$0
-    )
-})
 }
 
 open func createRoom(name: String, about: String, picture: String, visibility: RoomVisibility, access: RoomAccess)async  -> CreateRoomPublishSnapshot  {
@@ -2795,22 +2592,6 @@ open func getArtifactCommentScope(preview: ArtifactPreview) -> CommentScopeSnaps
     return try!  FfiConverterTypeCommentScopeSnapshot_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_get_artifact_comment_scope(self.uniffiClonePointer(),
         FfiConverterTypeArtifactPreview_lower(preview),$0
-    )
-})
-}
-
-open func getArtifactDetailProjection(artifact: ArtifactRecord) -> ArtifactDetailProjection  {
-    return try!  FfiConverterTypeArtifactDetailProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_artifact_detail_projection(self.uniffiClonePointer(),
-        FfiConverterTypeArtifactRecord_lower(artifact),$0
-    )
-})
-}
-
-open func getArtifactDetailRoute(artifact: ArtifactRecord) -> ArtifactDetailRoute  {
-    return try!  FfiConverterTypeArtifactDetailRoute_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_artifact_detail_route(self.uniffiClonePointer(),
-        FfiConverterTypeArtifactRecord_lower(artifact),$0
     )
 })
 }
@@ -3136,29 +2917,6 @@ open func getHighlightSourceKind(previewSource: String, externalReference: Strin
 })
 }
 
-    /**
-     * Full highlights home feed snapshot. Rust owns the following-highlights
-     * query, following-reads query, cross-feed dedupe, grouping, stable ids,
-     * and merged ordering.
-     */
-open func getHomeFeedSnapshot(highlightLimit: UInt32, readLimit: UInt32)async  -> HomeFeedSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_home_feed_snapshot(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt32.lower(highlightLimit),FfiConverterUInt32.lower(readLimit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeHomeFeedSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
 open func getJoinedCommunities()async  -> JoinedCommunitiesSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -3175,58 +2933,6 @@ open func getJoinedCommunities()async  -> JoinedCommunitiesSnapshot  {
             errorHandler: nil
 
         )
-}
-
-    /**
-     * Size + event-count snapshot of the local nostrdb cache. Order-of-
-     * magnitude figures used by the Network Settings "Local cache" card.
-     */
-open func getNetworkCacheStatsSnapshot()async  -> NetworkCacheStatsSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_network_cache_stats_snapshot(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeNetworkCacheStatsSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Return the screen-shaped Network Settings snapshot: configured relays,
-     * live diagnostics, derived header/auto-connected projection, Wi-Fi-only
-     * preference, and error state.
-     */
-open func getNetworkSettingsSnapshot(previousRelays: [RelayConfig])async  -> NetworkSettingsSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_network_settings_snapshot(
-                    self.uniffiClonePointer(),
-                    FfiConverterSequenceTypeRelayConfig.lower(previousRelays)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeNetworkSettingsSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-open func getNetworkWifiOnlyPreferenceSnapshot() -> NetworkWifiOnlyPreferenceSnapshot  {
-    return try!  FfiConverterTypeNetworkWifiOnlyPreferenceSnapshot_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_get_network_wifi_only_preference_snapshot(self.uniffiClonePointer(),$0
-    )
-})
 }
 
 open func getOnboardingInterestProjection(selectedIds: [String]) -> OnboardingInterestProjection  {
@@ -3303,28 +3009,6 @@ open func getPodcastPlaybackRehydrationSnapshot(hasCurrentArtifact: Bool) -> Pod
 }
 
     /**
-     * Full profile-page read model. Rust owns tab queries, section limits,
-     * current-viewer follow state, and per-section cache-error fallback.
-     */
-open func getProfilePageSnapshot(pubkeyHex: String)async  -> ProfilePageSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_profile_page_snapshot(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(pubkeyHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeProfilePageSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
      * Classify a subscription event kind into the exact profile slice that
      * native shells should refresh.
      */
@@ -3354,28 +3038,6 @@ open func getRelayHostedRoomsSnapshot(url: String)async  -> RelayHostedRoomsSnap
         )
 }
 
-    /**
-     * Screen-shaped snapshot for the explorer's "Browse all" grid. Rust owns
-     * the cache query, limit, query normalization, and matched fields.
-     */
-open func getRoomBrowseSnapshot(query: String, limit: UInt32)async  -> RoomBrowseSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_room_browse_snapshot(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(query),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRoomBrowseSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
 open func getRoomDiscussionSnapshot(groupId: String)async  -> RoomDiscussionSnapshot  {
     return
         try!  await uniffiRustCallAsync(
@@ -3389,52 +3051,6 @@ open func getRoomDiscussionSnapshot(groupId: String)async  -> RoomDiscussionSnap
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeRoomDiscussionSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Snapshot for the room explorer shelves. Rust owns curator lookup,
-     * per-shelf cache failure fallbacks, joined-room exclusion, and shelf
-     * limits. Native shells render the returned shelves.
-     */
-open func getRoomExplorerSnapshot(joined: [CommunitySummary])async  -> RoomExplorerSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_room_explorer_snapshot(
-                    self.uniffiClonePointer(),
-                    FfiConverterSequenceTypeCommunitySummary.lower(joined)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRoomExplorerSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Full room-home read model for one community. Rust owns artifact and
-     * highlight limits, reference-scoped highlight/comment reads, and lane
-     * assembly.
-     */
-open func getRoomHomeSnapshot(groupId: String)async  -> RoomHomeSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_room_home_snapshot(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(groupId)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRoomHomeSnapshot_lift,
             errorHandler: nil
 
         )
@@ -3484,29 +3100,6 @@ open func getSearchArticleResultsSnapshot(query: String)async  -> SearchArticleR
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSearchArticleResultsSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Search screen chrome snapshot: recent query history plus resolved
-     * NIP-50 relays. Rust owns persistence, de-dupe, relay defaults, and
-     * error semantics.
-     */
-open func getSearchChromeSnapshot()async  -> SearchChromeSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_search_chrome_snapshot(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSearchChromeSnapshot_lift,
             errorHandler: nil
 
         )
@@ -3591,30 +3184,6 @@ open func getWebMetadata(url: String)async  -> WebMetadata?  {
 }
 
     /**
-     * Fetch another user's kind:10002 via the indexer pool and return the
-     * parsed `RelayConfig` rows. Useful for "adopt someone else's relay
-     * setup" flows — the Swift caller shows the list with checkboxes
-     * and upserts the selected subset through `upsert_relay`.
-     */
-open func importRelaysFromNpubSnapshot(npub: String)async  -> ImportRelaysFetchSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_import_relays_from_npub_snapshot(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(npub)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeImportRelaysFetchSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
      * Publish the default Blossom server list only if the user has no cached
      * kind:10063. Called once after login; no-op when the list already exists.
      */
@@ -3634,14 +3203,6 @@ open func initDefaultBlossomServers()async  -> MutationSnapshot  {
             errorHandler: nil
 
         )
-}
-
-open func isNip05UsernameValid(input: String) -> Bool  {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_is_nip05_username_valid(self.uniffiClonePointer(),
-        FfiConverterString.lower(input),$0
-    )
-})
 }
 
 open func isOnboardingComplete() -> Bool  {
@@ -3727,24 +3288,6 @@ open func markPodcastClipOut(selection: PodcastClipSelection, currentTime: Doubl
 })
 }
 
-open func markWhatsNewSeen(shippedAtUnixSeconds: UInt64)async  -> MutationSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_mark_whats_new_seen(
-                    self.uniffiClonePointer(),
-                    FfiConverterUInt64.lower(shippedAtUnixSeconds)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeMutationSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
     /**
      * Normalize user-entered or scanned ISBN input. Native shells use this
      * only to enable/route capture UI; Rust remains the source of truth for
@@ -3754,14 +3297,6 @@ open func normalizeIsbnInput(raw: String) -> String?  {
     return try!  FfiConverterOptionString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_normalize_isbn_input(self.uniffiClonePointer(),
         FfiConverterString.lower(raw),$0
-    )
-})
-}
-
-open func normalizeNip05Username(input: String) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_normalize_nip05_username(self.uniffiClonePointer(),
-        FfiConverterString.lower(input),$0
     )
 })
 }
@@ -3838,47 +3373,6 @@ open func planWaveformPeaks(input: WaveformPeaksPlanInput) -> WaveformPeaksPlan 
         FfiConverterTypeWaveformPeaksPlanInput_lower(input),$0
     )
 })
-}
-
-open func prepareWhatsNew()async  -> WhatsNewPresentationSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_prepare_whats_new(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeWhatsNewPresentationSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Fetch the target relay's NIP-11 information document via an HTTPS
-     * GET to the `ws[s]://` URL's HTTP equivalent with
-     * `Accept: application/nostr+json`. Fails fast on timeout.
-     */
-open func probeRelayNip11Snapshot(url: String)async  -> RelayNip11ProbeSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_probe_relay_nip11_snapshot(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(url)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeRelayNip11ProbeSnapshot_lift,
-            errorHandler: nil
-
-        )
 }
 
 open func projectAddRelaySheet(input: AddRelaySheetProjectionInput) -> AddRelaySheetProjection  {
@@ -4406,14 +3900,6 @@ open func projectHighlightResourceHeader(input: HighlightResourceHeaderProjectio
 })
 }
 
-open func projectHomeFeedSnapshotApply(input: HomeFeedSnapshotApplyInput) -> HomeFeedSnapshotApplyProjection  {
-    return try!  FfiConverterTypeHomeFeedSnapshotApplyProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_home_feed_snapshot_apply(self.uniffiClonePointer(),
-        FfiConverterTypeHomeFeedSnapshotApplyInput_lower(input),$0
-    )
-})
-}
-
 open func projectImportRelays(input: ImportRelaysProjectionInput) -> ImportRelaysProjection  {
     return try!  FfiConverterTypeImportRelaysProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_import_relays(self.uniffiClonePointer(),
@@ -4523,30 +4009,6 @@ open func projectNostrEntityArticleCard(input: NostrEntityArticleCardProjectionI
     return try!  FfiConverterTypeNostrEntityArticleCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_nostr_entity_article_card(self.uniffiClonePointer(),
         FfiConverterTypeNostrEntityArticleCardProjectionInput_lower(input),$0
-    )
-})
-}
-
-    /**
-     * Project onboarding account creation state. Rust owns display-name
-     * trimming and continue eligibility.
-     */
-open func projectOnboardingCreateAccount(input: OnboardingCreateAccountProjectionInput) -> OnboardingCreateAccountProjection  {
-    return try!  FfiConverterTypeOnboardingCreateAccountProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_onboarding_create_account(self.uniffiClonePointer(),
-        FfiConverterTypeOnboardingCreateAccountProjectionInput_lower(input),$0
-    )
-})
-}
-
-    /**
-     * Project username availability-check state. Rust owns canonical trim
-     * and username validity for the onboarding flow.
-     */
-open func projectOnboardingUsernameCheck(username: String) -> OnboardingUsernameCheckProjection  {
-    return try!  FfiConverterTypeOnboardingUsernameCheckProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_onboarding_username_check(self.uniffiClonePointer(),
-        FfiConverterString.lower(username),$0
     )
 })
 }
@@ -4765,34 +4227,10 @@ open func projectRoomAvatar(input: RoomAvatarProjectionInput) -> RoomAvatarProje
 })
 }
 
-open func projectRoomBrowseSnapshotApply(input: RoomBrowseSnapshotApplyInput) -> RoomBrowseSnapshotApplyProjection  {
-    return try!  FfiConverterTypeRoomBrowseSnapshotApplyProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_room_browse_snapshot_apply(self.uniffiClonePointer(),
-        FfiConverterTypeRoomBrowseSnapshotApplyInput_lower(input),$0
-    )
-})
-}
-
 open func projectRoomCoverCard(input: RoomCoverCardProjectionInput) -> RoomCoverCardProjection  {
     return try!  FfiConverterTypeRoomCoverCardProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_project_room_cover_card(self.uniffiClonePointer(),
         FfiConverterTypeRoomCoverCardProjectionInput_lower(input),$0
-    )
-})
-}
-
-open func projectRoomExplorerFeaturedStartResult(input: RoomExplorerFeaturedStartResultInput) -> RoomExplorerFeaturedStartResultProjection  {
-    return try!  FfiConverterTypeRoomExplorerFeaturedStartResultProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_room_explorer_featured_start_result(self.uniffiClonePointer(),
-        FfiConverterTypeRoomExplorerFeaturedStartResultInput_lower(input),$0
-    )
-})
-}
-
-open func projectRoomExplorerJoinRequestResult(input: RoomExplorerJoinRequestResultInput) -> RoomExplorerJoinRequestResultProjection  {
-    return try!  FfiConverterTypeRoomExplorerJoinRequestResultProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_room_explorer_join_request_result(self.uniffiClonePointer(),
-        FfiConverterTypeRoomExplorerJoinRequestResultInput_lower(input),$0
     )
 })
 }
@@ -4827,78 +4265,6 @@ open func projectRoomInviteSendResult(selected: [RoomInviteCandidate], failedPub
     uniffi_highlighter_core_fn_method_highlightercore_project_room_invite_send_result(self.uniffiClonePointer(),
         FfiConverterSequenceTypeRoomInviteCandidate.lower(selected),
         FfiConverterSequenceString.lower(failedPubkeys),$0
-    )
-})
-}
-
-open func projectRoomLibraryArticleCard(input: RoomLibraryArticleCardProjectionInput) -> RoomLibraryArticleCardProjection  {
-    return try!  FfiConverterTypeRoomLibraryArticleCardProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_room_library_article_card(self.uniffiClonePointer(),
-        FfiConverterTypeRoomLibraryArticleCardProjectionInput_lower(input),$0
-    )
-})
-}
-
-open func projectRoomLibraryBookCard(input: RoomLibraryBookCardProjectionInput) -> RoomLibraryBookCardProjection  {
-    return try!  FfiConverterTypeRoomLibraryBookCardProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_room_library_book_card(self.uniffiClonePointer(),
-        FfiConverterTypeRoomLibraryBookCardProjectionInput_lower(input),$0
-    )
-})
-}
-
-open func projectRoomLibraryCardKind(input: RoomLibraryCardKindProjectionInput) -> RoomLibraryCardKindProjection  {
-    return try!  FfiConverterTypeRoomLibraryCardKindProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_room_library_card_kind(self.uniffiClonePointer(),
-        FfiConverterTypeRoomLibraryCardKindProjectionInput_lower(input),$0
-    )
-})
-}
-
-open func projectRoomLibraryGenericCard(input: RoomLibraryGenericCardProjectionInput) -> RoomLibraryGenericCardProjection  {
-    return try!  FfiConverterTypeRoomLibraryGenericCardProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_room_library_generic_card(self.uniffiClonePointer(),
-        FfiConverterTypeRoomLibraryGenericCardProjectionInput_lower(input),$0
-    )
-})
-}
-
-open func projectRoomLibraryPodcastCard(input: RoomLibraryPodcastCardProjectionInput) -> RoomLibraryPodcastCardProjection  {
-    return try!  FfiConverterTypeRoomLibraryPodcastCardProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_room_library_podcast_card(self.uniffiClonePointer(),
-        FfiConverterTypeRoomLibraryPodcastCardProjectionInput_lower(input),$0
-    )
-})
-}
-
-open func projectRoomPreviewAction(input: RoomPreviewActionProjectionInput) -> RoomPreviewActionProjection  {
-    return try!  FfiConverterTypeRoomPreviewActionProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_room_preview_action(self.uniffiClonePointer(),
-        FfiConverterTypeRoomPreviewActionProjectionInput_lower(input),$0
-    )
-})
-}
-
-open func projectRoomPreviewArtifacts(input: RoomPreviewArtifactsProjectionInput) -> RoomPreviewArtifactsProjection  {
-    return try!  FfiConverterTypeRoomPreviewArtifactsProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_room_preview_artifacts(self.uniffiClonePointer(),
-        FfiConverterTypeRoomPreviewArtifactsProjectionInput_lower(input),$0
-    )
-})
-}
-
-open func projectRoomPreviewHeader(input: RoomPreviewHeaderProjectionInput) -> RoomPreviewHeaderProjection  {
-    return try!  FfiConverterTypeRoomPreviewHeaderProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_room_preview_header(self.uniffiClonePointer(),
-        FfiConverterTypeRoomPreviewHeaderProjectionInput_lower(input),$0
-    )
-})
-}
-
-open func projectRoomRecommendationCard(input: RoomRecommendationCardProjectionInput) -> RoomRecommendationCardProjection  {
-    return try!  FfiConverterTypeRoomRecommendationCardProjection_lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_project_room_recommendation_card(self.uniffiClonePointer(),
-        FfiConverterTypeRoomRecommendationCardProjectionInput_lower(input),$0
     )
 })
 }
@@ -5373,48 +4739,6 @@ open func recordPodcastPlaybackPosition(input: PodcastPlaybackPositionInput) -> 
 })
 }
 
-open func recordRecentSearchSnapshot(query: String)async  -> SearchChromeSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_record_recent_search_snapshot(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(query)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeSearchChromeSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
-    /**
-     * Handle the app returning to foreground. iOS may suspend WebSockets
-     * while backgrounded; when Wi-Fi-only mode is off, force a fresh
-     * socket/subscription cycle. When Wi-Fi-only is on, the raw path update
-     * is the only authority allowed to reconnect.
-     */
-open func refreshRelayConnectionsForForeground()async  -> NetworkSettingsMutationSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_refresh_relay_connections_for_foreground(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeNetworkSettingsMutationSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
     /**
      * Remove a relay by URL.
      */
@@ -5596,24 +4920,6 @@ open func setRelayRoles(url: String, read: Bool, write: Bool, rooms: Bool, index
         )
 }
 
-open func setWifiOnlyEnabled(enabled: Bool)async  -> NetworkWifiOnlyPreferenceSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_set_wifi_only_enabled(
-                    self.uniffiClonePointer(),
-                    FfiConverterBool.lower(enabled)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeNetworkWifiOnlyPreferenceSnapshot_lift,
-            errorHandler: nil
-
-        )
-}
-
 open func shareExtensionCommunitiesSnapshot(communities: [CommunitySummary]) -> Data  {
     return try!  FfiConverterData.lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlightercore_share_extension_communities_snapshot(self.uniffiClonePointer(),
@@ -5697,24 +5003,6 @@ open func startRoomDiscovery()async   {
             completeFunc: ffi_highlighter_core_rust_future_complete_void,
             freeFunc: ffi_highlighter_core_rust_future_free_void,
             liftFunc: { $0 },
-            errorHandler: nil
-
-        )
-}
-
-open func startRoomExplorerFeaturedRooms()async  -> MutationSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_start_room_explorer_featured_rooms(
-                    self.uniffiClonePointer()
-
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypeMutationSnapshot_lift,
             errorHandler: nil
 
         )
@@ -6138,14 +5426,6 @@ open func subscribeWebBookmarks()async  -> SubscriptionStartSnapshot  {
             errorHandler: nil
 
         )
-}
-
-open func suggestNip05Username(displayName: String) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_suggest_nip05_username(self.uniffiClonePointer(),
-        FfiConverterString.lower(displayName),$0
-    )
-})
 }
 
     /**
@@ -9614,76 +8894,6 @@ public func FfiConverterTypeArticleShareUrlSnapshot_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeArticleShareUrlSnapshot_lower(_ value: ArticleShareUrlSnapshot) -> RustBuffer {
     return FfiConverterTypeArticleShareUrlSnapshot.lower(value)
-}
-
-
-public struct ArtifactDetailProjection {
-    public var route: ArtifactDetailRoute
-    public var navigationTitle: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(route: ArtifactDetailRoute, navigationTitle: String) {
-        self.route = route
-        self.navigationTitle = navigationTitle
-    }
-}
-
-#if compiler(>=6)
-extension ArtifactDetailProjection: Sendable {}
-#endif
-
-
-extension ArtifactDetailProjection: Equatable, Hashable {
-    public static func ==(lhs: ArtifactDetailProjection, rhs: ArtifactDetailProjection) -> Bool {
-        if lhs.route != rhs.route {
-            return false
-        }
-        if lhs.navigationTitle != rhs.navigationTitle {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(route)
-        hasher.combine(navigationTitle)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeArtifactDetailProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArtifactDetailProjection {
-        return
-            try ArtifactDetailProjection(
-                route: FfiConverterTypeArtifactDetailRoute.read(from: &buf),
-                navigationTitle: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ArtifactDetailProjection, into buf: inout [UInt8]) {
-        FfiConverterTypeArtifactDetailRoute.write(value.route, into: &buf)
-        FfiConverterString.write(value.navigationTitle, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeArtifactDetailProjection_lift(_ buf: RustBuffer) throws -> ArtifactDetailProjection {
-    return try FfiConverterTypeArtifactDetailProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeArtifactDetailProjection_lower(_ value: ArtifactDetailProjection) -> RustBuffer {
-    return FfiConverterTypeArtifactDetailProjection.lower(value)
 }
 
 
@@ -25669,200 +24879,6 @@ public func FfiConverterTypeHomeFeedItem_lower(_ value: HomeFeedItem) -> RustBuf
 }
 
 
-public struct HomeFeedSnapshot {
-    public var items: [HomeFeedItem]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(items: [HomeFeedItem], error: String) {
-        self.items = items
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension HomeFeedSnapshot: Sendable {}
-#endif
-
-
-extension HomeFeedSnapshot: Equatable, Hashable {
-    public static func ==(lhs: HomeFeedSnapshot, rhs: HomeFeedSnapshot) -> Bool {
-        if lhs.items != rhs.items {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(items)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeHomeFeedSnapshot: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HomeFeedSnapshot {
-        return
-            try HomeFeedSnapshot(
-                items: FfiConverterSequenceTypeHomeFeedItem.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: HomeFeedSnapshot, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeHomeFeedItem.write(value.items, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHomeFeedSnapshot_lift(_ buf: RustBuffer) throws -> HomeFeedSnapshot {
-    return try FfiConverterTypeHomeFeedSnapshot.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHomeFeedSnapshot_lower(_ value: HomeFeedSnapshot) -> RustBuffer {
-    return FfiConverterTypeHomeFeedSnapshot.lower(value)
-}
-
-
-public struct HomeFeedSnapshotApplyInput {
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(error: String) {
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension HomeFeedSnapshotApplyInput: Sendable {}
-#endif
-
-
-extension HomeFeedSnapshotApplyInput: Equatable, Hashable {
-    public static func ==(lhs: HomeFeedSnapshotApplyInput, rhs: HomeFeedSnapshotApplyInput) -> Bool {
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeHomeFeedSnapshotApplyInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HomeFeedSnapshotApplyInput {
-        return
-            try HomeFeedSnapshotApplyInput(
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: HomeFeedSnapshotApplyInput, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHomeFeedSnapshotApplyInput_lift(_ buf: RustBuffer) throws -> HomeFeedSnapshotApplyInput {
-    return try FfiConverterTypeHomeFeedSnapshotApplyInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHomeFeedSnapshotApplyInput_lower(_ value: HomeFeedSnapshotApplyInput) -> RustBuffer {
-    return FfiConverterTypeHomeFeedSnapshotApplyInput.lower(value)
-}
-
-
-public struct HomeFeedSnapshotApplyProjection {
-    public var loadError: String?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(loadError: String?) {
-        self.loadError = loadError
-    }
-}
-
-#if compiler(>=6)
-extension HomeFeedSnapshotApplyProjection: Sendable {}
-#endif
-
-
-extension HomeFeedSnapshotApplyProjection: Equatable, Hashable {
-    public static func ==(lhs: HomeFeedSnapshotApplyProjection, rhs: HomeFeedSnapshotApplyProjection) -> Bool {
-        if lhs.loadError != rhs.loadError {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(loadError)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeHomeFeedSnapshotApplyProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HomeFeedSnapshotApplyProjection {
-        return
-            try HomeFeedSnapshotApplyProjection(
-                loadError: FfiConverterOptionString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: HomeFeedSnapshotApplyProjection, into buf: inout [UInt8]) {
-        FfiConverterOptionString.write(value.loadError, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHomeFeedSnapshotApplyProjection_lift(_ buf: RustBuffer) throws -> HomeFeedSnapshotApplyProjection {
-    return try FfiConverterTypeHomeFeedSnapshotApplyProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeHomeFeedSnapshotApplyProjection_lower(_ value: HomeFeedSnapshotApplyProjection) -> RustBuffer {
-    return FfiConverterTypeHomeFeedSnapshotApplyProjection.lower(value)
-}
-
-
 /**
  * Highlight + its associated artifact (for feed rendering).
  */
@@ -31327,256 +30343,6 @@ public func FfiConverterTypeNetworkWifiOnlyPreferenceSnapshot_lower(_ value: Net
 }
 
 
-public struct Nip05Availability {
-    public var valid: Bool
-    public var available: Bool
-    public var identifier: String
-    public var domain: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(valid: Bool, available: Bool, identifier: String, domain: String) {
-        self.valid = valid
-        self.available = available
-        self.identifier = identifier
-        self.domain = domain
-    }
-}
-
-#if compiler(>=6)
-extension Nip05Availability: Sendable {}
-#endif
-
-
-extension Nip05Availability: Equatable, Hashable {
-    public static func ==(lhs: Nip05Availability, rhs: Nip05Availability) -> Bool {
-        if lhs.valid != rhs.valid {
-            return false
-        }
-        if lhs.available != rhs.available {
-            return false
-        }
-        if lhs.identifier != rhs.identifier {
-            return false
-        }
-        if lhs.domain != rhs.domain {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(valid)
-        hasher.combine(available)
-        hasher.combine(identifier)
-        hasher.combine(domain)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeNip05Availability: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip05Availability {
-        return
-            try Nip05Availability(
-                valid: FfiConverterBool.read(from: &buf),
-                available: FfiConverterBool.read(from: &buf),
-                identifier: FfiConverterString.read(from: &buf),
-                domain: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: Nip05Availability, into buf: inout [UInt8]) {
-        FfiConverterBool.write(value.valid, into: &buf)
-        FfiConverterBool.write(value.available, into: &buf)
-        FfiConverterString.write(value.identifier, into: &buf)
-        FfiConverterString.write(value.domain, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNip05Availability_lift(_ buf: RustBuffer) throws -> Nip05Availability {
-    return try FfiConverterTypeNip05Availability.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNip05Availability_lower(_ value: Nip05Availability) -> RustBuffer {
-    return FfiConverterTypeNip05Availability.lower(value)
-}
-
-
-public struct Nip05AvailabilitySnapshot {
-    public var state: Nip05AvailabilityState
-    public var identifier: String
-    public var domain: String
-    public var errorMessage: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(state: Nip05AvailabilityState, identifier: String, domain: String, errorMessage: String) {
-        self.state = state
-        self.identifier = identifier
-        self.domain = domain
-        self.errorMessage = errorMessage
-    }
-}
-
-#if compiler(>=6)
-extension Nip05AvailabilitySnapshot: Sendable {}
-#endif
-
-
-extension Nip05AvailabilitySnapshot: Equatable, Hashable {
-    public static func ==(lhs: Nip05AvailabilitySnapshot, rhs: Nip05AvailabilitySnapshot) -> Bool {
-        if lhs.state != rhs.state {
-            return false
-        }
-        if lhs.identifier != rhs.identifier {
-            return false
-        }
-        if lhs.domain != rhs.domain {
-            return false
-        }
-        if lhs.errorMessage != rhs.errorMessage {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(state)
-        hasher.combine(identifier)
-        hasher.combine(domain)
-        hasher.combine(errorMessage)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeNip05AvailabilitySnapshot: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip05AvailabilitySnapshot {
-        return
-            try Nip05AvailabilitySnapshot(
-                state: FfiConverterTypeNip05AvailabilityState.read(from: &buf),
-                identifier: FfiConverterString.read(from: &buf),
-                domain: FfiConverterString.read(from: &buf),
-                errorMessage: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: Nip05AvailabilitySnapshot, into buf: inout [UInt8]) {
-        FfiConverterTypeNip05AvailabilityState.write(value.state, into: &buf)
-        FfiConverterString.write(value.identifier, into: &buf)
-        FfiConverterString.write(value.domain, into: &buf)
-        FfiConverterString.write(value.errorMessage, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNip05AvailabilitySnapshot_lift(_ buf: RustBuffer) throws -> Nip05AvailabilitySnapshot {
-    return try FfiConverterTypeNip05AvailabilitySnapshot.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNip05AvailabilitySnapshot_lower(_ value: Nip05AvailabilitySnapshot) -> RustBuffer {
-    return FfiConverterTypeNip05AvailabilitySnapshot.lower(value)
-}
-
-
-public struct Nip05RegistrationSnapshot {
-    public var identifier: String?
-    public var succeeded: Bool
-    public var errorMessage: String?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(identifier: String?, succeeded: Bool, errorMessage: String?) {
-        self.identifier = identifier
-        self.succeeded = succeeded
-        self.errorMessage = errorMessage
-    }
-}
-
-#if compiler(>=6)
-extension Nip05RegistrationSnapshot: Sendable {}
-#endif
-
-
-extension Nip05RegistrationSnapshot: Equatable, Hashable {
-    public static func ==(lhs: Nip05RegistrationSnapshot, rhs: Nip05RegistrationSnapshot) -> Bool {
-        if lhs.identifier != rhs.identifier {
-            return false
-        }
-        if lhs.succeeded != rhs.succeeded {
-            return false
-        }
-        if lhs.errorMessage != rhs.errorMessage {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(identifier)
-        hasher.combine(succeeded)
-        hasher.combine(errorMessage)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeNip05RegistrationSnapshot: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip05RegistrationSnapshot {
-        return
-            try Nip05RegistrationSnapshot(
-                identifier: FfiConverterOptionString.read(from: &buf),
-                succeeded: FfiConverterBool.read(from: &buf),
-                errorMessage: FfiConverterOptionString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: Nip05RegistrationSnapshot, into buf: inout [UInt8]) {
-        FfiConverterOptionString.write(value.identifier, into: &buf)
-        FfiConverterBool.write(value.succeeded, into: &buf)
-        FfiConverterOptionString.write(value.errorMessage, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNip05RegistrationSnapshot_lift(_ buf: RustBuffer) throws -> Nip05RegistrationSnapshot {
-    return try FfiConverterTypeNip05RegistrationSnapshot.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNip05RegistrationSnapshot_lower(_ value: Nip05RegistrationSnapshot) -> RustBuffer {
-    return FfiConverterTypeNip05RegistrationSnapshot.lower(value)
-}
-
-
 /**
  * Minimal projection of a relay's NIP-11 information document. Populated
  * by `probe_relay_nip11_snapshot` via a one-shot HTTPS GET to the relay's base URL
@@ -32555,170 +31321,6 @@ public func FfiConverterTypeOcrWord_lower(_ value: OcrWord) -> RustBuffer {
 }
 
 
-public struct OnboardingCreateAccountProjection {
-    public var displayName: String
-    public var username: String
-    public var canContinue: Bool
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(displayName: String, username: String, canContinue: Bool) {
-        self.displayName = displayName
-        self.username = username
-        self.canContinue = canContinue
-    }
-}
-
-#if compiler(>=6)
-extension OnboardingCreateAccountProjection: Sendable {}
-#endif
-
-
-extension OnboardingCreateAccountProjection: Equatable, Hashable {
-    public static func ==(lhs: OnboardingCreateAccountProjection, rhs: OnboardingCreateAccountProjection) -> Bool {
-        if lhs.displayName != rhs.displayName {
-            return false
-        }
-        if lhs.username != rhs.username {
-            return false
-        }
-        if lhs.canContinue != rhs.canContinue {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(displayName)
-        hasher.combine(username)
-        hasher.combine(canContinue)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeOnboardingCreateAccountProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingCreateAccountProjection {
-        return
-            try OnboardingCreateAccountProjection(
-                displayName: FfiConverterString.read(from: &buf),
-                username: FfiConverterString.read(from: &buf),
-                canContinue: FfiConverterBool.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: OnboardingCreateAccountProjection, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.displayName, into: &buf)
-        FfiConverterString.write(value.username, into: &buf)
-        FfiConverterBool.write(value.canContinue, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeOnboardingCreateAccountProjection_lift(_ buf: RustBuffer) throws -> OnboardingCreateAccountProjection {
-    return try FfiConverterTypeOnboardingCreateAccountProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeOnboardingCreateAccountProjection_lower(_ value: OnboardingCreateAccountProjection) -> RustBuffer {
-    return FfiConverterTypeOnboardingCreateAccountProjection.lower(value)
-}
-
-
-public struct OnboardingCreateAccountProjectionInput {
-    public var displayName: String
-    public var username: String
-    public var usernameAvailable: Bool
-    public var isWorking: Bool
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(displayName: String, username: String, usernameAvailable: Bool, isWorking: Bool) {
-        self.displayName = displayName
-        self.username = username
-        self.usernameAvailable = usernameAvailable
-        self.isWorking = isWorking
-    }
-}
-
-#if compiler(>=6)
-extension OnboardingCreateAccountProjectionInput: Sendable {}
-#endif
-
-
-extension OnboardingCreateAccountProjectionInput: Equatable, Hashable {
-    public static func ==(lhs: OnboardingCreateAccountProjectionInput, rhs: OnboardingCreateAccountProjectionInput) -> Bool {
-        if lhs.displayName != rhs.displayName {
-            return false
-        }
-        if lhs.username != rhs.username {
-            return false
-        }
-        if lhs.usernameAvailable != rhs.usernameAvailable {
-            return false
-        }
-        if lhs.isWorking != rhs.isWorking {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(displayName)
-        hasher.combine(username)
-        hasher.combine(usernameAvailable)
-        hasher.combine(isWorking)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeOnboardingCreateAccountProjectionInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingCreateAccountProjectionInput {
-        return
-            try OnboardingCreateAccountProjectionInput(
-                displayName: FfiConverterString.read(from: &buf),
-                username: FfiConverterString.read(from: &buf),
-                usernameAvailable: FfiConverterBool.read(from: &buf),
-                isWorking: FfiConverterBool.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: OnboardingCreateAccountProjectionInput, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.displayName, into: &buf)
-        FfiConverterString.write(value.username, into: &buf)
-        FfiConverterBool.write(value.usernameAvailable, into: &buf)
-        FfiConverterBool.write(value.isWorking, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeOnboardingCreateAccountProjectionInput_lift(_ buf: RustBuffer) throws -> OnboardingCreateAccountProjectionInput {
-    return try FfiConverterTypeOnboardingCreateAccountProjectionInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeOnboardingCreateAccountProjectionInput_lower(_ value: OnboardingCreateAccountProjectionInput) -> RustBuffer {
-    return FfiConverterTypeOnboardingCreateAccountProjectionInput.lower(value)
-}
-
-
 public struct OnboardingInterest {
     public var id: String
     public var emoji: String
@@ -33044,84 +31646,6 @@ public func FfiConverterTypeOnboardingInterestSelection_lift(_ buf: RustBuffer) 
 #endif
 public func FfiConverterTypeOnboardingInterestSelection_lower(_ value: OnboardingInterestSelection) -> RustBuffer {
     return FfiConverterTypeOnboardingInterestSelection.lower(value)
-}
-
-
-public struct OnboardingUsernameCheckProjection {
-    public var username: String
-    public var hasUsername: Bool
-    public var valid: Bool
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(username: String, hasUsername: Bool, valid: Bool) {
-        self.username = username
-        self.hasUsername = hasUsername
-        self.valid = valid
-    }
-}
-
-#if compiler(>=6)
-extension OnboardingUsernameCheckProjection: Sendable {}
-#endif
-
-
-extension OnboardingUsernameCheckProjection: Equatable, Hashable {
-    public static func ==(lhs: OnboardingUsernameCheckProjection, rhs: OnboardingUsernameCheckProjection) -> Bool {
-        if lhs.username != rhs.username {
-            return false
-        }
-        if lhs.hasUsername != rhs.hasUsername {
-            return false
-        }
-        if lhs.valid != rhs.valid {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(username)
-        hasher.combine(hasUsername)
-        hasher.combine(valid)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeOnboardingUsernameCheckProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OnboardingUsernameCheckProjection {
-        return
-            try OnboardingUsernameCheckProjection(
-                username: FfiConverterString.read(from: &buf),
-                hasUsername: FfiConverterBool.read(from: &buf),
-                valid: FfiConverterBool.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: OnboardingUsernameCheckProjection, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.username, into: &buf)
-        FfiConverterBool.write(value.hasUsername, into: &buf)
-        FfiConverterBool.write(value.valid, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeOnboardingUsernameCheckProjection_lift(_ buf: RustBuffer) throws -> OnboardingUsernameCheckProjection {
-    return try FfiConverterTypeOnboardingUsernameCheckProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeOnboardingUsernameCheckProjection_lower(_ value: OnboardingUsernameCheckProjection) -> RustBuffer {
-    return FfiConverterTypeOnboardingUsernameCheckProjection.lower(value)
 }
 
 
@@ -37009,100 +35533,6 @@ public func FfiConverterTypeProfileMetadata_lift(_ buf: RustBuffer) throws -> Pr
 #endif
 public func FfiConverterTypeProfileMetadata_lower(_ value: ProfileMetadata) -> RustBuffer {
     return FfiConverterTypeProfileMetadata.lower(value)
-}
-
-
-public struct ProfilePageSnapshot {
-    public var profile: ProfileMetadata?
-    public var articles: [ArticleRecord]
-    public var highlights: [HighlightRecord]
-    public var communities: [CommunitySummary]
-    public var isFollowing: Bool
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(profile: ProfileMetadata?, articles: [ArticleRecord], highlights: [HighlightRecord], communities: [CommunitySummary], isFollowing: Bool) {
-        self.profile = profile
-        self.articles = articles
-        self.highlights = highlights
-        self.communities = communities
-        self.isFollowing = isFollowing
-    }
-}
-
-#if compiler(>=6)
-extension ProfilePageSnapshot: Sendable {}
-#endif
-
-
-extension ProfilePageSnapshot: Equatable, Hashable {
-    public static func ==(lhs: ProfilePageSnapshot, rhs: ProfilePageSnapshot) -> Bool {
-        if lhs.profile != rhs.profile {
-            return false
-        }
-        if lhs.articles != rhs.articles {
-            return false
-        }
-        if lhs.highlights != rhs.highlights {
-            return false
-        }
-        if lhs.communities != rhs.communities {
-            return false
-        }
-        if lhs.isFollowing != rhs.isFollowing {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(profile)
-        hasher.combine(articles)
-        hasher.combine(highlights)
-        hasher.combine(communities)
-        hasher.combine(isFollowing)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeProfilePageSnapshot: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ProfilePageSnapshot {
-        return
-            try ProfilePageSnapshot(
-                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf),
-                articles: FfiConverterSequenceTypeArticleRecord.read(from: &buf),
-                highlights: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
-                communities: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
-                isFollowing: FfiConverterBool.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: ProfilePageSnapshot, into buf: inout [UInt8]) {
-        FfiConverterOptionTypeProfileMetadata.write(value.profile, into: &buf)
-        FfiConverterSequenceTypeArticleRecord.write(value.articles, into: &buf)
-        FfiConverterSequenceTypeHighlightRecord.write(value.highlights, into: &buf)
-        FfiConverterSequenceTypeCommunitySummary.write(value.communities, into: &buf)
-        FfiConverterBool.write(value.isFollowing, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeProfilePageSnapshot_lift(_ buf: RustBuffer) throws -> ProfilePageSnapshot {
-    return try FfiConverterTypeProfilePageSnapshot.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeProfilePageSnapshot_lower(_ value: ProfilePageSnapshot) -> RustBuffer {
-    return FfiConverterTypeProfilePageSnapshot.lower(value)
 }
 
 
@@ -41160,208 +39590,6 @@ public func FfiConverterTypeRoomAvatarProjectionInput_lower(_ value: RoomAvatarP
 }
 
 
-public struct RoomBrowseSnapshot {
-    public var rooms: [CommunitySummary]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(rooms: [CommunitySummary], error: String) {
-        self.rooms = rooms
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension RoomBrowseSnapshot: Sendable {}
-#endif
-
-
-extension RoomBrowseSnapshot: Equatable, Hashable {
-    public static func ==(lhs: RoomBrowseSnapshot, rhs: RoomBrowseSnapshot) -> Bool {
-        if lhs.rooms != rhs.rooms {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(rooms)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomBrowseSnapshot: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomBrowseSnapshot {
-        return
-            try RoomBrowseSnapshot(
-                rooms: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomBrowseSnapshot, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeCommunitySummary.write(value.rooms, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomBrowseSnapshot_lift(_ buf: RustBuffer) throws -> RoomBrowseSnapshot {
-    return try FfiConverterTypeRoomBrowseSnapshot.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomBrowseSnapshot_lower(_ value: RoomBrowseSnapshot) -> RustBuffer {
-    return FfiConverterTypeRoomBrowseSnapshot.lower(value)
-}
-
-
-public struct RoomBrowseSnapshotApplyInput {
-    public var rooms: [CommunitySummary]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(rooms: [CommunitySummary], error: String) {
-        self.rooms = rooms
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension RoomBrowseSnapshotApplyInput: Sendable {}
-#endif
-
-
-extension RoomBrowseSnapshotApplyInput: Equatable, Hashable {
-    public static func ==(lhs: RoomBrowseSnapshotApplyInput, rhs: RoomBrowseSnapshotApplyInput) -> Bool {
-        if lhs.rooms != rhs.rooms {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(rooms)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomBrowseSnapshotApplyInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomBrowseSnapshotApplyInput {
-        return
-            try RoomBrowseSnapshotApplyInput(
-                rooms: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomBrowseSnapshotApplyInput, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeCommunitySummary.write(value.rooms, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomBrowseSnapshotApplyInput_lift(_ buf: RustBuffer) throws -> RoomBrowseSnapshotApplyInput {
-    return try FfiConverterTypeRoomBrowseSnapshotApplyInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomBrowseSnapshotApplyInput_lower(_ value: RoomBrowseSnapshotApplyInput) -> RustBuffer {
-    return FfiConverterTypeRoomBrowseSnapshotApplyInput.lower(value)
-}
-
-
-public struct RoomBrowseSnapshotApplyProjection {
-    public var rooms: [CommunitySummary]
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(rooms: [CommunitySummary]) {
-        self.rooms = rooms
-    }
-}
-
-#if compiler(>=6)
-extension RoomBrowseSnapshotApplyProjection: Sendable {}
-#endif
-
-
-extension RoomBrowseSnapshotApplyProjection: Equatable, Hashable {
-    public static func ==(lhs: RoomBrowseSnapshotApplyProjection, rhs: RoomBrowseSnapshotApplyProjection) -> Bool {
-        if lhs.rooms != rhs.rooms {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(rooms)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomBrowseSnapshotApplyProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomBrowseSnapshotApplyProjection {
-        return
-            try RoomBrowseSnapshotApplyProjection(
-                rooms: FfiConverterSequenceTypeCommunitySummary.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomBrowseSnapshotApplyProjection, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeCommunitySummary.write(value.rooms, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomBrowseSnapshotApplyProjection_lift(_ buf: RustBuffer) throws -> RoomBrowseSnapshotApplyProjection {
-    return try FfiConverterTypeRoomBrowseSnapshotApplyProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomBrowseSnapshotApplyProjection_lower(_ value: RoomBrowseSnapshotApplyProjection) -> RustBuffer {
-    return FfiConverterTypeRoomBrowseSnapshotApplyProjection.lower(value)
-}
-
-
 /**
  * Snapshot for `ViewId::RoomChat { group_id }` — bounded raw chat rows for one
  * NIP-29 room.
@@ -41804,466 +40032,6 @@ public func FfiConverterTypeRoomDiscussionsSnapshot_lift(_ buf: RustBuffer) thro
 #endif
 public func FfiConverterTypeRoomDiscussionsSnapshot_lower(_ value: RoomDiscussionsSnapshot) -> RustBuffer {
     return FfiConverterTypeRoomDiscussionsSnapshot.lower(value)
-}
-
-
-public struct RoomExplorerFeaturedStartResultInput {
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(error: String) {
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension RoomExplorerFeaturedStartResultInput: Sendable {}
-#endif
-
-
-extension RoomExplorerFeaturedStartResultInput: Equatable, Hashable {
-    public static func ==(lhs: RoomExplorerFeaturedStartResultInput, rhs: RoomExplorerFeaturedStartResultInput) -> Bool {
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomExplorerFeaturedStartResultInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomExplorerFeaturedStartResultInput {
-        return
-            try RoomExplorerFeaturedStartResultInput(
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomExplorerFeaturedStartResultInput, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomExplorerFeaturedStartResultInput_lift(_ buf: RustBuffer) throws -> RoomExplorerFeaturedStartResultInput {
-    return try FfiConverterTypeRoomExplorerFeaturedStartResultInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomExplorerFeaturedStartResultInput_lower(_ value: RoomExplorerFeaturedStartResultInput) -> RustBuffer {
-    return FfiConverterTypeRoomExplorerFeaturedStartResultInput.lower(value)
-}
-
-
-public struct RoomExplorerFeaturedStartResultProjection {
-    public var shouldMarkStarted: Bool
-    public var shouldLog: Bool
-    public var logMessage: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(shouldMarkStarted: Bool, shouldLog: Bool, logMessage: String) {
-        self.shouldMarkStarted = shouldMarkStarted
-        self.shouldLog = shouldLog
-        self.logMessage = logMessage
-    }
-}
-
-#if compiler(>=6)
-extension RoomExplorerFeaturedStartResultProjection: Sendable {}
-#endif
-
-
-extension RoomExplorerFeaturedStartResultProjection: Equatable, Hashable {
-    public static func ==(lhs: RoomExplorerFeaturedStartResultProjection, rhs: RoomExplorerFeaturedStartResultProjection) -> Bool {
-        if lhs.shouldMarkStarted != rhs.shouldMarkStarted {
-            return false
-        }
-        if lhs.shouldLog != rhs.shouldLog {
-            return false
-        }
-        if lhs.logMessage != rhs.logMessage {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(shouldMarkStarted)
-        hasher.combine(shouldLog)
-        hasher.combine(logMessage)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomExplorerFeaturedStartResultProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomExplorerFeaturedStartResultProjection {
-        return
-            try RoomExplorerFeaturedStartResultProjection(
-                shouldMarkStarted: FfiConverterBool.read(from: &buf),
-                shouldLog: FfiConverterBool.read(from: &buf),
-                logMessage: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomExplorerFeaturedStartResultProjection, into buf: inout [UInt8]) {
-        FfiConverterBool.write(value.shouldMarkStarted, into: &buf)
-        FfiConverterBool.write(value.shouldLog, into: &buf)
-        FfiConverterString.write(value.logMessage, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomExplorerFeaturedStartResultProjection_lift(_ buf: RustBuffer) throws -> RoomExplorerFeaturedStartResultProjection {
-    return try FfiConverterTypeRoomExplorerFeaturedStartResultProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomExplorerFeaturedStartResultProjection_lower(_ value: RoomExplorerFeaturedStartResultProjection) -> RustBuffer {
-    return FfiConverterTypeRoomExplorerFeaturedStartResultProjection.lower(value)
-}
-
-
-public struct RoomExplorerJoinRequestResultInput {
-    public var groupId: String
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(groupId: String, error: String) {
-        self.groupId = groupId
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension RoomExplorerJoinRequestResultInput: Sendable {}
-#endif
-
-
-extension RoomExplorerJoinRequestResultInput: Equatable, Hashable {
-    public static func ==(lhs: RoomExplorerJoinRequestResultInput, rhs: RoomExplorerJoinRequestResultInput) -> Bool {
-        if lhs.groupId != rhs.groupId {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(groupId)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomExplorerJoinRequestResultInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomExplorerJoinRequestResultInput {
-        return
-            try RoomExplorerJoinRequestResultInput(
-                groupId: FfiConverterString.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomExplorerJoinRequestResultInput, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.groupId, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomExplorerJoinRequestResultInput_lift(_ buf: RustBuffer) throws -> RoomExplorerJoinRequestResultInput {
-    return try FfiConverterTypeRoomExplorerJoinRequestResultInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomExplorerJoinRequestResultInput_lower(_ value: RoomExplorerJoinRequestResultInput) -> RustBuffer {
-    return FfiConverterTypeRoomExplorerJoinRequestResultInput.lower(value)
-}
-
-
-public struct RoomExplorerJoinRequestResultProjection {
-    public var shouldLog: Bool
-    public var logMessage: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(shouldLog: Bool, logMessage: String) {
-        self.shouldLog = shouldLog
-        self.logMessage = logMessage
-    }
-}
-
-#if compiler(>=6)
-extension RoomExplorerJoinRequestResultProjection: Sendable {}
-#endif
-
-
-extension RoomExplorerJoinRequestResultProjection: Equatable, Hashable {
-    public static func ==(lhs: RoomExplorerJoinRequestResultProjection, rhs: RoomExplorerJoinRequestResultProjection) -> Bool {
-        if lhs.shouldLog != rhs.shouldLog {
-            return false
-        }
-        if lhs.logMessage != rhs.logMessage {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(shouldLog)
-        hasher.combine(logMessage)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomExplorerJoinRequestResultProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomExplorerJoinRequestResultProjection {
-        return
-            try RoomExplorerJoinRequestResultProjection(
-                shouldLog: FfiConverterBool.read(from: &buf),
-                logMessage: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomExplorerJoinRequestResultProjection, into buf: inout [UInt8]) {
-        FfiConverterBool.write(value.shouldLog, into: &buf)
-        FfiConverterString.write(value.logMessage, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomExplorerJoinRequestResultProjection_lift(_ buf: RustBuffer) throws -> RoomExplorerJoinRequestResultProjection {
-    return try FfiConverterTypeRoomExplorerJoinRequestResultProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomExplorerJoinRequestResultProjection_lower(_ value: RoomExplorerJoinRequestResultProjection) -> RustBuffer {
-    return FfiConverterTypeRoomExplorerJoinRequestResultProjection.lower(value)
-}
-
-
-public struct RoomExplorerSnapshot {
-    public var featured: [CommunitySummary]
-    public var newNoteworthy: [CommunitySummary]
-    public var friendsShelf: [RoomRecommendation]
-    public var authorsShelf: [RoomRecommendation]
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(featured: [CommunitySummary], newNoteworthy: [CommunitySummary], friendsShelf: [RoomRecommendation], authorsShelf: [RoomRecommendation]) {
-        self.featured = featured
-        self.newNoteworthy = newNoteworthy
-        self.friendsShelf = friendsShelf
-        self.authorsShelf = authorsShelf
-    }
-}
-
-#if compiler(>=6)
-extension RoomExplorerSnapshot: Sendable {}
-#endif
-
-
-extension RoomExplorerSnapshot: Equatable, Hashable {
-    public static func ==(lhs: RoomExplorerSnapshot, rhs: RoomExplorerSnapshot) -> Bool {
-        if lhs.featured != rhs.featured {
-            return false
-        }
-        if lhs.newNoteworthy != rhs.newNoteworthy {
-            return false
-        }
-        if lhs.friendsShelf != rhs.friendsShelf {
-            return false
-        }
-        if lhs.authorsShelf != rhs.authorsShelf {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(featured)
-        hasher.combine(newNoteworthy)
-        hasher.combine(friendsShelf)
-        hasher.combine(authorsShelf)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomExplorerSnapshot: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomExplorerSnapshot {
-        return
-            try RoomExplorerSnapshot(
-                featured: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
-                newNoteworthy: FfiConverterSequenceTypeCommunitySummary.read(from: &buf),
-                friendsShelf: FfiConverterSequenceTypeRoomRecommendation.read(from: &buf),
-                authorsShelf: FfiConverterSequenceTypeRoomRecommendation.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomExplorerSnapshot, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeCommunitySummary.write(value.featured, into: &buf)
-        FfiConverterSequenceTypeCommunitySummary.write(value.newNoteworthy, into: &buf)
-        FfiConverterSequenceTypeRoomRecommendation.write(value.friendsShelf, into: &buf)
-        FfiConverterSequenceTypeRoomRecommendation.write(value.authorsShelf, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomExplorerSnapshot_lift(_ buf: RustBuffer) throws -> RoomExplorerSnapshot {
-    return try FfiConverterTypeRoomExplorerSnapshot.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomExplorerSnapshot_lower(_ value: RoomExplorerSnapshot) -> RustBuffer {
-    return FfiConverterTypeRoomExplorerSnapshot.lower(value)
-}
-
-
-public struct RoomHomeSnapshot {
-    public var artifacts: [ArtifactRecord]
-    public var highlights: [HydratedHighlight]
-    public var highlightsByReference: [HighlightReferenceBucket]
-    public var commentsByReference: [CommentReferenceBucket]
-    public var lanes: [RoomLane]
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(artifacts: [ArtifactRecord], highlights: [HydratedHighlight], highlightsByReference: [HighlightReferenceBucket], commentsByReference: [CommentReferenceBucket], lanes: [RoomLane]) {
-        self.artifacts = artifacts
-        self.highlights = highlights
-        self.highlightsByReference = highlightsByReference
-        self.commentsByReference = commentsByReference
-        self.lanes = lanes
-    }
-}
-
-#if compiler(>=6)
-extension RoomHomeSnapshot: Sendable {}
-#endif
-
-
-extension RoomHomeSnapshot: Equatable, Hashable {
-    public static func ==(lhs: RoomHomeSnapshot, rhs: RoomHomeSnapshot) -> Bool {
-        if lhs.artifacts != rhs.artifacts {
-            return false
-        }
-        if lhs.highlights != rhs.highlights {
-            return false
-        }
-        if lhs.highlightsByReference != rhs.highlightsByReference {
-            return false
-        }
-        if lhs.commentsByReference != rhs.commentsByReference {
-            return false
-        }
-        if lhs.lanes != rhs.lanes {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(artifacts)
-        hasher.combine(highlights)
-        hasher.combine(highlightsByReference)
-        hasher.combine(commentsByReference)
-        hasher.combine(lanes)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomHomeSnapshot: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomHomeSnapshot {
-        return
-            try RoomHomeSnapshot(
-                artifacts: FfiConverterSequenceTypeArtifactRecord.read(from: &buf),
-                highlights: FfiConverterSequenceTypeHydratedHighlight.read(from: &buf),
-                highlightsByReference: FfiConverterSequenceTypeHighlightReferenceBucket.read(from: &buf),
-                commentsByReference: FfiConverterSequenceTypeCommentReferenceBucket.read(from: &buf),
-                lanes: FfiConverterSequenceTypeRoomLane.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomHomeSnapshot, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeArtifactRecord.write(value.artifacts, into: &buf)
-        FfiConverterSequenceTypeHydratedHighlight.write(value.highlights, into: &buf)
-        FfiConverterSequenceTypeHighlightReferenceBucket.write(value.highlightsByReference, into: &buf)
-        FfiConverterSequenceTypeCommentReferenceBucket.write(value.commentsByReference, into: &buf)
-        FfiConverterSequenceTypeRoomLane.write(value.lanes, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomHomeSnapshot_lift(_ buf: RustBuffer) throws -> RoomHomeSnapshot {
-    return try FfiConverterTypeRoomHomeSnapshot.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomHomeSnapshot_lower(_ value: RoomHomeSnapshot) -> RustBuffer {
-    return FfiConverterTypeRoomHomeSnapshot.lower(value)
 }
 
 
@@ -43629,1340 +41397,6 @@ public func FfiConverterTypeRoomLaneRow_lower(_ value: RoomLaneRow) -> RustBuffe
 }
 
 
-public struct RoomLibraryArticleCardProjection {
-    public var displayTitle: String
-    public var titleIsFallback: Bool
-    public var imageUrl: String?
-    public var articleAuthorPubkey: String?
-    public var avatarPubkey: String
-    public var authorProfilePubkey: String
-    public var relativeUnixSeconds: UInt64?
-    public var metaText: String?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(displayTitle: String, titleIsFallback: Bool, imageUrl: String?, articleAuthorPubkey: String?, avatarPubkey: String, authorProfilePubkey: String, relativeUnixSeconds: UInt64?, metaText: String?) {
-        self.displayTitle = displayTitle
-        self.titleIsFallback = titleIsFallback
-        self.imageUrl = imageUrl
-        self.articleAuthorPubkey = articleAuthorPubkey
-        self.avatarPubkey = avatarPubkey
-        self.authorProfilePubkey = authorProfilePubkey
-        self.relativeUnixSeconds = relativeUnixSeconds
-        self.metaText = metaText
-    }
-}
-
-#if compiler(>=6)
-extension RoomLibraryArticleCardProjection: Sendable {}
-#endif
-
-
-extension RoomLibraryArticleCardProjection: Equatable, Hashable {
-    public static func ==(lhs: RoomLibraryArticleCardProjection, rhs: RoomLibraryArticleCardProjection) -> Bool {
-        if lhs.displayTitle != rhs.displayTitle {
-            return false
-        }
-        if lhs.titleIsFallback != rhs.titleIsFallback {
-            return false
-        }
-        if lhs.imageUrl != rhs.imageUrl {
-            return false
-        }
-        if lhs.articleAuthorPubkey != rhs.articleAuthorPubkey {
-            return false
-        }
-        if lhs.avatarPubkey != rhs.avatarPubkey {
-            return false
-        }
-        if lhs.authorProfilePubkey != rhs.authorProfilePubkey {
-            return false
-        }
-        if lhs.relativeUnixSeconds != rhs.relativeUnixSeconds {
-            return false
-        }
-        if lhs.metaText != rhs.metaText {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(displayTitle)
-        hasher.combine(titleIsFallback)
-        hasher.combine(imageUrl)
-        hasher.combine(articleAuthorPubkey)
-        hasher.combine(avatarPubkey)
-        hasher.combine(authorProfilePubkey)
-        hasher.combine(relativeUnixSeconds)
-        hasher.combine(metaText)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomLibraryArticleCardProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryArticleCardProjection {
-        return
-            try RoomLibraryArticleCardProjection(
-                displayTitle: FfiConverterString.read(from: &buf),
-                titleIsFallback: FfiConverterBool.read(from: &buf),
-                imageUrl: FfiConverterOptionString.read(from: &buf),
-                articleAuthorPubkey: FfiConverterOptionString.read(from: &buf),
-                avatarPubkey: FfiConverterString.read(from: &buf),
-                authorProfilePubkey: FfiConverterString.read(from: &buf),
-                relativeUnixSeconds: FfiConverterOptionUInt64.read(from: &buf),
-                metaText: FfiConverterOptionString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomLibraryArticleCardProjection, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.displayTitle, into: &buf)
-        FfiConverterBool.write(value.titleIsFallback, into: &buf)
-        FfiConverterOptionString.write(value.imageUrl, into: &buf)
-        FfiConverterOptionString.write(value.articleAuthorPubkey, into: &buf)
-        FfiConverterString.write(value.avatarPubkey, into: &buf)
-        FfiConverterString.write(value.authorProfilePubkey, into: &buf)
-        FfiConverterOptionUInt64.write(value.relativeUnixSeconds, into: &buf)
-        FfiConverterOptionString.write(value.metaText, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryArticleCardProjection_lift(_ buf: RustBuffer) throws -> RoomLibraryArticleCardProjection {
-    return try FfiConverterTypeRoomLibraryArticleCardProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryArticleCardProjection_lower(_ value: RoomLibraryArticleCardProjection) -> RustBuffer {
-    return FfiConverterTypeRoomLibraryArticleCardProjection.lower(value)
-}
-
-
-public struct RoomLibraryArticleCardProjectionInput {
-    public var artifact: ArtifactRecord
-    public var commentCount: UInt32
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(artifact: ArtifactRecord, commentCount: UInt32) {
-        self.artifact = artifact
-        self.commentCount = commentCount
-    }
-}
-
-#if compiler(>=6)
-extension RoomLibraryArticleCardProjectionInput: Sendable {}
-#endif
-
-
-extension RoomLibraryArticleCardProjectionInput: Equatable, Hashable {
-    public static func ==(lhs: RoomLibraryArticleCardProjectionInput, rhs: RoomLibraryArticleCardProjectionInput) -> Bool {
-        if lhs.artifact != rhs.artifact {
-            return false
-        }
-        if lhs.commentCount != rhs.commentCount {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(artifact)
-        hasher.combine(commentCount)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomLibraryArticleCardProjectionInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryArticleCardProjectionInput {
-        return
-            try RoomLibraryArticleCardProjectionInput(
-                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
-                commentCount: FfiConverterUInt32.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomLibraryArticleCardProjectionInput, into buf: inout [UInt8]) {
-        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
-        FfiConverterUInt32.write(value.commentCount, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryArticleCardProjectionInput_lift(_ buf: RustBuffer) throws -> RoomLibraryArticleCardProjectionInput {
-    return try FfiConverterTypeRoomLibraryArticleCardProjectionInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryArticleCardProjectionInput_lower(_ value: RoomLibraryArticleCardProjectionInput) -> RustBuffer {
-    return FfiConverterTypeRoomLibraryArticleCardProjectionInput.lower(value)
-}
-
-
-public struct RoomLibraryBookCardProjection {
-    public var title: String
-    public var titleIsFallback: Bool
-    public var authorLabel: String?
-    public var summary: String?
-    public var imageUrl: String?
-    public var sharerPubkey: String
-    public var relativeUnixSeconds: UInt64?
-    public var commentBadgeLabel: String?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(title: String, titleIsFallback: Bool, authorLabel: String?, summary: String?, imageUrl: String?, sharerPubkey: String, relativeUnixSeconds: UInt64?, commentBadgeLabel: String?) {
-        self.title = title
-        self.titleIsFallback = titleIsFallback
-        self.authorLabel = authorLabel
-        self.summary = summary
-        self.imageUrl = imageUrl
-        self.sharerPubkey = sharerPubkey
-        self.relativeUnixSeconds = relativeUnixSeconds
-        self.commentBadgeLabel = commentBadgeLabel
-    }
-}
-
-#if compiler(>=6)
-extension RoomLibraryBookCardProjection: Sendable {}
-#endif
-
-
-extension RoomLibraryBookCardProjection: Equatable, Hashable {
-    public static func ==(lhs: RoomLibraryBookCardProjection, rhs: RoomLibraryBookCardProjection) -> Bool {
-        if lhs.title != rhs.title {
-            return false
-        }
-        if lhs.titleIsFallback != rhs.titleIsFallback {
-            return false
-        }
-        if lhs.authorLabel != rhs.authorLabel {
-            return false
-        }
-        if lhs.summary != rhs.summary {
-            return false
-        }
-        if lhs.imageUrl != rhs.imageUrl {
-            return false
-        }
-        if lhs.sharerPubkey != rhs.sharerPubkey {
-            return false
-        }
-        if lhs.relativeUnixSeconds != rhs.relativeUnixSeconds {
-            return false
-        }
-        if lhs.commentBadgeLabel != rhs.commentBadgeLabel {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(title)
-        hasher.combine(titleIsFallback)
-        hasher.combine(authorLabel)
-        hasher.combine(summary)
-        hasher.combine(imageUrl)
-        hasher.combine(sharerPubkey)
-        hasher.combine(relativeUnixSeconds)
-        hasher.combine(commentBadgeLabel)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomLibraryBookCardProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryBookCardProjection {
-        return
-            try RoomLibraryBookCardProjection(
-                title: FfiConverterString.read(from: &buf),
-                titleIsFallback: FfiConverterBool.read(from: &buf),
-                authorLabel: FfiConverterOptionString.read(from: &buf),
-                summary: FfiConverterOptionString.read(from: &buf),
-                imageUrl: FfiConverterOptionString.read(from: &buf),
-                sharerPubkey: FfiConverterString.read(from: &buf),
-                relativeUnixSeconds: FfiConverterOptionUInt64.read(from: &buf),
-                commentBadgeLabel: FfiConverterOptionString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomLibraryBookCardProjection, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.title, into: &buf)
-        FfiConverterBool.write(value.titleIsFallback, into: &buf)
-        FfiConverterOptionString.write(value.authorLabel, into: &buf)
-        FfiConverterOptionString.write(value.summary, into: &buf)
-        FfiConverterOptionString.write(value.imageUrl, into: &buf)
-        FfiConverterString.write(value.sharerPubkey, into: &buf)
-        FfiConverterOptionUInt64.write(value.relativeUnixSeconds, into: &buf)
-        FfiConverterOptionString.write(value.commentBadgeLabel, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryBookCardProjection_lift(_ buf: RustBuffer) throws -> RoomLibraryBookCardProjection {
-    return try FfiConverterTypeRoomLibraryBookCardProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryBookCardProjection_lower(_ value: RoomLibraryBookCardProjection) -> RustBuffer {
-    return FfiConverterTypeRoomLibraryBookCardProjection.lower(value)
-}
-
-
-public struct RoomLibraryBookCardProjectionInput {
-    public var artifact: ArtifactRecord
-    public var commentCount: UInt32
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(artifact: ArtifactRecord, commentCount: UInt32) {
-        self.artifact = artifact
-        self.commentCount = commentCount
-    }
-}
-
-#if compiler(>=6)
-extension RoomLibraryBookCardProjectionInput: Sendable {}
-#endif
-
-
-extension RoomLibraryBookCardProjectionInput: Equatable, Hashable {
-    public static func ==(lhs: RoomLibraryBookCardProjectionInput, rhs: RoomLibraryBookCardProjectionInput) -> Bool {
-        if lhs.artifact != rhs.artifact {
-            return false
-        }
-        if lhs.commentCount != rhs.commentCount {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(artifact)
-        hasher.combine(commentCount)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomLibraryBookCardProjectionInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryBookCardProjectionInput {
-        return
-            try RoomLibraryBookCardProjectionInput(
-                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
-                commentCount: FfiConverterUInt32.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomLibraryBookCardProjectionInput, into buf: inout [UInt8]) {
-        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
-        FfiConverterUInt32.write(value.commentCount, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryBookCardProjectionInput_lift(_ buf: RustBuffer) throws -> RoomLibraryBookCardProjectionInput {
-    return try FfiConverterTypeRoomLibraryBookCardProjectionInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryBookCardProjectionInput_lower(_ value: RoomLibraryBookCardProjectionInput) -> RustBuffer {
-    return FfiConverterTypeRoomLibraryBookCardProjectionInput.lower(value)
-}
-
-
-public struct RoomLibraryCardKindProjection {
-    public var cardKind: RoomLibraryCardKind
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(cardKind: RoomLibraryCardKind) {
-        self.cardKind = cardKind
-    }
-}
-
-#if compiler(>=6)
-extension RoomLibraryCardKindProjection: Sendable {}
-#endif
-
-
-extension RoomLibraryCardKindProjection: Equatable, Hashable {
-    public static func ==(lhs: RoomLibraryCardKindProjection, rhs: RoomLibraryCardKindProjection) -> Bool {
-        if lhs.cardKind != rhs.cardKind {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(cardKind)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomLibraryCardKindProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryCardKindProjection {
-        return
-            try RoomLibraryCardKindProjection(
-                cardKind: FfiConverterTypeRoomLibraryCardKind.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomLibraryCardKindProjection, into buf: inout [UInt8]) {
-        FfiConverterTypeRoomLibraryCardKind.write(value.cardKind, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryCardKindProjection_lift(_ buf: RustBuffer) throws -> RoomLibraryCardKindProjection {
-    return try FfiConverterTypeRoomLibraryCardKindProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryCardKindProjection_lower(_ value: RoomLibraryCardKindProjection) -> RustBuffer {
-    return FfiConverterTypeRoomLibraryCardKindProjection.lower(value)
-}
-
-
-public struct RoomLibraryCardKindProjectionInput {
-    public var artifact: ArtifactRecord
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(artifact: ArtifactRecord) {
-        self.artifact = artifact
-    }
-}
-
-#if compiler(>=6)
-extension RoomLibraryCardKindProjectionInput: Sendable {}
-#endif
-
-
-extension RoomLibraryCardKindProjectionInput: Equatable, Hashable {
-    public static func ==(lhs: RoomLibraryCardKindProjectionInput, rhs: RoomLibraryCardKindProjectionInput) -> Bool {
-        if lhs.artifact != rhs.artifact {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(artifact)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomLibraryCardKindProjectionInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryCardKindProjectionInput {
-        return
-            try RoomLibraryCardKindProjectionInput(
-                artifact: FfiConverterTypeArtifactRecord.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomLibraryCardKindProjectionInput, into buf: inout [UInt8]) {
-        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryCardKindProjectionInput_lift(_ buf: RustBuffer) throws -> RoomLibraryCardKindProjectionInput {
-    return try FfiConverterTypeRoomLibraryCardKindProjectionInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryCardKindProjectionInput_lower(_ value: RoomLibraryCardKindProjectionInput) -> RustBuffer {
-    return FfiConverterTypeRoomLibraryCardKindProjectionInput.lower(value)
-}
-
-
-public struct RoomLibraryGenericCardProjection {
-    public var title: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(title: String) {
-        self.title = title
-    }
-}
-
-#if compiler(>=6)
-extension RoomLibraryGenericCardProjection: Sendable {}
-#endif
-
-
-extension RoomLibraryGenericCardProjection: Equatable, Hashable {
-    public static func ==(lhs: RoomLibraryGenericCardProjection, rhs: RoomLibraryGenericCardProjection) -> Bool {
-        if lhs.title != rhs.title {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(title)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomLibraryGenericCardProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryGenericCardProjection {
-        return
-            try RoomLibraryGenericCardProjection(
-                title: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomLibraryGenericCardProjection, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.title, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryGenericCardProjection_lift(_ buf: RustBuffer) throws -> RoomLibraryGenericCardProjection {
-    return try FfiConverterTypeRoomLibraryGenericCardProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryGenericCardProjection_lower(_ value: RoomLibraryGenericCardProjection) -> RustBuffer {
-    return FfiConverterTypeRoomLibraryGenericCardProjection.lower(value)
-}
-
-
-public struct RoomLibraryGenericCardProjectionInput {
-    public var artifact: ArtifactRecord
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(artifact: ArtifactRecord) {
-        self.artifact = artifact
-    }
-}
-
-#if compiler(>=6)
-extension RoomLibraryGenericCardProjectionInput: Sendable {}
-#endif
-
-
-extension RoomLibraryGenericCardProjectionInput: Equatable, Hashable {
-    public static func ==(lhs: RoomLibraryGenericCardProjectionInput, rhs: RoomLibraryGenericCardProjectionInput) -> Bool {
-        if lhs.artifact != rhs.artifact {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(artifact)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomLibraryGenericCardProjectionInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryGenericCardProjectionInput {
-        return
-            try RoomLibraryGenericCardProjectionInput(
-                artifact: FfiConverterTypeArtifactRecord.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomLibraryGenericCardProjectionInput, into buf: inout [UInt8]) {
-        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryGenericCardProjectionInput_lift(_ buf: RustBuffer) throws -> RoomLibraryGenericCardProjectionInput {
-    return try FfiConverterTypeRoomLibraryGenericCardProjectionInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryGenericCardProjectionInput_lower(_ value: RoomLibraryGenericCardProjectionInput) -> RustBuffer {
-    return FfiConverterTypeRoomLibraryGenericCardProjectionInput.lower(value)
-}
-
-
-public struct RoomLibraryPodcastCardProjection {
-    public var title: String
-    public var titleIsFallback: Bool
-    public var showLabel: String?
-    public var durationLabel: String?
-    public var imageUrl: String?
-    public var sharerPubkey: String
-    public var relativeUnixSeconds: UInt64?
-    public var commentBadgeLabel: String?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(title: String, titleIsFallback: Bool, showLabel: String?, durationLabel: String?, imageUrl: String?, sharerPubkey: String, relativeUnixSeconds: UInt64?, commentBadgeLabel: String?) {
-        self.title = title
-        self.titleIsFallback = titleIsFallback
-        self.showLabel = showLabel
-        self.durationLabel = durationLabel
-        self.imageUrl = imageUrl
-        self.sharerPubkey = sharerPubkey
-        self.relativeUnixSeconds = relativeUnixSeconds
-        self.commentBadgeLabel = commentBadgeLabel
-    }
-}
-
-#if compiler(>=6)
-extension RoomLibraryPodcastCardProjection: Sendable {}
-#endif
-
-
-extension RoomLibraryPodcastCardProjection: Equatable, Hashable {
-    public static func ==(lhs: RoomLibraryPodcastCardProjection, rhs: RoomLibraryPodcastCardProjection) -> Bool {
-        if lhs.title != rhs.title {
-            return false
-        }
-        if lhs.titleIsFallback != rhs.titleIsFallback {
-            return false
-        }
-        if lhs.showLabel != rhs.showLabel {
-            return false
-        }
-        if lhs.durationLabel != rhs.durationLabel {
-            return false
-        }
-        if lhs.imageUrl != rhs.imageUrl {
-            return false
-        }
-        if lhs.sharerPubkey != rhs.sharerPubkey {
-            return false
-        }
-        if lhs.relativeUnixSeconds != rhs.relativeUnixSeconds {
-            return false
-        }
-        if lhs.commentBadgeLabel != rhs.commentBadgeLabel {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(title)
-        hasher.combine(titleIsFallback)
-        hasher.combine(showLabel)
-        hasher.combine(durationLabel)
-        hasher.combine(imageUrl)
-        hasher.combine(sharerPubkey)
-        hasher.combine(relativeUnixSeconds)
-        hasher.combine(commentBadgeLabel)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomLibraryPodcastCardProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryPodcastCardProjection {
-        return
-            try RoomLibraryPodcastCardProjection(
-                title: FfiConverterString.read(from: &buf),
-                titleIsFallback: FfiConverterBool.read(from: &buf),
-                showLabel: FfiConverterOptionString.read(from: &buf),
-                durationLabel: FfiConverterOptionString.read(from: &buf),
-                imageUrl: FfiConverterOptionString.read(from: &buf),
-                sharerPubkey: FfiConverterString.read(from: &buf),
-                relativeUnixSeconds: FfiConverterOptionUInt64.read(from: &buf),
-                commentBadgeLabel: FfiConverterOptionString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomLibraryPodcastCardProjection, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.title, into: &buf)
-        FfiConverterBool.write(value.titleIsFallback, into: &buf)
-        FfiConverterOptionString.write(value.showLabel, into: &buf)
-        FfiConverterOptionString.write(value.durationLabel, into: &buf)
-        FfiConverterOptionString.write(value.imageUrl, into: &buf)
-        FfiConverterString.write(value.sharerPubkey, into: &buf)
-        FfiConverterOptionUInt64.write(value.relativeUnixSeconds, into: &buf)
-        FfiConverterOptionString.write(value.commentBadgeLabel, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryPodcastCardProjection_lift(_ buf: RustBuffer) throws -> RoomLibraryPodcastCardProjection {
-    return try FfiConverterTypeRoomLibraryPodcastCardProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryPodcastCardProjection_lower(_ value: RoomLibraryPodcastCardProjection) -> RustBuffer {
-    return FfiConverterTypeRoomLibraryPodcastCardProjection.lower(value)
-}
-
-
-public struct RoomLibraryPodcastCardProjectionInput {
-    public var artifact: ArtifactRecord
-    public var commentCount: UInt32
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(artifact: ArtifactRecord, commentCount: UInt32) {
-        self.artifact = artifact
-        self.commentCount = commentCount
-    }
-}
-
-#if compiler(>=6)
-extension RoomLibraryPodcastCardProjectionInput: Sendable {}
-#endif
-
-
-extension RoomLibraryPodcastCardProjectionInput: Equatable, Hashable {
-    public static func ==(lhs: RoomLibraryPodcastCardProjectionInput, rhs: RoomLibraryPodcastCardProjectionInput) -> Bool {
-        if lhs.artifact != rhs.artifact {
-            return false
-        }
-        if lhs.commentCount != rhs.commentCount {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(artifact)
-        hasher.combine(commentCount)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomLibraryPodcastCardProjectionInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryPodcastCardProjectionInput {
-        return
-            try RoomLibraryPodcastCardProjectionInput(
-                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
-                commentCount: FfiConverterUInt32.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomLibraryPodcastCardProjectionInput, into buf: inout [UInt8]) {
-        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
-        FfiConverterUInt32.write(value.commentCount, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryPodcastCardProjectionInput_lift(_ buf: RustBuffer) throws -> RoomLibraryPodcastCardProjectionInput {
-    return try FfiConverterTypeRoomLibraryPodcastCardProjectionInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryPodcastCardProjectionInput_lower(_ value: RoomLibraryPodcastCardProjectionInput) -> RustBuffer {
-    return FfiConverterTypeRoomLibraryPodcastCardProjectionInput.lower(value)
-}
-
-
-public struct RoomPreviewActionProjection {
-    public var alreadyJoined: Bool
-    public var primaryLabel: String
-    public var secondaryAction: RoomPreviewSecondaryAction
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(alreadyJoined: Bool, primaryLabel: String, secondaryAction: RoomPreviewSecondaryAction) {
-        self.alreadyJoined = alreadyJoined
-        self.primaryLabel = primaryLabel
-        self.secondaryAction = secondaryAction
-    }
-}
-
-#if compiler(>=6)
-extension RoomPreviewActionProjection: Sendable {}
-#endif
-
-
-extension RoomPreviewActionProjection: Equatable, Hashable {
-    public static func ==(lhs: RoomPreviewActionProjection, rhs: RoomPreviewActionProjection) -> Bool {
-        if lhs.alreadyJoined != rhs.alreadyJoined {
-            return false
-        }
-        if lhs.primaryLabel != rhs.primaryLabel {
-            return false
-        }
-        if lhs.secondaryAction != rhs.secondaryAction {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(alreadyJoined)
-        hasher.combine(primaryLabel)
-        hasher.combine(secondaryAction)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomPreviewActionProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewActionProjection {
-        return
-            try RoomPreviewActionProjection(
-                alreadyJoined: FfiConverterBool.read(from: &buf),
-                primaryLabel: FfiConverterString.read(from: &buf),
-                secondaryAction: FfiConverterTypeRoomPreviewSecondaryAction.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomPreviewActionProjection, into buf: inout [UInt8]) {
-        FfiConverterBool.write(value.alreadyJoined, into: &buf)
-        FfiConverterString.write(value.primaryLabel, into: &buf)
-        FfiConverterTypeRoomPreviewSecondaryAction.write(value.secondaryAction, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomPreviewActionProjection_lift(_ buf: RustBuffer) throws -> RoomPreviewActionProjection {
-    return try FfiConverterTypeRoomPreviewActionProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomPreviewActionProjection_lower(_ value: RoomPreviewActionProjection) -> RustBuffer {
-    return FfiConverterTypeRoomPreviewActionProjection.lower(value)
-}
-
-
-public struct RoomPreviewActionProjectionInput {
-    public var roomAccess: String
-    public var roomId: String
-    public var joinedRoomIds: [String]
-    public var isExpanded: Bool
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(roomAccess: String, roomId: String, joinedRoomIds: [String], isExpanded: Bool) {
-        self.roomAccess = roomAccess
-        self.roomId = roomId
-        self.joinedRoomIds = joinedRoomIds
-        self.isExpanded = isExpanded
-    }
-}
-
-#if compiler(>=6)
-extension RoomPreviewActionProjectionInput: Sendable {}
-#endif
-
-
-extension RoomPreviewActionProjectionInput: Equatable, Hashable {
-    public static func ==(lhs: RoomPreviewActionProjectionInput, rhs: RoomPreviewActionProjectionInput) -> Bool {
-        if lhs.roomAccess != rhs.roomAccess {
-            return false
-        }
-        if lhs.roomId != rhs.roomId {
-            return false
-        }
-        if lhs.joinedRoomIds != rhs.joinedRoomIds {
-            return false
-        }
-        if lhs.isExpanded != rhs.isExpanded {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(roomAccess)
-        hasher.combine(roomId)
-        hasher.combine(joinedRoomIds)
-        hasher.combine(isExpanded)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomPreviewActionProjectionInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewActionProjectionInput {
-        return
-            try RoomPreviewActionProjectionInput(
-                roomAccess: FfiConverterString.read(from: &buf),
-                roomId: FfiConverterString.read(from: &buf),
-                joinedRoomIds: FfiConverterSequenceString.read(from: &buf),
-                isExpanded: FfiConverterBool.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomPreviewActionProjectionInput, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.roomAccess, into: &buf)
-        FfiConverterString.write(value.roomId, into: &buf)
-        FfiConverterSequenceString.write(value.joinedRoomIds, into: &buf)
-        FfiConverterBool.write(value.isExpanded, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomPreviewActionProjectionInput_lift(_ buf: RustBuffer) throws -> RoomPreviewActionProjectionInput {
-    return try FfiConverterTypeRoomPreviewActionProjectionInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomPreviewActionProjectionInput_lower(_ value: RoomPreviewActionProjectionInput) -> RustBuffer {
-    return FfiConverterTypeRoomPreviewActionProjectionInput.lower(value)
-}
-
-
-public struct RoomPreviewArtifactRowProjection {
-    public var artifact: ArtifactRecord
-    public var title: String
-    public var subtitle: String?
-    public var showsDivider: Bool
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(artifact: ArtifactRecord, title: String, subtitle: String?, showsDivider: Bool) {
-        self.artifact = artifact
-        self.title = title
-        self.subtitle = subtitle
-        self.showsDivider = showsDivider
-    }
-}
-
-#if compiler(>=6)
-extension RoomPreviewArtifactRowProjection: Sendable {}
-#endif
-
-
-extension RoomPreviewArtifactRowProjection: Equatable, Hashable {
-    public static func ==(lhs: RoomPreviewArtifactRowProjection, rhs: RoomPreviewArtifactRowProjection) -> Bool {
-        if lhs.artifact != rhs.artifact {
-            return false
-        }
-        if lhs.title != rhs.title {
-            return false
-        }
-        if lhs.subtitle != rhs.subtitle {
-            return false
-        }
-        if lhs.showsDivider != rhs.showsDivider {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(artifact)
-        hasher.combine(title)
-        hasher.combine(subtitle)
-        hasher.combine(showsDivider)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomPreviewArtifactRowProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewArtifactRowProjection {
-        return
-            try RoomPreviewArtifactRowProjection(
-                artifact: FfiConverterTypeArtifactRecord.read(from: &buf),
-                title: FfiConverterString.read(from: &buf),
-                subtitle: FfiConverterOptionString.read(from: &buf),
-                showsDivider: FfiConverterBool.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomPreviewArtifactRowProjection, into buf: inout [UInt8]) {
-        FfiConverterTypeArtifactRecord.write(value.artifact, into: &buf)
-        FfiConverterString.write(value.title, into: &buf)
-        FfiConverterOptionString.write(value.subtitle, into: &buf)
-        FfiConverterBool.write(value.showsDivider, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomPreviewArtifactRowProjection_lift(_ buf: RustBuffer) throws -> RoomPreviewArtifactRowProjection {
-    return try FfiConverterTypeRoomPreviewArtifactRowProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomPreviewArtifactRowProjection_lower(_ value: RoomPreviewArtifactRowProjection) -> RustBuffer {
-    return FfiConverterTypeRoomPreviewArtifactRowProjection.lower(value)
-}
-
-
-public struct RoomPreviewArtifactsProjection {
-    public var rows: [RoomPreviewArtifactRowProjection]
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(rows: [RoomPreviewArtifactRowProjection]) {
-        self.rows = rows
-    }
-}
-
-#if compiler(>=6)
-extension RoomPreviewArtifactsProjection: Sendable {}
-#endif
-
-
-extension RoomPreviewArtifactsProjection: Equatable, Hashable {
-    public static func ==(lhs: RoomPreviewArtifactsProjection, rhs: RoomPreviewArtifactsProjection) -> Bool {
-        if lhs.rows != rhs.rows {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(rows)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomPreviewArtifactsProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewArtifactsProjection {
-        return
-            try RoomPreviewArtifactsProjection(
-                rows: FfiConverterSequenceTypeRoomPreviewArtifactRowProjection.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomPreviewArtifactsProjection, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeRoomPreviewArtifactRowProjection.write(value.rows, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomPreviewArtifactsProjection_lift(_ buf: RustBuffer) throws -> RoomPreviewArtifactsProjection {
-    return try FfiConverterTypeRoomPreviewArtifactsProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomPreviewArtifactsProjection_lower(_ value: RoomPreviewArtifactsProjection) -> RustBuffer {
-    return FfiConverterTypeRoomPreviewArtifactsProjection.lower(value)
-}
-
-
-public struct RoomPreviewArtifactsProjectionInput {
-    public var artifacts: [ArtifactRecord]
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(artifacts: [ArtifactRecord]) {
-        self.artifacts = artifacts
-    }
-}
-
-#if compiler(>=6)
-extension RoomPreviewArtifactsProjectionInput: Sendable {}
-#endif
-
-
-extension RoomPreviewArtifactsProjectionInput: Equatable, Hashable {
-    public static func ==(lhs: RoomPreviewArtifactsProjectionInput, rhs: RoomPreviewArtifactsProjectionInput) -> Bool {
-        if lhs.artifacts != rhs.artifacts {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(artifacts)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomPreviewArtifactsProjectionInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewArtifactsProjectionInput {
-        return
-            try RoomPreviewArtifactsProjectionInput(
-                artifacts: FfiConverterSequenceTypeArtifactRecord.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomPreviewArtifactsProjectionInput, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeArtifactRecord.write(value.artifacts, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomPreviewArtifactsProjectionInput_lift(_ buf: RustBuffer) throws -> RoomPreviewArtifactsProjectionInput {
-    return try FfiConverterTypeRoomPreviewArtifactsProjectionInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomPreviewArtifactsProjectionInput_lower(_ value: RoomPreviewArtifactsProjectionInput) -> RustBuffer {
-    return FfiConverterTypeRoomPreviewArtifactsProjectionInput.lower(value)
-}
-
-
-public struct RoomPreviewHeaderProjection {
-    public var accessLabel: String
-    public var accessIconSystemName: String
-    public var accessIsOpen: Bool
-    public var memberCountLabel: String?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(accessLabel: String, accessIconSystemName: String, accessIsOpen: Bool, memberCountLabel: String?) {
-        self.accessLabel = accessLabel
-        self.accessIconSystemName = accessIconSystemName
-        self.accessIsOpen = accessIsOpen
-        self.memberCountLabel = memberCountLabel
-    }
-}
-
-#if compiler(>=6)
-extension RoomPreviewHeaderProjection: Sendable {}
-#endif
-
-
-extension RoomPreviewHeaderProjection: Equatable, Hashable {
-    public static func ==(lhs: RoomPreviewHeaderProjection, rhs: RoomPreviewHeaderProjection) -> Bool {
-        if lhs.accessLabel != rhs.accessLabel {
-            return false
-        }
-        if lhs.accessIconSystemName != rhs.accessIconSystemName {
-            return false
-        }
-        if lhs.accessIsOpen != rhs.accessIsOpen {
-            return false
-        }
-        if lhs.memberCountLabel != rhs.memberCountLabel {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(accessLabel)
-        hasher.combine(accessIconSystemName)
-        hasher.combine(accessIsOpen)
-        hasher.combine(memberCountLabel)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomPreviewHeaderProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewHeaderProjection {
-        return
-            try RoomPreviewHeaderProjection(
-                accessLabel: FfiConverterString.read(from: &buf),
-                accessIconSystemName: FfiConverterString.read(from: &buf),
-                accessIsOpen: FfiConverterBool.read(from: &buf),
-                memberCountLabel: FfiConverterOptionString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomPreviewHeaderProjection, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.accessLabel, into: &buf)
-        FfiConverterString.write(value.accessIconSystemName, into: &buf)
-        FfiConverterBool.write(value.accessIsOpen, into: &buf)
-        FfiConverterOptionString.write(value.memberCountLabel, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomPreviewHeaderProjection_lift(_ buf: RustBuffer) throws -> RoomPreviewHeaderProjection {
-    return try FfiConverterTypeRoomPreviewHeaderProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomPreviewHeaderProjection_lower(_ value: RoomPreviewHeaderProjection) -> RustBuffer {
-    return FfiConverterTypeRoomPreviewHeaderProjection.lower(value)
-}
-
-
-public struct RoomPreviewHeaderProjectionInput {
-    public var room: CommunitySummary
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(room: CommunitySummary) {
-        self.room = room
-    }
-}
-
-#if compiler(>=6)
-extension RoomPreviewHeaderProjectionInput: Sendable {}
-#endif
-
-
-extension RoomPreviewHeaderProjectionInput: Equatable, Hashable {
-    public static func ==(lhs: RoomPreviewHeaderProjectionInput, rhs: RoomPreviewHeaderProjectionInput) -> Bool {
-        if lhs.room != rhs.room {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(room)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomPreviewHeaderProjectionInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewHeaderProjectionInput {
-        return
-            try RoomPreviewHeaderProjectionInput(
-                room: FfiConverterTypeCommunitySummary.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomPreviewHeaderProjectionInput, into buf: inout [UInt8]) {
-        FfiConverterTypeCommunitySummary.write(value.room, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomPreviewHeaderProjectionInput_lift(_ buf: RustBuffer) throws -> RoomPreviewHeaderProjectionInput {
-    return try FfiConverterTypeRoomPreviewHeaderProjectionInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomPreviewHeaderProjectionInput_lower(_ value: RoomPreviewHeaderProjectionInput) -> RustBuffer {
-    return FfiConverterTypeRoomPreviewHeaderProjectionInput.lower(value)
-}
-
-
 /**
  * A single explorer row: a room plus the signal that surfaced it. The
  * iOS side uses `reason_pubkeys` to render an avatar cluster and
@@ -45051,310 +41485,6 @@ public func FfiConverterTypeRoomRecommendation_lift(_ buf: RustBuffer) throws ->
 #endif
 public func FfiConverterTypeRoomRecommendation_lower(_ value: RoomRecommendation) -> RustBuffer {
     return FfiConverterTypeRoomRecommendation.lower(value)
-}
-
-
-public struct RoomRecommendationAvatarProjection {
-    public var pubkey: String
-    public var pictureUrl: String
-    public var displayInitial: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(pubkey: String, pictureUrl: String, displayInitial: String) {
-        self.pubkey = pubkey
-        self.pictureUrl = pictureUrl
-        self.displayInitial = displayInitial
-    }
-}
-
-#if compiler(>=6)
-extension RoomRecommendationAvatarProjection: Sendable {}
-#endif
-
-
-extension RoomRecommendationAvatarProjection: Equatable, Hashable {
-    public static func ==(lhs: RoomRecommendationAvatarProjection, rhs: RoomRecommendationAvatarProjection) -> Bool {
-        if lhs.pubkey != rhs.pubkey {
-            return false
-        }
-        if lhs.pictureUrl != rhs.pictureUrl {
-            return false
-        }
-        if lhs.displayInitial != rhs.displayInitial {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(pubkey)
-        hasher.combine(pictureUrl)
-        hasher.combine(displayInitial)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomRecommendationAvatarProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendationAvatarProjection {
-        return
-            try RoomRecommendationAvatarProjection(
-                pubkey: FfiConverterString.read(from: &buf),
-                pictureUrl: FfiConverterString.read(from: &buf),
-                displayInitial: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomRecommendationAvatarProjection, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.pubkey, into: &buf)
-        FfiConverterString.write(value.pictureUrl, into: &buf)
-        FfiConverterString.write(value.displayInitial, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomRecommendationAvatarProjection_lift(_ buf: RustBuffer) throws -> RoomRecommendationAvatarProjection {
-    return try FfiConverterTypeRoomRecommendationAvatarProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomRecommendationAvatarProjection_lower(_ value: RoomRecommendationAvatarProjection) -> RustBuffer {
-    return FfiConverterTypeRoomRecommendationAvatarProjection.lower(value)
-}
-
-
-public struct RoomRecommendationCardProjection {
-    public var byline: String
-    public var visibleAvatars: [RoomRecommendationAvatarProjection]
-    public var preloadPubkeys: [String]
-    public var overflowLabel: String?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(byline: String, visibleAvatars: [RoomRecommendationAvatarProjection], preloadPubkeys: [String], overflowLabel: String?) {
-        self.byline = byline
-        self.visibleAvatars = visibleAvatars
-        self.preloadPubkeys = preloadPubkeys
-        self.overflowLabel = overflowLabel
-    }
-}
-
-#if compiler(>=6)
-extension RoomRecommendationCardProjection: Sendable {}
-#endif
-
-
-extension RoomRecommendationCardProjection: Equatable, Hashable {
-    public static func ==(lhs: RoomRecommendationCardProjection, rhs: RoomRecommendationCardProjection) -> Bool {
-        if lhs.byline != rhs.byline {
-            return false
-        }
-        if lhs.visibleAvatars != rhs.visibleAvatars {
-            return false
-        }
-        if lhs.preloadPubkeys != rhs.preloadPubkeys {
-            return false
-        }
-        if lhs.overflowLabel != rhs.overflowLabel {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(byline)
-        hasher.combine(visibleAvatars)
-        hasher.combine(preloadPubkeys)
-        hasher.combine(overflowLabel)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomRecommendationCardProjection: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendationCardProjection {
-        return
-            try RoomRecommendationCardProjection(
-                byline: FfiConverterString.read(from: &buf),
-                visibleAvatars: FfiConverterSequenceTypeRoomRecommendationAvatarProjection.read(from: &buf),
-                preloadPubkeys: FfiConverterSequenceString.read(from: &buf),
-                overflowLabel: FfiConverterOptionString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomRecommendationCardProjection, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.byline, into: &buf)
-        FfiConverterSequenceTypeRoomRecommendationAvatarProjection.write(value.visibleAvatars, into: &buf)
-        FfiConverterSequenceString.write(value.preloadPubkeys, into: &buf)
-        FfiConverterOptionString.write(value.overflowLabel, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomRecommendationCardProjection_lift(_ buf: RustBuffer) throws -> RoomRecommendationCardProjection {
-    return try FfiConverterTypeRoomRecommendationCardProjection.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomRecommendationCardProjection_lower(_ value: RoomRecommendationCardProjection) -> RustBuffer {
-    return FfiConverterTypeRoomRecommendationCardProjection.lower(value)
-}
-
-
-public struct RoomRecommendationCardProjectionInput {
-    public var recommendation: RoomRecommendation
-    public var reasonProfiles: [RoomRecommendationReasonProfile]
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(recommendation: RoomRecommendation, reasonProfiles: [RoomRecommendationReasonProfile]) {
-        self.recommendation = recommendation
-        self.reasonProfiles = reasonProfiles
-    }
-}
-
-#if compiler(>=6)
-extension RoomRecommendationCardProjectionInput: Sendable {}
-#endif
-
-
-extension RoomRecommendationCardProjectionInput: Equatable, Hashable {
-    public static func ==(lhs: RoomRecommendationCardProjectionInput, rhs: RoomRecommendationCardProjectionInput) -> Bool {
-        if lhs.recommendation != rhs.recommendation {
-            return false
-        }
-        if lhs.reasonProfiles != rhs.reasonProfiles {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(recommendation)
-        hasher.combine(reasonProfiles)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomRecommendationCardProjectionInput: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendationCardProjectionInput {
-        return
-            try RoomRecommendationCardProjectionInput(
-                recommendation: FfiConverterTypeRoomRecommendation.read(from: &buf),
-                reasonProfiles: FfiConverterSequenceTypeRoomRecommendationReasonProfile.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomRecommendationCardProjectionInput, into buf: inout [UInt8]) {
-        FfiConverterTypeRoomRecommendation.write(value.recommendation, into: &buf)
-        FfiConverterSequenceTypeRoomRecommendationReasonProfile.write(value.reasonProfiles, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomRecommendationCardProjectionInput_lift(_ buf: RustBuffer) throws -> RoomRecommendationCardProjectionInput {
-    return try FfiConverterTypeRoomRecommendationCardProjectionInput.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomRecommendationCardProjectionInput_lower(_ value: RoomRecommendationCardProjectionInput) -> RustBuffer {
-    return FfiConverterTypeRoomRecommendationCardProjectionInput.lower(value)
-}
-
-
-public struct RoomRecommendationReasonProfile {
-    public var pubkey: String
-    public var profile: ProfileMetadata?
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(pubkey: String, profile: ProfileMetadata?) {
-        self.pubkey = pubkey
-        self.profile = profile
-    }
-}
-
-#if compiler(>=6)
-extension RoomRecommendationReasonProfile: Sendable {}
-#endif
-
-
-extension RoomRecommendationReasonProfile: Equatable, Hashable {
-    public static func ==(lhs: RoomRecommendationReasonProfile, rhs: RoomRecommendationReasonProfile) -> Bool {
-        if lhs.pubkey != rhs.pubkey {
-            return false
-        }
-        if lhs.profile != rhs.profile {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(pubkey)
-        hasher.combine(profile)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomRecommendationReasonProfile: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomRecommendationReasonProfile {
-        return
-            try RoomRecommendationReasonProfile(
-                pubkey: FfiConverterString.read(from: &buf),
-                profile: FfiConverterOptionTypeProfileMetadata.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RoomRecommendationReasonProfile, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.pubkey, into: &buf)
-        FfiConverterOptionTypeProfileMetadata.write(value.profile, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomRecommendationReasonProfile_lift(_ buf: RustBuffer) throws -> RoomRecommendationReasonProfile {
-    return try FfiConverterTypeRoomRecommendationReasonProfile.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomRecommendationReasonProfile_lower(_ value: RoomRecommendationReasonProfile) -> RustBuffer {
-    return FfiConverterTypeRoomRecommendationReasonProfile.lower(value)
 }
 
 
@@ -50701,84 +46831,6 @@ public func FfiConverterTypeWebMetadataRequestProjectionInput_lower(_ value: Web
 }
 
 
-public struct WhatsNewEntry {
-    public var shippedAtIso: String
-    public var shippedAtUnixSeconds: UInt64
-    public var lines: [String]
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(shippedAtIso: String, shippedAtUnixSeconds: UInt64, lines: [String]) {
-        self.shippedAtIso = shippedAtIso
-        self.shippedAtUnixSeconds = shippedAtUnixSeconds
-        self.lines = lines
-    }
-}
-
-#if compiler(>=6)
-extension WhatsNewEntry: Sendable {}
-#endif
-
-
-extension WhatsNewEntry: Equatable, Hashable {
-    public static func ==(lhs: WhatsNewEntry, rhs: WhatsNewEntry) -> Bool {
-        if lhs.shippedAtIso != rhs.shippedAtIso {
-            return false
-        }
-        if lhs.shippedAtUnixSeconds != rhs.shippedAtUnixSeconds {
-            return false
-        }
-        if lhs.lines != rhs.lines {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(shippedAtIso)
-        hasher.combine(shippedAtUnixSeconds)
-        hasher.combine(lines)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeWhatsNewEntry: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WhatsNewEntry {
-        return
-            try WhatsNewEntry(
-                shippedAtIso: FfiConverterString.read(from: &buf),
-                shippedAtUnixSeconds: FfiConverterUInt64.read(from: &buf),
-                lines: FfiConverterSequenceString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: WhatsNewEntry, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.shippedAtIso, into: &buf)
-        FfiConverterUInt64.write(value.shippedAtUnixSeconds, into: &buf)
-        FfiConverterSequenceString.write(value.lines, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWhatsNewEntry_lift(_ buf: RustBuffer) throws -> WhatsNewEntry {
-    return try FfiConverterTypeWhatsNewEntry.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWhatsNewEntry_lower(_ value: WhatsNewEntry) -> RustBuffer {
-    return FfiConverterTypeWhatsNewEntry.lower(value)
-}
-
-
 /**
  * One What's New changelog entry from the bundled `resources/whats-new.json`.
  *
@@ -50885,84 +46937,6 @@ public func FfiConverterTypeWhatsNewEntryRow_lift(_ buf: RustBuffer) throws -> W
 #endif
 public func FfiConverterTypeWhatsNewEntryRow_lower(_ value: WhatsNewEntryRow) -> RustBuffer {
     return FfiConverterTypeWhatsNewEntryRow.lower(value)
-}
-
-
-public struct WhatsNewPresentationSnapshot {
-    public var entries: [WhatsNewEntry]
-    public var shouldPresent: Bool
-    public var errorMessage: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(entries: [WhatsNewEntry], shouldPresent: Bool, errorMessage: String) {
-        self.entries = entries
-        self.shouldPresent = shouldPresent
-        self.errorMessage = errorMessage
-    }
-}
-
-#if compiler(>=6)
-extension WhatsNewPresentationSnapshot: Sendable {}
-#endif
-
-
-extension WhatsNewPresentationSnapshot: Equatable, Hashable {
-    public static func ==(lhs: WhatsNewPresentationSnapshot, rhs: WhatsNewPresentationSnapshot) -> Bool {
-        if lhs.entries != rhs.entries {
-            return false
-        }
-        if lhs.shouldPresent != rhs.shouldPresent {
-            return false
-        }
-        if lhs.errorMessage != rhs.errorMessage {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(entries)
-        hasher.combine(shouldPresent)
-        hasher.combine(errorMessage)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeWhatsNewPresentationSnapshot: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WhatsNewPresentationSnapshot {
-        return
-            try WhatsNewPresentationSnapshot(
-                entries: FfiConverterSequenceTypeWhatsNewEntry.read(from: &buf),
-                shouldPresent: FfiConverterBool.read(from: &buf),
-                errorMessage: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: WhatsNewPresentationSnapshot, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeWhatsNewEntry.write(value.entries, into: &buf)
-        FfiConverterBool.write(value.shouldPresent, into: &buf)
-        FfiConverterString.write(value.errorMessage, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWhatsNewPresentationSnapshot_lift(_ buf: RustBuffer) throws -> WhatsNewPresentationSnapshot {
-    return try FfiConverterTypeWhatsNewPresentationSnapshot.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeWhatsNewPresentationSnapshot_lower(_ value: WhatsNewPresentationSnapshot) -> RustBuffer {
-    return FfiConverterTypeWhatsNewPresentationSnapshot.lower(value)
 }
 
 
@@ -53993,90 +49967,6 @@ extension NetworkRelayConnectionPolicyAction: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
-public enum Nip05AvailabilityState {
-
-    case idle
-    case invalid
-    case available
-    case taken
-}
-
-
-#if compiler(>=6)
-extension Nip05AvailabilityState: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeNip05AvailabilityState: FfiConverterRustBuffer {
-    typealias SwiftType = Nip05AvailabilityState
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nip05AvailabilityState {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-
-        case 1: return .idle
-
-        case 2: return .invalid
-
-        case 3: return .available
-
-        case 4: return .taken
-
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: Nip05AvailabilityState, into buf: inout [UInt8]) {
-        switch value {
-
-
-        case .idle:
-            writeInt(&buf, Int32(1))
-
-
-        case .invalid:
-            writeInt(&buf, Int32(2))
-
-
-        case .available:
-            writeInt(&buf, Int32(3))
-
-
-        case .taken:
-            writeInt(&buf, Int32(4))
-
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNip05AvailabilityState_lift(_ buf: RustBuffer) throws -> Nip05AvailabilityState {
-    return try FfiConverterTypeNip05AvailabilityState.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeNip05AvailabilityState_lower(_ value: Nip05AvailabilityState) -> RustBuffer {
-    return FfiConverterTypeNip05AvailabilityState.lower(value)
-}
-
-
-extension Nip05AvailabilityState: Equatable, Hashable {}
-
-
-
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
 public enum NostrContentRun {
 
     case text(value: String
@@ -55895,167 +51785,6 @@ public func FfiConverterTypeRoomInviteSelectionAction_lower(_ value: RoomInviteS
 
 
 extension RoomInviteSelectionAction: Equatable, Hashable {}
-
-
-
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum RoomLibraryCardKind {
-
-    case article
-    case book
-    case podcast
-    case generic
-}
-
-
-#if compiler(>=6)
-extension RoomLibraryCardKind: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomLibraryCardKind: FfiConverterRustBuffer {
-    typealias SwiftType = RoomLibraryCardKind
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomLibraryCardKind {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-
-        case 1: return .article
-
-        case 2: return .book
-
-        case 3: return .podcast
-
-        case 4: return .generic
-
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: RoomLibraryCardKind, into buf: inout [UInt8]) {
-        switch value {
-
-
-        case .article:
-            writeInt(&buf, Int32(1))
-
-
-        case .book:
-            writeInt(&buf, Int32(2))
-
-
-        case .podcast:
-            writeInt(&buf, Int32(3))
-
-
-        case .generic:
-            writeInt(&buf, Int32(4))
-
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryCardKind_lift(_ buf: RustBuffer) throws -> RoomLibraryCardKind {
-    return try FfiConverterTypeRoomLibraryCardKind.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomLibraryCardKind_lower(_ value: RoomLibraryCardKind) -> RustBuffer {
-    return FfiConverterTypeRoomLibraryCardKind.lower(value)
-}
-
-
-extension RoomLibraryCardKind: Equatable, Hashable {}
-
-
-
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-
-public enum RoomPreviewSecondaryAction {
-
-    case none
-    case peekInside
-    case openFullRoom
-}
-
-
-#if compiler(>=6)
-extension RoomPreviewSecondaryAction: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRoomPreviewSecondaryAction: FfiConverterRustBuffer {
-    typealias SwiftType = RoomPreviewSecondaryAction
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RoomPreviewSecondaryAction {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-
-        case 1: return .none
-
-        case 2: return .peekInside
-
-        case 3: return .openFullRoom
-
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: RoomPreviewSecondaryAction, into buf: inout [UInt8]) {
-        switch value {
-
-
-        case .none:
-            writeInt(&buf, Int32(1))
-
-
-        case .peekInside:
-            writeInt(&buf, Int32(2))
-
-
-        case .openFullRoom:
-            writeInt(&buf, Int32(3))
-
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomPreviewSecondaryAction_lift(_ buf: RustBuffer) throws -> RoomPreviewSecondaryAction {
-    return try FfiConverterTypeRoomPreviewSecondaryAction.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRoomPreviewSecondaryAction_lower(_ value: RoomPreviewSecondaryAction) -> RustBuffer {
-    return FfiConverterTypeRoomPreviewSecondaryAction.lower(value)
-}
-
-
-extension RoomPreviewSecondaryAction: Equatable, Hashable {}
 
 
 
@@ -59426,31 +55155,6 @@ fileprivate struct FfiConverterSequenceTypeCommentRecordRow: FfiConverterRustBuf
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeCommentReferenceBucket: FfiConverterRustBuffer {
-    typealias SwiftType = [CommentReferenceBucket]
-
-    public static func write(_ value: [CommentReferenceBucket], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeCommentReferenceBucket.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CommentReferenceBucket] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [CommentReferenceBucket]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeCommentReferenceBucket.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterSequenceTypeCommentThreadNode: FfiConverterRustBuffer {
     typealias SwiftType = [CommentThreadNode]
 
@@ -59876,31 +55580,6 @@ fileprivate struct FfiConverterSequenceTypeHighlightRecord: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeHighlightReferenceBucket: FfiConverterRustBuffer {
-    typealias SwiftType = [HighlightReferenceBucket]
-
-    public static func write(_ value: [HighlightReferenceBucket], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeHighlightReferenceBucket.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HighlightReferenceBucket] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [HighlightReferenceBucket]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeHighlightReferenceBucket.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterSequenceTypeHighlightResourceAuthorProfile: FfiConverterRustBuffer {
     typealias SwiftType = [HighlightResourceAuthorProfile]
 
@@ -59943,31 +55622,6 @@ fileprivate struct FfiConverterSequenceTypeHighlightRow: FfiConverterRustBuffer 
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeHighlightRow.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeHomeFeedItem: FfiConverterRustBuffer {
-    typealias SwiftType = [HomeFeedItem]
-
-    public static func write(_ value: [HomeFeedItem], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeHomeFeedItem.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [HomeFeedItem] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [HomeFeedItem]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeHomeFeedItem.read(from: &buf))
         }
         return seq
     }
@@ -60626,31 +56280,6 @@ fileprivate struct FfiConverterSequenceTypeRoomInviteSuggestion: FfiConverterRus
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeRoomLane: FfiConverterRustBuffer {
-    typealias SwiftType = [RoomLane]
-
-    public static func write(_ value: [RoomLane], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeRoomLane.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RoomLane] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [RoomLane]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeRoomLane.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterSequenceTypeRoomLaneRow: FfiConverterRustBuffer {
     typealias SwiftType = [RoomLaneRow]
 
@@ -60668,106 +56297,6 @@ fileprivate struct FfiConverterSequenceTypeRoomLaneRow: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeRoomLaneRow.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeRoomPreviewArtifactRowProjection: FfiConverterRustBuffer {
-    typealias SwiftType = [RoomPreviewArtifactRowProjection]
-
-    public static func write(_ value: [RoomPreviewArtifactRowProjection], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeRoomPreviewArtifactRowProjection.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RoomPreviewArtifactRowProjection] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [RoomPreviewArtifactRowProjection]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeRoomPreviewArtifactRowProjection.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeRoomRecommendation: FfiConverterRustBuffer {
-    typealias SwiftType = [RoomRecommendation]
-
-    public static func write(_ value: [RoomRecommendation], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeRoomRecommendation.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RoomRecommendation] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [RoomRecommendation]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeRoomRecommendation.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeRoomRecommendationAvatarProjection: FfiConverterRustBuffer {
-    typealias SwiftType = [RoomRecommendationAvatarProjection]
-
-    public static func write(_ value: [RoomRecommendationAvatarProjection], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeRoomRecommendationAvatarProjection.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RoomRecommendationAvatarProjection] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [RoomRecommendationAvatarProjection]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeRoomRecommendationAvatarProjection.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeRoomRecommendationReasonProfile: FfiConverterRustBuffer {
-    typealias SwiftType = [RoomRecommendationReasonProfile]
-
-    public static func write(_ value: [RoomRecommendationReasonProfile], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeRoomRecommendationReasonProfile.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [RoomRecommendationReasonProfile] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [RoomRecommendationReasonProfile]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeRoomRecommendationReasonProfile.read(from: &buf))
         }
         return seq
     }
@@ -60943,31 +56472,6 @@ fileprivate struct FfiConverterSequenceTypeWebBookmarkRow: FfiConverterRustBuffe
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeWebBookmarkRow.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeWhatsNewEntry: FfiConverterRustBuffer {
-    typealias SwiftType = [WhatsNewEntry]
-
-    public static func write(_ value: [WhatsNewEntry], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeWhatsNewEntry.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [WhatsNewEntry] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [WhatsNewEntry]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeWhatsNewEntry.read(from: &buf))
         }
         return seq
     }
@@ -61240,9 +56744,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlighterapp_tick() != 48249) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_apply_network_path_status() != 37260) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_apply_profile_follow_mutation() != 50949) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -61264,16 +56765,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_clear_podcast_clip_selection() != 42605) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_clear_recent_searches_snapshot() != 16414) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_complete_onboarding_interests() != 49785) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_confirm_pending_join() != 50218) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_count_artifact_comments() != 14471) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_create_room() != 28154) {
@@ -61339,12 +56834,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_comment_scope() != 7691) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_detail_projection() != 56154) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_artifact_detail_route() != 10925) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_blossom_server_settings_snapshot() != 30223) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -61396,19 +56885,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_highlight_source_kind() != 42257) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_home_feed_snapshot() != 9098) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_joined_communities() != 18685) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_network_cache_stats_snapshot() != 16607) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_network_settings_snapshot() != 60252) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_network_wifi_only_preference_snapshot() != 11814) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_onboarding_interest_projection() != 3646) {
@@ -61435,25 +56912,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_playback_rehydration_snapshot() != 22927) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_profile_page_snapshot() != 21484) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_profile_update_action() != 16735) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_relay_hosted_rooms_snapshot() != 43219) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_browse_snapshot() != 45616) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_discussion_snapshot() != 35341) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_explorer_snapshot() != 45699) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_home_snapshot() != 12801) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_room_invite_avatar_projection() != 27101) {
@@ -61463,9 +56928,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_article_results_snapshot() != 52032) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_chrome_snapshot() != 48174) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_search_results_snapshot() != 55653) {
@@ -61480,13 +56942,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_web_metadata() != 13151) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_import_relays_from_npub_snapshot() != 45090) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_init_default_blossom_servers() != 33982) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_is_nip05_username_valid() != 33870) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_is_onboarding_complete() != 27446) {
@@ -61513,13 +56969,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_mark_podcast_clip_out() != 19205) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_mark_whats_new_seen() != 62998) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_normalize_isbn_input() != 8882) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_normalize_nip05_username() != 21732) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_nostr_entity_fallback_label() != 41592) {
@@ -61544,12 +56994,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_plan_waveform_peaks() != 22444) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_prepare_whats_new() != 28000) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_probe_relay_nip11_snapshot() != 46156) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_add_relay_sheet() != 14886) {
@@ -61717,9 +57161,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_highlight_resource_header() != 61046) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_home_feed_snapshot_apply() != 48171) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_import_relays() != 28442) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -61757,12 +57198,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_nostr_entity_article_card() != 6476) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_onboarding_create_account() != 11608) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_onboarding_username_check() != 9841) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_podcast_clip_publish_result() != 14867) {
@@ -61834,16 +57269,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_avatar() != 27524) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_browse_snapshot_apply() != 36863) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_cover_card() != 60263) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_explorer_featured_start_result() != 31917) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_explorer_join_request_result() != 29689) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_invite_selection() != 36933) {
@@ -61853,33 +57279,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_invite_send_result() != 60512) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_article_card() != 56696) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_book_card() != 17129) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_card_kind() != 7758) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_generic_card() != 61708) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_library_podcast_card() != 47926) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_preview_action() != 45992) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_preview_artifacts() != 32023) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_preview_header() != 41801) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_project_room_recommendation_card() != 50552) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_project_search_community_row() != 30600) {
@@ -61993,12 +57392,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_record_podcast_playback_position() != 26014) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_record_recent_search_snapshot() != 36017) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_refresh_relay_connections_for_foreground() != 19095) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_remove_relay() != 35958) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -62035,9 +57428,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlightercore_set_relay_roles() != 30185) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_set_wifi_only_enabled() != 17319) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_highlighter_core_checksum_method_highlightercore_share_extension_communities_snapshot() != 38830) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -62051,9 +57441,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_start_room_discovery() != 41569) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_start_room_explorer_featured_rooms() != 13434) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_article() != 30320) {
@@ -62108,9 +57495,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_subscribe_web_bookmarks() != 14611) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_suggest_nip05_username() != 36133) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_toggle_article_bookmark_snapshot() != 16959) {

@@ -171,10 +171,8 @@ struct LoginView: View {
         errorMessage = nil
 
         if trimmed.hasPrefix("nsec1") {
-            _ = KeychainService.saveNsec(trimmed)
             kernel.app.dispatch(.signInNsec(nsec: trimmed))
         } else if trimmed.hasPrefix("bunker://") || trimmed.hasPrefix("nostrconnect://") {
-            _ = KeychainService.saveBunkerURI(trimmed)
             kernel.app.dispatch(.pairBunker(uri: trimmed))
         } else {
             errorMessage = "Unrecognized input — paste an nsec1…, bunker://, or nostrconnect:// URI"

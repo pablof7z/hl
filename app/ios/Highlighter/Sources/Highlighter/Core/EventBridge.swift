@@ -176,8 +176,8 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     @MainActor
     private func dispatchAppScope(_ change: DataChangeType) {
         switch change {
-        case .signerConnected(let user):
-            if let appStore { Task { await appStore.completeLogin(user: user) } }
+        case .signerConnected:
+            break // auth state is now kernel-owned (kernel.appRoot → App.swift onChange)
         case .relayDiagnosticsUpdated(let diagnostics):
             let store = registry.withLock { reg in reg.networkStore?.value }
             if let store { Task { await store.applyDiagnostics(diagnostics) } }
