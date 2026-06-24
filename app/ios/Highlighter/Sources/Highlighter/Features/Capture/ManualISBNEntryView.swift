@@ -16,7 +16,7 @@ struct ManualISBNEntryView: View {
     @FocusState private var focused: Bool
 
     private var normalizedISBN: String? {
-        appStore.safeCore.normalizeIsbnInput(raw)
+        normalizeIsbn(raw)
     }
 
     var body: some View {

@@ -503,13 +503,19 @@ private struct AvatarView: View {
         }
     }
 
+    // D1 inlined: mirrors `app/core/src/room_invites.rs::avatar_projection`.
+    // Pure computation over the profile — prefer the profile picture and the
+    // uppercased first letter of the display name, falling back to the first
+    // character of the pubkey hex when no name is available.
     private var avatarProjection: RoomInviteAvatarProjection {
-        appStore.safeCore.getRoomInviteAvatarProjection(
-            input: RoomInviteAvatarProjectionInput(
-                pubkeyHex: pubkeyHex,
-                profile: profile
-            )
-        )
+        let pictureUrl = profile?.picture ?? ""
+        let displayInitial: String
+        if let first = profile?.name.first {
+            displayInitial = String(first).uppercased()
+        } else {
+            displayInitial = String(pubkeyHex.prefix(1)).uppercased()
+        }
+        return RoomInviteAvatarProjection(pictureUrl: pictureUrl, displayInitial: displayInitial)
     }
 }
 

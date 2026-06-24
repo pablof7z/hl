@@ -50,7 +50,7 @@ struct BookScannerView: View {
                 return
             }
             await model.start { payload in
-                guard let isbn = appStore.safeCore.normalizeIsbnInput(payload) else {
+                guard let isbn = normalizeIsbn(payload) else {
                     model.flashNotABook()
                     return
                 }
@@ -388,4 +388,83 @@ struct ScannerReticleView: View {
             }
         }
     }
+}
+
+// MARK: - ISBN normalization (D1 inlined)
+//
+// Mirrors `app/core/src/isbn_lookup.rs::normalize_isbn`. Per the D1 doctrine
+// this pure computation is owned by Swift — Rust still owns the network-backed
+// ISBN catalog lookups that consume the normalized value. Shared file-scope
+// helper used by both `BookScannerView` and `ManualISBNEntryView`.
+
+/// Normalize a scanned or typed ISBN into a canonical Bookland ISBN-13.
+///
+/// Returns the 13-digit Bookland string when `raw` is a valid ISBN-13 or
+/// ISBN-10 (the latter converted to ISBN-13), or `nil` when it is neither.
+func normalizeIsbn(_ raw: String) -> String? {
+    let digits = String(raw.filter { !$0.isWhitespace && $0 != "-" })
+
+    if isbnIsValidBookland13(digits) {
+        return digits
+    }
+    if isbnIsValid10(digits) {
+        return isbn10To13(digits)
+    }
+    return nil
+}
+
+private func isbnIsAsciiDigit(_ c: Character) -> Bool {
+    c.isASCII && c.isNumber
+}
+
+private func isbnIsValidBookland13(_ digits: String) -> Bool {
+    guard digits.count == 13,
+          digits.allSatisfy(isbnIsAsciiDigit),
+          digits.hasPrefix("978") || digits.hasPrefix("979")
+    else { return false }
+    return isbnIsValid13Checksum(digits)
+}
+
+private func isbnIsValid13Checksum(_ digits: String) -> Bool {
+    guard digits.count == 13 else { return false }
+    var sum = 0
+    for (i, c) in digits.enumerated() {
+        guard isbnIsAsciiDigit(c), let d = c.wholeNumberValue else { return false }
+        sum += i % 2 == 0 ? d : d * 3
+    }
+    return sum % 10 == 0
+}
+
+private func isbnIsValid10(_ digits: String) -> Bool {
+    guard digits.count == 10 else { return false }
+    var sum = 0
+    for (i, c) in digits.enumerated() {
+        let value: Int
+        if (c == "X" || c == "x"), i == 9 {
+            value = 10
+        } else if isbnIsAsciiDigit(c), let d = c.wholeNumberValue {
+            value = d
+        } else {
+            return false
+        }
+        sum += value * (10 - i)
+    }
+    return sum % 11 == 0
+}
+
+/// Convert a validated 10-digit ISBN to ISBN-13 by prepending "978" and
+/// recomputing the final check digit per the standard rule.
+private func isbn10To13(_ isbn10: String) -> String {
+    let prefix = "978" + String(isbn10.prefix(9))
+    return prefix + String(isbnCompute13CheckDigit(prefix))
+}
+
+private func isbnCompute13CheckDigit(_ prefix12: String) -> Character {
+    var sum = 0
+    for (i, c) in prefix12.enumerated() {
+        let d = c.wholeNumberValue ?? 0
+        sum += i % 2 == 0 ? d : d * 3
+    }
+    let check = (10 - (sum % 10)) % 10
+    return Character(String(check))
 }
