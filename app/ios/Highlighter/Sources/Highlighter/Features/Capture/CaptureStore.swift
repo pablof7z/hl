@@ -76,14 +76,12 @@ final class CaptureStore {
     /// Current crop box for the selected passage (Vision normalized). Native.
     private(set) var highlightCropBox: CGRect?
 
-    @ObservationIgnored private let safeCore: SafeHighlighterCore
     @ObservationIgnored private let kernel: HighlighterAppKernel
     @ObservationIgnored private var processedJPEG: ImageProcessing.Result?
     @ObservationIgnored private var selectedHighlightBoxes: [CGRect] = []
     @ObservationIgnored private var highlightCropMarginFraction: Double = 0.08
 
-    init(safeCore: SafeHighlighterCore, kernel: HighlighterAppKernel) {
-        self.safeCore = safeCore
+    init(kernel: HighlighterAppKernel) {
         self.kernel = kernel
     }
 
@@ -121,35 +119,22 @@ final class CaptureStore {
 
     // MARK: - Capture entry (native pixel pipeline → kernel OCR)
 
-    /// User snapped a photo. Native: strip EXIF, run OCR once to detect a
-    /// two-page spread, crop to the dominant page. Then hand the cropped handle
-    /// to the kernel for the authoritative OCR → snapshot.
+    /// User snapped a photo. Native: strip EXIF, then hand the handle
+    /// to the kernel for authoritative OCR → snapshot.
     func handleCapturedImage(_ image: UIImage) {
         reset(keepingPickerSelection: false)
         phase = .processing
         thumbnail = image
         kernel.openCapture()
-        prefillRecentBook()
 
         Task {
-            guard let initial = ImageProcessing.stripMetadataAndEncode(image) else {
+            guard let processed = ImageProcessing.stripMetadataAndEncode(image) else {
                 self.uploadError = ImageProcessing.failureMessage
                 self.phase = .reviewing
                 return
             }
-            // Native OCR ONLY to detect + crop a two-page spread (pixel work);
-            // the kernel re-OCRs the cropped image for the authoritative draft.
-            let initialLines = await self.recognize(processed: initial)
-            let processed: ImageProcessing.Result
-            if let detection = self.safeCore.detectOcrActivePage(initialLines),
-               let cropped = ImageProcessing.cropToPage(initial, pageRect: detection.pageRect.cgRect) {
-                processed = cropped
-                if let croppedThumb = UIImage(data: cropped.data) { self.thumbnail = croppedThumb }
-            } else {
-                processed = initial
-            }
             self.processedJPEG = processed
-            // Hand the cropped page to the kernel: write a data_dir handle, then
+            // Hand the image to the kernel: write a data_dir handle, then
             // hl.ocr.recognize → kernel OCR → captureSnapshot (markdown/words).
             guard let handle = CapturePresenter.writeHandle(processed.data, ext: "jpg") else {
                 self.uploadError = ImageProcessing.failureMessage
@@ -160,15 +145,6 @@ final class CaptureStore {
             // Upload the un-annotated page now so a picture-only (no-quote)
             // publish has its photo; a later stash re-uploads the annotated crop.
             self.startUpload(processed: processed)
-        }
-    }
-
-    private func prefillRecentBook() {
-        guard selectedBook == nil else { return }
-        Task {
-            let snapshot = await safeCore.getBookPickerSnapshot(query: "", recentLimit: 1, searchLimit: 0)
-            guard let book = snapshot.recents.first, self.selectedBook == nil else { return }
-            self.selectedBook = .existing(book)
         }
     }
 
@@ -250,19 +226,6 @@ final class CaptureStore {
     }
 
     // MARK: - Internals
-
-    private func recognize(processed: ImageProcessing.Result) async -> [OCRLine] {
-        guard let provider = CGDataProvider(data: processed.data as CFData),
-              let cgImage = CGImage(
-                jpegDataProviderSource: provider,
-                decode: nil,
-                shouldInterpolate: true,
-                intent: .defaultIntent
-              ) else {
-            return []
-        }
-        return await OCRService.recognizeLines(in: cgImage)
-    }
 
     private func dispatchSelectedBook() {
         switch selectedBook {

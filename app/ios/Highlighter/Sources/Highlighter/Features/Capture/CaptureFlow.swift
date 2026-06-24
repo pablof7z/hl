@@ -30,7 +30,7 @@ private struct CaptureFlowModifier: ViewModifier {
         content
             .task {
                 if store == nil {
-                    store = CaptureStore(safeCore: appStore.safeCore, kernel: kernel)
+                    store = CaptureStore(kernel: kernel)
                 }
             }
             .fullScreenCover(isPresented: cameraBinding) {
