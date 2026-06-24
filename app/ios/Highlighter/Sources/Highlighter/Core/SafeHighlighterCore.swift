@@ -58,16 +58,9 @@ actor SafeHighlighterCore {
         await core.publishPodcastComposerClip(input: input)
     }
 
-    // MARK: - Relay config (bespoke nostrdb + network fetch paths)
-    // Relay config is sourced from kind:10002 + kind:30078 until the kernel
-    // exposes relay management directly.
-
-    func queryUserRelayConfigs(pubkeyHex: String) -> [RelayConfig] {
-        core.queryUserRelayConfigs(pubkeyHex: pubkeyHex)
-    }
-
     /// Fetch another user's kind:10002 relay list from the indexer relay pool.
     /// Used by the "Import from npub" flow in Network Settings.
+    /// Note: calls the raw HighlighterCore directly (not via NMP slot).
     func fetchRelaysForPubkey(pubkeyHex: String) async -> [RelayConfig] {
         await core.fetchRelaysForPubkey(pubkeyHex: pubkeyHex)
     }

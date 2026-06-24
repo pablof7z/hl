@@ -1007,7 +1007,6 @@ mod tests {
                         | Effect::DispatchShareToRoom { .. }
                         | Effect::DispatchBookmarkAction { .. }
                         | Effect::DispatchReactAction { .. }
-                        | Effect::PublishRoomsRelayList { .. }
                 )
             })
             .collect();

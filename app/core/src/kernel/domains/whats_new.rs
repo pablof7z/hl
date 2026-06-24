@@ -416,8 +416,7 @@ mod tests {
             .filter(|e| {
                 matches!(
                     e,
-                    Effect::PublishRoomsRelayList { .. }
-                        | Effect::PublishHighlightEvent { .. }
+                    Effect::PublishHighlightEvent { .. }
                         | Effect::DispatchFollowAction { .. }
                         | Effect::DispatchNip29Action { .. }
                         | Effect::DispatchShareToRoom { .. }

@@ -133,14 +133,6 @@ impl HighlighterCore {
         *self.callback_slot.write() = Some(callback);
     }
 
-    /// Read the user's configured relay list from the local event store.
-    /// Source of truth: kind:10002 (NIP-65) + kind:30078 app-data. Falls
-    /// back to seed defaults when no events are present. Non-blocking (ndb read).
-    pub fn query_user_relay_configs(&self, pubkey_hex: String) -> Vec<crate::relays::RelayConfig> {
-        crate::relays::query_relays(self.runtime.ndb(), &pubkey_hex)
-            .unwrap_or_else(|_| crate::relays::seed_defaults())
-    }
-
     /// Fetch another nostr user's relay list (kind:10002 NIP-65) from the
     /// indexer relay pool and return their configured relays. Used by the
     /// "Import from npub" flow. Returns an empty list on parse errors or when

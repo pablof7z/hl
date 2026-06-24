@@ -89,20 +89,6 @@ pub enum Effect {
     /// single `ActorCommand::AddRelay` with the new role (nmp upserts).
     /// Fire-and-forget. D3: no wss-scheme literals.
     SetRelayRole { url: String, role: String },
-    /// Sign and publish a kind:30078 app-data event via
-    /// `ActorCommand::PublishRawEvent`.
-    ///
-    /// Used to persist the hl rooms relay list under the hl-owned d-tag
-    /// `"com.highlighter.relays"`. The kernel builds the JSON `content` and
-    /// the `["d", "com.highlighter.relays"]` tag; the active signer signs it
-    /// through nmp's standard publish path. Fire-and-forget: nmp handles relay
-    /// routing via `PublishTarget::Auto` (NIP-65 outbox; D3). No wss-scheme
-    /// literals in the kernel — relay URLs are embedded inside `content` only.
-    PublishRoomsRelayList {
-        /// JSON-serialized rooms relay list to embed in the event content.
-        content: String,
-    },
-
     // ── Phase 3B additions (append-only) ─────────────────────────────────────
     /// Call `nmp_nip29::register::wire_joined_groups(nmp_ref, pubkey, "")`.
     ///

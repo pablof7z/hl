@@ -7,7 +7,6 @@ import SwiftUI
 struct ImportRelaysSheet: View {
     let store: NetworkSettingsStore
 
-    @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var npubText: String = ""
@@ -161,7 +160,7 @@ struct ImportRelaysSheet: View {
         selectedUrls = []
         isFetching = true
         defer { isFetching = false }
-        let configs = await appStore.fetchRelaysForPubkey(source.submitNpub)
+        let configs = await store.fetchRelaysForPubkey(source.submitNpub)
         if configs.isEmpty {
             errorText = "No relay list found for that pubkey. Make sure you have at least one Indexer relay enabled and the user has published a kind:10002 event."
         } else {

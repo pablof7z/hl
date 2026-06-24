@@ -468,6 +468,16 @@ final class HighlighterAppKernel {
         app.dispatch(.setBookPickerQuery(query: query, recentLimit: 30, searchLimit: 20))
     }
 
+    // MARK: - Phase 7 Part C: relay list from NMP slot
+
+    /// Relay list snapshot from NMP's configured_relays slot. Used by
+    /// `NetworkSettingsStore.load()` to hydrate the relay list without reading
+    /// nostrdb. Rooms/indexer flags are NOT carried here — they come from
+    /// UserDefaults (`hl.relays.app_flags`).
+    var relayListSnapshot: [KernelRelayRow] {
+        app.relayListSnapshot()
+    }
+
     // MARK: - Phase 7: relay diagnostics lifecycle
 
     /// Open the relay-diagnostics view. The kernel streams `RelayDiagnosticsViewSnapshot`

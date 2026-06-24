@@ -4,14 +4,11 @@
 //!   - `AppAction::AddRelay` → `Effect::AddRelay`
 //!   - `AppAction::RemoveRelay` → `Effect::RemoveRelay`
 //!   - `AppAction::SetRelayRole` → `Effect::SetRelayRole`
-//!   - `AppAction::SetRoomsRelayList` → `Effect::PublishRoomsRelayList`
 //!
 //! ## Architectural invariants
 //!
 //! - **D3**: no wss-scheme literals anywhere in this module. All relay URLs come
 //!   from the caller (`AppAction` payload) or from the injected `RelayPolicy`.
-//!   The only string constant is the hl-owned d-tag `"com.highlighter.relays"`
-//!   for the kind:30078 rooms relay list (a product identifier, not a URL).
 //! - **D6**: all actions are fire-and-forget; errors surface as nmp logs, not
 //!   as `Result`s crossing the dispatch boundary.
 //! - **Live lane untouched**: `HighlighterCore` / `nostr_runtime.rs` /
@@ -29,15 +26,6 @@ use crate::kernel::action::RelayRole;
 use crate::kernel::actor::NmpHandle;
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
-
-// ─── hl-owned constants ──────────────────────────────────────────────────────
-
-/// hl-owned d-tag for the rooms relay list (NIP-78 / kind:30078).
-///
-/// This is a Highlighter product identifier — NOT a relay URL. Kernel code
-/// is permitted to embed this string (it is not a wss-scheme literal and is not
-/// injected from outside; it is owned by hl).
-pub(crate) const ROOMS_RELAY_D_TAG: &str = "com.highlighter.relays";
 
 // ─── Reducer arms ───────────────────────────────────────────────────────────
 
@@ -75,43 +63,6 @@ pub(crate) fn reduce_action_set_relay_role(
         url,
         role: role.normalize().to_owned(),
     }]
-}
-
-/// Handle `AppAction::SetRoomsRelayList`.
-///
-/// Serializes the relay URL list to JSON and emits a
-/// `Effect::PublishRoomsRelayList` that will sign-and-publish a kind:30078
-/// event through the active signer via `ActorCommand::PublishRawEvent`.
-pub(crate) fn reduce_action_set_rooms_relay_list(
-    _state: &mut AppState,
-    entries: Vec<crate::kernel::action::RelayAppDataEntry>,
-) -> Vec<Effect> {
-    // Build the kind:30078 `com.highlighter.relays` content in the SAME shape the
-    // bespoke lane uses (relays.rs::app_data_content): a JSON array of
-    // {url, rooms, indexer} for relays that have EITHER flag set. Rooms AND
-    // indexer are per-relay flags in ONE replaceable event — the caller passes
-    // the full relay set so this single publish carries both. (Phase 7: replaces
-    // the prior buggy `Vec<String>` content that wiped flags for every reader —
-    // guarded by the parity test below.)
-    let content = match relay_app_data_content(&entries) {
-        Ok(json) => json,
-        Err(e) => {
-            // D6: never a panic / Result across FFI. Log and silently no-op.
-            tracing::warn!(error = %e, "SetRoomsRelayList: JSON serialization failed — discarding");
-            return vec![];
-        }
-    };
-    vec![Effect::PublishRoomsRelayList { content }]
-}
-
-/// Serialize relay app-data entries to the kind:30078 content JSON, dropping
-/// rows with neither flag (mirrors bespoke `relays.rs::app_data_content`).
-pub(crate) fn relay_app_data_content(
-    entries: &[crate::kernel::action::RelayAppDataEntry],
-) -> Result<String, serde_json::Error> {
-    let kept: Vec<&crate::kernel::action::RelayAppDataEntry> =
-        entries.iter().filter(|e| e.rooms || e.indexer).collect();
-    serde_json::to_string(&kept)
 }
 
 /// NIP-65 (kind:10002) role string for a relay's read/write flags, or `None` when
@@ -169,59 +120,6 @@ pub(crate) fn run_effect_set_relay_role(url: String, role: String, nmp: Option<&
     let _ = nmp_ref
         .actor_sender()
         .send(nmp_core::ActorCommand::AddRelay { url, role });
-}
-
-/// Execute `Effect::PublishRoomsRelayList`.
-///
-/// Builds a kind:30078 unsigned event via `nmp_nip78::build_app_data_event`
-/// with d-tag `"com.highlighter.relays"` and the serialized relay list as
-/// content, then publishes it through `ActorCommand::PublishUnsignedEvent`.
-/// The actor signs with the active account, stamps `created_at` (D7), and
-/// routes via the NIP-65 outbox resolver (D3 — no relay URL literals here).
-///
-/// `pubkey` is passed as `""` — nmp overwrites it with the signing account's
-/// key during publish (documented in nmp-nip78 `build_app_data_event` comment).
-/// `created_at` is passed as `0` — nmp stamps the real wall-clock time (D7).
-///
-/// D6: if `build_app_data_event` returns an error (only on empty d-tag, which
-/// cannot happen with the constant `ROOMS_RELAY_D_TAG`) we log at warn and
-/// return without sending — never a panic or Result across the dispatch boundary.
-pub(crate) fn run_effect_publish_rooms_relay_list(content: String, nmp: Option<&NmpHandle>) {
-    let Some(handle) = nmp else { return };
-    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
-
-    // Build the unsigned kind:30078 event using the canonical nmp-nip78 helper.
-    // `pubkey` is a hint only — the actor overwrites it with the active account.
-    // `created_at = 0` — actor stamps D7 wall-clock time before signing.
-    let unsigned_event = match nmp_nip78::build_app_data_event(
-        "",                // pubkey hint — actor overwrites
-        ROOMS_RELAY_D_TAG, // hl-owned d-tag: "com.highlighter.relays"
-        content,
-        0,      // created_at hint — actor stamps real timestamp (D7)
-        vec![], // no extra tags
-    ) {
-        Ok(event) => event,
-        Err(e) => {
-            // D6: never a panic or Result across FFI.
-            // EmptyDTag cannot occur with ROOMS_RELAY_D_TAG; InvalidExtraTag
-            // cannot occur with an empty extra_tags vec.
-            tracing::warn!(
-                error = %e,
-                "PublishRoomsRelayList: build_app_data_event failed — discarding (D6)"
-            );
-            return;
-        }
-    };
-
-    // Publish via PublishUnsignedEvent — actor signs, timestamps (D7), and
-    // routes through NIP-65 outbox (D3: no explicit relay set). Fire-and-forget.
-    let _ = nmp_ref
-        .actor_sender()
-        .send(nmp_core::ActorCommand::PublishUnsignedEvent {
-            event: unsigned_event,
-            correlation_id: None,
-            signer_pubkey: None, // sign with the active account
-        });
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -345,76 +243,6 @@ mod tests {
         }
     }
 
-    // ── 2D-T4: rooms_role_publishes_nip78_app_data_with_correct_d_tag ────────
-    //
-    // `AppAction::SetRoomsRelayList` must produce `Effect::PublishRoomsRelayList`
-    // whose `content` is a JSON array of the supplied URLs and whose d-tag is
-    // `"com.highlighter.relays"` (the hl-owned app-data d-tag). We verify the
-    // effect data here; the actual publish is tested at the effect-runner level
-    // (no live NmpApp in unit tests).
-    #[test]
-    fn rooms_role_publishes_nip78_app_data_with_correct_d_tag() {
-        use crate::kernel::action::RelayAppDataEntry;
-        let mut state = make_state();
-        let clock = ManualClock::new(0);
-
-        let entries = vec![
-            RelayAppDataEntry {
-                url: "wss://rooms.relay.one".to_owned(),
-                rooms: true,
-                indexer: false,
-            },
-            RelayAppDataEntry {
-                url: "wss://idx.relay.two".to_owned(),
-                rooms: false,
-                indexer: true,
-            },
-            // neither flag → must be dropped from the content (parity w/ bespoke).
-            RelayAppDataEntry {
-                url: "wss://plain.relay.three".to_owned(),
-                rooms: false,
-                indexer: false,
-            },
-        ];
-
-        let effects = step(
-            &mut state,
-            &clock,
-            AppAction::SetRoomsRelayList {
-                entries: entries.clone(),
-            },
-        );
-
-        assert_eq!(
-            effects.len(),
-            1,
-            "SetRoomsRelayList must produce exactly one effect"
-        );
-        match &effects[0] {
-            Effect::PublishRoomsRelayList { content } => {
-                // Content is the {url,rooms,indexer}[] app-data shape (NOT a bare
-                // URL array), dropping the neither-flag row.
-                #[derive(serde::Deserialize, PartialEq, Debug)]
-                struct E {
-                    url: String,
-                    rooms: bool,
-                    indexer: bool,
-                }
-                let parsed: Vec<E> =
-                    serde_json::from_str(content).expect("content must be valid app-data JSON");
-                assert_eq!(parsed.len(), 2, "neither-flag row must be dropped");
-                assert_eq!(parsed[0].url, "wss://rooms.relay.one");
-                assert!(parsed[0].rooms && !parsed[0].indexer);
-                assert!(!parsed[1].rooms && parsed[1].indexer);
-                assert_eq!(
-                    ROOMS_RELAY_D_TAG, "com.highlighter.relays",
-                    "rooms relay d-tag must be the hl-owned constant"
-                );
-            }
-            other => panic!("expected Effect::PublishRoomsRelayList, got {:?}", other),
-        }
-    }
-
     // Phase 7 parity (gotcha #7): the kernel's kind:10002 (NIP-65) role decision
     // must match bespoke relays.rs::nip65_tags for all 4 read/write cases —
     // INCLUDING (f,f)→omitted. Guards the rooms-only-relay regression (a relay
@@ -455,77 +283,6 @@ mod tests {
                 }
             }
         }
-    }
-
-    // Phase 7 parity (gotcha #7): the kernel's kind:30078 app-data content must be
-    // byte-identical to the bespoke relays.rs::app_data_content — guards both the
-    // format AND the fix for the prior Vec<String> bug. No hardcoded expectation:
-    // build the SAME {url,rooms,indexer} set as kernel entries AND bespoke
-    // RelayConfigs, serialize both, assert_eq.
-    #[test]
-    fn relay_app_data_content_matches_bespoke() {
-        use crate::kernel::action::RelayAppDataEntry;
-        use crate::relays::RelayConfig;
-
-        let kernel_entries = vec![
-            RelayAppDataEntry {
-                url: "wss://a".into(),
-                rooms: true,
-                indexer: false,
-            },
-            RelayAppDataEntry {
-                url: "wss://b".into(),
-                rooms: true,
-                indexer: true,
-            },
-            RelayAppDataEntry {
-                url: "wss://c".into(),
-                rooms: false,
-                indexer: true,
-            },
-            RelayAppDataEntry {
-                url: "wss://d".into(),
-                rooms: false,
-                indexer: false,
-            },
-        ];
-        let bespoke_rows = vec![
-            RelayConfig {
-                url: "wss://a".into(),
-                read: true,
-                write: true,
-                rooms: true,
-                indexer: false,
-            },
-            RelayConfig {
-                url: "wss://b".into(),
-                read: true,
-                write: false,
-                rooms: true,
-                indexer: true,
-            },
-            RelayConfig {
-                url: "wss://c".into(),
-                read: false,
-                write: true,
-                rooms: false,
-                indexer: true,
-            },
-            RelayConfig {
-                url: "wss://d".into(),
-                read: true,
-                write: true,
-                rooms: false,
-                indexer: false,
-            },
-        ];
-
-        let kernel_content = relay_app_data_content(&kernel_entries).expect("kernel content");
-        let bespoke_content = crate::relays::app_data_content(&bespoke_rows);
-        assert_eq!(
-            kernel_content, bespoke_content,
-            "kernel kind:30078 app-data content must match bespoke app_data_content exactly"
-        );
     }
 
     // ── 2D-T5: no_hardcoded_relay_literals_in_kernel ─────────────────────────
@@ -595,11 +352,6 @@ mod tests {
                 url: String::new(),
                 role: RelayRole::Write,
             },
-        );
-        let _: Vec<Effect> = step(
-            &mut state,
-            &clock,
-            AppAction::SetRoomsRelayList { entries: vec![] },
         );
     }
 

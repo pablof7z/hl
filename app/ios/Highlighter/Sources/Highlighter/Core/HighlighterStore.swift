@@ -140,22 +140,6 @@ final class HighlighterStore {
         bookmarkedArticleAddresses.contains(articleAddress)
     }
 
-    // MARK: - Relay config (bespoke nostrdb read path)
-
-    /// Read the current user's relay list from the local nostrdb. Bridges to
-    /// `SafeHighlighterCore.queryUserRelayConfigs` (the bespoke kind:10002 +
-    /// kind:30078 read path) until the kernel exposes relay config directly.
-    func getUserRelayConfigs() async -> [RelayConfig] {
-        guard let pubkey = currentUser?.pubkey else { return [] }
-        return await safeCore.queryUserRelayConfigs(pubkeyHex: pubkey)
-    }
-
-    /// Fetch another user's kind:10002 relay list from the indexer relay pool.
-    /// Used by the "Import from npub" flow in Network Settings.
-    func fetchRelaysForPubkey(_ pubkeyHex: String) async -> [RelayConfig] {
-        await safeCore.fetchRelaysForPubkey(pubkeyHex: pubkeyHex)
-    }
-
     /// Triggers the kernel's profile subscription for `pubkeyHex`. Profile data
     /// arrives asynchronously via App.swift's `onChange(of: kernel.profileSnapshots)`
     /// bridge, which calls `applyKernelProfiles`. Safe to call from multiple

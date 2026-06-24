@@ -1244,7 +1244,6 @@ mod tests {
                 matches!(
                     e,
                     Effect::PublishHighlightEvent { .. }
-                        | Effect::PublishRoomsRelayList { .. }
                         | Effect::DispatchNip29Action { .. }
                         | Effect::DispatchFollowAction { .. }
                         | Effect::DispatchShareToRoom { .. }

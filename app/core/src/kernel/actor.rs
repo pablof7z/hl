@@ -207,6 +207,10 @@ pub(crate) struct SharedState {
     pub snapshots: Mutex<std::collections::HashMap<ViewId, ViewSnapshot>>,
     /// The registered platform observer.
     pub observer: RwLock<Option<Arc<dyn HighlighterObserver>>>,
+    /// Cloned from NMP's `configured_relays_handle()` at startup.
+    /// Used by `relay_list_snapshot()` for direct FFI reads without going
+    /// through the actor channel (Arc-shared; updated by the NMP actor).
+    pub relay_slot: Mutex<Option<nmp_core::AppRelaySlot>>,
 }
 
 impl SharedState {
@@ -214,6 +218,7 @@ impl SharedState {
         Arc::new(Self {
             snapshots: Mutex::new(std::collections::HashMap::new()),
             observer: RwLock::new(None),
+            relay_slot: Mutex::new(None),
         })
     }
 }
@@ -303,9 +308,6 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         AppAction::RemoveRelay { url } => relays::reduce_action_remove_relay(state, url),
         AppAction::SetRelayRole { url, role } => {
             relays::reduce_action_set_relay_role(state, url, role)
-        }
-        AppAction::SetRoomsRelayList { entries } => {
-            relays::reduce_action_set_rooms_relay_list(state, entries)
         }
 
         // ── Phase 3C additions ────────────────────────────────────────────────
@@ -575,7 +577,7 @@ fn reduce_action_envelope(
         ReactPayload, ReleaseEntityRefPayload, ReleaseProfilePayload, RemoveBookmarkPayload,
         RemoveFromSetPayload, RemoveRelayPayload, ResolveEntityRefPayload, RunOmniboxPayload,
         RunSearchPayload, SelectRootTabPayload, SetBookPickerQueryPayload, SetRelayRolePayload,
-        SetRoomsRelayListPayload, ShareArtifactToRoomPayload, ShareHighlightToRoomPayload,
+        ShareArtifactToRoomPayload, ShareHighlightToRoomPayload,
         ShareMintInvitePayload, ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload,
         ToggleReactionPayload, UnfollowPayload, UnreactPayload,
     };
@@ -636,11 +638,6 @@ fn reduce_action_envelope(
             };
             relays::reduce_action_set_relay_role(state, p.url, role)
         }
-        "hl.relay.set_rooms_relay_list" => {
-            let p = parse!(SetRoomsRelayListPayload);
-            relays::reduce_action_set_rooms_relay_list(state, p.entries)
-        }
-
         // ── Follows ───────────────────────────────────────────────────────────
         "hl.profile.follow" => {
             let p = parse!(FollowPayload);
@@ -1866,9 +1863,6 @@ pub(crate) async fn run_effect(
         }
         Effect::SetRelayRole { url, role } => {
             relays::run_effect_set_relay_role(url, role, nmp);
-        }
-        Effect::PublishRoomsRelayList { content } => {
-            relays::run_effect_publish_rooms_relay_list(content, nmp);
         }
 
         // ── Phase 3B additions (append-only) ─────────────────────────────────

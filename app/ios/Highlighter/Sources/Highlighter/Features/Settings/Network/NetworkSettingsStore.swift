@@ -4,11 +4,11 @@ import Observation
 /// App-scope store for the Network Settings screen. Owns the user's relay
 /// rows (config) + the live diagnostics snapshot.
 ///
-/// Architecture contract: nostrdb is the source of truth. `load()` asks the
-/// Rust core (which reads from nostrdb / cached kind:10002 + kind:30078);
-/// writes go through `HighlighterCore` which publishes new events and
-/// reconciles the live pool. Live status deltas arrive via `EventBridge`
-/// on the app-scope bus (subscription_id == 0).
+/// Architecture contract: relay read/write config comes from NMP's
+/// configured_relays slot (via `kernel.relayListSnapshot`); rooms/indexer
+/// flags are stored in UserDefaults under `hl.relays.app_flags`. Writes
+/// dispatch kernel actions (NIP-65 / removeRelay). Live status deltas arrive
+/// via `EventBridge` on the app-scope bus (subscription_id == 0).
 @MainActor
 @Observable
 final class NetworkSettingsStore {
@@ -54,6 +54,13 @@ final class NetworkSettingsStore {
         case remove
     }
 
+    /// Codable value stored per-URL in `UserDefaults` under `hl.relays.app_flags`.
+    /// Carries only the flags NOT represented in NIP-65 (rooms + indexer).
+    private struct AppFlagsEntry: Codable {
+        var rooms: Bool
+        var indexer: Bool
+    }
+
     /// Pure routing decision. Delegates the marker to the KERNEL's
     /// `nip65RelayRole` (single source of truth, parity-tested against bespoke
     /// `nip65_tags`), so Swift never makes the marker decision locally and
@@ -74,22 +81,6 @@ final class NetworkSettingsStore {
             kernel.app.dispatch(.setRelayRole(url: url, role: role))
         case .remove:
             kernel.app.dispatch(.removeRelay(url: url))
-        }
-    }
-
-    /// Build the FULL relay set's {url, rooms, indexer} app-data entries (the
-    /// kind:30078 `com.highlighter.relays` event is a single replaceable record),
-    /// optionally overriding one URL's flags for an in-flight edit.
-    private func appDataEntries(
-        override url: String? = nil,
-        rooms: Bool = false,
-        indexer: Bool = false
-    ) -> [RelayAppDataEntry] {
-        relays.map { cfg in
-            if let url, cfg.url == url {
-                return RelayAppDataEntry(url: cfg.url, rooms: rooms, indexer: indexer)
-            }
-            return RelayAppDataEntry(url: cfg.url, rooms: cfg.rooms, indexer: cfg.indexer)
         }
     }
 
@@ -167,13 +158,25 @@ final class NetworkSettingsStore {
 
     func load() async {
         wifiOnlyEnabled = UserDefaults.standard.bool(forKey: "hl.network.wifi_only")
-        // Hydrate relay list from nostrdb on first load. After that, optimistic
-        // updates in upsert/remove/setRoles maintain the in-memory list so we
-        // don't clobber local mutations with a stale nostrdb read.
-        if relays.isEmpty, let store = appStore {
-            let configs = await store.getUserRelayConfigs()
-            if !configs.isEmpty {
-                relays = configs
+        // Hydrate relay list from the NMP kernel slot on first load. After that,
+        // optimistic updates in upsert/remove/setRoles maintain the in-memory list
+        // so we don't clobber local mutations with a stale kernel read.
+        if relays.isEmpty {
+            let rows = kernel.relayListSnapshot
+            if !rows.isEmpty {
+                relays = rows.map { row in
+                    let role = row.role
+                    let tokens = Set(role.split(separator: ",").map(String.init))
+                    return RelayConfig(
+                        url: row.url,
+                        read: tokens.contains("read") || tokens.contains("both"),
+                        write: tokens.contains("write") || tokens.contains("both"),
+                        rooms: false,
+                        indexer: tokens.contains("indexer")
+                    )
+                }
+                // Overlay stored rooms/indexer flags from UserDefaults.
+                applyStoredAppFlags()
             }
         }
         isLoading = false
@@ -194,27 +197,26 @@ final class NetworkSettingsStore {
     // MARK: - Writes
 
     func upsert(_ cfg: RelayConfig) async {
-        // Optimistic local update so the next app-data publish + the UI reflect
-        // the change immediately (kernel publish is fire-and-forget).
+        // Optimistic local update so the NIP-65 publish + the UI reflect the
+        // change immediately (kernel publish is fire-and-forget).
         if let idx = relays.firstIndex(where: { $0.url == cfg.url }) {
             relays[idx] = cfg
         } else {
             relays.append(cfg)
         }
         // kind:10002 (NIP-65): add/edit with the read/write marker, or remove from
-        // 10002 if rooms/indexer-only (read=write=false). kind:30078 app-data carries
-        // the full relay set's rooms/indexer flags. Kernel sole writer.
+        // 10002 if rooms/indexer-only (read=write=false). Kernel sole writer.
         dispatchNip65(url: cfg.url, read: cfg.read, write: cfg.write)
-        kernel.app.dispatch(.setRoomsRelayList(entries: appDataEntries()))
+        saveAppFlags()
         await load()
     }
 
     func remove(_ url: String) async {
         relays.removeAll { $0.url == url }
-        // kind:10002 via removeRelay (nmp auto-publishes the updated list); kind:30078
-        // app-data rebuilt without the removed relay.
+        // kind:10002 via removeRelay (nmp auto-publishes the updated list).
+        // Persist the pruned rooms/indexer flags to UserDefaults.
         kernel.app.dispatch(.removeRelay(url: url))
-        kernel.app.dispatch(.setRoomsRelayList(entries: appDataEntries()))
+        saveAppFlags()
         await load()
     }
 
@@ -223,19 +225,18 @@ final class NetworkSettingsStore {
     }
 
     func setRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async {
-        // Optimistic local update so the app-data publish carries the new flags.
+        // Optimistic local update so the NIP-65 publish + UserDefaults write carry
+        // the new flags.
         if let idx = relays.firstIndex(where: { $0.url == url }) {
             relays[idx] = RelayConfig(
                 url: url, read: read, write: write, rooms: rooms, indexer: indexer
             )
         }
         // read/write → kind:10002 (NIP-65 marker); read=write=false → removed from
-        // kind:10002 (rooms/indexer-only relays live only in app-data). rooms/indexer
-        // → kind:30078 app-data (full set, this url's flags updated). Kernel sole writer.
+        // kind:10002 (rooms/indexer-only relays live only in UserDefaults flags).
+        // Kernel sole writer for NIP-65.
         dispatchNip65(url: url, read: read, write: write)
-        kernel.app.dispatch(
-            .setRoomsRelayList(entries: appDataEntries(override: url, rooms: rooms, indexer: indexer))
-        )
+        saveAppFlags()
         await load()
     }
 
@@ -294,7 +295,39 @@ final class NetworkSettingsStore {
         recomputeAggregates()
     }
 
+    /// Fetch another user's kind:10002 relay list from the indexer relay pool.
+    /// Used by the "Import from npub" flow in ImportRelaysSheet.
+    func fetchRelaysForPubkey(_ pubkeyHex: String) async -> [RelayConfig] {
+        await appStore?.safeCore.fetchRelaysForPubkey(pubkeyHex: pubkeyHex) ?? []
+    }
+
     // MARK: - Private
+
+    /// Overlay rooms/indexer flags from UserDefaults onto the in-memory relay
+    /// list. Called after hydrating `relays` from the kernel slot.
+    private func applyStoredAppFlags() {
+        guard let data = UserDefaults.standard.data(forKey: "hl.relays.app_flags"),
+              let dict = try? JSONDecoder().decode([String: AppFlagsEntry].self, from: data)
+        else { return }
+        relays = relays.map { cfg in
+            guard let entry = dict[cfg.url] else { return cfg }
+            return RelayConfig(url: cfg.url, read: cfg.read, write: cfg.write,
+                               rooms: entry.rooms, indexer: entry.indexer || cfg.indexer)
+        }
+    }
+
+    /// Persist rooms/indexer flags for every relay that has at least one set.
+    /// Called after every write (upsert / remove / setRoles) so that the next
+    /// `load()` restores the flags correctly.
+    private func saveAppFlags() {
+        var dict: [String: AppFlagsEntry] = [:]
+        for cfg in relays where cfg.rooms || cfg.indexer {
+            dict[cfg.url] = AppFlagsEntry(rooms: cfg.rooms, indexer: cfg.indexer)
+        }
+        if let data = try? JSONEncoder().encode(dict) {
+            UserDefaults.standard.set(data, forKey: "hl.relays.app_flags")
+        }
+    }
 
     // MARK: - D1 relay projections
 

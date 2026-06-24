@@ -24,6 +24,15 @@ use crate::kernel::snapshot::ViewSnapshot;
 use crate::kernel::view::{ViewId, ViewRoute};
 use crate::onboarding::OnboardingStore;
 
+/// A single relay row read from NMP's `configured_relays` slot.
+/// `role` is the canonical NMP wire string: "read", "write", "both",
+/// "indexer", "read,indexer", "write,indexer", or "both,indexer".
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct KernelRelayRow {
+    pub url: String,
+    pub role: String,
+}
+
 /// The new-lane kernel object. Swift holds one of these alongside the live
 /// `HighlighterCore` during Phase 1; later phases migrate screens one by one.
 ///
@@ -66,6 +75,14 @@ impl HighlighterApp {
 
         // Boot the NmpApp (Pattern 1 from nmp_runtime.rs:725-860).
         let nmp = start_nmp_app(&config.data_dir, tx.clone());
+
+        // Capture NMP's relay slot for direct FFI access (bypasses actor channel for reads).
+        if let Some(ref handle) = nmp {
+            let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
+            if let Ok(mut guard) = shared.relay_slot.lock() {
+                *guard = Some(nmp_ref.configured_relays_handle());
+            }
+        }
 
         // Build the relay/follow policy from relay_policy.json seed defaults.
         // D3: relay URLs live in relay_policy.json, not in kernel logic.
@@ -160,6 +177,30 @@ impl HighlighterApp {
     /// on wall-clock time (D8 / D9).
     pub fn tick(&self) {
         let _ = self.tx.send(Cmd::Tick);
+    }
+
+    /// Return the current configured relay list from NMP's relay slot.
+    /// Reads directly from the Arc<Mutex<AppRelayList>> without going through
+    /// the actor — safe because the slot is Arc-shared and updated by the NMP actor.
+    /// Returns empty if NMP is not yet started (test mode / before startup).
+    pub fn relay_list_snapshot(&self) -> Vec<KernelRelayRow> {
+        let Ok(slot_guard) = self.shared.relay_slot.lock() else {
+            return vec![];
+        };
+        let Some(ref slot) = *slot_guard else {
+            return vec![];
+        };
+        let Ok(relay_guard) = slot.lock() else {
+            return vec![];
+        };
+        relay_guard
+            .as_slice()
+            .iter()
+            .map(|r| KernelRelayRow {
+                url: r.url().to_string(),
+                role: r.role().to_string(),
+            })
+            .collect()
     }
 }
 
