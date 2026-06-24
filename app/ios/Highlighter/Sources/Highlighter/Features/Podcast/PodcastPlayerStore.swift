@@ -76,9 +76,20 @@ final class PodcastPlayerStore {
     // MARK: - Global load / clear
 
     func load(artifact: ArtifactRecord) {
-        let url = artifact.preview.audioUrl
+        // Prefer full audio URL; fall back to preview URL (same policy as bespoke planPodcastPlaybackSession).
+        let url = [artifact.preview.audioUrl, artifact.preview.audioPreviewUrl]
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { !$0.isEmpty } ?? ""
         guard !url.isEmpty else {
             logger.warning("load: no audio URL for artifact \(artifact.shareEventId, privacy: .public)")
+            return
+        }
+
+        let guid = artifact.preview.podcastItemGuid
+
+        // If the same episode is already loaded in the kernel, just resume.
+        if let loaded = kernel?.podcastListeningSnapshot, loaded.guid == guid {
+            kernel?.app.dispatch(.audioResume)
             return
         }
 
@@ -98,12 +109,12 @@ final class PodcastPlayerStore {
         logger.info("load artifact=\(artifact.shareEventId, privacy: .public) url=\(url, privacy: .public)")
 
         // Dispatch to the kernel — the capability bridge (AudioCapabilityPlayer)
-        // owns the AVPlayer from here on. The kernel will seek to the saved
-        // resume position and begin playback automatically.
+        // owns the AVPlayer from here on. The kernel looks up the saved resume
+        // position from its disk cache (populated by Effect::SavePodcastPosition).
         let artifactJson = captureArtifactRecordJson(artifact: artifact)
         kernel?.app.dispatch(.audioPlay(
             url: url,
-            guid: artifact.preview.podcastItemGuid,
+            guid: guid,
             artifactJson: artifactJson,
             resumePositionSeconds: nil
         ))
