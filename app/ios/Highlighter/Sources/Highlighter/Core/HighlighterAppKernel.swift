@@ -187,6 +187,12 @@ final class HighlighterAppKernel {
         // share sheet / room-share card read its phase + minted invite codes.
         kernelApp.openView(viewId: .sharePublish, route: .sharePublish)
 
+        // Phase 7 C2: Bookmarks is always-resident. The app-scope store mirrors
+        // the kind:10003 address rows into `bookmarkedArticleAddresses` so the
+        // bookmark affordance on article cards reflects state app-wide (not only
+        // while the Bookmarks screen is open).
+        kernelApp.openView(viewId: .bookmarks, route: .bookmarks)
+
         // Note: RoomExplorer is NOT opened here. RoomExplorerView manages its
         // own open/close lifecycle (openRoomExplorer on .task, closeRoomExplorer
         // on .onDisappear). The kernel auto-starts discovery via the lifecycle
@@ -400,17 +406,19 @@ final class HighlighterAppKernel {
 
     // MARK: - Phase 7: bookmarks lifecycle
 
-    /// Open the bookmarks view. The kernel hydrates the bookmarked-article
-    /// previews (resolving/fetching as needed); snapshots stream into `bookmarks`.
+    /// Open the bookmarks view. Idempotent — the view is opened app-resident in
+    /// `init` (Phase 7 C2) so the Bookmarks screen re-opening it is a no-op; the
+    /// kernel hydrates the bookmarked-article previews and streams snapshots into
+    /// `bookmarks`.
     func openBookmarks() {
         app.openView(viewId: .bookmarks, route: .bookmarks)
     }
 
-    /// Close the bookmarks view.
-    func closeBookmarks() {
-        app.closeView(viewId: .bookmarks)
-        bookmarks = nil
-    }
+    /// No-op: the bookmarks view is app-resident (Phase 7 C2) so the app-scope
+    /// store keeps mirroring `bookmarkedArticleAddresses` after the Bookmarks
+    /// screen disappears. Kept so the Bookmarks screen's `.onDisappear` wiring
+    /// stays valid.
+    func closeBookmarks() {}
 
     // MARK: - Snapshot ingestion (called on main actor by KernelObserver)
 

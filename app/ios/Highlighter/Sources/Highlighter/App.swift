@@ -23,6 +23,20 @@ struct AppEntry: App {
                 .environment(store)
                 .environment(kernel)
                 .task {
+                    // Bridge communities/bookmarks/profiles from the kernel into
+                    // the app-scope store (Phase 7 C2). The store writes bookmark
+                    // toggles back through the kernel.
+                    store.kernel = kernel
+                    if let communities = kernel.communities {
+                        store.applyCommunitiesSnapshot(communities)
+                    }
+                    if let bookmarks = kernel.bookmarks {
+                        store.applyBookmarksSnapshot(bookmarks)
+                    }
+                    if !kernel.profileSnapshots.isEmpty {
+                        store.applyKernelProfiles(kernel.profileSnapshots)
+                    }
+
                     // Kick the kernel's session-restore loop first so the
                     // route state is available as early as possible.
                     kernel.app.dispatch(.restoreSession)
@@ -36,6 +50,17 @@ struct AppEntry: App {
                     guard let snap, snap.shouldPresent,
                           whatsNewPresentation == nil else { return }
                     whatsNewPresentation = WhatsNewPresentation(entries: snap.entries)
+                }
+                .onChange(of: kernel.communities) { _, communities in
+                    guard let communities else { return }
+                    store.applyCommunitiesSnapshot(communities)
+                }
+                .onChange(of: kernel.bookmarks) { _, bookmarks in
+                    guard let bookmarks else { return }
+                    store.applyBookmarksSnapshot(bookmarks)
+                }
+                .onChange(of: kernel.profileSnapshots) { _, profiles in
+                    store.applyKernelProfiles(profiles)
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     // Forward app lifecycle to the kernel (belt-and-suspenders:
