@@ -192,6 +192,11 @@ final class HighlighterAppKernel {
         // resident in the background tab shell (no open/close lifecycle).
         kernelApp.openView(viewId: .communities, route: .communities)
 
+        // Phase 7 cutover: open the podcast-listening view immediately — it is
+        // always resident so position/state ticks arrive without a view-open
+        // round-trip on the first play.
+        kernelApp.openView(viewId: .podcastListening, route: .podcastListening)
+
         // Note: RoomExplorer is NOT opened here. RoomExplorerView manages its
         // own open/close lifecycle (openRoomExplorer on .task, closeRoomExplorer
         // on .onDisappear). The kernel auto-starts discovery via the lifecycle
@@ -517,9 +522,11 @@ final class HighlighterAppKernel {
              .highlightFeed, .bookPicker, .shareComposer:
             break
 
-        // Phase 5+ snapshots (podcast) — store the latest listening snapshot.
+        // Phase 5+ snapshots (podcast) — store the latest listening snapshot
+        // and push it into PodcastPlayerStore so SwiftUI reacts immediately.
         case .podcastListening(let s):
             podcastListeningSnapshot = s
+            store?.podcastPlayer.receiveListeningSnapshot(s)
 
         }
     }

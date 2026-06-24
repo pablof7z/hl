@@ -103,9 +103,12 @@ enum HighlighterAction {
     // ── Audio / podcast (Phase 5H) ────────────────────────────────────────────
     /// Load and play the episode identified by `guid`.  Kernel looks up the
     /// saved resume position and emits `CapabilityRequest::Audio(.load)`.
-    case audioPlay(url: String, guid: String, artifactJson: String)
+    /// Pass `resumePositionSeconds` to override the kernel's saved position.
+    case audioPlay(url: String, guid: String, artifactJson: String, resumePositionSeconds: Double?)
     /// Pause the currently-loaded player.
     case audioPause
+    /// Resume the currently-loaded (paused) player without reloading.
+    case audioResume
     /// Seek to an absolute position (kernel clamps to `[0, duration]`).
     case audioSeek(seconds: Double)
     /// Explicitly persist the current resume position (call on app resign-active).
@@ -378,11 +381,14 @@ enum HighlighterAction {
             return AppActionEnvelope(namespace: "hl.share.drain_queue", json: "{}")
 
         // ── Audio / podcast (Phase 5H) ────────────────────────────────────────
-        case .audioPlay(let url, let guid, let artifactJson):
-            return AppActionEnvelope(namespace: "hl.audio.play",
-                                     json: jsonObject(["url": url, "guid": guid, "artifact_json": artifactJson]))
+        case .audioPlay(let url, let guid, let artifactJson, let resumePositionSeconds):
+            var dict: [String: Any] = ["url": url, "guid": guid, "artifact_json": artifactJson]
+            if let pos = resumePositionSeconds { dict["resume_position_seconds"] = pos }
+            return AppActionEnvelope(namespace: "hl.audio.play", json: jsonAny(dict))
         case .audioPause:
             return AppActionEnvelope(namespace: "hl.audio.pause", json: "{}")
+        case .audioResume:
+            return AppActionEnvelope(namespace: "hl.audio.resume", json: "{}")
         case .audioSeek(let seconds):
             return AppActionEnvelope(namespace: "hl.audio.seek",
                                      json: jsonAny(["seconds": seconds]))

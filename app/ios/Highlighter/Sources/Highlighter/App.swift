@@ -32,6 +32,11 @@ struct AppEntry: App {
                     store.kernel = kernel
                     kernel.store = store
 
+                    // Phase 7 cutover: give PodcastPlayerStore a back-reference
+                    // to the kernel so it can dispatch audio actions (play/pause/
+                    // seek) without going through HighlighterStore.
+                    store.podcastPlayer.kernel = kernel
+
                     // Kick the kernel's session-restore loop first so the
                     // route state is available as early as possible.
                     kernel.app.dispatch(.restoreSession)
