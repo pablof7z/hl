@@ -3,6 +3,9 @@ import Foundation
 /// Actor-isolated wrapper around the UniFFI-generated `HighlighterCore` so
 /// Swift call sites get serialized access without worrying about FFI thread
 /// safety. Mirrors TENEX's `SafeTenexCore`.
+///
+/// Remaining surface: podcast-domain only (hl product — not ported to NMP/kernel).
+/// All other calls have been migrated to kernel actions or uniffi free functions.
 actor SafeHighlighterCore {
     private let core: HighlighterCore
 
@@ -10,11 +13,7 @@ actor SafeHighlighterCore {
         self.core = core
     }
 
-    // MARK: - Auth (read-only helpers; sign-in/restore owned by kernel)
-
-    func completeOnboardingInterests(selectedIds: [String]) async -> MutationSnapshot {
-        await core.completeOnboardingInterests(selectedIds: selectedIds)
-    }
+    // MARK: - Podcast (hl product domain — permanent bespoke lane)
 
     nonisolated func planPodcastPlaybackSession(
         input: PodcastPlaybackSessionInput
@@ -47,81 +46,6 @@ actor SafeHighlighterCore {
         await core.getPodcastListeningClipsSnapshot(artifact: artifact, limit: limit)
     }
 
-    nonisolated func defaultHighlightCropBox(
-        highlightBoxes: [OcrRect],
-        imageWidth: Double,
-        imageHeight: Double,
-        marginFraction: Double
-    ) -> OcrRect? {
-        core.defaultHighlightCropBox(
-            highlightBoxes: highlightBoxes,
-            imageWidth: imageWidth,
-            imageHeight: imageHeight,
-            marginFraction: marginFraction
-        )
-    }
-
-    nonisolated func sanitizeHighlightCropBox(_ cropBox: OcrRect, fallback: OcrRect?) -> OcrRect {
-        core.sanitizeHighlightCropBox(cropBox: cropBox, fallback: fallback)
-    }
-
-    // MARK: - Profile reads
-
-    nonisolated func decodeNostrEntity(_ input: String) -> NostrEntityRefSnapshot {
-        core.decodeNostrEntity(input: input)
-    }
-
-    func updateProfile(draft: ProfileUpdateDraft) async -> ProfileUpdateSnapshot {
-        await core.updateProfile(draft: draft)
-    }
-
-    func updateProfile(
-        name: String,
-        displayName: String,
-        about: String,
-        picture: String,
-        banner: String,
-        nip05: String,
-        website: String,
-        lud16: String
-    ) async -> ProfileUpdateSnapshot {
-        let draft = ProfileUpdateDraft(
-            name: name,
-            displayName: displayName,
-            about: about,
-            picture: picture,
-            banner: banner,
-            nip05: nip05,
-            website: website,
-            lud16: lud16
-        )
-        return await updateProfile(draft: draft)
-    }
-
-    // MARK: - Rooms explorer
-
-    func startRoomDiscovery() async {
-        await core.startRoomDiscovery()
-    }
-
-    func createRoom(
-        name: String,
-        about: String,
-        picture: String,
-        visibility: RoomVisibility,
-        access: RoomAccess
-    ) async -> CreateRoomPublishSnapshot {
-        await core.createRoom(
-            name: name,
-            about: about,
-            picture: picture,
-            visibility: visibility,
-            access: access
-        )
-    }
-
-    // MARK: - Writes
-
     func publishPodcastClipHighlight(
         input: PodcastClipPublishInput
     ) async -> PodcastClipPublishSnapshot {
@@ -132,18 +56,6 @@ actor SafeHighlighterCore {
         input: PodcastClipComposerPublishInput
     ) async -> PodcastClipPublishSnapshot {
         await core.publishPodcastComposerClip(input: input)
-    }
-
-    // MARK: - Relay config
-
-    func removeRelay(_ url: String) async -> NetworkSettingsMutationSnapshot {
-        await core.removeRelay(url: url)
-    }
-
-    // MARK: - Relay telemetry (PR 4)
-
-    func reconnectAll() async -> NetworkSettingsMutationSnapshot {
-        await core.reconnectAll()
     }
 
 }
