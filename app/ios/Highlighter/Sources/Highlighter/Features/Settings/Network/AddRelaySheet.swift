@@ -4,7 +4,6 @@ import SwiftUI
 /// Read + Write on, Rooms and Indexer off. A user can tap chips after the
 /// relay is in the list if they want to change the roles.
 struct AddRelaySheet: View {
-    @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
 
     let onAdd: (RelayConfig) -> Void
@@ -179,15 +178,16 @@ struct AddRelaySheet: View {
         let currentProjection = projection
         guard currentProjection.isValid else { return }
         let url = currentProjection.normalizedUrl
-        let core = appStore.safeCore
         probeTask = Task { [url] in
             guard !Task.isCancelled else { return }
             probeInFlight = true
             defer { probeInFlight = false }
-            let snapshot = await core.probeRelayNip11Snapshot(url)
+            // NOTE: probeRelayNip11Snapshot removed (relay_polish.rs deleted in
+            // Phase 7 teardown). Probe silently returns no result; Add is still enabled.
+            _ = url
             guard !Task.isCancelled else { return }
-            probeResult = snapshot.document
-            probeFailed = snapshot.probeFailed
+            probeResult = nil
+            probeFailed = false
         }
     }
 }

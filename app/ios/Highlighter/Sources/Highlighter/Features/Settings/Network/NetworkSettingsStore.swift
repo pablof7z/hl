@@ -157,36 +157,12 @@ final class NetworkSettingsStore {
     // MARK: - Lifecycle
 
     func load() async {
-        let snapshot = await core.getNetworkSettingsSnapshot(previousRelays: relays)
-        applyNetworkSettingsSnapshot(snapshot)
+        // NOTE: getNetworkSettingsSnapshot and probeRelayNip11Snapshot were removed
+        // when relay_polish.rs was deleted in Phase 7 teardown. The relay list is
+        // maintained via optimistic in-memory updates in upsert/remove; NIP-11
+        // probing is unavailable until the kernel exposes it via dispatch.
+        wifiOnlyEnabled = UserDefaults.standard.bool(forKey: "hl.network.wifi_only")
         isLoading = false
-        // Fire-and-forget NIP-11 probes for every relay we don't already
-        // have cached. Each probe updates `nip11ByUrl` as it resolves, so
-        // the rows progressively fill in their icons and names. Fails are
-        // silent — a row without a NIP-11 doc just keeps its URL fallback.
-        let probePlan = core.planRelayNip11Probes(input: RelayNip11ProbePlanInput(
-            relays: relays,
-            cachedUrls: Array(nip11ByUrl.keys),
-            inFlightUrls: inFlightNip11
-        ))
-        inFlightNip11 = probePlan.inFlightUrls
-        for url in probePlan.urlsToProbe {
-            let core = self.core
-            Task { [weak self] in
-                defer {
-                    Task { @MainActor [weak self] in
-                        guard let self else { return }
-                        self.inFlightNip11 = self.core.finishRelayNip11Probe(
-                            inFlightUrls: self.inFlightNip11,
-                            url: url
-                        )
-                    }
-                }
-                let snapshot = await core.probeRelayNip11Snapshot(url)
-                guard let doc = snapshot.document else { return }
-                await MainActor.run { self?.nip11ByUrl[url] = doc }
-            }
-        }
     }
 
     func startLiveUpdates() {
@@ -205,10 +181,8 @@ final class NetworkSettingsStore {
     // MARK: - Cache
 
     func refreshCacheStats() async {
-        let snapshot = await core.getNetworkCacheStatsSnapshot()
-        if let stats = snapshot.stats {
-            cacheStats = stats
-        }
+        // NOTE: getNetworkCacheStatsSnapshot removed (relay_polish.rs deleted in
+        // Phase 7 teardown). Cache stats unavailable until kernel exposes this.
     }
 
     // MARK: - Writes
@@ -304,28 +278,6 @@ final class NetworkSettingsStore {
     }
 
     // MARK: - Private
-
-    private func applyNetworkSettingsSnapshot(_ snapshot: NetworkSettingsSnapshot) {
-        let apply = core.projectNetworkSettingsSnapshotApply(
-            input: NetworkSettingsSnapshotApplyInput(snapshot: snapshot)
-        )
-        relays = apply.relays
-        wifiOnlyEnabled = apply.wifiOnlyEnabled
-        appStore?.applyNetworkPathMonitorEnabled(apply.pathMonitorEnabled)
-        applyRelaySettingsProjection(apply.settingsProjection, rows: apply.diagnostics)
-        lastError = apply.errorMessage
-    }
-
-    private func applyWifiOnlyPreferenceSnapshot(_ snapshot: NetworkWifiOnlyPreferenceSnapshot) {
-        let apply = core.projectNetworkWifiOnlyPreferenceApply(
-            input: NetworkWifiOnlyPreferenceApplyInput(snapshot: snapshot)
-        )
-        wifiOnlyEnabled = apply.wifiOnlyEnabled
-        appStore?.applyNetworkPathMonitorEnabled(apply.pathMonitorEnabled)
-        if let errorMessage = apply.errorMessage {
-            lastError = errorMessage
-        }
-    }
 
     private func applyNetworkDiagnosticsSnapshot(_ snapshot: NetworkDiagnosticsSnapshot) {
         let apply = core.projectNetworkDiagnosticsSnapshotApply(

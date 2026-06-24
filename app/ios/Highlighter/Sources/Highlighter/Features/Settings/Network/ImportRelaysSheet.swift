@@ -161,12 +161,10 @@ struct ImportRelaysSheet: View {
         selectedUrls = []
         isFetching = true
         defer { isFetching = false }
-        let snapshot = await appStore.safeCore
-            .importRelaysFromNpubSnapshot(source.submitNpub)
-        fetched = snapshot.fetched
-        selectedUrls = snapshot.selectedUrls
-        let rawFetchError = snapshot.errorMessage.trimmingCharacters(in: .whitespaces)
-        errorText = rawFetchError.isEmpty ? nil : rawFetchError
+        // NOTE: importRelaysFromNpubSnapshot removed (relay_polish.rs deleted in
+        // Phase 7 teardown). Relay import is unavailable until the kernel exposes it.
+        _ = source.submitNpub
+        errorText = "Relay import is temporarily unavailable."
     }
 
     private func applySelected() async {

@@ -1,5 +1,7 @@
 import SwiftUI
 
+private enum RoomLibraryCardKind { case article, book, podcast, generic }
+
 struct RoomHomeView: View {
     enum Tab: Hashable { case home, library, discussions, chat }
 

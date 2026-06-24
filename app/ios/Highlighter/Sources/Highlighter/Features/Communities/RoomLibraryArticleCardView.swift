@@ -1,5 +1,16 @@
 import SwiftUI
 
+private struct RoomLibraryArticleCardProjection {
+    let displayTitle: String
+    let titleIsFallback: Bool
+    let imageUrl: String?
+    let articleAuthorPubkey: String?
+    let avatarPubkey: String
+    let authorProfilePubkey: String
+    let relativeUnixSeconds: UInt64?
+    let metaText: String?
+}
+
 /// Medium-style card for an article artifact in a room's library. Mirrors
 /// the reads-tab treatment by using the Rust artifact route so the real
 /// article author drives the attribution avatar/profile lookup rather than

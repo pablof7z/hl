@@ -1,6 +1,30 @@
 import Kingfisher
 import SwiftUI
 
+private enum RoomPreviewSecondaryAction {
+    case none, peekInside, openFullRoom
+}
+
+private struct RoomPreviewActionProjection {
+    let alreadyJoined: Bool
+    let primaryLabel: String
+    let secondaryAction: RoomPreviewSecondaryAction
+}
+
+private struct RoomPreviewHeaderProjection {
+    let accessLabel: String
+    let accessIconSystemName: String
+    let accessIsOpen: Bool
+    let memberCountLabel: String?
+}
+
+private struct RoomPreviewArtifactRowProjection {
+    let artifact: ArtifactRecord
+    let title: String
+    let subtitle: String?
+    let showsDivider: Bool
+}
+
 /// Modal presented when a card on the explorer is tapped. Starts at
 /// `.medium` with the hero, description, and Join button; "Peek inside"
 /// expands the sheet to `.large` and streams the room's recent artifacts

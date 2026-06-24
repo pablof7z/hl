@@ -1,6 +1,17 @@
 import Kingfisher
 import SwiftUI
 
+private struct RoomLibraryPodcastCardProjection {
+    let title: String
+    let titleIsFallback: Bool
+    let showLabel: String?
+    let durationLabel: String?
+    let imageUrl: String?
+    let sharerPubkey: String
+    let relativeUnixSeconds: UInt64?
+    let commentBadgeLabel: String?
+}
+
 struct RoomLibraryPodcastCardView: View {
     @Environment(HighlighterStore.self) private var app
 

@@ -55,18 +55,10 @@ actor SafeHighlighterCore {
         await core.completeOnboardingInterests(selectedIds: selectedIds)
     }
 
-    func setWifiOnlyEnabled(_ enabled: Bool) async -> NetworkWifiOnlyPreferenceSnapshot {
-        await core.setWifiOnlyEnabled(enabled: enabled)
-    }
-
     nonisolated func projectNetworkWifiOnlyPreferenceApply(
         input: NetworkWifiOnlyPreferenceApplyInput
     ) -> NetworkWifiOnlyPreferenceApplyProjection {
         core.projectNetworkWifiOnlyPreferenceApply(input: input)
-    }
-
-    nonisolated func getNetworkWifiOnlyPreferenceSnapshot() -> NetworkWifiOnlyPreferenceSnapshot {
-        core.getNetworkWifiOnlyPreferenceSnapshot()
     }
 
     nonisolated func planPodcastPlaybackSession(
@@ -234,14 +226,6 @@ actor SafeHighlighterCore {
         await core.downloadPodcastArtwork(url: url)
     }
 
-    func prepareWhatsNew() async -> WhatsNewPresentationSnapshot {
-        await core.prepareWhatsNew()
-    }
-
-    func markWhatsNewSeen(shippedAtUnixSeconds: UInt64) async -> MutationSnapshot {
-        await core.markWhatsNewSeen(shippedAtUnixSeconds: shippedAtUnixSeconds)
-    }
-
     // MARK: - Reads
 
     func getJoinedCommunities() async -> JoinedCommunitiesSnapshot {
@@ -262,10 +246,6 @@ actor SafeHighlighterCore {
         input: RelayHostedRoomsApplyInput
     ) -> RelayHostedRoomsApplyProjection {
         core.projectRelayHostedRoomsApply(input: input)
-    }
-
-    func getRoomHomeSnapshot(groupId: String) async -> RoomHomeSnapshot {
-        await core.getRoomHomeSnapshot(groupId: groupId)
     }
 
     func getBookPickerSnapshot(
@@ -354,18 +334,6 @@ actor SafeHighlighterCore {
 
     func getSearchArticleResultsSnapshot(query: String) async -> SearchArticleResultsSnapshot {
         await core.getSearchArticleResultsSnapshot(query: query)
-    }
-
-    func getSearchChromeSnapshot() async -> SearchChromeSnapshot {
-        await core.getSearchChromeSnapshot()
-    }
-
-    func recordRecentSearchSnapshot(_ query: String) async -> SearchChromeSnapshot {
-        await core.recordRecentSearchSnapshot(query: query)
-    }
-
-    func clearRecentSearchesSnapshot() async -> SearchChromeSnapshot {
-        await core.clearRecentSearchesSnapshot()
     }
 
     func subscribeArticleSearch(query: String) async -> SubscriptionStartSnapshot {
@@ -768,10 +736,6 @@ actor SafeHighlighterCore {
         await core.getUserProfile(pubkeyHex: pubkeyHex)
     }
 
-    func getProfilePageSnapshot(pubkeyHex: String) async -> ProfilePageSnapshot {
-        await core.getProfilePageSnapshot(pubkeyHex: pubkeyHex)
-    }
-
     nonisolated func projectPublicKeyDisplay(
         input: PublicKeyDisplayProjectionInput
     ) -> PublicKeyDisplayProjection {
@@ -950,30 +914,6 @@ actor SafeHighlighterCore {
         return await updateProfile(draft: draft)
     }
 
-    nonisolated func normalizeNip05Username(_ input: String) -> String {
-        core.normalizeNip05Username(input: input)
-    }
-
-    nonisolated func suggestNip05Username(displayName: String) -> String {
-        core.suggestNip05Username(displayName: displayName)
-    }
-
-    nonisolated func isNip05UsernameValid(_ input: String) -> Bool {
-        core.isNip05UsernameValid(input: input)
-    }
-
-    nonisolated func projectOnboardingCreateAccount(
-        input: OnboardingCreateAccountProjectionInput
-    ) -> OnboardingCreateAccountProjection {
-        core.projectOnboardingCreateAccount(input: input)
-    }
-
-    nonisolated func projectOnboardingUsernameCheck(
-        username: String
-    ) -> OnboardingUsernameCheckProjection {
-        core.projectOnboardingUsernameCheck(username: username)
-    }
-
     func getArticleReaderSnapshot(pubkeyHex: String, dTag: String) async -> ArticleReaderSnapshot {
         await core.getArticleReaderSnapshot(pubkeyHex: pubkeyHex, dTag: dTag)
     }
@@ -1096,17 +1036,6 @@ actor SafeHighlighterCore {
         core.getArtifactCommentScope(preview: preview)
     }
 
-
-    nonisolated func countArtifactComments(
-        artifact: ArtifactRecord,
-        commentsByReference: [CommentReferenceBucket]
-    ) -> UInt32 {
-        core.countArtifactComments(
-            artifact: artifact,
-            commentsByReference: commentsByReference
-        )
-    }
-
     nonisolated func projectDiscussionAttachment(
         input: DiscussionAttachmentProjectionInput
     ) -> DiscussionAttachmentProjection {
@@ -1216,36 +1145,6 @@ actor SafeHighlighterCore {
         await core.startFriendsRoomsDiscovery()
     }
 
-    func startRoomExplorerFeaturedRooms() async -> MutationSnapshot {
-        await core.startRoomExplorerFeaturedRooms()
-    }
-
-    func getRoomExplorerSnapshot(joined: [CommunitySummary]) async -> RoomExplorerSnapshot {
-        await core.getRoomExplorerSnapshot(joined: joined)
-    }
-
-    func getRoomBrowseSnapshot(query: String, limit: UInt32 = 120) async -> RoomBrowseSnapshot {
-        await core.getRoomBrowseSnapshot(query: query, limit: limit)
-    }
-
-    nonisolated func projectRoomBrowseSnapshotApply(
-        input: RoomBrowseSnapshotApplyInput
-    ) -> RoomBrowseSnapshotApplyProjection {
-        core.projectRoomBrowseSnapshotApply(input: input)
-    }
-
-    nonisolated func projectRoomExplorerJoinRequestResult(
-        input: RoomExplorerJoinRequestResultInput
-    ) -> RoomExplorerJoinRequestResultProjection {
-        core.projectRoomExplorerJoinRequestResult(input: input)
-    }
-
-    nonisolated func projectRoomExplorerFeaturedStartResult(
-        input: RoomExplorerFeaturedStartResultInput
-    ) -> RoomExplorerFeaturedStartResultProjection {
-        core.projectRoomExplorerFeaturedStartResult(input: input)
-    }
-
     func requestJoinRoom(groupId: String, roomName: String) async -> JoinRoomRequestSnapshot {
         await core.requestJoinRoom(groupId: groupId, roomName: roomName)
     }
@@ -1296,60 +1195,6 @@ actor SafeHighlighterCore {
         core.projectRoomCoverCard(input: input)
     }
 
-    nonisolated func projectRoomRecommendationCard(
-        input: RoomRecommendationCardProjectionInput
-    ) -> RoomRecommendationCardProjection {
-        core.projectRoomRecommendationCard(input: input)
-    }
-
-    nonisolated func projectRoomPreviewArtifacts(
-        input: RoomPreviewArtifactsProjectionInput
-    ) -> RoomPreviewArtifactsProjection {
-        core.projectRoomPreviewArtifacts(input: input)
-    }
-
-    nonisolated func projectRoomPreviewHeader(
-        input: RoomPreviewHeaderProjectionInput
-    ) -> RoomPreviewHeaderProjection {
-        core.projectRoomPreviewHeader(input: input)
-    }
-
-    nonisolated func projectRoomPreviewAction(
-        input: RoomPreviewActionProjectionInput
-    ) -> RoomPreviewActionProjection {
-        core.projectRoomPreviewAction(input: input)
-    }
-
-    nonisolated func projectRoomLibraryArticleCard(
-        input: RoomLibraryArticleCardProjectionInput
-    ) -> RoomLibraryArticleCardProjection {
-        core.projectRoomLibraryArticleCard(input: input)
-    }
-
-    nonisolated func projectRoomLibraryCardKind(
-        input: RoomLibraryCardKindProjectionInput
-    ) -> RoomLibraryCardKindProjection {
-        core.projectRoomLibraryCardKind(input: input)
-    }
-
-    nonisolated func projectRoomLibraryBookCard(
-        input: RoomLibraryBookCardProjectionInput
-    ) -> RoomLibraryBookCardProjection {
-        core.projectRoomLibraryBookCard(input: input)
-    }
-
-    nonisolated func projectRoomLibraryPodcastCard(
-        input: RoomLibraryPodcastCardProjectionInput
-    ) -> RoomLibraryPodcastCardProjection {
-        core.projectRoomLibraryPodcastCard(input: input)
-    }
-
-    nonisolated func projectRoomLibraryGenericCard(
-        input: RoomLibraryGenericCardProjectionInput
-    ) -> RoomLibraryGenericCardProjection {
-        core.projectRoomLibraryGenericCard(input: input)
-    }
-
     // #21: getRoomShareLinkSnapshot wrapper DELETED — RoomShareCard dispatches
     // the kernel `hl.share.mint_invite` action and reads the minted code from
     // the SharePublish snapshot (kernel sole kind:9009 writer).
@@ -1391,19 +1236,6 @@ actor SafeHighlighterCore {
     }
 
     // MARK: - Home Feed
-
-    func getHomeFeedSnapshot(
-        highlightLimit: UInt32 = 120,
-        readLimit: UInt32 = 40
-    ) async -> HomeFeedSnapshot {
-        await core.getHomeFeedSnapshot(highlightLimit: highlightLimit, readLimit: readLimit)
-    }
-
-    nonisolated func projectHomeFeedSnapshotApply(
-        input: HomeFeedSnapshotApplyInput
-    ) -> HomeFeedSnapshotApplyProjection {
-        core.projectHomeFeedSnapshotApply(input: input)
-    }
 
     nonisolated func projectReadingFeedCard(
         input: ReadingFeedCardProjectionInput
@@ -1610,10 +1442,6 @@ actor SafeHighlighterCore {
 
     // MARK: - Relay config (NIP-65 read/write + NIP-78 rooms/indexer)
 
-    func getNetworkSettingsSnapshot(previousRelays: [RelayConfig]) async -> NetworkSettingsSnapshot {
-        await core.getNetworkSettingsSnapshot(previousRelays: previousRelays)
-    }
-
     nonisolated func projectNetworkSettingsSnapshotApply(
         input: NetworkSettingsSnapshotApplyInput
     ) -> NetworkSettingsSnapshotApplyProjection {
@@ -1740,23 +1568,4 @@ actor SafeHighlighterCore {
         await core.disconnectAll()
     }
 
-    func refreshRelayConnectionsForForeground() async -> NetworkSettingsMutationSnapshot {
-        await core.refreshRelayConnectionsForForeground()
-    }
-
-    func applyNetworkPathStatus(isWifi: Bool) async -> NetworkPathPolicySnapshot {
-        await core.applyNetworkPathStatus(isWifi: isWifi)
-    }
-
-    func probeRelayNip11Snapshot(_ url: String) async -> RelayNip11ProbeSnapshot {
-        await core.probeRelayNip11Snapshot(url: url)
-    }
-
-    func importRelaysFromNpubSnapshot(_ npub: String) async -> ImportRelaysFetchSnapshot {
-        await core.importRelaysFromNpubSnapshot(npub: npub)
-    }
-
-    func getNetworkCacheStatsSnapshot() async -> NetworkCacheStatsSnapshot {
-        await core.getNetworkCacheStatsSnapshot()
-    }
 }
