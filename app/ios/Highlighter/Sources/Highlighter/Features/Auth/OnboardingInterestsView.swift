@@ -9,7 +9,7 @@ struct OnboardingInterestsView: View {
     @State private var isWorking = false
 
     private var projection: OnboardingInterestProjection {
-        store.safeCore.getOnboardingInterestProjection(selectedIds: selectedIds)
+        OnboardingInterestCatalog.projection(selectedIds: selectedIds)
     }
 
     var body: some View {
@@ -98,7 +98,7 @@ struct OnboardingInterestsView: View {
     private func chip(_ interest: OnboardingInterestChip) -> some View {
         let active = interest.isSelected
         return Button {
-            selectedIds = store.safeCore.toggleOnboardingInterestSelection(
+            selectedIds = OnboardingInterestCatalog.toggle(
                 selectedIds: selectedIds,
                 interestId: interest.id
             )
@@ -182,5 +182,99 @@ private struct FlowLayout: Layout {
         }
         if !current.items.isEmpty { rows.append(current) }
         return rows
+    }
+}
+
+// MARK: - Onboarding interest catalog (D1 inlined)
+//
+// Mirrors `app/core/src/onboarding.rs` (interest_catalog / interest_projection /
+// toggle_interest_selection). The catalog is static seed data, so per the D1
+// doctrine Swift owns this pure computation. Rust still owns the durable
+// "onboarding complete" flag and the follow-list publish in
+// `complete_onboarding_interests`.
+private enum OnboardingInterestCatalog {
+    private static let jackPubkey = "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2"
+    private static let fiatjafPubkey = "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+    private static let minimumRequired: UInt32 = 3
+
+    private struct Seed {
+        let id: String
+        let emoji: String
+        let label: String
+        let pubkeys: [String]
+    }
+
+    private static let interests: [Seed] = [
+        Seed(id: "philosophy", emoji: "🧠", label: "Philosophy", pubkeys: [jackPubkey]),
+        Seed(id: "science_fiction", emoji: "🚀", label: "Science Fiction", pubkeys: [jackPubkey]),
+        Seed(id: "technology", emoji: "💻", label: "Technology", pubkeys: [fiatjafPubkey, jackPubkey]),
+        Seed(id: "history", emoji: "📜", label: "History", pubkeys: [jackPubkey]),
+        Seed(id: "economics", emoji: "📈", label: "Economics", pubkeys: [fiatjafPubkey]),
+        Seed(id: "psychology", emoji: "🔬", label: "Psychology", pubkeys: [jackPubkey]),
+        Seed(id: "literature", emoji: "📚", label: "Literature", pubkeys: [jackPubkey]),
+        Seed(id: "politics", emoji: "🗳️", label: "Politics", pubkeys: []),
+        Seed(id: "bitcoin", emoji: "₿", label: "Bitcoin", pubkeys: [jackPubkey, fiatjafPubkey]),
+        Seed(id: "self_improvement", emoji: "🌱", label: "Self-improvement", pubkeys: [jackPubkey]),
+        Seed(id: "science", emoji: "🔭", label: "Science", pubkeys: []),
+        Seed(id: "art", emoji: "🎨", label: "Art", pubkeys: []),
+        Seed(id: "music", emoji: "🎵", label: "Music", pubkeys: []),
+        Seed(id: "design", emoji: "✏️", label: "Design", pubkeys: []),
+        Seed(id: "writing", emoji: "✍️", label: "Writing", pubkeys: [jackPubkey]),
+        Seed(id: "startups", emoji: "⚡️", label: "Startups", pubkeys: [jackPubkey]),
+        Seed(id: "nostr", emoji: "🟣", label: "Nostr", pubkeys: [fiatjafPubkey]),
+        Seed(id: "food", emoji: "🍳", label: "Food", pubkeys: []),
+        Seed(id: "travel", emoji: "🗺️", label: "Travel", pubkeys: []),
+        Seed(id: "health", emoji: "🏃", label: "Health", pubkeys: []),
+    ]
+
+    /// Renderable chips plus the selection summary for the current set of ids.
+    static func projection(selectedIds: [String]) -> OnboardingInterestProjection {
+        let requested = Set(selectedIds)
+        let selected = Set(interests.lazy.filter { requested.contains($0.id) }.map(\.id))
+        let chips = interests.map {
+            OnboardingInterestChip(
+                id: $0.id,
+                emoji: $0.emoji,
+                label: $0.label,
+                isSelected: selected.contains($0.id)
+            )
+        }
+        return OnboardingInterestProjection(interests: chips, selection: selection(for: selected))
+    }
+
+    /// Toggle a known interest id in/out, returning ids in catalog order.
+    /// Unknown ids leave the selection unchanged (matches Rust).
+    static func toggle(selectedIds: [String], interestId: String) -> [String] {
+        let requested = Set(selectedIds)
+        var selected = Set(interests.lazy.filter { requested.contains($0.id) }.map(\.id))
+        if interests.contains(where: { $0.id == interestId }) {
+            if selected.contains(interestId) {
+                selected.remove(interestId)
+            } else {
+                selected.insert(interestId)
+            }
+        }
+        return interests.lazy.filter { selected.contains($0.id) }.map(\.id)
+    }
+
+    private static func selection(for selected: Set<String>) -> OnboardingInterestSelection {
+        let selectedCount = UInt32(selected.count)
+        let remaining = selectedCount >= minimumRequired ? 0 : minimumRequired - selectedCount
+
+        var seen = Set<String>()
+        var followPubkeys: [String] = []
+        for interest in interests where selected.contains(interest.id) {
+            for pubkey in interest.pubkeys where seen.insert(pubkey).inserted {
+                followPubkeys.append(pubkey)
+            }
+        }
+
+        return OnboardingInterestSelection(
+            minimumRequired: minimumRequired,
+            selectedCount: selectedCount,
+            remaining: remaining,
+            canContinue: remaining == 0,
+            followPubkeys: followPubkeys
+        )
     }
 }
