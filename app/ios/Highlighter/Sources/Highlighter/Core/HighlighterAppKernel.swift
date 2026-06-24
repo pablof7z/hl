@@ -30,7 +30,9 @@ final class HighlighterAppKernel {
         sessionPresent: false,
         onboardingComplete: false,
         nostrconnectUri: nil,
-        authError: nil
+        authError: nil,
+        activePubkeyHex: nil,
+        activePubkeyNpub: nil
     )
 
     /// Latest projection for the root-shell chrome (tabs, toast, sheet).

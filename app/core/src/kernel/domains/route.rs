@@ -5,6 +5,9 @@
 //!         (actions); OnboardingStateLoaded (event); LoadOnboardingFlag (effect);
 //!         and the project_app_root / project_root_shell snapshot helpers.
 
+use nostr_ndb::nostr::nips::nip19::ToBech32;
+use nostr_ndb::nostr::PublicKey;
+
 use crate::onboarding::OnboardingStore;
 
 use crate::kernel::app::{AppState, SessionState};
@@ -233,6 +236,18 @@ pub(crate) fn project_app_root(state: &AppState) -> AppRootSnapshot {
         SessionState::SignInFailed { error, .. } => Some(error.clone()),
         _ => None,
     };
+    // Phase 7 Part C: expose the active pubkey so Swift can build CurrentUser
+    // after kernel sign-in without a bespoke lane call.
+    let (active_pubkey_hex, active_pubkey_npub) = match &state.session {
+        SessionState::Present { pubkey, .. } => {
+            let hex = pubkey.clone();
+            let npub = PublicKey::from_hex(&hex)
+                .ok()
+                .and_then(|pk| pk.to_bech32().ok());
+            (Some(hex), npub)
+        }
+        _ => (None, None),
+    };
     AppRootSnapshot {
         route_kind,
         session_present,
@@ -240,6 +255,8 @@ pub(crate) fn project_app_root(state: &AppState) -> AppRootSnapshot {
         // Phase 2B: expose pending NostrConnect URI to the iOS QR-code sheet.
         nostrconnect_uri: state.nostrconnect_uri.clone(),
         auth_error,
+        active_pubkey_hex,
+        active_pubkey_npub,
     }
 }
 

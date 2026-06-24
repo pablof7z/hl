@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct OnboardingCreateAccountView: View {
+    @Environment(HighlighterStore.self) private var store
     @Environment(HighlighterAppKernel.self) private var kernel
 
     @State private var displayName: String = ""
@@ -86,6 +87,18 @@ struct OnboardingCreateAccountView: View {
         .navigationDestination(isPresented: $navigateToInterests) {
             OnboardingInterestsView()
         }
+        .onChange(of: kernel.appRoot.sessionPresent) { _, isPresent in
+            if isPresent && isWorking {
+                isWorking = false
+                navigateToInterests = true
+            }
+        }
+        .onChange(of: kernel.appRoot.authError) { _, error in
+            if let error, isWorking {
+                errorMessage = error
+                isWorking = false
+            }
+        }
         .onAppear { focusedField = .displayName }
     }
 
@@ -100,13 +113,11 @@ struct OnboardingCreateAccountView: View {
     private func createAccount() {
         let name = trimmedDisplayName
         guard canContinue else { return }
-
+        isWorking = true
         errorMessage = nil
-        // The kernel generates keys inside NMP's keyring and publishes the
-        // initial kind:0 with `profileName`. Success flips `appRoot.sessionPresent`;
-        // navigate optimistically into the interests step (a local push) while the
-        // kernel finishes — `finish()` there completes onboarding.
+        // Fire-and-forget (D6): kernel generates the keypair, persists to NMP
+        // keyring, and publishes the kind:0 profile event. Session transitions
+        // to Present → onChange above navigates to interests.
         kernel.app.dispatch(.createAccount(profileName: name))
-        navigateToInterests = true
     }
 }

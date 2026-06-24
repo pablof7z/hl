@@ -46,6 +46,16 @@ pub struct AppRootSnapshot {
     /// no explicit clear-on-route-change is needed. D1: raw error; Swift formats
     /// the display copy.
     pub auth_error: Option<String>,
+
+    // ── Phase 7 Part C additions (auth port) ─────────────────────────────────
+    /// Raw 64-char hex pubkey of the active session. `None` when no session is
+    /// present. Exposed so Swift can build `CurrentUser` after kernel sign-in
+    /// without a bespoke lane call. D1: raw hex; Swift formats npub for display.
+    pub active_pubkey_hex: Option<String>,
+    /// bech32 `npub` of the active session (for Settings / KeysView display).
+    /// Pre-encoded in Rust so Swift avoids a bespoke bech32 dependency.
+    /// `None` when no session is present.
+    pub active_pubkey_npub: Option<String>,
 }
 
 /// A transient toast message visible in the root shell.

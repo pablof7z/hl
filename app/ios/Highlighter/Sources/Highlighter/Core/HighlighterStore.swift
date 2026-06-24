@@ -88,16 +88,13 @@ final class HighlighterStore {
         isBootstrapping = true
         defer { isBootstrapping = false }
 
-        // Register the EventBridge unconditionally, before any login attempt.
-        // The NIP-46 nostrconnect:// flow fires `SignerConnected` from a
-        // background tokio task; if no callback is wired by then, the delta
-        // is dropped silently and the UI never transitions to logged-in.
+        // Register the EventBridge unconditionally before any kernel session
+        // restoration fires. Podcast / EventBridge callbacks use the bespoke lane;
+        // the kernel owns the auth / routing side.
         registerEventBridge()
-
-        if let user = await AppSessionStore.shared.restoreSession(into: safeCore) {
-            currentUser = user
-            await loadAppScopeData()
-        }
+        // Session restore is driven by the kernel (hl.auth.restore_session
+        // dispatched in App.swift); `currentUser` is set via the
+        // `onChange(of: kernel.appRoot)` bridge there.
     }
 
     func completeLogin(user: CurrentUser) async {
@@ -319,7 +316,7 @@ final class HighlighterStore {
         applyCommunitiesSnapshot(communities)
     }
 
-    private func loadAppScopeData() async {
+    func loadAppScopeData() async {
         refreshNetworkPathCapabilityPreference()
 
         // Communities, bookmarks, and the current user's profile are owned by

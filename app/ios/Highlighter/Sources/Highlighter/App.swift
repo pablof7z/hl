@@ -62,6 +62,19 @@ struct AppEntry: App {
                 .onChange(of: kernel.profileSnapshots) { _, profiles in
                     store.applyKernelProfiles(profiles)
                 }
+                // Phase 7 Part C: kernel is now the authoritative session source.
+                // When the kernel signs in (restore or new login), propagate
+                // CurrentUser into the store so existing per-user UI continues
+                // to function without a bespoke lane call.
+                .onChange(of: kernel.appRoot) { _, appRoot in
+                    if appRoot.sessionPresent,
+                       let hex = appRoot.activePubkeyHex,
+                       store.currentUser?.pubkey != hex {
+                        let npub = appRoot.activePubkeyNpub ?? hex
+                        store.currentUser = CurrentUser(pubkey: hex, npub: npub)
+                        Task { await store.loadAppScopeData() }
+                    }
+                }
                 .onChange(of: scenePhase) { _, newPhase in
                     // Forward app lifecycle to the kernel (belt-and-suspenders:
                     // RootSceneView also handles the live-lane side effects).
