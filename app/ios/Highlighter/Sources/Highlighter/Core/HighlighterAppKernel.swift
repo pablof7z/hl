@@ -126,6 +126,11 @@ final class HighlighterAppKernel {
     /// (Phase 7); the collections/web panes stay on the live lane (nmp #1653).
     private(set) var bookmarks: BookmarksSnapshot?
 
+    /// What's New sheet projection. `nil` until `prepareWhatsNew` is dispatched.
+    /// App.swift observes this to trigger the sheet when `shouldPresent` is true
+    /// (Phase 7 C1 — replaces the bespoke `safeCore.prepareWhatsNew` call).
+    private(set) var whatsNew: WhatsNewSnapshot?
+
     // MARK: - Kernel handle
 
     /// The Rust-side kernel object. Callers may dispatch actions and manage
@@ -473,12 +478,16 @@ final class HighlighterAppKernel {
         case .articleReader(let s):
             articleReader[s.address] = s
 
+        // Phase 7 C1: What's New is observed by App.swift to drive the sheet.
+        case .whatsNew(let s):
+            whatsNew = s
+
         // Phase 4+ snapshots — managed by their owning views / stores via
         // `current_snapshot`; the observer push is handled by those stores
         // directly. No-op here (the actor still pushes; non-resident views
         // are closed before they can receive stale data — D5).
         case .articleFeed,
-             .highlightFeed, .whatsNew, .bookPicker, .shareComposer:
+             .highlightFeed, .bookPicker, .shareComposer:
             break
 
         // Phase 5+ snapshots (podcast) — managed by their owning views / stores;

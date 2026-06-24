@@ -3,8 +3,8 @@ import UIKit
 
 struct WhatsNewSheet: View {
 
-    let entries: [WhatsNewEntry]
-    let onSeen: (WhatsNewEntry) -> Void
+    let entries: [WhatsNewEntryRow]
+    let onSeen: (WhatsNewEntryRow) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var didMarkSeen = false
 
@@ -48,9 +48,9 @@ struct WhatsNewSheet: View {
     }
 
     @ViewBuilder
-    private func entrySection(_ entry: WhatsNewEntry) -> some View {
+    private func entrySection(_ entry: WhatsNewEntryRow) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(Self.dateline(for: entry.shippedAtUnixSeconds))
+            Text(Self.dateline(for: entry.shippedAtUnix))
                 .font(.caption2.weight(.semibold))
                 .tracking(0.5)
                 .foregroundStyle(.secondary)
@@ -112,6 +112,6 @@ struct WhatsNewSheet: View {
     }
 }
 
-extension WhatsNewEntry: Identifiable {
-    public var id: UInt64 { shippedAtUnixSeconds }
+extension WhatsNewEntryRow: Identifiable {
+    public var id: UInt64 { shippedAtUnix }
 }

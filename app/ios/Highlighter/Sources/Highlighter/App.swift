@@ -27,11 +27,15 @@ struct AppEntry: App {
                     // route state is available as early as possible.
                     kernel.app.dispatch(.restoreSession)
 
-                    // Live-lane: prepare the what's-new sheet.
-                    let snapshot = await store.safeCore.prepareWhatsNew()
-                    if snapshot.shouldPresent {
-                        whatsNewPresentation = WhatsNewPresentation(entries: snapshot.entries)
-                    }
+                    // Phase 7 C1: prepare the what's-new sheet via the kernel.
+                    // The result arrives asynchronously as a `WhatsNewSnapshot`
+                    // on `kernel.whatsNew` (see `.onChange` below).
+                    kernel.app.dispatch(.prepareWhatsNew)
+                }
+                .onChange(of: kernel.whatsNew) { _, snap in
+                    guard let snap, snap.shouldPresent,
+                          whatsNewPresentation == nil else { return }
+                    whatsNewPresentation = WhatsNewPresentation(entries: snap.entries)
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     // Forward app lifecycle to the kernel (belt-and-suspenders:
@@ -47,11 +51,9 @@ struct AppEntry: App {
                 }
                 .sheet(item: $whatsNewPresentation) { presentation in
                     WhatsNewSheet(entries: presentation.entries) { entry in
-                        Task {
-                            _ = await store.safeCore.markWhatsNewSeen(
-                                shippedAtUnixSeconds: entry.shippedAtUnixSeconds
-                            )
-                        }
+                        kernel.app.dispatch(
+                            .markWhatsNewSeen(shippedAtUnix: entry.shippedAtUnix)
+                        )
                     }
                 }
                 .onOpenURL { url in
@@ -73,5 +75,5 @@ struct AppEntry: App {
 /// receives them atomically — see the wiring note above.
 private struct WhatsNewPresentation: Identifiable {
     let id = UUID()
-    let entries: [WhatsNewEntry]
+    let entries: [WhatsNewEntryRow]
 }
