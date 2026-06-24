@@ -142,7 +142,7 @@ final class SearchStore {
         // highlight/community buckets populate concurrently.
         omniboxArmed = true
         kernel.app.dispatch(.runOmnibox(query: trimmed))
-        kernel.app.dispatch(.runSearch(query: trimmed, scope: .articlesAndHighlights))
+        kernel.app.dispatch(.runSearch(query: trimmed, scope: .articlesHighlightsAndUsers))
         appliedQuery = trimmed
     }
 
@@ -206,16 +206,15 @@ final class SearchStore {
     /// and reads the kernel `profiles` local-scan bucket.
     func applyKernelSnapshot() {
         guard let snap = kernel.searchSnapshot else { return }
-        // .articlesAndHighlights scope: hits contain kind:30023 + kind:9802 only.
-        // Communities (kind:39000) and profiles (kind:0) need separate scopes;
-        // those buckets are deferred to Wave 5.
         articles = snap.hits
             .filter { $0.kind == 30023 }
             .map(Self.articleRecord(from:))
         highlights = snap.hits
             .filter { $0.kind == 9802 }
             .map(Self.highlightRecord(from:))
-        // communities and profiles remain empty for this dispatch scope.
+        profiles = snap.hits
+            .filter { $0.kind == 0 }
+            .compactMap(Self.profileRow(from:))
         isLocalLoading = false
         isRelayLoading = false
     }
@@ -257,6 +256,36 @@ final class SearchStore {
             clipSpeaker: "",
             clipTranscriptSegmentIds: [],
             imageUrl: "",
+            createdAt: hit.createdAt
+        )
+    }
+
+    private static func profileRow(from hit: KernelSearchHitRow) -> ProfileSearchRow? {
+        guard let data = hit.content.data(using: .utf8),
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            return nil
+        }
+        func str(_ key: String) -> String {
+            (json[key] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let displayName: String = {
+            let dn = str("display_name")
+            if !dn.isEmpty { return dn }
+            let alias = str("displayName")
+            if !alias.isEmpty { return alias }
+            return str("displayname")
+        }()
+        let picture: String = {
+            let p = str("picture")
+            return p.isEmpty ? str("image") : p
+        }()
+        return ProfileSearchRow(
+            pubkey: hit.author,
+            name: str("name"),
+            displayName: displayName,
+            nip05: str("nip05"),
+            picture: picture,
+            about: str("about"),
             createdAt: hit.createdAt
         )
     }

@@ -590,6 +590,9 @@ enum HLSearchScope: String {
     /// kind:30023 articles + kind:9802 highlights in one query — backs the
     /// unified search screen (Swift buckets the mixed hits by kind).
     case articlesAndHighlights = "articles_and_highlights"
+    /// kind:0 + kind:9802 + kind:30023 in one NIP-50 query — unified search
+    /// with People, Articles, and Highlights all from a single relay subscription.
+    case articlesHighlightsAndUsers = "articles_highlights_and_users"
 }
 
 // MARK: - HighlighterApp dispatch facade

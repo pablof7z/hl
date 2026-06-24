@@ -218,6 +218,12 @@ fn hl_scope_to_nmp(scope: &SearchScope) -> NmpSearchScope {
             // unified search screen buckets the mixed hits by kind Swift-side.
             NmpSearchScope::Kinds(BTreeSet::from([9802u32, 30023u32]))
         }
+        SearchScope::ArticlesHighlightsAndUsers => {
+            use std::collections::BTreeSet;
+            // kind:0 + kind:9802 + kind:30023 — unified search screen; Swift
+            // buckets by kind (0→people, 9802→highlights, 30023→articles).
+            NmpSearchScope::Kinds(BTreeSet::from([0u32, 9802u32, 30023u32]))
+        }
     }
 }
 

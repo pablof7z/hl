@@ -1153,6 +1153,10 @@ pub enum SearchScope {
     /// unified search screen, which renders Articles and Highlights sections
     /// from a single query (Swift buckets the mixed hits by kind). Phase 7.
     ArticlesAndHighlights,
+    /// kind:0 + kind:9802 + kind:30023 in one query — unified search screen
+    /// with People, Articles, and Highlights all populated from a single
+    /// NIP-50 relay subscription. Swift buckets the mixed hits by kind.
+    ArticlesHighlightsAndUsers,
 }
 
 /// NIP-65 / kind:10002 role for a configured relay.
