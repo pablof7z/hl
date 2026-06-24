@@ -98,25 +98,20 @@ struct SearchView: View {
                 handleDirectNavigation(navigation)
             }
             // Omnibox resolver outcome (#1865) → route through the store.
-            .onChange(of: kernel.search?.omnibox) { _, outcome in
+            .onChange(of: kernel.searchSnapshot?.omnibox) { _, outcome in
                 store?.applyOmniboxOutcome(outcome)
             }
             .globalUserToolbar()
         }
         .task {
             if store == nil {
-                let s = SearchStore(
-                    safeCore: app.safeCore,
-                    eventBridge: app.eventBridge,
-                    kernel: kernel
-                )
+                let s = SearchStore(kernel: kernel)
                 store = s
                 await s.start()
             }
             store?.disarmOmnibox()
             kernel.openSearch()
-            let snapshot = await app.safeCore.getSearchChromeSnapshot()
-            recentQueries = snapshot.recentQueries
+            recentQueries = UserDefaults.standard.stringArray(forKey: "hl.search.recent_queries") ?? []
         }
         .onDisappear {
             store?.stop()

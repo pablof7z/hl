@@ -211,7 +211,7 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     private func dispatchRoom(_ change: DataChangeType, store: RoomStore) {
         switch change {
         case .artifactUpserted, .highlightUpserted, .highlightShared:
-            Task { await store.reloadFromCache() }
+            store.applyKernelSnapshot()
         default:
             break
         }
@@ -240,25 +240,16 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     @MainActor
     private func dispatchChatPresence(_ change: DataChangeType, probe: ChatPresenceProbe) {
         if case .chatMessageUpserted = change {
-            probe.notifyActivity()
+            probe.refreshActivity()
         }
     }
 
     @MainActor
     private func dispatchHomeFeed(_ change: DataChangeType, store: HomeFeedStore) {
         if case .followingReadsUpdated = change {
-            Task { await store.refresh() }
+            store.applyKernelSnapshot()
         } else if case .followingHighlightsUpdated = change {
-            Task { await store.refresh() }
-        }
-    }
-
-    @MainActor
-    private func dispatchSearch(_ change: DataChangeType, store: SearchStore) {
-        if case .searchArticlesUpdated(let query) = change {
-            store.applyRelaySearchUpdate(query: query)
-        } else if case .nostrEntityResolved(let event) = change {
-            store.applyDirectNostrEntity(event: event)
+            store.applyKernelSnapshot()
         }
     }
 
