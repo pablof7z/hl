@@ -127,11 +127,22 @@ struct RoomLibraryBookCardView: View {
     }
 
     private var cardProjection: RoomLibraryBookCardProjection {
-        app.safeCore.projectRoomLibraryBookCard(
-            input: RoomLibraryBookCardProjectionInput(
-                artifact: artifact,
-                commentCount: UInt32(commentCount)
-            )
+        // D1: inline book_card_projection — title fallback, optional author/summary/image,
+        // sharer pubkey from artifact, relative date, and comment badge.
+        let preview = artifact.preview
+        let title = preview.title.isEmpty ? "Untitled" : preview.title
+        let titleIsFallback = preview.title.isEmpty
+        let relativeUnixSeconds: UInt64? = artifact.createdAt.flatMap { $0 > 0 ? $0 : nil }
+        let commentBadgeLabel: String? = commentCount > 0 ? "\(commentCount)" : nil
+        return RoomLibraryBookCardProjection(
+            title: title,
+            titleIsFallback: titleIsFallback,
+            authorLabel: preview.author.isEmpty ? nil : preview.author,
+            summary: preview.description.isEmpty ? nil : preview.description,
+            imageUrl: preview.image.isEmpty ? nil : preview.image,
+            sharerPubkey: artifact.pubkey,
+            relativeUnixSeconds: relativeUnixSeconds,
+            commentBadgeLabel: commentBadgeLabel
         )
     }
 

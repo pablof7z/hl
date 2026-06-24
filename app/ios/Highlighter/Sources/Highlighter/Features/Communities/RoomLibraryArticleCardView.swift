@@ -43,12 +43,62 @@ struct RoomLibraryArticleCardView: View {
     // MARK: - Derived bits
 
     private var cardProjection: RoomLibraryArticleCardProjection {
-        app.safeCore.projectRoomLibraryArticleCard(
-            input: RoomLibraryArticleCardProjectionInput(
-                artifact: artifact,
-                commentCount: UInt32(commentCount)
-            )
+        // D1: inline article_card_projection — article author extracted from the NIP-23
+        // "a"-tag reference in the artifact preview; domain and comment-count form meta text.
+        let preview = artifact.preview
+        let displayTitle = preview.title.isEmpty ? "Untitled" : preview.title
+        let titleIsFallback = preview.title.isEmpty
+
+        // Article author pubkey: only for "article" source with a valid "a"-tag reference.
+        let articleAuthorPubkey: String? = {
+            guard preview.source.trimmingCharacters(in: .whitespaces).lowercased() == "article"
+            else { return nil }
+            return Self.articleAuthorPubkeyFrom(preview: preview)
+        }()
+
+        let avatarPubkey = articleAuthorPubkey ?? artifact.pubkey
+        let authorProfilePubkey = articleAuthorPubkey ?? ""
+        let relativeUnixSeconds: UInt64? = artifact.createdAt.flatMap { $0 > 0 ? $0 : nil }
+
+        var metaBits: [String] = []
+        if !preview.domain.isEmpty { metaBits.append(preview.domain) }
+        let cc = commentCount
+        if cc > 0 { metaBits.append("\(cc) comment\(cc == 1 ? "" : "s")") }
+        let metaText: String? = metaBits.isEmpty ? nil : metaBits.joined(separator: " · ")
+
+        return RoomLibraryArticleCardProjection(
+            displayTitle: displayTitle,
+            titleIsFallback: titleIsFallback,
+            imageUrl: preview.image.isEmpty ? nil : preview.image,
+            articleAuthorPubkey: articleAuthorPubkey,
+            avatarPubkey: avatarPubkey,
+            authorProfilePubkey: authorProfilePubkey,
+            relativeUnixSeconds: relativeUnixSeconds,
+            metaText: metaText
         )
+    }
+
+    /// Extract the article author pubkey from an ArtifactPreview by reading either the
+    /// `highlightTagName`/`highlightTagValue` or `referenceTagName`/`referenceTagValue`
+    /// fields (mirrors artifact_detail.rs `reference_value_for(preview, "a")`).
+    private static func articleAuthorPubkeyFrom(preview: ArtifactPreview) -> String? {
+        let address: String
+        if preview.highlightTagName.caseInsensitiveCompare("a") == .orderedSame,
+           !preview.highlightTagValue.trimmingCharacters(in: .whitespaces).isEmpty {
+            address = preview.highlightTagValue
+        } else if preview.referenceTagName.caseInsensitiveCompare("a") == .orderedSame,
+                  !preview.referenceTagValue.trimmingCharacters(in: .whitespaces).isEmpty {
+            address = preview.referenceTagValue
+        } else {
+            return nil
+        }
+        let parts = address.trimmingCharacters(in: .whitespaces)
+            .split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+        guard parts.count == 3,
+              parts[0] == "30023",
+              !String(parts[1]).isEmpty,
+              !String(parts[2]).isEmpty else { return nil }
+        return String(parts[1])
     }
 
     private func authorDisplay(

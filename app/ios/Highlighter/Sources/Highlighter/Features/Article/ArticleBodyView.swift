@@ -19,7 +19,6 @@ struct ArticleBodyView: UIViewRepresentable {
     let footnoteBackAnchors: [Int: NSRange]
     let highlightsById: [String: HighlightRecord]
     let paperColor: UIColor
-    let safeCore: SafeHighlighterCore
 
     /// User selected text and tapped **Highlight** (without note). The view
     /// hands back the selected text + the surrounding paragraph as context.
@@ -198,13 +197,12 @@ struct ArticleBodyView: UIViewRepresentable {
             }
             let paragraphRange = NSRange(location: start, length: max(0, end - start))
             let paragraph = full.substring(with: paragraphRange)
-            let projection = parent.safeCore.projectArticleReaderSelection(
-                input: ArticleReaderSelectionProjectionInput(
-                    quote: quote,
-                    context: paragraph
-                )
-            )
-            return (projection.quote, projection.context, projection.hasQuote)
+            // D1: inline article_reader_selection_projection — trim both sides,
+            // clear context when it equals the quote, set hasQuote if non-empty.
+            let trimmedQuote = quote.trimmingCharacters(in: .whitespaces)
+            let trimmedContext = paragraph.trimmingCharacters(in: .whitespaces)
+            let context = trimmedContext == trimmedQuote ? "" : trimmedContext
+            return (trimmedQuote, context, !trimmedQuote.isEmpty)
         }
 
         // MARK: Tap hit-testing

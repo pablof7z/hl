@@ -115,8 +115,8 @@ final class HomeFeedStore {
     }
 
     /// Minimal `ArtifactRecord` from a resolved preview, for the highlight
-    /// share-to-room target. `nil` callers fall back to
-    /// `projectShareHighlightArticleTarget` (HighlightsTabView).
+    /// share-to-room target. `nil` callers fall back to the inline NIP-23
+    /// address parsing in `HighlightsTabView.shareTargetForHighlight(_:)`.
     private static func artifactRecord(from preview: ArtifactPreviewRow) -> ArtifactRecord? {
         guard !preview.pending else { return nil }
         return nil

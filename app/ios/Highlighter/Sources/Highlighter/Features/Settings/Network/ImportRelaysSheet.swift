@@ -18,10 +18,37 @@ struct ImportRelaysSheet: View {
     @State private var isApplying = false
 
     private var projection: ImportRelaysProjection {
-        appStore.safeCore.projectImportRelays(input: ImportRelaysProjectionInput(
-            fetched: fetched,
-            selectedUrls: selectedUrls
-        ))
+        // D1: inline import_relays_projection — map fetched relays to rows, compute counts.
+        let selectedSet = Set(selectedUrls)
+        var selectedConfigs: [RelayConfig] = []
+        let rows: [ImportRelayRow] = fetched.map { config in
+            let isSelected = selectedSet.contains(config.url)
+            if isSelected { selectedConfigs.append(config) }
+            let displayUrl = config.url.hasPrefix("wss://")
+                ? String(config.url.dropFirst(6))
+                : config.url
+            let roleLabel: String
+            switch (config.read, config.write) {
+            case (true, true):  roleLabel = "Read + Write"
+            case (true, false): roleLabel = "Read"
+            case (false, true): roleLabel = "Write"
+            default:            roleLabel = "No roles"
+            }
+            return ImportRelayRow(
+                config: config,
+                displayUrl: displayUrl,
+                roleLabel: roleLabel,
+                isSelected: isSelected
+            )
+        }
+        let foundCount = rows.count
+        return ImportRelaysProjection(
+            rows: rows,
+            selectedCount: UInt64(selectedConfigs.count),
+            foundTitle: "Found \(foundCount) relay\(foundCount == 1 ? "" : "s")",
+            canApply: !selectedConfigs.isEmpty,
+            selectedConfigs: selectedConfigs
+        )
     }
 
     private var sourceProjection: ImportRelaysSourceProjection {
