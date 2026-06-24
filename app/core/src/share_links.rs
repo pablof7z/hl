@@ -4,9 +4,8 @@
 //! event kind, relay hint, and public route that make those links resolve.
 
 use crate::errors::CoreError;
-use crate::nostr_entities::encode_event_to_nevent;
 use crate::relays::highlighter_relay;
-use nostr_sdk::nips::nip19::{Nip19Coordinate, ToBech32};
+use nostr_sdk::nips::nip19::{Nip19Coordinate, Nip19Event, ToBech32};
 use nostr_sdk::prelude::*;
 
 const HIGHLIGHT_SHARE_BASE_URL: &str = "https://beta.highlighter.com/highlight/";
@@ -53,13 +52,25 @@ pub fn highlight_share_url(
     event_id_hex: String,
     author_pubkey_hex: Option<String>,
 ) -> Result<String, CoreError> {
-    let nevent = encode_event_to_nevent(
-        event_id_hex,
-        author_pubkey_hex,
-        vec![highlighter_relay().to_owned()],
-        Some(HIGHLIGHT_EVENT_KIND),
-    )?;
-    Ok(format!("{HIGHLIGHT_SHARE_BASE_URL}{nevent}"))
+    let id = EventId::from_hex(&event_id_hex)
+        .map_err(|e| CoreError::InvalidInput(format!("bad event id: {e}")))?;
+    let mut nevent = Nip19Event::new(id);
+    if let Some(pk_hex) = author_pubkey_hex {
+        let trimmed = pk_hex.trim();
+        if !trimmed.is_empty() {
+            let author = PublicKey::from_hex(trimmed)
+                .map_err(|e| CoreError::InvalidInput(format!("bad author pubkey: {e}")))?;
+            nevent = nevent.author(author);
+        }
+    }
+    nevent = nevent.kind(Kind::from(HIGHLIGHT_EVENT_KIND as u16));
+    let relay = RelayUrl::parse(highlighter_relay())
+        .map_err(|e| CoreError::InvalidInput(format!("bad relay hint: {e}")))?;
+    nevent = nevent.relays([relay]);
+    let encoded = nevent
+        .to_bech32()
+        .map_err(|e| CoreError::InvalidInput(format!("encode nevent: {e}")))?;
+    Ok(format!("{HIGHLIGHT_SHARE_BASE_URL}{encoded}"))
 }
 
 fn article_address_parts(address: &str) -> Result<(Kind, PublicKey, String), CoreError> {
@@ -99,7 +110,61 @@ fn article_address_parts(address: &str) -> Result<(Kind, PublicKey, String), Cor
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nostr_entities::{decode_nostr_entity, NostrEntityRef};
+    use crate::events::NostrEntityRef;
+    use nostr_sdk::nips::nip19::{FromBech32, Nip19, Nip19Coordinate, Nip19Profile};
+
+    fn decode_nostr_entity(input: &str) -> Result<NostrEntityRef, crate::errors::CoreError> {
+        let trimmed = input
+            .trim()
+            .strip_prefix("nostr:")
+            .unwrap_or(input.trim())
+            .trim();
+        let decoded = Nip19::from_bech32(trimmed).map_err(|e| {
+            crate::errors::CoreError::InvalidInput(format!("bad nostr entity: {e}"))
+        })?;
+        Ok(match decoded {
+            Nip19::Pubkey(pk) => NostrEntityRef::Profile {
+                pubkey_hex: pk.to_hex(),
+                relays: Vec::new(),
+            },
+            Nip19::Profile(Nip19Profile {
+                public_key, relays, ..
+            }) => NostrEntityRef::Profile {
+                pubkey_hex: public_key.to_hex(),
+                relays: relays.into_iter().map(|u| u.to_string()).collect(),
+            },
+            Nip19::EventId(id) => NostrEntityRef::Event {
+                event_id_hex: id.to_hex(),
+                relays: Vec::new(),
+                author_hint_hex: None,
+                kind_hint: None,
+            },
+            Nip19::Event(nostr_sdk::nips::nip19::Nip19Event {
+                event_id,
+                author,
+                kind,
+                relays,
+            }) => NostrEntityRef::Event {
+                event_id_hex: event_id.to_hex(),
+                relays: relays.into_iter().map(|u| u.to_string()).collect(),
+                author_hint_hex: author.map(|pk| pk.to_hex()),
+                kind_hint: kind.map(|k| k.as_u16() as u32),
+            },
+            Nip19::Coordinate(Nip19Coordinate {
+                coordinate, relays, ..
+            }) => NostrEntityRef::Address {
+                kind: coordinate.kind.as_u16() as u32,
+                pubkey_hex: coordinate.public_key.to_hex(),
+                d_tag: coordinate.identifier,
+                relays: relays.into_iter().map(|u| u.to_string()).collect(),
+            },
+            _ => {
+                return Err(crate::errors::CoreError::InvalidInput(
+                    "nostr entity type not renderable".into(),
+                ))
+            }
+        })
+    }
 
     fn event_id_hex() -> String {
         "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_owned()

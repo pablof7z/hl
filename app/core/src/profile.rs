@@ -8,7 +8,6 @@ use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::blossom::BlossomUploadSnapshot;
 use crate::errors::CoreError;
 use crate::models::{ProfileMetadata, ProfileUpdateDraft};
 use crate::nostr_runtime::{mirror_social_trio_to_purple, NostrRuntime};
@@ -240,17 +239,6 @@ pub struct ProfileUpdateProjection {
 pub struct ProfileUpdateSnapshot {
     pub profile: Option<ProfileMetadata>,
     pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct ProfileImageUploadResultInput {
-    pub snapshot: BlossomUploadSnapshot,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct ProfileImageUploadResultProjection {
-    pub image_url: Option<String>,
-    pub error_message: Option<String>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -533,22 +521,6 @@ pub fn profile_update_snapshot(
             profile: None,
             error: error.to_string(),
         },
-    }
-}
-
-pub fn profile_image_upload_result_projection(
-    input: ProfileImageUploadResultInput,
-) -> ProfileImageUploadResultProjection {
-    if let Some(upload) = input.snapshot.upload {
-        return ProfileImageUploadResultProjection {
-            image_url: Some(upload.url),
-            error_message: None,
-        };
-    }
-
-    ProfileImageUploadResultProjection {
-        image_url: None,
-        error_message: Some(format!("Upload failed: {}", input.snapshot.error.trim())),
     }
 }
 
@@ -1325,41 +1297,6 @@ mod tests {
         let err = profile_update_snapshot(Err(CoreError::Signer("locked".into())));
         assert!(err.profile.is_none());
         assert_eq!(err.error, "signer error: locked");
-    }
-
-    #[test]
-    fn profile_image_upload_result_projection_projects_url_or_error() {
-        let ok = profile_image_upload_result_projection(ProfileImageUploadResultInput {
-            snapshot: BlossomUploadSnapshot {
-                upload: Some(crate::models::BlossomUpload {
-                    url: "https://blossom.example/profile.jpg".into(),
-                    sha256_hex: "abc".into(),
-                    mime: "image/jpeg".into(),
-                    size_bytes: 123,
-                    width: 640,
-                    height: 480,
-                    alt: String::new(),
-                }),
-                error: String::new(),
-            },
-        });
-        assert_eq!(
-            ok.image_url.as_deref(),
-            Some("https://blossom.example/profile.jpg")
-        );
-        assert_eq!(ok.error_message, None);
-
-        let failed = profile_image_upload_result_projection(ProfileImageUploadResultInput {
-            snapshot: BlossomUploadSnapshot {
-                upload: None,
-                error: " offline ".into(),
-            },
-        });
-        assert_eq!(failed.image_url, None);
-        assert_eq!(
-            failed.error_message.as_deref(),
-            Some("Upload failed: offline")
-        );
     }
 
     #[test]

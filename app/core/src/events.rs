@@ -8,7 +8,77 @@ use crate::models::{
     ArtifactRecord, ChatMessageRecord, CommunitySummary, CurrentUser, DiscussionRecord,
     HighlightRecord, HydratedHighlight, ProfileUpdateAction, RelayDiagnostic, RelayStatus,
 };
-use crate::nostr_entities::NostrEntityEvent;
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum NostrEntityRef {
+    Profile {
+        pubkey_hex: String,
+        relays: Vec<String>,
+    },
+    Event {
+        event_id_hex: String,
+        relays: Vec<String>,
+        author_hint_hex: Option<String>,
+        kind_hint: Option<u32>,
+    },
+    Address {
+        kind: u32,
+        pubkey_hex: String,
+        d_tag: String,
+        relays: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum NostrEntityRenderKind {
+    Article,
+    Note,
+    Highlight,
+    Profile,
+    Generic,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum NostrEntityInlineRender {
+    Profile {
+        pubkey_hex: String,
+        fallback_label: String,
+    },
+    Reference {
+        chip_label: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum NostrContentRun {
+    Text { value: String },
+    Entity { entity: NostrEntityRef },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NostrEntityEvent {
+    pub event_id_hex: String,
+    pub kind: u32,
+    pub render_kind: NostrEntityRenderKind,
+    pub pubkey_hex: String,
+    pub content: String,
+    pub created_at: u64,
+    pub tags_json: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NostrEntityRefSnapshot {
+    pub entity: Option<NostrEntityRef>,
+    pub decoded: bool,
+    pub error_message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct NostrEntityResolutionSnapshot {
+    pub event: Option<NostrEntityEvent>,
+    pub resolved: bool,
+    pub error_message: String,
+}
 
 const KIND_METADATA: u32 = 0;
 const KIND_CONTACTS: u32 = 3;

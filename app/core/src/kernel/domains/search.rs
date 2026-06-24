@@ -2468,30 +2468,17 @@ mod tests {
         );
     }
 
-    // 7-SP-T_PARITY: REAL identity-level parity test — kernel profile scan must
-    // match bespoke `crate::search::search_profiles` on the same fixture.
-    //
-    // Gotcha #7/#7b compliance: calls BOTH functions on shared test data and
-    // asserts pubkey IDENTITY in ORDER — not just counts.
-    //
-    // Fixture:
-    //   keys_a — display_name starts with "huxley" (prefix-match tier)
-    //   keys_b — name contains "Huxley" (contains-only tier)
-    //   keys_c — unrelated (no match)
-    //
-    // Expected order: keys_a first (prefix), keys_b second (contains), keys_c absent.
+    // 7-SP-T: kernel profile scan over a populated cache returns the matching
+    // profiles in tier order (prefix-match first, contains-only second, no-match
+    // excluded), asserting every consumer field Swift reads — values, not counts.
     #[test]
-    fn parity_profile_scan_matches_bespoke_algorithm() {
-        use crate::test_ndb::{isolated_ndb, process_event_and_wait};
-
-        let (ndb, _tmp) = isolated_ndb(4 * 1024 * 1024);
-
+    fn profile_scan_matches_tier_order_and_fields() {
         let keys_a = nostr_sdk::prelude::Keys::generate(); // prefix-match
         let keys_b = nostr_sdk::prelude::Keys::generate(); // contains-only match
         let keys_c = nostr_sdk::prelude::Keys::generate(); // no match
 
         // Every consumer field is populated (name/display_name/about/picture/
-        // nip05) so the per-field parity asserts compare non-empty values, not
+        // nip05) so the per-field asserts compare non-empty values, not
         // empty==empty.
         let ev_a = nostr_sdk::prelude::EventBuilder::new(
             nostr_sdk::prelude::Kind::Custom(0),
@@ -2517,14 +2504,7 @@ mod tests {
         .sign_with_keys(&keys_c)
         .unwrap();
 
-        for ev in [&ev_a, &ev_b, &ev_c] {
-            process_event_and_wait(&ndb, ev);
-        }
-
-        // Bespoke result — real nostrdb scan.
-        let bespoke = crate::search::search_profiles(&ndb, "huxley", 20).unwrap();
-
-        // Kernel: populate profile_search_cache from the same events.
+        // Kernel: populate profile_search_cache from the events.
         let make_hit = |ev: &nostr_sdk::prelude::Event| SearchHitRow {
             id: ev.id.to_hex(),
             author: ev.pubkey.to_hex(),
@@ -2548,60 +2528,43 @@ mod tests {
         };
         let kernel = &s.profiles;
 
-        // ── CONSUMER-FIELD parity: assert EVERY field Swift reads at
-        // SearchView.swift:745 / SearchSeeAllView.swift:262 matches between the
-        // bespoke `search_profiles` and the kernel port, in order. Not counts,
-        // not pubkey-only — the guard must BITE if any field is dropped.
+        // ── CONSUMER-FIELD assertions: assert EVERY field Swift reads at
+        // SearchView.swift:745 / SearchSeeAllView.swift:262 against the fixture's
+        // known values, in order. Not counts, not pubkey-only — the guard must
+        // BITE if any field is dropped.
         // (proven: temporarily zero any kernel field below and this fails.)
         assert_eq!(
             kernel.len(),
-            bespoke.len(),
-            "kernel and bespoke must return the same number of rows\n\
-             bespoke: {:?}\nkernel: {:?}",
-            bespoke.iter().map(|p| &p.pubkey).collect::<Vec<_>>(),
+            2,
+            "fixture has 2 huxley-matching profiles; proust is excluded\nkernel: {:?}",
             kernel.iter().map(|p| &p.pubkey).collect::<Vec<_>>(),
         );
-        assert_eq!(
-            kernel.len(),
-            2,
-            "fixture has 2 huxley-matching profiles; proust is excluded"
-        );
-        for (i, (k, b)) in kernel.iter().zip(bespoke.iter()).enumerate() {
-            assert_eq!(k.pubkey, b.pubkey, "row {i}: pubkey must match (and order)");
-            assert_eq!(k.name, b.name, "row {i} ({}): name must match", b.pubkey);
-            assert_eq!(
-                k.display_name, b.display_name,
-                "row {i} ({}): displayName must match",
-                b.pubkey
-            );
-            assert_eq!(k.about, b.about, "row {i} ({}): about must match", b.pubkey);
-            assert_eq!(
-                k.picture, b.picture,
-                "row {i} ({}): picture must match",
-                b.pubkey
-            );
-            assert_eq!(k.nip05, b.nip05, "row {i} ({}): nip05 must match", b.pubkey);
-            // Bespoke carries created_at as Option<u64>; kernel as u64. The
-            // fixture sets it on every event, so it must round-trip identically.
-            assert_eq!(
-                Some(k.created_at),
-                b.created_at,
-                "row {i} ({}): createdAt must match",
-                b.pubkey
-            );
-        }
 
-        // Prefix-match must be first (keys_a has display_name starting with "Huxley").
+        // Row 0 — keys_a (display_name prefix-match), all consumer fields.
         assert_eq!(
             kernel[0].pubkey,
             keys_a.public_key().to_hex(),
-            "prefix-match (display_name 'Huxley Reader') must rank before contains-only"
+            "row 0 pubkey"
         );
+        assert_eq!(kernel[0].name, "huxley-fan", "row 0 name");
+        assert_eq!(kernel[0].display_name, "Huxley Reader", "row 0 displayName");
+        assert_eq!(kernel[0].about, "Books", "row 0 about");
+        assert_eq!(kernel[0].picture, "https://ex.com/a.png", "row 0 picture");
+        assert_eq!(kernel[0].nip05, "a@ex.com", "row 0 nip05");
+        assert_eq!(kernel[0].created_at, 2_000, "row 0 createdAt");
+
+        // Row 1 — keys_b (name contains-only match), all consumer fields.
         assert_eq!(
             kernel[1].pubkey,
             keys_b.public_key().to_hex(),
-            "contains-only match ('Prof. Aldous Huxley') must rank second"
+            "row 1 pubkey"
         );
+        assert_eq!(kernel[1].name, "Prof. Aldous Huxley", "row 1 name");
+        assert_eq!(kernel[1].display_name, "Aldous H.", "row 1 displayName");
+        assert_eq!(kernel[1].about, "Writer", "row 1 about");
+        assert_eq!(kernel[1].picture, "https://ex.com/b.png", "row 1 picture");
+        assert_eq!(kernel[1].nip05, "b@ex.com", "row 1 nip05");
+        assert_eq!(kernel[1].created_at, 1_000, "row 1 createdAt");
 
         // Sanity: the matched rows actually carry non-empty consumer fields, so
         // the per-field asserts above are not vacuously comparing empty==empty.

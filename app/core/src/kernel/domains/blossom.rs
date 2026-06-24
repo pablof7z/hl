@@ -221,7 +221,7 @@ fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow, now: u64
                     .and_then(|v| v.pointer("/nip94/alt").and_then(serde_json::Value::as_str))
                     .unwrap_or_default()
                     .to_string();
-                Some(crate::models::BlossomUpload {
+                Some(crate::kernel::models::BlossomUpload {
                     url: url.clone(),
                     sha256_hex,
                     mime,
@@ -336,7 +336,7 @@ fn reduce_event_blossom_upload_result_inner(
     state: &mut AppState,
     success: bool,
     blob_url: String,
-    blossom_upload: Option<crate::models::BlossomUpload>,
+    blossom_upload: Option<crate::kernel::models::BlossomUpload>,
 ) {
     if success {
         state.capture_draft.has_upload = true;

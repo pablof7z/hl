@@ -13,30 +13,14 @@ pub use kernel::{
 };
 // ─────────────────────────────────────────────────────────────────────────────
 
-pub mod article_reader;
-pub mod articles;
 pub mod artifacts;
-pub mod blossom;
-pub mod book_detail;
-pub mod bookmarks;
-pub mod capture;
-pub mod chat;
 pub mod client;
 pub mod clock;
-pub mod comments;
-pub mod curation;
-pub mod discussions;
 pub mod errors;
 pub mod events;
 pub mod feedback;
-pub mod follows;
-pub mod groups;
 pub mod highlights;
-pub mod isbn_lookup;
-pub mod lists;
 pub mod models;
-pub mod nip46;
-pub mod nostr_entities;
 pub mod nostr_runtime;
 pub mod ocr;
 pub mod onboarding;
@@ -46,75 +30,20 @@ pub mod podcast_playback;
 pub mod podcast_position;
 pub mod podcast_transcript;
 pub mod profile;
-pub mod reactions;
-pub mod reads;
-pub mod recent_books;
 pub mod relays;
-pub mod room_invites;
-pub mod search;
-pub mod session;
-pub mod share_extension;
 pub mod share_links;
-pub mod share_targets;
-pub mod subscriptions;
 #[cfg(test)]
 pub mod test_ndb;
 pub mod time_labels;
 pub mod waveform;
-pub mod web_metadata;
 
-pub use article_reader::{
-    ArticleReaderHighlightPublishSnapshot, ArticleReaderPublishResultInput,
-    ArticleReaderPublishResultProjection, ArticleReaderSnapshot, ArticleReaderSnapshotApplyInput,
-    ArticleReaderSnapshotProjection,
-};
-pub use articles::{
-    ArticleProfileCardProjection, ArticleProfileCardProjectionInput, ArticleReaderHeaderProjection,
-    ArticleReaderHeaderProjectionInput,
-};
 pub use artifacts::ArtifactPublishSnapshot;
-pub use blossom::{
-    BlossomServerEntryProjection, BlossomServerEntryProjectionInput, BlossomServerListProjection,
-    BlossomServerListProjectionInput, BlossomServerSettingsMutationSnapshot,
-    BlossomServerSettingsSnapshot, BlossomUploadSnapshot,
-};
-pub use book_detail::{
-    BookDetailSnapshot, BookDetailSnapshotApplyInput, BookDetailSnapshotApplyProjection,
-};
-pub use bookmarks::{
-    ArticleBookmarkChromeProjection, ArticleBookmarkChromeProjectionInput,
-    ArticleBookmarkStateProjection, ArticleBookmarkStateProjectionInput, ArticleBookmarksSnapshot,
-    ArticleBookmarksSnapshotApplyInput, ArticleBookmarksSnapshotApplyProjection,
-};
-pub use capture::{
-    CaptureBookDisplayProjection, CaptureBookDisplayProjectionInput,
-    CaptureCommunitySelectionProjection, CaptureCommunitySelectionProjectionInput,
-    CapturePublishInput, CapturePublishPhase, CapturePublishProjection,
-    CapturePublishProjectionInput, CapturePublishResultProjection,
-    CapturePublishResultProjectionInput, CapturePublishSnapshot, CaptureStashProjection,
-    CaptureStashProjectionInput, CaptureUploadProjection, CaptureUploadProjectionInput,
-};
 pub use client::HighlighterCore;
-pub use comments::{
-    CommentActionChromeProjection, CommentActionChromeProjectionInput, CommentComposerProjection,
-    CommentComposerProjectionInput, CommentInlineThreadSnapshotApplyInput,
-    CommentInlineThreadSnapshotApplyProjection, CommentInteractionMutationSnapshot,
-    CommentInteractionRow, CommentInteractionSnapshot, CommentNodeChromeProjection,
-    CommentNodeChromeProjectionInput, CommentPublishResultInput, CommentPublishResultProjection,
-    CommentPublishSnapshot, CommentScopeSnapshot, CommentSnapshotApplyInput,
-    CommentSnapshotApplyProjection, CommentThreadSnapshot, CommentThreadViewProjection,
-    CommentThreadViewProjectionInput, CommentToolbarProjection, CommentToolbarProjectionInput,
-};
 pub use errors::CoreError;
-pub use events::{DataChangeType, Delta, EventCallback};
-pub use groups::{
-    CommunityRowProjection, CommunityRowProjectionInput, CreateRoomCoverUploadResultInput,
-    CreateRoomCoverUploadResultProjection, CreateRoomProjection, CreateRoomProjectionInput,
-    CreateRoomPublishResultInput, CreateRoomPublishResultProjection, CreateRoomPublishSnapshot,
-    CreateRoomVisibilityOption, JoinRoomRequestSnapshot, JoinedCommunitiesSnapshot,
-    JoinedCommunitiesSnapshotApplyInput, JoinedCommunitiesSnapshotApplyProjection, RoomAccess,
-    RoomAvatarProjection, RoomAvatarProjectionInput, RoomCoverCardProjection,
-    RoomCoverCardProjectionInput, RoomVisibility,
+pub use events::{
+    DataChangeType, Delta, EventCallback, NostrContentRun, NostrEntityEvent,
+    NostrEntityInlineRender, NostrEntityRef, NostrEntityRefSnapshot, NostrEntityRenderKind,
+    NostrEntityResolutionSnapshot,
 };
 pub use highlights::{
     ArticleHighlightPublishProjection, ArticleHighlightPublishProjectionInput,
@@ -126,21 +55,6 @@ pub use highlights::{
     HighlightGroupHighlighterProfile, HighlightGroupHighlighterProjection,
     HighlightGroupLabelSegment, HighlightResourceAuthorProfile, HighlightResourceHeaderProjection,
     HighlightResourceHeaderProjectionInput, HighlightShareUrlSnapshot,
-};
-pub use isbn_lookup::{
-    BookPickerQueryProjection, BookPickerQueryProjectionInput, BookPickerSnapshot,
-    EditedBookPreviewProjection, IsbnManualPreviewProjection, IsbnManualPreviewProjectionInput,
-    IsbnPreviewLookupApplyInput, IsbnPreviewLookupApplyProjection, IsbnPreviewLookupSnapshot,
-    IsbnPreviewRequestProjection, IsbnPreviewRequestProjectionInput,
-};
-pub use lists::{
-    BookmarkLibraryFilter, BookmarkLibraryFilterChipProjection, BookmarkLibraryPane,
-    BookmarkLibraryProjection, BookmarkLibraryProjectionInput, BookmarkLibraryScope,
-    BookmarkLibraryScopeOptionProjection, BookmarkLibrarySnapshot, BookmarkSetDetailSnapshot,
-    BookmarkSetRowProjection, BookmarkSetRowProjectionInput, BookmarkedArticleRowProjection,
-    BookmarkedArticleRowProjectionInput, CurationMenuSnapshot, CurationMenuSnapshotApplyInput,
-    CurationMenuSnapshotApplyProjection, CurationSetCreateProjection,
-    CurationSetCreateProjectionInput, WebBookmarkRowProjection, WebBookmarkRowProjectionInput,
 };
 pub use models::{
     AppSubscriptionStartProjection, AppSubscriptionStartProjectionInput, ArticleReaderRoute,
@@ -155,11 +69,6 @@ pub use models::{
     ProfileMetadata, ProfileUpdateDraft, ReadingFeedItem, RoomLane, RoomRecommendation,
     RoomRecommendationReason, SubscriptionStartSnapshot, ViewSubscriptionStartProjection,
     ViewSubscriptionStartProjectionInput, WebBookmarkRecord,
-};
-pub use nip46::NostrConnectStartSnapshot;
-pub use nostr_entities::{
-    NostrEntityArticleCardProjection, NostrEntityArticleCardProjectionInput,
-    NostrEntityRefSnapshot, NostrEntityResolutionSnapshot,
 };
 pub use ocr::{OcrLine, OcrPageDetection, OcrPageSide, OcrRect, OcrWord};
 pub use podcast_playback::{
@@ -183,7 +92,6 @@ pub use profile::{
     ProfileFollowActionProjection, ProfileFollowMutationApplyInput,
     ProfileFollowMutationApplyProjection, ProfileFollowMutationInput,
     ProfileFollowMutationSnapshot, ProfileIdentityProjection, ProfileIdentityProjectionInput,
-    ProfileImageUploadResultInput, ProfileImageUploadResultProjection,
     ProfileRelationshipProjection, ProfileRelationshipProjectionInput, ProfileUpdateProjection,
     ProfileUpdateProjectionInput, ProfileUpdateResultInput, ProfileUpdateResultProjection,
     ProfileUpdateSnapshot,
@@ -204,49 +112,11 @@ pub use relays::{
     RelayNip11ProbeSnapshot, RelayRemoveProjection, RelayRemoveProjectionInput, RelayRowProjection,
     RelayRowProjectionInput, RelaySettingsProjection, RelayStatusTone,
 };
-pub use room_invites::{
-    RoomInviteAvatarProjection, RoomInviteAvatarProjectionInput, RoomInviteCandidate,
-    RoomInviteCandidateSource, RoomInviteChip, RoomInviteInputFormat, RoomInviteProjection,
-    RoomInviteResolvedCandidate, RoomInviteSelectionAction, RoomInviteSelectionChromeInput,
-    RoomInviteSelectionChromeProjection, RoomInviteSelectionInput, RoomInviteSelectionProjection,
-    RoomInviteSendResultProjection, RoomInviteSnapshot, RoomInviteSnapshotInput,
-    RoomInviteSuggestion,
-};
-pub use search::{
-    SearchArticleResultsSnapshot, SearchChromeSnapshot, SearchCommunityRowProjection,
-    SearchCommunityRowProjectionInput, SearchHighlightRowProjection,
-    SearchHighlightRowProjectionInput, SearchQueryProjection, SearchQueryProjectionInput,
-    SearchRelayArticlesApplyInput, SearchRelayArticlesApplyProjection, SearchRelayRefreshInput,
-    SearchRelayRefreshProjection, SearchRelayStartResultInput, SearchRelayStartResultProjection,
-    SearchRelayUpdateInput, SearchRelayUpdateProjection, SearchResultsApplyInput,
-    SearchResultsApplyProjection, SearchResultsSnapshot, SearchScheduleInput,
-    SearchScheduleProjection, SearchSuggestionsProjection, SearchSuggestionsProjectionInput,
-    SearchTextMatchSpan, SearchTextMatchesProjection, SearchTextMatchesProjectionInput,
-};
-pub use session::{
-    AccountGenerationSnapshot, AuthSessionRestoreSnapshot, AuthSessionSnapshot,
-    PublicKeyDisplayProjection, PublicKeyDisplayProjectionInput, SecretKeyDisplayProjection,
-    SecretKeyDisplayProjectionInput, SecretKeySettingsSnapshot, SessionStorageWriteInput,
-    SessionStorageWriteSnapshot,
-};
-pub use share_extension::{
-    ShareQueueAttempt, ShareQueueDrainProjection, ShareQueueDrainProjectionInput, ShareQueueItem,
-};
 pub use share_links::ArticleShareUrlSnapshot;
-pub use share_targets::{
-    ShareArticleTargetProjectionInput, ShareArtifactTargetProjection,
-    ShareArtifactTargetProjectionInput, ShareHighlightArticleTargetProjectionInput,
-    ShareHighlightTargetProjection, ShareHighlightTargetProjectionInput,
-    ShareToCommunityPublishResultInput, ShareToCommunityPublishResultProjection,
-    ShareWebReaderTargetProjectionInput, ShareWebReaderTargetSnapshot,
-};
 pub use time_labels::{
     RelativeTimeLabelInput, RelativeTimeLabelProjection, RelativeTimeLabelStyle,
 };
 pub use waveform::{
     WaveformCacheKeyProjection, WaveformCacheKeyProjectionInput, WaveformPeaksPlan,
     WaveformPeaksPlanInput, WaveformWifiStatus,
-};
-pub use web_metadata::{
-    WebMetadata, WebMetadataRequestProjection, WebMetadataRequestProjectionInput,
 };

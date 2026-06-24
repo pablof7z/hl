@@ -72,6 +72,41 @@ pub struct ArtifactRecord {
     pub note: String,
 }
 
+/// Result of a successful Blossom upload — what to put in an `imeta` tag.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct BlossomUpload {
+    /// Public URL the server returned (e.g. `https://blossom.primal.net/<sha>.jpg`).
+    pub url: String,
+    /// Lowercase hex SHA-256 of the uploaded bytes.
+    pub sha256_hex: String,
+    /// MIME type the client uploaded as.
+    pub mime: String,
+    pub size_bytes: u64,
+    pub width: u32,
+    pub height: u32,
+    /// Optional alt text — for OCR captures, the recognized text. Empty if none.
+    pub alt: String,
+}
+
+/// A pending highlight to publish — text + optional context/note.
+#[derive(Debug, Clone)]
+pub struct HighlightDraft {
+    pub quote: String,
+    pub context: String,
+    pub note: String,
+    /// Optional clip bounds for audio/video (seconds).
+    pub clip_start_seconds: Option<f64>,
+    pub clip_end_seconds: Option<f64>,
+    /// Speaker name for audio clips — empty if unknown or N/A.
+    pub clip_speaker: String,
+    /// Transcript segment IDs that the clip spans. Empty for non-clip highlights.
+    pub clip_transcript_segment_ids: Vec<String>,
+    /// Optional photo accompanying the highlight (e.g. the page captured for an
+    /// OCR'd book quote). When set, the published kind:9802 carries an
+    /// `imeta` tag (NIP-92) referencing the Blossom-hosted blob.
+    pub image: Option<BlossomUpload>,
+}
+
 /// Last podcast playback position persisted by the Rust core. Native shells
 /// own AV playback handles, but durable playback state and the cold-launch
 /// episode projection live here so every platform resumes the same episode.

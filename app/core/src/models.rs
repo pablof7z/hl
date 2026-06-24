@@ -438,40 +438,11 @@ pub struct HydratedHighlight {
     pub shared_by_pubkey: Option<String>,
 }
 
-/// A pending highlight to publish — text + optional context/note.
-#[derive(Debug, Clone)]
-pub struct HighlightDraft {
-    pub quote: String,
-    pub context: String,
-    pub note: String,
-    /// Optional clip bounds for audio/video (seconds).
-    pub clip_start_seconds: Option<f64>,
-    pub clip_end_seconds: Option<f64>,
-    /// Speaker name for audio clips — empty if unknown or N/A.
-    pub clip_speaker: String,
-    /// Transcript segment IDs that the clip spans. Empty for non-clip highlights.
-    pub clip_transcript_segment_ids: Vec<String>,
-    /// Optional photo accompanying the highlight (e.g. the page captured for an
-    /// OCR'd book quote). When set, the published kind:9802 carries an
-    /// `imeta` tag (NIP-92) referencing the Blossom-hosted blob.
-    pub image: Option<BlossomUpload>,
-}
-
-/// Result of a successful Blossom upload — what to put in an `imeta` tag.
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct BlossomUpload {
-    /// Public URL the server returned (e.g. `https://blossom.primal.net/<sha>.jpg`).
-    pub url: String,
-    /// Lowercase hex SHA-256 of the uploaded bytes.
-    pub sha256_hex: String,
-    /// MIME type the client uploaded as.
-    pub mime: String,
-    pub size_bytes: u64,
-    pub width: u32,
-    pub height: u32,
-    /// Optional alt text — for OCR captures, the recognized text. Empty if none.
-    pub alt: String,
-}
+// Phase 7 — Part-C prep: HighlightDraft and BlossomUpload were relocated into
+// the kernel lane (`crate::kernel::models`) because the kernel uses them
+// directly. Re-imported here so the bespoke files that reference
+// `crate::models::{HighlightDraft, BlossomUpload}` keep resolving.
+pub use crate::kernel::models::{BlossomUpload, HighlightDraft};
 
 /// A pending NIP-68 picture (kind:20) to publish into a community.
 /// Used as the OCR-fallback path: when the user couldn't or didn't want to

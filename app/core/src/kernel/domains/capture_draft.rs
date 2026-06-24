@@ -204,7 +204,7 @@ pub struct CaptureDraftState {
     /// the nmp blob JSON). `None` when only the URL is available (test-injection
     /// path via `KernelEvent::BlossomUploadResult`). `blossom_image_url` keeps
     /// the URL accessible for the view snapshot regardless.
-    pub blossom_upload: Option<crate::models::BlossomUpload>,
+    pub blossom_upload: Option<crate::kernel::models::BlossomUpload>,
     /// Existing published artifact to reference on the highlight+artifact path
     /// (kind:9802). Set via `hl.capture.set_artifact_record` (future action
     /// wiring); tests set this field directly on `AppState::capture_draft`.
@@ -506,7 +506,7 @@ pub(crate) fn reduce_action_publish(state: &mut AppState, now: u64) -> Vec<Effec
 /// `highlights::build_imeta_tag` without the nostr-sdk Tag wrapper —
 /// produces a `Vec<String>` suitable for embedding in a `serde_json::json!`
 /// tag array.
-fn imeta_tag_parts(upload: &crate::models::BlossomUpload) -> Vec<String> {
+fn imeta_tag_parts(upload: &crate::kernel::models::BlossomUpload) -> Vec<String> {
     let mut parts = vec!["imeta".to_string()];
     parts.push(format!("url {}", upload.url));
     parts.push(format!("m {}", upload.mime));
@@ -1295,7 +1295,7 @@ mod tests {
         // 5G sets has_upload when the Blossom upload completes; simulate that here.
         state.capture_draft.has_upload = true;
         // Provide a full blossom_upload so imeta is included in the event.
-        state.capture_draft.blossom_upload = Some(crate::models::BlossomUpload {
+        state.capture_draft.blossom_upload = Some(crate::kernel::models::BlossomUpload {
             url: "https://blossom.example/img.jpg".into(),
             sha256_hex: "aa".repeat(32),
             mime: "image/jpeg".into(),
@@ -1802,8 +1802,8 @@ mod tests {
         }
     }
 
-    fn fixture_blossom() -> crate::models::BlossomUpload {
-        crate::models::BlossomUpload {
+    fn fixture_blossom() -> crate::kernel::models::BlossomUpload {
+        crate::kernel::models::BlossomUpload {
             url: "https://blossom.primal.net/abc123.jpg".into(),
             sha256_hex: "abc123".repeat(8) + "ab", // 50-char placeholder
             mime: "image/jpeg".into(),
@@ -1932,7 +1932,7 @@ mod tests {
         let blossom = fixture_blossom();
 
         // Bespoke expected event — same inputs the kernel will see.
-        let bespoke_draft = crate::models::HighlightDraft {
+        let bespoke_draft = crate::kernel::models::HighlightDraft {
             quote: "A profound insight from the book.".into(),
             context: "The chapter about design patterns.".into(),
             note: "This changed my mind.".into(),
@@ -2113,7 +2113,7 @@ mod tests {
         // Bespoke expected highlight event (kind:9802) referencing the same
         // artifact record the kernel synthesises from the preview.
         let artifact_from_preview = crate::artifacts::unpublished_record(preview.clone());
-        let bespoke_draft = crate::models::HighlightDraft {
+        let bespoke_draft = crate::kernel::models::HighlightDraft {
             quote: "Key insight from unpublished book.".into(),
             context: "The introduction chapter.".into(),
             note: "Must revisit.".into(),
@@ -2493,7 +2493,7 @@ mod tests {
         let blossom = fixture_blossom();
 
         // Bespoke expected event — same inputs the kernel will see.
-        let bespoke_draft = crate::models::HighlightDraft {
+        let bespoke_draft = crate::kernel::models::HighlightDraft {
             quote: "A profound insight from the book.".into(),
             context: String::new(),
             note: String::new(),
