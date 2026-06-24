@@ -142,6 +142,19 @@ struct KeysView: View {
     // MARK: - Helpers
 
     private var secretKeySnapshot: SecretKeySettingsSnapshot {
-        store.safeCore.currentSecretKeySettingsSnapshot(isRevealed: isRevealed)
+        guard let nsec = KeychainService.loadNsec(), !nsec.isEmpty else {
+            return SecretKeySettingsSnapshot(hasSecretKey: false, displayValue: "", copyValue: nil)
+        }
+        let displayValue: String
+        if isRevealed || nsec.count <= 10 {
+            displayValue = nsec
+        } else {
+            displayValue = "\(nsec.prefix(8))••••••••••••••••••••••••\(nsec.suffix(6))"
+        }
+        return SecretKeySettingsSnapshot(
+            hasSecretKey: true,
+            displayValue: displayValue,
+            copyValue: nsec
+        )
     }
 }

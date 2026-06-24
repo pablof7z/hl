@@ -419,22 +419,15 @@ struct RoomInviteView: View {
     @MainActor
     private func refreshInviteSnapshot(requestProfiles: Bool) async {
         let requestKey = inviteSnapshotRequestKey
-        let snapshot = await appStore.safeCore.getRoomInviteSnapshot(
-            input: RoomInviteSnapshotInput(
-                query: query,
-                profiles: Array(appStore.profileSnapshots.values),
-                selected: selected.map(\.coreCandidate),
-                limit: 50
-            )
+        // Stub: people-search/candidate projection temporarily unavailable
+        // until the kernel exposes it. Empty projection keeps the view stable.
+        let snapshot = RoomInviteSnapshot(
+            projection: Self.emptyInviteProjection,
+            profilePubkeysToRequest: [],
+            error: ""
         )
         guard !Task.isCancelled, requestKey == inviteSnapshotRequestKey else { return }
         inviteSnapshot = snapshot
-
-        guard requestProfiles else { return }
-        for pubkey in snapshot.profilePubkeysToRequest {
-            guard !Task.isCancelled else { return }
-            await appStore.requestProfile(pubkeyHex: pubkey)
-        }
     }
 
     /// Host relay for the room. Prefer the live kernel room-home snapshot

@@ -342,15 +342,9 @@ struct HighlightDetailView: View {
     /// server-rendered with full Open Graph + Twitter Card meta so the
     /// link unfurls into a social card built around the quote.
     private func refreshShareURL() async {
-        let snapshot = await app.safeCore.getHighlightShareUrlSnapshot(
-            eventIdHex: highlight.eventId,
-            authorPubkeyHex: highlight.pubkey
-        )
-        guard snapshot.ready, let url = snapshot.shareUrl else {
-            shareURL = nil
-            return
-        }
-        shareURL = URL(string: url)
+        // Stub: use the hex event ID URL until the kernel provides NIP-19
+        // nevent encoding (bech32 + TLV). The server resolves by hex too.
+        shareURL = URL(string: "https://beta.highlighter.com/highlight/\(highlight.eventId)")
     }
 
     // MARK: - Resource projection

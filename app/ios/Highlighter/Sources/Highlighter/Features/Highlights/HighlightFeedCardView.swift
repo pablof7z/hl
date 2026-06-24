@@ -646,13 +646,11 @@ struct HighlightFeedCardView: View {
 
         guard let addr = resource.articleAddress else { return }
 
-        sourceArticle = await app.safeCore.getArticleByAddress(address: addr)
-        if let pubkey = sourceArticle?.pubkey, !pubkey.isEmpty {
-            sourceArticleAuthorPubkey = pubkey
-            await app.requestProfile(pubkeyHex: pubkey)
-            return
-        }
-        if let pubkey = await app.safeCore.getArticleAddressAuthor(address: addr), !pubkey.isEmpty {
+        // Pure parse of "30023:pubkeyHex:d-tag" — the author pubkey is the
+        // second segment. Replaces the nostrdb article lookup (D1 inline).
+        let parts = addr.split(separator: ":", maxSplits: 2).map(String.init)
+        if parts.count >= 3, !parts[1].isEmpty {
+            let pubkey = parts[1]
             sourceArticleAuthorPubkey = pubkey
             await app.requestProfile(pubkeyHex: pubkey)
         }
