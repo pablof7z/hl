@@ -439,24 +439,37 @@ struct EditProfileSheet: View {
     private func save() {
         let projection = updateProjection
         guard projection.canSave else { return }
-        saving = true
-        Task {
-            defer { Task { @MainActor in saving = false } }
-            let outcome = await appStore.safeCore.updateProfile(draft: projection.draft)
-            await MainActor.run {
-                let errorText = outcome.error.trimmingCharacters(in: .whitespaces)
-                if !errorText.isEmpty {
-                    self.error = errorText
-                    return
-                }
-                guard let updated = outcome.profile else {
-                    self.error = "Unable to update profile."
-                    return
-                }
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                onSaved(updated)
-                dismiss()
-            }
-        }
+        let draft = projection.draft
+        // Fire-and-forget kernel dispatch (D6). Rust preserves unknown kind:0 fields
+        // and publishes the new metadata event; the kernel observer loop delivers
+        // the updated ProfileSnapshot back via App.swift's onChange bridge.
+        appStore.kernel?.app.dispatch(.updateProfile(
+            displayName: draft.displayName.isEmpty ? nil : draft.displayName,
+            name: draft.name.isEmpty ? nil : draft.name,
+            about: draft.about.isEmpty ? nil : draft.about,
+            pictureUrl: draft.picture.isEmpty ? nil : draft.picture,
+            bannerUrl: draft.banner.isEmpty ? nil : draft.banner,
+            website: draft.website.isEmpty ? nil : draft.website,
+            nip05: draft.nip05.isEmpty ? nil : draft.nip05,
+            lightningAddress: draft.lud16.isEmpty ? nil : draft.lud16
+        ))
+        // Optimistic: build a ProfileMetadata from the form fields so the caller
+        // can refresh its display without waiting for the relay echo.
+        let pubkey = initial?.pubkey ?? ""
+        let updated = ProfileMetadata(
+            pubkey: pubkey,
+            name: draft.name,
+            displayName: draft.displayName,
+            about: draft.about,
+            picture: draft.picture,
+            banner: draft.banner,
+            nip05: draft.nip05,
+            website: draft.website,
+            lud16: draft.lud16,
+            createdAt: nil
+        )
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        onSaved(updated)
+        dismiss()
     }
 }

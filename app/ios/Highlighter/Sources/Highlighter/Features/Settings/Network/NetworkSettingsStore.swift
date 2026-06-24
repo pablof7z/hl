@@ -147,12 +147,11 @@ final class NetworkSettingsStore {
     }
 
     /// Toggle Wi-Fi-only mode. The app store owns the `NWPathMonitor`
-    /// capability; Rust owns the durable preference and relay connection
-    /// policy.
+    /// capability; the preference is persisted in UserDefaults.
     func setWifiOnly(_ on: Bool) async {
         wifiOnlyEnabled = on
-        let snapshot = await core.setWifiOnlyEnabled(on)
-        applyWifiOnlyPreferenceSnapshot(snapshot)
+        UserDefaults.standard.set(on, forKey: "hl.network.wifi_only")
+        appStore?.applyNetworkPathMonitorEnabled(on)
     }
 
     // MARK: - Lifecycle

@@ -488,6 +488,26 @@ pub(crate) struct CreateAndAddToSetPayload {
     pub item_coordinate: String,
 }
 
+// ── Phase 7 Part C additions (append-only) ───────────────────────────────────
+
+/// `hl.profile.update` envelope payload — update the active account's kind:0
+/// profile metadata.
+///
+/// All fields are optional — absent/`None` fields are NOT written to the event.
+/// `Some("")` clears a field. Unknown kind:0 fields from the existing event are
+/// preserved verbatim (round-trip safe). Fire-and-forget (D6, Non-Negotiable #3).
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct UpdateProfilePayload {
+    pub display_name: Option<String>,
+    pub name: Option<String>,
+    pub about: Option<String>,
+    pub picture_url: Option<String>,
+    pub banner_url: Option<String>,
+    pub website: Option<String>,
+    pub nip05: Option<String>,
+    pub lightning_address: Option<String>,
+}
+
 /// Every user or platform action the kernel understands.
 ///
 /// Dispatch is fire-and-forget (`dispatch(action)` returns `()`; Non-Negotiable #3).
@@ -1024,6 +1044,24 @@ pub enum AppAction {
     AudioSetResume {
         /// Resume position in seconds (finite, ≥ 0).
         seconds: f64,
+    },
+
+    // ── Phase 7 Part C additions (append-only) ─────────────────────────────
+    /// Update the active account's kind:0 profile metadata.
+    ///
+    /// Rust preserves unknown kind:0 fields from the existing event (round-trip
+    /// safe). Signs and publishes a new kind:0 replaceable event. Only non-None
+    /// fields are written; `Some("")` clears a field.
+    /// Fire-and-forget (D6, Non-Negotiable #3).
+    UpdateProfile {
+        display_name: Option<String>,
+        name: Option<String>,
+        about: Option<String>,
+        picture_url: Option<String>,
+        banner_url: Option<String>,
+        website: Option<String>,
+        nip05: Option<String>,
+        lightning_address: Option<String>,
     },
 }
 

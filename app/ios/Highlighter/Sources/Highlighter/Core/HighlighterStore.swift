@@ -60,7 +60,6 @@ final class HighlighterStore {
     /// referencing the same URL share a single Task. Cleared once the
     /// fetch completes (success or failure).
     @ObservationIgnored private var webMetadataInflight: [String: Task<Void, Never>] = [:]
-    @ObservationIgnored private var isbnInflight: [String: Task<Void, Never>] = [:]
 
     var isLoggedIn: Bool { currentUser != nil }
 
@@ -137,11 +136,9 @@ final class HighlighterStore {
     }
 
     func completeOnboardingInterests(selectedIds: [String]) async -> MutationSnapshot {
-        let outcome = await safeCore.completeOnboardingInterests(selectedIds: selectedIds)
-        if outcome.applied {
-            isOnboardingComplete = true
-        }
-        return outcome
+        kernel?.app.dispatch(.completeOnboarding)
+        isOnboardingComplete = true
+        return MutationSnapshot(applied: true, error: "")
     }
 
     // MARK: - Bookmarks
@@ -275,31 +272,12 @@ final class HighlighterStore {
         }
     }
 
-    /// Fetch + cache an ISBN preview. Concurrent callers for the same ISBN
-    /// coalesce onto one in-flight Task. No-op when already cached.
-    /// Rust canonicalizes the input to ISBN-13 before lookup.
+    /// Fetch + cache an ISBN preview. Dispatches to the kernel; the result
+    /// arrives via the kernel's artifact-preview snapshot in a later wave.
     func requestIsbnPreview(isbn: String) async {
-        // D1: ISBN-13 normalization is the same pure computation Swift already
-        // owns for the scanner (`normalizeIsbn`). Rust still owns the
-        // network-backed catalog lookup that consumes the normalized value.
         guard let key = normalizeIsbn(isbn) else { return }
         if isbnPreviewCache[key] != nil { return }
-        if let existing = isbnInflight[key] {
-            await existing.value
-            return
-        }
-        let task = Task { [weak self] in
-            guard let self else { return }
-            let outcome = await self.safeCore.lookupIsbn(key)
-            await MainActor.run {
-                if let preview = outcome.preview {
-                    self.isbnPreviewCache[key] = preview
-                }
-                self.isbnInflight.removeValue(forKey: key)
-            }
-        }
-        isbnInflight[key] = task
-        await task.value
+        kernel?.app.dispatch(.lookupIsbn(isbn: key))
     }
 
     /// Snapshot `joinedCommunities` into the App Group handoff store so the
@@ -312,8 +290,8 @@ final class HighlighterStore {
     }
 
     func refreshNetworkPathCapabilityPreference() {
-        let snapshot = safeCore.getNetworkWifiOnlyPreferenceSnapshot()
-        applyNetworkPathMonitorEnabled(snapshot.pathMonitorEnabled)
+        let wifiOnly = UserDefaults.standard.bool(forKey: "hl.network.wifi_only")
+        applyNetworkPathMonitorEnabled(wifiOnly)
     }
 
     func applyNetworkPathMonitorEnabled(_ enabled: Bool) {
@@ -358,9 +336,8 @@ final class HighlighterStore {
             currentUserProfile = snap.asProfileMetadata()
         }
 
-        // Publish the default Blossom server list if the user has never set one.
-        // No-op when a kind:10063 is already cached. Fire-and-forget.
-        _ = await safeCore.initDefaultBlossomServers()
+        // Default Blossom server setup is now handled by the kernel's
+        // DEFAULT_BLOSSOM_SERVER constant; no bespoke init needed.
     }
 
     private func startNetworkPathMonitor() {

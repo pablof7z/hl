@@ -799,4 +799,24 @@ pub enum Effect {
         /// Reducer-minted placeholder correlation id (swapped for the nmp id).
         correlation_id: String,
     },
+
+    // ── Phase 7 Part C additions (append-only) ───────────────────────────────
+    /// Update the active account's kind:0 profile metadata.
+    ///
+    /// The effect runner reads the existing kind:0 from nostrdb, merges the
+    /// supplied fields (preserving unknown fields — round-trip safe), signs,
+    /// and publishes a new kind:0 replaceable event.
+    ///
+    /// Phase 7 Part C stub: no-op until the bespoke lane is deleted.
+    /// Fire-and-forget (D6, Non-Negotiable #3).
+    UpdateProfile {
+        display_name: Option<String>,
+        name: Option<String>,
+        about: Option<String>,
+        picture_url: Option<String>,
+        banner_url: Option<String>,
+        website: Option<String>,
+        nip05: Option<String>,
+        lightning_address: Option<String>,
+    },
 }

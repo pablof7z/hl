@@ -29,14 +29,8 @@ struct RootSceneView: View {
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 ShareQueueProcessor.drain(app: store, kernel: kernel)
-                // iOS suspends WebSockets while we're backgrounded; nostr-sdk's
-                // foreground refresh path forces a fresh socket/subscription
-                // cycle when Rust policy allows it. Without this the NIP-46
-                // nostrconnect:// flow misses Primal's response when the user
-                // comes back from the signer app.
-                Task {
-                    _ = await store.safeCore.refreshRelayConnectionsForForeground()
-                }
+                // Relay foreground refresh is handled by kernel.app.resume()
+                // in App.swift's scenePhase onChange (belt-and-suspenders).
             }
         }
         // Belt-and-suspenders: mirror live-lane logout/onboarding state changes

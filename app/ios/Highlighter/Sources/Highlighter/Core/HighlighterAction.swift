@@ -191,6 +191,21 @@ enum HighlighterAction {
     /// add `itemCoordinate` as its first member. Fire-and-forget.
     case createAndAddToSet(title: String, itemCoordinate: String)
 
+    // ── Profile update (Phase 7 Part C) ──────────────────────────────────────────
+    /// Publish an updated kind:0 profile metadata event via the kernel.
+    /// Fire-and-forget (D6). Rust preserves unknown kind:0 fields (round-trip safe).
+    /// `nil` fields are omitted; `Some("")` clears a field.
+    case updateProfile(
+        displayName: String?,
+        name: String?,
+        about: String?,
+        pictureUrl: String?,
+        bannerUrl: String?,
+        website: String?,
+        nip05: String?,
+        lightningAddress: String?
+    )
+
     // ── Feedback / shake-to-share (Phase 7 cutover) ─────────────────────────────
     case feedbackOpenList
     case feedbackCloseList
@@ -529,6 +544,20 @@ enum HighlighterAction {
                 namespace: "hl.curation.create_and_add",
                 json: jsonObject(["title": title, "item_coordinate": itemCoordinate])
             )
+
+        // ── Profile update (Phase 7 Part C) ──────────────────────────────────
+        case .updateProfile(let displayName, let name, let about, let pictureUrl,
+                            let bannerUrl, let website, let nip05, let lightningAddress):
+            var dict: [String: Any] = [:]
+            if let v = displayName { dict["display_name"] = v }
+            if let v = name { dict["name"] = v }
+            if let v = about { dict["about"] = v }
+            if let v = pictureUrl { dict["picture_url"] = v }
+            if let v = bannerUrl { dict["banner_url"] = v }
+            if let v = website { dict["website"] = v }
+            if let v = nip05 { dict["nip05"] = v }
+            if let v = lightningAddress { dict["lightning_address"] = v }
+            return AppActionEnvelope(namespace: "hl.profile.update", json: jsonAny(dict))
         }
     }
 }

@@ -186,12 +186,9 @@ final class EventBridge: EventCallback, @unchecked Sendable {
             store?.applyStatus(url: url, state: state)
         case .appToastRequested(let message):
             appStore?.shareToast = message
-        case .membershipChanged(let groupId):
+        case .membershipChanged(_):
             if let appStore {
-                Task {
-                    await appStore.safeCore.confirmPendingJoin(groupId: groupId)
-                    await appStore.refreshJoinedCommunities()
-                }
+                Task { await appStore.refreshJoinedCommunities() }
             }
         case .communityUpserted:
             // Any group-related event arrived — re-query nostrdb for the

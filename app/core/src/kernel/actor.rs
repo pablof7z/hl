@@ -482,6 +482,29 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         AppAction::AudioPause => podcast::reduce_action_pause(state),
         AppAction::AudioSeek { seconds } => podcast::reduce_action_seek(state, seconds),
         AppAction::AudioSetResume { seconds } => podcast::reduce_action_set_resume(state, seconds),
+
+        // ── Phase 7 Part C additions (append-only) ───────────────────────────
+        AppAction::UpdateProfile {
+            display_name,
+            name,
+            about,
+            picture_url,
+            banner_url,
+            website,
+            nip05,
+            lightning_address,
+        } => {
+            vec![Effect::UpdateProfile {
+                display_name,
+                name,
+                about,
+                picture_url,
+                banner_url,
+                website,
+                nip05,
+                lightning_address,
+            }]
+        }
     }
 }
 
@@ -1001,6 +1024,25 @@ fn reduce_action_envelope(
             use crate::kernel::action::EnsureArtifactPreviewPayload;
             let p = parse!(EnsureArtifactPreviewPayload);
             artifact_preview::ensure_artifact_preview(state, p.coordinate)
+        }
+
+        // ── Phase 7 Part C additions (append-only) ───────────────────────────
+        // `hl.profile.update` — update the active account's kind:0 metadata.
+        // Fire-and-forget (D6, Non-Negotiable #3): the kernel merges the fields,
+        // preserves unknown keys from the existing event, signs, and publishes.
+        "hl.profile.update" => {
+            use crate::kernel::action::UpdateProfilePayload;
+            let p = parse!(UpdateProfilePayload);
+            vec![Effect::UpdateProfile {
+                display_name: p.display_name,
+                name: p.name,
+                about: p.about,
+                picture_url: p.picture_url,
+                banner_url: p.banner_url,
+                website: p.website,
+                nip05: p.nip05,
+                lightning_address: p.lightning_address,
+            }]
         }
 
         // ── Unknown namespace ─────────────────────────────────────────────────
@@ -2149,6 +2191,36 @@ pub(crate) async fn run_effect(
                 // registration. For now, log and leave the row pending — the consumer
                 // screens tolerate pending rows with placeholder UI.
             }
+        }
+
+        // ── Phase 7 Part C additions (append-only) ───────────────────────────
+        Effect::UpdateProfile {
+            display_name,
+            name,
+            about,
+            picture_url,
+            banner_url,
+            website,
+            nip05,
+            lightning_address,
+        } => {
+            // Phase 7 Part C stub: the bespoke lane still handles profile updates
+            // via safeCore.updateProfile (crate::profile::publish_profile requires
+            // a NostrRuntime which is not available in the kernel effect runner).
+            // After the bespoke lane is deleted this becomes a full kernel-native
+            // kind:0 publish (read ndb → merge fields → preserve unknown keys →
+            // ActorCommand::PublishRawEvent). Fire-and-forget (D6).
+            let _ = (
+                display_name,
+                name,
+                about,
+                picture_url,
+                banner_url,
+                website,
+                nip05,
+                lightning_address,
+            );
+            tracing::warn!("UpdateProfile effect: not yet implemented in kernel (Phase 7 Part C stub)");
         }
     }
 

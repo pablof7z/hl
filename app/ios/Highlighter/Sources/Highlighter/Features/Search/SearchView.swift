@@ -74,12 +74,11 @@ struct SearchView: View {
         }
         .task {
             if store == nil {
-                let s = SearchStore(safeCore: app.safeCore, kernel: kernel)
+                let s = SearchStore(kernel: kernel)
                 store = s
                 await s.start()
             }
-            let snapshot = await app.safeCore.getSearchChromeSnapshot()
-            recentQueries = snapshot.recentQueries
+            recentQueries = UserDefaults.standard.stringArray(forKey: "hl.search.recent_queries") ?? []
         }
         .onChange(of: kernel.searchSnapshot) { _, _ in
             store?.applyKernelSnapshot()
@@ -472,17 +471,17 @@ struct SearchView: View {
     private func commitRecentQuery() {
         let searchQuery = (store?.query ?? "").trimmingCharacters(in: .whitespaces)
         guard !searchQuery.isEmpty else { return }
-        Task { @MainActor in
-            let snapshot = await app.safeCore.recordRecentSearchSnapshot(searchQuery)
-            recentQueries = snapshot.recentQueries
-        }
+        var queries = UserDefaults.standard.stringArray(forKey: "hl.search.recent_queries") ?? []
+        queries.removeAll { $0 == searchQuery }
+        queries.insert(searchQuery, at: 0)
+        if queries.count > 10 { queries = Array(queries.prefix(10)) }
+        UserDefaults.standard.set(queries, forKey: "hl.search.recent_queries")
+        recentQueries = queries
     }
 
     private func clearRecentQueries() {
-        Task { @MainActor in
-            let snapshot = await app.safeCore.clearRecentSearchesSnapshot()
-            recentQueries = snapshot.recentQueries
-        }
+        UserDefaults.standard.removeObject(forKey: "hl.search.recent_queries")
+        recentQueries = []
     }
 
     private func allEmpty(store: SearchStore) -> Bool {

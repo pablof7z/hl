@@ -42,7 +42,6 @@ final class SearchStore {
 
     // MARK: - Dependencies
 
-    private let safeCore: SafeHighlighterCore
     /// Phase 7: the kernel owns article/highlight/community search.
     @ObservationIgnored private let kernel: HighlighterAppKernel
 
@@ -53,8 +52,7 @@ final class SearchStore {
 
     // MARK: - Init
 
-    init(safeCore: SafeHighlighterCore, kernel: HighlighterAppKernel) {
-        self.safeCore = safeCore
+    init(kernel: HighlighterAppKernel) {
         self.kernel = kernel
     }
 
@@ -62,8 +60,7 @@ final class SearchStore {
 
     func start() async {
         kernel.openSearch()
-        let snapshot = await safeCore.getSearchChromeSnapshot()
-        searchRelays = snapshot.searchRelays
+        // searchRelays: populated from kernel relay state in a later wave.
     }
 
     func stop() {
