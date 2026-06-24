@@ -9,8 +9,7 @@ import SwiftUI
 /// opens the RoomExplorer kernel view on `.task` (the actor's lifecycle hook
 /// auto-starts room discovery) and reads `newNoteworthy` directly, filtering
 /// client-side by the search query. Joining dispatches the `JoinRoom` kernel
-/// action. The bespoke `safeCore.startRoomDiscovery` /
-/// `getRoomBrowseSnapshot` / `requestJoinRoom` calls were removed.
+/// action. The bespoke room discovery/read/join calls were removed.
 struct RoomBrowseAllView: View {
     @Environment(HighlighterStore.self) private var appStore
     @Environment(HighlighterAppKernel.self) private var kernel

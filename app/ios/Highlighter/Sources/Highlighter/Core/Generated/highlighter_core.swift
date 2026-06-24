@@ -816,6 +816,14 @@ public protocol HighlighterAppProtocol: AnyObject, Sendable {
     func provideCapabilityResult(result: CapabilityResult)
 
     /**
+     * Return the current configured relay list from NMP's relay slot.
+     * Reads directly from the Arc<Mutex<AppRelayList>> without going through
+     * the actor — safe because the slot is Arc-shared and updated by the NMP actor.
+     * Returns empty if NMP is not yet started (test mode / before startup).
+     */
+    func relayListSnapshot()  -> [KernelRelayRow]
+
+    /**
      * Notify the kernel that the app entered the foreground.
      */
     func resume()
@@ -976,6 +984,19 @@ open func provideCapabilityResult(result: CapabilityResult)  {try! rustCall() {
 }
 
     /**
+     * Return the current configured relay list from NMP's relay slot.
+     * Reads directly from the Arc<Mutex<AppRelayList>> without going through
+     * the actor — safe because the slot is Arc-shared and updated by the NMP actor.
+     * Returns empty if NMP is not yet started (test mode / before startup).
+     */
+open func relayListSnapshot() -> [KernelRelayRow]  {
+    return try!  FfiConverterSequenceTypeKernelRelayRow.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_relay_list_snapshot(self.uniffiClonePointer(),$0
+    )
+})
+}
+
+    /**
      * Notify the kernel that the app entered the foreground.
      */
 open func resume()  {try! rustCall() {
@@ -1105,13 +1126,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      * into a NIP-29 room.
      */
     func publishPodcastComposerClip(input: PodcastClipComposerPublishInput) async  -> PodcastClipPublishSnapshot
-
-    /**
-     * Read the user's configured relay list from the local event store.
-     * Source of truth: kind:10002 (NIP-65) + kind:30078 app-data. Falls
-     * back to seed defaults when no events are present. Non-blocking (ndb read).
-     */
-    func queryUserRelayConfigs(pubkeyHex: String)  -> [RelayConfig]
 
     func recordPodcastPlaybackPosition(input: PodcastPlaybackPositionInput)  -> MutationSnapshot
 
@@ -1274,19 +1288,6 @@ open func publishPodcastComposerClip(input: PodcastClipComposerPublishInput)asyn
             errorHandler: nil
 
         )
-}
-
-    /**
-     * Read the user's configured relay list from the local event store.
-     * Source of truth: kind:10002 (NIP-65) + kind:30078 app-data. Falls
-     * back to seed defaults when no events are present. Non-blocking (ndb read).
-     */
-open func queryUserRelayConfigs(pubkeyHex: String) -> [RelayConfig]  {
-    return try!  FfiConverterSequenceTypeRelayConfig.lift(try! rustCall() {
-    uniffi_highlighter_core_fn_method_highlightercore_query_user_relay_configs(self.uniffiClonePointer(),
-        FfiConverterString.lower(pubkeyHex),$0
-    )
-})
 }
 
 open func recordPodcastPlaybackPosition(input: PodcastPlaybackPositionInput) -> MutationSnapshot  {
@@ -14426,6 +14427,81 @@ public func FfiConverterTypeKernelNetworkSettingsSnapshot_lower(_ value: KernelN
 
 
 /**
+ * A single relay row read from NMP's `configured_relays` slot.
+ * `role` is the canonical NMP wire string: "read", "write", "both",
+ * "indexer", "read,indexer", "write,indexer", or "both,indexer".
+ */
+public struct KernelRelayRow {
+    public var url: String
+    public var role: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(url: String, role: String) {
+        self.url = url
+        self.role = role
+    }
+}
+
+#if compiler(>=6)
+extension KernelRelayRow: Sendable {}
+#endif
+
+
+extension KernelRelayRow: Equatable, Hashable {
+    public static func ==(lhs: KernelRelayRow, rhs: KernelRelayRow) -> Bool {
+        if lhs.url != rhs.url {
+            return false
+        }
+        if lhs.role != rhs.role {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(url)
+        hasher.combine(role)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelRelayRow: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelRelayRow {
+        return
+            try KernelRelayRow(
+                url: FfiConverterString.read(from: &buf),
+                role: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelRelayRow, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterString.write(value.role, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelRelayRow_lift(_ buf: RustBuffer) throws -> KernelRelayRow {
+    return try FfiConverterTypeKernelRelayRow.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelRelayRow_lower(_ value: KernelRelayRow) -> RustBuffer {
+    return FfiConverterTypeKernelRelayRow.lower(value)
+}
+
+
+/**
  * Snapshot for `ViewId::RoomExplorer` — the discovery screen.
  *
  * Named `KernelRoomExplorerSnapshot` to avoid collision with the legacy
@@ -23156,90 +23232,6 @@ public func FfiConverterTypeRelativeTimeLabelProjection_lower(_ value: RelativeT
 }
 
 
-/**
- * One relay's NIP-78 app-data flags (Phase 7). Mirrors the bespoke
- * `relays.rs::AppDataEntry` so the kernel publishes the kind:30078
- * `com.highlighter.relays` event in the SAME content shape — rooms AND indexer
- * are per-relay flags in ONE replaceable event, not separate lists.
- */
-public struct RelayAppDataEntry {
-    public var url: String
-    public var rooms: Bool
-    public var indexer: Bool
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(url: String, rooms: Bool, indexer: Bool) {
-        self.url = url
-        self.rooms = rooms
-        self.indexer = indexer
-    }
-}
-
-#if compiler(>=6)
-extension RelayAppDataEntry: Sendable {}
-#endif
-
-
-extension RelayAppDataEntry: Equatable, Hashable {
-    public static func ==(lhs: RelayAppDataEntry, rhs: RelayAppDataEntry) -> Bool {
-        if lhs.url != rhs.url {
-            return false
-        }
-        if lhs.rooms != rhs.rooms {
-            return false
-        }
-        if lhs.indexer != rhs.indexer {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(url)
-        hasher.combine(rooms)
-        hasher.combine(indexer)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeRelayAppDataEntry: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RelayAppDataEntry {
-        return
-            try RelayAppDataEntry(
-                url: FfiConverterString.read(from: &buf),
-                rooms: FfiConverterBool.read(from: &buf),
-                indexer: FfiConverterBool.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: RelayAppDataEntry, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.url, into: &buf)
-        FfiConverterBool.write(value.rooms, into: &buf)
-        FfiConverterBool.write(value.indexer, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRelayAppDataEntry_lift(_ buf: RustBuffer) throws -> RelayAppDataEntry {
-    return try FfiConverterTypeRelayAppDataEntry.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeRelayAppDataEntry_lower(_ value: RelayAppDataEntry) -> RustBuffer {
-    return FfiConverterTypeRelayAppDataEntry.lower(value)
-}
-
-
 public struct RelayAvatarProjection {
     public var iconUrl: String?
     public var initial: String
@@ -31826,6 +31818,12 @@ public enum SearchScope {
      * from a single query (Swift buckets the mixed hits by kind). Phase 7.
      */
     case articlesAndHighlights
+    /**
+     * kind:0 + kind:9802 + kind:30023 in one query — unified search screen
+     * with People, Articles, and Highlights all populated from a single
+     * NIP-50 relay subscription. Swift buckets the mixed hits by kind.
+     */
+    case articlesHighlightsAndUsers
 }
 
 
@@ -31851,6 +31849,8 @@ public struct FfiConverterTypeSearchScope: FfiConverterRustBuffer {
 
         case 4: return .articlesAndHighlights
 
+        case 5: return .articlesHighlightsAndUsers
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -31873,6 +31873,10 @@ public struct FfiConverterTypeSearchScope: FfiConverterRustBuffer {
 
         case .articlesAndHighlights:
             writeInt(&buf, Int32(4))
+
+
+        case .articlesHighlightsAndUsers:
+            writeInt(&buf, Int32(5))
 
         }
     }
@@ -34960,6 +34964,31 @@ fileprivate struct FfiConverterSequenceTypeKernelHomeFeedRow: FfiConverterRustBu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeKernelRelayRow: FfiConverterRustBuffer {
+    typealias SwiftType = [KernelRelayRow]
+
+    public static func write(_ value: [KernelRelayRow], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeKernelRelayRow.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [KernelRelayRow] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [KernelRelayRow]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeKernelRelayRow.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeKernelRoomLane: FfiConverterRustBuffer {
     typealias SwiftType = [KernelRoomLane]
 
@@ -35831,6 +35860,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlighterapp_provide_capability_result() != 16552) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_relay_list_snapshot() != 61650) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlighterapp_resume() != 61329) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -35862,9 +35894,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_publish_podcast_composer_clip() != 13940) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_query_user_relay_configs() != 14303) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_record_podcast_playback_position() != 26014) {

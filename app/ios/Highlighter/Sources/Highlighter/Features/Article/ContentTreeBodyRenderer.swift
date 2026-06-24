@@ -59,10 +59,9 @@ enum ContentTreeBodyRenderer {
     ///
     /// `resolveEntity` converts a wire entity URI into the app's resolving
     /// `NostrEntityRef` (the kernel `standaloneNostrEntity` decode); standalone
-    /// event refs become `.nostrEntity` card segments. The closure is
-    /// `nonisolated` on `SafeHighlighterCore`, so it is safe to call here off
-    /// the main actor. When it returns `nil` (undecodable URI) the ref falls
-    /// back to a visible inline chip — never to empty.
+    /// event refs become `.nostrEntity` card segments. When it returns `nil`
+    /// (undecodable URI) the ref falls back to a visible inline chip — never to
+    /// empty.
     static func render(
         tree: ContentTreeWire,
         highlights: [HighlightRecord],

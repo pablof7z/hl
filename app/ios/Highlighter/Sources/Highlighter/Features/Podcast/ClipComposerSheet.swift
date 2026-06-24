@@ -300,7 +300,7 @@ struct ClipComposerSheet: View {
         publishError = nil
 
         Task {
-            let outcome = await app.safeCore.publishPodcastComposerClip(
+            let outcome = await app.core.publishPodcastComposerClip(
                 input: PodcastClipComposerPublishInput(
                     artifact: artifact,
                     segments: player.transcriptSegments,

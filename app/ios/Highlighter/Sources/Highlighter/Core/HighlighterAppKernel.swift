@@ -134,8 +134,7 @@ final class HighlighterAppKernel {
     private(set) var bookmarks: BookmarksSnapshot?
 
     /// What's New sheet projection. `nil` until `prepareWhatsNew` is dispatched.
-    /// App.swift observes this to trigger the sheet when `shouldPresent` is true
-    /// (Phase 7 C1 — replaces the bespoke `safeCore.prepareWhatsNew` call).
+    /// App.swift observes this to trigger the sheet when `shouldPresent` is true.
     private(set) var whatsNew: WhatsNewSnapshot?
 
     /// BookPicker snapshot. `nil` until the `ViewId.bookPicker` view is open.
@@ -468,11 +467,11 @@ final class HighlighterAppKernel {
         app.dispatch(.setBookPickerQuery(query: query, recentLimit: 30, searchLimit: 20))
     }
 
-    // MARK: - Phase 7 Part C: relay list from NMP slot
+    // MARK: - Relay list from NMP slot
 
     /// Relay list snapshot from NMP's configured_relays slot. Used by
     /// `NetworkSettingsStore.load()` to hydrate the relay list without reading
-    /// nostrdb. Rooms/indexer flags are NOT carried here — they come from
+    /// nostrdb. Rooms/indexer flags are NOT carried here; they come from
     /// UserDefaults (`hl.relays.app_flags`).
     var relayListSnapshot: [KernelRelayRow] {
         app.relayListSnapshot()

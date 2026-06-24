@@ -10,7 +10,7 @@ import Observation
 /// `ViewId.homeFeed` view and maps the raw rows into the bespoke render
 /// view-models (`HomeFeedItem`/`HydratedHighlight`/`ReadingFeedItem`). The
 /// live-lane `getHomeFeedSnapshot` / `subscribeFollowingReads|Highlights` path
-/// and its EventBridge wiring are gone (kernel is the sole reader).
+/// is gone (kernel is the sole reader).
 @MainActor
 @Observable
 final class HomeFeedStore {
