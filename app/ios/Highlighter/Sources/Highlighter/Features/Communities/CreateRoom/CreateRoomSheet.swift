@@ -1,14 +1,12 @@
 import Kingfisher
-import PhotosUI
 import SwiftUI
 
 /// Founding-a-room flow. One `.large` sheet, no wizard. The name field is
 /// the only serif on the screen — the room is being given an identity, and
 /// the typeface honours that. Visibility is an inline row, not a segmented
 /// control — the default (public · open) is sane, so most users never
-/// touch it. Picking a cover routes through `PhotosPicker` →
-/// `core.uploadPhoto` so the image lands on the user's Blossom server
-/// before the room is created. On success, pushes `RoomInviteView` in
+/// touch it. A cover is set by pasting an image URL. On create, the room is
+/// minted with a caller-supplied groupId and `RoomInviteView` is pushed in
 /// welcome mode so adding the first guests feels like one continuous act.
 struct CreateRoomSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -19,10 +17,7 @@ struct CreateRoomSheet: View {
     @State private var visibility: RoomVisibility = .public
     @State private var access: RoomAccess = .open
     @State private var visibilityPickerPresented = false
-    @State private var photoItem: PhotosPickerItem?
-    @State private var coverUpload: BlossomUpload?
-    @State private var coverIsUploading = false
-    @State private var isCreating = false
+    @State private var coverURL: String = ""
     @State private var error: String?
     @State private var createdGroupId: String?
 
@@ -34,7 +29,7 @@ struct CreateRoomSheet: View {
         let createAbout = about.trimmingCharacters(in: .whitespaces)
         let (glyph, summary) = Self.visibilityDisplay(visibility, access)
         return CreateRoomProjection(
-            canCreate: createName.count >= 2 && !isCreating && !coverIsUploading,
+            canCreate: createName.count >= 2,
             createName: createName,
             createAbout: createAbout,
             visibilityGlyph: glyph,
@@ -109,10 +104,6 @@ struct CreateRoomSheet: View {
             }, message: {
                 if let error { Text(error) }
             })
-            .onChange(of: photoItem) { _, newItem in
-                guard let newItem else { return }
-                Task { await uploadCover(item: newItem) }
-            }
         }
     }
 
@@ -120,7 +111,7 @@ struct CreateRoomSheet: View {
 
     private var coverPlate: some View {
         ZStack {
-            if let upload = coverUpload, let url = URL(string: upload.url) {
+            if !coverURL.isEmpty, let url = URL(string: coverURL) {
                 KFImage(url)
                     .resizable()
                     .scaledToFill()
@@ -138,28 +129,21 @@ struct CreateRoomSheet: View {
                 )
                 .frame(height: 200)
                 .overlay {
-                    if coverIsUploading {
-                        ProgressView()
-                            .tint(.white)
-                            .controlSize(.large)
-                    } else {
-                        VStack(spacing: 8) {
-                            Image(systemName: "photo.on.rectangle.angled")
-                                .font(.title)
-                                .foregroundStyle(.white.opacity(0.92))
-                            Text("Add a cover")
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(.white.opacity(0.92))
-                        }
+                    VStack(spacing: 8) {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .font(.title)
+                            .foregroundStyle(.white.opacity(0.92))
+                        Text("Paste a cover URL below")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.white.opacity(0.92))
                     }
                 }
             }
         }
         .overlay(alignment: .topTrailing) {
-            if coverUpload != nil {
+            if !coverURL.isEmpty {
                 Button {
-                    coverUpload = nil
-                    photoItem = nil
+                    coverURL = ""
                 } label: {
                     Image(systemName: "xmark")
                         .font(.caption.weight(.semibold))
@@ -169,13 +153,6 @@ struct CreateRoomSheet: View {
                 }
                 .padding(12)
             }
-        }
-        .overlay {
-            // Make the whole plate tappable to pick — no fiddly tiny buttons.
-            PhotosPicker(selection: $photoItem, matching: .images) {
-                Color.clear
-            }
-            .buttonStyle(.plain)
         }
     }
 
@@ -204,6 +181,18 @@ struct CreateRoomSheet: View {
             .foregroundStyle(Color.highlighterInkStrong)
             .focused($focused, equals: .about)
             .lineLimit(3...8)
+
+            TextField(
+                "",
+                text: $coverURL,
+                prompt: Text("Cover image URL (optional)")
+                    .foregroundColor(Color.highlighterInkMuted.opacity(0.7))
+            )
+            .font(.body)
+            .foregroundStyle(Color.highlighterInkStrong)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .keyboardType(.URL)
         }
     }
 
@@ -245,21 +234,15 @@ struct CreateRoomSheet: View {
             .frame(height: 24)
 
             Button(action: create) {
-                ZStack {
-                    if isCreating {
-                        ProgressView().tint(.white)
-                    } else {
-                        Text("Create Room")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(projection.canCreate ? Color.highlighterAccent : Color.highlighterAccent.opacity(0.35))
-                )
+                Text("Create Room")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(projection.canCreate ? Color.highlighterAccent : Color.highlighterAccent.opacity(0.35))
+                    )
             }
             .buttonStyle(.plain)
             .disabled(!projection.canCreate)
@@ -275,79 +258,28 @@ struct CreateRoomSheet: View {
         Binding(get: { error != nil }, set: { if !$0 { error = nil } })
     }
 
-    private func uploadCover(item: PhotosPickerItem) async {
-        coverIsUploading = true
-        defer { coverIsUploading = false }
-        do {
-            guard let data = try await item.loadTransferable(type: Data.self) else { return }
-            guard let image = UIImage(data: data) else {
-                error = "That image couldn't be read."
-                return
-            }
-            let prepared = await prepareForUpload(image: image)
-            let outcome = await appStore.safeCore.uploadPhoto(
-                bytes: prepared.data,
-                mime: "image/jpeg",
-                width: UInt32(prepared.width),
-                height: UInt32(prepared.height),
-                alt: ""
-            )
-            if let upload = outcome.upload {
-                coverUpload = upload
-            } else {
-                self.error = "Couldn't upload cover: \(outcome.error.trimmingCharacters(in: .whitespaces))"
-            }
-        } catch {
-            self.error = "Couldn't upload cover: \(error.localizedDescription)"
-        }
-    }
-
-    private struct PreparedImage {
-        let data: Data
-        let width: Int
-        let height: Int
-    }
-
-    private func prepareForUpload(image: UIImage) async -> PreparedImage {
-        let maxSide: CGFloat = 1600
-        let scale = min(1, maxSide / max(image.size.width, image.size.height))
-        let target = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: target)
-        let scaled = renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: target))
-        }
-        let data = scaled.jpegData(compressionQuality: 0.85) ?? Data()
-        return PreparedImage(
-            data: data,
-            width: Int(scaled.size.width),
-            height: Int(scaled.size.height)
-        )
-    }
-
     private func create() {
         let draft = projection
         guard draft.canCreate else { return }
-        let pictureURL = coverUpload?.url ?? ""
-        isCreating = true
-        focused = nil
-        Task {
-            defer { isCreating = false }
-            let outcome = await appStore.safeCore.createRoom(
-                name: draft.createName,
-                about: draft.createAbout,
-                picture: pictureURL,
-                visibility: visibility,
-                access: access
-            )
-            let trimmedError = outcome.error.trimmingCharacters(in: .whitespaces)
-            if trimmedError.isEmpty {
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.success)
-                createdGroupId = outcome.groupId
-            } else {
-                self.error = "Couldn't publish: \(trimmedError)"
-            }
+
+        let hostRelay = appStore.joinedCommunities.first?.relayUrl ?? ""
+        guard !hostRelay.isEmpty else {
+            error = "No rooms relay configured. Join a room first."
+            return
         }
+
+        let groupId = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(16)).lowercased()
+
+        appStore.kernel?.app.dispatch(.createRoom(
+            groupId: groupId,
+            hostRelayUrl: hostRelay,
+            name: draft.createName,
+            about: draft.createAbout.isEmpty ? nil : draft.createAbout
+        ))
+
+        focused = nil
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        createdGroupId = groupId
     }
 }
 
