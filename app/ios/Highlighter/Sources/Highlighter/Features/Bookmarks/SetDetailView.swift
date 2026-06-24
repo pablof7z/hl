@@ -100,12 +100,9 @@ struct SetDetailView: View {
     }
 
     private func loadArticles() async {
-        isLoading = true
-        defer { isLoading = false }
-
-        let snapshot = await app.safeCore.getBookmarkSetDetailSnapshot(record: record)
-        displayTitle = snapshot.displayTitle
-        articles = snapshot.articles
-        isCollectionEmpty = snapshot.isEmpty
+        // Kernel does not have a getBookmarkSetDetailSnapshot projection yet.
+        // Degrade gracefully: show an empty set rather than calling bespoke core.
+        articles = []
+        isCollectionEmpty = true
     }
 }

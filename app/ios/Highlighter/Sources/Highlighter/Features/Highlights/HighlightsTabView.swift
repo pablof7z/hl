@@ -145,7 +145,7 @@ struct HighlightsTabView: View {
     @ViewBuilder
     private func highlightContextMenu(_ item: HydratedHighlight) -> some View {
         Button {
-            shareTarget = .highlight(item.highlight, core: app.safeCore)
+            shareTarget = .highlight(item.highlight)
         } label: {
             Label("Share quote to room", systemImage: "quote.bubble")
         }
@@ -172,7 +172,7 @@ struct HighlightsTabView: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button {
-                shareTarget = ShareToCommunityTarget.article(item.article, core: app.safeCore)
+                shareTarget = ShareToCommunityTarget.article(item.article)
             } label: {
                 Label("Share to community", systemImage: "square.and.arrow.up")
             }
@@ -183,7 +183,7 @@ struct HighlightsTabView: View {
     /// highlights today — we reshare the source article, not the quote.
     private func shareTargetForHighlight(_ item: HydratedHighlight) -> ShareToCommunityTarget? {
         if let existing = item.artifact {
-            return .artifact(existing, core: app.safeCore)
+            return .artifact(existing)
         }
         // D1: inline highlight_article_target_projection — parse the NIP-23
         // address, build a minimal ArtifactPreview with "a"-tag references.

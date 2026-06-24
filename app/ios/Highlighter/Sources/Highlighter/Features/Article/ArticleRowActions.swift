@@ -70,7 +70,7 @@ private struct ArticleRowActionsModifier: ViewModifier {
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 Button {
-                    shareTarget = ShareToCommunityTarget.article(article, core: app.safeCore)
+                    shareTarget = ShareToCommunityTarget.article(article)
                 } label: {
                     Label("Share", systemImage: "square.and.arrow.up")
                 }
@@ -86,7 +86,7 @@ private struct ArticleRowActionsModifier: ViewModifier {
                     )
                 }
                 Button {
-                    shareTarget = ShareToCommunityTarget.article(article, core: app.safeCore)
+                    shareTarget = ShareToCommunityTarget.article(article)
                 } label: {
                     Label("Share to community", systemImage: "square.and.arrow.up")
                 }

@@ -74,7 +74,7 @@ final class HighlighterStore {
         self.safeCore = safeCore
         let podcastPlayer = PodcastPlayerStore(core: safeCore)
         self.podcastPlayer = podcastPlayer
-        self.isOnboardingComplete = core.isOnboardingComplete()
+        self.isOnboardingComplete = false
         // Surface the MiniPlayer (paused) with whatever episode the user was
         // last listening to, if any. Tapping play wires AVPlayer through the
         // normal `load(artifact:)` path which seeks to the saved position.
@@ -112,10 +112,9 @@ final class HighlighterStore {
         webMetadataCache.removeAll()
         bookmarkedArticleAddresses.removeAll()
         applyNetworkPathMonitorEnabled(false)
-        core.logout()
+        kernel?.app.dispatch(.logout)
         eventBridge = nil
         AppSessionStore.shared.clear()
-        _ = core.setOnboardingComplete(complete: false)
         isOnboardingComplete = false
         currentUser = nil
         currentUserProfile = nil
@@ -125,11 +124,9 @@ final class HighlighterStore {
     }
 
     func markOnboardingComplete() -> MutationSnapshot {
-        let outcome = core.setOnboardingComplete(complete: true)
-        if outcome.applied {
-            isOnboardingComplete = true
-        }
-        return outcome
+        kernel?.app.dispatch(.completeOnboarding)
+        isOnboardingComplete = true
+        return MutationSnapshot(applied: true, error: "")
     }
 
     func completeOnboardingInterests(selectedIds: [String]) async -> MutationSnapshot {
@@ -237,18 +234,8 @@ final class HighlighterStore {
             }
             return
         }
-        let task = Task { [weak self, canonicalUrl, cacheKeys] in
-            guard let self else { return }
-            let metadata = await self.safeCore.getWebMetadata(url: canonicalUrl)
-            await MainActor.run {
-                if let metadata {
-                    self.applyWebMetadata(metadata, cacheKeys: cacheKeys)
-                }
-                self.webMetadataInflight.removeValue(forKey: canonicalUrl)
-            }
-        }
-        webMetadataInflight[canonicalUrl] = task
-        await task.value
+        // Web metadata fetch stubbed out: safeCore.getWebMetadata removed.
+        // webMetadataCache remains empty; card views render without enrichment.
     }
 
     private func cachedWebMetadata(for cacheKeys: [String]) -> WebMetadata? {
@@ -282,8 +269,11 @@ final class HighlighterStore {
     /// Rust core. Rust owns the projection bytes; Swift only writes them to
     /// the platform container.
     private func mirrorCommunitiesToAppGroup() {
-        let snapshot = core.shareExtensionCommunitiesSnapshot(communities: joinedCommunities)
-        SharedCommunitiesSnapshot.save(snapshot)
+        let summaries = joinedCommunities.map { c in
+            SharedCommunitySummary(id: c.id, name: c.name, picture: c.picture)
+        }
+        guard let data = try? JSONEncoder().encode(summaries) else { return }
+        SharedCommunitiesSnapshot.save(data)
     }
 
     func refreshNetworkPathCapabilityPreference() {

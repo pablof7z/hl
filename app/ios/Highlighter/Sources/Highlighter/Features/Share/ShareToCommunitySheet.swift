@@ -25,28 +25,57 @@ struct ShareToCommunityTarget: Identifiable {
         case highlightRepost(eventId: String, authorPubkeyHex: String, relayHint: String)
     }
 
-    static func article(_ article: ArticleRecord, core: SafeHighlighterCore) -> ShareToCommunityTarget {
-        let projection = core.projectShareArticleTarget(
-            input: ShareArticleTargetProjectionInput(article: article)
+    // D1: pure Swift — no kernel call needed for these projections.
+
+    static func article(_ article: ArticleRecord) -> ShareToCommunityTarget {
+        let displayTitle = article.title.isEmpty ? article.identifier : article.title
+        // Build ArtifactPreview inline from ArticleRecord (NIP-23 kind:30023).
+        let preview = ArtifactPreview(
+            id: article.eventId,
+            url: "",
+            title: article.title,
+            author: article.pubkey,
+            image: article.image,
+            description: article.summary,
+            source: "article",
+            domain: "",
+            catalogId: "",
+            catalogKind: "",
+            podcastGuid: "",
+            podcastItemGuid: "",
+            podcastShowTitle: "",
+            audioUrl: "",
+            audioPreviewUrl: "",
+            transcriptUrl: "",
+            feedUrl: "",
+            publishedAt: "",
+            durationSeconds: nil,
+            referenceTagName: "a",
+            referenceTagValue: article.address,
+            referenceKind: "30023",
+            highlightTagName: "a",
+            highlightTagValue: article.address,
+            highlightReferenceKey: "a:\(article.address)",
+            chapters: []
         )
         return ShareToCommunityTarget(
-            payload: .artifactShare(preview: projection.preview),
-            displayTitle: projection.displayTitle,
-            displaySubtitle: projection.displaySubtitle,
-            imageURL: projection.imageUrl.flatMap { URL(string: $0) },
-            publicShareURL: articleShareURL(for: article, core: core)
+            payload: .artifactShare(preview: preview),
+            displayTitle: displayTitle,
+            displaySubtitle: "",
+            imageURL: article.image.isEmpty ? nil : URL(string: article.image),
+            publicShareURL: articleShareURL(for: article)
         )
     }
 
-    static func artifact(_ artifact: ArtifactRecord, core: SafeHighlighterCore) -> ShareToCommunityTarget {
-        let projection = core.projectShareArtifactTarget(
-            input: ShareArtifactTargetProjectionInput(artifact: artifact)
-        )
+    static func artifact(_ artifact: ArtifactRecord) -> ShareToCommunityTarget {
+        // ArtifactRecord already carries a fully-populated ArtifactPreview.
+        let preview = artifact.preview
+        let displayTitle = preview.title.isEmpty ? preview.id : preview.title
         return ShareToCommunityTarget(
-            payload: .artifactShare(preview: projection.preview),
-            displayTitle: projection.displayTitle,
-            displaySubtitle: projection.displaySubtitle,
-            imageURL: projection.imageUrl.flatMap { URL(string: $0) },
+            payload: .artifactShare(preview: preview),
+            displayTitle: displayTitle,
+            displaySubtitle: "",
+            imageURL: preview.image.isEmpty ? nil : URL(string: preview.image),
             publicShareURL: nil
         )
     }
@@ -56,32 +85,27 @@ struct ShareToCommunityTarget: Identifiable {
     /// in the room sees the friend's quote with full attribution.
     static func highlight(
         _ highlight: HighlightRecord,
-        relayHint: String = "",
-        core: SafeHighlighterCore
+        relayHint: String = ""
     ) -> ShareToCommunityTarget {
-        let projection = core.projectShareHighlightTarget(
-            input: ShareHighlightTargetProjectionInput(
-                highlight: highlight,
-                relayHint: relayHint
-            )
-        )
+        let displayTitle = String(highlight.quote.prefix(60))
         return ShareToCommunityTarget(
             payload: .highlightRepost(
-                eventId: projection.eventId,
-                authorPubkeyHex: projection.authorPubkeyHex,
-                relayHint: projection.relayHint
+                eventId: highlight.eventId,
+                authorPubkeyHex: highlight.pubkey,
+                relayHint: relayHint
             ),
-            displayTitle: projection.displayTitle,
-            displaySubtitle: projection.displaySubtitle,
-            imageURL: projection.imageUrl.flatMap { URL(string: $0) },
+            displayTitle: displayTitle,
+            displaySubtitle: "",
+            imageURL: nil,
             publicShareURL: nil
         )
     }
 
-    private static func articleShareURL(for article: ArticleRecord, core: SafeHighlighterCore) -> URL? {
-        let snapshot = core.articleShareUrl(address: article.address)
-        guard snapshot.error.isEmpty else { return nil }
-        return URL(string: snapshot.url)
+    private static func articleShareURL(for article: ArticleRecord) -> URL? {
+        // TODO: build https://highlighter.com/a/<npub>/<d-tag> once npub
+        // bech32 encoding is available in pure Swift. Returning nil for now;
+        // the ShareLink toolbar button is hidden when publicShareURL is nil.
+        return nil
     }
 }
 

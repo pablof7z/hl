@@ -7133,6 +7133,18 @@ public struct AppRootSnapshot {
      * the display copy.
      */
     public var authError: String?
+    /**
+     * Raw 64-char hex pubkey of the active session. `None` when no session is
+     * present. Exposed so Swift can build `CurrentUser` after kernel sign-in
+     * without a bespoke lane call. D1: raw hex; Swift formats npub for display.
+     */
+    public var activePubkeyHex: String?
+    /**
+     * bech32 `npub` of the active session (for Settings / KeysView display).
+     * Pre-encoded in Rust so Swift avoids a bespoke bech32 dependency.
+     * `None` when no session is present.
+     */
+    public var activePubkeyNpub: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -7159,12 +7171,24 @@ public struct AppRootSnapshot {
          * to a new attempt (Restoring/SigningIn), success (Present), or Absent — so
          * no explicit clear-on-route-change is needed. D1: raw error; Swift formats
          * the display copy.
-         */authError: String?) {
+         */authError: String?,
+        /**
+         * Raw 64-char hex pubkey of the active session. `None` when no session is
+         * present. Exposed so Swift can build `CurrentUser` after kernel sign-in
+         * without a bespoke lane call. D1: raw hex; Swift formats npub for display.
+         */activePubkeyHex: String?,
+        /**
+         * bech32 `npub` of the active session (for Settings / KeysView display).
+         * Pre-encoded in Rust so Swift avoids a bespoke bech32 dependency.
+         * `None` when no session is present.
+         */activePubkeyNpub: String?) {
         self.routeKind = routeKind
         self.sessionPresent = sessionPresent
         self.onboardingComplete = onboardingComplete
         self.nostrconnectUri = nostrconnectUri
         self.authError = authError
+        self.activePubkeyHex = activePubkeyHex
+        self.activePubkeyNpub = activePubkeyNpub
     }
 }
 
@@ -7190,6 +7214,12 @@ extension AppRootSnapshot: Equatable, Hashable {
         if lhs.authError != rhs.authError {
             return false
         }
+        if lhs.activePubkeyHex != rhs.activePubkeyHex {
+            return false
+        }
+        if lhs.activePubkeyNpub != rhs.activePubkeyNpub {
+            return false
+        }
         return true
     }
 
@@ -7199,6 +7229,8 @@ extension AppRootSnapshot: Equatable, Hashable {
         hasher.combine(onboardingComplete)
         hasher.combine(nostrconnectUri)
         hasher.combine(authError)
+        hasher.combine(activePubkeyHex)
+        hasher.combine(activePubkeyNpub)
     }
 }
 
@@ -7215,7 +7247,9 @@ public struct FfiConverterTypeAppRootSnapshot: FfiConverterRustBuffer {
                 sessionPresent: FfiConverterBool.read(from: &buf),
                 onboardingComplete: FfiConverterBool.read(from: &buf),
                 nostrconnectUri: FfiConverterOptionString.read(from: &buf),
-                authError: FfiConverterOptionString.read(from: &buf)
+                authError: FfiConverterOptionString.read(from: &buf),
+                activePubkeyHex: FfiConverterOptionString.read(from: &buf),
+                activePubkeyNpub: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -7225,6 +7259,8 @@ public struct FfiConverterTypeAppRootSnapshot: FfiConverterRustBuffer {
         FfiConverterBool.write(value.onboardingComplete, into: &buf)
         FfiConverterOptionString.write(value.nostrconnectUri, into: &buf)
         FfiConverterOptionString.write(value.authError, into: &buf)
+        FfiConverterOptionString.write(value.activePubkeyHex, into: &buf)
+        FfiConverterOptionString.write(value.activePubkeyNpub, into: &buf)
     }
 }
 

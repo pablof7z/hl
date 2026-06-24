@@ -51,7 +51,7 @@ struct ArticleReaderView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        shareTarget = ShareToCommunityTarget.article(article, core: app.safeCore)
+                        shareTarget = ShareToCommunityTarget.article(article)
                     } label: {
                         Image(systemName: "square.and.arrow.up")
                     }
@@ -293,7 +293,6 @@ private struct ReaderScroll: View {
                 rendered = nil
                 return
             }
-            let safeCore = app.safeCore
             let profileSnapshot = Dictionary(
                 uniqueKeysWithValues: app.profileSnapshots.map { (pk, meta) -> (String, String) in
                     let name = meta.displayName.isEmpty
@@ -322,11 +321,10 @@ private struct ReaderScroll: View {
                         )
                     },
                     profileNames: profileSnapshot,
-                    // Resolve standalone `nostr:` event refs into the app's
-                    // resolving entity card. `standaloneNostrEntity` is
-                    // `nonisolated`, so it's safe to call from this detached
-                    // off-main render task (#22 entity-card fidelity).
-                    resolveEntity: { uri in safeCore.standaloneNostrEntity(uri) }
+                    // resolveEntity is stubbed to nil — nostr: URIs in article
+                    // bodies fall back to plain links until the kernel exposes
+                    // a nonisolated entity resolver.
+                    resolveEntity: nil
                 )
             }.value
         }
