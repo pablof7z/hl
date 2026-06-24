@@ -112,16 +112,11 @@ struct WebReaderView: View {
 private struct WebCommentsScopeModifier: ViewModifier {
     let url: URL
 
-    @Environment(HighlighterStore.self) private var app
-
     @ViewBuilder
     func body(content: Content) -> some View {
-        let snapshot = app.safeCore.getWebCommentScope(url: url.absoluteString)
-        if snapshot.attach, let scope = snapshot.scope {
-            content.commentsAttachment(scope: scope)
-        } else {
-            content
-        }
+        // D1: web comment scope is always the URL itself, tag "I", kind 0.
+        let scope = CommentScope(rootTagName: "I", rootTagValue: url.absoluteString, rootKind: 0)
+        content.commentsAttachment(scope: scope)
     }
 }
 

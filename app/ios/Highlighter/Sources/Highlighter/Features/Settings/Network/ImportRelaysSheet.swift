@@ -153,10 +153,14 @@ struct ImportRelaysSheet: View {
     }
 
     private func toggle(_ url: String) {
-        selectedUrls = appStore.safeCore.toggleImportRelaySelection(
-            fetched: fetched,
-            selectedUrls: selectedUrls,
-            url: url
-        )
+        // D1: toggle url in selectedUrls while preserving fetched order.
+        if selectedUrls.contains(url) {
+            selectedUrls = selectedUrls.filter { $0 != url }
+        } else {
+            let fetchedOrder = fetched.map { $0.url }
+            selectedUrls = (selectedUrls + [url]).sorted { a, b in
+                (fetchedOrder.firstIndex(of: a) ?? Int.max) < (fetchedOrder.firstIndex(of: b) ?? Int.max)
+            }
+        }
     }
 }
