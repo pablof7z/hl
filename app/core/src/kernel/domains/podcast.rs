@@ -414,7 +414,7 @@ pub(crate) fn reduce_capability_audio(state: &mut AppState, result: AudioResult)
                 }
                 ep.is_playing = true;
             }
-            vec![]
+            vec![Effect::EmitCapabilityRequest(CapabilityRequest::Audio(AudioOp::Play))]
         }
         AudioResult::WaveformPeaks { url: _, buckets: _ } => {
             // Waveform peaks arrive here; Phase 5J will handle caching.
