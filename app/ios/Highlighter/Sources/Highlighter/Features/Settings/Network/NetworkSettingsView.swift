@@ -78,10 +78,20 @@ struct NetworkSettingsView: View {
         .task {
             if store == nil {
                 store = NetworkSettingsStore(appStore: appStore, kernel: kernel)
-                appStore.eventBridge?.registerNetworkStore(store!)
             }
             await store?.load()
-            store?.startLiveUpdates()
+            kernel.openRelayDiagnostics()
+            if let rows = kernel.relayDiagnostics?.relays {
+                store?.applyRelayDiagRows(rows)
+            }
+        }
+        .onChange(of: kernel.relayDiagnostics) { _, snap in
+            if let rows = snap?.relays {
+                store?.applyRelayDiagRows(rows)
+            }
+        }
+        .onDisappear {
+            kernel.closeRelayDiagnostics()
         }
     }
 

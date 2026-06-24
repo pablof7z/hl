@@ -81,6 +81,7 @@ final class HighlighterStore {
         Task { @MainActor in
             await podcastPlayer.rehydrateFromSavedRecord()
         }
+        registerEventBridge()
     }
 
     func logout() {

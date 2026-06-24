@@ -38,11 +38,7 @@ struct BookmarksView: View {
             }
         }
         .task {
-            guard let bridge = app.eventBridge else { return }
-            await store.start(
-                bridge: bridge,
-                kernel: kernel
-            )
+            await store.start(kernel: kernel)
         }
         .onChange(of: app.bookmarkedArticleAddresses) {
             Task { await store.reload() }

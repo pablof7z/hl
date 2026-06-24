@@ -142,6 +142,12 @@ final class HighlighterAppKernel {
     /// opens the view on appear and closes on dismiss (Phase 7 C teardown).
     private(set) var bookPicker: BookPickerKernelSnapshot?
 
+    /// Relay diagnostics snapshot. `nil` until the `ViewId.relayDiagnostics` view is
+    /// open. NetworkSettingsView opens it on `.task` and closes it on `.onDisappear`;
+    /// the kernel streams `RelayDiagnosticsViewSnapshot` rows into this field so
+    /// `NetworkSettingsStore.applyRelayDiagRows` can bridge them to the bespoke model.
+    private(set) var relayDiagnostics: RelayDiagnosticsViewSnapshot? = nil
+
     // MARK: - Kernel handle
 
     /// The Rust-side kernel object. Callers may dispatch actions and manage
@@ -461,6 +467,22 @@ final class HighlighterAppKernel {
         app.dispatch(.setBookPickerQuery(query: query, recentLimit: 30, searchLimit: 20))
     }
 
+    // MARK: - Phase 7: relay diagnostics lifecycle
+
+    /// Open the relay-diagnostics view. The kernel streams `RelayDiagnosticsViewSnapshot`
+    /// rows into `relayDiagnostics` while this view is open. Call from
+    /// `NetworkSettingsView.task`.
+    func openRelayDiagnostics() {
+        app.openView(viewId: .relayDiagnostics, route: .relayDiagnostics)
+    }
+
+    /// Close the relay-diagnostics view and clear its cached snapshot.
+    /// Call from `NetworkSettingsView.onDisappear`.
+    func closeRelayDiagnostics() {
+        app.closeView(viewId: .relayDiagnostics)
+        relayDiagnostics = nil
+    }
+
     // MARK: - Snapshot ingestion (called on main actor by KernelObserver)
 
     fileprivate func receive(viewId: ViewId, snapshot: ViewSnapshot) {
@@ -520,9 +542,13 @@ final class HighlighterAppKernel {
         case .bookmarks(let s):
             bookmarks = s
 
-        // Phase 2E (network settings / relay diagnostics) — handled elsewhere.
-        case .networkSettings, .relayDiagnostics:
+        // Phase 2E (network settings) — not used.
+        case .networkSettings:
             break
+
+        // Relay diagnostics: store snapshot so NetworkSettingsView can bridge rows.
+        case .relayDiagnostics(let s):
+            relayDiagnostics = s
 
         // Phase 7 cutover: article reader (ArticleReaderStore reads its overlay
         // highlights from here; the body render path is Swift-side).

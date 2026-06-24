@@ -15,11 +15,9 @@ final class BookmarkStore {
     var scope: BookmarkLibraryScope = .mine
     var isLoading = false
 
-    private weak var bridge: EventBridge?
     private var kernel: HighlighterAppKernel?
 
-    func start(bridge: EventBridge, kernel: HighlighterAppKernel) async {
-        self.bridge = bridge
+    func start(kernel: HighlighterAppKernel) async {
         self.kernel = kernel
 
         kernel.openBookmarks()

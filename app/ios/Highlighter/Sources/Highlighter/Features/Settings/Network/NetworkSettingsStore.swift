@@ -262,6 +262,33 @@ final class NetworkSettingsStore {
         recomputeAggregates()
     }
 
+    /// Bridge from kernel `RelayDiagRow` → bespoke `RelayDiagnostic`.
+    /// Called from `NetworkSettingsView.onChange(of: kernel.relayDiagnostics)`.
+    func applyRelayDiagRows(_ rows: [RelayDiagRow]) {
+        var result: [String: RelayDiagnostic] = [:]
+        for row in rows {
+            let state: RelayStatus
+            switch row.connectionState {
+            case .connected:
+                state = .connected
+            case .reconnecting:
+                state = .connecting
+            case .error, .unknown:
+                state = .disconnected
+            }
+            result[row.relayUrl] = RelayDiagnostic(
+                url: row.relayUrl,
+                state: state,
+                rttMs: nil,
+                bytesSent: 0,
+                bytesReceived: row.totalEventsRx,
+                connectedSinceTs: row.lastConnectedMs > 0 ? row.lastConnectedMs / 1000 : nil
+            )
+        }
+        diagnostics = result
+        recomputeAggregates()
+    }
+
     // MARK: - Private
 
     // MARK: - D1 relay projections
