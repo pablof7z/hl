@@ -119,15 +119,12 @@ final class ProfileStore {
     // MARK: - Live-lane loads (articles + highlights, Phase 4 deferred)
 
     func loadArticlesAndHighlights() async {
-        // Articles and highlights still come from the live lane (those profile
-        // tabs stay live per the Phase 7 cutover plan). Profile metadata,
-        // isFollowing, and communities are kernel-owned: the live-lane FALLBACK
-        // was removed in Phase 7 so the kernel ProfileSnapshot is the SOLE
-        // metadata source. The view renders metadata from applyKernelSnapshot();
-        // first paint waits for the kernel card rather than the live snapshot.
-        let snapshot = await safeCore.getProfilePageSnapshot(pubkeyHex: pubkey)
-        articles = snapshot.articles
-        highlights = snapshot.highlights
+        // Wave 4 stub: the kernel ProfileSnapshot does not yet carry articles or
+        // highlights, and the bespoke live-lane getProfilePageSnapshot read path
+        // is removed in Phase 7. These tabs stay empty until the feed engine
+        // wires per-pubkey article/highlight data (Wave 4).
+        articles = []
+        highlights = []
     }
 
     /// Called by `EventBridge` when a `UserProfileUpdated` delta arrives.
