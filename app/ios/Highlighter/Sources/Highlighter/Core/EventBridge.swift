@@ -163,9 +163,11 @@ final class EventBridge: EventCallback, @unchecked Sendable {
 
     @MainActor
     private func dispatchProfileSnapshot(_ change: DataChangeType, pubkey: String) {
+        // D1: getProfileUpdateAction maps kind:0 → .refreshProfile; we only act on
+        // metadata (kind:0) here, so the Rust call reduces to a kind == 0 check.
         guard case .userProfileUpdated(_, let kind) = change,
               let appStore,
-              appStore.safeCore.getProfileUpdateAction(kind: kind) == .refreshProfile else {
+              kind == 0 else {
             return
         }
         Task { await appStore.applyProfileSnapshotUpdate(pubkeyHex: pubkey) }

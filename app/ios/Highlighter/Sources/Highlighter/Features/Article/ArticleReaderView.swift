@@ -203,15 +203,14 @@ private struct ArticleCommentsAttachmentModifier: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        let snapshot = app.safeCore.getArticleCommentScope(address: target.address)
-        if snapshot.attach, let scope = snapshot.scope {
-            content.commentsAttachment(
-                scope: scope,
-                artifactAuthorPubkey: target.pubkey
-            )
-        } else {
-            content
-        }
+        // D1: CommentScope is a plain struct — rootTagName/rootTagValue/rootKind are always
+        // deterministic for an article address (NIP-23 kind:30023) and need no Rust call.
+        // Articles always attach comments.
+        let scope = CommentScope(rootTagName: "A", rootTagValue: target.address, rootKind: 30023)
+        content.commentsAttachment(
+            scope: scope,
+            artifactAuthorPubkey: target.pubkey
+        )
     }
 }
 

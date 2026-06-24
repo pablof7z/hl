@@ -9,8 +9,8 @@ struct DiscussionDetailView: View {
     @State private var focusedNode: CommentNode? = nil
 
     private var commentScope: CommentScope? {
-        let snapshot = app.safeCore.getDiscussionCommentScope(eventIdHex: discussion.eventId)
-        return snapshot.attach ? snapshot.scope : nil
+        // D1: discussion comment scope is always event-id + kind 11 (NIP-29).
+        CommentScope(rootTagName: "E", rootTagValue: discussion.eventId, rootKind: 11)
     }
 
     var body: some View {
