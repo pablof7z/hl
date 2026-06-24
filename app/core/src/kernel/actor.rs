@@ -765,10 +765,15 @@ fn reduce_action_envelope(
                     );
                 }
             };
-            let saved = state.podcast_resume_cache.get(&p.guid).copied();
-            podcast::reduce_action_play(state, p.url, p.guid, artifact, saved)
+            let saved = state.podcast_resume_cache.get(&p.guid).copied()
+                .or(p.resume_position_seconds.filter(|s| s.is_finite() && *s >= 0.0));
+            let guid = p.guid.clone();
+            let mut effects = podcast::reduce_action_play(state, p.url, p.guid, artifact, saved);
+            effects.push(Effect::LoadPodcastPosition { guid });
+            effects
         }
         "hl.audio.pause" => podcast::reduce_action_pause(state),
+        "hl.audio.resume" => podcast::reduce_action_resume(state),
         "hl.audio.seek" => {
             let p = parse!(AudioSeekPayload);
             podcast::reduce_action_seek(state, p.seconds)
