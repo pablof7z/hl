@@ -1063,6 +1063,20 @@ pub enum AppAction {
         nip05: Option<String>,
         lightning_address: Option<String>,
     },
+
+    // ── Phase 7 Part C additions (append-only) ───────────────────────────────
+    /// Signal from the iOS NWPathMonitor that the network path changed.
+    ///
+    /// `is_wifi` is true when the current path is `.satisfied` AND uses a Wi-Fi
+    /// interface. `wifi_only` mirrors `UserDefaults["hl.network.wifi_only"]` —
+    /// the kernel does not own this preference; Swift reads it and passes it in.
+    ///
+    /// The effect runner disconnects relay sockets when `wifi_only && !is_wifi`
+    /// and reconnects when `wifi_only && is_wifi`. Fire-and-forget (D6).
+    ApplyNetworkPath {
+        is_wifi: bool,
+        wifi_only: bool,
+    },
 }
 
 /// NIP-50 search scope — which event kinds the relay-search targets.

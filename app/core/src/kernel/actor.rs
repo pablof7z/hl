@@ -505,6 +505,10 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
                 lightning_address,
             }]
         }
+
+        AppAction::ApplyNetworkPath { is_wifi, wifi_only } => {
+            vec![Effect::ApplyNetworkPath { is_wifi, wifi_only }]
+        }
     }
 }
 
@@ -1043,6 +1047,16 @@ fn reduce_action_envelope(
                 nip05: p.nip05,
                 lightning_address: p.lightning_address,
             }]
+        }
+
+        // `hl.network.apply_path` — apply a native network-path update.
+        // Swift reads wifi_only from UserDefaults and passes it alongside the
+        // current is_wifi flag from NWPathMonitor. Fire-and-forget (D6).
+        "hl.network.apply_path" => {
+            #[derive(serde::Deserialize)]
+            struct Payload { is_wifi: bool, wifi_only: bool }
+            let p = parse!(Payload);
+            vec![Effect::ApplyNetworkPath { is_wifi: p.is_wifi, wifi_only: p.wifi_only }]
         }
 
         // ── Unknown namespace ─────────────────────────────────────────────────
@@ -2204,23 +2218,55 @@ pub(crate) async fn run_effect(
             nip05,
             lightning_address,
         } => {
-            // Phase 7 Part C stub: the bespoke lane still handles profile updates
-            // via safeCore.updateProfile (crate::profile::publish_profile requires
-            // a NostrRuntime which is not available in the kernel effect runner).
-            // After the bespoke lane is deleted this becomes a full kernel-native
-            // kind:0 publish (read ndb → merge fields → preserve unknown keys →
-            // ActorCommand::PublishRawEvent). Fire-and-forget (D6).
-            let _ = (
-                display_name,
-                name,
-                about,
-                picture_url,
-                banner_url,
-                website,
-                nip05,
-                lightning_address,
-            );
-            tracing::warn!("UpdateProfile effect: not yet implemented in kernel (Phase 7 Part C stub)");
+            // Build kind:0 content JSON from supplied fields. The caller (EditProfileSheet)
+            // pre-populates ALL visible fields from the current profile snapshot, so the
+            // published event carries the full set the user sees — round-trip safe for
+            // known fields. Unknown fields (not surfaced in the UI) are lost here;
+            // a later wave can merge from nostrdb before publish.
+            let Some(handle) = nmp else {
+                tracing::debug!("UpdateProfile: no live NmpApp (test mode) — no-op");
+                return;
+            };
+            let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
+
+            let mut content_map: std::collections::HashMap<&str, String> =
+                std::collections::HashMap::new();
+            if let Some(v) = display_name { content_map.insert("display_name", v); }
+            if let Some(v) = name        { content_map.insert("name", v); }
+            if let Some(v) = about       { content_map.insert("about", v); }
+            if let Some(v) = picture_url { content_map.insert("picture", v); }
+            if let Some(v) = banner_url  { content_map.insert("banner", v); }
+            if let Some(v) = website     { content_map.insert("website", v); }
+            if let Some(v) = nip05       { content_map.insert("nip05", v); }
+            if let Some(v) = lightning_address { content_map.insert("lud16", v); }
+
+            let content_json = match serde_json::to_string(&content_map) {
+                Ok(j) => j,
+                Err(e) => {
+                    tracing::warn!(error = %e, "UpdateProfile: JSON encode error — no-op (D6)");
+                    return;
+                }
+            };
+
+            let _ = nmp_ref
+                .actor_sender()
+                .send(nmp_core::ActorCommand::PublishRawEvent {
+                    kind: 0,
+                    content: content_json,
+                    tags: vec![],
+                    target: nmp_core::publish::PublishTarget::Auto,
+                    signer_pubkey: None,
+                    correlation_id: None,
+                });
+        }
+
+        Effect::ApplyNetworkPath { is_wifi, wifi_only } => {
+            // Wi-Fi-only relay enforcement. NMP at the current pinned revision
+            // does not expose a disconnect/connect-all ActorCommand, so this is
+            // a no-op stub. A future NMP update (or custom ActorCommand extension)
+            // will use the is_wifi + wifi_only values to enforce relay policy.
+            // Fire-and-forget (D6). D3: no relay URL literals here.
+            let _ = (is_wifi, wifi_only);
         }
     }
 

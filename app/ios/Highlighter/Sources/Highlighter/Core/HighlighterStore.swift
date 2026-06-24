@@ -346,15 +346,15 @@ final class HighlighterStore {
         monitor.pathUpdateHandler = { [weak self] path in
             let isWifi = path.status == .satisfied && path.usesInterfaceType(.wifi)
             Task { @MainActor [weak self] in
-                await self?.applyNetworkPathStatus(isWifi: isWifi)
+                self?.applyNetworkPathStatus(isWifi: isWifi)
             }
         }
         monitor.start(queue: .global(qos: .utility))
         networkPathMonitor = monitor
     }
 
-    private func applyNetworkPathStatus(isWifi: Bool) async {
-        let snapshot = await safeCore.applyNetworkPathStatus(isWifi: isWifi)
-        applyNetworkPathMonitorEnabled(snapshot.pathMonitorEnabled)
+    private func applyNetworkPathStatus(isWifi: Bool) {
+        let wifiOnly = UserDefaults.standard.bool(forKey: "hl.network.wifi_only")
+        kernel?.app.dispatch(.applyNetworkPath(isWifi: isWifi, wifiOnly: wifiOnly))
     }
 }

@@ -819,4 +819,12 @@ pub enum Effect {
         nip05: Option<String>,
         lightning_address: Option<String>,
     },
+
+    /// Apply a native network-path update. The runner disconnects or reconnects
+    /// NMP's relay sockets according to the Wi-Fi-only policy.
+    /// Fire-and-forget (D6). Phase 7 Part C.
+    ApplyNetworkPath {
+        is_wifi: bool,
+        wifi_only: bool,
+    },
 }

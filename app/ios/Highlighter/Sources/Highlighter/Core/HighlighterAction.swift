@@ -205,6 +205,9 @@ enum HighlighterAction {
         nip05: String?,
         lightningAddress: String?
     )
+    /// Inform the kernel that the iOS NWPathMonitor detected a path change.
+    /// `wifiOnly` mirrors `UserDefaults["hl.network.wifi_only"]`. Fire-and-forget (D6).
+    case applyNetworkPath(isWifi: Bool, wifiOnly: Bool)
 
     // ── Feedback / shake-to-share (Phase 7 cutover) ─────────────────────────────
     case feedbackOpenList
