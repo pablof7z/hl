@@ -406,18 +406,14 @@ final class PodcastPlayerStore {
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                let tick = self.core.projectPodcastPlaybackTick(
-                    input: PodcastPlaybackTickInput(
-                        previousTimeSeconds: self.currentTime,
-                        currentTimeSeconds: time.seconds,
-                        isPlaying: self.isPlaying
-                    )
-                )
-                let seconds = tick.currentTimeSeconds
+                let previous = self.currentTime.isFinite && self.currentTime >= 0 ? self.currentTime : 0.0
+                let seconds = time.seconds.isFinite && time.seconds >= 0 ? time.seconds : 0.0
+                let shouldUpdateNowPlaying = Int64(seconds) != Int64(previous)
+                let shouldPersistPosition = shouldUpdateNowPlaying && self.isPlaying && Int64(seconds) > 0 && Int64(seconds) % 5 == 0
                 self.currentTime = seconds
-                if tick.shouldUpdateNowPlaying {
+                if shouldUpdateNowPlaying {
                     self.updateNowPlayingInfo()
-                    if tick.shouldPersistPosition {
+                    if shouldPersistPosition {
                         self.persistPosition(position: seconds)
                     }
                 }
@@ -594,12 +590,11 @@ final class PodcastPlayerStore {
             return
         }
 
-        let projection = core.getPodcastNowPlayingProjection(
-            input: PodcastNowPlayingProjectionInput(artifact: artifact)
-        )
+        let showTitle = artifact.preview.podcastShowTitle.isEmpty ? artifact.preview.author : artifact.preview.podcastShowTitle
+        let episodeTitle = artifact.preview.title.isEmpty ? "Untitled episode" : artifact.preview.title
         var info: [String: Any] = [:]
-        info[MPMediaItemPropertyTitle] = projection.episodeTitle
-        info[MPMediaItemPropertyArtist] = projection.showTitle
+        info[MPMediaItemPropertyTitle] = episodeTitle
+        info[MPMediaItemPropertyArtist] = showTitle
         info[MPMediaItemPropertyMediaType] = MPMediaType.podcast.rawValue
 
         if duration > 0 {
@@ -623,8 +618,8 @@ final class PodcastPlayerStore {
     /// Runs entirely off the main thread; hops back to update state.
     private func fetchAndApplyArtwork(from urlString: String) {
         guard !urlString.isEmpty, let url = URL(string: urlString) else { return }
-        Task(priority: .userInitiated) { [weak self, core] in
-            guard let data = await core.downloadPodcastArtwork(url: url.absoluteString),
+        Task(priority: .userInitiated) { [weak self] in
+            guard let (data, _) = try? await URLSession.shared.data(from: url),
                   let uiImage = UIImage(data: data) else { return }
             let artwork = MPMediaItemArtwork(boundsSize: uiImage.size) { _ in uiImage }
             await MainActor.run { [weak self] in

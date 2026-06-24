@@ -110,8 +110,10 @@ struct MiniPlayerView: View {
     }
 
     private func podcastNowPlaying(_ artifact: ArtifactRecord) -> PodcastNowPlayingProjection {
-        app.core.getPodcastNowPlayingProjection(
-            input: PodcastNowPlayingProjectionInput(artifact: artifact)
+        PodcastNowPlayingProjection(
+            showTitle: artifact.preview.podcastShowTitle.isEmpty ? artifact.preview.author : artifact.preview.podcastShowTitle,
+            episodeTitle: artifact.preview.title.isEmpty ? "Untitled episode" : artifact.preview.title,
+            imageUrl: artifact.preview.image
         )
     }
 
