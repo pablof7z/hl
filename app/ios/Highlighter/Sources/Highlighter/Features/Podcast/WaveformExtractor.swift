@@ -24,11 +24,10 @@ enum WaveformExtractor {
     /// was skipped or failed for any reason — callers tolerate absent peaks.
     static func peaks(
         forAudioURL url: URL,
-        durationSeconds: TimeInterval,
-        core: SafeHighlighterCore
+        durationSeconds: TimeInterval
     ) async -> [Float]? {
         let audioUrl = url.absoluteString
-        let keyProjection = core.projectWaveformCacheKey(
+        let keyProjection = cacheKeyProjection(
             input: WaveformCacheKeyProjectionInput(audioUrl: audioUrl)
         )
         guard keyProjection.isUsable else {
@@ -36,7 +35,7 @@ enum WaveformExtractor {
         }
 
         let stored = WaveformPeakStore.read(cacheKey: keyProjection.cacheKey)
-        var plan = core.planWaveformPeaks(
+        var plan = peaksPlan(
             input: WaveformPeaksPlanInput(
                 audioUrl: audioUrl,
                 durationSeconds: durationSeconds,
@@ -50,7 +49,7 @@ enum WaveformExtractor {
         }
 
         if plan.shouldCheckWifiStatus {
-            plan = core.planWaveformPeaks(
+            plan = peaksPlan(
                 input: WaveformPeaksPlanInput(
                     audioUrl: audioUrl,
                     durationSeconds: durationSeconds,

@@ -141,7 +141,8 @@ pub(crate) fn session_plan(
     }
 }
 
-pub(crate) fn session_apply_projection(
+#[uniffi::export]
+pub fn session_apply_projection(
     input: PodcastPlaybackSessionApplyInput,
 ) -> PodcastPlaybackSessionApplyProjection {
     let plan = input.plan;
@@ -198,7 +199,8 @@ pub(crate) fn position_save_request(
     }))
 }
 
-pub(crate) fn seek_projection(input: PodcastPlaybackSeekInput) -> PodcastPlaybackSeekProjection {
+#[uniffi::export]
+pub fn seek_projection(input: PodcastPlaybackSeekInput) -> PodcastPlaybackSeekProjection {
     let target = if input.target_seconds.is_finite() {
         input.target_seconds
     } else {
@@ -219,7 +221,8 @@ pub(crate) fn seek_projection(input: PodcastPlaybackSeekInput) -> PodcastPlaybac
     }
 }
 
-pub(crate) fn tick_projection(input: PodcastPlaybackTickInput) -> PodcastPlaybackTickProjection {
+#[uniffi::export]
+pub fn tick_projection(input: PodcastPlaybackTickInput) -> PodcastPlaybackTickProjection {
     let previous = normalize_time(input.previous_time_seconds);
     let current = normalize_time(input.current_time_seconds);
     let previous_whole = previous as i64;
@@ -302,6 +305,13 @@ fn normalize_time(seconds: f64) -> f64 {
     } else {
         0.0
     }
+}
+
+/// UniFFI free-function wrapper: plans a fresh playback session without a
+/// pre-saved position. Use `session_apply_projection` to act on the result.
+#[uniffi::export]
+pub fn plan_session(input: PodcastPlaybackSessionInput) -> PodcastPlaybackSessionPlan {
+    session_plan(input, None)
 }
 
 #[cfg(test)]

@@ -44,6 +44,7 @@ pub struct WaveformPeaksPlan {
     pub skip_reason: Option<String>,
 }
 
+#[uniffi::export]
 pub fn cache_key_projection(input: WaveformCacheKeyProjectionInput) -> WaveformCacheKeyProjection {
     match cache_key_for_audio_url(&input.audio_url) {
         Some(cache_key) => WaveformCacheKeyProjection {
@@ -57,6 +58,7 @@ pub fn cache_key_projection(input: WaveformCacheKeyProjectionInput) -> WaveformC
     }
 }
 
+#[uniffi::export]
 pub fn peaks_plan(input: WaveformPeaksPlanInput) -> WaveformPeaksPlan {
     let Some(cache_key) = cache_key_for_audio_url(&input.audio_url) else {
         return WaveformPeaksPlan {

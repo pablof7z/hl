@@ -56852,6 +56852,13 @@ public func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, 
     )
 })
 }
+public func cacheKeyProjection(input: WaveformCacheKeyProjectionInput) -> WaveformCacheKeyProjection  {
+    return try!  FfiConverterTypeWaveformCacheKeyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_cache_key_projection(
+        FfiConverterTypeWaveformCacheKeyProjectionInput_lower(input),$0
+    )
+})
+}
 /**
  * Serialize an `ArtifactPreview` for `hl.capture.set_artifact_preview`.
  */
@@ -56872,10 +56879,49 @@ public func captureArtifactRecordJson(artifact: ArtifactRecord) -> String  {
     )
 })
 }
+public func clearClipSelection() -> PodcastClipSelection  {
+    return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_clear_clip_selection($0
+    )
+})
+}
 public func clipComposerProjection(input: PodcastClipComposerInput) -> PodcastClipComposerProjection  {
     return try!  FfiConverterTypePodcastClipComposerProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_func_clip_composer_projection(
         FfiConverterTypePodcastClipComposerInput_lower(input),$0
+    )
+})
+}
+public func clipPublishResultProjection(input: PodcastClipPublishResultInput) -> PodcastClipPublishResultProjection  {
+    return try!  FfiConverterTypePodcastClipPublishResultProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_clip_publish_result_projection(
+        FfiConverterTypePodcastClipPublishResultInput_lower(input),$0
+    )
+})
+}
+/**
+ * Download raw artwork bytes from `url`. Returns `None` on any error.
+ */
+public func downloadPodcastArtwork(url: String)async  -> Data?  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_func_download_podcast_artwork(FfiConverterString.lower(url)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionData.lift,
+            errorHandler: nil
+
+        )
+}
+public func extendPodcastClipToSegment(selection: PodcastClipSelection, segment: TranscriptSegment) -> PodcastClipSelection  {
+    return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_extend_podcast_clip_to_segment(
+        FfiConverterTypePodcastClipSelection_lower(selection),
+        FfiConverterTypeTranscriptSegment_lower(segment),$0
     )
 })
 }
@@ -56891,6 +56937,45 @@ public func listeningProjection(input: PodcastListeningProjectionInput) -> Podca
     return try!  FfiConverterTypePodcastListeningProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_func_listening_projection(
         FfiConverterTypePodcastListeningProjectionInput_lower(input),$0
+    )
+})
+}
+/**
+ * Fetch and parse a podcast transcript from `url`, returning a load snapshot.
+ */
+public func loadPodcastTranscript(url: String)async  -> PodcastTranscriptLoadSnapshot  {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_highlighter_core_fn_func_load_podcast_transcript(FfiConverterString.lower(url)
+                )
+            },
+            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
+            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
+            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePodcastTranscriptLoadSnapshot_lift,
+            errorHandler: nil
+
+        )
+}
+/**
+ * UniFFI free-function wrappers for clip-selection mutations.
+ * The underlying functions take `&PodcastClipSelection`; these take owned
+ * values so UniFFI can cross the FFI boundary without reference types.
+ */
+public func markPodcastClipIn(selection: PodcastClipSelection, currentTime: Double) -> PodcastClipSelection  {
+    return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_mark_podcast_clip_in(
+        FfiConverterTypePodcastClipSelection_lower(selection),
+        FfiConverterDouble.lower(currentTime),$0
+    )
+})
+}
+public func markPodcastClipOut(selection: PodcastClipSelection, currentTime: Double) -> PodcastClipSelection  {
+    return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_mark_podcast_clip_out(
+        FfiConverterTypePodcastClipSelection_lower(selection),
+        FfiConverterDouble.lower(currentTime),$0
     )
 })
 }
@@ -56914,6 +56999,73 @@ public func nip65RelayRole(read: Bool, write: Bool) -> String?  {
 })
 }
 /**
+ * Project episode metadata for mini-player and system Now Playing surfaces.
+ * Rust owns episode title/show fallback parity across platform shells.
+ */
+public func nowPlayingProjection(input: PodcastNowPlayingProjectionInput) -> PodcastNowPlayingProjection  {
+    return try!  FfiConverterTypePodcastNowPlayingProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_now_playing_projection(
+        FfiConverterTypePodcastNowPlayingProjectionInput_lower(input),$0
+    )
+})
+}
+public func peaksPlan(input: WaveformPeaksPlanInput) -> WaveformPeaksPlan  {
+    return try!  FfiConverterTypeWaveformPeaksPlan_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_peaks_plan(
+        FfiConverterTypeWaveformPeaksPlanInput_lower(input),$0
+    )
+})
+}
+/**
+ * UniFFI free-function wrapper: plans a fresh playback session without a
+ * pre-saved position. Use `session_apply_projection` to act on the result.
+ */
+public func planSession(input: PodcastPlaybackSessionInput) -> PodcastPlaybackSessionPlan  {
+    return try!  FfiConverterTypePodcastPlaybackSessionPlan_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_plan_session(
+        FfiConverterTypePodcastPlaybackSessionInput_lower(input),$0
+    )
+})
+}
+public func seekProjection(input: PodcastPlaybackSeekInput) -> PodcastPlaybackSeekProjection  {
+    return try!  FfiConverterTypePodcastPlaybackSeekProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_seek_projection(
+        FfiConverterTypePodcastPlaybackSeekInput_lower(input),$0
+    )
+})
+}
+public func sessionApplyProjection(input: PodcastPlaybackSessionApplyInput) -> PodcastPlaybackSessionApplyProjection  {
+    return try!  FfiConverterTypePodcastPlaybackSessionApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_session_apply_projection(
+        FfiConverterTypePodcastPlaybackSessionApplyInput_lower(input),$0
+    )
+})
+}
+public func setPodcastClipEnd(selection: PodcastClipSelection, value: Double, durationSeconds: Double) -> PodcastClipSelection  {
+    return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_set_podcast_clip_end(
+        FfiConverterTypePodcastClipSelection_lower(selection),
+        FfiConverterDouble.lower(value),
+        FfiConverterDouble.lower(durationSeconds),$0
+    )
+})
+}
+public func setPodcastClipStart(selection: PodcastClipSelection, value: Double) -> PodcastClipSelection  {
+    return try!  FfiConverterTypePodcastClipSelection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_set_podcast_clip_start(
+        FfiConverterTypePodcastClipSelection_lower(selection),
+        FfiConverterDouble.lower(value),$0
+    )
+})
+}
+public func tickProjection(input: PodcastPlaybackTickInput) -> PodcastPlaybackTickProjection  {
+    return try!  FfiConverterTypePodcastPlaybackTickProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_tick_projection(
+        FfiConverterTypePodcastPlaybackTickInput_lower(input),$0
+    )
+})
+}
+/**
  * Tokenize Nostr event content and return a JSON-encoded `ContentTreeWire`.
  *
  * Calls `nmp_content_tokenize_text` (stateless C-ABI, no NmpApp* needed).
@@ -56924,6 +57076,13 @@ public func tokenizeNostrContent(content: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_func_tokenize_nostr_content(
         FfiConverterString.lower(content),$0
+    )
+})
+}
+public func transcriptLoadApplyProjection(input: PodcastTranscriptLoadApplyInput) -> PodcastTranscriptLoadApplyProjection  {
+    return try!  FfiConverterTypePodcastTranscriptLoadApplyProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_transcript_load_apply_projection(
+        FfiConverterTypePodcastTranscriptLoadApplyInput_lower(input),$0
     )
 })
 }
@@ -56946,13 +57105,28 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_func_build_edited_book_preview() != 15822) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_func_cache_key_projection() != 30661) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_func_capture_artifact_preview_json() != 61435) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_func_capture_artifact_record_json() != 33914) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_func_clear_clip_selection() != 23005) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_func_clip_composer_projection() != 42526) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_clip_publish_result_projection() != 64416) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_download_podcast_artwork() != 64329) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_extend_podcast_clip_to_segment() != 36896) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_func_find_existing_book_for_isbn() != 20340) {
@@ -56961,10 +57135,46 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_func_listening_projection() != 50032) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_func_load_podcast_transcript() != 22663) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_mark_podcast_clip_in() != 14417) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_mark_podcast_clip_out() != 60114) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_func_nip65_relay_role() != 11383) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_func_now_playing_projection() != 3176) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_peaks_plan() != 28707) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_plan_session() != 53313) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_seek_projection() != 48933) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_session_apply_projection() != 10957) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_set_podcast_clip_end() != 34312) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_set_podcast_clip_start() != 27438) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_tick_projection() != 42496) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_func_tokenize_nostr_content() != 48981) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_transcript_load_apply_projection() != 7745) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_eventcallback_on_data_changed() != 54279) {

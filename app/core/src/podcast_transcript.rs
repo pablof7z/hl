@@ -287,6 +287,7 @@ pub fn transcript_load_snapshot(
     }
 }
 
+#[uniffi::export]
 pub fn transcript_load_apply_projection(
     input: PodcastTranscriptLoadApplyInput,
 ) -> PodcastTranscriptLoadApplyProjection {
@@ -318,6 +319,7 @@ pub fn clip_publish_snapshot(
     }
 }
 
+#[uniffi::export]
 pub fn clip_publish_result_projection(
     input: PodcastClipPublishResultInput,
 ) -> PodcastClipPublishResultProjection {
@@ -590,6 +592,7 @@ pub fn listening_clips_snapshot(
 
 /// Project episode metadata for mini-player and system Now Playing surfaces.
 /// Rust owns episode title/show fallback parity across platform shells.
+#[uniffi::export]
 pub fn now_playing_projection(
     input: PodcastNowPlayingProjectionInput,
 ) -> PodcastNowPlayingProjection {
@@ -890,6 +893,7 @@ fn community_name_for_id(id: &str, joined_communities: &[CommunitySummary]) -> S
         .unwrap_or_else(|| id.to_string())
 }
 
+#[uniffi::export]
 pub fn clear_clip_selection() -> PodcastClipSelection {
     PodcastClipSelection {
         clip_start_seconds: None,
@@ -973,6 +977,60 @@ pub fn set_clip_end(
     }
     next.clip_end_seconds = Some(end);
     next
+}
+
+/// UniFFI free-function wrappers for clip-selection mutations.
+/// The underlying functions take `&PodcastClipSelection`; these take owned
+/// values so UniFFI can cross the FFI boundary without reference types.
+
+#[uniffi::export]
+pub fn mark_podcast_clip_in(
+    selection: PodcastClipSelection,
+    current_time: f64,
+) -> PodcastClipSelection {
+    mark_clip_in(&selection, current_time)
+}
+
+#[uniffi::export]
+pub fn mark_podcast_clip_out(
+    selection: PodcastClipSelection,
+    current_time: f64,
+) -> PodcastClipSelection {
+    mark_clip_out(&selection, current_time)
+}
+
+#[uniffi::export]
+pub fn extend_podcast_clip_to_segment(
+    selection: PodcastClipSelection,
+    segment: TranscriptSegment,
+) -> PodcastClipSelection {
+    extend_clip_to_segment(&selection, &segment)
+}
+
+#[uniffi::export]
+pub fn set_podcast_clip_start(selection: PodcastClipSelection, value: f64) -> PodcastClipSelection {
+    set_clip_start(&selection, value)
+}
+
+#[uniffi::export]
+pub fn set_podcast_clip_end(
+    selection: PodcastClipSelection,
+    value: f64,
+    duration_seconds: f64,
+) -> PodcastClipSelection {
+    set_clip_end(&selection, value, duration_seconds)
+}
+
+/// Fetch and parse a podcast transcript from `url`, returning a load snapshot.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn load_podcast_transcript(url: String) -> PodcastTranscriptLoadSnapshot {
+    transcript_load_snapshot(fetch_transcript(&url).await)
+}
+
+/// Download raw artwork bytes from `url`. Returns `None` on any error.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn download_podcast_artwork(url: String) -> Option<Vec<u8>> {
+    download_artwork(&url).await.ok()
 }
 
 fn http_client() -> reqwest::Client {

@@ -67,12 +67,6 @@ actor SafeHighlighterCore {
         core.planPodcastPlaybackSession(input: input)
     }
 
-    nonisolated func projectPodcastPlaybackSessionApply(
-        input: PodcastPlaybackSessionApplyInput
-    ) -> PodcastPlaybackSessionApplyProjection {
-        core.projectPodcastPlaybackSessionApply(input: input)
-    }
-
     func recordPodcastPlaybackPosition(
         artifact: ArtifactRecord,
         positionSeconds: Double
@@ -85,50 +79,10 @@ actor SafeHighlighterCore {
         )
     }
 
-    nonisolated func projectPodcastPlaybackSeek(
-        input: PodcastPlaybackSeekInput
-    ) -> PodcastPlaybackSeekProjection {
-        core.projectPodcastPlaybackSeek(input: input)
-    }
-
-    nonisolated func projectPodcastPlaybackTick(
-        input: PodcastPlaybackTickInput
-    ) -> PodcastPlaybackTickProjection {
-        core.projectPodcastPlaybackTick(input: input)
-    }
-
     func getPodcastPlaybackRehydrationSnapshot(
         hasCurrentArtifact: Bool
     ) -> PodcastPlaybackRehydrationSnapshot {
         core.getPodcastPlaybackRehydrationSnapshot(hasCurrentArtifact: hasCurrentArtifact)
-    }
-
-    func loadPodcastTranscript(url: String) async -> PodcastTranscriptLoadSnapshot {
-        await core.loadPodcastTranscript(url: url)
-    }
-
-    nonisolated func projectPodcastTranscriptLoadApply(
-        input: PodcastTranscriptLoadApplyInput
-    ) -> PodcastTranscriptLoadApplyProjection {
-        core.projectPodcastTranscriptLoadApply(input: input)
-    }
-
-    nonisolated func getPodcastNowPlayingProjection(
-        input: PodcastNowPlayingProjectionInput
-    ) -> PodcastNowPlayingProjection {
-        core.getPodcastNowPlayingProjection(input: input)
-    }
-
-    nonisolated func projectWaveformCacheKey(
-        input: WaveformCacheKeyProjectionInput
-    ) -> WaveformCacheKeyProjection {
-        core.projectWaveformCacheKey(input: input)
-    }
-
-    nonisolated func planWaveformPeaks(
-        input: WaveformPeaksPlanInput
-    ) -> WaveformPeaksPlan {
-        core.planWaveformPeaks(input: input)
     }
 
     func getPodcastListeningClipsSnapshot(
@@ -136,66 +90,6 @@ actor SafeHighlighterCore {
         limit: UInt32 = 128
     ) async -> PodcastListeningClipsSnapshot {
         await core.getPodcastListeningClipsSnapshot(artifact: artifact, limit: limit)
-    }
-
-    nonisolated func clearPodcastClipSelection() -> PodcastClipSelection {
-        core.clearPodcastClipSelection()
-    }
-
-    nonisolated func markPodcastClipIn(
-        selection: PodcastClipSelection,
-        currentTime: Double
-    ) -> PodcastClipSelection {
-        core.markPodcastClipIn(
-            selection: selection,
-            currentTime: currentTime
-        )
-    }
-
-    nonisolated func markPodcastClipOut(
-        selection: PodcastClipSelection,
-        currentTime: Double
-    ) -> PodcastClipSelection {
-        core.markPodcastClipOut(
-            selection: selection,
-            currentTime: currentTime
-        )
-    }
-
-    nonisolated func extendPodcastClipToSegment(
-        selection: PodcastClipSelection,
-        segment: TranscriptSegment
-    ) -> PodcastClipSelection {
-        core.extendPodcastClipToSegment(
-            selection: selection,
-            segment: segment
-        )
-    }
-
-    nonisolated func setPodcastClipStart(
-        selection: PodcastClipSelection,
-        value: Double
-    ) -> PodcastClipSelection {
-        core.setPodcastClipStart(
-            selection: selection,
-            value: value
-        )
-    }
-
-    nonisolated func setPodcastClipEnd(
-        selection: PodcastClipSelection,
-        value: Double,
-        durationSeconds: Double
-    ) -> PodcastClipSelection {
-        core.setPodcastClipEnd(
-            selection: selection,
-            value: value,
-            durationSeconds: durationSeconds
-        )
-    }
-
-    func downloadPodcastArtwork(url: String) async -> Data? {
-        await core.downloadPodcastArtwork(url: url)
     }
 
     // MARK: - Reads
@@ -1289,12 +1183,6 @@ actor SafeHighlighterCore {
         input: PodcastClipPublishInput
     ) async -> PodcastClipPublishSnapshot {
         await core.publishPodcastClipHighlight(input: input)
-    }
-
-    nonisolated func projectPodcastClipPublishResult(
-        input: PodcastClipPublishResultInput
-    ) -> PodcastClipPublishResultProjection {
-        core.projectPodcastClipPublishResult(input: input)
     }
 
     func publishPodcastComposerClip(
