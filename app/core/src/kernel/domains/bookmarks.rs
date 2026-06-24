@@ -61,9 +61,11 @@
 
 use std::sync::{Arc, Mutex};
 
+use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
+use nmp_core::substrate::ActionPayload;
 use nmp_core::KernelEventObserver;
-use nmp_ffi::NmpApp;
-use nmp_nip51::{BookmarkItem, BookmarkListProjection};
+use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
+use nmp_nip51::{BookmarkItem, BookmarkListProjection, BookmarkUpdateInput};
 
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
@@ -297,11 +299,28 @@ pub(crate) fn run_effect_dispatch_bookmark_action(
 ) {
     let Some(handle) = nmp else { return };
 
-    let _ = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
-        handle.ptr.as_ptr(),
+    let action = match serde_json::from_str::<BookmarkUpdateInput>(&json) {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!(error = %e, "bookmarks: failed to deserialise BookmarkUpdateInput");
+            return;
+        }
+    };
+    let payload_bytes = action.encode();
+    let correlation_id = uuid::Uuid::new_v4().to_string();
+    let envelope = encode_dispatch_envelope(
+        &correlation_id,
         &namespace,
-        &json,
+        DISPATCH_ENVELOPE_SCHEMA_VERSION,
+        &payload_bytes,
     );
+
+    let result_ptr =
+        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
+
+    if !result_ptr.is_null() {
+        nmp_free_string(result_ptr);
+    }
 }
 
 // ─── Projection registration ─────────────────────────────────────────────────

@@ -208,6 +208,61 @@ final class EventBridge: EventCallback, @unchecked Sendable {
     }
 
     @MainActor
+    private func dispatchRoom(_ change: DataChangeType, store: RoomStore) {
+        switch change {
+        case .artifactUpserted, .highlightUpserted, .highlightShared:
+            Task { await store.reloadFromCache() }
+        default:
+            break
+        }
+    }
+
+    @MainActor
+    private func dispatchDiscussions(_ change: DataChangeType, store: DiscussionStore) {
+        switch change {
+        case .discussionUpserted:
+            Task { await store.reloadFromCache() }
+        default:
+            break
+        }
+    }
+
+    @MainActor
+    private func dispatchChat(_ change: DataChangeType, store: ChatStore) {
+        switch change {
+        case .chatMessageUpserted(_, let message):
+            Task { await store.reloadFromCache(activityEventId: message.eventId) }
+        default:
+            break
+        }
+    }
+
+    @MainActor
+    private func dispatchChatPresence(_ change: DataChangeType, probe: ChatPresenceProbe) {
+        if case .chatMessageUpserted = change {
+            probe.notifyActivity()
+        }
+    }
+
+    @MainActor
+    private func dispatchHomeFeed(_ change: DataChangeType, store: HomeFeedStore) {
+        if case .followingReadsUpdated = change {
+            Task { await store.refresh() }
+        } else if case .followingHighlightsUpdated = change {
+            Task { await store.refresh() }
+        }
+    }
+
+    @MainActor
+    private func dispatchSearch(_ change: DataChangeType, store: SearchStore) {
+        if case .searchArticlesUpdated(let query) = change {
+            store.applyRelaySearchUpdate(query: query)
+        } else if case .nostrEntityResolved(let event) = change {
+            store.applyDirectNostrEntity(event: event)
+        }
+    }
+
+    @MainActor
     private func dispatchBookmarkStore(_ change: DataChangeType, store: BookmarkStore) {
         switch change {
         case .bookmarkSetsUpdated, .followingCurationSetsUpdated, .webBookmarksUpdated:

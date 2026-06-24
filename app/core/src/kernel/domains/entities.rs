@@ -123,23 +123,19 @@ pub(crate) fn run_effect_release_entity_ref(key: String, nmp: Option<&NmpHandle>
 
 /// Tokenize Nostr event content and return a JSON-encoded `ContentTreeWire`.
 ///
-/// Calls `nmp_content_tokenize_text` (stateless C-ABI, no NmpApp* needed).
+/// Calls `nmp_content::tokenize` (stateless Rust function, no NmpApp* needed).
 /// Returns `{"ok":true,"tree":{...}}` on success or `{"ok":false,"error":"..."}` on failure.
-/// `content` is the raw event content; mode=0 (plain text), kind=1 (note).
+/// `content` is the raw event content; mode=Plain (kind:1 note).
 #[uniffi::export]
 pub fn tokenize_nostr_content(content: String) -> String {
-    use std::ffi::{CStr, CString};
-    let Ok(content_c) = CString::new(content) else {
-        return r#"{"ok":false,"error":"nul byte in content"}"#.to_string();
-    };
-    let tags_c = c"[]";
-    unsafe {
-        let raw = nmp_ffi::nmp_content_tokenize_text(content_c.as_ptr(), tags_c.as_ptr(), 0, 1);
-        if raw.is_null() {
-            return r#"{"ok":false,"error":"null result"}"#.to_string();
-        }
-        let result = CStr::from_ptr(raw).to_string_lossy().into_owned();
-        nmp_ffi::nmp_free_string(raw);
-        result
+    use nmp_content::{tokenize, RenderMode};
+    let tree = tokenize(&content, &[], RenderMode::Plain);
+    let wire = tree.to_wire();
+    match serde_json::to_string(&wire) {
+        Ok(tree_json) => format!(r#"{{"ok":true,"tree":{tree_json}}}"#),
+        Err(e) => format!(
+            r#"{{"ok":false,"error":{}}}"#,
+            serde_json::json!(e.to_string())
+        ),
     }
 }

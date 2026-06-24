@@ -53,8 +53,11 @@
 
 use std::sync::Arc;
 
+use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
+use nmp_core::substrate::ActionPayload;
 use nmp_core::KernelEventObserver;
-use nmp_nip29::{GroupChatProjection, GroupId};
+use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string};
+use nmp_nip29::{action::PostChatMessageInput, GroupChatProjection, GroupId};
 use tokio::sync::mpsc;
 
 use crate::kernel::action::KernelEvent;
@@ -377,11 +380,28 @@ pub(crate) fn run_effect_dispatch_chat_post(
 ) {
     let Some(handle) = nmp else { return };
 
-    let _ = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
-        handle.ptr.as_ptr(),
+    let action = match serde_json::from_str::<PostChatMessageInput>(&json) {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!(error = %e, "chat: failed to deserialise PostChatMessageInput");
+            return;
+        }
+    };
+    let payload_bytes = action.encode();
+    let correlation_id = uuid::Uuid::new_v4().to_string();
+    let envelope = encode_dispatch_envelope(
+        &correlation_id,
         "nmp.nip29.post_chat_message",
-        &json,
+        DISPATCH_ENVELOPE_SCHEMA_VERSION,
+        &payload_bytes,
     );
+
+    let result_ptr =
+        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
+
+    if !result_ptr.is_null() {
+        nmp_free_string(result_ptr);
+    }
 }
 
 // ─── Clear on identity loss ──────────────────────────────────────────────────

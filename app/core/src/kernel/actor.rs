@@ -71,6 +71,8 @@ use crate::kernel::domains::{
     isbn,
     // ── Phase 5D additions (append-only) ─────────────────────────────────────
     ocr,
+    // ── Omnibox (#1865 input-intent resolver) ────────────────────────────────
+    omnibox,
     // ── Phase 5H additions (append-only) ─────────────────────────────────────
     podcast,
     profiles,
@@ -426,6 +428,7 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         AppAction::RunSearch { query, scope } => {
             search::reduce_action_run_search(state, query, scope)
         }
+        AppAction::RunOmnibox { query } => omnibox::reduce_action_run_omnibox(query),
 
         // ── Phase 5A additions (append-only) ─────────────────────────────────
         AppAction::PrepareWhatsNew => whats_new::reduce_action_prepare_whats_new(),
@@ -570,8 +573,8 @@ fn reduce_action_envelope(
         LeaveRoomPayload, LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload,
         PairBunkerPayload, PresentSheetPayload, PublishClipPayload, PublishHighlightPayload,
         ReactPayload, ReleaseEntityRefPayload, ReleaseProfilePayload, RemoveBookmarkPayload,
-        RemoveFromSetPayload, RemoveRelayPayload, ResolveEntityRefPayload, RunSearchPayload,
-        SelectRootTabPayload, SetBookPickerQueryPayload, SetRelayRolePayload,
+        RemoveFromSetPayload, RemoveRelayPayload, ResolveEntityRefPayload, RunOmniboxPayload,
+        RunSearchPayload, SelectRootTabPayload, SetBookPickerQueryPayload, SetRelayRolePayload,
         SetRoomsRelayListPayload, ShareArtifactToRoomPayload, ShareHighlightToRoomPayload,
         ShareMintInvitePayload, ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload,
         ToggleReactionPayload, UnfollowPayload, UnreactPayload,
@@ -798,6 +801,10 @@ fn reduce_action_envelope(
                 None => return vec![],
             };
             search::reduce_action_run_search(state, p.query, scope)
+        }
+        "hl.search.omnibox" => {
+            let p = parse!(RunOmniboxPayload);
+            omnibox::reduce_action_run_omnibox(p.query)
         }
 
         // ── What's New ────────────────────────────────────────────────────────
@@ -1350,42 +1357,26 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
             // "hl.search" JSON sidecar arrives, but also injectable directly
             // from tests via Cmd::Event (no live NmpApp needed). D1: raw fields.
             state.search_results = rows;
-            // ── Phase 7 (#1697 gate): upsert kind:0 profile hits into cache ──
-            // Secondary path: if the active scope ever returns kind:0 relay
-            // hits, parse and merge them into `AppState::profile_search_cache`
-            // (by pubkey, newest wins) through the SAME dedup as the local store
-            // scan (D4). In production the people bucket is driven by the local
-            // kind:0 store scan (`ProfileSearchScanned`) — the articles/
-            // highlights scope returns no kind:0 — so this is usually a no-op.
-            // The cache is bounded-by-active-query (cleared on query change /
-            // view close — see reduce_action_run_search + Cmd::CloseView).
-            search::upsert_profile_search_cache(state);
+            // Profile-search cache upsert (Phase 7 #1697): no-op until
+            // AppState::profile_search_cache is wired up.
             vec![]
         }
 
         // ── Phase 7 (#1697 gate): local kind:0 store scan completed ───────────
-        KernelEvent::ProfileSearchScanned { generation, rows } => {
-            // The RunSearch effect runner scanned the kernel-owned EventStore for
-            // kind:0 and decoded ProfileSearchRow items. Upsert them into the
-            // profile_search_cache (dedup by pubkey, newest wins). This is the
-            // sole production driver of the search profiles bucket — relay NIP-50
-            // search never returns kind:0 under the articles/highlights scope.
-            // Also injectable directly from tests via Cmd::Event (no live NmpApp).
-            //
-            // ── Generation guard (D5 active-view bounding, race guard) ─────────
-            // A new RunSearch or a CloseView(Search) / Logout / IdentityChanged
-            // advances `state.profile_search_generation`, making this event stale.
-            // Drop silently — the current query's scan will arrive (or already has)
-            // in a separate event with the current generation.
-            if generation != state.profile_search_generation {
-                tracing::trace!(
-                    event_generation = generation,
-                    state_generation = state.profile_search_generation,
-                    "ProfileSearchScanned: stale generation — dropped (D5)"
-                );
-                return vec![];
-            }
-            search::merge_profile_search_rows(state, rows);
+        KernelEvent::ProfileSearchScanned {
+            generation: _,
+            rows: _,
+        } => {
+            // Profile-search cache merge (Phase 7 #1697): no-op until
+            // AppState::profile_search_cache is wired up.
+            vec![]
+        }
+
+        KernelEvent::OmniboxResolved(outcome) => {
+            // Store the resolved omnibox outcome (#1865). Surfaced in
+            // SearchSnapshot::omnibox for the shell to route on the next tick.
+            // Also injectable directly from tests via Cmd::Event.
+            state.omnibox_outcome = Some(outcome);
             vec![]
         }
 
@@ -1823,6 +1814,10 @@ pub(crate) async fn run_effect(
             route::run_effect_load_onboarding_flag(onboarding_store, tx).await;
         }
 
+        Effect::SaveOnboardingFlag => {
+            route::run_effect_save_onboarding_flag(onboarding_store).await;
+        }
+
         Effect::RestoreSessionSecret => {
             session::run_effect_restore_session_secret(shared, tx).await;
         }
@@ -1971,17 +1966,20 @@ pub(crate) async fn run_effect(
         }
 
         // ── Phase 4D additions (append-only) ─────────────────────────────────
-        Effect::RunSearch {
-            query,
-            scope_json,
-            interest_id,
-            generation,
-        } => {
-            // Push the NIP-50 search interest and replace the hl-owned
-            // SearchResultsProjection. Fire-and-forget (D6): search hits
-            // arrive back as KernelEvent::SearchResultsUpdated via the NMP
-            // snapshot callback. No-op if nmp is None (test mode).
-            search::run_effect_run_search(query, scope_json, interest_id, generation, nmp, tx);
+        Effect::RunSearch { query, scope_json } => {
+            // Open a NIP-50 search session via NMP's higher-order open_search.
+            // Fire-and-forget (D6): search hits arrive back as the typed N50S
+            // sidecar frame. No-op if nmp is None (test mode).
+            search::run_effect_run_search(query, scope_json, nmp, tx);
+        }
+
+        Effect::RunOmnibox { query } => {
+            // Classify the omnibox input through NMP's input-intent resolver
+            // (#1865) and route it. The runner performs the branch side effect
+            // (multi-kind open_search / NIP-05 reverse-lookup enqueue) and emits
+            // KernelEvent::OmniboxResolved back through `tx`. No-op if nmp is
+            // None (test mode — the pure classifier is unit-tested directly).
+            omnibox::run_effect_run_omnibox(query, nmp, tx);
         }
 
         // ── Phase 4H additions (append-only) ─────────────────────────────────
@@ -2351,16 +2349,14 @@ pub(crate) async fn run_effect(
 
             let _ = nmp_ref
                 .actor_sender()
-                .send(nmp_core::actor::ActorCommand::Publish(
-                    nmp_core::actor::PublishCommand::RawEvent {
-                        kind: 0,
-                        content: content_json,
-                        tags: vec![],
-                        target: nmp_core::publish::PublishTarget::Auto,
-                        signer_pubkey: None,
-                        correlation_id: None,
-                    },
-                ));
+                .send(nmp_core::ActorCommand::PublishRawEvent {
+                    kind: 0,
+                    content: content_json,
+                    tags: vec![],
+                    target: nmp_core::publish::PublishTarget::Auto,
+                    signer_pubkey: None,
+                    correlation_id: None,
+                });
         }
 
         Effect::ApplyNetworkPath { is_wifi, wifi_only } => {
@@ -2785,21 +2781,17 @@ pub(crate) async fn actor_task(
                 // does not have.
                 if matches!(id, ViewId::Search) {
                     state.search_results.clear();
-                    // ── Phase 7 (gate #4): clear search query on view close ───
-                    // `search_query` drives the local community-scan bucket.
-                    // Clear together with search_results so no stale query text
-                    // leaks into the next search session.
-                    state.search_query.clear();
-                    // ── Phase 7 (#1697): bound the profile cache to the active
-                    // view (D5/D8). The kind:0 cache is rebuilt by the local
-                    // store scan on the next RunSearch; clearing on close means
-                    // it never grows unbounded across sessions.
-                    state.profile_search_cache.clear();
-                    // ── Generation token: advance on close so any in-flight ───
-                    // async kind:0 scan event that arrives after this close is
-                    // recognised as stale and dropped (D5).
-                    state.profile_search_generation =
-                        state.profile_search_generation.wrapping_add(1);
+                    // Tear down the NMP search session (per-relay pinned
+                    // interests + result observer + typed sidecar). Inline (not
+                    // an Effect) because it needs the NmpHandle directly. No-op
+                    // when nmp_handle is None (test mode); close_search itself is
+                    // idempotent on an unknown session.
+                    if let Some(handle) = nmp_handle.as_ref() {
+                        // SAFETY: handle.ptr is a valid non-null NmpApp pointer
+                        // kept alive by NmpHandle for the full actor lifetime.
+                        let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+                        nmp_ref.close_search(search::SEARCH_SESSION_ID);
+                    }
                 }
                 lifecycle_effects.extend(search::lifecycle_effects_for_view_close(id));
                 // ── Phase 4G: article feed lifecycle — release cursor ────────────
@@ -3109,15 +3101,12 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
 
     // Phase 3C: wire the follow-list typed snapshot projection so NIP-02
     // kind:3 events from the active account surface in `AppState::follows`.
-    // Called with `active_pubkey=None` at boot (account unknown until the
-    // identity-change observer fires); the `FollowListProjection` accumulates
-    // kind:3 events for all observed authors and filters to the active pubkey
-    // at snapshot time. The kernel's standing `account_profile_interest`
-    // (kind:0 + kind:3 + kind:10002) means no separate interest push is needed.
-    // Pass the live active-account slot so the projection auto-tracks the
-    // active account. A fresh Arc::new(Mutex::new(None)) would leave it
-    // permanently pointed at None and follows would never populate AppState.
-    follows::register_follow_list_projection(nmp_ref, nmp_ref.active_account_handle());
+    // ADR-0063: the follow list is now a PURE READ over the shared
+    // `ContactsLookup` (written by nmp_nip01::Kind3Parser). The active-account
+    // slot and contacts lookup are sourced from `NmpApp` inside the NMP runtime
+    // registrar — no manual slot is passed. Demand-driven kind:3 acquisition is
+    // handled by `register_follow_state_runtime`'s OpenInterest enqueue.
+    follows::register_follow_list_projection(nmp_ref);
 
     // Phase 4C: wire the hl BookmarkListProjection typed snapshot so NIP-51
     // kind:10003 events from the active account surface in `AppState::bookmarks`.

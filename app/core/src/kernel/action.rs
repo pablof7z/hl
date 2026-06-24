@@ -258,6 +258,14 @@ pub(crate) struct RunSearchPayload {
     pub scope: String,
 }
 
+/// `hl.search.omnibox` envelope payload — one raw input string for the
+/// input-intent resolver (`#1865`). No scope: the omnibox declares its own
+/// scope allow-list in `omnibox::omnibox_scopes`.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct RunOmniboxPayload {
+    pub query: String,
+}
+
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct MarkWhatsNewSeenPayload {
     pub shipped_at_unix: u64,
@@ -1055,6 +1063,22 @@ pub enum AppAction {
         scope: SearchScope,
     },
 
+    /// Classify one omnibox / paste / search input through NMP's input-intent
+    /// resolver (`#1865`) and route it.
+    ///
+    /// The reducer emits `Effect::RunOmnibox`; the effect runner calls
+    /// `nmp_app_intent_classify` and, per the classification, either navigates
+    /// (pasted ref), enqueues a NIP-05 reverse lookup, opens a NIP-29 group,
+    /// runs a multi-kind free-text relay search, or safe-rejects an `nsec`. The
+    /// resolved `OmniboxOutcome` arrives back as `KernelEvent::OmniboxResolved`
+    /// and is surfaced in `SearchSnapshot::omnibox`.
+    ///
+    /// Empty / whitespace-only `query` → no-op (D6). Fire-and-forget (D6).
+    RunOmnibox {
+        /// Raw, untrusted omnibox input (may be a secret — never echoed).
+        query: String,
+    },
+
     // ── Phase 5A additions (append-only) ─────────────────────────────────────
     /// Prepare the What's New sheet — load entries and seen marker from disk.
     /// Device-local (never published to nostr — `hl-app-state-vs-nostr-facts`).
@@ -1391,6 +1415,15 @@ pub enum KernelEvent {
     /// unbounded (Non-Negotiable #7). No labels or formatted strings — Swift
     /// formats all search result UI (D1).
     SearchResultsUpdated(Vec<crate::kernel::snapshot::SearchHitRow>),
+
+    /// The omnibox resolver (`#1865`) classified an input.
+    ///
+    /// Produced by `omnibox::run_effect_run_omnibox` after calling
+    /// `nmp_app_intent_classify` and performing the branch side effect. The
+    /// reducer stores the outcome in `AppState::omnibox_outcome`; it is surfaced
+    /// in `SearchSnapshot::omnibox` for the shell to route on. Carries no copy of
+    /// a rejected secret (`OmniboxOutcome::RejectSecret` is fieldless).
+    OmniboxResolved(crate::kernel::snapshot::OmniboxOutcome),
 
     // ── Phase 4F additions (append-only) ─────────────────────────────────────
     /// `nmp_app_pull_page` returned a decoded page (or a Gap rebase) for the

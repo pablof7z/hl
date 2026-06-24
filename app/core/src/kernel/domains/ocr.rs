@@ -671,7 +671,7 @@ fn soft_join(left: &str, right: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::capabilities::ocr::{OcrLine, OcrOp, OcrRect, OcrResult, OcrWord};
+    use crate::capabilities::ocr::{OcrLine, OcrOp, OcrRect, OcrResult};
     use crate::capabilities::CapabilityResult;
     use crate::kernel::action::KernelEvent;
     use crate::kernel::actor::{reduce, Cmd};

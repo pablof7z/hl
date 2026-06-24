@@ -46,7 +46,11 @@
 //! All action-result routing is guarded: unknown correlation_ids, missing
 //! status fields, and malformed result JSON are silent no-ops.
 
+use nmp_blossom::UploadInput;
+use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
+use nmp_core::substrate::ActionPayload;
 use nmp_core::typed_projections::ActionResultRow;
+use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string};
 
 use crate::kernel::action::KernelEvent;
 use crate::kernel::app::AppState;
@@ -425,49 +429,85 @@ pub(crate) fn run_effect_blossom_upload(
         return;
     };
 
-    let action_json = serde_json::json!({
-        "file_path": image_handle,
-        "servers": servers,
-    });
-    let action_json_str = match serde_json::to_string(&action_json) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::warn!("run_effect_blossom_upload: serde_json failed: {e}");
-            return;
-        }
+    // Build the typed UploadInput and encode to FlatBuffers for the bytes
+    // doorway (ADR-0064 / Cut-B). The correlation_id is the reducer-minted
+    // placeholder; the bytes lane echoes it back verbatim so the swap logic
+    // below is a no-op (nmp_cid == correlation_id always on this lane).
+    let action = UploadInput {
+        file_path: image_handle,
+        servers,
+        content_type: None,
+        signer_pubkey: None,
     };
-
-    let dispatch_result = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
-        handle.ptr.as_ptr(),
+    let payload_bytes = action.encode();
+    let envelope = encode_dispatch_envelope(
+        &correlation_id,
         "nmp.blossom.upload",
-        &action_json_str,
+        DISPATCH_ENVELOPE_SCHEMA_VERSION,
+        &payload_bytes,
     );
 
-    let nmp_id = match dispatch_result {
-        Err(e) => {
-            tracing::warn!("run_effect_blossom_upload: dispatch rejected: {e}");
+    let result_ptr =
+        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
+
+    if result_ptr.is_null() {
+        // D6: null return is an nmp bug; treat as a failure.
+        let _ = tx.send(Cmd::Event(KernelEvent::BlossomUploadResult {
+            success: false,
+            blob_url: String::new(),
+            error: "nmp_app_dispatch_action returned null".to_string(),
+        }));
+        return;
+    }
+
+    // Parse the result JSON while the pointer is still valid, then free it.
+    let result_json = {
+        let cstr = unsafe { std::ffi::CStr::from_ptr(result_ptr) };
+        let s = cstr.to_string_lossy().to_string();
+        nmp_free_string(result_ptr);
+        s
+    };
+
+    // Extract the nmp-minted correlation_id from `{"correlation_id":"…"}`.
+    let nmp_cid = serde_json::from_str::<serde_json::Value>(&result_json)
+        .ok()
+        .and_then(|v| {
+            v.get("correlation_id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        });
+
+    match nmp_cid {
+        Some(nmp_id) if nmp_id != correlation_id => {
+            // nmp minted a different id; swap the placeholder in AppState so
+            // apply_action_result_row can match the real id when the
+            // action_results frame arrives.
+            tracing::debug!(
+                placeholder_cid = %correlation_id,
+                nmp_cid = %nmp_id,
+                "run_effect_blossom_upload: swapping placeholder with nmp id"
+            );
+            let _ = tx.send(Cmd::Event(KernelEvent::NmpBlossomCorrelationMinted {
+                placeholder_correlation_id: correlation_id,
+                nmp_correlation_id: nmp_id,
+            }));
+        }
+        Some(_) => {
+            // nmp returned the same id — no swap needed, action_results will match.
+        }
+        None => {
+            // nmp returned an error JSON or no correlation_id. Upload was rejected.
+            tracing::warn!(
+                result = %result_json,
+                "run_effect_blossom_upload: nmp rejected upload — emitting failure"
+            );
             let _ = tx.send(Cmd::Event(KernelEvent::BlossomUploadResult {
                 success: false,
                 blob_url: String::new(),
-                error: e,
+                error: result_json,
             }));
-            return;
         }
-        Ok(id) => id,
-    };
-
-    if nmp_id != correlation_id {
-        tracing::debug!(
-            placeholder_cid = %correlation_id,
-            nmp_cid = %nmp_id,
-            "run_effect_blossom_upload: swapping placeholder with nmp id"
-        );
-        let _ = tx.send(Cmd::Event(KernelEvent::NmpBlossomCorrelationMinted {
-            placeholder_correlation_id: correlation_id,
-            nmp_correlation_id: nmp_id,
-        }));
     }
-    // nmp returned the same id — no swap needed, action_results will match.
 }
 
 /// Run `Effect::PublishCaptureWithCorrelation` — dispatch a capture-draft
@@ -526,16 +566,14 @@ pub(crate) fn run_effect_publish_capture_with_correlation(
     let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
     let _ = nmp_ref
         .actor_sender()
-        .send(nmp_core::actor::ActorCommand::Publish(
-            nmp_core::actor::PublishCommand::RawEvent {
-                kind: template.kind,
-                content: template.content,
-                tags: template.tags,
-                target: nmp_core::publish::PublishTarget::Auto,
-                signer_pubkey: None,
-                correlation_id: Some(correlation_id),
-            },
-        ));
+        .send(nmp_core::ActorCommand::PublishRawEvent {
+            kind: template.kind,
+            content: template.content,
+            tags: template.tags,
+            target: nmp_core::publish::PublishTarget::Auto,
+            signer_pubkey: None,
+            correlation_id: Some(correlation_id),
+        });
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────

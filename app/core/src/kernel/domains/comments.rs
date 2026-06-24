@@ -53,9 +53,11 @@
 
 use std::sync::Arc;
 
+use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
+use nmp_core::substrate::ActionPayload;
 use nmp_core::KernelEventObserver;
-use nmp_ffi::NmpApp;
-use nmp_nip22::{CommentThreadProjection, CommentThreadSnapshot, KIND_COMMENT};
+use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
+use nmp_nip22::{CommentThreadProjection, CommentThreadSnapshot, PostCommentAction, KIND_COMMENT};
 use tokio::sync::mpsc;
 
 use crate::kernel::action::{KernelEvent, PostCommentPayload};
@@ -195,11 +197,28 @@ pub(crate) fn run_effect_dispatch_comment_action(
 ) {
     let Some(handle) = nmp else { return };
 
-    let _ = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
-        handle.ptr.as_ptr(),
+    let action = match serde_json::from_str::<PostCommentAction>(&json) {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!(error = %e, "comments: failed to deserialise PostCommentAction");
+            return;
+        }
+    };
+    let payload_bytes = action.encode();
+    let correlation_id = uuid::Uuid::new_v4().to_string();
+    let envelope = encode_dispatch_envelope(
+        &correlation_id,
         "nmp.nip22.post_comment",
-        &json,
+        DISPATCH_ENVELOPE_SCHEMA_VERSION,
+        &payload_bytes,
     );
+
+    let result_ptr =
+        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
+
+    if !result_ptr.is_null() {
+        nmp_free_string(result_ptr);
+    }
 }
 
 // ─── Snapshot computation ─────────────────────────────────────────────────────
@@ -312,7 +331,7 @@ pub(crate) fn register_comment_projection(nmp_ref: &NmpApp, tx: mpsc::UnboundedS
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kernel::action::{AppAction, KernelEvent};
+    use crate::kernel::action::KernelEvent;
     use crate::kernel::actor::{reduce, Cmd};
     use crate::kernel::clock::{Clock, ManualClock};
     use crate::kernel::effect::Effect;

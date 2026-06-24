@@ -995,30 +995,58 @@ pub struct SearchSnapshot {
     /// Ordered (by `created_at` descending, then `id` ascending) search hit rows.
     /// Raw fields only — no "X results" count label, no formatted strings (D1).
     pub hits: Vec<KernelSearchHitRow>,
-    // ── Phase 7 (gate #4 communities bucket) additions (append-only) ─────────
-    /// Local-scan community results from `AppState::discovered_groups` merged with
-    /// `AppState::communities`. Substring-matched by name/about against the
-    /// active `search_query`; filtered to public+open; sorted by lowercase name
-    /// then host_relay_url then group_id; bounded at 20.
-    /// Empty when the query is blank or no public+open communities match.
-    /// D1: raw rows only — Swift renders all display strings and fallbacks.
-    pub communities: Vec<CommunitySearchRow>,
-    // ── Phase 7 (search highlights bucket) additions (append-only) ───────────
-    /// Enriched kind:9802 highlight rows decoded from the kind:9802 entries in
-    /// `hits` via the SHARED `decode_highlight_row` (same NIP-84/NIP-73 fields as
-    /// the highlight feed / article-reader overlay — quote/context/artifact
-    /// refs/clip/image). Preserves the `hits` order (created_at desc). Lets Swift
-    /// render the Highlights search bucket without re-parsing kind:9802 tags.
-    /// Empty when no kind:9802 hits are present.
-    pub highlights: Vec<HighlightRow>,
-    // ── Phase 7 (#1697 gate profiles bucket) additions (append-only) ─────────
-    /// Local-scan kind:0 profile results from `AppState::profile_search_cache`.
-    /// Substring-matched by name/display_name/nip05/about against `search_query`;
-    /// ranked prefix-match first, then alphabetical by primary label; bounded at 20.
-    /// Same algorithm as `crate::search::search_profiles` (bespoke live lane).
-    /// Empty when the query is blank or no profiles match.
-    /// D1: raw rows only — Swift renders all display strings.
-    pub profiles: Vec<ProfileSearchRow>,
+    /// The most recent omnibox classification outcome (`#1865` input-intent
+    /// resolver), or `None` if the field has not classified an input yet. The
+    /// shell routes on this: `Navigate`/`OpenGroup`/`ResolveNip05` drive
+    /// navigation, `RejectSecret` shows a safe-reject hint, `FreeText` keeps the
+    /// result buckets. The shell consumes it after routing (one-shot).
+    pub omnibox: Option<OmniboxOutcome>,
+}
+
+/// Outcome of classifying one omnibox / paste / search input through NMP's
+/// input-intent resolver (`#1865` / `#1804`).
+///
+/// Produced by `omnibox::classification_to_outcome` and surfaced in
+/// [`SearchSnapshot::omnibox`]. Raw protocol data only (D1): the shell formats
+/// any user-facing copy and owns the navigation routing.
+#[derive(Debug, Clone, PartialEq, uniffi::Enum)]
+pub enum OmniboxOutcome {
+    /// Free text — run the result buckets. The kernel also opened a multi-kind
+    /// NIP-50 relay search (profiles + notes + articles) under the shared search
+    /// session; hits stream into [`SearchSnapshot::hits`].
+    FreeText {
+        /// The trimmed query that was searched.
+        query: String,
+    },
+    /// A NIP-19/21 reference to open directly. `uri` is the canonical `nostr:`
+    /// form the shell decodes and routes (profile / thread / article / group).
+    Navigate {
+        /// Canonical `nostr:`-form URI.
+        uri: String,
+    },
+    /// A NIP-05 identifier whose HTTP `.well-known/nostr.json` reverse lookup was
+    /// enqueued. The resolved profile opens reactively once the claim lands.
+    ResolveNip05 {
+        /// The `name@domain` identifier (SHAPE-validated; never a secret).
+        identifier: String,
+    },
+    /// A NIP-29 group reference (`host'local-id` or an `naddr` to a group).
+    OpenGroup {
+        /// `wss://`-prefixed host relay URL.
+        host_relay_url: String,
+        /// NIP-29 local id.
+        local_id: String,
+    },
+    /// A pasted relay URL (`ws://` / `wss://`).
+    RelayUrl {
+        /// Normalized relay URL.
+        url: String,
+    },
+    /// The input was (or contained) a secret key (`nsec` / `ncryptsec`). Safe
+    /// reject — the secret is NEVER carried, logged, or echoed.
+    RejectSecret,
+    /// The input matched no recognizer and is not usable as free text.
+    NoMatch,
 }
 
 // ── Phase 4G additions (append-only) ─────────────────────────────────────────

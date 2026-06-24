@@ -61,9 +61,13 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
+use nmp_core::substrate::ActionPayload;
 use nmp_core::KernelEventObserver;
-use nmp_ffi::NmpApp;
-use nmp_nip25::{ReactionProjection, KIND_REACTION, KIND_REACTION_DELETE};
+use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
+use nmp_nip25::{
+    ReactAction, ReactionProjection, UnreactAction, KIND_REACTION, KIND_REACTION_DELETE,
+};
 use tokio::sync::mpsc;
 
 use crate::kernel::action::KernelEvent;
@@ -378,11 +382,43 @@ pub(crate) fn run_effect_dispatch_react_action(
 ) {
     let Some(handle) = nmp else { return };
 
-    let _ = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
-        handle.ptr.as_ptr(),
+    // Deserialise the pre-built JSON back to the typed struct, then encode as
+    // FlatBuffers for the bytes doorway (ADR-0064 / Cut-B).
+    let payload_bytes = match namespace.as_str() {
+        "nmp.nip25.react" => match serde_json::from_str::<ReactAction>(&json) {
+            Ok(action) => action.encode(),
+            Err(e) => {
+                tracing::warn!(error = %e, "reactions: failed to deserialise ReactAction");
+                return;
+            }
+        },
+        "nmp.nip25.unreact" => match serde_json::from_str::<UnreactAction>(&json) {
+            Ok(action) => action.encode(),
+            Err(e) => {
+                tracing::warn!(error = %e, "reactions: failed to deserialise UnreactAction");
+                return;
+            }
+        },
+        other => {
+            tracing::warn!(namespace = other, "reactions: unknown namespace — no-op");
+            return;
+        }
+    };
+
+    let correlation_id = uuid::Uuid::new_v4().to_string();
+    let envelope = encode_dispatch_envelope(
+        &correlation_id,
         &namespace,
-        &json,
+        DISPATCH_ENVELOPE_SCHEMA_VERSION,
+        &payload_bytes,
     );
+
+    let result_ptr =
+        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
+
+    if !result_ptr.is_null() {
+        nmp_free_string(result_ptr);
+    }
 }
 
 // ─── Projection registration ─────────────────────────────────────────────────

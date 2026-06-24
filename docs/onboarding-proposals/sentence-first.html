@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sentence First - Highlighter Onboarding Proposal</title>
+    <link rel="stylesheet" href="./shared.css" />
+    <style>
+      .sentence-flow .topbar-title {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .flow-caption {
+        color: var(--faint);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .passage-card {
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: rgba(255, 250, 244, 0.88);
+        padding: 16px;
+        margin-top: 14px;
+      }
+
+      .passage-source {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        color: var(--faint);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .passage-text {
+        margin: 14px 0 0;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 21px;
+        line-height: 1.42;
+      }
+
+      .passage-context {
+        margin: 12px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .reaction-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .reaction {
+        min-height: 44px;
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: rgba(255, 250, 244, 0.74);
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .reaction.selected {
+        border-color: var(--accent);
+        background: rgba(196, 126, 94, 0.13);
+      }
+
+      .taste-meter {
+        display: grid;
+        gap: 8px;
+        margin-top: 16px;
+      }
+
+      .meter-line {
+        display: grid;
+        grid-template-columns: 84px 1fr;
+        align-items: center;
+        gap: 10px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .meter-track {
+        height: 8px;
+        border-radius: 999px;
+        background: var(--wash);
+        overflow: hidden;
+      }
+
+      .meter-fill {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--green);
+      }
+
+      .shelf-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: end;
+        margin-top: 16px;
+      }
+
+      .shelf-header h3 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .shelf-header span {
+        color: var(--faint);
+        font-size: 12px;
+      }
+
+      .shelf-item {
+        display: grid;
+        grid-template-columns: 72px 1fr;
+        gap: 12px;
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: rgba(255, 250, 244, 0.82);
+        padding: 10px;
+        margin-top: 10px;
+      }
+
+      .shelf-cover {
+        min-height: 92px;
+        border-radius: 7px;
+        background: linear-gradient(160deg, #f3e7d7, #8a9a7f);
+      }
+
+      .shelf-item:nth-of-type(3) .shelf-cover {
+        background: linear-gradient(160deg, #fffaf4, #c47e5e);
+      }
+
+      .shelf-item:nth-of-type(4) .shelf-cover {
+        background: linear-gradient(160deg, #e6ddd0, #6f8f9b);
+      }
+
+      .shelf-meta {
+        min-width: 0;
+      }
+
+      .shelf-title {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 700;
+        line-height: 1.25;
+      }
+
+      .shelf-copy {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.38;
+      }
+
+      .open-artifact {
+        width: 100%;
+        margin-top: 10px;
+        border: 1px solid var(--rule);
+        border-radius: 999px;
+        background: transparent;
+        color: var(--accent);
+        min-height: 36px;
+        font-weight: 700;
+      }
+
+      .artifact-head {
+        display: grid;
+        grid-template-columns: 92px 1fr;
+        gap: 14px;
+        margin-top: 14px;
+      }
+
+      .artifact-cover {
+        min-height: 128px;
+        border-radius: 8px;
+        background: linear-gradient(160deg, #fffaf4, #c47e5e);
+      }
+
+      .saved-strip {
+        border: 1px solid rgba(196, 126, 94, 0.45);
+        border-radius: 8px;
+        background: rgba(196, 126, 94, 0.1);
+        padding: 12px;
+        margin-top: 14px;
+      }
+
+      .saved-strip strong {
+        display: block;
+        font-size: 13px;
+        margin-bottom: 6px;
+      }
+
+      .identity-choice {
+        display: grid;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .identity-choice .full-choice {
+        margin-top: 0;
+      }
+
+      .handoff-card {
+        border: 1px dashed var(--rule);
+        border-radius: 8px;
+        padding: 14px;
+        margin-top: 16px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .brief-label {
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage">
+      <section class="stage-head">
+        <a class="backlink" href="./index.html">&larr; Back to proposals</a>
+        <div class="stage-kicker">Proposal 2 &middot; Content path</div>
+        <h1 class="stage-title">Sentence First</h1>
+        <p class="stage-blurb">
+          A cold-start flow that asks for reactions to compelling excerpts before asking for identity.
+          The product learns taste, reveals a starter shelf, opens the artifact behind a saved
+          highlight, then makes account saving feel like preserving work already done.
+        </p>
+      </section>
+
+      <section class="prototype-layout">
+        <aside class="brief" aria-label="Proposal brief">
+          <section class="brief-card">
+            <div class="brief-label">Hypothesis</div>
+            <p>
+              People who do not arrive through an invite still understand Highlighter quickly if the
+              first object is a strong sentence, not an empty feed or signup form.
+            </p>
+          </section>
+
+          <section class="brief-card">
+            <div class="brief-label">Activation</div>
+            <p>
+              Activation is the first saved highlight plus one opened artifact. The shelf is earned
+              from reactions, so the user sees immediate personalization before creating an identity.
+            </p>
+          </section>
+
+          <section class="brief-card">
+            <div class="brief-label">Viral Loop</div>
+            <p>
+              A saved passage becomes the share object: "this sentence made me think of you" links
+              back to the artifact, the user's shelf, and the group discussing it.
+            </p>
+          </section>
+
+          <section class="brief-card">
+            <div class="brief-label">Risk</div>
+            <p>
+              If excerpts feel too generic, this becomes another taste quiz. The passage inventory
+              has to be sharp, attributed, and varied enough to feel curated by readers.
+            </p>
+          </section>
+        </aside>
+
+        <section class="phone-wrap" aria-label="Interactive iPhone wireframe">
+          <div class="phone sentence-flow" data-flow-id="sentence-first">
+            <div class="phone-screen">
+              <div class="status">
+                <span>9:41</span>
+                <span class="status-icons"><span class="dot"></span><span class="bar"></span></span>
+              </div>
+
+              <div class="app">
+                <div class="topbar">
+                  <button class="icon-btn" data-prev aria-label="Previous screen">&larr;</button>
+                  <div class="topbar-title">Highlighter</div>
+                  <button
+                    class="icon-btn"
+                    data-toast-trigger="Keep going. This prototype saves only at the end."
+                    aria-label="More"
+                  >
+                    i
+                  </button>
+                </div>
+
+                <section class="screen" data-screen>
+                  <div class="flow-caption">Cold start</div>
+                  <h2 class="screen-title">Start with one sentence.</h2>
+                  <p class="screen-copy">
+                    No profile yet. React to passages first, then Highlighter builds a shelf.
+                  </p>
+
+                  <article class="passage-card">
+                    <div class="passage-source">
+                      <span>Essay</span>
+                      <span>3 min read</span>
+                    </div>
+                    <p class="passage-text">
+                      "The fastest way to understand what someone values is to notice what they save
+                      when no one is watching."
+                    </p>
+                    <p class="passage-context">
+                      From an essay about private libraries, public taste, and the notes people keep.
+                    </p>
+                    <div class="reaction-row" aria-label="React to passage">
+                      <button
+                        class="reaction"
+                        data-select="first-reaction"
+                        data-toast="Saved as thoughtful."
+                      >
+                        Thoughtful
+                      </button>
+                      <button class="reaction" data-select="first-reaction" data-toast="Saved as useful.">
+                        Useful
+                      </button>
+                      <button class="reaction" data-select="first-reaction" data-toast="Saved as skip.">
+                        Skip
+                      </button>
+                    </div>
+                  </article>
+                </section>
+
+                <section class="screen" data-screen>
+                  <div class="flow-caption">Taste signal</div>
+                  <h2 class="screen-title">Choose what pulls you in.</h2>
+                  <p class="screen-copy">
+                    Each reaction tunes the starter shelf without asking for interests up front.
+                  </p>
+
+                  <article class="passage-card">
+                    <div class="passage-source">
+                      <span>Book</span>
+                      <span>Chapter 2</span>
+                    </div>
+                    <p class="passage-text">
+                      "A tool becomes social the moment it lets one person's attention become useful
+                      to someone else."
+                    </p>
+                    <div class="reaction-row">
+                      <button class="reaction" data-toggle data-toast="Added to your signal.">
+                        Save
+                      </button>
+                      <button class="reaction" data-toggle data-toast="Marked for discussion.">
+                        Discuss
+                      </button>
+                      <button class="reaction" data-toggle data-toast="More like this.">
+                        More
+                      </button>
+                    </div>
+                  </article>
+
+                  <div class="taste-meter">
+                    <div class="meter-line">
+                      <span>Ideas</span>
+                      <span class="meter-track"><span class="meter-fill" style="width: 78%"></span></span>
+                    </div>
+                    <div class="meter-line">
+                      <span>Tools</span>
+                      <span class="meter-track"><span class="meter-fill" style="width: 54%"></span></span>
+                    </div>
+                    <div class="meter-line">
+                      <span>Culture</span>
+                      <span class="meter-track"><span class="meter-fill" style="width: 36%"></span></span>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="screen" data-screen>
+                  <div class="flow-caption">Starter shelf</div>
+                  <h2 class="screen-title">A shelf appears.</h2>
+                  <p class="screen-copy">
+                    The app turns reactions into artifacts, not a generic topic list.
+                  </p>
+
+                  <div class="shelf-header">
+                    <h3>For your first hour</h3>
+                    <span>Based on 4 signals</span>
+                  </div>
+
+                  <article class="shelf-item">
+                    <div class="shelf-cover" aria-hidden="true"></div>
+                    <div class="shelf-meta">
+                      <p class="shelf-title">The Attention Library</p>
+                      <p class="shelf-copy">
+                        12 readers saved passages about taste, memory, and personal archives.
+                      </p>
+                      <button class="open-artifact" data-toast-trigger="Artifact queued for the next screen.">
+                        Open artifact
+                      </button>
+                    </div>
+                  </article>
+
+                  <article class="shelf-item">
+                    <div class="shelf-cover" aria-hidden="true"></div>
+                    <div class="shelf-meta">
+                      <p class="shelf-title">Notes on Useful Networks</p>
+                      <p class="shelf-copy">
+                        A short essay with an active discussion about social tools.
+                      </p>
+                    </div>
+                  </article>
+
+                  <article class="shelf-item">
+                    <div class="shelf-cover" aria-hidden="true"></div>
+                    <div class="shelf-meta">
+                      <p class="shelf-title">Small Rooms, Better Reading</p>
+                      <p class="shelf-copy">A group shelf for readers who annotate slowly.</p>
+                    </div>
+                  </article>
+                </section>
+
+                <section class="screen" data-screen>
+                  <div class="flow-caption">Artifact page</div>
+                  <h2 class="screen-title">Your saved highlight is already here.</h2>
+
+                  <div class="artifact-head">
+                    <div class="artifact-cover" aria-hidden="true"></div>
+                    <div>
+                      <div class="meta">Essay &middot; 14 highlights</div>
+                      <h3 class="artifact-title">The Attention Library</h3>
+                      <p class="screen-copy">
+                        A reader-led discussion room is attached to the source.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="saved-strip">
+                    <strong>Saved highlight</strong>
+                    <p class="shelf-copy">
+                      "The fastest way to understand what someone values is to notice what they save
+                      when no one is watching."
+                    </p>
+                  </div>
+
+                  <div class="stack">
+                    <div class="row">
+                      <div class="avatar accent">M</div>
+                      <div class="row-main">
+                        <div class="row-title">Maya also saved this</div>
+                        <div class="row-copy">"This is the sentence I send when explaining why notes matter."</div>
+                      </div>
+                    </div>
+                    <button class="full-choice" data-toggle data-toast="Draft reply saved with this highlight.">
+                      Add a quick response
+                    </button>
+                  </div>
+                </section>
+
+                <section class="screen" data-screen>
+                  <div class="flow-caption">Identity save</div>
+                  <h2 class="screen-title">Save your shelf before it disappears.</h2>
+                  <p class="screen-copy">
+                    The account request is framed as keeping highlights, shelf, and discussion context.
+                  </p>
+
+                  <div class="identity-choice">
+                    <button class="full-choice" data-select="identity" data-toast="Nostr Connect selected.">
+                      Continue with Nostr Connect
+                    </button>
+                    <button class="full-choice" data-select="identity" data-toast="Local key selected.">
+                      Save a new Highlighter key
+                    </button>
+                    <button class="full-choice" data-select="identity" data-toast="Read-only reminder set.">
+                      Remind me after one more artifact
+                    </button>
+                  </div>
+
+                  <div class="handoff-card">
+                    Saved after signup: 2 reactions, 1 highlight, 1 starter shelf, 1 artifact room.
+                    The next screen can ask who should see the sentence.
+                  </div>
+                </section>
+
+                <div class="bottom">
+                  <div class="progress" data-progress aria-hidden="true"></div>
+                  <div class="cta-row">
+                    <button class="btn secondary" data-prev>Back</button>
+                    <button class="btn" data-next="Continue">Continue</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="toast" data-toast role="status" aria-live="polite"></div>
+            </div>
+          </div>
+          <p class="phone-note">
+            Tap reactions and Continue. This tests sequencing and motivation, not final visual design.
+          </p>
+        </section>
+      </section>
+    </main>
+
+    <script src="./shared.js"></script>
+  </body>
+</html>

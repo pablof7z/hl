@@ -27,6 +27,9 @@ pub(crate) mod articles;
 // ── Phase 4D additions (append-only) ─────────────────────────────────────────
 pub(crate) mod search;
 
+// ── Omnibox (#1865 input-intent resolver) ────────────────────────────────────
+pub(crate) mod omnibox;
+
 // ── Phase 4F additions (append-only) ─────────────────────────────────────────
 /// Feed-pull core — ADR-0058 shared engine (Phase 4F).
 ///

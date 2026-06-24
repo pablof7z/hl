@@ -25,13 +25,13 @@
 //!
 //! ## Projection wiring
 //!
-//! `register_follow_list_projection(nmp_ref, active_pubkey)` (defined here)
-//! wires the `FollowListProjection` event observer + typed snapshot projection
-//! against the live `NmpApp`. It follows the Chirp pattern in
-//! `apps/chirp/nmp-app-chirp/src/ffi/register.rs::nmp_app_chirp_register_follow_list`.
-//! Call it at boot (after `nmp_app_start`) and re-call on `IdentityChanged(Some)`
-//! — the projection accumulates all observed authors but only surfaces the
-//! active pubkey's follow list.
+//! `register_follow_list_projection(nmp_ref)` (defined here) delegates to
+//! `nmp_nip02::register_follow_state_runtime`, wiring the `"nmp.follow_list"`
+//! typed snapshot projection against the live `NmpApp`. It follows the Chirp
+//! pattern in `apps/chirp/nmp-app-chirp/src/ffi/register.rs::nmp_app_chirp_register_follow_list`.
+//! ADR-0063: the projection is a PURE READ over the shared `ContactsLookup`
+//! (no `KernelEventObserver`); account changes are tracked internally by the
+//! runtime registrar, so a single boot-time call suffices.
 //!
 //! ## Threading
 //!
@@ -40,11 +40,11 @@
 //! synchronous and non-blocking (FlatBuffers decode only, no I/O). D6: decode
 //! errors leave `AppState::follows` unchanged.
 
-use std::sync::{Arc, Mutex};
-
-use nmp_ffi::NmpApp;
-use nmp_nip02::projection::FollowListProjection;
+use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
+use nmp_core::substrate::ActionPayload;
+use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
 use nmp_nip02::wire::typed_fb::decode_follow_list;
+use nmp_nip02::{register_follow_state_runtime, PubkeyAction};
 
 use crate::kernel::app::AppState;
 
@@ -118,69 +118,55 @@ pub(crate) fn run_effect_dispatch_follow_action(
     let Some(handle) = nmp else { return };
 
     let namespace = if follow { "nmp.follow" } else { "nmp.unfollow" };
-    let action_json = format!("{{\"pubkey\":\"{pubkey}\"}}");
-
-    let _ = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
-        handle.ptr.as_ptr(),
+    let action = PubkeyAction { pubkey };
+    let payload_bytes = action.encode();
+    let correlation_id = uuid::Uuid::new_v4().to_string();
+    let envelope = encode_dispatch_envelope(
+        &correlation_id,
         namespace,
-        &action_json,
+        DISPATCH_ENVELOPE_SCHEMA_VERSION,
+        &payload_bytes,
     );
+
+    let result_ptr =
+        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
+
+    // Free the returned correlation-id JSON string. nmp-ffi returns a
+    // CString::into_raw pointer; `nmp_free_string` is the canonical free path
+    // (same Rust allocator as the allocation). Calling host `free()` is UB.
+    // A null pointer is a no-op (nmp-ffi D6 null-safety contract).
+    if !result_ptr.is_null() {
+        nmp_free_string(result_ptr);
+    }
 }
 
 // ─── Projection registration ─────────────────────────────────────────────────
 
-/// Wire the `FollowListProjection` event observer + typed snapshot projection
-/// against `nmp_ref`. Follows the Chirp pattern in
+/// Wire the NIP-02 follow-list runtime against `nmp_ref`. Delegates to
+/// `nmp_nip02::register_follow_state_runtime`, mirroring the Chirp pattern in
 /// `apps/chirp/nmp-app-chirp/src/ffi/register.rs::nmp_app_chirp_register_follow_list`.
 ///
-/// `active_account_slot` is the live `Arc<Mutex<Option<String>>>` that NMP
-/// itself updates on sign-in/switch/logout. Pass `nmp_ref.active_account_handle()`
-/// so the projection auto-tracks the active account without manual updates.
-/// Using a fresh `Arc::new(Mutex::new(None))` would leave the projection
-/// permanently pointed at None, so follows would never populate AppState.
+/// ADR-0063: `FollowListProjection` is no longer a `KernelEventObserver`; it is
+/// a PURE READ over the shared `nmp_core::substrate::ContactsLookup` (written by
+/// `nmp_nip01::Kind3Parser` on every kind:3 ingest, including cache-serve and
+/// local publishes). `register_follow_state_runtime` sources both the active-
+/// account slot (`app.active_pubkey()`) and the canonical contacts lookup
+/// (`app.contacts_lookup()` — the SAME `Arc` the `Kind3Parser` writes into) from
+/// the live `NmpApp`, then:
+///   * registers the `"nmp.follow_list"` typed snapshot projection (schema_id
+///     `"nmp.nip02.follow_list"`) so `AppState::follows` keeps updating, and
+///   * enqueues a demand-driven `OpenInterest` for `{"kinds":[3],"authors":[<active>]}`
+///     (re-opened on each account change) so cache-serve populates the lookup
+///     before the first snapshot tick.
 ///
-/// Must be called once at boot (after `nmp_app_start`). The slot automatically
-/// reflects future identity changes because NMP writes through the same Arc.
-///
-/// The kernel already fetches kind:3 for the active account via the
-/// `account_profile_interest` (kind:0 + kind:3 + kind:10002); no separate
-/// interest push is needed — events arrive through the standing subscription.
-///
-/// D6: a null or poisoned observer slot degrades to a silent return without
-/// registering the typed projection (so the snapshot never updates but the
-/// app does not crash).
-pub(crate) fn register_follow_list_projection(
-    nmp_ref: &NmpApp,
-    active_account_slot: Arc<Mutex<Option<String>>>,
-) {
-    // FollowListProjection is now a pure read-model over ContactsLookup (NMP
-    // ADR-0063 Lane H). It no longer implements KernelEventObserver — the
-    // canonical follow state lives in the shared ContactsLookup written by
-    // Kind3Parser on every ingest, so no event observation is needed.
+/// Must be called once at boot (after `nmp_app_start`). Account changes are
+/// tracked internally via the identity-change observer NMP installs.
+pub(crate) fn register_follow_list_projection(nmp_ref: &NmpApp) {
+    // The shared ContactsLookup — the SAME Arc the Kind3Parser writes into via
+    // the ingest pipeline. Passed explicitly so the generic runtime registrar
+    // depends only on nmp-core traits, not on nmp-ffi (matches Chirp exactly).
     let contacts_lookup = nmp_ref.contacts_lookup();
-    let projection = Arc::new(FollowListProjection::new(
-        active_account_slot,
-        contacts_lookup,
-    ));
-
-    // Register the typed sidecar projection under the canonical key.
-    // KEY = "nmp.follow_list"; SCHEMA_ID (in the payload) = "nmp.nip02.follow_list".
-    // This mirrors the Chirp wiring exactly (key/schema_id split is deliberate).
-    let typed_proj = Arc::clone(&projection);
-    nmp_ref.register_typed_snapshot_projection("nmp.follow_list", move || {
-        let snapshot = typed_proj.snapshot();
-        Some(nmp_core::TypedProjectionData {
-            key: "nmp.follow_list".to_string(),
-            schema_id: SCHEMA_ID.to_string(),
-            schema_version: nmp_nip02::FOLLOW_LIST_SCHEMA_VERSION,
-            // FILE_IDENTIFIER is a &[u8;4]; convert to a UTF-8 string as
-            // Chirp does (String::from_utf8_lossy — "NF02" is valid ASCII).
-            file_identifier: String::from_utf8_lossy(nmp_nip02::FOLLOW_LIST_FILE_IDENTIFIER)
-                .into_owned(),
-            payload: nmp_nip02::encode_follow_list(&snapshot),
-            ..Default::default()
-        })
-    });
+    register_follow_state_runtime(nmp_ref, contacts_lookup);
 }
 
 // ─── Unit tests ──────────────────────────────────────────────────────────────

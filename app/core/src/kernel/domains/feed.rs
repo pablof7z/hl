@@ -313,7 +313,7 @@ pub fn reduce_release_feed_cursor(key: FeedKey) -> Vec<Effect> {
 /// session) resets `after_seq` to the provided value — consumers should pass
 /// the current `FeedState::after_seq` so the cursor resumes rather than
 /// rewinding (0 = start from the beginning).
-/// Returns the kernel-allocated cursor id (for storage in FeedState), or 0 in test mode.
+/// Returns the cursor id (for storage in FeedState), or 0 in test mode.
 pub(crate) fn run_effect_register_feed_cursor(
     key: FeedKey,
     scope: PullScope,
@@ -326,46 +326,8 @@ pub(crate) fn run_effect_register_feed_cursor(
     };
     let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
 
-    // NMP master: cursor ids are allocated by the kernel's PullCursorRegistry.
-    // Alloc a handle under a brief registry write lock — the canonical path.
-    let cursor_handle = {
-        let slot = nmp_ref.pull_cursor_registry_handle();
-        let guard = match slot.lock() {
-            Ok(g) => g,
-            Err(_) => {
-                tracing::warn!(
-                    ?key,
-                    "RegisterFeedCursor: cursor registry lock poisoned (D6)"
-                );
-                return 0;
-            }
-        };
-        let registry_arc = match guard.as_ref() {
-            Some(r) => r.clone(),
-            None => {
-                tracing::warn!(
-                    ?key,
-                    "RegisterFeedCursor: cursor registry not yet published (D6)"
-                );
-                return 0;
-            }
-        };
-        // Bind the write-guard to a named local so it drops before registry_arc.
-        let write_result = registry_arc.write();
-        let h = match write_result {
-            Ok(mut reg) => reg.alloc_handle(),
-            Err(_) => {
-                tracing::warn!(
-                    ?key,
-                    "RegisterFeedCursor: cursor registry write lock poisoned (D6)"
-                );
-                return 0;
-            }
-        };
-        h
-    };
-    // PullCursorHandle is Copy: extract the id for FeedState before the handle moves.
-    let cursor_id = cursor_handle.id().0;
+    // Mint a deterministic cursor id from the feed key (same as mint_cursor_id).
+    let cursor_id = mint_cursor_id(&key);
 
     let page_size =
         NonZeroUsize::new(FEED_PAGE_SIZE as usize).unwrap_or(NonZeroUsize::new(20).unwrap());
@@ -374,21 +336,17 @@ pub(crate) fn run_effect_register_feed_cursor(
 
     let _ = nmp_ref
         .actor_sender()
-        .send(nmp_core::actor::ActorCommand::Interests(
-            nmp_core::actor::InterestsCommand::OpenPullCursor {
-                handle: cursor_handle,
-                spec: nmp_core::PullCursorSpec {
-                    consumer_id: nmp_core::PullConsumerId(format!("hl.{key}")),
-                    scope,
-                    mode: PullCursorMode::GapAllowed,
-                    after_seq,
-                    limits: nmp_core::PullLimits {
-                        max_entries: page_size,
-                        max_scan_entries: scan_budget,
-                    },
-                },
+        .send(nmp_core::ActorCommand::RegisterPullCursor {
+            cursor_id,
+            consumer_id: format!("hl.{key}"),
+            scope,
+            mode: PullCursorMode::GapAllowed,
+            after_seq,
+            limits: nmp_core::PullLimits {
+                max_entries: page_size,
+                max_scan_entries: scan_budget,
             },
-        ));
+        });
     cursor_id
 }
 
@@ -421,7 +379,7 @@ pub(crate) fn run_effect_drain_feed(
     tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
     nmp: Option<&NmpHandle>,
 ) {
-    use nmp_ffi::pull::{nmp_mirror_free_bytes, nmp_mirror_pull_page};
+    use nmp_ffi::pull::{nmp_app_pull_page, nmp_free_bytes};
 
     let Some(handle) = nmp else {
         tracing::debug!(?key, "DrainFeed: no live NmpApp (test mode)");
@@ -440,7 +398,7 @@ pub(crate) fn run_effect_drain_feed(
     // Call nmp_app_pull_page. It is `pub extern "C"` (not `unsafe`) in nmp-ffi,
     // so the call itself does not require an unsafe block; we cast the pointer
     // here, which is safe because nmp_ref is a valid reference to an NmpApp.
-    let owned_bytes = nmp_mirror_pull_page(
+    let owned_bytes = nmp_app_pull_page(
         nmp_ref as *const nmp_ffi::NmpApp,
         cursor_id,
         FEED_PAGE_SIZE,
@@ -451,7 +409,7 @@ pub(crate) fn run_effect_drain_feed(
     let result = decode_pull_page_wire(key.clone(), cursor_id, &owned_bytes);
 
     // nmp_free_bytes is `pub extern "C"` (not `unsafe`) — call directly.
-    nmp_mirror_free_bytes(owned_bytes);
+    nmp_free_bytes(owned_bytes);
 
     match result {
         Some(event) => {
@@ -479,11 +437,7 @@ pub(crate) fn run_effect_release_feed_cursor(cursor_id: u64, nmp: Option<&NmpHan
     let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
     let _ = nmp_ref
         .actor_sender()
-        .send(nmp_core::actor::ActorCommand::Interests(
-            nmp_core::actor::InterestsCommand::UnregisterPullCursor {
-                cursor_id: nmp_core::PullCursorId(cursor_id),
-            },
-        ));
+        .send(nmp_core::ActorCommand::UnregisterPullCursor { cursor_id });
 }
 
 /// Advance the kernel's registered cursor to `after_seq` after a successful drain.
@@ -505,12 +459,10 @@ pub(crate) fn advance_feed_cursor(cursor_id: u64, after_seq: u64, nmp: Option<&N
     let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
     let _ = nmp_ref
         .actor_sender()
-        .send(nmp_core::actor::ActorCommand::Interests(
-            nmp_core::actor::InterestsCommand::AdvancePullCursor {
-                cursor_id: nmp_core::PullCursorId(cursor_id),
-                after_seq,
-            },
-        ));
+        .send(nmp_core::ActorCommand::AdvancePullCursor {
+            cursor_id,
+            after_seq,
+        });
 }
 
 // ─── Binary wire decoder ──────────────────────────────────────────────────────
@@ -527,7 +479,7 @@ pub(crate) fn advance_feed_cursor(cursor_id: u64, after_seq: u64, nmp: Option<&N
 fn decode_pull_page_wire(
     key: FeedKey,
     cursor_id: u64,
-    bytes: &nmp_ffi::pull::NmpMirrorBytes,
+    bytes: &nmp_ffi::pull::NmpOwnedBytes,
 ) -> Option<KernelEvent> {
     if bytes.ptr.is_null() || bytes.len == 0 {
         tracing::warn!(?key, "DrainFeed: empty bytes returned");
@@ -920,12 +872,12 @@ mod tests {
     /// Garbage binary wire input produces no-op (D6 — malformed_page_no_ops).
     #[test]
     fn malformed_page_no_ops() {
-        use nmp_ffi::pull::NmpMirrorBytes;
+        use nmp_ffi::pull::NmpOwnedBytes;
 
         // Simulate garbage bytes that look like a Page variant but are truncated.
         let garbage: Vec<u8> = vec![0u8, 0xDE, 0xAD, 0xBE, 0xEF]; // variant=Page, then truncated
         let mut v = garbage.clone();
-        let bytes = NmpMirrorBytes {
+        let bytes = NmpOwnedBytes {
             ptr: v.as_mut_ptr(),
             len: v.len(),
             cap: v.capacity(),
@@ -940,10 +892,10 @@ mod tests {
     /// Garbage all-zeros wire produces no-op.
     #[test]
     fn all_zeros_wire_no_ops() {
-        use nmp_ffi::pull::NmpMirrorBytes;
+        use nmp_ffi::pull::NmpOwnedBytes;
 
         let mut zeros = vec![0u8; 32];
-        let bytes = NmpMirrorBytes {
+        let bytes = NmpOwnedBytes {
             ptr: zeros.as_mut_ptr(),
             len: zeros.len(),
             cap: zeros.capacity(),

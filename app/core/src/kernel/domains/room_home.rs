@@ -47,7 +47,10 @@
 //! without re-opening a subscription. Only the header / metadata / membership
 //! shell is produced in Phase 3F.
 
-use nmp_ffi::NmpApp;
+use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
+use nmp_core::substrate::ActionPayload;
+use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
+use nmp_nip29::action::{RepostInGroupInput, ShareEventInGroupInput};
 use nmp_nip29::decode_group_events_snapshot;
 use nmp_nip29::register::wire_group_events;
 use nmp_nip29::GroupId;
@@ -463,11 +466,48 @@ pub(crate) fn run_effect_dispatch_share_to_room(
 ) {
     let Some(handle) = nmp else { return };
 
-    let _ = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
-        handle.ptr.as_ptr(),
+    // Route by namespace: deserialise the pre-built JSON to the typed struct,
+    // then encode as FlatBuffers for the bytes doorway (ADR-0064 / Cut-B).
+    let payload_bytes: Vec<u8> = match namespace.as_str() {
+        "nmp.nip29.share_event_in_group" => {
+            match serde_json::from_str::<ShareEventInGroupInput>(&json) {
+                Ok(a) => a.encode(),
+                Err(e) => {
+                    tracing::warn!(error = %e, "room_home: failed to deserialise ShareEventInGroupInput");
+                    return;
+                }
+            }
+        }
+        "nmp.nip29.repost_in_group" => match serde_json::from_str::<RepostInGroupInput>(&json) {
+            Ok(a) => a.encode(),
+            Err(e) => {
+                tracing::warn!(error = %e, "room_home: failed to deserialise RepostInGroupInput");
+                return;
+            }
+        },
+        other => {
+            tracing::warn!(
+                namespace = other,
+                "room_home: unknown share namespace — no-op"
+            );
+            return;
+        }
+    };
+
+    let correlation_id = uuid::Uuid::new_v4().to_string();
+    let envelope = encode_dispatch_envelope(
+        &correlation_id,
         &namespace,
-        &json,
+        DISPATCH_ENVELOPE_SCHEMA_VERSION,
+        &payload_bytes,
     );
+
+    let result_ptr =
+        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
+
+    if !result_ptr.is_null() {
+        nmp_free_string(result_ptr);
+    }
 }
 
 // ─── Room-home aggregation helpers ────────────────────────────────────────────

@@ -90,9 +90,18 @@ struct ArticleBodyView: UIViewRepresentable {
     func updateUIView(_ uiView: UITextView, context: Context) {
         if uiView.attributedText != attributedText {
             uiView.attributedText = attributedText
+            uiView.invalidateIntrinsicContentSize()
+            uiView.setNeedsLayout()
         }
         uiView.backgroundColor = paperColor
         context.coordinator.parent = self
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        guard let width = proposal.width, width > 0 else { return nil }
+        let target = CGSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        let measured = uiView.sizeThatFits(target)
+        return CGSize(width: width, height: measured.height)
     }
 
     func makeCoordinator() -> Coordinator {

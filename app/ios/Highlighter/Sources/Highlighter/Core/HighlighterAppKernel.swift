@@ -124,7 +124,8 @@ final class HighlighterAppKernel {
     /// articles, reads `highlights` directly, `communities` directly, and
     /// `profiles` directly (all four buckets now come from `SearchSnapshot` —
     /// the profiles bucket is driven by the local kind:0 store scan, not the
-    /// live lane; nmp #1697).
+    /// live lane; nmp #1697). Also carries the omnibox classification outcome
+    /// (`#1865`) the Search screen routes on.
     private(set) var searchSnapshot: SearchSnapshot?
 
     /// NIP-51 kind:10003 bookmarks snapshot. `nil` until the `ViewId.bookmarks`
@@ -417,8 +418,8 @@ final class HighlighterAppKernel {
     // MARK: - Phase 7: search lifecycle
 
     /// Open the NIP-50 search view. Snapshots stream into `searchSnapshot` once a
-    /// query is run via `dispatch(.runSearch(...))`. Call from the search screen's
-    /// `.task`.
+    /// query is run. Also delivers the omnibox classification outcome (#1865).
+    /// Idempotent. Call from `SearchView.task`.
     func openSearch() {
         app.openView(viewId: .search, route: .search)
     }
@@ -534,7 +535,8 @@ final class HighlighterAppKernel {
         case .sharePublish(let s):
             sharePublish = s
 
-        // Phase 7 cutover: search (SearchStore reads this).
+        // Phase 7 cutover: search (SearchStore reads this). Also carries the
+        // omnibox classification outcome (#1865) for SearchView routing.
         case .search(let s):
             searchSnapshot = s
 
@@ -574,6 +576,13 @@ final class HighlighterAppKernel {
         // Phase 5+ snapshots (podcast) — managed by their owning views / stores;
         // no-op here (same pattern as Phase 4+ above).
         case .podcastListening:
+            break
+
+        // Kernel-lane comment / feedback / room chat + discussion snapshots
+        // (#1747 migration in flight). hl's Swift still drives these surfaces
+        // through the legacy lane, so the kernel push is a no-op here for now.
+        case .commentThread, .feedbackThreads, .feedbackThread,
+             .roomChat, .roomDiscussions:
             break
         }
     }

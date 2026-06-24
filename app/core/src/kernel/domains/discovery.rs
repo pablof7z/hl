@@ -43,7 +43,12 @@
 //! `projections::dispatch_typed_frame`, called from `reduce_event`). It is
 //! synchronous and non-blocking (FlatBuffers decode only, no I/O).
 
-use nmp_ffi::NmpApp;
+use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
+use nmp_core::substrate::ActionPayload;
+use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
+use nmp_nip29::action::{
+    CreateInviteInput, CreatePublicGroupInput, DiscoverGroupsInput, JoinGroupInput, PutUserInput,
+};
 use nmp_nip29::decode_discovered_groups_snapshot;
 use nmp_nip29::register::open_group_discovery;
 
@@ -179,11 +184,66 @@ pub(crate) fn run_effect_dispatch_nip29_action(
 ) {
     let Some(handle) = nmp else { return };
 
-    let _ = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
-        handle.ptr.as_ptr(),
+    // Route by namespace: deserialise the pre-built JSON to the typed struct,
+    // then encode as FlatBuffers for the bytes doorway (ADR-0064 / Cut-B).
+    let payload_bytes: Vec<u8> = match namespace.as_str() {
+        "nmp.nip29.discover" => match serde_json::from_str::<DiscoverGroupsInput>(&json) {
+            Ok(a) => a.encode(),
+            Err(e) => {
+                tracing::warn!(error = %e, "nip29: failed to deserialise DiscoverGroupsInput");
+                return;
+            }
+        },
+        "nmp.nip29.join" => match serde_json::from_str::<JoinGroupInput>(&json) {
+            Ok(a) => a.encode(),
+            Err(e) => {
+                tracing::warn!(error = %e, "nip29: failed to deserialise JoinGroupInput");
+                return;
+            }
+        },
+        "nmp.nip29.create_public_group" => {
+            match serde_json::from_str::<CreatePublicGroupInput>(&json) {
+                Ok(a) => a.encode(),
+                Err(e) => {
+                    tracing::warn!(error = %e, "nip29: failed to deserialise CreatePublicGroupInput");
+                    return;
+                }
+            }
+        }
+        "nmp.nip29.put_user" => match serde_json::from_str::<PutUserInput>(&json) {
+            Ok(a) => a.encode(),
+            Err(e) => {
+                tracing::warn!(error = %e, "nip29: failed to deserialise PutUserInput");
+                return;
+            }
+        },
+        "nmp.nip29.create_invite" => match serde_json::from_str::<CreateInviteInput>(&json) {
+            Ok(a) => a.encode(),
+            Err(e) => {
+                tracing::warn!(error = %e, "nip29: failed to deserialise CreateInviteInput");
+                return;
+            }
+        },
+        other => {
+            tracing::warn!(namespace = other, "nip29: unknown namespace — no-op");
+            return;
+        }
+    };
+
+    let correlation_id = uuid::Uuid::new_v4().to_string();
+    let envelope = encode_dispatch_envelope(
+        &correlation_id,
         &namespace,
-        &json,
+        DISPATCH_ENVELOPE_SCHEMA_VERSION,
+        &payload_bytes,
     );
+
+    let result_ptr =
+        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
+
+    if !result_ptr.is_null() {
+        nmp_free_string(result_ptr);
+    }
 }
 
 /// Execute `Effect::WireGroupDiscovery { relay_url }`.

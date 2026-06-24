@@ -311,16 +311,14 @@ pub(crate) fn run_effect_publish_discussion(
 
     let _ = nmp_ref
         .actor_sender()
-        .send(nmp_core::actor::ActorCommand::Publish(
-            nmp_core::actor::PublishCommand::RawEvent {
-                kind: template.kind,
-                content: template.content,
-                tags: template.tags,
-                target: nmp_core::publish::PublishTarget::Auto,
-                signer_pubkey: None,
-                correlation_id: None,
-            },
-        ));
+        .send(nmp_core::ActorCommand::PublishRawEvent {
+            kind: template.kind,
+            content: template.content,
+            tags: template.tags,
+            target: nmp_core::publish::PublishTarget::Auto,
+            signer_pubkey: None,
+            correlation_id: None,
+        });
 }
 
 // Snapshot computation

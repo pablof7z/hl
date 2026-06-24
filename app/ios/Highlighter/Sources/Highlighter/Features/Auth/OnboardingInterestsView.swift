@@ -126,8 +126,14 @@ struct OnboardingInterestsView: View {
             // just finalize onboarding so the route flips to the root shell.
             let outcome = await store.completeOnboardingInterests(selectedIds: chosenIds)
             if !outcome.applied {
-                isWorking = false
-                return
+                // Follow-list publish failed (relays not yet connected on a fresh
+                // account). Fall back to marking onboarding complete locally so
+                // the user isn't stranded on the interests screen.
+                let fallback = store.markOnboardingComplete()
+                if !fallback.applied {
+                    isWorking = false
+                    return
+                }
             }
         }
     }

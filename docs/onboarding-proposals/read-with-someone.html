@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Read With Someone - Highlighter Onboarding Proposal</title>
+    <link rel="stylesheet" href="./shared.css" />
+    <style>
+      .artifact-strip {
+        display: grid;
+        grid-template-columns: 82px 1fr;
+        gap: 13px;
+        align-items: stretch;
+      }
+
+      .artifact-strip .cover {
+        height: auto;
+        min-height: 118px;
+      }
+
+      .room-preview {
+        margin-top: 16px;
+        border: 1px dashed var(--rule);
+        border-radius: 8px;
+        padding: 14px;
+        background: rgba(237, 228, 216, 0.42);
+      }
+
+      .contract-line {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .contract-line {
+        padding: 11px 0;
+        border-bottom: 1px solid rgba(222, 212, 200, 0.76);
+      }
+
+      .contract-line:last-child {
+        border-bottom: 0;
+      }
+
+      .contract-status {
+        color: var(--green);
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .invite-card {
+        margin-top: 16px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .message-preview {
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        background: rgba(255, 250, 244, 0.78);
+        padding: 13px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .send-state {
+        display: grid;
+        place-items: center;
+        min-height: 310px;
+        text-align: center;
+      }
+
+      .sent-mark {
+        width: 68px;
+        height: 68px;
+        border-radius: 50%;
+        background: rgba(138, 154, 127, 0.18);
+        color: var(--green);
+        display: grid;
+        place-items: center;
+        font-size: 34px;
+        margin: 0 auto 16px;
+      }
+
+      .small-label {
+        color: var(--faint);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage">
+      <section class="stage-head">
+        <a class="backlink" href="./index.html">Back to proposals</a>
+        <div class="stage-kicker">Proposal 3 - Relationship path</div>
+        <h1 class="stage-title">Read With Someone</h1>
+        <p class="stage-blurb">
+          A private co-reading path where the first meaningful action is choosing an artifact and
+          one person. The prototype tests whether intimacy beats broad discovery for activation.
+        </p>
+      </section>
+
+      <section class="prototype-layout">
+        <aside class="brief" aria-label="Proposal brief">
+          <div class="brief-card">
+            <h2>Hypothesis</h2>
+            <p>
+              People are more likely to understand Highlighter when it starts with a specific thing
+              they care about and a specific person they want to read it with.
+            </p>
+          </div>
+          <div class="brief-card">
+            <h2>Activation</h2>
+            <p>
+              Activation is room creation plus an invite sent with a concrete reading prompt, before
+              account setup, profile polishing, or community browsing.
+            </p>
+          </div>
+          <div class="brief-card">
+            <h2>Viral Loop</h2>
+            <p>
+              The invite carries the artifact, the inviter, and a lightweight notification contract.
+              The recipient joins a private room and can later invite one more reader.
+            </p>
+          </div>
+          <div class="brief-card">
+            <h2>Risk</h2>
+            <p>
+              Too much intimacy can make the product feel like a private messaging feature. The room
+              needs to reveal artifact-centered reading value quickly.
+            </p>
+          </div>
+        </aside>
+
+        <section class="phone-wrap" aria-label="Interactive iPhone wireframe">
+          <div class="phone" data-flow-id="read-with-someone">
+            <div class="phone-screen">
+              <div class="status">
+                <span>9:41</span>
+                <span class="status-icons"><span class="dot"></span><span class="bar"></span></span>
+              </div>
+
+              <div class="app">
+                <div class="topbar">
+                  <a class="backlink" href="./index.html">Proposals</a>
+                  <span class="small-label" data-step-label></span>
+                </div>
+
+                <section class="screen active" data-screen>
+                  <p class="meta">Start with the artifact</p>
+                  <h2 class="screen-title">What do you want to read with someone?</h2>
+                  <p class="screen-copy">
+                    The first screen assumes the user arrived with intent, not with a blank feed.
+                  </p>
+
+                  <div class="card hero-card">
+                    <div class="cover"></div>
+                    <div class="card-body">
+                      <p class="meta">Book - saved from article thread</p>
+                      <h3 class="artifact-title">The Creative Act</h3>
+                      <p class="quote">
+                        "A rule is a way of seeing what your instincts are trying to say."
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="stack">
+                    <button
+                      class="full-choice selected"
+                      data-select="artifact"
+                      data-toast="This artifact will anchor the private room."
+                    >
+                      Use this artifact
+                    </button>
+                    <button
+                      class="full-choice"
+                      data-select="artifact"
+                      data-toast="Prototype branch: pick another saved artifact."
+                    >
+                      Choose from saved items
+                    </button>
+                  </div>
+                </section>
+
+                <section class="screen" data-screen>
+                  <p class="meta">Choose one person</p>
+                  <h2 class="screen-title">Who would make this better?</h2>
+                  <p class="screen-copy">
+                    No contact dump. The user chooses one high-confidence invite.
+                  </p>
+
+                  <div class="stack">
+                    <button
+                      class="full-choice selected"
+                      data-select="person"
+                      data-toast="Mara is selected for the room."
+                    >
+                      <span class="row">
+                        <span class="avatar accent">M</span>
+                        <span class="row-main">
+                          <span class="row-title">Mara</span>
+                          <span class="row-copy">Sent you three highlights from this author</span>
+                        </span>
+                      </span>
+                    </button>
+                    <button
+                      class="full-choice"
+                      data-select="person"
+                      data-toast="Jon is selected for the room."
+                    >
+                      <span class="row">
+                        <span class="avatar">J</span>
+                        <span class="row-main">
+                          <span class="row-title">Jon</span>
+                          <span class="row-copy">Usually reads craft and design notes</span>
+                        </span>
+                      </span>
+                    </button>
+                    <button
+                      class="full-choice"
+                      data-select="person"
+                      data-toast="A private invite link will be created."
+                    >
+                      <span class="row">
+                        <span class="avatar">+</span>
+                        <span class="row-main">
+                          <span class="row-title">Someone not here</span>
+                          <span class="row-copy">Create a private link for one recipient</span>
+                        </span>
+                      </span>
+                    </button>
+                  </div>
+                </section>
+
+                <section class="screen" data-screen>
+                  <p class="meta">Private co-reading room</p>
+                  <h2 class="screen-title">Make a room for two readers.</h2>
+                  <p class="screen-copy">
+                    The room explains scope before asking the user to send anything.
+                  </p>
+
+                  <div class="room-preview">
+                    <div class="artifact-strip">
+                      <div class="cover small"></div>
+                      <div>
+                        <p class="meta">Room draft</p>
+                        <h3 class="artifact-title">You + Mara</h3>
+                        <p class="row-copy">
+                          Private notes, highlights, and replies around The Creative Act.
+                        </p>
+                      </div>
+                    </div>
+                    <div class="chips" aria-label="Room settings">
+                      <button class="chip selected" data-toggle data-toast="Two-person room selected.">
+                        Two-person
+                      </button>
+                      <button class="chip" data-toggle data-toast="Weekly digest is optional.">
+                        Weekly digest
+                      </button>
+                      <button class="chip selected" data-toggle data-toast="Invite starts closed.">
+                        Closed invite
+                      </button>
+                    </div>
+                  </div>
+
+                  <textarea class="composer" aria-label="Room prompt">Let's read this together and trade one highlight each by Sunday.</textarea>
+                </section>
+
+                <section class="screen" data-screen>
+                  <p class="meta">Notification contract</p>
+                  <h2 class="screen-title">Set expectations before the invite.</h2>
+                  <p class="screen-copy">
+                    This is the trust screen: what the recipient gets, and what they will not get.
+                  </p>
+
+                  <div class="card stack">
+                    <div class="contract-line">
+                      <div>
+                        <div class="row-title">Mara gets one invite</div>
+                        <div class="row-copy">No reminder until she accepts.</div>
+                      </div>
+                      <span class="contract-status">On</span>
+                    </div>
+                    <div class="contract-line">
+                      <div>
+                        <div class="row-title">You get replies only</div>
+                        <div class="row-copy">No social activity alerts from outside this room.</div>
+                      </div>
+                      <span class="contract-status">On</span>
+                    </div>
+                    <div class="contract-line">
+                      <div>
+                        <div class="row-title">Room can grow later</div>
+                        <div class="row-copy">Either reader must approve adding another person.</div>
+                      </div>
+                      <span class="contract-status">Locked</span>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="screen" data-screen>
+                  <p class="meta">Send invite</p>
+                  <h2 class="screen-title">Invite Mara into the artifact.</h2>
+                  <p class="screen-copy">
+                    The message is specific enough to feel personal and bounded enough to feel safe.
+                  </p>
+
+                  <div class="invite-card">
+                    <div class="message-preview">
+                      Mara, I made a private reading room for The Creative Act. Want to trade one
+                      highlight each by Sunday? No feed, just this book.
+                    </div>
+                    <button
+                      class="full-choice selected"
+                      data-toast-trigger="Invite ready to send through Messages."
+                    >
+                      Messages
+                    </button>
+                    <button class="full-choice" data-toast-trigger="Private link copied.">
+                      Copy private link
+                    </button>
+                  </div>
+                </section>
+
+                <section class="screen" data-screen>
+                  <div class="send-state">
+                    <div>
+                      <div class="sent-mark">sent</div>
+                      <p class="meta">Invite sent</p>
+                      <h2 class="screen-title">The room exists when Mara joins.</h2>
+                      <p class="screen-copy">
+                        The next surface should show the artifact, the prompt, and the first action:
+                        add one highlight.
+                      </p>
+                    </div>
+                  </div>
+                </section>
+
+                <div class="bottom">
+                  <div class="progress" data-progress aria-hidden="true"></div>
+                  <div class="cta-row">
+                    <button class="btn secondary" data-prev>Back</button>
+                    <button class="btn" data-next>Continue</button>
+                  </div>
+                  <p class="phone-note">Interactive wireframe: choices show state but do not persist across branches.</p>
+                </div>
+              </div>
+              <div class="toast" data-toast></div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="./shared.js"></script>
+  </body>
+</html>

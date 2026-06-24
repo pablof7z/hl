@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Founding Circle - Highlighter Onboarding Proposal</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <main class="stage">
+      <section class="stage-head">
+        <a class="backlink" href="./index.html">Back to proposals</a>
+        <div class="stage-kicker">Proposal 5 - Creator path</div>
+        <h1 class="stage-title">Founding Circle</h1>
+        <p class="stage-blurb">
+          A creator-led onboarding path for people who arrive with the urge to start a small room.
+          The flow keeps the group intentionally narrow: mission, first artifact, privacy, a few
+          people, restrained notifications, then the room opens.
+        </p>
+      </section>
+
+      <section class="prototype-layout" data-flow-id="founding-circle">
+        <aside class="brief" aria-label="Proposal brief">
+          <article class="brief-card">
+            <h2>Hypothesis</h2>
+            <p>
+              Some users do not want to browse communities first. They want to gather a handful of
+              people around one clear reading mission. Highlighter should make that feel safer than
+              starting another public feed.
+            </p>
+          </article>
+
+          <article class="brief-card">
+            <h2>Activation</h2>
+            <p>
+              Activation happens when the user creates a room with a named mission, adds one
+              artifact, and sends three to five intentional invites.
+            </p>
+          </article>
+
+          <article class="brief-card">
+            <h2>Viral Loop</h2>
+            <p>
+              Each invite carries the room mission plus the first artifact, so recipients understand
+              why they were chosen before they install or sign in.
+            </p>
+          </article>
+
+          <article class="brief-card">
+            <h2>Risk</h2>
+            <p>
+              The path may overfit confident creators. It must avoid empty-room anxiety and make
+              privacy/notification restraint visible enough that invites feel respectful.
+            </p>
+          </article>
+        </aside>
+
+        <div class="phone-wrap">
+          <div class="phone" aria-label="Interactive iPhone wireframe">
+            <div class="phone-screen">
+              <div class="status">
+                <span>9:41</span>
+                <span class="status-icons"><span class="dot"></span><span class="bar"></span></span>
+              </div>
+
+              <div class="app">
+                <div class="topbar">
+                  <button class="icon-btn" type="button" data-prev aria-label="Previous screen">&lt;</button>
+                  <span class="meta" data-step-label></span>
+                  <button
+                    class="icon-btn"
+                    type="button"
+                    data-toast-trigger="Draft saved locally"
+                    aria-label="Save draft"
+                  >
+                    OK
+                  </button>
+                </div>
+
+                <section class="screen" data-screen>
+                  <p class="meta">Start a room</p>
+                  <h2 class="screen-title">Who is this room for?</h2>
+                  <p class="screen-copy">
+                    Founding Circle starts with a promise, not a name. Pick the reason people would
+                    recognize themselves in the room.
+                  </p>
+
+                  <div class="stack">
+                    <button
+                      class="full-choice selected"
+                      type="button"
+                      data-select="mission"
+                      data-toast="Mission set: ambitious but small"
+                    >
+                      <div class="row-title">Read sharper strategy essays with operators</div>
+                      <div class="row-copy">For people who build, decide, and want better arguments.</div>
+                    </button>
+                    <button
+                      class="full-choice"
+                      type="button"
+                      data-select="mission"
+                      data-toast="Mission set: technical learning"
+                    >
+                      <div class="row-title">Work through AI engineering papers together</div>
+                      <div class="row-copy">A quiet room for papers, notes, and careful questions.</div>
+                    </button>
+                    <button
+                      class="full-choice"
+                      type="button"
+                      data-select="mission"
+                      data-toast="Mission set: cultural reading"
+                    >
+                      <div class="row-title">Share books that change how we see cities</div>
+                      <div class="row-copy">Built around artifacts, not chatty status updates.</div>
+                    </button>
+                  </div>
+                </section>
+
+                <section class="screen" data-screen>
+                  <p class="meta">First artifact</p>
+                  <h2 class="screen-title">Give the room something to gather around.</h2>
+                  <p class="screen-copy">
+                    The first artifact becomes the invite preview and the opening discussion prompt.
+                  </p>
+
+                  <article class="card hero-card">
+                    <div class="cover"></div>
+                    <div class="card-body">
+                      <p class="meta">Article - 18 min</p>
+                      <h3 class="artifact-title">The Discipline of Useful Disagreement</h3>
+                      <p class="quote">
+                        "The strongest small groups do not remove friction. They make friction
+                        legible."
+                      </p>
+                    </div>
+                  </article>
+
+                  <div class="chips">
+                    <button class="chip selected" type="button" data-toggle data-toast="Invite hook: quote included">
+                      Include quote
+                    </button>
+                    <button class="chip" type="button" data-toggle data-toast="Prompt added to invite">
+                      Add prompt
+                    </button>
+                    <button class="chip" type="button" data-toggle data-toast="Artifact can be swapped later">
+                      Swap artifact
+                    </button>
+                  </div>
+                </section>
+
+                <section class="screen" data-screen>
+                  <p class="meta">Room settings</p>
+                  <h2 class="screen-title">Set the room boundaries before anyone arrives.</h2>
+                  <p class="screen-copy">
+                    The labels use plain language while mapping to NIP-29 access and visibility
+                    choices.
+                  </p>
+
+                  <div class="choice-grid">
+                    <button
+                      class="choice selected"
+                      type="button"
+                      data-select="access"
+                      data-toast="Access: invite-only"
+                    >
+                      <div class="row-title">Invite-only</div>
+                      <div class="row-copy">You approve members.</div>
+                    </button>
+                    <button class="choice" type="button" data-select="access" data-toast="Access: request to join">
+                      <div class="row-title">Request to join</div>
+                      <div class="row-copy">People can ask in.</div>
+                    </button>
+                    <button
+                      class="choice selected"
+                      type="button"
+                      data-select="visibility"
+                      data-toast="Visibility: unlisted"
+                    >
+                      <div class="row-title">Unlisted</div>
+                      <div class="row-copy">Only invited people see it.</div>
+                    </button>
+                    <button class="choice" type="button" data-select="visibility" data-toast="Visibility: discoverable">
+                      <div class="row-title">Discoverable</div>
+                      <div class="row-copy">Others can find the room.</div>
+                    </button>
+                  </div>
+
+                  <button class="full-choice selected" type="button" data-toggle data-toast="Private reading is on">
+                    <div class="row-title">Private reading by default</div>
+                    <div class="row-copy">Artifacts, highlights, and replies are member-visible.</div>
+                  </button>
+                </section>
+
+                <section class="screen" data-screen>
+                  <p class="meta">Founding members</p>
+                  <h2 class="screen-title">Choose three to five people intentionally.</h2>
+                  <p class="screen-copy">
+                    No contact dump. Each invite should feel like a specific ask.
+                  </p>
+
+                  <div class="stack">
+                    <button class="full-choice selected" type="button" data-toggle data-toast="Maya selected">
+                      <div class="row">
+                        <span class="avatar accent">MR</span>
+                        <span class="row-main">
+                          <span class="row-title">Maya Rao</span>
+                          <span class="row-copy">Pushes for clearer strategy arguments.</span>
+                        </span>
+                      </div>
+                    </button>
+                    <button class="full-choice selected" type="button" data-toggle data-toast="Jon selected">
+                      <div class="row">
+                        <span class="avatar">JK</span>
+                        <span class="row-main">
+                          <span class="row-title">Jon Kim</span>
+                          <span class="row-copy">Usually brings the best counterexample.</span>
+                        </span>
+                      </div>
+                    </button>
+                    <button class="full-choice selected" type="button" data-toggle data-toast="Leah selected">
+                      <div class="row">
+                        <span class="avatar">LT</span>
+                        <span class="row-main">
+                          <span class="row-title">Leah Tan</span>
+                          <span class="row-copy">Will actually read the full artifact.</span>
+                        </span>
+                      </div>
+                    </button>
+                    <button class="full-choice" type="button" data-toggle data-toast="Invite added">
+                      <div class="row">
+                        <span class="avatar">+1</span>
+                        <span class="row-main">
+                          <span class="row-title">Add one more person</span>
+                          <span class="row-copy">Keep the room small enough to start well.</span>
+                        </span>
+                      </div>
+                    </button>
+                  </div>
+                </section>
+
+                <section class="screen" data-screen>
+                  <p class="meta">Notification restraint</p>
+                  <h2 class="screen-title">Make the invite feel respectful.</h2>
+                  <p class="screen-copy">
+                    Highlighter tells the creator what will not happen. This reduces anxiety before
+                    sending invites.
+                  </p>
+
+                  <div class="stack">
+                    <article class="card">
+                      <div class="row">
+                        <span class="avatar accent">1</span>
+                        <span class="row-main">
+                          <span class="row-title">One invite notification</span>
+                          <span class="row-copy">No reminder unless you send one manually.</span>
+                        </span>
+                      </div>
+                    </article>
+                    <article class="card">
+                      <div class="row">
+                        <span class="avatar accent">2</span>
+                        <span class="row-main">
+                          <span class="row-title">No contact import</span>
+                          <span class="row-copy">Only the people you selected are contacted.</span>
+                        </span>
+                      </div>
+                    </article>
+                    <article class="card">
+                      <div class="row">
+                        <span class="avatar accent">3</span>
+                        <span class="row-main">
+                          <span class="row-title">Quiet until accepted</span>
+                          <span class="row-copy">The room will not create noisy group chatter.</span>
+                        </span>
+                      </div>
+                    </article>
+                  </div>
+
+                  <div class="chips">
+                    <button class="chip selected" type="button" data-toggle data-toast="Invite preview shows restraint">
+                      Show this in invite
+                    </button>
+                    <button class="chip" type="button" data-toggle data-toast="Manual reminders only">
+                      Manual reminders
+                    </button>
+                  </div>
+                </section>
+
+                <section class="screen" data-screen>
+                  <p class="meta">Room open</p>
+                  <h2 class="screen-title">The room starts with people, purpose, and an artifact.</h2>
+                  <p class="screen-copy">
+                    The creator lands in an active-looking but not fake room. The next action is a
+                    first highlight, not dashboard configuration.
+                  </p>
+
+                  <article class="card hero-card">
+                    <div class="cover small"></div>
+                    <div class="card-body">
+                      <p class="meta">Founding Circle - invite-only - private</p>
+                      <h3 class="artifact-title">Useful Disagreement Room</h3>
+                      <p class="screen-copy">
+                        3 invites queued. Opening artifact ready. Notifications restrained.
+                      </p>
+                    </div>
+                  </article>
+
+                  <div class="stack">
+                    <article class="card">
+                      <p class="meta">Next best action</p>
+                      <p class="quote">Pick the passage that should start the first discussion.</p>
+                    </article>
+                    <button
+                      class="full-choice selected"
+                      type="button"
+                      data-toast-trigger="Room opened with invite preview"
+                    >
+                      <div class="row-title">Send invites and open room</div>
+                      <div class="row-copy">Invites include mission, artifact, and quiet-by-default promise.</div>
+                    </button>
+                  </div>
+                </section>
+
+                <div class="bottom">
+                  <div class="progress" data-progress aria-hidden="true"></div>
+                  <div class="cta-row">
+                    <button class="btn secondary" type="button" data-prev>Back</button>
+                    <button class="btn" type="button" data-next="Continue">Continue</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="toast" data-toast role="status" aria-live="polite"></div>
+            </div>
+          </div>
+          <p class="phone-note">Tap choices, chips, and Continue. This is a UX wireframe, not a final visual design.</p>
+        </div>
+      </section>
+    </main>
+
+    <script src="./shared.js"></script>
+  </body>
+</html>

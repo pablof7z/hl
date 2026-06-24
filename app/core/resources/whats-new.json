@@ -8,6 +8,12 @@
       ]
     },
     {
+      "shipped_at": "2026-06-18T00:00:00Z",
+      "lines": [
+        "Search now opens pasted Nostr event and profile identifiers directly, and long articles render reliably to the end."
+      ]
+    },
+    {
       "shipped_at": "2026-05-14T21:45:00Z",
       "lines": [
         "Tapping 'Open room' from a profile's Communities tab now navigates to the room properly instead of dismissing immediately."

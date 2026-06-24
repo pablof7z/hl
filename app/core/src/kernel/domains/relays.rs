@@ -146,9 +146,7 @@ pub(crate) fn run_effect_add_relay(url: String, role: String, nmp: Option<&NmpHa
     let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
     let _ = nmp_ref
         .actor_sender()
-        .send(nmp_core::actor::ActorCommand::Relay(
-            nmp_core::actor::RelayCommand::AddRelay { url, role },
-        ));
+        .send(nmp_core::ActorCommand::AddRelay { url, role });
 }
 
 /// Execute `Effect::RemoveRelay`.
@@ -157,9 +155,7 @@ pub(crate) fn run_effect_remove_relay(url: String, nmp: Option<&NmpHandle>) {
     let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
     let _ = nmp_ref
         .actor_sender()
-        .send(nmp_core::actor::ActorCommand::Relay(
-            nmp_core::actor::RelayCommand::RemoveRelay { url },
-        ));
+        .send(nmp_core::ActorCommand::RemoveRelay { url });
 }
 
 /// Execute `Effect::SetRelayRole`.
@@ -172,9 +168,7 @@ pub(crate) fn run_effect_set_relay_role(url: String, role: String, nmp: Option<&
     // T66a: AddRelay on an existing URL is an upsert (overrides the role).
     let _ = nmp_ref
         .actor_sender()
-        .send(nmp_core::actor::ActorCommand::Relay(
-            nmp_core::actor::RelayCommand::AddRelay { url, role },
-        ));
+        .send(nmp_core::ActorCommand::AddRelay { url, role });
 }
 
 /// Execute `Effect::PublishRoomsRelayList`.
@@ -223,13 +217,11 @@ pub(crate) fn run_effect_publish_rooms_relay_list(content: String, nmp: Option<&
     // routes through NIP-65 outbox (D3: no explicit relay set). Fire-and-forget.
     let _ = nmp_ref
         .actor_sender()
-        .send(nmp_core::actor::ActorCommand::Publish(
-            nmp_core::actor::PublishCommand::UnsignedEvent {
-                event: unsigned_event,
-                correlation_id: None,
-                signer_pubkey: None, // sign with the active account
-            },
-        ));
+        .send(nmp_core::ActorCommand::PublishUnsignedEvent {
+            event: unsigned_event,
+            correlation_id: None,
+            signer_pubkey: None, // sign with the active account
+        });
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────

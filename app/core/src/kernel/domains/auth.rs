@@ -106,10 +106,9 @@ pub(crate) fn reduce_action_logout(state: &mut AppState) -> Vec<Effect> {
     // Logout clears the SAME account-scoped state as the None/removed-account
     // and direct-switch arms via ONE helper (profiles, bookmarks, bookmark/
     // curation sets, web bookmarks, articles, reactions, NIP-50 search +
-    // profile_search_cache/generation, HomeFeed feed cursors/rows, share_queue,
-    // room discussions, room-home buffers, feedback, chat, artifact previews) so
-    // the three teardown paths can never drift apart. The helper emits the
-    // accumulator-clearing effect.
+    // omnibox_outcome, HomeFeed feed cursors/rows, share_queue, room discussions,
+    // room-home buffers, feedback, chat, artifact previews) so the three teardown
+    // paths can never drift apart. The helper emits the accumulator-clearing effect.
     let mut effects = clear_account_scoped_state_on_switch(state);
     // RemoveActiveAccount fires nmp.remove_account; ClearSession
     // emits a CapabilityRequest to native for its keychain.
@@ -216,15 +215,35 @@ pub(crate) fn reduce_event_identity_changed(
             // NMP fires IdentityChanged(None) on logout / account removal. Wipe
             // AppState::follows so stale contacts don't outlive the session.
             state.follows = Vec::new();
-            // ── #1653: shared account-scoped teardown (single source) ─────────
-            // The None/removed-account arm, the logout arm, and the direct-switch
-            // arm tear down the SAME account-scoped state via ONE helper so they
-            // can never drift apart. This clears profiles, bookmarks, bookmark/
-            // curation sets, web bookmarks, articles, reactions, NIP-50 search +
-            // profile_search_cache/generation, HomeFeed feed cursors/rows,
-            // share_queue, room discussions, room-home buffers, feedback, chat,
-            // and artifact previews — and returns the accumulator-clearing effect.
-            clear_account_scoped_state_on_switch(state)
+            // ── Phase 3D: clear profile state on account removal ──────────────
+            // own_profile and claimed_profiles belong to the departing account.
+            super::profiles::clear_on_identity_lost(state);
+            // ── Phase 4C: clear bookmark list on account removal ──────────────
+            // Wipe AppState::bookmarks so stale bookmarks don't outlive the
+            // removed account.
+            state.bookmarks = Vec::new();
+            // ── Phase 4A: clear articles on account removal ───────────────────
+            state.articles.clear();
+            // ── Phase 4B: clear reaction state on account removal ─────────────
+            super::reactions::clear_on_identity_lost(state);
+            // ── Phase 4D: clear search results on account removal ─────────────
+            state.search_results.clear();
+            // Omnibox outcome (#1865) belongs to the removed account — clear it.
+            state.omnibox_outcome = None;
+            // ── Phase 4F: clear feed-pull state on account removal ────────────
+            clear_feed_state_on_identity_lost(state);
+            // ── Phase 7 feedback: clear UI-lifecycle state on identity loss ───
+            super::feedback::reduce_event_clear_on_logout(state);
+            // ── Phase 7 chat: clear chat room buffers on account removal ───────
+            // Chat room buffers are open-view working sets. Clear on identity
+            // loss so stale message rows don't outlive the account session.
+            super::chat::clear_on_identity_lost(state);
+            // ── Phase 7 artifact-preview: clear preview rows on identity loss ──
+            // Artifact previews are keyed to the active account's subscriptions.
+            // Wipe on account removal so stale rows don't surface under a new
+            // identity.
+            super::artifact_preview::clear_on_identity_lost(state);
+            vec![]
         }
     }
 }
@@ -388,15 +407,13 @@ pub(crate) fn run_effect_create_account(
         // (D6 — timeout in clock_checks will surface the failure as state).
         let _ = nmp_ref
             .actor_sender()
-            .send(nmp_core::actor::ActorCommand::Identity(
-                nmp_core::actor::IdentityCommand::CreateAccount {
-                    profile,
-                    relays,
-                    initial_follows,
-                    mls: false,
-                    make_active: true,
-                },
-            ));
+            .send(nmp_core::ActorCommand::CreateAccount {
+                profile,
+                relays,
+                initial_follows,
+                mls: false,
+                make_active: true,
+            });
     }
     // No nmp handle (test mode) → test injects IdentityChanged directly.
 }
@@ -478,19 +495,10 @@ pub(crate) fn clear_account_scoped_state_on_switch(state: &mut AppState) -> Vec<
     state.articles.clear();
     // Reaction counts from the departing account.
     super::reactions::clear_on_identity_lost(state);
-    // NIP-50 search results + query for the departing account.
+    // NIP-50 search results for the departing account.
     state.search_results.clear();
-    state.search_query.clear();
-    // ── Phase 7 (#1697 gate, folded into unified teardown): profile search ─────
-    // AppState::profile_search_cache holds kind:0 profiles seen during the
-    // departing account's search sessions. Wipe so stale profiles don't surface
-    // under the next identity. Advance the generation so any in-flight
-    // ProfileSearchScanned event from the departing session is dropped by the
-    // reducer's generation guard (D5). Previously cleared inline in the logout /
-    // None arms (search-profiles slice); folded here so the three teardown paths
-    // (logout, None/removed, direct switch) share ONE source and can't drift.
-    state.profile_search_cache.clear();
-    state.profile_search_generation = state.profile_search_generation.wrapping_add(1);
+    // Omnibox outcome (#1865) belongs to the departing session.
+    state.omnibox_outcome = None;
     // #1653 BLOCKING: HomeFeed follow-scoped feed cursors/rows (article_feed,
     // highlight_feed, home_feed_interactions, room_lanes, …). Reset to default +
     // cursor_id=0 so the new account re-registers fresh on its FollowListUpdated.
@@ -1483,7 +1491,6 @@ mod tests {
             },
         );
         state.viewer_reaction_ids.insert("evt".into(), "rid".into());
-        state.search_query = "q".into();
         state.article_feed = FeedState {
             cursor_id: 1,
             after_seq: 1,
@@ -1553,7 +1560,6 @@ mod tests {
         assert!(state.reaction_state.is_empty(), "reaction_state");
         assert!(state.viewer_reaction_ids.is_empty(), "viewer_reaction_ids");
         assert!(state.search_results.is_empty(), "search_results");
-        assert!(state.search_query.is_empty(), "search_query");
         assert_eq!(state.article_feed.cursor_id, 0, "article_feed cursor");
         assert!(state.article_feed.rows.is_empty(), "article_feed rows");
         assert_eq!(state.highlight_feed.cursor_id, 0, "highlight_feed cursor");

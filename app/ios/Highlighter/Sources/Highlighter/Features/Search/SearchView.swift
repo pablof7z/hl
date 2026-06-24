@@ -17,15 +17,19 @@ import SwiftUI
 ///   between local and remote.
 struct SearchView: View {
     @Environment(HighlighterStore.self) private var app
-    /// Phase 7: the kernel owns ALL search buckets — articles/highlights/
-    /// communities AND people (#1697). The people bucket is the kernel's local
-    /// kind:0 `EventStore` scan (replacing the bespoke nostrdb scan). SearchStore
-    /// reads every bucket from `kernel.searchSnapshot`.
     @Environment(HighlighterAppKernel.self) private var kernel
 
     @State private var store: SearchStore?
     @FocusState private var focusedField: Bool
     @State private var recentQueries: [String] = []
+    @State private var directArticleTarget: ArticleReaderTarget?
+    @State private var directArticleActive = false
+    @State private var directProfilePubkey: String?
+    @State private var directProfileActive = false
+    @State private var directEntity: NostrEntityRef?
+    @State private var directEntityActive = false
+    @State private var directGroupId: String?
+    @State private var directGroupActive = false
 
     var body: some View {
         NavigationStack {
@@ -70,21 +74,53 @@ struct SearchView: View {
                     SearchSeeAllView(target: target, store: store)
                 }
             }
+            .navigationDestination(isPresented: $directArticleActive) {
+                if let directArticleTarget {
+                    ArticleReaderView(target: directArticleTarget)
+                }
+            }
+            .navigationDestination(isPresented: $directProfileActive) {
+                if let directProfilePubkey {
+                    ProfileView(pubkey: directProfilePubkey)
+                }
+            }
+            .navigationDestination(isPresented: $directEntityActive) {
+                if let directEntity {
+                    NostrEntityReaderView(entity: directEntity)
+                }
+            }
+            .navigationDestination(isPresented: $directGroupActive) {
+                if let directGroupId {
+                    RoomHomeView(groupId: directGroupId)
+                }
+            }
+            .onChange(of: store?.directNavigation) { _, navigation in
+                handleDirectNavigation(navigation)
+            }
+            // Omnibox resolver outcome (#1865) → route through the store.
+            .onChange(of: kernel.search?.omnibox) { _, outcome in
+                store?.applyOmniboxOutcome(outcome)
+            }
             .globalUserToolbar()
         }
         .task {
             if store == nil {
-                let s = SearchStore(kernel: kernel)
+                let s = SearchStore(
+                    safeCore: app.safeCore,
+                    eventBridge: app.eventBridge,
+                    kernel: kernel
+                )
                 store = s
                 await s.start()
             }
-            recentQueries = UserDefaults.standard.stringArray(forKey: "hl.search.recent_queries") ?? []
-        }
-        .onChange(of: kernel.searchSnapshot) { _, _ in
-            store?.applyKernelSnapshot()
+            store?.disarmOmnibox()
+            kernel.openSearch()
+            let snapshot = await app.safeCore.getSearchChromeSnapshot()
+            recentQueries = snapshot.recentQueries
         }
         .onDisappear {
             store?.stop()
+            kernel.closeSearch()
         }
     }
 
@@ -92,11 +128,34 @@ struct SearchView: View {
 
     @ViewBuilder
     private func content(store: SearchStore) -> some View {
-        if store.hasQuery {
+        if store.secretRejected {
+            secretRejectedNotice
+        } else if store.hasQuery {
             results(store: store)
         } else {
             emptyState(store: store)
         }
+    }
+
+    /// Safe inline notice shown when the omnibox resolver (#1865) classifies the
+    /// input as a secret key. The secret is NEVER echoed.
+    private var secretRejectedNotice: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Rectangle()
+                .fill(Color.highlighterAccent.opacity(0.6))
+                .frame(width: 3, height: 24)
+                .clipShape(RoundedRectangle(cornerRadius: 1.5))
+            Text("Secret keys aren't accepted")
+                .font(.system(.title3, design: .default).weight(.semibold))
+                .foregroundStyle(Color.highlighterInkStrong)
+            Text("That looks like a private key (nsec). For your safety it's never searched, stored, or shown. Clear the field and paste a public reference, NIP-05 address, or search terms instead.")
+                .font(.footnote)
+                .foregroundStyle(Color.highlighterInkMuted)
+                .lineSpacing(3)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.horizontal, 20)
+        .padding(.top, 36)
     }
 
     // MARK: - Empty (discovery) state
@@ -253,7 +312,8 @@ struct SearchView: View {
     private func results(store: SearchStore) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
-                if store.isRelayLoading && allEmpty(store: store) {
+                directOpenHint(store: store)
+                if store.isLocalLoading && allEmpty(store: store) {
                     loadingSkeleton
                 } else if allEmpty(store: store) && !store.isRelayLoading {
                     noResults(store: store)
@@ -314,6 +374,20 @@ struct SearchView: View {
                 .foregroundStyle(Color.highlighterInkMuted)
         }
         .padding(.top, 8)
+    }
+
+    @ViewBuilder
+    private func directOpenHint(store: SearchStore) -> some View {
+        if let message = store.directOpenMessage {
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(Color.highlighterInkMuted)
+            }
+            .padding(.top, 8)
+        }
     }
 
     // MARK: - Sections
@@ -514,6 +588,25 @@ struct SearchView: View {
             .replacingOccurrences(of: "wss://", with: "")
             .replacingOccurrences(of: "ws://", with: "")
     }
+
+    private func handleDirectNavigation(_ navigation: SearchDirectNavigation?) {
+        guard let navigation else { return }
+        switch navigation {
+        case .article(let target):
+            directArticleTarget = target
+            directArticleActive = true
+        case .profile(let pubkey):
+            directProfilePubkey = pubkey
+            directProfileActive = true
+        case .entity(let entity):
+            directEntity = entity
+            directEntityActive = true
+        case .group(let groupId):
+            directGroupId = groupId
+            directGroupActive = true
+        }
+        store?.consumeDirectNavigation()
+    }
 }
 
 // MARK: - Section header
@@ -577,6 +670,22 @@ enum SearchSeeAllTarget: Hashable {
         switch self {
         case .highlights(let q), .articles(let q), .communities(let q), .people(let q): q
         }
+    }
+}
+
+private struct NostrEntityReaderView: View {
+    let entity: NostrEntityRef
+
+    var body: some View {
+        ScrollView {
+            NostrEntityCard(entity: entity)
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+                .padding(.bottom, 40)
+        }
+        .background(Color.highlighterPaper.ignoresSafeArea())
+        .navigationTitle("Nostr event")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

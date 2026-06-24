@@ -117,6 +117,13 @@ pub(crate) fn dispatch_typed_frame(
                 profiles::apply_own_profile(state, &proj.payload);
             }
 
+            // ── Phase 3D arm: "claimed_profiles" — REMOVED (ADR-0063 Lane H) ──
+            // NMP deleted the bulk `"claimed_profiles"` typed sidecar; visited-
+            // profile resolution is now served by the per-key `refs.profile`
+            // row-delta projection (`nmp_core::refs::RefProfileStore`). See the
+            // FOLLOW-UP note in `profiles.rs`. `AppState::claimed_profiles` is
+            // still populated via `KernelEvent::ProfileCardUpdated`.
+
             // ── Phase 3E arm: "nmp.nip29.discovered_groups" ──────────────────
             // Decode the `"nmp.nip29.discovered_groups"` FlatBuffers payload via
             // `nmp_nip29::decode_discovered_groups_snapshot` and maps rows into
@@ -158,13 +165,14 @@ pub(crate) fn dispatch_typed_frame(
                 super::articles::apply_articles(state, &proj.payload);
             }
 
-            // ── Phase 4D arm: "hl.search" ─────────────────────────────────────
-            // Decode the hl-owned serde-JSON search snapshot (registered by
-            // `search::run_effect_run_search` on each `AppAction::RunSearch`
-            // dispatch) and store raw SearchHitRow items in
-            // AppState::search_results. Bounded by the projection's max_hits cap
-            // (default 200 — Non-Negotiable #7). D6: decode errors are silent
-            // no-ops. D1: raw fields only — no "X results" count labels.
+            // ── Phase 4D arm: NMP "nmp.nip50.search" (N50S sidecar) ───────────
+            // Decode NMP's typed N50S search-results sidecar (registered by
+            // `NmpApp::open_search`, driven from `search::run_effect_run_search`
+            // on each `AppAction::RunSearch` dispatch) and store raw SearchHitRow
+            // items in AppState::search_results. Bounded by NMP's projection
+            // max_hits cap (default 200 — Non-Negotiable #7). D6: decode errors
+            // are silent no-ops. D1: raw fields only — no "X results" labels.
+            // SEARCH_SCHEMA_ID == nmp_nip50::SEARCH_RESULTS_SCHEMA_ID.
             // Append-only: new arms go BELOW this one.
             super::search::SEARCH_SCHEMA_ID => {
                 super::search::apply_search_results(state, &proj.payload);
@@ -212,8 +220,12 @@ pub(crate) fn dispatch_typed_frame(
             }
 
             // ── Phase 7 arm: "refs.profile" ──────────────────────────────────
+            // ADR-0063 Lane H: visited-profile cards now arrive as per-key
+            // row-delta projection (`RefProfileStore`). The bulk apply path
+            // has been removed; this arm is a no-op until the
+            // `RefProfileStore::apply_sidecar` wire-up lands as a follow-up.
             "refs.profile" => {
-                profiles::apply_refs_profile(state, &proj.payload);
+                // TODO(refs.profile): wire RefProfileStore when ADR-0063 Lane H lands.
             }
 
             // ── Phase 7 arm: "refs.event" ─────────────────────────────────────

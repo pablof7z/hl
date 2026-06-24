@@ -23,11 +23,42 @@ struct RootSceneView: View {
                 NavigationStack { OnboardingView() }
             }
         }
+        .task {
+            await store.bootstrap()
+            // Mirror initial onboarding state for returning users whose
+            // isOnboardingComplete was already true at init (no onChange fires).
+            if store.isOnboardingComplete {
+                kernel.app.dispatch(.completeOnboarding)
+            }
+        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 ShareQueueProcessor.drain(app: store, kernel: kernel)
-                // Relay foreground refresh is handled by kernel.app.resume()
-                // in App.swift's scenePhase onChange (belt-and-suspenders).
+                // iOS suspends WebSockets while we're backgrounded; nostr-sdk's
+                // foreground refresh path forces a fresh socket/subscription
+                // cycle when Rust policy allows it. Without this the NIP-46
+                // nostrconnect:// flow misses Primal's response when the user
+                // comes back from the signer app.
+                Task {
+                    _ = await store.safeCore.refreshRelayConnectionsForForeground()
+                }
+            }
+        }
+        // Belt-and-suspenders: mirror live-lane auth/onboarding state changes
+        // into the kernel so both lanes agree during Phase 1 coexistence.
+        .onChange(of: store.isLoggedIn) { _, isLoggedIn in
+            if isLoggedIn {
+                // Bridge live-lane login into the NMP kernel so routeKind
+                // transitions to .rootShell. The keychain was already written
+                // before this point, so restoreSession reads the correct secret.
+                kernel.app.dispatch(.restoreSession)
+            } else {
+                kernel.app.dispatch(.logout)
+            }
+        }
+        .onChange(of: store.isOnboardingComplete) { _, complete in
+            if complete {
+                kernel.app.dispatch(.completeOnboarding)
             }
         }
 
