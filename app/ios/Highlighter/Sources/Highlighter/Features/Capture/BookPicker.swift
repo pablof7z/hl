@@ -394,8 +394,15 @@ struct BookPicker: View {
     // MARK: - Actions
 
     private var queryProjection: BookPickerQueryProjection {
-        appStore.safeCore.projectBookPickerQuery(
-            input: BookPickerQueryProjectionInput(query: query)
+        // D1: mirrors isbn_lookup::book_picker_query_projection.
+        // ISBN detection uses digit count only (no check-digit validation).
+        let searchQuery = query.trimmingCharacters(in: .whitespaces)
+        let digits = searchQuery.filter { $0.isNumber }
+        let normalizedIsbn: String? = (digits.count == 10 || digits.count == 13) ? digits : nil
+        return BookPickerQueryProjection(
+            searchQuery: searchQuery,
+            hasQuery: !searchQuery.isEmpty,
+            normalizedIsbn: normalizedIsbn
         )
     }
 
