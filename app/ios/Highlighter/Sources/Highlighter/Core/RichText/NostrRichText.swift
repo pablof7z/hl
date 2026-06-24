@@ -222,8 +222,17 @@ struct NostrEntityCard: View {
                 placeholder
             }
         }
-        .task(id: appStore.safeCore.nostrEntityIdentityKey(entity: entity)) { await start() }
+        .task(id: entityIdentityKey) { await start() }
         .onDisappear { stop() }
+    }
+
+    private var entityIdentityKey: String {
+        // D1: mirrors nostr_entities::identity_key
+        switch entity {
+        case .profile(let pubkeyHex, _): return "p:\(pubkeyHex)"
+        case .event(let eventIdHex, _, _, _): return "e:\(eventIdHex)"
+        case .address(let kind, let pubkeyHex, let dTag, _): return "a:\(kind):\(pubkeyHex):\(dTag)"
+        }
     }
 
     @ViewBuilder
@@ -255,7 +264,19 @@ struct NostrEntityCard: View {
     }
 
     private var entityLabel: String {
-        appStore.core.nostrEntityFallbackLabel(entity: entity)
+        // D1: mirrors nostr_entities::fallback_label
+        switch entity {
+        case .profile(let pubkeyHex, _):
+            return "Profile · \(pubkeyHex.prefix(12))…"
+        case .event(let eventIdHex, _, _, let kindHint):
+            if let kind = kindHint {
+                return "Event kind \(kind) · \(eventIdHex.prefix(12))…"
+            } else {
+                return "Event · \(eventIdHex.prefix(12))…"
+            }
+        case .address(let kind, _, let dTag, _):
+            return "Kind \(kind) · \(dTag)"
+        }
     }
 
     private func start() async {
@@ -284,9 +305,7 @@ private struct ArticleEntityCard: View {
     @State private var profile: ProfileMetadata?
 
     var body: some View {
-        let projection = appStore.safeCore.projectNostrEntityArticleCard(
-            input: NostrEntityArticleCardProjectionInput(event: event)
-        )
+        let projection = articleCardProjection
         let target = projection.readerRoute.map { ArticleReaderTarget(route: $0) }
         return Group {
             if let target {
@@ -354,6 +373,29 @@ private struct ArticleEntityCard: View {
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.highlighterRule, lineWidth: 1)
+        )
+    }
+
+    private var articleCardProjection: NostrEntityArticleCardProjection {
+        // D1: mirrors nostr_entities::article_card_projection
+        let tags = (try? JSONDecoder().decode([[String]].self, from: Data(event.tagsJson.utf8))) ?? []
+        func tagValue(_ name: String) -> String {
+            tags.first { $0.first == name && $0.count > 1 }?[1] ?? ""
+        }
+        let dTag = tagValue("d")
+        let title = tagValue("title")
+        let pubkey = event.pubkeyHex.trimmingCharacters(in: .whitespaces)
+        let dTagTrimmed = dTag.trimmingCharacters(in: .whitespaces)
+        let readerRoute: ArticleReaderRoute? = (!pubkey.isEmpty && !dTagTrimmed.isEmpty)
+            ? ArticleReaderRoute(address: "30023:\(pubkey):\(dTagTrimmed)", pubkey: pubkey, dTag: dTagTrimmed)
+            : nil
+        let imageRaw = tagValue("image")
+        let summaryRaw = tagValue("summary")
+        return NostrEntityArticleCardProjection(
+            displayTitle: title.isEmpty ? "Untitled" : title,
+            imageUrl: imageRaw.isEmpty ? nil : imageRaw,
+            summary: summaryRaw.isEmpty ? nil : summaryRaw,
+            readerRoute: readerRoute
         )
     }
 
