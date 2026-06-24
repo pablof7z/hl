@@ -3,36 +3,32 @@ import SwiftUI
 /// Thread display + reply composer rendered inside an expanded `MemberClipRow`.
 struct ClipThreadView: View {
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
 
     let clipEventId: String
 
     @State private var replyText: String = ""
-    @State private var isSending: Bool = false
-    @State private var sendError: String? = nil
-
-    private var comments: [CommentRecord]? {
-        app.podcastPlayer.comments[clipEventId]
-    }
+    @State private var localComments: [CommentRecord]? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Divider()
                 .padding(.horizontal, 16)
 
-            if comments == nil {
+            if localComments == nil {
                 HStack {
                     Spacer()
                     ProgressView()
                     Spacer()
                 }
                 .padding(.vertical, 16)
-            } else if let list = comments, list.isEmpty {
+            } else if let list = localComments, list.isEmpty {
                 Text("No replies yet")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-            } else if let list = comments {
+            } else if let list = localComments {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(list.reversed(), id: \.eventId) { comment in
                         CommentRowView(comment: comment)
@@ -50,71 +46,52 @@ struct ClipThreadView: View {
                     .font(.subheadline)
                     .tint(Color.highlighterAccent)
 
-                if isSending {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                } else {
-                    Button("Send") {
-                        send()
-                    }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(composerProjection.canSubmit
-                        ? Color.highlighterAccent
-                        : Color.secondary)
-                    .disabled(!composerProjection.canSubmit)
+                Button("Send") {
+                    send()
                 }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(canSubmit
+                    ? Color.highlighterAccent
+                    : Color.secondary)
+                .disabled(!canSubmit)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-
-            if let error = sendError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
-            }
+        }
+        .task {
+            kernel.openCommentThread(rootTagValue: clipEventId)
+            applySnapshot()
+        }
+        .onChange(of: kernel.commentThreads[clipEventId]) { _, _ in
+            applySnapshot()
+        }
+        .onDisappear {
+            kernel.closeCommentThread(rootTagValue: clipEventId)
         }
     }
 
-    private var composerProjection: CommentComposerProjection {
-        let submitBody = replyText.trimmingCharacters(in: .whitespaces)
-        return CommentComposerProjection(
-            submitBody: submitBody,
-            canSubmit: !submitBody.isEmpty && !isSending
-        )
+    private var canSubmit: Bool {
+        !replyText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private func applySnapshot() {
+        guard let snapshot = kernel.commentThreads[clipEventId] else { return }
+        localComments = snapshot.records.map(CommentTreeBuilder.record(from:))
     }
 
     private func send() {
-        let projection = composerProjection
-        guard projection.canSubmit else { return }
-        isSending = true
-        sendError = nil
-        let id = clipEventId
-        Task {
-            let scopeSnapshot = app.safeCore.getHighlightCommentScope(eventIdHex: id)
-            guard scopeSnapshot.attach, let scope = scopeSnapshot.scope else {
-                sendError = scopeSnapshot.errorMessage
-                isSending = false
-                return
-            }
-            let outcome = await app.safeCore.publishCommentForScopeSnapshot(
-                scope: scope,
-                content: projection.submitBody,
-                limit: 200
-            )
-            let publishErrorMsg = outcome.error.trimmingCharacters(in: .whitespaces)
-            guard publishErrorMsg.isEmpty else {
-                sendError = publishErrorMsg
-                isSending = false
-                return
-            }
-            let rawError = outcome.snapshot.error.trimmingCharacters(in: .whitespaces)
-            app.podcastPlayer.comments[id] = rawError.isEmpty ? outcome.snapshot.records : []
-            sendError = rawError.isEmpty ? nil : rawError
-            replyText = ""
-            isSending = false
-        }
+        let trimmed = replyText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        kernel.app.dispatch(.postComment(
+            rootTagName: "e",
+            rootTagValue: clipEventId,
+            rootKind: 9802,
+            parentEventId: nil,
+            rootAuthorPubkey: nil,
+            parentAuthorPubkey: nil,
+            content: trimmed
+        ))
+        replyText = ""
     }
 }
 
