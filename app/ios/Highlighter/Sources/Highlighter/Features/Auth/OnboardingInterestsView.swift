@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct OnboardingInterestsView: View {
-    let account: GeneratedAccount
-
     @Environment(HighlighterStore.self) private var store
 
     @State private var selectedIds: [String] = []
@@ -124,7 +122,8 @@ struct OnboardingInterestsView: View {
         let chosenIds = selectedIds
 
         Task {
-            await store.completeLogin(user: account.user)
+            // The kernel already authenticated the account (session present);
+            // just finalize onboarding so the route flips to the root shell.
             let outcome = await store.completeOnboardingInterests(selectedIds: chosenIds)
             if !outcome.applied {
                 isWorking = false

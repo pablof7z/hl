@@ -561,6 +561,13 @@ enum HighlighterAction {
             if let v = nip05 { dict["nip05"] = v }
             if let v = lightningAddress { dict["lightning_address"] = v }
             return AppActionEnvelope(namespace: "hl.profile.update", json: jsonAny(dict))
+
+        // ── Network (Phase 7 Part C) ──────────────────────────────────────────
+        case .applyNetworkPath(let isWifi, let wifiOnly):
+            return AppActionEnvelope(
+                namespace: "hl.network.apply_path",
+                json: jsonAny(["is_wifi": isWifi, "wifi_only": wifiOnly])
+            )
         }
     }
 }

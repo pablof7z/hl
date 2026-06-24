@@ -1,12 +1,11 @@
 import SwiftUI
 
 struct OnboardingCreateAccountView: View {
-    @Environment(HighlighterStore.self) private var store
+    @Environment(HighlighterAppKernel.self) private var kernel
 
     @State private var displayName: String = ""
     @State private var isWorking = false
     @State private var errorMessage: String?
-    @State private var createdAccount: GeneratedAccount?
     @State private var navigateToInterests = false
 
     @FocusState private var focusedField: Field?
@@ -85,9 +84,7 @@ struct OnboardingCreateAccountView: View {
             }
         }
         .navigationDestination(isPresented: $navigateToInterests) {
-            if let account = createdAccount {
-                OnboardingInterestsView(account: account)
-            }
+            OnboardingInterestsView()
         }
         .onAppear { focusedField = .displayName }
     }
@@ -104,40 +101,12 @@ struct OnboardingCreateAccountView: View {
         let name = trimmedDisplayName
         guard canContinue else { return }
 
-        isWorking = true
         errorMessage = nil
-
-        Task {
-            defer { isWorking = false }
-            let accountSnapshot = await store.safeCore.generateAccount()
-            guard accountSnapshot.succeeded, let account = accountSnapshot.account else {
-                errorMessage = accountSnapshot.errorMessage
-                return
-            }
-            let storage = AppSessionStore.shared.persistAccountInstructions(
-                accountSnapshot,
-                core: store.safeCore
-            )
-            guard storage.succeeded else {
-                errorMessage = storage.errorMessage
-                return
-            }
-
-            Task {
-                _ = await store.safeCore.updateProfile(
-                    name: "",
-                    displayName: name,
-                    about: "",
-                    picture: "",
-                    banner: "",
-                    nip05: "",
-                    website: "",
-                    lud16: ""
-                )
-            }
-
-            createdAccount = account
-            navigateToInterests = true
-        }
+        // The kernel generates keys inside NMP's keyring and publishes the
+        // initial kind:0 with `profileName`. Success flips `appRoot.sessionPresent`;
+        // navigate optimistically into the interests step (a local push) while the
+        // kernel finishes — `finish()` there completes onboarding.
+        kernel.app.dispatch(.createAccount(profileName: name))
+        navigateToInterests = true
     }
 }
