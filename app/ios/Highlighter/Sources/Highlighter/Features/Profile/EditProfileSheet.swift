@@ -398,30 +398,11 @@ struct EditProfileSheet: View {
         commit: @escaping (String) -> Void,
         uploading: @escaping (Bool) -> Void
     ) async {
-        uploading(true)
-        defer { uploading(false) }
-        do {
-            guard let data = try await item.loadTransferable(type: Data.self),
-                  let image = UIImage(data: data) else {
-                error = "Couldn't read that image."
-                return
-            }
-            let prepared = await prepareForUpload(image: image)
-            let outcome = await appStore.safeCore.uploadPhoto(
-                bytes: prepared.data,
-                mime: "image/jpeg",
-                width: UInt32(prepared.width),
-                height: UInt32(prepared.height),
-                alt: ""
-            )
-            guard let imageURL = outcome.upload?.url else {
-                error = "Upload failed: \(outcome.error.trimmingCharacters(in: .whitespaces))"
-                return
-            }
-            commit(imageURL)
-        } catch {
-            self.error = "Upload failed: \(error.localizedDescription)"
-        }
+        // Phase 7 stub: Blossom upload requires NMP signing which isn't yet wired
+        // for non-capture flows. Users can paste an image URL directly in the text
+        // field. Kernel upload-by-purpose will restore the photo picker in Wave 2.
+        _ = item
+        error = "Image upload not yet supported — paste a URL instead."
     }
 
     private struct PreparedImage { let data: Data; let width: Int; let height: Int }
