@@ -51,8 +51,6 @@
 //! * Non-Negotiable #3 — `reduce_action_post_comment` returns `Vec<Effect>` (never
 //!   `Result`); fire-and-forget.
 
-use std::ffi::CString;
-use std::os::raw::c_char;
 use std::sync::Arc;
 
 use nmp_core::KernelEventObserver;
@@ -64,22 +62,6 @@ use crate::kernel::action::{KernelEvent, PostCommentPayload};
 use crate::kernel::actor::Cmd;
 use crate::kernel::app::AppState;
 use crate::kernel::snapshot::{CommentRecordRow, CommentThreadKernelSnapshot};
-
-// ─── nmp-ffi C ABI declarations ─────────────────────────────────────────────
-
-// `nmp_app_dispatch_action` is #[no_mangle] extern "C" in nmp-ffi/src/action.rs.
-// Declared here so the comments effect runner can call it directly without
-// importing the full nmp-ffi action surface.
-#[allow(improper_ctypes)] // NmpApp is opaque; the pointer is safe — nmp-ffi uses the same ABI.
-extern "C" {
-    fn nmp_app_dispatch_action(
-        app: *mut NmpApp,
-        namespace: *const c_char,
-        action_json: *const c_char,
-    ) -> *mut c_char;
-}
-
-use nmp_ffi::nmp_free_string;
 
 // ─── READ side: KernelEventObserver wrapper ──────────────────────────────────
 
@@ -213,27 +195,11 @@ pub(crate) fn run_effect_dispatch_comment_action(
 ) {
     let Some(handle) = nmp else { return };
 
-    let namespace = "nmp.nip22.post_comment";
-    let ns_c = match CString::new(namespace) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let json_c = match CString::new(json) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. ns_c and json_c are valid
-    // CStrings alive for the duration of this call. The returned pointer is
-    // freed below via nmp_free_string (same Rust allocator as the allocation).
-    let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
-
-    // Free the returned correlation-id JSON string (same Rust allocator path).
-    if !result_ptr.is_null() {
-        nmp_free_string(result_ptr);
-    }
+    let _ = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
+        handle.ptr.as_ptr(),
+        "nmp.nip22.post_comment",
+        &json,
+    );
 }
 
 // ─── Snapshot computation ─────────────────────────────────────────────────────

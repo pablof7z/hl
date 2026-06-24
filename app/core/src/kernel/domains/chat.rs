@@ -51,12 +51,9 @@
 //! * Non-Negotiable #3 — `reduce_action_post_chat` returns `Vec<Effect>` (never
 //!   `Result`); fire-and-forget.
 
-use std::ffi::CString;
-use std::os::raw::c_char;
 use std::sync::Arc;
 
 use nmp_core::KernelEventObserver;
-use nmp_ffi::NmpApp;
 use nmp_nip29::{GroupChatProjection, GroupId};
 use tokio::sync::mpsc;
 
@@ -76,19 +73,6 @@ const CHAT_MAX_PAGES: u32 = 20;
 pub(crate) const CHAT_MAX_MESSAGES: usize = CHAT_MAX_PAGES as usize * CHAT_PAGE_SIZE;
 /// Gap threshold for `show_header` grouping (300 seconds).
 const SHOW_HEADER_GAP_SECS: u64 = 300;
-
-// ─── nmp-ffi C ABI declarations ─────────────────────────────────────────────
-
-#[allow(improper_ctypes)] // NmpApp is opaque; the pointer is safe — nmp-ffi uses the same ABI.
-extern "C" {
-    fn nmp_app_dispatch_action(
-        app: *mut NmpApp,
-        namespace: *const c_char,
-        action_json: *const c_char,
-    ) -> *mut c_char;
-}
-
-use nmp_ffi::nmp_free_string;
 
 // ─── Per-room state ──────────────────────────────────────────────────────────
 
@@ -393,25 +377,11 @@ pub(crate) fn run_effect_dispatch_chat_post(
 ) {
     let Some(handle) = nmp else { return };
 
-    let namespace = "nmp.nip29.post_chat_message";
-    let ns_c = match CString::new(namespace) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let json_c = match CString::new(json) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. ns_c and json_c are valid
-    // CStrings alive for the duration of this call.
-    let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
-
-    if !result_ptr.is_null() {
-        nmp_free_string(result_ptr);
-    }
+    let _ = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
+        handle.ptr.as_ptr(),
+        "nmp.nip29.post_chat_message",
+        &json,
+    );
 }
 
 // ─── Clear on identity loss ──────────────────────────────────────────────────

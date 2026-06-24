@@ -43,41 +43,24 @@
 //! decode errors leave `AppState` fields unchanged (silent no-op).
 
 use std::ffi::CString;
-use std::os::raw::{c_char, c_int};
+use std::os::raw::c_int;
 
 use nmp_core::typed_projections::decode_profile;
 #[cfg(test)]
 use nmp_core::typed_projections::ProfileCardModel;
-use nmp_ffi::NmpApp;
+use nmp_ffi::{nmp_app_release_ref, nmp_app_resolve_ref};
 
 use crate::kernel::actor::NmpHandle;
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::{CommunityRow, ProfileSnapshot, ViewSnapshot};
 
-// ─── nmp-ffi C ABI declarations ─────────────────────────────────────────────
+// ─── nmp-ffi resolve_ref constants (ADR-0063 Lane H) ────────────────────────
 
-// `nmp_app_claim_profile` is `#[no_mangle] extern "C"` in nmp-ffi/src/timeline.rs.
-// We declare it here to drive the profiles effect runner without a separate wrapper.
-#[allow(improper_ctypes)] // NmpApp is opaque; the pointer is safe.
-extern "C" {
-    fn nmp_app_claim_profile(
-        app: *mut NmpApp,
-        pubkey: *const c_char,
-        consumer_id: *const c_char,
-        force: c_int,
-        liveness: c_int,
-    );
-}
-
-// `nmp_app_release_profile` is `#[no_mangle] extern "C"` in nmp-ffi/src/timeline.rs.
-#[allow(improper_ctypes)] // NmpApp is opaque; the pointer is safe.
-extern "C" {
-    fn nmp_app_release_profile(app: *mut NmpApp, pubkey: *const c_char, consumer_id: *const c_char);
-}
-
-// `ProfileLiveness` int constants from nmp-core (D6: 0 = CacheOk, non-zero = Live).
-// We use `1` (Live/Tailing) for open profile views so profile edits arrive reactively.
+// nmp_app_resolve_ref namespace/shape/liveness integer codes (see resolve_ref.rs).
+// namespace=0 → Profile, shape=1 → profile.card (full card for profile screen).
+const PROFILE_NAMESPACE: c_int = 0;
+const PROFILE_CARD_SHAPE: c_int = 1;
 const LIVENESS_LIVE: c_int = 1;
 
 /// Stable consumer-id prefix. The per-pubkey suffix makes each profile view
@@ -197,19 +180,17 @@ pub(crate) fn run_effect_claim_profile(pubkey: String, nmp: Option<&NmpHandle>) 
         Err(_) => return,
     };
 
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. pubkey_c and consumer_c are valid
-    // CStrings alive for the duration of this call. nmp_app_claim_profile is
-    // FFI-clean (null/invalid pubkey is a silent no-op — nmp D6 contract).
-    unsafe {
-        nmp_app_claim_profile(
-            handle.ptr.as_ptr(),
-            pubkey_c.as_ptr(),
-            consumer_c.as_ptr(),
-            0,             // force = false
-            LIVENESS_LIVE, // liveness = Live (Tailing sub)
-        );
-    }
+    // handle.ptr is a valid non-null NmpApp pointer. pubkey_c and consumer_c are
+    // valid CStrings alive for the duration of this call. nmp_app_resolve_ref is
+    // FFI-clean (null/invalid key is a silent no-op — nmp D6 contract).
+    nmp_app_resolve_ref(
+        handle.ptr.as_ptr(),
+        PROFILE_NAMESPACE,
+        pubkey_c.as_ptr(),
+        consumer_c.as_ptr(),
+        PROFILE_CARD_SHAPE,
+        LIVENESS_LIVE,
+    );
 }
 
 /// Execute `Effect::ReleaseProfile` — calls `nmp_app_release_profile` with
@@ -234,11 +215,14 @@ pub(crate) fn run_effect_release_profile(pubkey: String, nmp: Option<&NmpHandle>
         Err(_) => return,
     };
 
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. CStrings alive for duration of call.
-    unsafe {
-        nmp_app_release_profile(handle.ptr.as_ptr(), pubkey_c.as_ptr(), consumer_c.as_ptr());
-    }
+    // handle.ptr is a valid non-null NmpApp pointer. CStrings alive for duration of call.
+    // nmp_app_release_ref is FFI-clean (null/invalid key is a silent no-op — nmp D6).
+    nmp_app_release_ref(
+        handle.ptr.as_ptr(),
+        PROFILE_NAMESPACE,
+        pubkey_c.as_ptr(),
+        consumer_c.as_ptr(),
+    );
 }
 
 // ─── Snapshot projection ─────────────────────────────────────────────────────

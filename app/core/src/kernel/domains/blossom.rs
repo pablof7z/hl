@@ -46,10 +46,7 @@
 //! All action-result routing is guarded: unknown correlation_ids, missing
 //! status fields, and malformed result JSON are silent no-ops.
 
-use std::ffi::{c_char, CString};
-
 use nmp_core::typed_projections::ActionResultRow;
-use nmp_ffi::{nmp_free_string, NmpApp};
 
 use crate::kernel::action::KernelEvent;
 use crate::kernel::app::AppState;
@@ -59,18 +56,6 @@ use crate::kernel::effect::Effect;
 /// Fallback Blossom server used when the host passes an empty `servers` list.
 /// Matches the live lane default in `blossom.rs::DEFAULT_SERVER`.
 pub(crate) const DEFAULT_BLOSSOM_SERVER: &str = "https://blossom.primal.net";
-
-// `nmp_app_dispatch_action` is #[no_mangle] extern "C" in nmp-ffi/src/action.rs.
-// Declared here (same pattern as reactions.rs / bookmarks.rs) so this module can
-// call it directly without importing the full nmp-ffi action surface.
-#[allow(improper_ctypes)] // NmpApp is opaque; the pointer is safe — nmp-ffi uses the same ABI.
-extern "C" {
-    fn nmp_app_dispatch_action(
-        app: *mut NmpApp,
-        namespace: *const c_char,
-        action_json: *const c_char,
-    ) -> *mut c_char;
-}
 
 // ─── Action reducer ─────────────────────────────────────────────────────────────
 
@@ -452,80 +437,37 @@ pub(crate) fn run_effect_blossom_upload(
         }
     };
 
-    let ns_c = match CString::new("nmp.blossom.upload") {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let json_c = match CString::new(action_json_str) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
+    let dispatch_result = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
+        handle.ptr.as_ptr(),
+        "nmp.blossom.upload",
+        &action_json_str,
+    );
 
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. ns_c and json_c are valid CStrings
-    // alive for the duration of this call. The returned pointer is freed below
-    // via nmp_free_string (same allocator contract as reactions.rs:371-378).
-    let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
-
-    if result_ptr.is_null() {
-        // D6: null return is an nmp bug; treat as a failure.
-        let _ = tx.send(Cmd::Event(KernelEvent::BlossomUploadResult {
-            success: false,
-            blob_url: String::new(),
-            error: "nmp_app_dispatch_action returned null".to_string(),
-        }));
-        return;
-    }
-
-    // Parse the result JSON while the pointer is still valid, then free it.
-    let result_json = {
-        let cstr = unsafe { std::ffi::CStr::from_ptr(result_ptr) };
-        let s = cstr.to_string_lossy().to_string();
-        nmp_free_string(result_ptr);
-        s
-    };
-
-    // Extract the nmp-minted correlation_id from `{"correlation_id":"…"}`.
-    let nmp_cid = serde_json::from_str::<serde_json::Value>(&result_json)
-        .ok()
-        .and_then(|v| {
-            v.get("correlation_id")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_string)
-        });
-
-    match nmp_cid {
-        Some(nmp_id) if nmp_id != correlation_id => {
-            // nmp minted a different id; swap the placeholder in AppState so
-            // apply_action_result_row can match the real id when the
-            // action_results frame arrives.
-            tracing::debug!(
-                placeholder_cid = %correlation_id,
-                nmp_cid = %nmp_id,
-                "run_effect_blossom_upload: swapping placeholder with nmp id"
-            );
-            let _ = tx.send(Cmd::Event(KernelEvent::NmpBlossomCorrelationMinted {
-                placeholder_correlation_id: correlation_id,
-                nmp_correlation_id: nmp_id,
-            }));
-        }
-        Some(_) => {
-            // nmp returned the same id — no swap needed, action_results will match.
-        }
-        None => {
-            // nmp returned an error JSON or no correlation_id. Upload was rejected.
-            tracing::warn!(
-                result = %result_json,
-                "run_effect_blossom_upload: nmp rejected upload — emitting failure"
-            );
+    let nmp_id = match dispatch_result {
+        Err(e) => {
+            tracing::warn!("run_effect_blossom_upload: dispatch rejected: {e}");
             let _ = tx.send(Cmd::Event(KernelEvent::BlossomUploadResult {
                 success: false,
                 blob_url: String::new(),
-                error: result_json,
+                error: e,
             }));
+            return;
         }
+        Ok(id) => id,
+    };
+
+    if nmp_id != correlation_id {
+        tracing::debug!(
+            placeholder_cid = %correlation_id,
+            nmp_cid = %nmp_id,
+            "run_effect_blossom_upload: swapping placeholder with nmp id"
+        );
+        let _ = tx.send(Cmd::Event(KernelEvent::NmpBlossomCorrelationMinted {
+            placeholder_correlation_id: correlation_id,
+            nmp_correlation_id: nmp_id,
+        }));
     }
+    // nmp returned the same id — no swap needed, action_results will match.
 }
 
 /// Run `Effect::PublishCaptureWithCorrelation` — dispatch a capture-draft

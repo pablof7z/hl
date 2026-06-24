@@ -40,8 +40,6 @@
 //! synchronous and non-blocking (FlatBuffers decode only, no I/O). D6: decode
 //! errors leave `AppState::follows` unchanged.
 
-use std::ffi::CString;
-use std::os::raw::c_char;
 use std::sync::{Arc, Mutex};
 
 use nmp_ffi::NmpApp;
@@ -53,26 +51,6 @@ use crate::kernel::app::AppState;
 // Re-export so callers (`projections.rs` dispatch arm) can match the schema
 // id without importing nmp_nip02 directly.
 pub(crate) use nmp_nip02::FOLLOW_LIST_SCHEMA_ID as SCHEMA_ID;
-
-// ─── nmp-ffi C ABI declarations ─────────────────────────────────────────────
-
-// `nmp_app_dispatch_action` is #[no_mangle] extern "C" in nmp-ffi/src/action.rs.
-// We declare it here so the follows effect runner can call it directly.
-#[allow(improper_ctypes)]
-extern "C" {
-    fn nmp_app_dispatch_action(
-        app: *mut NmpApp,
-        namespace: *const c_char,
-        action_json: *const c_char,
-    ) -> *mut c_char;
-}
-
-// `nmp_free_string` is the canonical free path for all C strings returned by
-// nmp-ffi (they are allocated via `CString::into_raw` in the Rust allocator;
-// calling host `free()` would use a different allocator — UB). Re-exported in
-// `nmp_ffi::nmp_free_string` but we use the direct C ABI here to avoid a
-// separate Rust function call layer.
-use nmp_ffi::nmp_free_string;
 
 // ─── READ side: projection frame apply ──────────────────────────────────────
 
@@ -140,34 +118,13 @@ pub(crate) fn run_effect_dispatch_follow_action(
     let Some(handle) = nmp else { return };
 
     let namespace = if follow { "nmp.follow" } else { "nmp.unfollow" };
-    // Serialize the wire shape: {"pubkey":"<hex>"}
     let action_json = format!("{{\"pubkey\":\"{pubkey}\"}}");
 
-    let ns_c = match CString::new(namespace) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let json_c = match CString::new(action_json) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. ns_c and json_c are valid CStrings
-    // alive for the duration of this call. The returned pointer is freed below.
-    let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
-
-    // Free the returned correlation-id JSON string. nmp-ffi returns a
-    // CString::into_raw pointer; `nmp_free_string` is the canonical free path
-    // (same Rust allocator as the allocation). Calling host `free()` would be
-    // UB. A null pointer is a no-op (nmp-ffi D6 null-safety contract).
-    if !result_ptr.is_null() {
-        // nmp_free_string takes ownership of the CString::into_raw pointer and
-        // frees it through the same Rust allocator. It handles null gracefully
-        // but we guard anyway to be explicit about the non-null path.
-        nmp_free_string(result_ptr);
-    }
+    let _ = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
+        handle.ptr.as_ptr(),
+        namespace,
+        &action_json,
+    );
 }
 
 // ─── Projection registration ─────────────────────────────────────────────────

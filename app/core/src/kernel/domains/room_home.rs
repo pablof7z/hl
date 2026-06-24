@@ -433,40 +433,13 @@ pub(crate) fn run_effect_dispatch_share_to_room(
     json: String,
     nmp: Option<&crate::kernel::actor::NmpHandle>,
 ) {
-    use nmp_ffi::nmp_free_string;
-    use std::ffi::CString;
-
-    #[allow(improper_ctypes)]
-    extern "C" {
-        fn nmp_app_dispatch_action(
-            app: *mut NmpApp,
-            namespace: *const std::os::raw::c_char,
-            action_json: *const std::os::raw::c_char,
-        ) -> *mut std::os::raw::c_char;
-    }
-
     let Some(handle) = nmp else { return };
 
-    let ns_c = match CString::new(namespace) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let json_c = match CString::new(json) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. ns_c and json_c are valid CStrings
-    // alive for the duration of this call. The returned pointer is freed below.
-    let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
-
-    // Free the returned correlation-id JSON string via the nmp allocator.
-    // A null pointer is a no-op (guard for clarity).
-    if !result_ptr.is_null() {
-        nmp_free_string(result_ptr);
-    }
+    let _ = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
+        handle.ptr.as_ptr(),
+        &namespace,
+        &json,
+    );
 }
 
 // ─── Room-home aggregation helpers ────────────────────────────────────────────

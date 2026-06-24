@@ -1134,77 +1134,36 @@ fn dispatch_share_publish_action(
 ) {
     use crate::kernel::action::KernelEvent;
     use crate::kernel::actor::Cmd;
-    use nmp_ffi::nmp_free_string;
-    use std::ffi::CString;
-
-    #[allow(improper_ctypes)]
-    extern "C" {
-        fn nmp_app_dispatch_action(
-            app: *mut nmp_ffi::NmpApp,
-            namespace: *const std::os::raw::c_char,
-            action_json: *const std::os::raw::c_char,
-        ) -> *mut std::os::raw::c_char;
-    }
 
     let reject = |error: String| {
-        // Drive the FSM → Error (D6): route through the same verdict reducer the
-        // action_results path uses, keyed on the placeholder still in flight.
         let _ = tx.send(Cmd::Event(KernelEvent::ShareMintDispatchRejected {
             correlation_id: placeholder_correlation_id.clone(),
             error,
         }));
     };
 
-    let ns_c = match CString::new(namespace) {
-        Ok(s) => s,
-        Err(_) => return reject("invalid namespace".into()),
-    };
-    let json_c = match CString::new(action_json) {
-        Ok(s) => s,
-        Err(_) => return reject("invalid action json".into()),
-    };
+    let dispatch_result = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
+        handle.ptr.as_ptr(),
+        namespace,
+        &action_json,
+    );
 
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. ns_c/json_c are valid CStrings alive
-    // for this call. The returned pointer is freed below via nmp_free_string.
-    let result_ptr =
-        unsafe { nmp_app_dispatch_action(handle.ptr.as_ptr(), ns_c.as_ptr(), json_c.as_ptr()) };
-
-    if result_ptr.is_null() {
-        return reject("nmp_app_dispatch_action returned null".into());
-    }
-
-    let result_json = {
-        let cstr = unsafe { std::ffi::CStr::from_ptr(result_ptr) };
-        let s = cstr.to_string_lossy().to_string();
-        nmp_free_string(result_ptr);
-        s
-    };
-
-    let parsed = serde_json::from_str::<serde_json::Value>(&result_json).ok();
-    let nmp_cid = parsed.as_ref().and_then(|v| {
-        v.get("correlation_id")
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_string)
-    });
-
-    match nmp_cid {
-        Some(nmp_id) if nmp_id != placeholder_correlation_id => {
+    match dispatch_result {
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "dispatch_share_publish_action: nmp rejected dispatch — FSM → Error"
+            );
+            reject(e);
+        }
+        Ok(nmp_id) if nmp_id != placeholder_correlation_id => {
             let _ = tx.send(Cmd::Event(KernelEvent::SharePublishCorrelationMinted {
                 placeholder_correlation_id,
                 nmp_correlation_id: nmp_id,
             }));
         }
-        Some(_) => {
+        Ok(_) => {
             // Same id — action_results will match the placeholder directly.
-        }
-        None => {
-            // Error envelope (or no correlation id) → the dispatch was rejected.
-            tracing::warn!(
-                result = %result_json,
-                "dispatch_share_publish_action: nmp rejected dispatch — FSM → Error"
-            );
-            reject(result_json);
         }
     }
 }
