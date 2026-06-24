@@ -162,6 +162,11 @@ pub struct AppState {
     /// `IdentityChanged(None)` and `Logout`.
     pub claimed_profiles: HashMap<String, nmp_core::typed_projections::ProfileCardModel>,
 
+    // ── Phase 7 entity-ref additions (append-only) ────────────────────────────
+    /// Events claimed via `nmp_app_resolve_ref(namespace=1)` for entity cards.
+    /// Keyed by event key (hex event id or coordinate). Cleared on identity lost.
+    pub claimed_events: HashMap<String, nmp_core::typed_projections::ClaimedEventRow>,
+
     // ── Phase 3F additions ────────────────────────────────────────────────────
     /// Raw group events for open RoomHome views, decoded from the
     /// `"nmp.nip29.group_events"` typed sidecar. Keyed by `group_id` (local id).
@@ -545,6 +550,7 @@ impl Default for AppState {
             room_policy: RoomPolicy::default(),
             own_profile: None,
             claimed_profiles: HashMap::new(),
+            claimed_events: HashMap::new(),
             // ── Phase 3F additions ────────────────────────────────────────────
             room_home_events: HashMap::new(),
             // ── #1653 additions ───────────────────────────────────────────────

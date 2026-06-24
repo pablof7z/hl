@@ -62,6 +62,10 @@ final class HighlighterAppKernel {
     /// Populated while a `ViewId.roomHome(groupId:)` view is open.
     private(set) var roomHomeSnapshots: [String: KernelRoomHomeSnapshot] = [:]
 
+    /// Per-entity-key snapshots, keyed by entity key (event id / NIP-19 coord).
+    /// Populated while a `ViewId.entityRef(key:)` view is open.
+    private(set) var entitySnapshots: [String: KernelEntitySnapshot] = [:]
+
     // MARK: - Published snapshots (Phase 7 cutovers)
 
     /// Per-group-id room chat snapshots, keyed by NIP-29 local group id.
@@ -258,6 +262,15 @@ final class HighlighterAppKernel {
         roomHomeSnapshots.removeValue(forKey: groupId)
     }
 
+    func resolveEntityRef(key: String) {
+        app.openView(viewId: .entityRef(key: key), route: .entityRef(key: key))
+    }
+
+    func releaseEntityRef(key: String) {
+        app.closeView(viewId: .entityRef(key: key))
+        entitySnapshots.removeValue(forKey: key)
+    }
+
     // MARK: - Phase 7: home feed lifecycle
 
     /// Open the merged home feed view (highlights + reads). The kernel opens both
@@ -440,6 +453,8 @@ final class HighlighterAppKernel {
             profileSnapshots[s.pubkey] = s
         case .roomHome(let s):
             roomHomeSnapshots[s.groupId] = s
+        case .entityRef(let s):
+            entitySnapshots[s.key] = s
 
         // Phase 7 cutover: room chat snapshot (ChatStore reads this dict).
         case .roomChat(let s):

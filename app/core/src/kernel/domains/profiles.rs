@@ -96,6 +96,27 @@ pub(crate) fn apply_own_profile(state: &mut AppState, payload: &[u8]) {
 /// `AppState::claimed_profiles`. Each entry is a `(pubkey, ProfileCardModel)`
 /// pair from the flattened BTreeMap.
 ///
+/// Apply a `"refs.profile"` NRRD batch to `AppState::claimed_profiles`.
+///
+/// Called from `projections::dispatch_typed_frame` when `schema_id == "refs.profile"`.
+/// D6: decode errors are silent no-ops.
+pub(crate) fn apply_refs_profile(state: &mut AppState, payload: &[u8]) {
+    use nmp_core::refs::{decode_ref_row_delta_batch, RefRowState};
+    let Ok(batch) = decode_ref_row_delta_batch(payload) else { return; };
+    for row in &batch.rows {
+        match row.state {
+            RefRowState::Changed => {
+                if let Ok(model) = decode_profile(&row.payload) {
+                    state.claimed_profiles.insert(row.key.clone(), model);
+                }
+            }
+            RefRowState::Cleared => {
+                state.claimed_profiles.remove(&row.key);
+            }
+        }
+    }
+}
+
 // ─── WRITE side: view-lifecycle helpers ─────────────────────────────────────
 
 /// Pure function called by the actor loop when a view is opened.

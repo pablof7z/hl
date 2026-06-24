@@ -27329,6 +27329,150 @@ public func FfiConverterTypeKernelCommentReferenceBucket_lower(_ value: KernelCo
 
 
 /**
+ * Raw entity ref data for an inline event card.
+ *
+ * D1: Swift formats all display strings (author name, timestamp, content truncation).
+ * `tags_json` is a JSON-encoded `Vec<Vec<String>>` so Swift can parse NIP-10 markers.
+ */
+public struct KernelEntitySnapshot {
+    /**
+     * Entity key (event id, NIP-19 coordinate, or external id).
+     */
+    public var key: String
+    /**
+     * Nostr event kind (e.g. 1 for notes, 30023 for articles).
+     */
+    public var kind: UInt32
+    /**
+     * Raw event content — D1: no truncation or formatting.
+     */
+    public var content: String
+    /**
+     * Author raw hex pubkey (64 lowercase chars).
+     */
+    public var pubkeyHex: String
+    /**
+     * JSON-encoded tags array `Vec<Vec<String>>` — Swift parses NIP-10 markers.
+     */
+    public var tagsJson: String
+    /**
+     * Event created_at Unix timestamp (seconds).
+     */
+    public var createdAt: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Entity key (event id, NIP-19 coordinate, or external id).
+         */key: String,
+        /**
+         * Nostr event kind (e.g. 1 for notes, 30023 for articles).
+         */kind: UInt32,
+        /**
+         * Raw event content — D1: no truncation or formatting.
+         */content: String,
+        /**
+         * Author raw hex pubkey (64 lowercase chars).
+         */pubkeyHex: String,
+        /**
+         * JSON-encoded tags array `Vec<Vec<String>>` — Swift parses NIP-10 markers.
+         */tagsJson: String,
+        /**
+         * Event created_at Unix timestamp (seconds).
+         */createdAt: UInt64) {
+        self.key = key
+        self.kind = kind
+        self.content = content
+        self.pubkeyHex = pubkeyHex
+        self.tagsJson = tagsJson
+        self.createdAt = createdAt
+    }
+}
+
+#if compiler(>=6)
+extension KernelEntitySnapshot: Sendable {}
+#endif
+
+
+extension KernelEntitySnapshot: Equatable, Hashable {
+    public static func ==(lhs: KernelEntitySnapshot, rhs: KernelEntitySnapshot) -> Bool {
+        if lhs.key != rhs.key {
+            return false
+        }
+        if lhs.kind != rhs.kind {
+            return false
+        }
+        if lhs.content != rhs.content {
+            return false
+        }
+        if lhs.pubkeyHex != rhs.pubkeyHex {
+            return false
+        }
+        if lhs.tagsJson != rhs.tagsJson {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(key)
+        hasher.combine(kind)
+        hasher.combine(content)
+        hasher.combine(pubkeyHex)
+        hasher.combine(tagsJson)
+        hasher.combine(createdAt)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKernelEntitySnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KernelEntitySnapshot {
+        return
+            try KernelEntitySnapshot(
+                key: FfiConverterString.read(from: &buf),
+                kind: FfiConverterUInt32.read(from: &buf),
+                content: FfiConverterString.read(from: &buf),
+                pubkeyHex: FfiConverterString.read(from: &buf),
+                tagsJson: FfiConverterString.read(from: &buf),
+                createdAt: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: KernelEntitySnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.key, into: &buf)
+        FfiConverterUInt32.write(value.kind, into: &buf)
+        FfiConverterString.write(value.content, into: &buf)
+        FfiConverterString.write(value.pubkeyHex, into: &buf)
+        FfiConverterString.write(value.tagsJson, into: &buf)
+        FfiConverterUInt64.write(value.createdAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelEntitySnapshot_lift(_ buf: RustBuffer) throws -> KernelEntitySnapshot {
+    return try FfiConverterTypeKernelEntitySnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeKernelEntitySnapshot_lower(_ value: KernelEntitySnapshot) -> RustBuffer {
+    return FfiConverterTypeKernelEntitySnapshot.lower(value)
+}
+
+
+/**
  * Snapshot for `ViewId::FeedbackThread { root_event_id }` — thread detail.
  *
  * Contains the root record + all descendant replies (ancestor-chain traversal),
@@ -52655,6 +52799,17 @@ public enum ViewId {
          * NIP-29 local group id.
          */groupId: String
     )
+    /**
+     * Entity ref view for an inline event card — event id, coordinate, or
+     * external id. Opened by `NostrRichText` when rendering an entity embed.
+     * Key format: 64-char hex event id, `"kind:pubkey:d"` coordinate, or
+     * `"i:<external-id>"`.
+     */
+    case entityRef(
+        /**
+         * Entity key (event id, NIP-19 coordinate, or external id).
+         */key: String
+    )
 }
 
 
@@ -52727,6 +52882,9 @@ public struct FfiConverterTypeViewId: FfiConverterRustBuffer {
         )
 
         case 25: return .roomDiscussions(groupId: try FfiConverterString.read(from: &buf)
+        )
+
+        case 26: return .entityRef(key: try FfiConverterString.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -52842,6 +53000,11 @@ public struct FfiConverterTypeViewId: FfiConverterRustBuffer {
         case let .roomDiscussions(groupId):
             writeInt(&buf, Int32(25))
             FfiConverterString.write(groupId, into: &buf)
+
+
+        case let .entityRef(key):
+            writeInt(&buf, Int32(26))
+            FfiConverterString.write(key, into: &buf)
 
         }
     }
@@ -53023,6 +53186,16 @@ public enum ViewRoute {
          * NIP-29 local group id.
          */groupId: String
     )
+    /**
+     * Entity ref projection — `KernelEntitySnapshot` (raw event fields for
+     * inline event cards). D1: no formatted strings; Swift formats author
+     * bylines, timestamps, content truncation.
+     */
+    case entityRef(
+        /**
+         * Entity key (event id, NIP-19 coordinate, or external id).
+         */key: String
+    )
 }
 
 
@@ -53095,6 +53268,9 @@ public struct FfiConverterTypeViewRoute: FfiConverterRustBuffer {
         )
 
         case 25: return .roomDiscussions(groupId: try FfiConverterString.read(from: &buf)
+        )
+
+        case 26: return .entityRef(key: try FfiConverterString.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -53210,6 +53386,11 @@ public struct FfiConverterTypeViewRoute: FfiConverterRustBuffer {
         case let .roomDiscussions(groupId):
             writeInt(&buf, Int32(25))
             FfiConverterString.write(groupId, into: &buf)
+
+
+        case let .entityRef(key):
+            writeInt(&buf, Int32(26))
+            FfiConverterString.write(key, into: &buf)
 
         }
     }
@@ -53414,6 +53595,12 @@ public enum ViewSnapshot {
      */
     case roomDiscussions(RoomDiscussionsSnapshot
     )
+    /**
+     * Entity ref — raw event fields for an inline event card.
+     * D1: no formatted strings; Swift formats all display output.
+     */
+    case entityRef(KernelEntitySnapshot
+    )
 }
 
 
@@ -53504,6 +53691,9 @@ public struct FfiConverterTypeViewSnapshot: FfiConverterRustBuffer {
         )
 
         case 25: return .roomDiscussions(try FfiConverterTypeRoomDiscussionsSnapshot.read(from: &buf)
+        )
+
+        case 26: return .entityRef(try FfiConverterTypeKernelEntitySnapshot.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -53637,6 +53827,11 @@ public struct FfiConverterTypeViewSnapshot: FfiConverterRustBuffer {
         case let .roomDiscussions(v1):
             writeInt(&buf, Int32(25))
             FfiConverterTypeRoomDiscussionsSnapshot.write(v1, into: &buf)
+
+
+        case let .entityRef(v1):
+            writeInt(&buf, Int32(26))
+            FfiConverterTypeKernelEntitySnapshot.write(v1, into: &buf)
 
         }
     }
@@ -56686,6 +56881,20 @@ public func nip65RelayRole(read: Bool, write: Bool) -> String?  {
     )
 })
 }
+/**
+ * Tokenize Nostr event content and return a JSON-encoded `ContentTreeWire`.
+ *
+ * Calls `nmp_content_tokenize_text` (stateless C-ABI, no NmpApp* needed).
+ * Returns `{"ok":true,"tree":{...}}` on success or `{"ok":false,"error":"..."}` on failure.
+ * `content` is the raw event content; mode=0 (plain text), kind=1 (note).
+ */
+public func tokenizeNostrContent(content: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_tokenize_nostr_content(
+        FfiConverterString.lower(content),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -56709,6 +56918,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_func_nip65_relay_role() != 11383) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_tokenize_nostr_content() != 48981) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_eventcallback_on_data_changed() != 54279) {

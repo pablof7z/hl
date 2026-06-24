@@ -184,6 +184,17 @@ pub enum Effect {
         pubkey: String,
     },
 
+    // ── Phase 7 entity-ref additions (append-only) ────────────────────────────
+    /// Call `nmp_app_resolve_ref(namespace=1, key, "hl.entity.<key>", shape=2, liveness=Live)`.
+    ResolveEntityRef {
+        key: String,
+    },
+
+    /// Call `nmp_app_release_ref(namespace=1, key, "hl.entity.<key>")`.
+    ReleaseEntityRef {
+        key: String,
+    },
+
     // ── Phase 3F additions (append-only) ─────────────────────────────────────
     /// Call `nmp_nip29::register::wire_group_events(nmp_ref, GroupId{..})` to
     /// register the `GroupEventsProjection` observer + typed FlatBuffers sidecar

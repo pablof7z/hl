@@ -462,6 +462,8 @@ pub(crate) fn clear_feed_state_on_identity_lost(state: &mut AppState) {
 pub(crate) fn clear_account_scoped_state_on_switch(state: &mut AppState) -> Vec<Effect> {
     // own_profile and claimed_profiles belong to the departing account.
     super::profiles::clear_on_identity_lost(state);
+    // claimed_events belong to the departing account.
+    state.claimed_events.clear();
     // Bookmarks list — stale bookmarks must not outlive the account.
     state.bookmarks = Vec::new();
     // #1653 HIGH: bookmark/curation sets + web bookmarks. SetListProjection

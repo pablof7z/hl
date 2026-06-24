@@ -488,6 +488,18 @@ pub(crate) struct CreateAndAddToSetPayload {
     pub item_coordinate: String,
 }
 
+// ── Phase 7 entity-ref payload structs (append-only) ─────────────────────────
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ResolveEntityRefPayload {
+    pub key: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct ReleaseEntityRefPayload {
+    pub key: String,
+}
+
 // ── Phase 7 Part C additions (append-only) ───────────────────────────────────
 
 /// `hl.profile.update` envelope payload — update the active account's kind:0
@@ -681,6 +693,19 @@ pub enum AppAction {
     /// subscription. Fire-and-forget (D6).
     ReleaseProfile {
         pubkey: String,
+    },
+
+    // ── Phase 7 entity-ref additions (append-only) ────────────────────────────
+    /// Resolve an entity ref — triggers `nmp_app_resolve_ref(namespace=1)`.
+    /// Sent when `NostrRichText` renders an inline entity embed.
+    ResolveEntityRef {
+        key: String,
+    },
+
+    /// Release an entity ref — triggers `nmp_app_release_ref(namespace=1)`.
+    /// Sent when the entity embed view disappears.
+    ReleaseEntityRef {
+        key: String,
     },
 
     // ── Phase 3F additions (append-only) ─────────────────────────────────────

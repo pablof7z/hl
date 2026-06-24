@@ -216,6 +216,10 @@ pub(crate) fn project_snapshot(
         // ViewId::RoomDiscussions is handled upstream in actor::project_snapshot.
         // This arm is unreachable in practice but required for exhaustive match.
         ViewId::RoomDiscussions { .. } => None,
+        // ── Phase 7 entity-ref additions (append-only) ────────────────────────
+        // ViewId::EntityRef is handled upstream in actor::project_snapshot.
+        // This arm is unreachable in practice but required for exhaustive match.
+        ViewId::EntityRef { .. } => None,
     }
 }
 

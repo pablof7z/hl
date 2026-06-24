@@ -211,6 +211,16 @@ pub(crate) fn dispatch_typed_frame(
                 super::bookmark_sets::apply_web_bookmarks(state, &proj.payload);
             }
 
+            // ── Phase 7 arm: "refs.profile" ──────────────────────────────────
+            "refs.profile" => {
+                profiles::apply_refs_profile(state, &proj.payload);
+            }
+
+            // ── Phase 7 arm: "refs.event" ─────────────────────────────────────
+            "refs.event" => {
+                super::entities::apply_refs_event(state, &proj.payload);
+            }
+
             // ── Default: unknown schema_id — silent no-op (D6) ────────────────
             // Projections registered by nmp-defaults that hl has not opted into
             // (e.g. action_stages, bunker_handshake) arrive here. This is the

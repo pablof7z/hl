@@ -57,6 +57,8 @@ use crate::kernel::domains::{
     comments,
     communities,
     discovery,
+    // ── Phase 7 entity-ref additions (append-only) ───────────────────────────
+    entities,
     // ── Phase 7 discussions additions (append-only) ──────────────────────────
     discussions,
     feed,
@@ -319,6 +321,14 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
 
         AppAction::ReleaseProfile { pubkey } => profiles::reduce_action_release_profile(pubkey),
 
+        // ── Phase 7 entity-ref additions (append-only) ────────────────────────
+        AppAction::ResolveEntityRef { key } => {
+            vec![Effect::ResolveEntityRef { key }]
+        }
+        AppAction::ReleaseEntityRef { key } => {
+            vec![Effect::ReleaseEntityRef { key }]
+        }
+
         // ── Phase 3F additions (append-only) ─────────────────────────────────
         AppAction::JoinRoom {
             group_id,
@@ -548,8 +558,9 @@ fn reduce_action_envelope(
         CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload, JoinRoomPayload,
         LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload, PairBunkerPayload,
         PresentSheetPayload, PublishClipPayload, PublishHighlightPayload, ReactPayload,
-        ReleaseProfilePayload, RemoveBookmarkPayload, RemoveFromSetPayload, RemoveRelayPayload,
-        RunSearchPayload, SelectRootTabPayload, SetRelayRolePayload, SetRoomsRelayListPayload,
+        ReleaseEntityRefPayload, ReleaseProfilePayload, RemoveBookmarkPayload,
+        RemoveFromSetPayload, RemoveRelayPayload, ResolveEntityRefPayload, RunSearchPayload,
+        SelectRootTabPayload, SetRelayRolePayload, SetRoomsRelayListPayload,
         ShareArtifactToRoomPayload, ShareHighlightToRoomPayload, ShareMintInvitePayload,
         ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload, ToggleReactionPayload,
         UnfollowPayload, UnreactPayload,
@@ -634,6 +645,16 @@ fn reduce_action_envelope(
         "hl.profile.release" => {
             let p = parse!(ReleaseProfilePayload);
             profiles::reduce_action_release_profile(p.pubkey)
+        }
+
+        // ── Entity ref (resolve/release) ──────────────────────────────────────
+        "hl.entity.resolve" => {
+            let p = parse!(ResolveEntityRefPayload);
+            vec![Effect::ResolveEntityRef { key: p.key }]
+        }
+        "hl.entity.release" => {
+            let p = parse!(ReleaseEntityRefPayload);
+            vec![Effect::ReleaseEntityRef { key: p.key }]
         }
 
         // ── Room discovery ────────────────────────────────────────────────────
@@ -1643,6 +1664,9 @@ pub(crate) fn project_snapshot(
         // ── Phase 3D additions (append-only) ─────────────────────────────────
         ViewId::Profile { pubkey } => profiles::project_profile_snapshot(state, pubkey),
 
+        // ── Phase 7 entity-ref additions (append-only) ────────────────────────
+        ViewId::EntityRef { key } => entities::project_entity_ref_snapshot(state, key),
+
         // ── Phase 3F additions (append-only) ─────────────────────────────────
         ViewId::RoomHome { group_id } => room_home::project_room_home_snapshot(state, group_id),
 
@@ -1861,6 +1885,14 @@ pub(crate) async fn run_effect(
             // subscription and removes the card from claimed_profiles. No-op in
             // test mode (nmp=None).
             profiles::run_effect_release_profile(pubkey, nmp);
+        }
+
+        // ── Phase 7 entity-ref additions (append-only) ────────────────────────
+        Effect::ResolveEntityRef { key } => {
+            entities::run_effect_resolve_entity_ref(key, nmp);
+        }
+        Effect::ReleaseEntityRef { key } => {
+            entities::run_effect_release_entity_ref(key, nmp);
         }
 
         // ── Phase 3F additions (append-only) ─────────────────────────────────
@@ -2628,6 +2660,8 @@ pub(crate) async fn actor_task(
                 registry.open(id.clone(), route.clone());
                 // ── Phase 3D: claim a profile subscription when its view opens ──
                 lifecycle_effects.extend(profiles::lifecycle_effects_for_view_open(id));
+                // ── Phase 7: resolve entity ref when its view opens ──────────
+                lifecycle_effects.extend(entities::lifecycle_effects_for_view_open(id));
                 // ── Phase 3F: wire group-events projection when room-home view opens ──
                 lifecycle_effects.extend(room_home::lifecycle_effects_for_view_open(id));
                 // ── Phase 3G: auto-start room discovery when RoomExplorer opens ──
@@ -2670,6 +2704,8 @@ pub(crate) async fn actor_task(
             Cmd::CloseView(id) => {
                 // ── Phase 3D: release the profile subscription before removing from registry ──
                 lifecycle_effects.extend(profiles::lifecycle_effects_for_view_close(id));
+                // ── Phase 7: release entity ref when its view closes ─────────
+                lifecycle_effects.extend(entities::lifecycle_effects_for_view_close(id));
                 // ── Phase 3F: release group-events buffer when room-home view closes ──
                 lifecycle_effects.extend(room_home::lifecycle_effects_for_view_close(id));
                 // ── Phase 4A: article reader close lifecycle (no-op in 4A) ─────

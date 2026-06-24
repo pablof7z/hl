@@ -250,6 +250,33 @@ pub enum ViewSnapshot {
     /// `GroupEventsProjection`, bounded at 64 per room, newest-first.
     /// D1: no title fallback, no formatted timestamps.
     RoomDiscussions(RoomDiscussionsSnapshot),
+
+    // ── Phase 7 entity-ref additions (append-only) ────────────────────────────
+    /// Entity ref — raw event fields for an inline event card.
+    /// D1: no formatted strings; Swift formats all display output.
+    EntityRef(KernelEntitySnapshot),
+}
+
+// ── Phase 7 entity-ref additions (append-only) ───────────────────────────────
+
+/// Raw entity ref data for an inline event card.
+///
+/// D1: Swift formats all display strings (author name, timestamp, content truncation).
+/// `tags_json` is a JSON-encoded `Vec<Vec<String>>` so Swift can parse NIP-10 markers.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct KernelEntitySnapshot {
+    /// Entity key (event id, NIP-19 coordinate, or external id).
+    pub key: String,
+    /// Nostr event kind (e.g. 1 for notes, 30023 for articles).
+    pub kind: u32,
+    /// Raw event content — D1: no truncation or formatting.
+    pub content: String,
+    /// Author raw hex pubkey (64 lowercase chars).
+    pub pubkey_hex: String,
+    /// JSON-encoded tags array `Vec<Vec<String>>` — Swift parses NIP-10 markers.
+    pub tags_json: String,
+    /// Event created_at Unix timestamp (seconds).
+    pub created_at: u64,
 }
 
 // ── Phase 7 artifact-preview additions (append-only) ─────────────────────────

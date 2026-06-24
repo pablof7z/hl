@@ -219,9 +219,9 @@ final class EventBridge: EventCallback, @unchecked Sendable {
 
     @MainActor
     private func dispatchNostrEntity(_ change: DataChangeType, store: NostrEntityCardStore) {
-        if case .nostrEntityResolved(let event) = change {
-            store.apply(event: event)
-        }
+        // Entity resolution is now handled by the kernel entity-ref projection.
+        // This path is unused; kept so the registry type remains consistent.
+        _ = store
     }
 
 }

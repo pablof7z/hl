@@ -216,6 +216,16 @@ pub enum ViewId {
         /// NIP-29 local group id.
         group_id: String,
     },
+
+    // ── Phase 7 additions (append-only) ─────────────────────────────────────
+    /// Entity ref view for an inline event card — event id, coordinate, or
+    /// external id. Opened by `NostrRichText` when rendering an entity embed.
+    /// Key format: 64-char hex event id, `"kind:pubkey:d"` coordinate, or
+    /// `"i:<external-id>"`.
+    EntityRef {
+        /// Entity key (event id, NIP-19 coordinate, or external id).
+        key: String,
+    },
 }
 
 /// Which projection to compute for a registered view.
@@ -355,6 +365,15 @@ pub enum ViewRoute {
     RoomDiscussions {
         /// NIP-29 local group id.
         group_id: String,
+    },
+
+    // ── Phase 7 additions (append-only) ─────────────────────────────────────
+    /// Entity ref projection — `KernelEntitySnapshot` (raw event fields for
+    /// inline event cards). D1: no formatted strings; Swift formats author
+    /// bylines, timestamps, content truncation.
+    EntityRef {
+        /// Entity key (event id, NIP-19 coordinate, or external id).
+        key: String,
     },
 }
 

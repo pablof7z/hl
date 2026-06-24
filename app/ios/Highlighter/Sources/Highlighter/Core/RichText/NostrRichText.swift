@@ -1,5 +1,4 @@
 import Kingfisher
-import Observation
 import SwiftUI
 
 /// Renders plain text that may contain `nostr:` URI mentions and event
@@ -94,29 +93,59 @@ struct NostrRichText: View {
     // MARK: - Tokenisation + blocking
 
     private var blocks: [Block] {
+        let json = tokenizeNostrContent(content: content)
+        guard let data = json.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let ok = root["ok"] as? Bool, ok,
+              let tree = root["tree"] as? [String: Any],
+              let rawBlocks = tree["blocks"] as? [[String: Any]] else {
+            return [.paragraph([.text(content)])]
+        }
+
         var blocks: [Block] = []
-        var currentRuns: [Run] = []
-        for token in appStore.safeCore.tokenizeNostrContent(content) {
-            switch token {
-            case .text(let value):
-                currentRuns.append(.text(value))
-            case .entity(let ref):
-                switch ref {
-                case .profile:
-                    currentRuns.append(.entity(ref))
-                case .event, .address:
-                    if !currentRuns.isEmpty {
-                        blocks.append(.paragraph(currentRuns))
-                        currentRuns.removeAll()
+        for rawBlock in rawBlocks {
+            var currentRuns: [Run] = []
+            if let inlines = rawBlock["inlines"] as? [[String: Any]] {
+                for inline in inlines {
+                    let type_ = inline["type"] as? String ?? ""
+                    if type_ == "text", let text = inline["text"] as? String {
+                        currentRuns.append(.text(text))
+                    } else if type_ == "nostr_ref", let key = inline["key"] as? String {
+                        if let ref = nostrEntityRef(fromKey: key) {
+                            switch ref {
+                            case .profile:
+                                currentRuns.append(.entity(ref))
+                            case .event, .address:
+                                if !currentRuns.isEmpty {
+                                    blocks.append(.paragraph(currentRuns))
+                                    currentRuns.removeAll()
+                                }
+                                blocks.append(.eventRef(ref))
+                            }
+                        }
                     }
-                    blocks.append(.eventRef(ref))
                 }
             }
-        }
-        if !currentRuns.isEmpty {
-            blocks.append(.paragraph(currentRuns))
+            if !currentRuns.isEmpty {
+                blocks.append(.paragraph(currentRuns))
+            }
         }
         return blocks
+    }
+
+    private func nostrEntityRef(fromKey key: String) -> NostrEntityRef? {
+        if key.hasPrefix("p:") {
+            let pubkey = String(key.dropFirst(2))
+            return .profile(pubkeyHex: pubkey, relays: [])
+        } else if key.hasPrefix("e:") {
+            let eventId = String(key.dropFirst(2))
+            return .event(eventIdHex: eventId, relays: [], authorHintHex: nil, kindHint: nil)
+        } else if key.hasPrefix("a:") {
+            let parts = key.dropFirst(2).split(separator: ":", maxSplits: 2).map(String.init)
+            guard parts.count == 3, let kind = UInt32(parts[0]) else { return nil }
+            return .address(kind: kind, pubkeyHex: parts[1], dTag: parts[2], relays: [])
+        }
+        return nil
     }
 
     // MARK: - Run / Block models
@@ -135,90 +164,80 @@ struct NostrRichText: View {
 // MARK: - Card
 
 @MainActor
-@Observable
 final class NostrEntityCardStore {
-    private(set) var resolved: NostrEntityEvent?
-
     @ObservationIgnored let entity: NostrEntityRef
-    @ObservationIgnored let safeCore: SafeHighlighterCore
-    @ObservationIgnored weak var eventBridge: EventBridge?
-    @ObservationIgnored private var subscriptionHandle: UInt64?
+    @ObservationIgnored let kernel: HighlighterAppKernel
 
-    init(
-        entity: NostrEntityRef,
-        safeCore: SafeHighlighterCore,
-        eventBridge: EventBridge?
-    ) {
+    init(entity: NostrEntityRef, kernel: HighlighterAppKernel) {
         self.entity = entity
-        self.safeCore = safeCore
-        self.eventBridge = eventBridge
+        self.kernel = kernel
     }
 
-    func start() async {
-        let snapshot = await safeCore.resolveNostrEntity(entity)
-        if snapshot.resolved, let event = snapshot.event {
-            resolved = event
-            return
-        }
-
-        guard !Task.isCancelled else { return }
-        guard subscriptionHandle == nil else { return }
-
-        let outcome = await safeCore.subscribeNostrEntity(entity)
-        let shouldRegister = outcome.error.trimmingCharacters(in: .whitespaces).isEmpty && outcome.handle != 0
-        guard shouldRegister else {
-            // Cache-only rendering remains valid; the placeholder stays visible.
-            return
-        }
-        guard !Task.isCancelled else {
-            await safeCore.unsubscribe(outcome.handle)
-            return
-        }
-        subscriptionHandle = outcome.handle
-        eventBridge?.registerNostrEntity(self, handle: outcome.handle)
+    func start() {
+        kernel.resolveEntityRef(key: entityKey)
     }
 
     func stop() {
-        if let handle = subscriptionHandle {
-            Task { [safeCore] in await safeCore.unsubscribe(handle) }
-            eventBridge?.unregister(handle: handle)
-        }
-        subscriptionHandle = nil
+        kernel.releaseEntityRef(key: entityKey)
     }
 
-    func apply(event: NostrEntityEvent) {
-        resolved = event
-    }
-}
-
-/// Block-level card for `nevent1…` / `naddr1…` references. Resolves
-/// against the local nostrdb first, then subscribes through Rust when cold.
-/// Per-entity rendering is selected by the Rust projection.
-struct NostrEntityCard: View {
-    let entity: NostrEntityRef
-
-    @Environment(HighlighterStore.self) private var appStore
-    @State private var store: NostrEntityCardStore?
-
-    var body: some View {
-        Group {
-            if let resolved = store?.resolved {
-                resolvedCard(resolved)
-            } else {
-                placeholder
-            }
-        }
-        .task(id: entityIdentityKey) { await start() }
-        .onDisappear { stop() }
-    }
-
-    private var entityIdentityKey: String {
-        // D1: mirrors nostr_entities::identity_key
+    var entityKey: String {
         switch entity {
         case .profile(let pubkeyHex, _): return "p:\(pubkeyHex)"
         case .event(let eventIdHex, _, _, _): return "e:\(eventIdHex)"
         case .address(let kind, let pubkeyHex, let dTag, _): return "a:\(kind):\(pubkeyHex):\(dTag)"
         }
+    }
+}
+
+/// Block-level card for `nevent1…` / `naddr1…` references. Resolves
+/// via the kernel entity projection. Per-entity rendering is selected by kind.
+struct NostrEntityCard: View {
+    let entity: NostrEntityRef
+
+    @Environment(HighlighterStore.self) private var appStore
+    @Environment(HighlighterAppKernel.self) private var kernel
+    @State private var store: NostrEntityCardStore?
+
+    var body: some View {
+        Group {
+            if let snapshot = kernel.entitySnapshots[entityIdentityKey],
+               let event = nostrEntityEvent(from: snapshot) {
+                resolvedCard(event)
+            } else {
+                placeholder
+            }
+        }
+        .task(id: entityIdentityKey) { start() }
+        .onDisappear { stop() }
+    }
+
+    private var entityIdentityKey: String {
+        switch entity {
+        case .profile(let pubkeyHex, _): return "p:\(pubkeyHex)"
+        case .event(let eventIdHex, _, _, _): return "e:\(eventIdHex)"
+        case .address(let kind, let pubkeyHex, let dTag, _): return "a:\(kind):\(pubkeyHex):\(dTag)"
+        }
+    }
+
+    private func nostrEntityEvent(from snapshot: KernelEntitySnapshot) -> NostrEntityEvent? {
+        let renderKind: NostrEntityRenderKind
+        switch snapshot.kind {
+        case 0: renderKind = .profile
+        case 1: renderKind = .note
+        case 9802: renderKind = .highlight
+        case 30023: renderKind = .article
+        default: renderKind = .generic
+        }
+        return NostrEntityEvent(
+            eventIdHex: snapshot.key,
+            kind: snapshot.kind,
+            renderKind: renderKind,
+            pubkeyHex: snapshot.pubkeyHex,
+            content: snapshot.content,
+            createdAt: snapshot.createdAt,
+            tagsJson: snapshot.tagsJson
+        )
     }
 
     @ViewBuilder
@@ -250,7 +269,6 @@ struct NostrEntityCard: View {
     }
 
     private var entityLabel: String {
-        // D1: mirrors nostr_entities::fallback_label
         switch entity {
         case .profile(let pubkeyHex, _):
             return "Profile · \(pubkeyHex.prefix(12))…"
@@ -265,15 +283,11 @@ struct NostrEntityCard: View {
         }
     }
 
-    private func start() async {
+    private func start() {
         store?.stop()
-        let next = NostrEntityCardStore(
-            entity: entity,
-            safeCore: appStore.safeCore,
-            eventBridge: appStore.eventBridge
-        )
+        let next = NostrEntityCardStore(entity: entity, kernel: kernel)
         store = next
-        await next.start()
+        next.start()
     }
 
     private func stop() {
