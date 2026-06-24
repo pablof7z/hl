@@ -90,7 +90,7 @@ struct PodcastListeningView: View {
 
     @ViewBuilder
     private var content: some View {
-        let projection = listeningProjection
+        let projection = podcastListeningProjection
         ZStack(alignment: .bottomTrailing) {
             VStack(spacing: 0) {
                 episodeHeader(projection: projection)
@@ -113,9 +113,8 @@ struct PodcastListeningView: View {
         }
     }
 
-    private var listeningProjection: PodcastListeningProjection {
-        app.safeCore.getPodcastListeningProjection(
-            input: PodcastListeningProjectionInput(
+    private var podcastListeningProjection: PodcastListeningProjection {
+        listeningProjection(input: PodcastListeningProjectionInput(
                 artifact: player.currentArtifact,
                 clips: memberClips,
                 transcriptSegments: player.transcriptSegments,

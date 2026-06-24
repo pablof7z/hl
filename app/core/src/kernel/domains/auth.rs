@@ -388,13 +388,15 @@ pub(crate) fn run_effect_create_account(
         // (D6 — timeout in clock_checks will surface the failure as state).
         let _ = nmp_ref
             .actor_sender()
-            .send(nmp_core::actor::ActorCommand::Identity(nmp_core::actor::IdentityCommand::CreateAccount {
-                profile,
-                relays,
-                initial_follows,
-                mls: false,
-                make_active: true,
-            }));
+            .send(nmp_core::actor::ActorCommand::Identity(
+                nmp_core::actor::IdentityCommand::CreateAccount {
+                    profile,
+                    relays,
+                    initial_follows,
+                    mls: false,
+                    make_active: true,
+                },
+            ));
     }
     // No nmp handle (test mode) → test injects IdentityChanged directly.
 }

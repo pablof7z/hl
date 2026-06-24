@@ -413,7 +413,7 @@ struct BookPicker: View {
     }
 
     private func beginResolve(_ isbn: String) {
-        if let existing = appStore.safeCore.findExistingBookForIsbn(isbn, recents: recents) {
+        if let existing = findExistingBookForIsbn(isbn: isbn, records: recents) {
             selection = .existing(existing)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             dismiss()
@@ -617,7 +617,7 @@ private struct ISBNPreviewSheet: View {
     private func commit() {
         let projection = manualProjection
         guard projection.canUse else { return }
-        let outcome = appStore.safeCore.buildEditedBookPreview(
+        let outcome = buildEditedBookPreview(
             isbn: isbn,
             basePreview: preview,
             title: projection.title,

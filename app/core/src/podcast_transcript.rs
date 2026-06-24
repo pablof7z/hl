@@ -422,6 +422,7 @@ pub fn clip_highlight_draft(
     }
 }
 
+#[uniffi::export]
 pub fn clip_composer_projection(input: PodcastClipComposerInput) -> PodcastClipComposerProjection {
     let matching_segments = matching_clip_segments(
         &input.segments,
@@ -523,6 +524,7 @@ pub fn clip_composer_highlight_draft(
     }
 }
 
+#[uniffi::export]
 pub fn listening_projection(input: PodcastListeningProjectionInput) -> PodcastListeningProjection {
     let clip_count = input.clips.len() as u64;
     let now_playing = input

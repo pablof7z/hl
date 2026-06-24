@@ -102,7 +102,9 @@ pub(crate) fn apply_own_profile(state: &mut AppState, payload: &[u8]) {
 /// D6: decode errors are silent no-ops.
 pub(crate) fn apply_refs_profile(state: &mut AppState, payload: &[u8]) {
     use nmp_core::refs::{decode_ref_row_delta_batch, RefRowState};
-    let Ok(batch) = decode_ref_row_delta_batch(payload) else { return; };
+    let Ok(batch) = decode_ref_row_delta_batch(payload) else {
+        return;
+    };
     for row in &batch.rows {
         match row.state {
             RefRowState::Changed => {

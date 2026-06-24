@@ -113,34 +113,6 @@ actor SafeHighlighterCore {
         core.projectPodcastTranscriptLoadApply(input: input)
     }
 
-    nonisolated func getPodcastClipComposerProjection(
-        segments: [TranscriptSegment],
-        transcriptAvailable: Bool,
-        clipStartSeconds: Double,
-        clipEndSeconds: Double,
-        durationSeconds: Double,
-        selectedGroupId: String?,
-        joinedCommunities: [CommunitySummary]
-    ) -> PodcastClipComposerProjection {
-        core.getPodcastClipComposerProjection(
-            input: PodcastClipComposerInput(
-                segments: segments,
-                transcriptAvailable: transcriptAvailable,
-                clipStartSeconds: clipStartSeconds,
-                clipEndSeconds: clipEndSeconds,
-                durationSeconds: durationSeconds,
-                selectedGroupId: selectedGroupId,
-                joinedCommunities: joinedCommunities
-            )
-        )
-    }
-
-    nonisolated func getPodcastListeningProjection(
-        input: PodcastListeningProjectionInput
-    ) -> PodcastListeningProjection {
-        core.getPodcastListeningProjection(input: input)
-    }
-
     nonisolated func getPodcastNowPlayingProjection(
         input: PodcastNowPlayingProjectionInput
     ) -> PodcastNowPlayingProjection {
@@ -487,13 +459,6 @@ actor SafeHighlighterCore {
         core.projectIsbnPreviewLookupApply(input: input)
     }
 
-    nonisolated func findExistingBookForIsbn(
-        _ isbn: String,
-        recents: [ArtifactRecord]
-    ) -> ArtifactRecord? {
-        core.findExistingBookForIsbn(isbn: isbn, recents: recents)
-    }
-
     nonisolated func reconstructOcrMarkdown(_ lines: [OCRLine]) -> String {
         core.reconstructOcrMarkdown(lines: lines)
     }
@@ -534,20 +499,6 @@ actor SafeHighlighterCore {
 
     nonisolated func ocrAltText(from markdown: String) -> String {
         core.ocrAltText(markdown: markdown)
-    }
-
-    nonisolated func buildEditedBookPreview(
-        isbn: String,
-        basePreview: ArtifactPreview?,
-        title: String,
-        author: String
-    ) -> EditedBookPreviewProjection {
-        core.buildEditedBookPreview(
-            isbn: isbn,
-            basePreview: basePreview,
-            title: title,
-            author: author
-        )
     }
 
     nonisolated func projectCaptureBookDisplay(

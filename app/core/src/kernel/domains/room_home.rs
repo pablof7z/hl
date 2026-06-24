@@ -2552,11 +2552,7 @@ mod tests {
                 1,
                 "P1: artifact count must match"
             );
-            assert_eq!(
-                kernel.highlights.len(),
-                1,
-                "P1: highlight count must match"
-            );
+            assert_eq!(kernel.highlights.len(), 1, "P1: highlight count must match");
             assert_eq!(
                 kernel.highlights_by_reference.len(),
                 1,
@@ -2779,16 +2775,8 @@ mod tests {
                 panic!("expected RoomHome snapshot");
             };
 
-            assert_eq!(
-                kernel.artifact_library.len(),
-                1,
-                "P4: artifact count"
-            );
-            assert_eq!(
-                kernel.highlights.len(),
-                1,
-                "P4: highlight count"
-            );
+            assert_eq!(kernel.artifact_library.len(), 1, "P4: artifact count");
+            assert_eq!(kernel.highlights.len(), 1, "P4: highlight count");
             assert_eq!(
                 kernel.highlights_by_reference.len(),
                 1,
@@ -2799,11 +2787,7 @@ mod tests {
                 1,
                 "P4: comments_by_reference count"
             );
-            assert_eq!(
-                kernel.assembled_lanes.len(),
-                1,
-                "P4: assembled lane count"
-            );
+            assert_eq!(kernel.assembled_lanes.len(), 1, "P4: assembled lane count");
             assert_eq!(
                 kernel.assembled_lanes[0].highlights.len(),
                 1,

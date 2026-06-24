@@ -57,10 +57,10 @@ use crate::kernel::domains::{
     comments,
     communities,
     discovery,
-    // ── Phase 7 entity-ref additions (append-only) ───────────────────────────
-    entities,
     // ── Phase 7 discussions additions (append-only) ──────────────────────────
     discussions,
+    // ── Phase 7 entity-ref additions (append-only) ───────────────────────────
+    entities,
     feed,
     // ── Phase 7 feedback additions (append-only) ─────────────────────────────
     feedback,
@@ -1075,9 +1075,15 @@ fn reduce_action_envelope(
         // current is_wifi flag from NWPathMonitor. Fire-and-forget (D6).
         "hl.network.apply_path" => {
             #[derive(serde::Deserialize)]
-            struct Payload { is_wifi: bool, wifi_only: bool }
+            struct Payload {
+                is_wifi: bool,
+                wifi_only: bool,
+            }
             let p = parse!(Payload);
-            vec![Effect::ApplyNetworkPath { is_wifi: p.is_wifi, wifi_only: p.wifi_only }]
+            vec![Effect::ApplyNetworkPath {
+                is_wifi: p.is_wifi,
+                wifi_only: p.wifi_only,
+            }]
         }
 
         // ── Unknown namespace ─────────────────────────────────────────────────
@@ -2263,14 +2269,30 @@ pub(crate) async fn run_effect(
 
             let mut content_map: std::collections::HashMap<&str, String> =
                 std::collections::HashMap::new();
-            if let Some(v) = display_name { content_map.insert("display_name", v); }
-            if let Some(v) = name        { content_map.insert("name", v); }
-            if let Some(v) = about       { content_map.insert("about", v); }
-            if let Some(v) = picture_url { content_map.insert("picture", v); }
-            if let Some(v) = banner_url  { content_map.insert("banner", v); }
-            if let Some(v) = website     { content_map.insert("website", v); }
-            if let Some(v) = nip05       { content_map.insert("nip05", v); }
-            if let Some(v) = lightning_address { content_map.insert("lud16", v); }
+            if let Some(v) = display_name {
+                content_map.insert("display_name", v);
+            }
+            if let Some(v) = name {
+                content_map.insert("name", v);
+            }
+            if let Some(v) = about {
+                content_map.insert("about", v);
+            }
+            if let Some(v) = picture_url {
+                content_map.insert("picture", v);
+            }
+            if let Some(v) = banner_url {
+                content_map.insert("banner", v);
+            }
+            if let Some(v) = website {
+                content_map.insert("website", v);
+            }
+            if let Some(v) = nip05 {
+                content_map.insert("nip05", v);
+            }
+            if let Some(v) = lightning_address {
+                content_map.insert("lud16", v);
+            }
 
             let content_json = match serde_json::to_string(&content_map) {
                 Ok(j) => j,
@@ -2848,7 +2870,8 @@ pub(crate) async fn actor_task(
                                 state.home_feed_interactions.cursor_id = allocated_id;
                             }
                             k if k.starts_with("hl.feed.room.") => {
-                                state.room_lanes.entry(k.to_string()).or_default().cursor_id = allocated_id;
+                                state.room_lanes.entry(k.to_string()).or_default().cursor_id =
+                                    allocated_id;
                             }
                             k if k.starts_with(room_home::ROOM_HIGHLIGHT_FEED_KEY_PREFIX) => {
                                 state

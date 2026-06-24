@@ -28,7 +28,9 @@ const CONSUMER_ID_PREFIX: &str = "hl.entity.";
 pub(crate) fn apply_refs_event(state: &mut AppState, payload: &[u8]) {
     use nmp_core::refs::{decode_ref_row_delta_batch, RefRowState};
     use nmp_core::typed_projections::decode_claimed_events;
-    let Ok(batch) = decode_ref_row_delta_batch(payload) else { return; };
+    let Ok(batch) = decode_ref_row_delta_batch(payload) else {
+        return;
+    };
     for row in &batch.rows {
         match row.state {
             RefRowState::Changed => {
@@ -82,9 +84,13 @@ pub(crate) fn lifecycle_effects_for_view_close(id: &crate::kernel::view::ViewId)
 /// Run `Effect::ResolveEntityRef` — call `nmp_app_resolve_ref(namespace=1, ...)`.
 pub(crate) fn run_effect_resolve_entity_ref(key: String, nmp: Option<&NmpHandle>) {
     let Some(handle) = nmp else { return };
-    let Ok(key_c) = CString::new(key.as_str()) else { return; };
+    let Ok(key_c) = CString::new(key.as_str()) else {
+        return;
+    };
     let consumer_id = format!("{}{}", CONSUMER_ID_PREFIX, key);
-    let Ok(consumer_c) = CString::new(consumer_id) else { return; };
+    let Ok(consumer_c) = CString::new(consumer_id) else {
+        return;
+    };
     nmp_app_resolve_ref(
         handle.ptr.as_ptr(),
         EVENT_NAMESPACE,
@@ -98,9 +104,13 @@ pub(crate) fn run_effect_resolve_entity_ref(key: String, nmp: Option<&NmpHandle>
 /// Run `Effect::ReleaseEntityRef` — call `nmp_app_release_ref(namespace=1, ...)`.
 pub(crate) fn run_effect_release_entity_ref(key: String, nmp: Option<&NmpHandle>) {
     let Some(handle) = nmp else { return };
-    let Ok(key_c) = CString::new(key.as_str()) else { return; };
+    let Ok(key_c) = CString::new(key.as_str()) else {
+        return;
+    };
     let consumer_id = format!("{}{}", CONSUMER_ID_PREFIX, key);
-    let Ok(consumer_c) = CString::new(consumer_id) else { return; };
+    let Ok(consumer_c) = CString::new(consumer_id) else {
+        return;
+    };
     nmp_app_release_ref(
         handle.ptr.as_ptr(),
         EVENT_NAMESPACE,
@@ -124,12 +134,7 @@ pub fn tokenize_nostr_content(content: String) -> String {
     };
     let tags_c = c"[]";
     unsafe {
-        let raw = nmp_ffi::nmp_content_tokenize_text(
-            content_c.as_ptr(),
-            tags_c.as_ptr(),
-            0,
-            1,
-        );
+        let raw = nmp_ffi::nmp_content_tokenize_text(content_c.as_ptr(), tags_c.as_ptr(), 0, 1);
         if raw.is_null() {
             return r#"{"ok":false,"error":"null result"}"#.to_string();
         }

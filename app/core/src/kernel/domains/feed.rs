@@ -333,14 +333,20 @@ pub(crate) fn run_effect_register_feed_cursor(
         let guard = match slot.lock() {
             Ok(g) => g,
             Err(_) => {
-                tracing::warn!(?key, "RegisterFeedCursor: cursor registry lock poisoned (D6)");
+                tracing::warn!(
+                    ?key,
+                    "RegisterFeedCursor: cursor registry lock poisoned (D6)"
+                );
                 return 0;
             }
         };
         let registry_arc = match guard.as_ref() {
             Some(r) => r.clone(),
             None => {
-                tracing::warn!(?key, "RegisterFeedCursor: cursor registry not yet published (D6)");
+                tracing::warn!(
+                    ?key,
+                    "RegisterFeedCursor: cursor registry not yet published (D6)"
+                );
                 return 0;
             }
         };
@@ -349,7 +355,10 @@ pub(crate) fn run_effect_register_feed_cursor(
         let h = match write_result {
             Ok(mut reg) => reg.alloc_handle(),
             Err(_) => {
-                tracing::warn!(?key, "RegisterFeedCursor: cursor registry write lock poisoned (D6)");
+                tracing::warn!(
+                    ?key,
+                    "RegisterFeedCursor: cursor registry write lock poisoned (D6)"
+                );
                 return 0;
             }
         };
@@ -412,7 +421,7 @@ pub(crate) fn run_effect_drain_feed(
     tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
     nmp: Option<&NmpHandle>,
 ) {
-    use nmp_ffi::pull::{nmp_mirror_pull_page, nmp_mirror_free_bytes};
+    use nmp_ffi::pull::{nmp_mirror_free_bytes, nmp_mirror_pull_page};
 
     let Some(handle) = nmp else {
         tracing::debug!(?key, "DrainFeed: no live NmpApp (test mode)");

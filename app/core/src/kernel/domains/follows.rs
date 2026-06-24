@@ -158,7 +158,10 @@ pub(crate) fn register_follow_list_projection(
     // canonical follow state lives in the shared ContactsLookup written by
     // Kind3Parser on every ingest, so no event observation is needed.
     let contacts_lookup = nmp_ref.contacts_lookup();
-    let projection = Arc::new(FollowListProjection::new(active_account_slot, contacts_lookup));
+    let projection = Arc::new(FollowListProjection::new(
+        active_account_slot,
+        contacts_lookup,
+    ));
 
     // Register the typed sidecar projection under the canonical key.
     // KEY = "nmp.follow_list"; SCHEMA_ID (in the payload) = "nmp.nip02.follow_list".

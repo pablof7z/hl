@@ -56842,6 +56842,16 @@ fileprivate func uniffiFutureContinuationCallback(handle: UInt64, pollResult: In
         print("uniffiFutureContinuationCallback invalid handle")
     }
 }
+public func buildEditedBookPreview(isbn: String, basePreview: ArtifactPreview?, title: String, author: String) -> EditedBookPreviewProjection  {
+    return try!  FfiConverterTypeEditedBookPreviewProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_build_edited_book_preview(
+        FfiConverterString.lower(isbn),
+        FfiConverterOptionTypeArtifactPreview.lower(basePreview),
+        FfiConverterString.lower(title),
+        FfiConverterString.lower(author),$0
+    )
+})
+}
 /**
  * Serialize an `ArtifactPreview` for `hl.capture.set_artifact_preview`.
  */
@@ -56859,6 +56869,28 @@ public func captureArtifactRecordJson(artifact: ArtifactRecord) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_highlighter_core_fn_func_capture_artifact_record_json(
         FfiConverterTypeArtifactRecord_lower(artifact),$0
+    )
+})
+}
+public func clipComposerProjection(input: PodcastClipComposerInput) -> PodcastClipComposerProjection  {
+    return try!  FfiConverterTypePodcastClipComposerProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_clip_composer_projection(
+        FfiConverterTypePodcastClipComposerInput_lower(input),$0
+    )
+})
+}
+public func findExistingBookForIsbn(isbn: String, records: [ArtifactRecord]) -> ArtifactRecord?  {
+    return try!  FfiConverterOptionTypeArtifactRecord.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_find_existing_book_for_isbn(
+        FfiConverterString.lower(isbn),
+        FfiConverterSequenceTypeArtifactRecord.lower(records),$0
+    )
+})
+}
+public func listeningProjection(input: PodcastListeningProjectionInput) -> PodcastListeningProjection  {
+    return try!  FfiConverterTypePodcastListeningProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_listening_projection(
+        FfiConverterTypePodcastListeningProjectionInput_lower(input),$0
     )
 })
 }
@@ -56911,10 +56943,22 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if (uniffi_highlighter_core_checksum_func_build_edited_book_preview() != 15822) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_func_capture_artifact_preview_json() != 61435) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_func_capture_artifact_record_json() != 33914) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_clip_composer_projection() != 42526) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_find_existing_book_for_isbn() != 20340) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_listening_projection() != 50032) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_func_nip65_relay_role() != 11383) {

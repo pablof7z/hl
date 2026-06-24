@@ -341,6 +341,24 @@ pub fn existing_record_for_isbn(isbn: &str, records: &[ArtifactRecord]) -> Optio
         .cloned()
 }
 
+#[uniffi::export]
+pub fn find_existing_book_for_isbn(
+    isbn: String,
+    records: Vec<ArtifactRecord>,
+) -> Option<ArtifactRecord> {
+    existing_record_for_isbn(&isbn, &records)
+}
+
+#[uniffi::export]
+pub fn build_edited_book_preview(
+    isbn: String,
+    base_preview: Option<ArtifactPreview>,
+    title: String,
+    author: String,
+) -> EditedBookPreviewProjection {
+    edited_book_preview_projection(isbn.trim(), base_preview, &title, &author)
+}
+
 async fn lookup_isbn_normalized(isbn13: &str) -> Result<ArtifactPreview, CoreError> {
     // Build the preview on a successful fetch; fall back to the minimal one
     // on any failure (404, timeout, bad JSON, etc.).

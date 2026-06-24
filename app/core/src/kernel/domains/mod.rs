@@ -8,9 +8,9 @@
 
 pub(crate) mod auth;
 pub(crate) mod bookmarks;
-pub(crate) mod dispatch_bytes;
 pub(crate) mod communities;
 pub(crate) mod discovery;
+pub(crate) mod dispatch_bytes;
 pub(crate) mod follows;
 pub(crate) mod profiles;
 pub(crate) mod projections;

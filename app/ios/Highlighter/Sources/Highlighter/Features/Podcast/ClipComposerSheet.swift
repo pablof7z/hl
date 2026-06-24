@@ -20,7 +20,7 @@ struct ClipComposerSheet: View {
     // MARK: - Computed
 
     private var composerProjection: PodcastClipComposerProjection {
-        app.safeCore.getPodcastClipComposerProjection(
+        clipComposerProjection(input: PodcastClipComposerInput(
             segments: player.transcriptSegments,
             transcriptAvailable: player.transcriptAvailability == .available,
             clipStartSeconds: startSeconds,
@@ -28,7 +28,7 @@ struct ClipComposerSheet: View {
             durationSeconds: player.duration,
             selectedGroupId: selectedGroupId,
             joinedCommunities: app.joinedCommunities
-        )
+        ))
     }
 
     private var extractedFragment: String {

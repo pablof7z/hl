@@ -23,12 +23,12 @@ use crate::groups;
 use crate::highlights;
 use crate::isbn_lookup;
 use crate::models::{
-    ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, BookRoute,
-    BookmarkSetRecord, CommentRecord, CommentScope, CommunitySummary,
-    CurrentUser, DiscussionRecord, FeedbackThreadRecord, HighlightRecord, HighlightSourceKind,
-    LoginInputAction, MutationSnapshot, NostrConnectOptions, OnboardingInterest,
-    OnboardingInterestProjection, OnboardingInterestSelection, ProfileMetadata,
-    ProfileUpdateAction, ProfileUpdateDraft, RelayDiagnostic, SubscriptionStartSnapshot,
+    ArticleRecord, ArtifactPreview, ArtifactRecord, BlossomUpload, BookRoute, BookmarkSetRecord,
+    CommentRecord, CommentScope, CommunitySummary, CurrentUser, DiscussionRecord,
+    FeedbackThreadRecord, HighlightRecord, HighlightSourceKind, LoginInputAction, MutationSnapshot,
+    NostrConnectOptions, OnboardingInterest, OnboardingInterestProjection,
+    OnboardingInterestSelection, ProfileMetadata, ProfileUpdateAction, ProfileUpdateDraft,
+    RelayDiagnostic, SubscriptionStartSnapshot,
 };
 use crate::nip46::{self, BunkerSigner};
 use crate::nostr_runtime::NostrRuntime;
@@ -3506,7 +3506,6 @@ impl HighlighterCore {
         self.runtime.sync_relay_diagnostics().await;
         crate::relays::network_settings_mutation_snapshot(Ok(()), false, "Couldn't disconnect")
     }
-
 }
 
 impl HighlighterCore {
