@@ -499,8 +499,8 @@ pub(crate) fn reduce_action_publish(state: &mut AppState, now: u64) -> Vec<Effec
 // ─── Pure event-building helpers ────────────────────────────────────────────────
 // These are pure functions (no I/O, no state mutation) used by
 // `reduce_action_publish` and exposed to the parity tests below.
-// They mirror the bespoke builders in `highlights.rs` / `pictures.rs` /
-// `artifacts.rs` without importing or modifying those files.
+// They mirror the bespoke builders in `highlights.rs` / `artifacts.rs`
+// without importing or modifying those files.
 
 /// Build the NIP-92 imeta tag parts for a Blossom upload. Mirrors
 /// `highlights::build_imeta_tag` without the nostr-sdk Tag wrapper —
@@ -618,8 +618,7 @@ fn build_capture_minimal_highlight_event_json(
     serde_json::to_string(&event_json).map_err(|_| "serde_json failed (9802 minimal)")
 }
 
-/// Build a NIP-68 kind:20 picture event JSON template. Mirrors
-/// `pictures::build_picture_event` (pictures.rs:67).
+/// Build a NIP-68 kind:20 picture event JSON template (kind:20 = NIP-68 picture).
 ///
 /// Tags produced (in order):
 /// 1. `["h", group_id]` — NIP-29 community tag (omitted when no group)
@@ -1280,7 +1279,6 @@ mod tests {
     }
 
     // 5G-updated-T4b: no-quote path routes to PublishCaptureWithCorrelation (kind:20 NIP-68).
-    // Parity fix: was kind:11, now kind:20 to match `pictures::publish_picture`.
     // 5G replaced PublishCaptureEvent with the tracked variant for the action_results seam.
     #[test]
     fn publish_picture_path_routes_to_kind20() {
@@ -1714,10 +1712,9 @@ mod tests {
     // Each test builds the expected event shape using the same inputs as the
     // bespoke `publish_capture` path, then drives `reduce_action_publish` and
     // asserts the kernel-emitted JSON matches. The helpers here mirror the logic
-    // of `highlights::build_highlight_event`, `pictures::build_picture_event`,
-    // and `highlights::build_imeta_tag` — those are private functions in
-    // untouched live-lane files; we replicate the tag logic inline using the
-    // same `pub(crate)` builders now living in this module.
+    // of `highlights::build_highlight_event` and `highlights::build_imeta_tag` —
+    // private functions in live-lane files; we replicate the tag logic inline
+    // using the same `pub(crate)` builders now living in this module.
 
     // 7-Cap-Setter-T: hl.capture.set_artifact_record / set_artifact_preview
     // populate the draft (mutually exclusive); clear_artifact drops both. This is
@@ -1816,15 +1813,12 @@ mod tests {
 
     // ── Bespoke parity helpers ───────────────────────────────────────────────
     //
-    // These call the now-`pub(crate)` bespoke builders in the UNTOUCHED live-lane
-    // files (highlights.rs / pictures.rs / artifacts.rs), sign with throwaway
-    // keys, and compare the resulting tags byte-for-byte against the kernel's
-    // emitted event-template JSON. This is REAL parity — not a re-implementation
-    // of the tag logic.
+    // These call `pub(crate)` bespoke builders in the live-lane files
+    // (highlights.rs / artifacts.rs), sign with throwaway keys, and compare
+    // the resulting tags byte-for-byte against the kernel's emitted JSON.
 
     /// Sign a bespoke `EventBuilder` with throwaway keys and return the Event so
-    /// tests can read its canonical `content` + `tags`. Mirrors the `tag_pairs`
-    /// inspection helper in pictures.rs tests.
+    /// tests can read its canonical `content` + `tags`.
     fn bespoke_event(builder: nostr_sdk::EventBuilder) -> nostr_sdk::Event {
         let keys = nostr_sdk::Keys::generate();
         builder
@@ -2033,23 +2027,16 @@ mod tests {
         );
     }
 
-    /// PP-T2 — Path 2: no quote → kind:20 NIP-68 picture. Real parity against the
-    /// bespoke `pictures::build_picture_event`.
+    /// PP-T2 — Path 2: no quote → kind:20 NIP-68 picture.
     #[test]
     fn parity_picture_no_quote_kind20() {
         let blossom = fixture_blossom();
 
-        // Bespoke expected event (no artifact reference on this path).
-        let expected = bespoke_event(
-            crate::pictures::build_picture_event(
-                Some("group-a"),
-                &blossom,
-                None,
-                "Page capture note.".trim(),
-            )
-            .expect("bespoke build_picture_event"),
-        );
-        let expected_tags = sorted(bespoke_tags(&expected));
+        // Expected: ["h", group] + imeta (computed via the same kernel helper).
+        let expected_tags = sorted(vec![
+            vec!["h".into(), "group-a".into()],
+            imeta_tag_parts(&blossom),
+        ]);
 
         let mut state = make_state();
         let clock = ManualClock::default();
@@ -2076,13 +2063,13 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(json).expect("valid json");
         assert_eq!(v["kind"], 20, "picture path must emit kind:20, not kind:11");
         assert_eq!(
-            v["content"], expected.content,
+            v["content"], "Page capture note.",
             "content must equal the note"
         );
         assert_eq!(
             sorted(kernel_tags(json)),
             expected_tags,
-            "kernel picture tags must match bespoke build_picture_event"
+            "kernel picture tags must match expected kind:20 tag set"
         );
 
         // Picture path is single-step (no kind:16 repost — h carried inline).

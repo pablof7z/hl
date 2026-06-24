@@ -24,8 +24,7 @@ pub mod models;
 pub mod nostr_runtime;
 pub mod ocr;
 pub mod onboarding;
-pub mod outbox;
-pub mod pictures;
+
 pub mod podcast_playback;
 pub mod podcast_position;
 pub mod podcast_transcript;
