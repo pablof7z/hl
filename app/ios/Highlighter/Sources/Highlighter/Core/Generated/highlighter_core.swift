@@ -23635,7 +23635,7 @@ public struct RelayDiagRow {
      */
     public var lastConnectedMs: UInt64
     /**
-     * Parsed connection state derived from nmp's `connection_tone` field.
+     * Parsed connection state derived from nmp's raw `connection` lifecycle string.
      */
     public var connectionState: RelayConnectionState
     /**
@@ -23668,7 +23668,7 @@ public struct RelayDiagRow {
          * has never connected. Swift shell formats as "Xs ago" at render time.
          */lastConnectedMs: UInt64,
         /**
-         * Parsed connection state derived from nmp's `connection_tone` field.
+         * Parsed connection state derived from nmp's raw `connection` lifecycle string.
          */connectionState: RelayConnectionState,
         /**
          * Total wire subscriptions known for this relay.
@@ -25626,32 +25626,13 @@ public struct SearchSnapshot {
      */
     public var hits: [KernelSearchHitRow]
     /**
-     * Local-scan community results from `AppState::discovered_groups` merged with
-     * `AppState::communities`. Substring-matched by name/about against the
-     * active `search_query`; filtered to public+open; sorted by lowercase name
-     * then host_relay_url then group_id; bounded at 20.
-     * Empty when the query is blank or no public+open communities match.
-     * D1: raw rows only — Swift renders all display strings and fallbacks.
+     * The most recent omnibox classification outcome (`#1865` input-intent
+     * resolver), or `None` if the field has not classified an input yet. The
+     * shell routes on this: `Navigate`/`OpenGroup`/`ResolveNip05` drive
+     * navigation, `RejectSecret` shows a safe-reject hint, `FreeText` keeps the
+     * result buckets. The shell consumes it after routing (one-shot).
      */
-    public var communities: [CommunitySearchRow]
-    /**
-     * Enriched kind:9802 highlight rows decoded from the kind:9802 entries in
-     * `hits` via the SHARED `decode_highlight_row` (same NIP-84/NIP-73 fields as
-     * the highlight feed / article-reader overlay — quote/context/artifact
-     * refs/clip/image). Preserves the `hits` order (created_at desc). Lets Swift
-     * render the Highlights search bucket without re-parsing kind:9802 tags.
-     * Empty when no kind:9802 hits are present.
-     */
-    public var highlights: [HighlightRow]
-    /**
-     * Local-scan kind:0 profile results from `AppState::profile_search_cache`.
-     * Substring-matched by name/display_name/nip05/about against `search_query`;
-     * ranked prefix-match first, then alphabetical by primary label; bounded at 20.
-     * Same algorithm as `crate::search::search_profiles` (bespoke live lane).
-     * Empty when the query is blank or no profiles match.
-     * D1: raw rows only — Swift renders all display strings.
-     */
-    public var profiles: [ProfileSearchRow]
+    public var omnibox: OmniboxOutcome?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -25661,33 +25642,14 @@ public struct SearchSnapshot {
          * Raw fields only — no "X results" count label, no formatted strings (D1).
          */hits: [KernelSearchHitRow],
         /**
-         * Local-scan community results from `AppState::discovered_groups` merged with
-         * `AppState::communities`. Substring-matched by name/about against the
-         * active `search_query`; filtered to public+open; sorted by lowercase name
-         * then host_relay_url then group_id; bounded at 20.
-         * Empty when the query is blank or no public+open communities match.
-         * D1: raw rows only — Swift renders all display strings and fallbacks.
-         */communities: [CommunitySearchRow],
-        /**
-         * Enriched kind:9802 highlight rows decoded from the kind:9802 entries in
-         * `hits` via the SHARED `decode_highlight_row` (same NIP-84/NIP-73 fields as
-         * the highlight feed / article-reader overlay — quote/context/artifact
-         * refs/clip/image). Preserves the `hits` order (created_at desc). Lets Swift
-         * render the Highlights search bucket without re-parsing kind:9802 tags.
-         * Empty when no kind:9802 hits are present.
-         */highlights: [HighlightRow],
-        /**
-         * Local-scan kind:0 profile results from `AppState::profile_search_cache`.
-         * Substring-matched by name/display_name/nip05/about against `search_query`;
-         * ranked prefix-match first, then alphabetical by primary label; bounded at 20.
-         * Same algorithm as `crate::search::search_profiles` (bespoke live lane).
-         * Empty when the query is blank or no profiles match.
-         * D1: raw rows only — Swift renders all display strings.
-         */profiles: [ProfileSearchRow]) {
+         * The most recent omnibox classification outcome (`#1865` input-intent
+         * resolver), or `None` if the field has not classified an input yet. The
+         * shell routes on this: `Navigate`/`OpenGroup`/`ResolveNip05` drive
+         * navigation, `RejectSecret` shows a safe-reject hint, `FreeText` keeps the
+         * result buckets. The shell consumes it after routing (one-shot).
+         */omnibox: OmniboxOutcome?) {
         self.hits = hits
-        self.communities = communities
-        self.highlights = highlights
-        self.profiles = profiles
+        self.omnibox = omnibox
     }
 }
 
@@ -25701,13 +25663,7 @@ extension SearchSnapshot: Equatable, Hashable {
         if lhs.hits != rhs.hits {
             return false
         }
-        if lhs.communities != rhs.communities {
-            return false
-        }
-        if lhs.highlights != rhs.highlights {
-            return false
-        }
-        if lhs.profiles != rhs.profiles {
+        if lhs.omnibox != rhs.omnibox {
             return false
         }
         return true
@@ -25715,9 +25671,7 @@ extension SearchSnapshot: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(hits)
-        hasher.combine(communities)
-        hasher.combine(highlights)
-        hasher.combine(profiles)
+        hasher.combine(omnibox)
     }
 }
 
@@ -25731,17 +25685,13 @@ public struct FfiConverterTypeSearchSnapshot: FfiConverterRustBuffer {
         return
             try SearchSnapshot(
                 hits: FfiConverterSequenceTypeKernelSearchHitRow.read(from: &buf),
-                communities: FfiConverterSequenceTypeCommunitySearchRow.read(from: &buf),
-                highlights: FfiConverterSequenceTypeHighlightRow.read(from: &buf),
-                profiles: FfiConverterSequenceTypeProfileSearchRow.read(from: &buf)
+                omnibox: FfiConverterOptionTypeOmniboxOutcome.read(from: &buf)
         )
     }
 
     public static func write(_ value: SearchSnapshot, into buf: inout [UInt8]) {
         FfiConverterSequenceTypeKernelSearchHitRow.write(value.hits, into: &buf)
-        FfiConverterSequenceTypeCommunitySearchRow.write(value.communities, into: &buf)
-        FfiConverterSequenceTypeHighlightRow.write(value.highlights, into: &buf)
-        FfiConverterSequenceTypeProfileSearchRow.write(value.profiles, into: &buf)
+        FfiConverterOptionTypeOmniboxOutcome.write(value.omnibox, into: &buf)
     }
 }
 
@@ -30485,6 +30435,179 @@ extension OcrResult: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Outcome of classifying one omnibox / paste / search input through NMP's
+ * input-intent resolver (`#1865` / `#1804`).
+ *
+ * Produced by `omnibox::classification_to_outcome` and surfaced in
+ * [`SearchSnapshot::omnibox`]. Raw protocol data only (D1): the shell formats
+ * any user-facing copy and owns the navigation routing.
+ */
+
+public enum OmniboxOutcome {
+
+    /**
+     * Free text — run the result buckets. The kernel also opened a multi-kind
+     * NIP-50 relay search (profiles + notes + articles) under the shared search
+     * session; hits stream into [`SearchSnapshot::hits`].
+     */
+    case freeText(
+        /**
+         * The trimmed query that was searched.
+         */query: String
+    )
+    /**
+     * A NIP-19/21 reference to open directly. `uri` is the canonical `nostr:`
+     * form the shell decodes and routes (profile / thread / article / group).
+     */
+    case navigate(
+        /**
+         * Canonical `nostr:`-form URI.
+         */uri: String
+    )
+    /**
+     * A NIP-05 identifier whose HTTP `.well-known/nostr.json` reverse lookup was
+     * enqueued. The resolved profile opens reactively once the claim lands.
+     */
+    case resolveNip05(
+        /**
+         * The `name@domain` identifier (SHAPE-validated; never a secret).
+         */identifier: String
+    )
+    /**
+     * A NIP-29 group reference (`host'local-id` or an `naddr` to a group).
+     */
+    case openGroup(
+        /**
+         * `wss://`-prefixed host relay URL.
+         */hostRelayUrl: String,
+        /**
+         * NIP-29 local id.
+         */localId: String
+    )
+    /**
+     * A pasted relay URL (`ws://` / `wss://`).
+     */
+    case relayUrl(
+        /**
+         * Normalized relay URL.
+         */url: String
+    )
+    /**
+     * The input was (or contained) a secret key (`nsec` / `ncryptsec`). Safe
+     * reject — the secret is NEVER carried, logged, or echoed.
+     */
+    case rejectSecret
+    /**
+     * The input matched no recognizer and is not usable as free text.
+     */
+    case noMatch
+}
+
+
+#if compiler(>=6)
+extension OmniboxOutcome: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOmniboxOutcome: FfiConverterRustBuffer {
+    typealias SwiftType = OmniboxOutcome
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> OmniboxOutcome {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .freeText(query: try FfiConverterString.read(from: &buf)
+        )
+
+        case 2: return .navigate(uri: try FfiConverterString.read(from: &buf)
+        )
+
+        case 3: return .resolveNip05(identifier: try FfiConverterString.read(from: &buf)
+        )
+
+        case 4: return .openGroup(hostRelayUrl: try FfiConverterString.read(from: &buf), localId: try FfiConverterString.read(from: &buf)
+        )
+
+        case 5: return .relayUrl(url: try FfiConverterString.read(from: &buf)
+        )
+
+        case 6: return .rejectSecret
+
+        case 7: return .noMatch
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: OmniboxOutcome, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .freeText(query):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(query, into: &buf)
+
+
+        case let .navigate(uri):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(uri, into: &buf)
+
+
+        case let .resolveNip05(identifier):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(identifier, into: &buf)
+
+
+        case let .openGroup(hostRelayUrl,localId):
+            writeInt(&buf, Int32(4))
+            FfiConverterString.write(hostRelayUrl, into: &buf)
+            FfiConverterString.write(localId, into: &buf)
+
+
+        case let .relayUrl(url):
+            writeInt(&buf, Int32(5))
+            FfiConverterString.write(url, into: &buf)
+
+
+        case .rejectSecret:
+            writeInt(&buf, Int32(6))
+
+
+        case .noMatch:
+            writeInt(&buf, Int32(7))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOmniboxOutcome_lift(_ buf: RustBuffer) throws -> OmniboxOutcome {
+    return try FfiConverterTypeOmniboxOutcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOmniboxOutcome_lower(_ value: OmniboxOutcome) -> RustBuffer {
+    return FfiConverterTypeOmniboxOutcome.lower(value)
+}
+
+
+extension OmniboxOutcome: Equatable, Hashable {}
+
+
+
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum PodcastTimelineRowKind {
 
@@ -30990,29 +31113,33 @@ extension RelativeTimeLabelStyle: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
- * Connection state of a relay as seen by the NMP kernel. Derived from
- * nmp's `connection_tone` field; represented as an enum so the Swift
- * shell can branch on a stable machine tag rather than parsing a string.
+ * Connection state of a relay as seen by the NMP kernel. Derived from nmp's
+ * RAW `connection` lifecycle string; represented as an enum so the Swift shell
+ * can branch on a stable machine tag rather than parsing a string.
  *
- * The mapping is conservative: unknown tones → `Unknown`.
+ * The mapping is conservative: unrecognised values → `Unknown`.
  */
 
 public enum RelayConnectionState {
 
     /**
-     * `"ok"` tone — relay is connected and healthy.
+     * `"connected"` — relay is connected and healthy.
      */
     case connected
     /**
-     * `"warn"` tone — relay is reconnecting or degraded.
+     * `"connecting"` / `"backing_off"` — relay is mid-handshake or retrying.
      */
     case reconnecting
     /**
-     * `"error"` tone — relay is in an error state.
+     * Reserved error state. NMP no longer emits a distinct error value in the
+     * `connection` string (error detail surfaces via `last_error`), so this is
+     * currently unreachable from `connection` alone — retained for the Swift
+     * shell's stable tag set.
      */
     case error
     /**
-     * `"muted"` or any other tone — state unknown / not yet connected.
+     * `"closed"` / `"offline"` / `"unknown"` or any other value — state
+     * unknown / not yet connected.
      */
     case unknown
 }
@@ -33985,6 +34112,30 @@ fileprivate struct FfiConverterOptionTypeNostrEntityRef: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeOmniboxOutcome: FfiConverterRustBuffer {
+    typealias SwiftType = OmniboxOutcome?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeOmniboxOutcome.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeOmniboxOutcome.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeViewSnapshot: FfiConverterRustBuffer {
     typealias SwiftType = ViewSnapshot?
 
@@ -34351,31 +34502,6 @@ fileprivate struct FfiConverterSequenceTypeCommunityRow: FfiConverterRustBuffer 
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeCommunityRow.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeCommunitySearchRow: FfiConverterRustBuffer {
-    typealias SwiftType = [CommunitySearchRow]
-
-    public static func write(_ value: [CommunitySearchRow], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeCommunitySearchRow.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [CommunitySearchRow] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [CommunitySearchRow]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeCommunitySearchRow.read(from: &buf))
         }
         return seq
     }
@@ -35034,31 +35160,6 @@ fileprivate struct FfiConverterSequenceTypePodcastTimelineRow: FfiConverterRustB
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterSequenceTypeProfileSearchRow: FfiConverterRustBuffer {
-    typealias SwiftType = [ProfileSearchRow]
-
-    public static func write(_ value: [ProfileSearchRow], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeProfileSearchRow.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [ProfileSearchRow] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [ProfileSearchRow]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeProfileSearchRow.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
 fileprivate struct FfiConverterSequenceTypeRawSharePayload: FfiConverterRustBuffer {
     typealias SwiftType = [RawSharePayload]
 
@@ -35609,9 +35710,9 @@ public func tickProjection(input: PodcastPlaybackTickInput) -> PodcastPlaybackTi
 /**
  * Tokenize Nostr event content and return a JSON-encoded `ContentTreeWire`.
  *
- * Calls `nmp_content_tokenize_text` (stateless C-ABI, no NmpApp* needed).
+ * Calls `nmp_content::tokenize` (stateless Rust function, no NmpApp* needed).
  * Returns `{"ok":true,"tree":{...}}` on success or `{"ok":false,"error":"..."}` on failure.
- * `content` is the raw event content; mode=0 (plain text), kind=1 (note).
+ * `content` is the raw event content; mode=Plain (kind:1 note).
  */
 public func tokenizeNostrContent(content: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
@@ -35706,7 +35807,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_func_tick_projection() != 42496) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_func_tokenize_nostr_content() != 48981) {
+    if (uniffi_highlighter_core_checksum_func_tokenize_nostr_content() != 7313) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_func_transcript_load_apply_projection() != 7745) {
