@@ -863,10 +863,6 @@ actor SafeHighlighterCore {
         core.standaloneNostrEntity(content: content)
     }
 
-    nonisolated func extractNostrEventRefs(_ content: String) -> [NostrEntityRef] {
-        core.extractNostrEventRefs(content: content)
-    }
-
     /// Project the public highlight share URL. Relay hints and route format
     /// are Rust-owned policy, not native view input.
     func getHighlightShareUrlSnapshot(

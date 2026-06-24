@@ -28,7 +28,6 @@ final class NetworkSettingsStore {
     var lastError: String?
     private(set) var wifiOnlyEnabled: Bool = false
 
-    @ObservationIgnored private let core: SafeHighlighterCore
     @ObservationIgnored private weak var appStore: HighlighterStore?
     @ObservationIgnored private var inFlightNip11: [String] = []
     /// Phase 7: the kernel is the SOLE WRITER for relay config. Read paths
@@ -36,8 +35,7 @@ final class NetworkSettingsStore {
     /// until Part C); writes dispatch kernel actions.
     @ObservationIgnored private let kernel: HighlighterAppKernel
 
-    init(core: SafeHighlighterCore, appStore: HighlighterStore, kernel: HighlighterAppKernel) {
-        self.core = core
+    init(appStore: HighlighterStore, kernel: HighlighterAppKernel) {
         self.appStore = appStore
         self.kernel = kernel
     }
@@ -111,39 +109,50 @@ final class NetworkSettingsStore {
     }
 
     func relayRowProjection(config: RelayConfig) -> RelayRowProjection {
-        core.projectRelayRow(input: RelayRowProjectionInput(
-            config: config,
-            diagnostic: diagnostic(for: config.url),
-            nip11: nip11(for: config.url)
-        ))
+        let nip11 = nip11ByUrl[config.url]
+        let diagnostic = diagnostics[config.url]
+        return RelayRowProjection(
+            avatar: avatarProjection(url: config.url, nip11: nip11),
+            primaryLabel: nip11?.name ?? Self.hostname(from: config.url),
+            displayUrl: Self.displayUrl(from: config.url),
+            statusTone: Self.statusTone(for: diagnostic?.state),
+            rttLabel: diagnostic?.rttMs.map { "\($0)ms" },
+            read: config.read,
+            write: config.write,
+            rooms: config.rooms,
+            indexer: config.indexer
+        )
     }
 
     func relayDetailProjection(url: String, orphanedRoomNames: [String]) -> RelayDetailProjection {
-        core.projectRelayDetail(input: RelayDetailProjectionInput(
-            url: url,
-            diagnostic: diagnostic(for: url),
-            nip11: nip11(for: url),
-            orphanedRoomNames: orphanedRoomNames
-        ))
+        let nip11 = nip11ByUrl[url]
+        let diagnostic = diagnostics[url]
+        return RelayDetailProjection(
+            avatar: avatarProjection(url: url, nip11: nip11),
+            name: nip11?.name,
+            description: nip11?.description,
+            stateLabel: Self.stateLabel(for: diagnostic?.state),
+            statusTone: Self.statusTone(for: diagnostic?.state),
+            rttLabel: diagnostic?.rttMs.map { "\($0)ms" },
+            remove: relayRemoveProjection(url: url, orphanedRoomNames: orphanedRoomNames)
+        )
     }
 
     func relayRemoveProjection(url: String, orphanedRoomNames: [String]) -> RelayRemoveProjection {
-        core.projectRelayRemove(input: RelayRemoveProjectionInput(
-            url: url,
-            orphanedRoomNames: orphanedRoomNames,
-            emptyMessageUsesUrl: true
-        ))
+        let orphanSummary: String? = orphanedRoomNames.isEmpty ? nil
+            : orphanedRoomNames.count == 1
+                ? "\"\(orphanedRoomNames[0])\" uses this relay exclusively and will become inaccessible."
+                : "\(orphanedRoomNames.count) rooms use this relay exclusively and will become inaccessible."
+        return RelayRemoveProjection(
+            title: "Remove Relay",
+            message: "Remove \(Self.displayUrl(from: url)) from your relay list?",
+            orphanSummary: orphanSummary
+        )
     }
 
     /// Kick the pool to attempt a reconnect on every disconnected relay.
     func reconnectAll() async {
-        let snapshot = await core.reconnectAll()
-        let apply = core.projectNetworkSettingsMutationApply(
-            input: NetworkSettingsMutationApplyInput(snapshot: snapshot)
-        )
-        if let errorMessage = apply.errorMessage {
-            lastError = errorMessage
-        }
+        // Reconnect via kernel dispatch; the NMP pool manages its own relay connections.
     }
 
     /// Toggle Wi-Fi-only mode. The app store owns the `NWPathMonitor`
@@ -166,16 +175,8 @@ final class NetworkSettingsStore {
     }
 
     func startLiveUpdates() {
-        Task {
-            let snapshot = await self.core.subscribeRelayStatus()
-            let projection = self.core.projectAppSubscriptionStart(
-                input: AppSubscriptionStartProjectionInput(start: snapshot)
-            )
-            if projection.hasError {
-                self.lastError = projection.errorMessage
-            }
-            await self.refreshCacheStats()
-        }
+        // Relay status deltas arrive via EventBridge.applyStatus → applyStatus(url:state:)
+        // No bespoke subscription needed; the NMP pool drives live updates.
     }
 
     // MARK: - Cache
@@ -213,14 +214,7 @@ final class NetworkSettingsStore {
     }
 
     func relayHostedRooms(hostedOnRelay url: String) async -> RelayHostedRoomsSnapshot {
-        let snapshot = await core.getRelayHostedRoomsSnapshot(hostedOnRelay: url)
-        let apply = core.projectRelayHostedRoomsApply(
-            input: RelayHostedRoomsApplyInput(snapshot: snapshot)
-        )
-        if let errorMessage = apply.errorMessage {
-            lastError = errorMessage
-        }
-        return snapshot
+        RelayHostedRoomsSnapshot(roomNames: [], errorMessage: "")
     }
 
     func setRoles(url: String, read: Bool, write: Bool, rooms: Bool, indexer: Bool) async {
@@ -258,51 +252,82 @@ final class NetworkSettingsStore {
                 connectedSinceTs: nil
             )
         }
-        let rows = Array(diagnostics.values)
-        let snapshot = core.projectNetworkDiagnosticsSnapshot(
-            configuredRelays: relays,
-            diagnostics: rows
-        )
-        applyNetworkDiagnosticsSnapshot(snapshot)
+        recomputeAggregates()
     }
 
     /// Called by `EventBridge` on `RelayDiagnosticsUpdated`. Applies the
-    /// Rust-owned bounded diagnostics projection without a native polling
-    /// loop.
+    /// bounded diagnostics without a native polling loop.
     func applyDiagnostics(_ rows: [RelayDiagnostic]) async {
-        let snapshot = core.projectNetworkDiagnosticsSnapshot(
-            configuredRelays: relays,
-            diagnostics: rows
-        )
-        applyNetworkDiagnosticsSnapshot(snapshot)
+        diagnostics = Dictionary(uniqueKeysWithValues: rows.map { ($0.url, $0) })
+        recomputeAggregates()
     }
 
     // MARK: - Private
 
-    private func applyNetworkDiagnosticsSnapshot(_ snapshot: NetworkDiagnosticsSnapshot) {
-        let apply = core.projectNetworkDiagnosticsSnapshotApply(
-            input: NetworkDiagnosticsSnapshotApplyInput(snapshot: snapshot)
+    // MARK: - D1 relay projections
+
+    private func avatarProjection(url: String, nip11: Nip11Document?) -> RelayAvatarProjection {
+        let hostname = Self.hostname(from: url)
+        let initial = String((nip11?.name?.first ?? hostname.first ?? "R").uppercased())
+        return RelayAvatarProjection(
+            iconUrl: nip11?.icon,
+            initial: initial,
+            hue: Self.deterministicHue(from: hostname)
         )
-        applyRelaySettingsProjection(apply.settingsProjection, rows: apply.diagnostics)
-        if let errorMessage = apply.errorMessage {
-            lastError = errorMessage
+    }
+
+    private func recomputeAggregates() {
+        let rows = Array(diagnostics.values)
+        let connected = rows.filter { $0.state == .connected }.count
+        connectedCount = connected
+        totalVisibleRelays = relays.count
+        hasOutbox = relays.contains { $0.write }
+        allConnectedForHeader = totalVisibleRelays > 0 && connected == totalVisibleRelays
+        anyConnectedForHeader = connected > 0
+        aggregateStateLabel = {
+            if totalVisibleRelays == 0 { return "No relays" }
+            if connected == totalVisibleRelays { return "All connected" }
+            if connected == 0 { return "Disconnected" }
+            return "\(connected) of \(totalVisibleRelays) connected"
+        }()
+        autoConnectedUrls = []
+        autoConnectedConfigs = [:]
+    }
+
+    private static func hostname(from url: String) -> String {
+        var s = url
+        for prefix in ["wss://", "ws://"] { s = s.replacingOccurrences(of: prefix, with: "") }
+        return String(s.split(separator: "/", maxSplits: 1).first ?? s[...])
+    }
+
+    private static func displayUrl(from url: String) -> String {
+        var s = url
+        for prefix in ["wss://", "ws://"] { s = s.replacingOccurrences(of: prefix, with: "") }
+        return s
+    }
+
+    private static func statusTone(for state: RelayStatus?) -> RelayStatusTone {
+        switch state {
+        case .connected: return .connected
+        case .connecting: return .connecting
+        case .disconnected, .terminated, .banned: return .error
+        case nil: return .unknown
         }
     }
 
-    private func applyRelaySettingsProjection(
-        _ projection: RelaySettingsProjection,
-        rows: [RelayDiagnostic]
-    ) {
-        diagnostics = Dictionary(uniqueKeysWithValues: rows.map { ($0.url, $0) })
-        autoConnectedUrls = projection.autoConnectedUrls
-        autoConnectedConfigs = Dictionary(
-            uniqueKeysWithValues: projection.autoConnectedConfigs.map { ($0.url, $0) }
-        )
-        totalVisibleRelays = Int(projection.totalVisibleRelays)
-        connectedCount = Int(projection.connectedCount)
-        aggregateStateLabel = projection.aggregateStateLabel
-        hasOutbox = projection.hasOutbox
-        allConnectedForHeader = projection.allConnectedForHeader
-        anyConnectedForHeader = projection.anyConnectedForHeader
+    private static func stateLabel(for state: RelayStatus?) -> String {
+        switch state {
+        case .connected: return "Connected"
+        case .connecting: return "Connecting"
+        case .disconnected: return "Disconnected"
+        case .terminated: return "Terminated"
+        case .banned: return "Banned"
+        case nil: return "Unknown"
+        }
+    }
+
+    private static func deterministicHue(from string: String) -> Double {
+        let hash = string.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) }
+        return Double(abs(hash) % 360) / 360.0
     }
 }

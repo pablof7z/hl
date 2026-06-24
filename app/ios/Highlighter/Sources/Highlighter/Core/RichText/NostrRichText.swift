@@ -119,20 +119,6 @@ struct NostrRichText: View {
         return blocks
     }
 
-    /// Pull every `nostr:` event-reference entity (`note1…`, `nevent1…`,
-    /// `naddr1…`) out of `content`, deduped by reference key, in the
-    /// order they first appeared. Profile mentions (`npub1…`,
-    /// `nprofile1…`) are excluded — those render inline via the main
-    /// `body`. Used by the article reader to render a "Referenced"
-    /// section after the article body without doing a full mid-stream
-    /// markdown refactor.
-    static func extractEventRefs(
-        from content: String,
-        using core: HighlighterCore
-    ) -> [NostrEntityRef] {
-        core.extractNostrEventRefs(content: content)
-    }
-
     // MARK: - Run / Block models
 
     private enum Run {
