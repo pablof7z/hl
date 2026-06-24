@@ -42,11 +42,12 @@
 //! Both are synchronous and non-blocking (FlatBuffers decode only — no I/O). D6:
 //! decode errors leave `AppState` fields unchanged (silent no-op).
 
-use std::collections::HashMap;
 use std::ffi::CString;
 use std::os::raw::{c_char, c_int};
 
-use nmp_core::typed_projections::{decode_claimed_profiles, decode_profile, ProfileCardModel};
+use nmp_core::typed_projections::decode_profile;
+#[cfg(test)]
+use nmp_core::typed_projections::ProfileCardModel;
 use nmp_ffi::NmpApp;
 
 use crate::kernel::actor::NmpHandle;
@@ -112,28 +113,6 @@ pub(crate) fn apply_own_profile(state: &mut AppState, payload: &[u8]) {
 /// `AppState::claimed_profiles`. Each entry is a `(pubkey, ProfileCardModel)`
 /// pair from the flattened BTreeMap.
 ///
-/// Called from `projections::dispatch_typed_frame` when
-/// `schema_id == "claimed_profiles"`. The snapshot reflects every profile that
-/// has been claimed via `ClaimProfile` and not yet released.
-///
-/// D6: any decode error leaves `AppState::claimed_profiles` unchanged.
-pub(crate) fn apply_claimed_profiles(state: &mut AppState, payload: &[u8]) {
-    match decode_claimed_profiles(payload) {
-        Ok(model) => {
-            state.claimed_profiles = model
-                .entries
-                .into_iter()
-                .collect::<HashMap<String, ProfileCardModel>>();
-        }
-        Err(e) => {
-            tracing::trace!(
-                error = %e,
-                "profiles::apply_claimed_profiles: decode error — claimed_profiles unchanged (D6)"
-            );
-        }
-    }
-}
-
 // ─── WRITE side: view-lifecycle helpers ─────────────────────────────────────
 
 /// Pure function called by the actor loop when a view is opened.
@@ -535,8 +514,7 @@ mod tests {
 
     // 3D-T5: malformed_profile_frame_no_ops
     //
-    // apply_own_profile and apply_claimed_profiles with garbage bytes must not
-    // panic or corrupt AppState (D6).
+    // apply_own_profile with garbage bytes must not panic or corrupt AppState (D6).
     #[test]
     fn malformed_profile_frame_no_ops() {
         let mut state = make_state();
@@ -549,16 +527,6 @@ mod tests {
         assert!(
             state.own_profile.is_some(),
             "malformed payload must leave own_profile unchanged (D6)"
-        );
-        // Seed claimed_profiles.
-        state.claimed_profiles.insert(
-            "bbbb".to_string(),
-            make_profile_card("bbbb000000000000000000000000000000000000000000000000000000000001"),
-        );
-        apply_claimed_profiles(&mut state, b"NOT A VALID FLATBUFFER");
-        assert!(
-            !state.claimed_profiles.is_empty(),
-            "malformed payload must leave claimed_profiles unchanged (D6)"
         );
     }
 

@@ -44,7 +44,6 @@ use std::ffi::CString;
 use std::os::raw::c_char;
 use std::sync::{Arc, Mutex};
 
-use nmp_core::KernelEventObserver;
 use nmp_ffi::NmpApp;
 use nmp_nip02::projection::FollowListProjection;
 use nmp_nip02::wire::typed_fb::decode_follow_list;
@@ -197,17 +196,12 @@ pub(crate) fn register_follow_list_projection(
     nmp_ref: &NmpApp,
     active_account_slot: Arc<Mutex<Option<String>>>,
 ) {
-    let projection = Arc::new(FollowListProjection::new(active_account_slot));
-
-    let observer_id =
-        nmp_ref.register_event_observer(Arc::clone(&projection) as Arc<dyn KernelEventObserver>);
-    if observer_id.0 == 0 {
-        // Observer slot is full or poisoned — skip projection registration.
-        tracing::warn!(
-            "follows::register_follow_list_projection: event-observer registration failed (D6)"
-        );
-        return;
-    }
+    // FollowListProjection is now a pure read-model over ContactsLookup (NMP
+    // ADR-0063 Lane H). It no longer implements KernelEventObserver — the
+    // canonical follow state lives in the shared ContactsLookup written by
+    // Kind3Parser on every ingest, so no event observation is needed.
+    let contacts_lookup = nmp_ref.contacts_lookup();
+    let projection = Arc::new(FollowListProjection::new(active_account_slot, contacts_lookup));
 
     // Register the typed sidecar projection under the canonical key.
     // KEY = "nmp.follow_list"; SCHEMA_ID (in the payload) = "nmp.nip02.follow_list".

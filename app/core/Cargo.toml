@@ -22,28 +22,28 @@ nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "fc
 # NMP tracks the master branch via GIT deps (NOT local path deps) so hl is
 # decoupled from the local monorepo checkout. `cargo update` refreshes Cargo.lock
 # to the current master tip; a rebuild then picks up the latest NMP automatically.
-nmp-core = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e" }
+nmp-core = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
 # nmp-store: EventStore trait (scan_by_kind_time / query) over the kernel-owned
 # event store. nmp-core re-exports it only via a `pub(crate)` facade (#1608), so
 # the trait methods must be reached by depending on the standalone crate directly
 # (nmp's own guidance). Pinned to the SAME rev as nmp-core. Default features —
 # the kind:0 scan runs against the already-built store; no LMDB backend needed.
-nmp-store = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e" }
-nmp-planner = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e" }
-nmp-ffi = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e", features = ["signer-broker", "external-signer"] }
-nmp-defaults = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e" }
-nmp-signers = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e" }
-nmp-nip11 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e" }
-nmp-nip02 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e" }
-nmp-nip25 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e" }
-nmp-nip29 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e" }
-nmp-nip22 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e" }
-nmp-nip50 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e" }
-nmp-nip51 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e" }
-nmp-nip78 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e" }
-nmp-blossom = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e" }
-nmp-content = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e" }
-nmp-kinds = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d16aea608ea1184f695348b878514ebec1c3f23e" }
+nmp-store = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-planner = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-ffi = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master", features = ["signer-broker", "external-signer"] }
+nmp-defaults = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-signers = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-nip11 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-nip02 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-nip25 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-nip29 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-nip22 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-nip50 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-nip51 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-nip78 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-blossom = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-content = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+nmp-kinds = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 futures = "0.3"

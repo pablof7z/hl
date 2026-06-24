@@ -569,14 +569,14 @@ pub(crate) fn run_effect_publish_set_event(
 
     let _ = nmp_ref
         .actor_sender()
-        .send(nmp_core::ActorCommand::PublishRawEvent {
+        .send(nmp_core::actor::ActorCommand::Publish(nmp_core::actor::PublishCommand::RawEvent {
             kind: template.kind,
             content: template.content,
             tags: template.tags,
             target: nmp_core::publish::PublishTarget::Auto,
             signer_pubkey: None,
             correlation_id: None,
-        });
+        }));
 }
 
 // ── View-scoped interest lifecycle (#1653 BLOCKING #1 + HIGH #7) ─────────────
@@ -730,9 +730,9 @@ pub(crate) fn run_effect_withdraw_interest(nmp: Option<&crate::kernel::actor::Nm
     let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
     let _ = nmp_ref
         .actor_sender()
-        .send(nmp_core::ActorCommand::WithdrawInterest(InterestId(
+        .send(nmp_core::actor::ActorCommand::Interests(nmp_core::actor::InterestsCommand::WithdrawInterest(InterestId(
             BOOKMARK_SETS_INTEREST_ID,
-        )));
+        ))));
 }
 
 // ── Projection registration ───────────────────────────────────────────────────

@@ -584,14 +584,14 @@ pub(crate) fn run_effect_publish_capture_with_correlation(
     let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
     let _ = nmp_ref
         .actor_sender()
-        .send(nmp_core::ActorCommand::PublishRawEvent {
+        .send(nmp_core::actor::ActorCommand::Publish(nmp_core::actor::PublishCommand::RawEvent {
             kind: template.kind,
             content: template.content,
             tags: template.tags,
             target: nmp_core::publish::PublishTarget::Auto,
             signer_pubkey: None,
             correlation_id: Some(correlation_id),
-        });
+        }));
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────

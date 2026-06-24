@@ -2250,14 +2250,16 @@ pub(crate) async fn run_effect(
 
             let _ = nmp_ref
                 .actor_sender()
-                .send(nmp_core::ActorCommand::PublishRawEvent {
-                    kind: 0,
-                    content: content_json,
-                    tags: vec![],
-                    target: nmp_core::publish::PublishTarget::Auto,
-                    signer_pubkey: None,
-                    correlation_id: None,
-                });
+                .send(nmp_core::actor::ActorCommand::Publish(
+                    nmp_core::actor::PublishCommand::RawEvent {
+                        kind: 0,
+                        content: content_json,
+                        tags: vec![],
+                        target: nmp_core::publish::PublishTarget::Auto,
+                        signer_pubkey: None,
+                        correlation_id: None,
+                    },
+                ));
         }
 
         Effect::ApplyNetworkPath { is_wifi, wifi_only } => {
@@ -2788,47 +2790,47 @@ pub(crate) async fn actor_task(
                 // ── Phase 4F inline effect handlers ──────────────────────────
                 Effect::RegisterFeedCursor {
                     key,
-                    cursor_id,
+                    cursor_id: _minted_id, // ignored — kernel allocates id
                     scope,
                 } => {
-                    // Store cursor_id in the appropriate FeedState so DrainFeed
-                    // and ReleaseFeedCursor can look it up without an actor
-                    // round-trip. Then register with the kernel.
-                    let id = *cursor_id;
+                    // NMP master: cursor ids are allocated by the kernel registry
+                    // (PullCursorRegistry::alloc_handle). run_effect_register_feed_cursor
+                    // returns the kernel-allocated id which we then store in FeedState.
                     let key_clone = key.clone();
                     let after_seq = feed_state_after_seq(&state, key);
-                    match key.as_str() {
-                        "hl.feed.articles" => state.article_feed.cursor_id = id,
-                        "hl.feed.highlights" => state.highlight_feed.cursor_id = id,
-                        home_feed::HOME_INTERACTIONS_FEED_KEY => {
-                            state.home_feed_interactions.cursor_id = id;
-                        }
-                        k if k.starts_with("hl.feed.room.") => {
-                            state.room_lanes.entry(k.to_string()).or_default().cursor_id = id;
-                        }
-                        k if k.starts_with(room_home::ROOM_HIGHLIGHT_FEED_KEY_PREFIX) => {
-                            state
-                                .room_highlight_feeds
-                                .entry(k.to_string())
-                                .or_default()
-                                .cursor_id = id;
-                        }
-                        k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => {
-                            state
-                                .article_highlight_feeds
-                                .entry(k.to_string())
-                                .or_default()
-                                .cursor_id = id;
-                        }
-                        _ => {}
-                    }
-                    feed::run_effect_register_feed_cursor(
+                    let allocated_id = feed::run_effect_register_feed_cursor(
                         key_clone,
-                        id,
                         scope.clone(),
                         after_seq,
                         nmp_handle.as_ref(),
                     );
+                    if allocated_id != 0 {
+                        match key.as_str() {
+                            "hl.feed.articles" => state.article_feed.cursor_id = allocated_id,
+                            "hl.feed.highlights" => state.highlight_feed.cursor_id = allocated_id,
+                            home_feed::HOME_INTERACTIONS_FEED_KEY => {
+                                state.home_feed_interactions.cursor_id = allocated_id;
+                            }
+                            k if k.starts_with("hl.feed.room.") => {
+                                state.room_lanes.entry(k.to_string()).or_default().cursor_id = allocated_id;
+                            }
+                            k if k.starts_with(room_home::ROOM_HIGHLIGHT_FEED_KEY_PREFIX) => {
+                                state
+                                    .room_highlight_feeds
+                                    .entry(k.to_string())
+                                    .or_default()
+                                    .cursor_id = allocated_id;
+                            }
+                            k if k.starts_with(articles::ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX) => {
+                                state
+                                    .article_highlight_feeds
+                                    .entry(k.to_string())
+                                    .or_default()
+                                    .cursor_id = allocated_id;
+                            }
+                            _ => {}
+                        }
+                    }
                     continue;
                 }
                 Effect::DrainFeed { key } => {

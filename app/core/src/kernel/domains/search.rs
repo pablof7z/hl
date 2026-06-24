@@ -144,7 +144,8 @@ impl SearchObserver {
 impl KernelEventObserver for SearchObserver {
     fn on_kernel_event(&self, event: &NmpKernelEvent) {
         if let Ok(mut guard) = self.inner.lock() {
-            guard.ingest_cache_event(event);
+            let relay_url = event.relay_provenance.first().cloned().unwrap_or_default();
+            guard.ingest_relay_event(event, relay_url);
         }
         // Poisoned lock: D6 silent no-op.
     }
