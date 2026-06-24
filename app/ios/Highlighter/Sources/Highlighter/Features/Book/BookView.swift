@@ -10,7 +10,13 @@ struct BookView: View {
     @State private var descriptionExpanded = false
 
     private var bookRoute: BookRoute? {
-        loadedRoute ?? app.core.getBookRoute(catalogId: catalogId)
+        if let loaded = loadedRoute { return loaded }
+        // D1: mirrors highlights::book_route_for_catalog + book_highlight_reference
+        let trimmed = catalogId.trimmingCharacters(in: .whitespaces)
+        let isbnPart = (trimmed.lowercased().hasPrefix("isbn:") ? String(trimmed.dropFirst(5)) : trimmed)
+            .trimmingCharacters(in: .whitespaces)
+        guard !isbnPart.isEmpty else { return nil }
+        return BookRoute(catalogId: "isbn:\(isbnPart)", isbn: isbnPart)
     }
 
     private var preview: ArtifactPreview? {
