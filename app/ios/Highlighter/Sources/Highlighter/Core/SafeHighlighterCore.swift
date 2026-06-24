@@ -851,10 +851,6 @@ actor SafeHighlighterCore {
         core.projectNostrEntityArticleCard(input: input)
     }
 
-    nonisolated func tokenizeNostrContent(_ content: String) -> [NostrContentRun] {
-        core.tokenizeNostrContent(content: content)
-    }
-
     nonisolated func tokenizeNostrMarkdownInline(_ content: String) -> [NostrContentRun] {
         core.tokenizeNostrMarkdownInline(content: content)
     }
@@ -873,14 +869,6 @@ actor SafeHighlighterCore {
             eventIdHex: eventIdHex,
             authorPubkeyHex: authorPubkeyHex
         )
-    }
-
-    func resolveNostrEntity(_ entity: NostrEntityRef) async -> NostrEntityResolutionSnapshot {
-        await core.resolveNostrEntity(entity: entity)
-    }
-
-    func subscribeNostrEntity(_ entity: NostrEntityRef) async -> SubscriptionStartSnapshot {
-        await core.subscribeNostrEntity(entity: entity)
     }
 
     func updateProfile(draft: ProfileUpdateDraft) async -> ProfileUpdateSnapshot {
@@ -1289,12 +1277,6 @@ actor SafeHighlighterCore {
         core.projectViewSubscriptionStart(input: input)
     }
 
-    nonisolated func projectAppSubscriptionStart(
-        input: AppSubscriptionStartProjectionInput
-    ) -> AppSubscriptionStartProjection {
-        core.projectAppSubscriptionStart(input: input)
-    }
-
     func subscribeFollowingReads() async -> SubscriptionStartSnapshot {
         await core.subscribeFollowingReads()
     }
@@ -1520,10 +1502,6 @@ actor SafeHighlighterCore {
         core.planRelayNip11Probes(input: input)
     }
 
-    nonisolated func finishRelayNip11Probe(inFlightUrls: [String], url: String) -> [String] {
-        core.finishRelayNip11Probe(inFlightUrls: inFlightUrls, url: url)
-    }
-
     nonisolated func toggleImportRelaySelection(
         fetched: [RelayConfig],
         selectedUrls: [String],
@@ -1550,10 +1528,6 @@ actor SafeHighlighterCore {
         input: ImportRelaysFetchApplyInput
     ) -> ImportRelaysFetchApplyProjection {
         core.projectImportRelaysFetchApply(input: input)
-    }
-
-    func subscribeRelayStatus() async -> SubscriptionStartSnapshot {
-        await core.subscribeRelayStatus()
     }
 
     func reconnectAll() async -> NetworkSettingsMutationSnapshot {
