@@ -271,6 +271,34 @@ pub(crate) fn reduce_action_join_room(
     }]
 }
 
+/// Handle `AppAction::LeaveRoom { group_id, host_relay_url, reason }`.
+///
+/// Dispatches `"nmp.nip29.leave"` via `Effect::DispatchNip29Action`.
+///
+/// `LeaveGroupInput` fields (nmp-nip29 `action/leave.rs`):
+/// - `group`: `{ host_relay_url, local_id }` (GroupId)
+/// - `reason`: `Option<String>`
+///
+/// Emits kind:9022 leave-request to the host relay. Fire-and-forget (D6).
+pub(crate) fn reduce_action_leave_room(
+    group_id: String,
+    host_relay_url: String,
+    reason: Option<String>,
+) -> Vec<Effect> {
+    let json = serde_json::json!({
+        "group": {
+            "host_relay_url": host_relay_url,
+            "local_id": group_id
+        },
+        "reason": reason
+    })
+    .to_string();
+    vec![Effect::DispatchNip29Action {
+        namespace: "nmp.nip29.leave".to_string(),
+        json,
+    }]
+}
+
 /// Handle `AppAction::CreateRoom { group_id, host_relay_url, name, about }`.
 ///
 /// Dispatches `"nmp.nip29.create_public_group"` via `Effect::DispatchNip29Action`.
@@ -1478,37 +1506,34 @@ mod tests {
         }
     }
 
-    // 3F-T11: no_leave_action_exists
+    // 3F-T11: leave_room_dispatches_nip29_leave
     //
-    // Document and verify that LeaveRoom is NOT implemented. There is no
-    // `nmp.nip29.leave` action on pinned nmp b4404159.
-    // See nmp issue #1598 — gap filed; LeaveRoom is deferred until nmp adds it.
-    //
-    // This test asserts that AppAction has no LeaveRoom variant by ensuring
-    // the action enum only has the expected write variants. We verify this
-    // indirectly: any AppAction::LeaveRoom dispatch attempt would be a compile
-    // error (no such variant), and here we confirm the known write actions work
-    // without a LeaveRoom arm in reduce_action.
+    // `AppAction::LeaveRoom` dispatches `"nmp.nip29.leave"` with the correct
+    // GroupId payload (nmp-nip29 `action/leave.rs` uses `group.host_relay_url`
+    // and `group.local_id`).
     #[test]
-    fn no_leave_action_exists() {
-        // Verify all four write actions compile and dispatch without LeaveRoom.
-        // If LeaveRoom existed in AppAction, this test would need to list it.
-        // The absence of a LeaveRoom arm in reduce_action (actor.rs) is enforced
-        // by the exhaustive match — any new arm would require a compile-time
-        // addition. This test documents the #1598 deferral expectation.
-        //
-        // LeaveRoom deferred: nmp.nip29.leave does not exist on b4404159.
-        // Tracking: nmp issue #1598. No hand-rolled kind:9022 publish.
-        let join = reduce_action_join_room(TEST_GROUP.to_string(), TEST_RELAY.to_string(), None);
-        assert_eq!(join.len(), 1);
+    fn leave_room_dispatches_nip29_leave() {
+        let effects =
+            reduce_action_leave_room(TEST_GROUP.to_string(), TEST_RELAY.to_string(), None);
+        assert_eq!(effects.len(), 1);
         assert!(
-            matches!(&join[0], Effect::DispatchNip29Action { namespace, .. } if namespace == "nmp.nip29.join")
+            matches!(&effects[0], Effect::DispatchNip29Action { namespace, json }
+                if namespace == "nmp.nip29.leave"
+                && json.contains(TEST_GROUP)
+                && json.contains(TEST_RELAY))
         );
 
-        // No LeaveRoom — the match in actor.rs::reduce_action has no such arm.
-        // Compile-time enforcement: attempting to add AppAction::LeaveRoom without
-        // adding a match arm would be a compile error. This test is the runtime
-        // documentation of the deferral policy.
+        // Reason is serialized when present.
+        let with_reason = reduce_action_leave_room(
+            TEST_GROUP.to_string(),
+            TEST_RELAY.to_string(),
+            Some("inactive".to_string()),
+        );
+        assert_eq!(with_reason.len(), 1);
+        assert!(
+            matches!(&with_reason[0], Effect::DispatchNip29Action { json, .. }
+                if json.contains("inactive"))
+        );
     }
 
     // 3F-T12: malformed_group_events_frame_noop

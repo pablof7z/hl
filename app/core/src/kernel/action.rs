@@ -149,6 +149,13 @@ pub(crate) struct JoinRoomPayload {
 }
 
 #[derive(Debug, serde::Deserialize)]
+pub(crate) struct LeaveRoomPayload {
+    pub(crate) group_id: String,
+    pub(crate) host_relay_url: String,
+    pub(crate) reason: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
 pub(crate) struct CreateRoomPayload {
     pub group_id: String,
     pub host_relay_url: String,
@@ -733,8 +740,6 @@ pub enum AppAction {
     /// URL (opaque string — kernel never constructs URLs, D3). `invite_code`
     /// is required for closed groups, optional for open groups.
     ///
-    /// NOTE: LeaveRoom (kind:9022) is NOT implemented — there is no
-    /// `nmp.nip29.leave` action on pinned nmp b4404159. See nmp issue #1598.
     JoinRoom {
         /// NIP-29 local group id.
         group_id: String,
@@ -742,6 +747,21 @@ pub enum AppAction {
         host_relay_url: String,
         /// Optional preauth invite code for closed groups.
         invite_code: Option<String>,
+    },
+
+    /// Leave a NIP-29 group by publishing a kind:9022 leave-request via
+    /// `"nmp.nip29.leave"`. Fire-and-forget (D6).
+    ///
+    /// `group_id` is the NIP-29 local group id; `host_relay_url` is the host
+    /// relay WebSocket URL (opaque — D3). `reason` is an optional human-readable
+    /// reason string; empty/`None` omits the content field.
+    LeaveRoom {
+        /// NIP-29 local group id.
+        group_id: String,
+        /// Host relay WebSocket URL (opaque — D3).
+        host_relay_url: String,
+        /// Optional human-readable reason for leaving.
+        reason: Option<String>,
     },
 
     /// Create a new public NIP-29 group by publishing kind:9007 + kind:9002

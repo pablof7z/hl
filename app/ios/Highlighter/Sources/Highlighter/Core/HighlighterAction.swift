@@ -51,6 +51,8 @@ enum HighlighterAction {
 
     // ── Room actions ──────────────────────────────────────────────────────────
     case joinRoom(groupId: String, hostRelayUrl: String, inviteCode: String?)
+    /// Leave a NIP-29 group (kind:9022 leave-request). Fire-and-forget.
+    case leaveRoom(groupId: String, hostRelayUrl: String, reason: String?)
     case createRoom(groupId: String, hostRelayUrl: String, name: String, about: String?)
     case addRoomMember(groupId: String, hostRelayUrl: String, pubkey: String, role: String?)
     case createRoomInvites(groupId: String, hostRelayUrl: String, codes: [String])
@@ -302,6 +304,10 @@ enum HighlighterAction {
             var dict: [String: Any] = ["group_id": groupId, "host_relay_url": hostRelayUrl]
             if let code = inviteCode { dict["invite_code"] = code }
             return AppActionEnvelope(namespace: "hl.room.join", json: jsonAny(dict))
+        case .leaveRoom(let groupId, let hostRelayUrl, let reason):
+            var dict: [String: Any] = ["group_id": groupId, "host_relay_url": hostRelayUrl]
+            if let reason = reason { dict["reason"] = reason }
+            return AppActionEnvelope(namespace: "hl.room.leave", json: jsonAny(dict))
         case .createRoom(let groupId, let hostRelayUrl, let name, let about):
             var dict: [String: Any] = ["group_id": groupId, "host_relay_url": hostRelayUrl, "name": name]
             if let about = about { dict["about"] = about }

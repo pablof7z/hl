@@ -59,6 +59,20 @@ struct RoomHomeView: View {
                     Button { inviteSheetPresented = true } label: {
                         Image(systemName: "person.badge.plus")
                     }
+                    Menu {
+                        Button(role: .destructive) {
+                            let relay = kernelRoomSnapshot?.hostRelayUrl ?? ""
+                            kernel.app.dispatch(.leaveRoom(
+                                groupId: groupId,
+                                hostRelayUrl: relay,
+                                reason: nil
+                            ))
+                        } label: {
+                            Label("Leave Room", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
                 }
             }
             .onChange(of: selectedTab) { _, tab in

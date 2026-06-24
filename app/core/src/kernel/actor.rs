@@ -336,6 +336,12 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
             invite_code,
         } => room_home::reduce_action_join_room(group_id, host_relay_url, invite_code),
 
+        AppAction::LeaveRoom {
+            group_id,
+            host_relay_url,
+            reason,
+        } => room_home::reduce_action_leave_room(group_id, host_relay_url, reason),
+
         AppAction::CreateRoom {
             group_id,
             host_relay_url,
@@ -561,6 +567,7 @@ fn reduce_action_envelope(
         ClipExtendSegmentPayload, ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload,
         ClipSetStartPayload, CreateAccountPayload, CreateAndAddToSetPayload,
         CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload, JoinRoomPayload,
+        LeaveRoomPayload,
         LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload, PairBunkerPayload,
         PresentSheetPayload, PublishClipPayload, PublishHighlightPayload, ReactPayload,
         ReleaseEntityRefPayload, ReleaseProfilePayload, RemoveBookmarkPayload,
@@ -672,6 +679,10 @@ fn reduce_action_envelope(
         "hl.room.join" => {
             let p = parse!(JoinRoomPayload);
             room_home::reduce_action_join_room(p.group_id, p.host_relay_url, p.invite_code)
+        }
+        "hl.room.leave" => {
+            let p = parse!(LeaveRoomPayload);
+            room_home::reduce_action_leave_room(p.group_id, p.host_relay_url, p.reason)
         }
         "hl.room.create" => {
             let p = parse!(CreateRoomPayload);
