@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Actor-blocking lint (design: actor-blocking-fix.md, Phase 0).
 #
-# The kernel actor in app/core/src/nmp_app.rs is the single writer and single
+# The kernel actor in app/core/src/kernel/actor.rs is the single writer and single
 # emitter. Any `runtime.block_on(...)` on the actor thread freezes every other
 # message and every snapshot emission. Phase 0 routed all legitimate actor-side
 # local work through `block_on_local(...)` and moved network work off-actor via
 # the OpRunner. This lint bans any *new* naked `.block_on(` from creeping back
 # onto the actor.
 #
-# Allowed `.block_on(` in nmp_app.rs:
+# Allowed `.block_on(` in actor.rs:
 #   1. The single call inside the `block_on_local` wrapper definition.
 #   2. Off-actor worker threads (each builds its own runtime), explicitly
 #      marked with a trailing `// lint-allow: block_on (worker runtime)`.
@@ -17,7 +17,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FILE="$ROOT/app/core/src/nmp_app.rs"
+FILE="$ROOT/app/core/src/kernel/actor.rs"
 
 if [[ ! -f "$FILE" ]]; then
   echo "lint-actor-blocking: cannot find $FILE" >&2
@@ -57,7 +57,7 @@ while IFS= read -r line; do
   if [[ "$line" == *"// lint-allow: block_on (worker runtime)"* ]]; then
     continue
   fi
-  echo "actor-blocking violation: nmp_app.rs:$lineno" >&2
+  echo "actor-blocking violation: kernel/actor.rs:$lineno" >&2
   echo "    $line" >&2
   violations=$((violations + 1))
 done < "$FILE"
@@ -67,11 +67,11 @@ done < "$FILE"
 # whitespace runs to single spaces and count occurrences; it must equal the
 # allowlisted count found by the per-line pass above (wrapper + worker tags
 # + test module). A mismatch means a formatted-away call slipped past.
-normalized_total=$(tr -s ' \n\t' ' ' < "$FILE" | grep -o '\. *block_on(' | wc -l | tr -d ' ')
+normalized_total=$(tr -s ' \n\t' ' ' < "$FILE" | { grep -o '\. *block_on(' || true; } | wc -l | tr -d ' ')
 perline_total=$(grep -c '\.block_on(' "$FILE" || true)
 if [[ "$normalized_total" -ne "$perline_total" ]]; then
   echo "actor-blocking violation: a multi-line-formatted .block_on( call" >&2
-  echo "exists in nmp_app.rs (normalized count $normalized_total != per-line" >&2
+  echo "exists in kernel/actor.rs (normalized count $normalized_total != per-line" >&2
   echo "count $perline_total). Re-join the call onto one line so the lint" >&2
   echo "can classify it." >&2
   violations=$((violations + 1))
@@ -79,11 +79,11 @@ fi
 
 if [[ "$violations" -gt 0 ]]; then
   echo "" >&2
-  echo "Found $violations un-allowlisted .block_on( call(s) in nmp_app.rs." >&2
+  echo "Found $violations un-allowlisted .block_on( call(s) in kernel/actor.rs." >&2
   echo "Route actor-side local work through block_on_local(...), or move" >&2
   echo "network work off-actor via OpRunner::submit_op. Off-actor worker" >&2
   echo "threads must carry a '// lint-allow: block_on (worker runtime)' note." >&2
   exit 1
 fi
 
-echo "lint-actor-blocking: OK (no un-allowlisted .block_on in nmp_app.rs)"
+echo "lint-actor-blocking: OK (no un-allowlisted .block_on in kernel/actor.rs)"

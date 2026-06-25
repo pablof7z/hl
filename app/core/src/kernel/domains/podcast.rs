@@ -354,6 +354,17 @@ pub(crate) fn reduce_action_pause(state: &mut AppState) -> Vec<Effect> {
     ))]
 }
 
+/// Reduce `hl.audio.resume` — resume playback when the player is already
+/// loaded (paused state). Emits `AudioOp::Play` without reloading the episode.
+pub(crate) fn reduce_action_resume(state: &mut AppState) -> Vec<Effect> {
+    if let Some(ep) = &mut state.podcast.current {
+        ep.is_playing = true;
+    }
+    vec![Effect::EmitCapabilityRequest(CapabilityRequest::Audio(
+        AudioOp::Play,
+    ))]
+}
+
 /// Reduce `hl.audio.seek` — clamp via `seek_projection`, emit `AudioOp::Seek`.
 pub(crate) fn reduce_action_seek(state: &mut AppState, seconds: f64) -> Vec<Effect> {
     let duration = state

@@ -1,4 +1,3 @@
-import AVFoundation
 import Foundation
 import MediaPlayer
 import Observation
@@ -45,14 +44,8 @@ final class PodcastPlayerStore {
     // MARK: - Private plumbing
 
     @ObservationIgnored private let core: HighlighterCore
-    @ObservationIgnored private var player: AVPlayer?
+    @ObservationIgnored weak var kernel: HighlighterAppKernel?
     @ObservationIgnored private let logger = Logger(subsystem: "com.highlighter.app", category: "PodcastPlayer")
-    @ObservationIgnored private nonisolated(unsafe) var timeObserver: Any?
-    @ObservationIgnored private nonisolated(unsafe) var statusObserver: NSKeyValueObservation?
-    @ObservationIgnored private nonisolated(unsafe) var bufferingObserver: NSKeyValueObservation?
-    @ObservationIgnored private nonisolated(unsafe) var rangesObserver: NSKeyValueObservation?
-    @ObservationIgnored private nonisolated(unsafe) var errorObserver: NSKeyValueObservation?
-    @ObservationIgnored private nonisolated(unsafe) var playbackEndObserver: NSObjectProtocol?
     @ObservationIgnored private var transcriptTask: Task<Void, Never>?
     @ObservationIgnored private var waveformTask: Task<Void, Never>?
 
@@ -63,47 +56,36 @@ final class PodcastPlayerStore {
     }
 
     deinit {
-        // Access only nonisolated(unsafe) properties here — no MainActor hop in deinit.
-        if let player, let timeObserver {
-            player.removeTimeObserver(timeObserver)
-        }
-        statusObserver?.invalidate()
-        bufferingObserver?.invalidate()
-        rangesObserver?.invalidate()
-        errorObserver?.invalidate()
-        if let playbackEndObserver {
-            NotificationCenter.default.removeObserver(playbackEndObserver)
-        }
-        player?.pause()
+        transcriptTask?.cancel()
+        waveformTask?.cancel()
+    }
+
+    // MARK: - Kernel snapshot ingestion
+
+    func receiveListeningSnapshot(_ snapshot: PodcastListeningSnapshot) {
+        currentTime = snapshot.positionSeconds
+        duration = snapshot.durationSeconds
+        isPlaying = snapshot.isPlaying
+        isBuffering = false
+        updateNowPlayingInfo()
     }
 
     // MARK: - Global load / clear
 
     func load(artifact: ArtifactRecord) {
-        let plan = core.planPodcastPlaybackSession(
-            input: PodcastPlaybackSessionInput(
-                artifact: artifact,
-                loadedShareEventId: currentArtifact?.shareEventId,
-                hasLoadedPlayer: player != nil
-            )
-        )
-        let playback = sessionApplyProjection(
-            input: PodcastPlaybackSessionApplyInput(plan: plan)
-        )
-        guard playback.canLoad, let url = URL(string: playback.audioUrl) else {
-            if let warning = playback.warningMessage {
-                logger.warning("\(warning, privacy: .public)")
-            }
+        let urlString = [artifact.preview.audioUrl, artifact.preview.audioPreviewUrl]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty } ?? ""
+        guard !urlString.isEmpty, let url = URL(string: urlString) else {
+            logger.warning("load: no audio URL for artifact \(artifact.shareEventId, privacy: .public)")
             return
         }
 
-        // If same episode is already loaded, just play.
-        if playback.shouldReuseLoadedPlayer {
-            play()
+        let guid = artifact.preview.podcastItemGuid
+        if let loaded = kernel?.podcastListeningSnapshot, loaded.guid == guid {
+            kernel?.app.dispatch(.audioResume)
             return
         }
-
-        tearDownPlayer()
 
         currentArtifact = artifact
         self.audioUrl = url
@@ -119,31 +101,21 @@ final class PodcastPlayerStore {
 
         logger.info("load artifact=\(artifact.shareEventId, privacy: .public) url=\(url.absoluteString, privacy: .public)")
 
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
-        try? AVAudioSession.sharedInstance().setActive(true)
-
-        let item = AVPlayerItem(url: url)
-        item.preferredForwardBufferDuration = 10
-
-        let newPlayer = AVPlayer(playerItem: item)
-        newPlayer.automaticallyWaitsToMinimizeStalling = true
-        self.player = newPlayer
-
-        installTimeObserver(on: newPlayer)
-        observeItem(item)
-        observeBuffering(item)
-        observeLoadedRanges(item)
-        observeError(item)
-        observePlaybackEnd(item: item)
+        kernel?.app.dispatch(.audioPlay(
+            url: urlString,
+            guid: guid,
+            artifactJson: captureArtifactRecordJson(artifact: artifact),
+            resumePositionSeconds: nil
+        ))
 
         configureRemoteCommandCenter()
         updateNowPlayingInfo()
         fetchAndApplyArtwork(from: artifact.preview.image)
-        beginPlayback(using: playback, shareEventId: artifact.shareEventId)
 
-        let transcriptUrl = playback.transcriptUrl
+        let transcriptUrl = artifact.preview.transcriptUrl
         if !transcriptUrl.isEmpty {
             transcriptAvailability = .loading
+            transcriptTask?.cancel()
             transcriptTask = Task { await loadTranscript(from: transcriptUrl) }
         }
 
@@ -152,7 +124,7 @@ final class PodcastPlayerStore {
         // present, so playback isn't blocked by this work.
         waveformPeaks = []
         waveformTask?.cancel()
-        let dur = playback.previewDurationSeconds
+        let dur = Double(artifact.preview.durationSeconds ?? 0)
         waveformTask = Task(priority: .background) { [weak self, url] in
             let peaks = await WaveformExtractor.peaks(
                 forAudioURL: url,
@@ -182,8 +154,12 @@ final class PodcastPlayerStore {
     }
 
     func clear() {
-        persistPosition()
-        tearDownPlayer()
+        kernel?.app.dispatch(.audioSetResume(seconds: currentTime))
+        kernel?.app.dispatch(.audioPause)
+        transcriptTask?.cancel()
+        transcriptTask = nil
+        waveformTask?.cancel()
+        waveformTask = nil
         currentArtifact = nil
         audioUrl = nil
         currentTime = 0
@@ -197,30 +173,29 @@ final class PodcastPlayerStore {
         transcriptSegments = []
         transcriptAvailability = .unavailable
         waveformPeaks = []
+        tearDownRemoteCommandCenter()
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
     // MARK: - Transport
 
     func play() {
-        // Cold-launch case: MiniPlayer was rehydrated from disk but AVPlayer
-        // hasn't been created yet. Route through `load` to wire it up; the
-        // saved-position branch in `load` will seek us back to where we were.
-        if player == nil, let artifact = currentArtifact {
+        // Cold-launch case: MiniPlayer was rehydrated but the kernel has not
+        // loaded the player. Route through `load` to dispatch audioPlay.
+        if kernel?.podcastListeningSnapshot == nil, let artifact = currentArtifact {
             logger.info("play (cold-launch rehydrate)")
             load(artifact: artifact)
             return
         }
         logger.info("play")
-        player?.play()
-        isPlaying = true
+        kernel?.app.dispatch(.audioResume)
         updateNowPlayingInfo()
     }
 
     func pause() {
         logger.info("pause")
-        persistPosition()
-        player?.pause()
-        isPlaying = false
+        kernel?.app.dispatch(.audioSetResume(seconds: currentTime))
+        kernel?.app.dispatch(.audioPause)
         updateNowPlayingInfo()
     }
 
@@ -236,10 +211,9 @@ final class PodcastPlayerStore {
             )
         )
         let clamped = projection.positionSeconds
-        let time = CMTime(seconds: clamped, preferredTimescale: 600)
-        player?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+        kernel?.app.dispatch(.audioSeek(seconds: clamped))
         currentTime = clamped
-        persistPosition(position: clamped)
+        updateNowPlayingInfo()
     }
 
     func skip(by delta: TimeInterval) {
@@ -362,163 +336,12 @@ final class PodcastPlayerStore {
         transcriptAvailability = projection.availability
     }
 
-    // MARK: - Position persistence
-
-    private func persistPosition(position: TimeInterval? = nil) {
-        guard let artifact = currentArtifact else { return }
-        let position = position ?? currentTime
-        Task { [core, position, artifact] in
-            _ = core.recordPodcastPlaybackPosition(
-                input: PodcastPlaybackPositionInput(
-                    artifact: artifact,
-                    positionSeconds: position
-                )
-            )
-        }
-    }
-
-    private func beginPlayback(using playback: PodcastPlaybackSessionApplyProjection, shareEventId: String) {
-        Task { @MainActor [weak self, playback, shareEventId] in
-            guard let self, self.currentArtifact?.shareEventId == shareEventId else { return }
-            if let position = playback.resumePositionSeconds {
-                let seekTime = CMTime(seconds: position, preferredTimescale: 600)
-                _ = await self.player?.seek(to: seekTime, toleranceBefore: .zero, toleranceAfter: .zero)
-                self.currentTime = position
-            }
-            if playback.shouldAutoplay {
-                self.player?.play()
-                self.isPlaying = true
-                self.updateNowPlayingInfo()
-            }
-        }
-    }
-
-    /// Cold-launch rehydration. Surfaces the MiniPlayer in a paused state with
-    /// the last episode the user listened to (within the last 7 days). The
-    /// AVPlayer is NOT created — that happens when the user taps play and we
-    /// route through `load(artifact:)` which seeks to the saved position.
+    /// Compatibility hook for the existing startup call. Playback rehydration
+    /// is now owned by the kernel podcast-listening snapshot; the old direct
+    /// HighlighterCore rehydration API is intentionally not called here.
     func rehydrateFromSavedRecord() async {
-        let snapshot = core.getPodcastPlaybackRehydrationSnapshot(
-            hasCurrentArtifact: currentArtifact != nil
-        )
-        guard snapshot.shouldApply, let artifact = snapshot.artifact else { return }
-        currentArtifact = artifact
-        currentTime = snapshot.currentTimeSeconds
-        duration = snapshot.durationSeconds
-        isPlaying = snapshot.isPlaying
-    }
-
-    // MARK: - Player setup helpers
-
-    private func installTimeObserver(on player: AVPlayer) {
-        let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
-        timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                let tick = tickProjection(
-                    input: PodcastPlaybackTickInput(
-                        previousTimeSeconds: self.currentTime,
-                        currentTimeSeconds: time.seconds,
-                        isPlaying: self.isPlaying
-                    )
-                )
-                let seconds = tick.currentTimeSeconds
-                self.currentTime = seconds
-                if tick.shouldUpdateNowPlaying {
-                    self.updateNowPlayingInfo()
-                    if tick.shouldPersistPosition {
-                        self.persistPosition(position: seconds)
-                    }
-                }
-            }
-        }
-    }
-
-    private func observeItem(_ item: AVPlayerItem) {
-        statusObserver = item.observe(\.status, options: [.initial, .new]) { [weak self, weak item] _, _ in
-            guard let self, let item else { return }
-            Task { @MainActor in
-                let status = item.status
-                self.logger.info("item status=\(status.rawValue)")
-                guard status == .readyToPlay else { return }
-                do {
-                    let loaded = try await item.asset.load(.duration)
-                    let seconds = loaded.seconds
-                    if seconds.isFinite, seconds > 0 {
-                        self.duration = seconds
-                        self.logger.info("duration=\(seconds, format: .fixed(precision: 1))s")
-                        self.updateNowPlayingInfo()
-                    }
-                } catch {
-                    self.logger.error("duration load failed: \(error.localizedDescription, privacy: .public)")
-                }
-            }
-        }
-    }
-
-    private func observeBuffering(_ item: AVPlayerItem) {
-        bufferingObserver = item.observe(
-            \.isPlaybackLikelyToKeepUp,
-            options: [.initial, .new]
-        ) { [weak self, weak item] _, _ in
-            guard let self, let item else { return }
-            Task { @MainActor in
-                let likelyToKeepUp = item.isPlaybackLikelyToKeepUp
-                let bufferEmpty = item.isPlaybackBufferEmpty
-                let newBuffering = !likelyToKeepUp && !bufferEmpty
-                if self.isBuffering != newBuffering {
-                    self.logger.info("buffering=\(newBuffering) likelyToKeepUp=\(likelyToKeepUp) bufferEmpty=\(bufferEmpty)")
-                    self.isBuffering = newBuffering
-                }
-            }
-        }
-    }
-
-    private func observeLoadedRanges(_ item: AVPlayerItem) {
-        rangesObserver = item.observe(
-            \.loadedTimeRanges,
-            options: [.initial, .new]
-        ) { [weak self, weak item] _, _ in
-            guard let self, let item else { return }
-            let ranges = item.loadedTimeRanges.compactMap { value -> ClosedRange<TimeInterval>? in
-                let range = value.timeRangeValue
-                let start = range.start.seconds
-                let end = CMTimeRangeGetEnd(range).seconds
-                guard start.isFinite, end.isFinite, end > start else { return nil }
-                return start...end
-            }
-            Task { @MainActor in
-                self.loadedTimeRanges = ranges
-            }
-        }
-    }
-
-    private func observeError(_ item: AVPlayerItem) {
-        errorObserver = item.observe(\.error, options: [.new]) { [weak self, weak item] _, _ in
-            guard let self, let item else { return }
-            Task { @MainActor in
-                if let error = item.error {
-                    let msg = error.localizedDescription
-                    self.logger.error("playback error: \(msg, privacy: .public)")
-                    self.lastError = msg
-                    self.isPlaying = false
-                }
-            }
-        }
-    }
-
-    private func observePlaybackEnd(item: AVPlayerItem) {
-        playbackEndObserver = NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: item,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.persistPosition()
-                self.isPlaying = false
-            }
-        }
+        guard let snapshot = kernel?.podcastListeningSnapshot, !snapshot.guid.isEmpty else { return }
+        receiveListeningSnapshot(snapshot)
     }
 
     // MARK: - Remote Command Center
@@ -642,32 +465,4 @@ final class PodcastPlayerStore {
         }
     }
 
-    private func tearDownPlayer() {
-        transcriptTask?.cancel()
-        transcriptTask = nil
-        waveformTask?.cancel()
-        waveformTask = nil
-
-        if let player, let timeObserver {
-            player.removeTimeObserver(timeObserver)
-        }
-        timeObserver = nil
-        statusObserver?.invalidate()
-        statusObserver = nil
-        bufferingObserver?.invalidate()
-        bufferingObserver = nil
-        rangesObserver?.invalidate()
-        rangesObserver = nil
-        errorObserver?.invalidate()
-        errorObserver = nil
-        if let playbackEndObserver {
-            NotificationCenter.default.removeObserver(playbackEndObserver)
-        }
-        playbackEndObserver = nil
-        player?.pause()
-        player = nil
-
-        tearDownRemoteCommandCenter()
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
-    }
 }
