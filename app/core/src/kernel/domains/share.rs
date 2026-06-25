@@ -730,9 +730,9 @@ pub(crate) fn share_template_json(
 ///
 ///   1. **D3 host-relay pin must FAIL CLOSED.** An in-group (NIP-29) event MUST
 ///      land on the group's host relay. An empty/missing `host_relay_url` is a
-///      caller bug — NOT a request to widen to `Auto`/outbox routing (that would
-///      publish a group event to the wrong relays). Empty host → `Error` (D6),
-///      no publish.
+///      state/routing bug — NOT a request to widen to `Auto`/outbox routing
+///      (that would publish a group event to the wrong relays). Empty host →
+///      `Error` (D6), no publish.
 ///   2. **Reserved-kind rejection.** A reserved replaceable-list kind (0/3/10003)
 ///      is rejected here (mirrors the validated `nmp.publish` PublishRaw ingress)
 ///      so a future builder emitting one is never silently signed.
@@ -773,6 +773,15 @@ fn emit_share_publish(
     }]
 }
 
+fn host_relay_for_group(state: &AppState, group_id: &str) -> String {
+    state
+        .communities
+        .iter()
+        .find(|c| c.group_id == group_id)
+        .map(|c| c.host_relay_url.trim().to_string())
+        .unwrap_or_default()
+}
+
 // ── Reducers ──────────────────────────────────────────────────────────────────
 
 /// Reduce `hl.share.artifact_to_room` — publish a kind:11 artifact share into a
@@ -782,7 +791,6 @@ fn emit_share_publish(
 pub(crate) fn reduce_action_artifact_to_room(
     state: &mut AppState,
     group_id: String,
-    host_relay_url: String,
     preview: ArtifactPreview,
     note: String,
 ) -> Vec<Effect> {
@@ -792,6 +800,7 @@ pub(crate) fn reduce_action_artifact_to_room(
         };
         return vec![];
     }
+    let host_relay_url = host_relay_for_group(state, &group_id);
     let tags = build_artifact_share_tags(&group_id, &preview);
     let content = note.trim().to_string();
     emit_share_publish(state, KIND_ARTIFACT_SHARE, &content, tags, &host_relay_url)
@@ -802,7 +811,6 @@ pub(crate) fn reduce_action_artifact_to_room(
 pub(crate) fn reduce_action_highlight_to_room(
     state: &mut AppState,
     target_group_id: String,
-    host_relay_url: String,
     highlight_event_id: String,
     highlight_author_pubkey: String,
     relay_hint: String,
@@ -813,6 +821,7 @@ pub(crate) fn reduce_action_highlight_to_room(
         };
         return vec![];
     }
+    let host_relay_url = host_relay_for_group(state, &target_group_id);
     let tags = build_highlight_repost_tags(
         &highlight_event_id,
         &highlight_author_pubkey,
@@ -844,7 +853,6 @@ pub(crate) fn reduce_action_highlight_to_room(
 pub(crate) fn reduce_action_mint_invite(
     state: &mut AppState,
     group_id: String,
-    host_relay_url: String,
     count: u32,
 ) -> Vec<Effect> {
     if group_id.trim().is_empty() {
@@ -853,9 +861,10 @@ pub(crate) fn reduce_action_mint_invite(
         };
         return vec![];
     }
-    // D3 fail-closed: a kind:9009 create-invite is a NIP-29 group write — it MUST
-    // land on the group's host relay. An empty host relay is a caller bug, not a
-    // request to widen to Auto/outbox routing. Error (D6), no publish.
+    let host_relay_url = host_relay_for_group(state, &group_id);
+    // D3 fail-closed: a kind:9009 create-invite is a NIP-29 group write. The
+    // host relay must resolve from Rust-owned community state; missing state is
+    // not a request to widen to Auto/outbox routing. Error (D6), no publish.
     if host_relay_url.trim().is_empty() {
         state.share_publish.phase = SharePublishPhase::Error {
             message: "host relay required for invite mint (no outbox fallback)".into(),
@@ -913,17 +922,6 @@ fn publish_queue_items(state: &mut AppState, items: &[ShareQueueItem]) -> Vec<Ef
         return vec![];
     }
 
-    // Resolve host relay per group from the joined-communities projection up
-    // front (immutable borrow) so the publish loop can take `&mut state`.
-    let host_for = |group_id: &str| -> String {
-        state
-            .communities
-            .iter()
-            .find(|c| c.group_id == group_id)
-            .map(|c| c.host_relay_url.clone())
-            .unwrap_or_default()
-    };
-
     // Pre-build (host_relay_url, tags, content) per item; skip items whose URL
     // fails to build a preview (D6 — logged, not fatal).
     let mut prepared: Vec<(String, Vec<Vec<String>>, String)> = Vec::new();
@@ -938,7 +936,7 @@ fn publish_queue_items(state: &mut AppState, items: &[ShareQueueItem]) -> Vec<Ef
                 continue;
             }
         };
-        let host_relay_url = host_for(&item.group_id);
+        let host_relay_url = host_relay_for_group(state, &item.group_id);
         // D3 fail-closed: a drained item whose group has no known host relay
         // must NOT publish (never widen a NIP-29 group write to Auto/outbox).
         // `emit_share_publish` sets the FSM to Error and returns no effect.
@@ -1808,11 +1806,11 @@ mod tests {
     #[test]
     fn artifact_to_room_reducer_emits_host_pinned_publish() {
         let mut state = AppState::default();
+        state.communities = vec![community_row("room-x", "Readers")];
         let preview = full_preview();
         let effects = reduce_action_artifact_to_room(
             &mut state,
             "room-x".into(),
-            "wss://host.example.com".into(),
             preview.clone(),
             "  note  ".into(),
         );
@@ -1841,7 +1839,7 @@ mod tests {
         let t: T = serde_json::from_str(json).unwrap();
         assert_eq!(t.kind, KIND_ARTIFACT_SHARE);
         assert_eq!(t.content, "note", "note is trimmed");
-        assert_eq!(t.host_relay_url, "wss://host.example.com");
+        assert_eq!(t.host_relay_url, "wss://relay.example.com");
         assert_eq!(t.tags, build_artifact_share_tags("room-x", &preview));
     }
 
@@ -1849,13 +1847,8 @@ mod tests {
     #[test]
     fn artifact_to_room_guard_bites_on_empty_group() {
         let mut state = AppState::default();
-        let effects = reduce_action_artifact_to_room(
-            &mut state,
-            "   ".into(),
-            "wss://host".into(),
-            full_preview(),
-            String::new(),
-        );
+        let effects =
+            reduce_action_artifact_to_room(&mut state, "   ".into(), full_preview(), String::new());
         assert!(effects.is_empty(), "guard must suppress the publish");
         assert!(
             matches!(state.share_publish.phase, SharePublishPhase::Error { .. }),
@@ -1899,12 +1892,8 @@ mod tests {
     #[test]
     fn mint_invite_generates_codes_and_reuses_create_invite_path() {
         let mut state = AppState::default();
-        let effects = reduce_action_mint_invite(
-            &mut state,
-            "room-x".into(),
-            "wss://host.example.com".into(),
-            3,
-        );
+        state.communities = vec![community_row("room-x", "Readers")];
+        let effects = reduce_action_mint_invite(&mut state, "room-x".into(), 3);
         assert_eq!(state.share_publish.last_invite_codes.len(), 3);
         for code in &state.share_publish.last_invite_codes {
             assert_eq!(code.len(), 24, "invite codes are 24 chars");
@@ -1947,12 +1936,8 @@ mod tests {
     #[test]
     fn mint_invite_failure_drives_fsm_to_error() {
         let mut state = AppState::default();
-        let effects = reduce_action_mint_invite(
-            &mut state,
-            "room-x".into(),
-            "wss://host.example.com".into(),
-            1,
-        );
+        state.communities = vec![community_row("room-x", "Readers")];
+        let effects = reduce_action_mint_invite(&mut state, "room-x".into(), 1);
         let Effect::DispatchCreateInviteWithCorrelation { correlation_id, .. } = &effects[0] else {
             panic!("expected DispatchCreateInviteWithCorrelation");
         };
@@ -1986,12 +1971,8 @@ mod tests {
     #[test]
     fn mint_invite_success_drives_fsm_to_done_with_codes() {
         let mut state = AppState::default();
-        let effects = reduce_action_mint_invite(
-            &mut state,
-            "room-x".into(),
-            "wss://host.example.com".into(),
-            2,
-        );
+        state.communities = vec![community_row("room-x", "Readers")];
+        let effects = reduce_action_mint_invite(&mut state, "room-x".into(), 2);
         let Effect::DispatchCreateInviteWithCorrelation { correlation_id, .. } = &effects[0] else {
             panic!("expected DispatchCreateInviteWithCorrelation");
         };
@@ -2009,12 +1990,8 @@ mod tests {
     #[test]
     fn mint_invite_correlation_swap_then_verdict() {
         let mut state = AppState::default();
-        let effects = reduce_action_mint_invite(
-            &mut state,
-            "room-x".into(),
-            "wss://host.example.com".into(),
-            1,
-        );
+        state.communities = vec![community_row("room-x", "Readers")];
+        let effects = reduce_action_mint_invite(&mut state, "room-x".into(), 1);
         let Effect::DispatchCreateInviteWithCorrelation { correlation_id, .. } = &effects[0] else {
             panic!("expected DispatchCreateInviteWithCorrelation");
         };
@@ -2043,20 +2020,19 @@ mod tests {
         assert!(project_share_publish_snapshot(&state).did_publish);
     }
 
-    /// Finding 2 (fail-closed host relay): an empty host relay for mint_invite →
-    /// Error + NO dispatch (never widen a group write to Auto/outbox). PRE-FIX the
-    /// reducer ignored host_relay_url entirely and dispatched regardless.
+    /// Finding 2 (fail-closed host relay): a missing Rust-owned host relay for
+    /// mint_invite → Error + NO dispatch (never widen a group write to Auto/outbox).
     #[test]
-    fn mint_invite_empty_host_relay_fails_closed() {
+    fn mint_invite_missing_host_relay_fails_closed() {
         let mut state = AppState::default();
-        let effects = reduce_action_mint_invite(&mut state, "room-x".into(), "   ".into(), 1);
+        let effects = reduce_action_mint_invite(&mut state, "room-x".into(), 1);
         assert!(
             effects.is_empty(),
             "no publish/dispatch on empty host relay"
         );
         assert!(
             matches!(state.share_publish.phase, SharePublishPhase::Error { .. }),
-            "empty host relay → Error (D3 fail-closed)"
+            "missing host relay → Error (D3 fail-closed)"
         );
         assert!(
             state.share_publish.pending_correlation_id.is_none(),
@@ -2064,19 +2040,18 @@ mod tests {
         );
     }
 
-    /// Finding 2 (fail-closed host relay) for artifact_to_room: empty host →
+    /// Finding 2 (fail-closed host relay) for artifact_to_room: missing host →
     /// Error + NO publish. PRE-FIX the runner widened an empty host to Auto.
     #[test]
-    fn artifact_to_room_empty_host_relay_fails_closed() {
+    fn artifact_to_room_missing_host_relay_fails_closed() {
         let mut state = AppState::default();
         let effects = reduce_action_artifact_to_room(
             &mut state,
             "room-x".into(),
-            "  ".into(), // empty host relay
             full_preview(),
             String::new(),
         );
-        assert!(effects.is_empty(), "no publish on empty host relay (D3)");
+        assert!(effects.is_empty(), "no publish on missing host relay (D3)");
         assert!(matches!(
             state.share_publish.phase,
             SharePublishPhase::Error { .. }
@@ -2085,17 +2060,16 @@ mod tests {
 
     /// Finding 2 (fail-closed host relay) for highlight_to_room.
     #[test]
-    fn highlight_to_room_empty_host_relay_fails_closed() {
+    fn highlight_to_room_missing_host_relay_fails_closed() {
         let mut state = AppState::default();
         let effects = reduce_action_highlight_to_room(
             &mut state,
             "room-z".into(),
-            String::new(), // empty host relay
             "deadbeef".into(),
             "author".into(),
             "wss://hint".into(),
         );
-        assert!(effects.is_empty(), "no publish on empty host relay (D3)");
+        assert!(effects.is_empty(), "no publish on missing host relay (D3)");
         assert!(matches!(
             state.share_publish.phase,
             SharePublishPhase::Error { .. }

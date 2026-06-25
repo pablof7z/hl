@@ -259,11 +259,6 @@ struct ShareToCommunitySheet: View {
         }
     }
 
-    /// Resolve the host relay URL for a joined community.
-    private func hostRelay(for groupId: String) -> String {
-        app.joinedCommunities.first { $0.id == groupId }?.relayUrl ?? ""
-    }
-
     /// #21: dispatch the kernel share-to-room action (kernel is the sole writer
     /// for kind:11 artifact shares + kind:16 highlight reposts). The publish
     /// verdict streams back through `kernel.sharePublish` (FSM → done / error),
@@ -274,13 +269,11 @@ struct ShareToCommunitySheet: View {
         // Clear any prior terminal state before starting a fresh publish.
         kernel.app.dispatch(.shareResetPublish)
 
-        let hostRelayUrl = hostRelay(for: groupId)
         switch target.payload {
         case .artifactShare(let preview):
             kernel.app.dispatch(
                 .shareArtifactToRoom(
                     groupId: groupId,
-                    hostRelayUrl: hostRelayUrl,
                     previewJson: captureArtifactPreviewJson(preview: preview),
                     note: note
                 )
@@ -289,7 +282,6 @@ struct ShareToCommunitySheet: View {
             kernel.app.dispatch(
                 .shareHighlightToRoom(
                     groupId: groupId,
-                    hostRelayUrl: hostRelayUrl,
                     highlightEventId: eventId,
                     highlightAuthorPubkey: authorPubkey,
                     relayHint: relayHint
