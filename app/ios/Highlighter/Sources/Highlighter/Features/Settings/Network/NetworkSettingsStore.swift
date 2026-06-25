@@ -7,8 +7,8 @@ import Observation
 /// Architecture contract: relay read/write config comes from NMP's
 /// configured_relays slot (via `kernel.relayListSnapshot`); rooms/indexer
 /// flags are stored in UserDefaults under `hl.relays.app_flags`. Writes
-/// dispatch kernel actions (NIP-65 / removeRelay). Live status deltas arrive
-/// via `EventBridge` on the app-scope bus (subscription_id == 0).
+/// dispatch kernel actions (NIP-65 / removeRelay). Live diagnostics arrive via
+/// the kernel relay diagnostics view.
 @MainActor
 @Observable
 final class NetworkSettingsStore {
@@ -31,8 +31,7 @@ final class NetworkSettingsStore {
     @ObservationIgnored private weak var appStore: HighlighterStore?
     @ObservationIgnored private var inFlightNip11: [String] = []
     /// Phase 7: the kernel is the SOLE WRITER for relay config. Read paths
-    /// (load / diagnostics) still come from the bespoke core (reads coexist
-    /// until Part C); writes dispatch kernel actions.
+    /// load from the NMP slot and diagnostics arrive through the kernel view.
     @ObservationIgnored private let kernel: HighlighterAppKernel
 
     init(appStore: HighlighterStore, kernel: HighlighterAppKernel) {
@@ -183,8 +182,7 @@ final class NetworkSettingsStore {
     }
 
     func startLiveUpdates() {
-        // Relay status deltas arrive via EventBridge.applyStatus → applyStatus(url:state:)
-        // No bespoke subscription needed; the NMP pool drives live updates.
+        // No bespoke subscription needed; the NMP pool drives kernel diagnostics.
     }
 
     // MARK: - Cache
@@ -242,8 +240,6 @@ final class NetworkSettingsStore {
 
     // MARK: - Delta hook
 
-    /// Called by `EventBridge` on `RelayStatusChanged`. Updates the local
-    /// diagnostic for the single relay without reloading the whole list.
     func applyStatus(url: String, state: RelayStatus) {
         if var existing = diagnostics[url] {
             existing.state = state
@@ -261,8 +257,7 @@ final class NetworkSettingsStore {
         recomputeAggregates()
     }
 
-    /// Called by `EventBridge` on `RelayDiagnosticsUpdated`. Applies the
-    /// bounded diagnostics without a native polling loop.
+    /// Applies bounded diagnostics without a native polling loop.
     func applyDiagnostics(_ rows: [RelayDiagnostic]) async {
         diagnostics = Dictionary(uniqueKeysWithValues: rows.map { ($0.url, $0) })
         recomputeAggregates()
@@ -298,7 +293,7 @@ final class NetworkSettingsStore {
     /// Fetch another user's kind:10002 relay list from the indexer relay pool.
     /// Used by the "Import from npub" flow in ImportRelaysSheet.
     func fetchRelaysForPubkey(_ pubkeyHex: String) async -> [RelayConfig] {
-        await appStore?.safeCore.fetchRelaysForPubkey(pubkeyHex: pubkeyHex) ?? []
+        await appStore?.core.fetchRelaysForPubkey(pubkeyHex: pubkeyHex) ?? []
     }
 
     // MARK: - Private

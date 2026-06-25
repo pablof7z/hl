@@ -135,8 +135,7 @@ final class ArticleReaderStore {
         }
     }
 
-    /// Called by `EventBridge` when an `ArticleUpdated` delta arrives. Phase 7
-    /// C1: re-applies the kernel snapshot (the sole data source) rather than
+    /// Re-applies the kernel snapshot (the sole data source) rather than
     /// re-querying the retired bespoke reader snapshot.
     func applyUpdate() async {
         applyKernelSnapshot()

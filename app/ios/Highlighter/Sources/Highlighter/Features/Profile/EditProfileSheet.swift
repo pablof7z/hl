@@ -8,11 +8,9 @@ import SwiftUI
 /// they were last seen on a relay (`unknown_field` round-trip is handled
 /// at the Rust layer — `publish_profile` preserves keys we don't know).
 ///
-/// Picture and banner uploads route through Blossom via the same
-/// `safeCore.uploadPhoto` path the rooms / capture flows use; we stash
-/// the returned URL into the corresponding text field so the form can
-/// show progress + the user can still paste a URL by hand if they
-/// prefer not to re-upload.
+/// Picture and banner uploads route through Blossom; we stash the returned URL
+/// into the corresponding text field so the form can show progress + the user
+/// can still paste a URL by hand if they prefer not to re-upload.
 struct EditProfileSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(HighlighterStore.self) private var appStore

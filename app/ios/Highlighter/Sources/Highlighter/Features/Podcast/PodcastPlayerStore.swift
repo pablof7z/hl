@@ -44,7 +44,7 @@ final class PodcastPlayerStore {
 
     // MARK: - Private plumbing
 
-    @ObservationIgnored private let core: SafeHighlighterCore
+    @ObservationIgnored private let core: HighlighterCore
     @ObservationIgnored private var player: AVPlayer?
     @ObservationIgnored private let logger = Logger(subsystem: "com.highlighter.app", category: "PodcastPlayer")
     @ObservationIgnored private nonisolated(unsafe) var timeObserver: Any?
@@ -58,7 +58,7 @@ final class PodcastPlayerStore {
 
     // MARK: - Lifecycle
 
-    init(core: SafeHighlighterCore) {
+    init(core: HighlighterCore) {
         self.core = core
     }
 
@@ -321,7 +321,7 @@ final class PodcastPlayerStore {
         targetGroupId: String,
         note: String,
         segments: [TranscriptSegment],
-        core: SafeHighlighterCore
+        core: HighlighterCore
     ) async -> PodcastClipPublishSnapshot {
         isPublishing = true
         publishError = nil
@@ -368,9 +368,11 @@ final class PodcastPlayerStore {
         guard let artifact = currentArtifact else { return }
         let position = position ?? currentTime
         Task { [core, position, artifact] in
-            _ = await core.recordPodcastPlaybackPosition(
-                artifact: artifact,
-                positionSeconds: position
+            _ = core.recordPodcastPlaybackPosition(
+                input: PodcastPlaybackPositionInput(
+                    artifact: artifact,
+                    positionSeconds: position
+                )
             )
         }
     }
@@ -396,7 +398,7 @@ final class PodcastPlayerStore {
     /// AVPlayer is NOT created — that happens when the user taps play and we
     /// route through `load(artifact:)` which seeks to the saved position.
     func rehydrateFromSavedRecord() async {
-        let snapshot = await core.getPodcastPlaybackRehydrationSnapshot(
+        let snapshot = core.getPodcastPlaybackRehydrationSnapshot(
             hasCurrentArtifact: currentArtifact != nil
         )
         guard snapshot.shouldApply, let artifact = snapshot.artifact else { return }

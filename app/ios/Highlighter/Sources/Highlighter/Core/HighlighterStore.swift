@@ -49,8 +49,6 @@ final class HighlighterStore {
 
     // Internal plumbing
     @ObservationIgnored let core: HighlighterCore
-    @ObservationIgnored let safeCore: SafeHighlighterCore
-    @ObservationIgnored private(set) var eventBridge: EventBridge?
     /// Kernel handle. Communities, bookmarks, and profiles are owned by the
     /// kernel's typed snapshots; App.swift pushes them into this store via
     /// `onChange` bridges, and writes (bookmark toggles) dispatch through here.
@@ -69,10 +67,8 @@ final class HighlighterStore {
 
     init() {
         let core = HighlighterCore()
-        let safeCore = SafeHighlighterCore(core: core)
         self.core = core
-        self.safeCore = safeCore
-        let podcastPlayer = PodcastPlayerStore(core: safeCore)
+        let podcastPlayer = PodcastPlayerStore(core: core)
         self.podcastPlayer = podcastPlayer
         self.isOnboardingComplete = false
         // Surface the MiniPlayer (paused) with whatever episode the user was
@@ -81,7 +77,6 @@ final class HighlighterStore {
         Task { @MainActor in
             await podcastPlayer.rehydrateFromSavedRecord()
         }
-        registerEventBridge()
     }
 
     func logout() {
@@ -92,7 +87,6 @@ final class HighlighterStore {
         bookmarkedArticleAddresses.removeAll()
         applyNetworkPathMonitorEnabled(false)
         kernel?.app.dispatch(.logout)
-        eventBridge = nil
 
         isOnboardingComplete = false
         currentUser = nil
@@ -145,12 +139,6 @@ final class HighlighterStore {
     /// bridge, which calls `applyKernelProfiles`. Safe to call from multiple
     /// views for the same pubkey (the kernel's claim is idempotent).
     func requestProfile(pubkeyHex: String) async {
-        kernel?.openProfile(pubkey: pubkeyHex)
-    }
-
-    /// Called by `EventBridge` when a subscribed profile's kind:0 arrives.
-    /// The kernel now owns profile projection; re-claim so it re-projects.
-    func applyProfileSnapshotUpdate(pubkeyHex: String) async {
         kernel?.openProfile(pubkey: pubkeyHex)
     }
 
@@ -213,7 +201,7 @@ final class HighlighterStore {
             }
             return
         }
-        // Web metadata fetch stubbed out: safeCore.getWebMetadata removed.
+        // Web metadata fetch stubbed out until the kernel exposes this read.
         // webMetadataCache remains empty; card views render without enrichment.
     }
 
@@ -271,15 +259,6 @@ final class HighlighterStore {
 
     // MARK: - Private
 
-    private func registerEventBridge() {
-        let bridge = EventBridge(appStore: self)
-        core.setEventCallback(callback: bridge)
-        eventBridge = bridge
-    }
-
-    /// Public so `EventBridge` can re-sync on a `MembershipChanged` delta. The
-    /// kernel's always-open `CommunitiesSnapshot` is authoritative; this just
-    /// re-applies the latest snapshot (idempotent).
     func refreshJoinedCommunities() async {
         guard let communities = kernel?.communities else { return }
         applyCommunitiesSnapshot(communities)
