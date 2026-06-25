@@ -3,11 +3,11 @@
 Status: **design** — not yet implemented. Supersedes the hardcoded
 `DEFAULT_RELAYS` const.
 
-Architecture contract: **nostrdb is the single source of truth.** Relay
+Architecture contract: **legacy app event store is the single source of truth.** Relay
 config is persisted to relay-owned events (kind:10002, kind:30078) which
-hydrate nostrdb via the Rust core; Swift reads config from nostrdb and
+hydrate legacy app event store via the Rust core; Swift reads config from legacy app event store and
 reacts to deltas. Live ephemeral telemetry (connection state, latency,
-event counters) is not in nostrdb — it comes from the Rust core's
+event counters) is not in legacy app event store — it comes from the Rust core's
 nostr-sdk `Client::handle_notifications` pump, bridged to Swift via
 `EventBridge` with a new `RelayStatusChanged` delta.
 
@@ -43,10 +43,10 @@ Split by what each flag is:
 
 - **`read` / `write`** → **kind:10002 (NIP-65)**. Nostr identity;
   interops with Amethyst/Damus/Primal. Re-published on every edit,
-  debounced 1s. Hydrated from nostrdb on login.
+  debounced 1s. Hydrated from legacy app event store on login.
 - **`rooms` / `indexer`** → **kind:30078 NIP-78 app-data** with
   `d = "com.highlighter.relays"`. Highlighter-specific routing, not
-  nostr identity. Self-published; hydrated from nostrdb.
+  nostr identity. Self-published; hydrated from legacy app event store.
 
 `DEFAULT_RELAYS` const is replaced by `fn seed_defaults() -> Vec<RelayConfig>`
 used only when no kind:10002 and no app-data event exist. Seed values:
@@ -84,7 +84,7 @@ defaults.
 - Relays with none of the four flags on are configured but not
   connected — an explicit "paused" state.
 
-**New `nostrdb` + `Client` bridge for live telemetry:**
+**New legacy app event store + `Client` bridge for live telemetry:**
 
 - `spawn_relay_status_pump()` on runtime start: listens to
   `Client::handle_notifications` for `RelayStatus::{Connected,
@@ -132,7 +132,7 @@ fn import_relays_from_npub(npub: String) -> Result<Vec<RelayConfig>,
                                                    CoreError>;
 ```
 
-All published via `SafeHighlighterCore` as `async throws` methods.
+All published via legacy safe-core wrapper as `async throws` methods.
 
 ## Swift screens
 

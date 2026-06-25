@@ -1,12 +1,12 @@
 # AGENTS.md — Highlighter Mobile & Desktop Apps
 
-> The Highlighter native apps share a Rust core that handles Nostr protocol logic, NIP-29 group operations, local data, and sync. Platform-specific UI layers (Kotlin for Android, Swift for iOS, Tauri/native for desktop) consume the Rust core via FFI bridge.
+> The Highlighter native apps are Rust/NMP-owned products with thin native shells. App runtime, event ingestion, relay routing, protocol actions, durable product state, and screen-shaped projections belong in the Rust core through `nostr-multi-platform` (NMP). Platform-specific UI layers (Kotlin for Android, Swift for iOS, Tauri/native for desktop) render projections and execute bounded OS capabilities only.
 
 ## Tech Stack
 
 | Layer | Technology | Purpose |
 |---|---|---|
-| **Rust core** | Rust (no_std where possible) | Nostr client, NIP-29 groups, signing, sync, local DB |
+| **Rust core** | Rust + NMP | Nostr runtime, event store, NIP-29 groups, signing, sync, routing, durable projections |
 | **Android** | Kotlin + Jetpack Compose | Native Android UI |
 | **iOS** | Swift + SwiftUI | Native iOS UI |
 | **Desktop** | Tauri or Rust-native | Desktop app (macOS, Windows, Linux) |
@@ -91,13 +91,12 @@ app/
 ├── core/                      # Shared Rust core library
 │   ├── src/
 │   │   ├── lib.rs             # Library root, public API
-│   │   ├── nostr/             # Nostr client (relay mgmt, event signing)
-│   │   ├── groups/            # NIP-29 group operations (join, leave, membership)
-│   │   ├── auth/              # NIP-42 authentication, key management
-│   │   ├── events/            # Event construction & validation
-│   │   ├── db/                # Local SQLite storage & sync
-│   │   ├── highlight/         # Highlight extraction & management
-│   │   └── ffi/               # FFI bridge definitions (uniffi/cbindgen)
+│   │   ├── kernel/            # TEA actor, typed actions, snapshots, capability requests
+│   │   ├── nmp_*/             # NMP app wiring and Nostr substrate integration
+│   │   ├── groups/            # NIP-29 projections/actions owned by Rust/NMP
+│   │   ├── auth/              # Signer/key capability requests and session projection
+│   │   ├── highlights/        # Highlight and discussion product projections/actions
+│   │   └── ffi/               # Bounded FFI bridge definitions (UniFFI/cbindgen)
 │   ├── Cargo.toml
 │   └── Cargo.lock
 ├── android/                   # Kotlin + Jetpack Compose
@@ -132,19 +131,25 @@ When modifying the Rust core's public API:
 2. Regenerate FFI bindings for all platforms
 3. Rebuild platform-specific projects
 
-### Offline & Sync
+### Native Architecture Contract
 
-The Rust core provides:
-- **Local event database** (SQLite) — all data available offline
-- **Background sync** — reconcile when connectivity returns
-- **Optimistic UI** — post events locally, confirm when relay accepts
-- **Conflict resolution** — latest timestamp wins for replaceable events (Nostr convention)
+The Rust/NMP core provides:
+- **Single app source of truth** for Nostr runtime, event ingestion, event store, relay routing, protocol actions, and durable product projections.
+- **Bounded snapshots** shaped for the currently open app chrome and screens. Native code must not receive or mirror the whole event store.
+- **Typed actions and capability requests**. Native dispatches user intent and reports raw OS results; Rust/NMP decides policy, retry, routing, privacy, and user-visible error state.
+- **Offline/sync behavior** through the NMP substrate. Do not add a second app-client database or native product cache to work around missing projections.
+
+Accepted native storage/capability exceptions:
+- iOS Keychain and Android Keystore/encrypted session storage for secrets and signer material.
+- NIP-55 app IPC handles, camera/file-picker handles, AVPlayer/ExoPlayer media handles, push/display permission state, and share-sheet/App Group handoff payloads.
+- Rendering and media caches such as image caches, waveform caches, and temporary captured image files, provided product policy remains Rust/NMP-owned and logout/deletion behavior is explicit.
+- Presentation-only state such as selected tab, sheet visibility, scroll position while a view is alive, focus, local text-field drafts before dispatch, and animation state.
 
 ### Auth on Mobile
 
 | Platform | Method | Details |
 |---|---|---|
-| Android | NIP-55 | Android signer app (Amber, etc.) |
+| Android | NIP-55 | Android signer app (Amber, etc.) plus Keystore-backed local secrets when needed |
 | iOS | Local keypair | Key stored in iOS Keychain |
 | Both | NIP-46 | Remote signer (Nostr Connect) for cross-device |
 
@@ -219,12 +224,12 @@ cargo tauri build
 ### Kotlin (Android)
 - Follow Kotlin style guide
 - Use Jetpack Compose for all UI
-- ViewModels for screen state, single source of truth via `StateFlow`
+- ViewModels adapt Rust/NMP projections to Compose state; they do not own product facts, relay policy, or durable app state
 
 ### Swift (iOS)
 - Follow Swift API Design Guidelines
 - Use SwiftUI for all views
-- `@Observable` / `@State` for view state
+- `@Observable` / `@State` are allowed for rendering and transient presentation state, not for owning product facts that belong in Rust/NMP
 
 ## What's New Changelog
 
@@ -248,7 +253,7 @@ Entry format:
 
 ## Common Patterns
 
-- **Adding a new Rust API**: Define in `core/src/`, expose via FFI in `core/src/ffi/`, regenerate bindings, implement UI on each platform
-- **Adding a new screen**: Create the screen in each platform's UI layer, use the Rust core for data
-- **Nostr event handling**: Always construct events via `core/src/events/` helpers — never build raw JSON manually
-- **Local database changes**: Add migration in `core/src/db/migrations/`, update schema version
+- **Adding a new Rust API**: Prefer a typed NMP/kernel action, bounded snapshot, or capability request. Regenerate bindings only when the FFI surface changes.
+- **Adding a new screen**: Create native rendering on each platform, but source product state from Rust/NMP projections.
+- **Nostr event handling**: Use typed Rust/NMP actions and projections. Native code must not build protocol JSON, choose relays, or publish directly.
+- **Persistence changes**: App-client product persistence belongs in Rust/NMP. Native persistence requires an explicit OS capability, presentation-state, or cache exception with deletion/logout behavior.

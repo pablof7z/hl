@@ -20,13 +20,13 @@ The single-message-at-a-time loop is the right shape (it is exactly nmp-core's s
 
 ### 1.2 Classification of the 92 `block_on` sites
 
-The classification below was verified by reading the helper bodies down into `HighlighterCore` (`app/core/src/client.rs`) and the runtime layers (`app/core/src/nmp_runtime.rs`, `app/core/src/nostr_runtime.rs`). An important correction to naive triage: **the majority of `get_*` core methods are pure nostrdb reads, not relay queries** — e.g. `get_user_profile` (`client.rs:473-478`), `get_article` (`client.rs:506`), `get_comments_for_reference` (`client.rs:542-554`), `get_follows` (`client.rs:1514-1517`), `get_joined_communities` (`client.rs:423-428`), `get_following_highlights` (`client.rs:459-466`), `get_feedback_threads` (`client.rs:1062-1070`), `get_featured_rooms` (`client.rs:1318-1323`), `get_relay_diagnostics` / `get_auto_connected_relays` (`client.rs:1683-1710`, in-memory snapshot). Likewise the `subscribe_*` methods are synchronous interest registration (`client.rs:236-243`) and `disconnect_all`/`reconnect_all` are non-waiting nudges (`client.rs:1723-1732`). Network delivery is push-based: deltas arrive later via the event callback.
+The classification below was verified by reading the helper bodies down into legacy core facade (`app/core/src/client.rs`) and the runtime layers (`app/core/src/nmp_runtime.rs`, `app/core/src/nostr_runtime.rs`). An important correction to naive triage: **the majority of `get_*` core methods are pure legacy app event store reads, not relay queries** — e.g. `get_user_profile` (`client.rs:473-478`), `get_article` (`client.rs:506`), `get_comments_for_reference` (`client.rs:542-554`), `get_follows` (`client.rs:1514-1517`), `get_joined_communities` (`client.rs:423-428`), `get_following_highlights` (`client.rs:459-466`), `get_feedback_threads` (`client.rs:1062-1070`), `get_featured_rooms` (`client.rs:1318-1323`), `get_relay_diagnostics` / `get_auto_connected_relays` (`client.rs:1683-1710`, in-memory snapshot). Likewise the `subscribe_*` methods are synchronous interest registration (`client.rs:236-243`) and `disconnect_all`/`reconnect_all` are non-waiting nudges (`client.rs:1723-1732`). Network delivery is push-based: deltas arrive later via the event callback.
 
 That leaves four genuinely distinct classes:
 
 #### Class A — NMP protocol-action waits, **360 s** worst case (the killers)
 
-`NostrRuntime::dispatch_nmp_action_for_result` → `nmp_runtime.rs:774` waits on a correlation row with `NMP_PROTOCOL_ACTION_TIMEOUT = Duration::from_secs(360)` (`nmp_runtime.rs:56`). On a dead network the relay ack never arrives and the actor wedges for **six minutes per message**. In-actor `block_on` sites:
+`legacy runtime::dispatch_nmp_action_for_result` → `nmp_runtime.rs:774` waits on a correlation row with `NMP_PROTOCOL_ACTION_TIMEOUT = Duration::from_secs(360)` (`nmp_runtime.rs:56`). On a dead network the relay ack never arrives and the actor wedges for **six minutes per message**. In-actor `block_on` sites:
 
 | Helper | Core path | block_on sites (nmp_app.rs) | Trigger |
 |---|---|---|---|
@@ -75,7 +75,7 @@ The embedded framework is explicit that **an actor must never block**, and it ha
 - **ADR-0028** (actor-liveness probe): actor stalls are treated as observable defects with dedicated FFI probing.
 - **D6** (`03-doctrine-d0-d8.md`, row D6): failures surface as toast state + busy flags, never as exceptions across FFI.
 
-**Verdict:** the framework already provides and mandates the right primitive — *off-actor work + correlation/generation-tagged re-entry message + deadline at the worker + D6 error surfacing*. Highlighter's facade violates it in ~34 network-class sites; its own nine workers prove the pattern fits this codebase. (Re-platforming `HighlighterCore` onto nmp-core's `ActionModule` registry would be the maximal interpretation of "use the framework primitive," but `HighlighterCore` is a parallel nostr-sdk-based runtime — that is a re-architecture, not a fix, and is out of scope here.)
+**Verdict:** the framework already provides and mandates the right primitive — *off-actor work + correlation/generation-tagged re-entry message + deadline at the worker + D6 error surfacing*. Highlighter's facade violates it in ~34 network-class sites; its own nine workers prove the pattern fits this codebase. (Re-platforming legacy core facade onto nmp-core's `ActionModule` registry would be the maximal interpretation of "use the framework primitive," but legacy core facade is a parallel nostr-sdk-based runtime — that is a re-architecture, not a fix, and is out of scope here.)
 
 ---
 
@@ -165,7 +165,7 @@ KernelMsg::OpResolved { domain, generation, outcome } => {
 ```
 
 **Invariants:**
-1. Workers receive `Arc<HighlighterCore>` and input data only — never `state`, never `ActorRuntimes`. All snapshot mutation happens in `apply_op_outcome` on the actor thread, exactly like today's nine `*Resolved` handlers.
+1. Workers receive `Arc<LegacyCoreFacade>` and input data only — never `state`, never `ActorRuntimes`. All snapshot mutation happens in `apply_op_outcome` on the actor thread, exactly like today's nine `*Resolved` handlers.
 2. Every handler that submits an op sets the domain's busy flag and emits *before* returning (the existing `set_signing_in` / `set_bootstrapping` pattern, `nmp_app.rs:2136-2137, 2188-2189`). Carve-out: optimistic-update toggles (comment like/bookmark, article bookmark) intentionally have no busy flag — the optimistic state IS the feedback; failure reverts + toasts (§4.3).
 3. Deadlines per class: Class A ops 30 s (not 360 — the UI cannot wait six minutes; the underlying `dispatch_action_for_result` future is simply abandoned at the worker deadline and its eventual row discarded), Class B publishes 30 s, Class C probes keep their existing 4–6 s.
 4. `block_on` survives only for Class D, renamed through a thin wrapper `block_on_local(...)` carrying a duration guard (log/debug-assert > 50 ms), so the lint in Phase 0 can ban naked `runtime.block_on` in this file.

@@ -69,13 +69,13 @@ File-based, JSON, single file per cache dir. Simpler than sled and
 zero-dependency churn.
 
 - Path: `<runtime.data_dir()>/web_metadata.json` — already created by
-  `NostrRuntime::with_data_dir`, so no extra dir setup.
+  `LegacyRuntime::with_data_dir`, so no extra dir setup.
 - TTL: 7 days for hits, 1 hour for negative entries (so dead links don't
   hammer relays). `fetched_at == 0` flags negative entries.
 - Coalesce concurrent fetches: in-flight `HashMap<String,
   Arc<tokio::sync::Notify>>`. First caller fetches; followers `await` the
   notify, then re-read the cache.
-- `HighlighterCore::get_web_metadata(url)` → check cache → on miss/stale,
+- `LegacyCoreFacade::get_web_metadata(url)` → check cache → on miss/stale,
   fetch + write back → return.
 
 ### Swift
@@ -84,7 +84,7 @@ zero-dependency churn.
   - `var webMetadataCache: [String: WebMetadata] = [:]` (Observable)
   - `func requestWebMetadata(url: String) async` — coalesces by url, writes
     to cache on success.
-- `SafeHighlighterCore` gets a `getWebMetadata(url:)` wrapper.
+- legacy safe-core wrapper gets a `getWebMetadata(url:)` wrapper.
 - `HighlightFeedCardView`:
   - New `private var normalizedWebURL: String?` derived from the
     artifact's `source == "web"` branch.
@@ -100,8 +100,8 @@ Modified:
 - `app/core/src/lib.rs` — `pub mod web_metadata;` + re-export `WebMetadata`.
 - `app/core/src/client.rs` — add `pub async fn get_web_metadata(...)` to
   the `#[uniffi::export]` impl. Hold the cache + in-flight map on
-  `HighlighterCore`.
-- `app/ios/.../Core/SafeHighlighterCore.swift` — `getWebMetadata` wrapper.
+  legacy core facade.
+- the legacy safe-core wrapper file — `getWebMetadata` wrapper.
 - `app/ios/.../Core/HighlighterStore.swift` — `webMetadataCache` +
   `requestWebMetadata`.
 - `app/ios/.../Features/Highlights/HighlightFeedCardView.swift` — wire
