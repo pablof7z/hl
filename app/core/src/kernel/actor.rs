@@ -407,10 +407,9 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
 
         AppAction::CreateRoom {
             group_id,
-            host_relay_url,
             name,
             about,
-        } => room_home::reduce_action_create_room(group_id, host_relay_url, name, about),
+        } => room_home::reduce_action_create_room(state, group_id, name, about),
 
         AppAction::AddRoomMember {
             group_id,
@@ -754,7 +753,7 @@ fn reduce_action_envelope(
         }
         "hl.room.create" => {
             let p = parse!(CreateRoomPayload);
-            room_home::reduce_action_create_room(p.group_id, p.host_relay_url, p.name, p.about)
+            room_home::reduce_action_create_room(state, p.group_id, p.name, p.about)
         }
         "hl.room.add_member" => {
             let p = parse!(AddRoomMemberPayload);

@@ -262,8 +262,7 @@ struct CreateRoomSheet: View {
         let draft = projection
         guard draft.canCreate else { return }
 
-        let hostRelay = appStore.joinedCommunities.first?.relayUrl ?? ""
-        guard !hostRelay.isEmpty else {
+        guard appStore.joinedCommunities.contains(where: { !$0.relayUrl.isEmpty }) else {
             error = "No rooms relay configured. Join a room first."
             return
         }
@@ -272,7 +271,6 @@ struct CreateRoomSheet: View {
 
         appStore.kernel?.app.dispatch(.createRoom(
             groupId: groupId,
-            hostRelayUrl: hostRelay,
             name: draft.createName,
             about: draft.createAbout.isEmpty ? nil : draft.createAbout
         ))

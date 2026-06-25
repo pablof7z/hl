@@ -157,7 +157,6 @@ pub(crate) struct LeaveRoomPayload {
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct CreateRoomPayload {
     pub group_id: String,
-    pub host_relay_url: String,
     pub name: String,
     pub about: Option<String>,
 }
@@ -767,8 +766,6 @@ pub enum AppAction {
     CreateRoom {
         /// NIP-29 local group id (must match `[a-z0-9-_]+`).
         group_id: String,
-        /// Host relay WebSocket URL (opaque — D3).
-        host_relay_url: String,
         /// Human-readable room name (required, non-empty).
         name: String,
         /// Optional description.
