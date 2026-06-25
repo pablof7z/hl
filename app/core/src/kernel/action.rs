@@ -191,7 +191,6 @@ pub(crate) struct ShareToRoomPayload {
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct ShareArtifactToRoomPayload {
     pub group_id: String,
-    pub host_relay_url: String,
     pub preview: crate::kernel::models::ArtifactPreview,
     #[serde(default)]
     pub note: String,
@@ -200,7 +199,6 @@ pub(crate) struct ShareArtifactToRoomPayload {
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct ShareHighlightToRoomPayload {
     pub group_id: String,
-    pub host_relay_url: String,
     pub highlight_event_id: String,
     pub highlight_author_pubkey: String,
     #[serde(default)]
@@ -210,7 +208,6 @@ pub(crate) struct ShareHighlightToRoomPayload {
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct ShareMintInvitePayload {
     pub group_id: String,
-    pub host_relay_url: String,
     #[serde(default = "one")]
     pub count: u32,
 }

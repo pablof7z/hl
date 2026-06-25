@@ -57,12 +57,12 @@ enum HighlighterAction {
     // ── Share flow (#21) ────────────────────────────────────────────────────────
     /// Publish a kind:11 artifact/article/podcast share into a room. `previewJson`
     /// is the serde-JSON of an `ArtifactPreview` (via `captureArtifactPreviewJson`).
-    case shareArtifactToRoom(groupId: String, hostRelayUrl: String, previewJson: String, note: String)
+    case shareArtifactToRoom(groupId: String, previewJson: String, note: String)
     /// Publish a kind:16 generic repost of an existing highlight into a room.
-    case shareHighlightToRoom(groupId: String, hostRelayUrl: String, highlightEventId: String, highlightAuthorPubkey: String, relayHint: String)
+    case shareHighlightToRoom(groupId: String, highlightEventId: String, highlightAuthorPubkey: String, relayHint: String)
     /// Mint `count` invite codes + publish kind:9009; read codes from the
     /// SharePublish snapshot.
-    case shareMintInvite(groupId: String, hostRelayUrl: String, count: UInt32)
+    case shareMintInvite(groupId: String, count: UInt32)
     /// Clear a terminal share-publish state (sheet dismissed / reopened).
     case shareResetPublish
 
@@ -349,26 +349,24 @@ enum HighlighterAction {
             return AppActionEnvelope(namespace: "hl.room.share_to_room", json: jsonAny(dict))
 
         // ── Share flow (#21) ────────────────────────────────────────────────────
-        case .shareArtifactToRoom(let groupId, let hostRelayUrl, let previewJson, let note):
+        case .shareArtifactToRoom(let groupId, let previewJson, let note):
             // preview_json is the serde-JSON of an ArtifactPreview; embed it as a
             // nested object so the kernel deserializes `preview` directly.
             let json = """
-            {"group_id":\(jsonString(groupId)),"host_relay_url":\(jsonString(hostRelayUrl)),"preview":\(previewJson),"note":\(jsonString(note))}
+            {"group_id":\(jsonString(groupId)),"preview":\(previewJson),"note":\(jsonString(note))}
             """
             return AppActionEnvelope(namespace: "hl.share.artifact_to_room", json: json)
-        case .shareHighlightToRoom(let groupId, let hostRelayUrl, let eventId, let author, let relayHint):
+        case .shareHighlightToRoom(let groupId, let eventId, let author, let relayHint):
             let dict: [String: Any] = [
                 "group_id": groupId,
-                "host_relay_url": hostRelayUrl,
                 "highlight_event_id": eventId,
                 "highlight_author_pubkey": author,
                 "relay_hint": relayHint,
             ]
             return AppActionEnvelope(namespace: "hl.share.highlight_to_room", json: jsonAny(dict))
-        case .shareMintInvite(let groupId, let hostRelayUrl, let count):
+        case .shareMintInvite(let groupId, let count):
             let dict: [String: Any] = [
                 "group_id": groupId,
-                "host_relay_url": hostRelayUrl,
                 "count": count,
             ]
             return AppActionEnvelope(namespace: "hl.share.mint_invite", json: jsonAny(dict))

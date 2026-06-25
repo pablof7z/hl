@@ -784,20 +784,13 @@ fn reduce_action_envelope(
         // ── Share flow (#21) ───────────────────────────────────────────────────
         "hl.share.artifact_to_room" => {
             let p = parse!(ShareArtifactToRoomPayload);
-            share::reduce_action_artifact_to_room(
-                state,
-                p.group_id,
-                p.host_relay_url,
-                p.preview,
-                p.note,
-            )
+            share::reduce_action_artifact_to_room(state, p.group_id, p.preview, p.note)
         }
         "hl.share.highlight_to_room" => {
             let p = parse!(ShareHighlightToRoomPayload);
             share::reduce_action_highlight_to_room(
                 state,
                 p.group_id,
-                p.host_relay_url,
                 p.highlight_event_id,
                 p.highlight_author_pubkey,
                 p.relay_hint,
@@ -805,7 +798,7 @@ fn reduce_action_envelope(
         }
         "hl.share.mint_invite" => {
             let p = parse!(ShareMintInvitePayload);
-            share::reduce_action_mint_invite(state, p.group_id, p.host_relay_url, p.count)
+            share::reduce_action_mint_invite(state, p.group_id, p.count)
         }
         // Note: `drain_queue_publish` is NOT a dispatchable namespace — the
         // publish runs automatically inside `reduce_event_share_queue_drained`

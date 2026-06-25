@@ -165,7 +165,6 @@ struct RoomShareCard: View {
         kernel.app.dispatch(
             .shareMintInvite(
                 groupId: groupId,
-                hostRelayUrl: room?.relayUrl ?? "",
                 count: 1
             )
         )
