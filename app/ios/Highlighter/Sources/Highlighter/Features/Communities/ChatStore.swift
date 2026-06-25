@@ -19,7 +19,6 @@ final class ChatPresenceProbe {
 
     func start(
         groupId: String,
-        hostRelayUrl: String,
         kernel: HighlighterAppKernel,
         onActivity: @escaping () -> Void
     ) async {
@@ -32,7 +31,7 @@ final class ChatPresenceProbe {
 
         // Opening the kernel chat view wires the ChatObserver and streams a
         // RoomChatSnapshot into `kernel.roomChatSnapshots[groupId]`.
-        kernel.openRoomChat(groupId: groupId, hostRelayUrl: hostRelayUrl)
+        kernel.openRoomChat(groupId: groupId)
         if kernel.roomChatSnapshots[groupId]?.hasActivity == true {
             onActivity()
         }
@@ -73,7 +72,6 @@ final class ChatStore {
     var sendError: String?
 
     @ObservationIgnored private var groupId: String?
-    @ObservationIgnored private var hostRelayUrl: String = ""
     @ObservationIgnored private weak var kernel: HighlighterAppKernel?
     @ObservationIgnored private var lastRevision: UInt64 = 0
 
@@ -82,9 +80,8 @@ final class ChatStore {
     /// so this store does NOT open/close it — it only mirrors the snapshot and
     /// dispatches writes. This avoids double open/close when the chat tab is
     /// shown and hidden while the room stays on screen.
-    func start(groupId: String, hostRelayUrl: String, kernel: HighlighterAppKernel) async {
+    func start(groupId: String, kernel: HighlighterAppKernel) async {
         self.groupId = groupId
-        self.hostRelayUrl = hostRelayUrl
         self.kernel = kernel
         isLoading = true
         applyKernelSnapshot()
@@ -122,7 +119,6 @@ final class ChatStore {
         guard !trimmed.isEmpty else { return }
         kernel.app.dispatch(.postChat(
             groupId: groupId,
-            hostRelayUrl: hostRelayUrl,
             content: trimmed,
             replyToEventId: replyTo?.eventId
         ))

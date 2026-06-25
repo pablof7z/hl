@@ -336,9 +336,9 @@ final class HighlighterAppKernel {
     /// Open a room-chat view for `groupId`. Opens the kernel view (so snapshots
     /// stream into `roomChatSnapshots`) and dispatches `hl.chat.open` to wire the
     /// per-room `ChatObserver`. Call from `ChatView.task`.
-    func openRoomChat(groupId: String, hostRelayUrl: String) {
+    func openRoomChat(groupId: String) {
         app.openView(viewId: .roomChat(groupId: groupId), route: .roomChat(groupId: groupId))
-        app.dispatch(.chatOpen(groupId: groupId, hostRelayUrl: hostRelayUrl))
+        app.dispatch(.chatOpen(groupId: groupId))
     }
 
     /// Close a room-chat view for `groupId`. Dispatches `hl.chat.close` (releases

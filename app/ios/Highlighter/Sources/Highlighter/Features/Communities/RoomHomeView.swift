@@ -86,7 +86,6 @@ struct RoomHomeView: View {
                 room.start(groupId: groupId, kernel: kernel)
                 await chatPresenceProbe.start(
                     groupId: groupId,
-                    hostRelayUrl: kernelRoomSnapshot?.hostRelayUrl ?? "",
                     kernel: kernel,
                     onActivity: {
                         hasChatActivity = true
