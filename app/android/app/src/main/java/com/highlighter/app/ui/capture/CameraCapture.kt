@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -37,8 +36,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,9 +50,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -67,35 +61,27 @@ import kotlin.coroutines.resumeWithException
 private const val TAG = "CameraCapture"
 
 /**
- * Result of a camera capture + on-device OCR pass.
+ * Result of a camera capture pass.
  *
  * [jpegBytes] — JPEG-encoded page image ready for UploadCapturePhoto.
  * [width] / [height] — intrinsic dimensions of the image.
- * [ocrMarkdown] — structurally reconstructed markdown from ML Kit.
- * [altText] — one-line alt summary (markdown flattened).
- * [lines] — raw OCR lines, kept for the page-review screen.
  */
 internal data class CaptureResult(
     val jpegBytes: ByteArray,
     val width: UInt,
     val height: UInt,
-    val ocrMarkdown: String,
-    val altText: String,
-    val lines: List<OcrLine>,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is CaptureResult) return false
         return jpegBytes.contentEquals(other.jpegBytes) &&
-            width == other.width && height == other.height &&
-            ocrMarkdown == other.ocrMarkdown
+            width == other.width && height == other.height
     }
 
     override fun hashCode(): Int {
         var result = jpegBytes.contentHashCode()
         result = 31 * result + width.hashCode()
         result = 31 * result + height.hashCode()
-        result = 31 * result + ocrMarkdown.hashCode()
         return result
     }
 }
@@ -105,9 +91,7 @@ internal data class CaptureResult(
  *
  * On capture, the image is:
  *  1. JPEG-compressed (quality 90).
- *  2. Run through ML Kit on-device TextRecognition.
- *  3. OCR lines restructured into markdown via [OcrStructureReconstructor].
- *  4. [onCapture] is called with the [CaptureResult].
+ *  2. [onCapture] is called with the [CaptureResult].
  *
  * The caller dismisses/replaces this screen; this composable only drives
  * the camera preview and capture flow.
@@ -216,7 +200,7 @@ internal fun CameraCaptureScreen(
                     modifier = Modifier.size(56.dp),
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Running OCR…", color = Color.White, style = MaterialTheme.typography.bodySmall)
+                Text("Capturing…", color = Color.White, style = MaterialTheme.typography.bodySmall)
             } else {
                 // Large shutter button
                 Surface(
@@ -257,14 +241,14 @@ internal fun CameraCaptureScreen(
     }
 }
 
-// ── Capture + OCR pipeline ────────────────────────────────────────────────────
+// ── Capture pipeline ─────────────────────────────────────────────────────────
 
 /**
- * Takes a photo, compresses it to JPEG (quality 90), runs ML Kit
- * TextRecognition on it, reconstructs OCR output into markdown, and returns
- * the [CaptureResult].
+ * Takes a photo, compresses it to JPEG (quality 90), and returns the
+ * [CaptureResult]. OCR runs later through the Rust-owned capability flow after
+ * the image handle is written to disk.
  *
- * Runs the heavy OCR on [Dispatchers.IO] and resumes on the caller's
+ * Runs image processing on [Dispatchers.IO] and resumes on the caller's
  * coroutine.
  */
 @OptIn(ExperimentalGetImage::class)
@@ -305,51 +289,9 @@ private suspend fun captureAndOcr(
     val width = bitmap.width.toUInt()
     val height = bitmap.height.toUInt()
 
-    // 3. Run ML Kit OCR on the bitmap.
-    val ocrLines = recognizeLines(bitmap)
-
-    // 4. Reconstruct into markdown.
-    val markdown = OcrStructureReconstructor.toMarkdown(ocrLines)
-    val altText = OcrStructureReconstructor.flattenForAlt(markdown)
-
     CaptureResult(
         jpegBytes = jpegBytes,
         width = width,
         height = height,
-        ocrMarkdown = markdown,
-        altText = altText,
-        lines = ocrLines,
     )
 }
-
-/**
- * Runs ML Kit on-device text recognition on [bitmap] and converts results
- * into [OcrLine] objects with pixel-coordinate bounding boxes.
- */
-private suspend fun recognizeLines(bitmap: Bitmap): List<OcrLine> =
-    suspendCancellableCoroutine { cont ->
-        val image = InputImage.fromBitmap(bitmap, 0)
-        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-        recognizer.process(image)
-            .addOnSuccessListener { visionText ->
-                val lines = mutableListOf<OcrLine>()
-                for (block in visionText.textBlocks) {
-                    for (line in block.lines) {
-                        val box = line.boundingBox ?: continue
-                        lines.add(
-                            OcrLine(
-                                text = line.text,
-                                top = box.top.toFloat(),
-                                bottom = box.bottom.toFloat(),
-                                left = box.left.toFloat(),
-                                right = box.right.toFloat(),
-                            ),
-                        )
-                    }
-                }
-                cont.resume(lines)
-            }
-            .addOnFailureListener { e ->
-                cont.resumeWithException(e)
-            }
-    }
