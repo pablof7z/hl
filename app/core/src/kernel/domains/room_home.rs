@@ -26,10 +26,10 @@
 //! ## D3 compliance
 //!
 //! No relay URL literals appear in this file. Joined-room writes resolve relay
-//! URLs from `AppState::communities`; join/create still receive an explicit host
-//! relay until their bootstrap policy is migrated. The `invite_link_base` URL
-//! lives in `AppState::room_policy.invite_link_base` (injected at construction,
-//! never hardcoded).
+//! URLs from `AppState::communities`; join still receives an explicit host relay
+//! because the user is choosing a discovered remote room. The `invite_link_base`
+//! URL lives in `AppState::room_policy.invite_link_base` (injected at
+//! construction, never hardcoded).
 //!
 //! ## D6 compliance
 //!
@@ -282,6 +282,14 @@ fn host_relay_for_joined_group(state: &AppState, group_id: &str) -> Option<Strin
         .filter(|url| !url.is_empty())
 }
 
+fn default_create_host_relay(state: &AppState) -> Option<String> {
+    state
+        .communities
+        .iter()
+        .map(|c| c.host_relay_url.trim().to_string())
+        .find(|url| !url.is_empty())
+}
+
 /// Handle `AppAction::LeaveRoom { group_id, reason }`.
 ///
 /// Dispatches `"nmp.nip29.leave"` via `Effect::DispatchNip29Action`.
@@ -317,7 +325,7 @@ pub(crate) fn reduce_action_leave_room(
     }]
 }
 
-/// Handle `AppAction::CreateRoom { group_id, host_relay_url, name, about }`.
+/// Handle `AppAction::CreateRoom { group_id, name, about }`.
 ///
 /// Dispatches `"nmp.nip29.create_public_group"` via `Effect::DispatchNip29Action`.
 ///
@@ -329,11 +337,18 @@ pub(crate) fn reduce_action_leave_room(
 /// Creates kind:9007 (create-group) + kind:9002 (metadata edit) on the host relay.
 /// Fire-and-forget (D6). D3: no relay URL literals in kernel.
 pub(crate) fn reduce_action_create_room(
+    state: &AppState,
     group_id: String,
-    host_relay_url: String,
     name: String,
     about: Option<String>,
 ) -> Vec<Effect> {
+    let Some(host_relay_url) = default_create_host_relay(state) else {
+        tracing::trace!(
+            group_id = %group_id,
+            "room_home::create_room: no default host relay from joined communities; skipping dispatch (D3 fail-closed)"
+        );
+        return vec![];
+    };
     let json = serde_json::json!({
         "group": {
             "host_relay_url": host_relay_url,
@@ -1470,6 +1485,7 @@ mod tests {
     #[test]
     fn create_room_dispatches_create_public_group() {
         let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
         let clock = ManualClock::default();
 
         let effects = step(
@@ -1477,7 +1493,6 @@ mod tests {
             &clock,
             Cmd::Action(AppAction::CreateRoom {
                 group_id: "my-room".to_string(),
-                host_relay_url: TEST_RELAY.to_string(),
                 name: "My Room".to_string(),
                 about: Some("A nice place".to_string()),
             }),
@@ -1499,6 +1514,27 @@ mod tests {
             }
             other => panic!("expected DispatchNip29Action, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn create_room_fails_closed_without_default_host_relay() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::CreateRoom {
+                group_id: "my-room".to_string(),
+                name: "My Room".to_string(),
+                about: None,
+            }),
+        );
+
+        assert!(
+            effects.is_empty(),
+            "CreateRoom must not dispatch without a Rust-owned default host relay"
+        );
     }
 
     // 3F-T9: add_room_member_dispatches_put_user
