@@ -54,12 +54,6 @@ class HighlighterViewModel(application: Application) :
         sessionStore,
     )
 
-    /**
-     * Bridges core deltas (signer connection, live data) back to the app.
-     * Registered before login so the NIP-46 `SignerConnected` delta is never
-     * dropped. Held so we can clear it on logout, matching iOS.
-     */
-    private var eventBridge: EventBridge? = null
     private var hasBootstrapped = false
 
     // Track the last wifiOnlyEnabled value so onState can skip the OS-level
@@ -98,11 +92,6 @@ class HighlighterViewModel(application: Application) :
         if (hasBootstrapped) return
         hasBootstrapped = true
 
-        // Register the EventBridge unconditionally, before any login attempt.
-        // The NIP-46 nostrconnect:// flow fires `SignerConnected` from a
-        // background tokio task; if no callback is wired by then, the delta is
-        // dropped silently and the UI never transitions to logged-in.
-        registerEventBridge()
         app.dispatch(HighlighterAppAction.Bootstrap)
 
         // Restore a previously saved credential and sign back in. Restore uses
@@ -243,13 +232,8 @@ class HighlighterViewModel(application: Application) :
 
     /** Tear down the signer session and forget the stored credential. */
     fun logout() {
-        app.clearCoreEventCallback()
         app.dispatch(HighlighterAppAction.Logout)
-        eventBridge = null
         sessionStore.clear()
-        // Re-arm the bridge so a subsequent sign-in on the same launch still
-        // receives the SignerConnected delta.
-        registerEventBridge()
     }
 
     override fun onState(state: HighlighterAppState) {
@@ -275,19 +259,6 @@ class HighlighterViewModel(application: Application) :
 
     override fun onOpenExternalUrl(url: String) {
         openExternalUrl(url)
-    }
-
-    private fun registerEventBridge() {
-        val bridge = EventBridge(
-            onSignerConnected = {
-                // Finish the NIP-46 login: re-arm the bridge defensively, then
-                // refresh app chrome to surface the new session (iOS completeLogin).
-                if (eventBridge == null) registerEventBridge()
-                app.dispatch(HighlighterAppAction.RefreshAppChrome)
-            },
-        )
-        app.setCoreEventCallback(bridge)
-        eventBridge = bridge
     }
 
     private fun openExternalUrl(url: String) {
