@@ -99,6 +99,24 @@ pub(crate) struct SetRelayRolePayload {
 }
 
 #[derive(Debug, serde::Deserialize)]
+pub(crate) struct SetRelayConfigPayload {
+    pub url: String,
+    #[serde(default)]
+    pub read: bool,
+    #[serde(default)]
+    pub write: bool,
+    #[serde(default)]
+    pub rooms: bool,
+    #[serde(default)]
+    pub indexer: bool,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct SetRelayConfigsPayload {
+    pub relays: Vec<SetRelayConfigPayload>,
+}
+
+#[derive(Debug, serde::Deserialize)]
 pub(crate) struct FollowPayload {
     pub pubkey: String,
 }

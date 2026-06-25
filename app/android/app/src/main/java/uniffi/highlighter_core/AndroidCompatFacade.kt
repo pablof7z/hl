@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -736,6 +737,12 @@ class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyring
             is HighlighterAppAction.SignInNip55 -> dispatchEnvelope("hl.auth.sign_in_nip55")
             is HighlighterAppAction.StartNostrConnect -> dispatchEnvelope("hl.auth.start_nostr_connect")
             is HighlighterAppAction.CompleteOnboarding -> dispatchEnvelope("hl.route.complete_onboarding")
+            HighlighterAppAction.OpenNetworkSettings -> {
+                openView(ViewId.NetworkSettings, ViewRoute.NetworkSettings)
+                aggregate = aggregate.copy(network = aggregate.network.copy(relays = app.relayListSnapshot().map { it.toRelayConfig() }))
+            }
+            HighlighterAppAction.CloseNetworkSettings -> closeView(ViewId.NetworkSettings)
+            HighlighterAppAction.OpenMediaSettings, HighlighterAppAction.CloseMediaSettings -> Unit
             is HighlighterAppAction.OpenProfile -> openView(ViewId.Profile(action.pubkey), ViewRoute.Profile(action.pubkey))
             HighlighterAppAction.CloseProfile -> closeView(aggregate.profileView.pubkeyHex.takeIf { it.isNotBlank() }?.let { ViewId.Profile(it) })
             is HighlighterAppAction.RequestProfile -> openView(ViewId.Profile(action.pubkey), ViewRoute.Profile(action.pubkey))
@@ -773,8 +780,30 @@ class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyring
                 ViewRoute.CommentThread(action.rootTagValue),
             )
             HighlighterAppAction.CloseComments -> closeView(aggregate.comments.rootTagValue.takeIf { it.isNotBlank() }?.let { ViewId.CommentThread(it) })
-            is HighlighterAppAction.NetworkPathChanged -> aggregate = aggregate.copy(network = aggregate.network.copy(currentPathIsWifi = action.isWifi))
-            is HighlighterAppAction.SetNetworkWifiOnly -> dispatchEnvelope("hl.network.apply_path", obj("wifi_only_enabled" to action.enabled))
+            is HighlighterAppAction.NetworkPathChanged -> {
+                aggregate = aggregate.copy(network = aggregate.network.copy(currentPathIsWifi = action.isWifi))
+                if (aggregate.network.wifiOnlyEnabled) {
+                    dispatchEnvelope("hl.network.apply_path", obj("is_wifi" to action.isWifi, "wifi_only" to true))
+                }
+            }
+            is HighlighterAppAction.SetNetworkWifiOnly -> {
+                val isWifi = aggregate.network.currentPathIsWifi ?: false
+                aggregate = aggregate.copy(network = aggregate.network.copy(wifiOnlyEnabled = action.enabled))
+                dispatchEnvelope("hl.network.apply_path", obj("is_wifi" to isWifi, "wifi_only" to action.enabled))
+            }
+            is HighlighterAppAction.UpsertNetworkRelay -> {
+                val next = aggregate.network.relays
+                    .filterNot { it.url == action.config.url }
+                    .plus(action.config)
+                aggregate = aggregate.copy(network = aggregate.network.copy(relays = next))
+                dispatchRelayConfigs(next)
+            }
+            is HighlighterAppAction.RemoveNetworkRelay -> {
+                val next = aggregate.network.relays.filterNot { it.url == action.url }
+                aggregate = aggregate.copy(network = aggregate.network.copy(relays = next))
+                dispatchRelayConfigs(next)
+            }
+            HighlighterAppAction.ReconnectNetwork -> Unit
             HighlighterAppAction.DismissWhatsNew -> aggregate.whatsNew.entries.firstOrNull()?.let {
                 dispatchEnvelope("hl.whats_new.mark_seen", obj("shipped_at_unix" to it.shippedAtUnix))
             }
@@ -834,6 +863,15 @@ class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyring
         app.dispatchAction(AppActionEnvelope(namespace, Json.encodeToString(json)))
     }
 
+    private fun dispatchRelayConfigs(relays: List<RelayConfig>) {
+        dispatchEnvelope(
+            "hl.relay.set_configs",
+            buildJsonObject {
+                put("relays", JsonArray(relays.map { it.toJsonObject() }))
+            },
+        )
+    }
+
     private fun submitSearch(raw: String) {
         val query = raw.trim()
         if (query.isEmpty()) return
@@ -864,7 +902,7 @@ private fun HighlighterAppState.reducing(viewId: ViewId, snapshot: ViewSnapshot)
             ),
         )
         is ViewSnapshot.RootShell -> copy(toast = snapshot.v1.toast)
-        is ViewSnapshot.NetworkSettings -> copy(network = network.copy(relays = snapshot.v1.relays.map { it.toRelayConfig() }))
+        is ViewSnapshot.NetworkSettings -> copy(network = network.copy(diagnostics = snapshot.v1.relays.map { it.compatRelayRow() }))
         is ViewSnapshot.RelayDiagnostics -> copy(network = network.copy(diagnostics = snapshot.v1.relays.map { it.compatRelayRow() }))
         is ViewSnapshot.Communities -> copy(chrome = chrome.copy(
             joinedCommunities = snapshot.v1.groups.map { it.toCommunitySummary() },
@@ -948,6 +986,25 @@ private fun RelayDiagRow.toRelayConfig(): RelayConfig =
         rooms = false,
         indexer = false,
     )
+
+private fun KernelRelayRow.toRelayConfig(): RelayConfig {
+    val tokens = role.split(",").map { it.trim() }.toSet()
+    return RelayConfig(
+        url = url,
+        read = "read" in tokens || "both" in tokens,
+        write = "write" in tokens || "both" in tokens,
+        rooms = false,
+        indexer = "indexer" in tokens,
+    )
+}
+
+private fun RelayConfig.toJsonObject(): JsonObject = buildJsonObject {
+    put("url", url)
+    put("read", read)
+    put("write", write)
+    put("rooms", rooms)
+    put("indexer", indexer)
+}
 
 private fun CommunityRow.toCommunitySummary() = CommunitySummary(
     id = groupId,
