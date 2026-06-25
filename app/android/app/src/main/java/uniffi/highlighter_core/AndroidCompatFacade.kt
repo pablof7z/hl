@@ -15,6 +15,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import java.io.File
+import java.util.UUID
 
 private const val TAG = "HlCompatFacade"
 
@@ -694,6 +696,7 @@ sealed class HighlighterAppAction {
 }
 
 class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyringHandler) {
+    private val dataDir = File(config.dataDir)
     private val app = HighlighterApp.newWithKeyring(AppConfig(config.dataDir), keyringHandler)
     private var reconciler: HighlighterAppReconciler? = null
     private val closed = AtomicBoolean(false)
@@ -718,6 +721,7 @@ class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyring
         openView(ViewId.SharePublish, ViewRoute.SharePublish)
         openView(ViewId.WhatsNew, ViewRoute.WhatsNew)
         openView(ViewId.PodcastListening, ViewRoute.PodcastListening)
+        openView(ViewId.Capture, ViewRoute.Capture)
     }
 
     fun listenForUpdates(reconciler: HighlighterAppReconciler) {
@@ -820,23 +824,24 @@ class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyring
                 "hl.share.publish_url",
                 obj("url" to action.url, "group_id" to action.groupId, "note" to action.note.orEmpty()),
             )
-            is HighlighterAppAction.PublishCaptureHighlight -> dispatchEnvelope(
-                "hl.capture.publish_highlight",
-                obj(
-                    "quote" to action.draft.quote,
-                    "context" to action.draft.context,
-                    "note" to action.draft.note,
-                    "group_id" to action.groupId.orEmpty(),
-                ),
+            is HighlighterAppAction.UploadCapturePhoto -> dispatchCaptureUpload(action)
+            HighlighterAppAction.ClearCaptureUpload -> {
+                aggregate = aggregate.copy(capture = aggregate.capture.copy(
+                    isUploading = false,
+                    uploadErrorMessage = null,
+                    upload = null,
+                ))
+                dispatchEnvelope("hl.capture.reset")
+            }
+            HighlighterAppAction.ClearCaptureError -> aggregate = aggregate.copy(
+                capture = aggregate.capture.copy(errorMessage = null, uploadErrorMessage = null),
             )
-            is HighlighterAppAction.PublishCapturePicture -> dispatchEnvelope(
-                "hl.capture.publish_picture",
-                obj(
-                    "image_url" to (action.upload?.url ?: action.upload?.imageUrl).orEmpty(),
-                    "note" to action.note,
-                    "group_id" to action.groupId.orEmpty(),
-                ),
-            )
+            HighlighterAppAction.ClearCaptureResult -> {
+                aggregate = aggregate.copy(capture = aggregate.capture.copy(publishedEventId = null))
+                dispatchEnvelope("hl.capture.reset")
+            }
+            is HighlighterAppAction.PublishCaptureHighlight -> dispatchCaptureHighlight(action)
+            is HighlighterAppAction.PublishCapturePicture -> dispatchCapturePicture(action)
             else -> Log.d(TAG, "compat action not yet mapped: $action")
         }
         reconciler?.onState(aggregate)
@@ -870,6 +875,86 @@ class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyring
                 put("relays", JsonArray(relays.map { it.toJsonObject() }))
             },
         )
+    }
+
+    private fun dispatchCaptureUpload(action: HighlighterAppAction.UploadCapturePhoto) {
+        val handle = runCatching {
+            val dir = File(dataDir, "capture").apply { mkdirs() }
+            val ext = when (action.mime.lowercase()) {
+                "image/png" -> "png"
+                "image/webp" -> "webp"
+                else -> "jpg"
+            }
+            File(dir, "capture-${UUID.randomUUID()}.$ext").also { it.writeBytes(action.bytes) }
+        }.getOrElse { error ->
+            aggregate = aggregate.copy(capture = aggregate.capture.copy(
+                isUploading = false,
+                uploadErrorMessage = error.message ?: "Could not prepare image upload",
+            ))
+            return
+        }
+
+        aggregate = aggregate.copy(capture = aggregate.capture.copy(
+            isUploading = true,
+            uploadErrorMessage = null,
+            upload = HighlighterCaptureUploadSnapshot(
+                url = handle.absolutePath,
+                imageUrl = handle.absolutePath,
+                mime = action.mime,
+                sizeBytes = action.bytes.size.toULong(),
+                width = action.width,
+                height = action.height,
+            ),
+        ))
+        dispatchEnvelope(
+            "hl.blossom.upload",
+            buildJsonObject {
+                put("image_handle", handle.absolutePath)
+                put("servers", JsonArray(emptyList()))
+            },
+        )
+    }
+
+    private fun dispatchCaptureHighlight(action: HighlighterAppAction.PublishCaptureHighlight) {
+        dispatchCaptureArtifact(action.artifact)
+        dispatchCaptureTargetGroup(action.groupId)
+        dispatchEnvelope("hl.capture.set_quote", obj("quote" to action.draft.quote))
+        dispatchEnvelope("hl.capture.set_context", obj("context" to action.draft.context))
+        dispatchEnvelope("hl.capture.set_note", obj("note" to action.draft.note))
+        dispatchEnvelope("hl.capture.publish")
+    }
+
+    private fun dispatchCapturePicture(action: HighlighterAppAction.PublishCapturePicture) {
+        dispatchCaptureArtifact(action.artifact)
+        dispatchCaptureTargetGroup(action.groupId)
+        dispatchEnvelope("hl.capture.set_note", obj("note" to action.note))
+        dispatchEnvelope("hl.capture.publish")
+    }
+
+    private fun dispatchCaptureArtifact(artifact: HighlighterCaptureArtifact?) {
+        when (artifact) {
+            is HighlighterCaptureArtifact.Existing -> dispatchEnvelope(
+                "hl.capture.set_artifact_record",
+                obj("artifact_json" to captureArtifactRecordJson(artifact.record)),
+            )
+            is HighlighterCaptureArtifact.Preview -> dispatchEnvelope(
+                "hl.capture.set_artifact_preview",
+                obj("preview_json" to captureArtifactPreviewJson(artifact.preview)),
+            )
+            is HighlighterCaptureArtifact.Pending -> dispatchEnvelope(
+                "hl.capture.set_artifact_preview",
+                obj("preview_json" to captureArtifactPreviewJson(artifact.preview)),
+            )
+            null -> dispatchEnvelope("hl.capture.clear_artifact")
+        }
+    }
+
+    private fun dispatchCaptureTargetGroup(groupId: String?) {
+        if (groupId.isNullOrBlank()) {
+            dispatchEnvelope("hl.capture.clear_target_group")
+        } else {
+            dispatchEnvelope("hl.capture.set_target_group", obj("group_id" to groupId))
+        }
     }
 
     private fun submitSearch(raw: String) {
@@ -940,6 +1025,7 @@ private fun HighlighterAppState.reducing(viewId: ViewId, snapshot: ViewSnapshot)
             publishedGroupId = snapshot.v1.inviteCodes.firstOrNull(),
             errorMessage = snapshot.v1.errorMessage,
         ))
+        is ViewSnapshot.Capture -> copy(capture = snapshot.v1.toCompatCapture(capture))
         is ViewSnapshot.CommentThread -> copy(comments = HighlighterCommentsSnapshot(
             rootTagValue = snapshot.v1.rootTagValue,
             records = snapshot.v1.records.map { it.toCommentRecord() },
@@ -977,6 +1063,23 @@ private fun RelayDiagRow.compatRelayRow(): HighlighterNetworkRelayRow =
             RelayConnectionState.UNKNOWN -> RelayStatus.DISCONNECTED
         },
     )
+
+private fun KernelCaptureSnapshot.toCompatCapture(previous: HighlighterCaptureSnapshot): HighlighterCaptureSnapshot {
+    val done = publishPhase == KernelCaptureDraftPhase.DONE
+    val failed = publishPhase == KernelCaptureDraftPhase.ERROR
+    return previous.copy(
+        errorMessage = publishError.takeIf { failed && it.isNotBlank() },
+        isPublishing = publishPhase == KernelCaptureDraftPhase.PUBLISHING,
+        publishedEventId = if (done) "published" else previous.publishedEventId,
+        isUploading = previous.isUploading && !canPublish,
+        uploadErrorMessage = if (canPublish) null else previous.uploadErrorMessage,
+        upload = previous.upload ?: if (canPublish) {
+            HighlighterCaptureUploadSnapshot(url = "kernel-upload-ready", imageUrl = "kernel-upload-ready")
+        } else {
+            null
+        },
+    )
+}
 
 private fun RelayDiagRow.toRelayConfig(): RelayConfig =
     RelayConfig(

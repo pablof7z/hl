@@ -30,11 +30,11 @@
 //! `AppState::ocr` (5D domain) and from there into the 5F capture-draft; the
 //! ISBN barcode flows into `AppState::isbn` (5C domain).
 //!
-//! ## Live lane untouched
+//! ## Native capability boundary
 //!
-//! `app/core/src/capture.rs` and `app/core/src/ocr.rs` (the live bespoke lane)
-//! are NOT modified by this slice (Non-Negotiable #6). The kernel lane is fully
-//! separate and coexists with the live lane during the migration window.
+//! This domain owns only the kernel request/result state. Native shells execute
+//! camera/barcode capabilities and report bounded raw results; they do not own
+//! capture publish policy or nostr event shaping.
 //!
 //! ## FFI surface
 //!
