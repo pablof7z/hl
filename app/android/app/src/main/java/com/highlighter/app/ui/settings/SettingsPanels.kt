@@ -141,24 +141,13 @@ internal fun NetworkPanel(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = {
-                    val url = relayUrl.trim()
-                    if (url.isNotEmpty()) {
-                        dispatch(
-                            HighlighterAppAction.UpsertNetworkRelay(
-                                RelayConfig(
-                                    url = url,
-                                    read = true,
-                                    write = true,
-                                    rooms = false,
-                                    indexer = false,
-                                ),
-                            ),
-                        )
+                    if (relayUrl.isNotEmpty()) {
+                        dispatch(HighlighterAppAction.AddNetworkRelay(relayUrl))
                         relayUrl = ""
                     }
                 },
                 shape = RoundedCornerShape(8.dp),
-                enabled = relayUrl.isNotBlank() && !network.isSaving,
+                enabled = relayUrl.isNotEmpty() && !network.isSaving,
             ) {
                 Text(if (network.isSaving) "Saving" else "Add")
             }

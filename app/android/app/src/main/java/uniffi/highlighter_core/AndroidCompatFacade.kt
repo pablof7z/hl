@@ -657,6 +657,7 @@ sealed class HighlighterAppAction {
     data class AudioSeek(val seconds: Double) : HighlighterAppAction()
     data class NetworkPathChanged(val isWifi: Boolean) : HighlighterAppAction()
     data class SetNetworkWifiOnly(val enabled: Boolean) : HighlighterAppAction()
+    data class AddNetworkRelay(val rawUrl: String) : HighlighterAppAction()
     data class UpsertNetworkRelay(val config: RelayConfig) : HighlighterAppAction()
     data class RemoveNetworkRelay(val url: String) : HighlighterAppAction()
     data object ReconnectNetwork : HighlighterAppAction()
@@ -809,11 +810,25 @@ class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyring
                 aggregate = aggregate.copy(network = aggregate.network.copy(wifiOnlyEnabled = action.enabled))
                 dispatchEnvelope("hl.network.apply_path", obj("is_wifi" to isWifi, "wifi_only" to action.enabled))
             }
+            is HighlighterAppAction.AddNetworkRelay -> {
+                val projection = projectDefaultRelayAdd(action.rawUrl)
+                if (!projection.canAdd) {
+                    aggregate = aggregate.copy(
+                        network = aggregate.network.copy(errorMessage = relayAddErrorMessage(projection)),
+                    )
+                } else {
+                    val next = aggregate.network.relays
+                        .filterNot { it.url == projection.addConfig.url }
+                        .plus(projection.addConfig)
+                    aggregate = aggregate.copy(network = aggregate.network.copy(relays = next, errorMessage = null))
+                    dispatchRelayConfigs(next)
+                }
+            }
             is HighlighterAppAction.UpsertNetworkRelay -> {
                 val next = aggregate.network.relays
                     .filterNot { it.url == action.config.url }
                     .plus(action.config)
-                aggregate = aggregate.copy(network = aggregate.network.copy(relays = next))
+                aggregate = aggregate.copy(network = aggregate.network.copy(relays = next, errorMessage = null))
                 dispatchRelayConfigs(next)
             }
             is HighlighterAppAction.RemoveNetworkRelay -> {
@@ -890,6 +905,30 @@ class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyring
     private fun dispatchEnvelope(namespace: String, json: JsonObject = JsonObject(emptyMap())) {
         app.dispatchAction(AppActionEnvelope(namespace, Json.encodeToString(json)))
     }
+
+    private fun projectDefaultRelayAdd(rawUrl: String): AddRelaySheetProjection {
+        val defaults = app.defaultAddRelayConfig()
+        return app.projectAddRelaySheet(
+            AddRelaySheetProjectionInput(
+                urlText = rawUrl,
+                clipboardText = null,
+                read = defaults.read,
+                write = defaults.write,
+                rooms = defaults.rooms,
+                indexer = defaults.indexer,
+                probeInFlight = false,
+                probeResult = null,
+                probeFailed = false,
+            ),
+        )
+    }
+
+    private fun relayAddErrorMessage(projection: AddRelaySheetProjection): String =
+        if (projection.normalizedUrl.isBlank()) {
+            "Relay URL is required"
+        } else {
+            "Relay URL must use ws:// or wss://"
+        }
 
     private fun dispatchRelayConfigs(relays: List<RelayConfig>) {
         dispatchEnvelope(
@@ -1116,6 +1155,8 @@ private fun KernelCaptureSnapshot.toCompatCapture(previous: HighlighterCaptureSn
     )
 }
 
+// Presentation-only fallback for legacy diagnostic rows that do not carry
+// NIP-65 roles. Configured relay rows come from KernelRelayRow.toRelayConfig().
 private fun RelayDiagRow.toRelayConfig(): RelayConfig =
     RelayConfig(
         url = relayUrl,
