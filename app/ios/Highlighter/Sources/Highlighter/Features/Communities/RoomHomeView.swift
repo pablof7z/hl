@@ -61,10 +61,8 @@ struct RoomHomeView: View {
                     }
                     Menu {
                         Button(role: .destructive) {
-                            let relay = kernelRoomSnapshot?.hostRelayUrl ?? ""
                             kernel.app.dispatch(.leaveRoom(
                                 groupId: groupId,
-                                hostRelayUrl: relay,
                                 reason: nil
                             ))
                         } label: {

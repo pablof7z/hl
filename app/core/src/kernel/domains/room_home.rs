@@ -9,8 +9,9 @@
 //!   deferred to Phase 4; metadata from `AppState::communities`, already
 //!   wired in 3B).
 //!
-//! * **WRITE** — five NIP-29 write actions (Phase 3F: four; Phase 4E: one more):
+//! * **WRITE** — NIP-29 write actions (Phase 3F plus later room/share slices):
 //!   - `AppAction::JoinRoom`            → `"nmp.nip29.join"`                   (kind:9021)
+//!   - `AppAction::LeaveRoom`           → `"nmp.nip29.leave"`                  (kind:9022)
 //!   - `AppAction::CreateRoom`          → `"nmp.nip29.create_public_group"`    (kind:9007+9002)
 //!   - `AppAction::AddRoomMember`       → `"nmp.nip29.put_user"`               (kind:9000)
 //!   - `AppAction::CreateRoomInvites`   → `"nmp.nip29.create_invite"`          (kind:9009)
@@ -22,15 +23,13 @@
 //!   Phase 4E adds `Effect::DispatchShareToRoom` (distinct from `DispatchNip29Action`)
 //!   to keep the effect runner attribution clear. Same C-ABI dispatch path.
 //!
-//!   `LeaveRoom` (kind:9022) is NOT implemented — there is no `nmp.nip29.leave`
-//!   action on pinned nmp (b4404159). See nmp issue #1598.
-//!
 //! ## D3 compliance
 //!
-//! No relay URL literals appear in this file. All relay URLs are opaque strings
-//! sourced from the caller (action payload or `AppState::room_policy`). The
-//! `invite_link_base` URL lives in `AppState::room_policy.invite_link_base`
-//! (injected at construction, never hardcoded).
+//! No relay URL literals appear in this file. Joined-room writes resolve relay
+//! URLs from `AppState::communities`; join/create still receive an explicit host
+//! relay until their bootstrap policy is migrated. The `invite_link_base` URL
+//! lives in `AppState::room_policy.invite_link_base` (injected at construction,
+//! never hardcoded).
 //!
 //! ## D6 compliance
 //!
@@ -274,7 +273,16 @@ pub(crate) fn reduce_action_join_room(
     }]
 }
 
-/// Handle `AppAction::LeaveRoom { group_id, host_relay_url, reason }`.
+fn host_relay_for_joined_group(state: &AppState, group_id: &str) -> Option<String> {
+    state
+        .communities
+        .iter()
+        .find(|c| c.group_id == group_id)
+        .map(|c| c.host_relay_url.trim().to_string())
+        .filter(|url| !url.is_empty())
+}
+
+/// Handle `AppAction::LeaveRoom { group_id, reason }`.
 ///
 /// Dispatches `"nmp.nip29.leave"` via `Effect::DispatchNip29Action`.
 ///
@@ -284,10 +292,17 @@ pub(crate) fn reduce_action_join_room(
 ///
 /// Emits kind:9022 leave-request to the host relay. Fire-and-forget (D6).
 pub(crate) fn reduce_action_leave_room(
+    state: &AppState,
     group_id: String,
-    host_relay_url: String,
     reason: Option<String>,
 ) -> Vec<Effect> {
+    let Some(host_relay_url) = host_relay_for_joined_group(state, &group_id) else {
+        tracing::trace!(
+            group_id = %group_id,
+            "room_home::leave_room: no joined-community host relay; skipping dispatch (D3 fail-closed)"
+        );
+        return vec![];
+    };
     let json = serde_json::json!({
         "group": {
             "host_relay_url": host_relay_url,
@@ -334,7 +349,7 @@ pub(crate) fn reduce_action_create_room(
     }]
 }
 
-/// Handle `AppAction::AddRoomMember { group_id, host_relay_url, pubkey, role }`.
+/// Handle `AppAction::AddRoomMember { group_id, pubkey, role }`.
 ///
 /// Dispatches `"nmp.nip29.put_user"` via `Effect::DispatchNip29Action`.
 ///
@@ -347,11 +362,18 @@ pub(crate) fn reduce_action_create_room(
 /// Publishes kind:9000 (add-member) to the host relay. Requires admin rights.
 /// Fire-and-forget (D6). D3: no relay URL literals in kernel.
 pub(crate) fn reduce_action_add_room_member(
+    state: &AppState,
     group_id: String,
-    host_relay_url: String,
     pubkey: String,
     role: Option<String>,
 ) -> Vec<Effect> {
+    let Some(host_relay_url) = host_relay_for_joined_group(state, &group_id) else {
+        tracing::trace!(
+            group_id = %group_id,
+            "room_home::add_room_member: no joined-community host relay; skipping dispatch (D3 fail-closed)"
+        );
+        return vec![];
+    };
     let json = serde_json::json!({
         "group": {
             "host_relay_url": host_relay_url,
@@ -367,7 +389,7 @@ pub(crate) fn reduce_action_add_room_member(
     }]
 }
 
-/// Handle `AppAction::CreateRoomInvites { group_id, host_relay_url, codes }`.
+/// Handle `AppAction::CreateRoomInvites { group_id, codes }`.
 ///
 /// Dispatches `"nmp.nip29.create_invite"` via `Effect::DispatchNip29Action`.
 ///
@@ -383,10 +405,17 @@ pub(crate) fn reduce_action_add_room_member(
 /// composes the full invite URL by appending the code to `invite_link_base`.
 /// The kernel never constructs or hardcodes invite URLs.
 pub(crate) fn reduce_action_create_room_invites(
+    state: &AppState,
     group_id: String,
-    host_relay_url: String,
     codes: Vec<String>,
 ) -> Vec<Effect> {
+    let Some(host_relay_url) = host_relay_for_joined_group(state, &group_id) else {
+        tracing::trace!(
+            group_id = %group_id,
+            "room_home::create_room_invites: no joined-community host relay; skipping dispatch (D3 fail-closed)"
+        );
+        return vec![];
+    };
     let json = serde_json::json!({
         "group": {
             "host_relay_url": host_relay_url,
@@ -401,7 +430,7 @@ pub(crate) fn reduce_action_create_room_invites(
     }]
 }
 
-/// Handle `AppAction::ShareToRoom { group_id, host_relay_url, target_event_id, target_author_pubkey, repost }`.
+/// Handle `AppAction::ShareToRoom { group_id, target_event_id, target_author_pubkey, repost }`.
 ///
 /// Routes to one of two NIP-29 actions (verified on pinned nmp b4404159,
 /// `crates/nmp-nip29/src/action/group_event.rs:101,124`):
@@ -417,12 +446,19 @@ pub(crate) fn reduce_action_create_room_invites(
 /// Kernel is the sole writer for these events on ported screens — no
 /// double-publish with the bespoke lane. D3: no relay URL literals.
 pub(crate) fn reduce_action_share_to_room(
+    state: &AppState,
     group_id: String,
-    host_relay_url: String,
     target_event_id: String,
     target_author_pubkey: Option<String>,
     repost: bool,
 ) -> Vec<Effect> {
+    let Some(host_relay_url) = host_relay_for_joined_group(state, &group_id) else {
+        tracing::trace!(
+            group_id = %group_id,
+            "room_home::share_to_room: no joined-community host relay; skipping dispatch (D3 fail-closed)"
+        );
+        return vec![];
+    };
     let namespace = if repost {
         "nmp.nip29.repost_in_group"
     } else {
@@ -1473,6 +1509,7 @@ mod tests {
     #[test]
     fn add_room_member_dispatches_put_user() {
         let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
         let clock = ManualClock::default();
         let pubkey = "a".repeat(64);
 
@@ -1481,7 +1518,6 @@ mod tests {
             &clock,
             Cmd::Action(AppAction::AddRoomMember {
                 group_id: TEST_GROUP.to_string(),
-                host_relay_url: TEST_RELAY.to_string(),
                 pubkey: pubkey.clone(),
                 role: Some("admin".to_string()),
             }),
@@ -1515,6 +1551,7 @@ mod tests {
     #[test]
     fn create_invites_dispatches_create_invite() {
         let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
         let clock = ManualClock::default();
 
         let effects = step(
@@ -1522,7 +1559,6 @@ mod tests {
             &clock,
             Cmd::Action(AppAction::CreateRoomInvites {
                 group_id: TEST_GROUP.to_string(),
-                host_relay_url: TEST_RELAY.to_string(),
                 codes: vec!["code-1".to_string(), "code-2".to_string()],
             }),
         );
@@ -1553,8 +1589,9 @@ mod tests {
     // and `group.local_id`).
     #[test]
     fn leave_room_dispatches_nip29_leave() {
-        let effects =
-            reduce_action_leave_room(TEST_GROUP.to_string(), TEST_RELAY.to_string(), None);
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        let effects = reduce_action_leave_room(&state, TEST_GROUP.to_string(), None);
         assert_eq!(effects.len(), 1);
         assert!(
             matches!(&effects[0], Effect::DispatchNip29Action { namespace, json }
@@ -1564,16 +1601,40 @@ mod tests {
         );
 
         // Reason is serialized when present.
-        let with_reason = reduce_action_leave_room(
-            TEST_GROUP.to_string(),
-            TEST_RELAY.to_string(),
-            Some("inactive".to_string()),
-        );
+        let with_reason =
+            reduce_action_leave_room(&state, TEST_GROUP.to_string(), Some("inactive".to_string()));
         assert_eq!(with_reason.len(), 1);
         assert!(
             matches!(&with_reason[0], Effect::DispatchNip29Action { json, .. }
                 if json.contains("inactive"))
         );
+    }
+
+    #[test]
+    fn joined_room_actions_fail_closed_without_joined_host_relay() {
+        let state = make_state();
+        assert!(reduce_action_leave_room(&state, TEST_GROUP.to_string(), None).is_empty());
+        assert!(reduce_action_add_room_member(
+            &state,
+            TEST_GROUP.to_string(),
+            "a".repeat(64),
+            None
+        )
+        .is_empty());
+        assert!(reduce_action_create_room_invites(
+            &state,
+            TEST_GROUP.to_string(),
+            vec!["code-1".to_string()]
+        )
+        .is_empty());
+        assert!(reduce_action_share_to_room(
+            &state,
+            TEST_GROUP.to_string(),
+            "event-1".to_string(),
+            None,
+            false
+        )
+        .is_empty());
     }
 
     // 3F-T12: malformed_group_events_frame_noop
@@ -1630,6 +1691,7 @@ mod tests {
     #[test]
     fn share_to_room_repost_false_dispatches_share_event_in_group() {
         let mut state = AppState::default();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
         let clock = ManualClock::default();
         let target_event_id = "abc123".to_string();
         let author_pubkey = "deadbeef".repeat(8); // 64-char hex
@@ -1639,7 +1701,6 @@ mod tests {
             &clock,
             Cmd::Action(AppAction::ShareToRoom {
                 group_id: TEST_GROUP.to_string(),
-                host_relay_url: TEST_RELAY.to_string(),
                 target_event_id: target_event_id.clone(),
                 target_author_pubkey: Some(author_pubkey.clone()),
                 repost: false,
@@ -1687,6 +1748,7 @@ mod tests {
     #[test]
     fn share_to_room_repost_true_dispatches_repost_in_group() {
         let mut state = AppState::default();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
         let clock = ManualClock::default();
 
         let effects = step(
@@ -1694,7 +1756,6 @@ mod tests {
             &clock,
             Cmd::Action(AppAction::ShareToRoom {
                 group_id: TEST_GROUP.to_string(),
-                host_relay_url: TEST_RELAY.to_string(),
                 target_event_id: "event-xyz".to_string(),
                 target_author_pubkey: None,
                 repost: true,
@@ -1736,10 +1797,12 @@ mod tests {
     fn payload_built_with_serde_not_format() {
         let tricky_event_id = r#"evt"with"quotes"#;
         let tricky_group = r#"group"id"#;
+        let mut state = make_state();
+        state.communities = vec![make_community_row(tricky_group, TEST_RELAY)];
 
         let effects = reduce_action_share_to_room(
+            &state,
             tricky_group.to_string(),
-            TEST_RELAY.to_string(),
             tricky_event_id.to_string(),
             None,
             false,
@@ -1769,9 +1832,11 @@ mod tests {
     // the reducer never returns a Result; errors do not cross the dispatch seam.
     #[test]
     fn share_dispatch_returns_unit() {
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
         let effects = reduce_action_share_to_room(
+            &state,
             TEST_GROUP.to_string(),
-            TEST_RELAY.to_string(),
             "event-id-123".to_string(),
             Some("author-pubkey".to_string()),
             false,

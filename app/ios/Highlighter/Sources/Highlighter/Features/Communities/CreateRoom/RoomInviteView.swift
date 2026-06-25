@@ -430,47 +430,33 @@ struct RoomInviteView: View {
         inviteSnapshot = snapshot
     }
 
-    /// Host relay for the room. Prefer the live kernel room-home snapshot
-    /// (authoritative `GroupId.host_relay_url`); fall back to the relay the
-    /// room metadata was cached from. D3: opaque string, never constructed here.
-    private var hostRelayUrl: String {
-        if let url = kernel.roomHomeSnapshots[groupId]?.hostRelayUrl, !url.isEmpty {
-            return url
-        }
-        return cachedRoom?.relayUrl ?? ""
-    }
-
     /// Add the selected people to the room.
     ///
     /// The kernel is the sole writer for the kind:9000 put-user events
     /// (`hl.room.add_member` → `nmp.nip29.put_user`). We dispatch one action
     /// per selected pubkey (fire-and-forget, D6 — the relay republishes 39002
     /// which arrives as a membership delta and updates the UI reactively).
-    /// Pubkeys we cannot dispatch (missing host relay) are projected as
-    /// failures so the toast/error matches the prior behaviour.
     private func send() {
         guard !sending, !selected.isEmpty else { return }
-        let relayUrl = hostRelayUrl
         let toAdd = selected
+        let canRouteJoinedRoom = cachedRoom != nil
         sending = true
         Task {
             defer { Task { @MainActor in sending = false } }
 
             var failedPubkeys: [String] = []
-            if relayUrl.isEmpty {
-                // No host relay resolved — cannot route any put-user. All fail.
-                failedPubkeys = toAdd.map(\.pubkeyHex)
-            } else {
+            if canRouteJoinedRoom {
                 for candidate in toAdd {
                     kernel.app.dispatch(
                         .addRoomMember(
                             groupId: groupId,
-                            hostRelayUrl: relayUrl,
                             pubkey: candidate.pubkeyHex,
                             role: nil
                         )
                     )
                 }
+            } else {
+                failedPubkeys = toAdd.map(\.pubkeyHex)
             }
 
             let failedSet = Set(failedPubkeys.map { $0.lowercased() })
