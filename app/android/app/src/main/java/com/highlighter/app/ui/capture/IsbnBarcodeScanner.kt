@@ -1,5 +1,6 @@
 package com.highlighter.app.ui.capture
 
+import android.annotation.SuppressLint
 import android.util.Log
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -189,7 +190,7 @@ internal fun IsbnBarcodeScannerScreen(
  * [onFound] with the raw display value when a barcode is detected.
  * Always closes [imageProxy] when done.
  */
-@androidx.camera.core.ExperimentalGetImage
+@SuppressLint("UnsafeOptInUsageError")
 private fun analyzeFrame(imageProxy: ImageProxy, onFound: (String) -> Unit) {
     val mediaImage = imageProxy.image
     if (mediaImage == null) {

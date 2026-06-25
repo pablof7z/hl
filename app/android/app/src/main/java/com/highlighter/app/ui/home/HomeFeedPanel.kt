@@ -48,6 +48,8 @@ import uniffi.highlighter_core.HighlighterHomeFeedItemKind
 import uniffi.highlighter_core.HighlighterHomeFeedSnapshot
 import uniffi.highlighter_core.HighlighterHomeReadItem
 
+private const val HOME_FEED_LOG_TAG = "highlighter-feed"
+
 /**
  * Populates a [LazyListScope] with the home feed content so that all items are
  * individually virtualized.  The caller owns the [LazyColumn] and passes its
@@ -67,9 +69,9 @@ internal fun LazyListScope.homeFeedItems(
     onOpenHighlightDetail: ((uniffi.highlighter_core.HydratedHighlight) -> Unit)? = null,
 ) {
     // Debug-only: skip the joinToString allocation in release builds.
-    if (android.util.Log.isLoggable("highlighter-feed", android.util.Log.INFO)) {
+    if (android.util.Log.isLoggable(HOME_FEED_LOG_TAG, android.util.Log.INFO)) {
         android.util.Log.i(
-            "highlighter-feed",
+            HOME_FEED_LOG_TAG,
             "render items=${feed.items.size} count=${feed.itemCount} " +
                 "loading=${feed.isLoading} err=${feed.errorMessage ?: "-"}",
         )
