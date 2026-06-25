@@ -42,16 +42,17 @@ class HighlighterViewModel(application: Application) :
     // very first delta. Inspect with: adb logcat -s highlighter-core
     private val loggingInitialized = run { initPlatformLogging() }
 
+    /** Encrypted credential persistence and NMP keyring capability executor. */
+    private val sessionStore = SessionStore(application)
+
     private val app = HighlighterNmpApp(
         HighlighterAppConfig(
             dataDir = File(application.filesDir, "highlighter-core").absolutePath,
             visibleLimit = 250u,
             emitHz = 30u,
         ),
+        sessionStore,
     )
-
-    /** Encrypted credential persistence — keeps the user signed in across launches. */
-    private val sessionStore = SessionStore(application)
 
     /**
      * Bridges core deltas (signer connection, live data) back to the app.

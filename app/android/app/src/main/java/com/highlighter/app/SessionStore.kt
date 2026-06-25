@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import uniffi.highlighter_core.HighlighterSessionCredential
+import uniffi.highlighter_core.NmpKeyringHandler
+import org.json.JSONObject
 
 /**
  * Encrypted persistence for the active session credential — the Android
@@ -20,7 +22,7 @@ import uniffi.highlighter_core.HighlighterSessionCredential
  * underlying master key was invalidated by a credential reset), the prefs
  * file is wiped once and recreated so a corrupt keystore never bricks login.
  */
-class SessionStore(context: Context) {
+class SessionStore(context: Context) : NmpKeyringHandler {
     private val prefs: SharedPreferences = openEncryptedPrefs(context.applicationContext)
 
     fun storedCredential(): HighlighterSessionCredential? {
@@ -67,11 +69,58 @@ class SessionStore(context: Context) {
             .apply()
     }
 
+    override fun handleKeyringRequest(requestJson: String): String {
+        return runCatching {
+            val request = JSONObject(requestJson)
+            val namespace = request.optString("namespace", "nmp.keyring.capability")
+            val correlationId = request.optString("correlation_id", "")
+            val payload = JSONObject(request.getString("payload_json"))
+            val accountId = payload.getString("account_id")
+            val key = "$KEY_NMP_PREFIX$accountId"
+            when (payload.getString("op")) {
+                "store" -> {
+                    prefs.edit().putString(key, payload.getString("secret")).apply()
+                    nmpEnvelope(namespace, correlationId, nmpResult("ok"))
+                }
+                "retrieve" -> {
+                    val secret = prefs.getString(key, null)
+                    if (secret == null) {
+                        nmpEnvelope(namespace, correlationId, nmpResult("not_found"))
+                    } else {
+                        nmpEnvelope(namespace, correlationId, nmpResult("ok", secret = secret))
+                    }
+                }
+                "delete" -> {
+                    prefs.edit().remove(key).apply()
+                    nmpEnvelope(namespace, correlationId, nmpResult("ok"))
+                }
+                else -> nmpEnvelope(namespace, correlationId, nmpResult("error", osStatus = -50))
+            }
+        }.getOrElse {
+            nmpEnvelope("nmp.keyring.capability", "", nmpResult("error", osStatus = -50))
+        }
+    }
+
     private companion object {
         const val PREFS_FILE = "highlighter_session"
         const val KEY_NSEC = "nsec"
         const val KEY_BUNKER = "bunker_uri"
         const val KEY_NIP55_PACKAGE = "nip55_signer_package"
+        const val KEY_NMP_PREFIX = "nmp.keyring."
+
+        fun nmpResult(status: String, secret: String? = null, osStatus: Int? = null): String {
+            val result = JSONObject().put("status", status)
+            if (secret != null) result.put("secret", secret)
+            if (osStatus != null) result.put("os_status", osStatus)
+            return result.toString()
+        }
+
+        fun nmpEnvelope(namespace: String, correlationId: String, resultJson: String): String =
+            JSONObject()
+                .put("namespace", namespace)
+                .put("correlation_id", correlationId)
+                .put("result_json", resultJson)
+                .toString()
 
         fun openEncryptedPrefs(context: Context): SharedPreferences {
             val masterKey = MasterKey.Builder(context)

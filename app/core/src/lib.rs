@@ -8,8 +8,9 @@ pub mod kernel;
 pub use capabilities::{CapabilityRequest, CapabilityResult, KeychainOp, KeychainResult};
 pub use ffi::HighlighterApp;
 pub use kernel::{
-    AppAction, AppConfig, AppRootSnapshot, HighlighterObserver, ManualClock, RootShellSnapshot,
-    RootTab, RouteKind, SystemClock, ToastSnapshot, ViewId, ViewRoute, ViewSnapshot,
+    AppAction, AppConfig, AppRootSnapshot, HighlighterObserver, ManualClock, NmpKeyringHandler,
+    RootShellSnapshot, RootTab, RouteKind, SystemClock, ToastSnapshot, ViewId, ViewRoute,
+    ViewSnapshot,
 };
 // ─────────────────────────────────────────────────────────────────────────────
 

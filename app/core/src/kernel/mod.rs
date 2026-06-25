@@ -16,7 +16,7 @@ pub mod snapshot;
 pub mod view;
 
 pub use action::{AppAction, KernelEvent, RootTab};
-pub use actor::HighlighterObserver;
+pub use actor::{HighlighterObserver, NmpKeyringHandler};
 pub use app::{AppConfig, AppState};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use snapshot::{AppRootSnapshot, RootShellSnapshot, RouteKind, ToastSnapshot, ViewSnapshot};

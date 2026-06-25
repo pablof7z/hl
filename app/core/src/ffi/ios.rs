@@ -17,7 +17,9 @@ use tokio::sync::mpsc;
 
 use crate::capabilities::CapabilityResult;
 use crate::kernel::action::{AppAction, AppActionEnvelope};
-use crate::kernel::actor::{actor_task, start_nmp_app, Cmd, HighlighterObserver, SharedState};
+use crate::kernel::actor::{
+    actor_task, start_nmp_app, Cmd, HighlighterObserver, NmpKeyringHandler, SharedState,
+};
 use crate::kernel::app::{AppConfig, CreateAccountPolicy, KernelPolicy, RoomPolicy, SeedRelay};
 use crate::kernel::clock::SystemClock;
 use crate::kernel::snapshot::ViewSnapshot;
@@ -58,56 +60,20 @@ impl HighlighterApp {
     /// storage path creation). Recoverable failures are state.
     #[uniffi::constructor]
     pub fn new(config: AppConfig) -> Arc<Self> {
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
-            .enable_all()
-            .thread_name("hl-kernel")
-            .build()
-            .expect("hl-kernel tokio runtime");
+        new_highlighter_app_inner(config, None)
+    }
 
-        let (tx, rx) = mpsc::unbounded_channel::<Cmd>();
-        let shared = SharedState::new();
-        let clock = Arc::new(SystemClock);
-
-        // OnboardingStore reads from the app's data directory.
-        let data_dir_path = std::path::PathBuf::from(&config.data_dir);
-        let onboarding_store = Arc::new(OnboardingStore::new(&data_dir_path));
-
-        // Boot the NmpApp (Pattern 1 from nmp_runtime.rs:725-860).
-        let nmp = start_nmp_app(&config.data_dir, tx.clone());
-
-        // Capture NMP's relay slot for direct FFI access (bypasses actor channel for reads).
-        if let Some(ref handle) = nmp {
-            let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
-            if let Ok(mut guard) = shared.relay_slot.lock() {
-                *guard = Some(nmp_ref.configured_relays_handle());
-            }
-        }
-
-        // Build the relay/follow policy from relay_policy.json seed defaults.
-        // D3: relay URLs live in relay_policy.json, not in kernel logic.
-        // Phase 5A: pass data_dir so the whats-new effect runner can read/write
-        // the seen-marker file at {data_dir}/whats-new-state-v1.json.
-        let policy = Arc::new(build_kernel_policy(&config.data_dir));
-
-        let shared_clone = shared.clone();
-        let tx_clone = tx.clone();
-        runtime.spawn(actor_task(
-            rx,
-            tx_clone,
-            shared_clone,
-            clock,
-            onboarding_store,
-            nmp,
-            policy,
-        ));
-
-        Arc::new(Self {
-            tx,
-            shared,
-            runtime: Mutex::new(Some(runtime)),
-            shutdown_sent: AtomicBool::new(false),
-        })
+    /// Construct the kernel with a native NMP keyring capability handler.
+    ///
+    /// The handler is registered before NMP starts, which is required for
+    /// cold-start session restore. Native executes raw secure-storage JSON;
+    /// NMP owns the keyring policy and key names.
+    #[uniffi::constructor]
+    pub fn new_with_keyring(
+        config: AppConfig,
+        keyring_handler: Arc<dyn NmpKeyringHandler>,
+    ) -> Arc<Self> {
+        new_highlighter_app_inner(config, Some(keyring_handler))
     }
 
     /// Register the platform observer for snapshot push and capability requests.
@@ -202,6 +168,62 @@ impl HighlighterApp {
             })
             .collect()
     }
+}
+
+fn new_highlighter_app_inner(
+    config: AppConfig,
+    keyring_handler: Option<Arc<dyn NmpKeyringHandler>>,
+) -> Arc<HighlighterApp> {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .thread_name("hl-kernel")
+        .build()
+        .expect("hl-kernel tokio runtime");
+
+    let (tx, rx) = mpsc::unbounded_channel::<Cmd>();
+    let shared = SharedState::new();
+    let clock = Arc::new(SystemClock);
+
+    // OnboardingStore reads from the app's data directory.
+    let data_dir_path = std::path::PathBuf::from(&config.data_dir);
+    let onboarding_store = Arc::new(OnboardingStore::new(&data_dir_path));
+
+    // Boot the NmpApp (Pattern 1 from nmp_runtime.rs:725-860).
+    let nmp = start_nmp_app(&config.data_dir, tx.clone(), keyring_handler);
+
+    // Capture NMP's relay slot for direct FFI access (bypasses actor channel for reads).
+    if let Some(ref handle) = nmp {
+        let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
+        if let Ok(mut guard) = shared.relay_slot.lock() {
+            *guard = Some(nmp_ref.configured_relays_handle());
+        }
+    }
+
+    // Build the relay/follow policy from relay_policy.json seed defaults.
+    // D3: relay URLs live in relay_policy.json, not in kernel logic.
+    // Phase 5A: pass data_dir so the whats-new effect runner can read/write
+    // the seen-marker file at {data_dir}/whats-new-state-v1.json.
+    let policy = Arc::new(build_kernel_policy(&config.data_dir));
+
+    let shared_clone = shared.clone();
+    let tx_clone = tx.clone();
+    runtime.spawn(actor_task(
+        rx,
+        tx_clone,
+        shared_clone,
+        clock,
+        onboarding_store,
+        nmp,
+        policy,
+    ));
+
+    Arc::new(HighlighterApp {
+        tx,
+        shared,
+        runtime: Mutex::new(Some(runtime)),
+        shutdown_sent: AtomicBool::new(false),
+    })
 }
 
 // ─── Compatibility shim (not UniFFI-exported) ────────────────────────────────
