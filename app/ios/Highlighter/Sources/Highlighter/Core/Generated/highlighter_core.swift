@@ -25827,6 +25827,12 @@ public struct SearchSnapshot {
      * result buckets. The shell consumes it after routing (one-shot).
      */
     public var omnibox: OmniboxOutcome?
+    /**
+     * Device-local recent search queries, newest first. Bounded by the search
+     * domain before crossing FFI; native shells render these rows and dispatch
+     * commit/clear actions instead of owning durable search history.
+     */
+    public var recentQueries: [String]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -25841,9 +25847,15 @@ public struct SearchSnapshot {
          * shell routes on this: `Navigate`/`OpenGroup`/`ResolveNip05` drive
          * navigation, `RejectSecret` shows a safe-reject hint, `FreeText` keeps the
          * result buckets. The shell consumes it after routing (one-shot).
-         */omnibox: OmniboxOutcome?) {
+         */omnibox: OmniboxOutcome?,
+        /**
+         * Device-local recent search queries, newest first. Bounded by the search
+         * domain before crossing FFI; native shells render these rows and dispatch
+         * commit/clear actions instead of owning durable search history.
+         */recentQueries: [String]) {
         self.hits = hits
         self.omnibox = omnibox
+        self.recentQueries = recentQueries
     }
 }
 
@@ -25860,12 +25872,16 @@ extension SearchSnapshot: Equatable, Hashable {
         if lhs.omnibox != rhs.omnibox {
             return false
         }
+        if lhs.recentQueries != rhs.recentQueries {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(hits)
         hasher.combine(omnibox)
+        hasher.combine(recentQueries)
     }
 }
 
@@ -25879,13 +25895,15 @@ public struct FfiConverterTypeSearchSnapshot: FfiConverterRustBuffer {
         return
             try SearchSnapshot(
                 hits: FfiConverterSequenceTypeKernelSearchHitRow.read(from: &buf),
-                omnibox: FfiConverterOptionTypeOmniboxOutcome.read(from: &buf)
+                omnibox: FfiConverterOptionTypeOmniboxOutcome.read(from: &buf),
+                recentQueries: FfiConverterSequenceString.read(from: &buf)
         )
     }
 
     public static func write(_ value: SearchSnapshot, into buf: inout [UInt8]) {
         FfiConverterSequenceTypeKernelSearchHitRow.write(value.hits, into: &buf)
         FfiConverterOptionTypeOmniboxOutcome.write(value.omnibox, into: &buf)
+        FfiConverterSequenceString.write(value.recentQueries, into: &buf)
     }
 }
 

@@ -850,4 +850,12 @@ pub enum Effect {
     /// Fire-and-forget (D6): I/O failure is logged but never surfaced as an
     /// error to the caller (the in-memory state is already updated).
     SaveOnboardingFlag,
+
+    /// Load device-local search recents from `{data_dir}/search-recents-v1.json`.
+    /// Fire-and-forget (D6); failures produce an empty loaded list.
+    LoadSearchRecentQueries,
+
+    /// Persist device-local search recents. The reducer has already updated
+    /// in-memory state; I/O failure is logged and never crosses FFI (D6).
+    PersistSearchRecentQueries { queries: Vec<String> },
 }

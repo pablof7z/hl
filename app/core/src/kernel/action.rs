@@ -249,6 +249,11 @@ pub(crate) struct RunOmniboxPayload {
 }
 
 #[derive(Debug, serde::Deserialize)]
+pub(crate) struct CommitSearchRecentQueryPayload {
+    pub query: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
 pub(crate) struct MarkWhatsNewSeenPayload {
     pub shipped_at_unix: u64,
 }
@@ -1050,6 +1055,15 @@ pub enum AppAction {
         query: String,
     },
 
+    /// Commit one device-local recent search query. The kernel owns the bounded,
+    /// durable recents list; native shells render and dispatch only.
+    CommitSearchRecentQuery {
+        query: String,
+    },
+
+    /// Clear device-local recent search queries.
+    ClearSearchRecentQueries,
+
     // ── Phase 5A additions (append-only) ─────────────────────────────────────
     /// Prepare the What's New sheet — load entries and seen marker from disk.
     /// Device-local (never published to nostr — `hl-app-state-vs-nostr-facts`).
@@ -1399,6 +1413,10 @@ pub enum KernelEvent {
     /// in `SearchSnapshot::omnibox` for the shell to route on. Carries no copy of
     /// a rejected secret (`OmniboxOutcome::RejectSecret` is fieldless).
     OmniboxResolved(crate::kernel::snapshot::OmniboxOutcome),
+
+    /// Device-local recent search queries loaded from disk. The reducer bounds
+    /// and normalizes before projecting them in `SearchSnapshot`.
+    SearchRecentQueriesLoaded(Vec<String>),
 
     // ── Phase 4F additions (append-only) ─────────────────────────────────────
     /// `nmp_app_pull_page` returned a decoded page (or a Gap rebase) for the

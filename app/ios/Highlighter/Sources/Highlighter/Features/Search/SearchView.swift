@@ -21,7 +21,6 @@ struct SearchView: View {
 
     @State private var store: SearchStore?
     @FocusState private var focusedField: Bool
-    @State private var recentQueries: [String] = []
     @State private var directArticleTarget: ArticleReaderTarget?
     @State private var directArticleActive = false
     @State private var directProfilePubkey: String?
@@ -97,6 +96,9 @@ struct SearchView: View {
             .onChange(of: store?.directNavigation) { _, navigation in
                 handleDirectNavigation(navigation)
             }
+            .onChange(of: kernel.searchSnapshot) { _, _ in
+                store?.applyKernelSnapshot()
+            }
             // Omnibox resolver outcome (#1865) → route through the store.
             .onChange(of: kernel.searchSnapshot?.omnibox) { _, outcome in
                 store?.applyOmniboxOutcome(outcome)
@@ -111,7 +113,7 @@ struct SearchView: View {
             }
             store?.disarmOmnibox()
             kernel.openSearch()
-            recentQueries = UserDefaults.standard.stringArray(forKey: "hl.search.recent_queries") ?? []
+            store?.applyKernelSnapshot()
         }
         .onDisappear {
             store?.stop()
@@ -187,7 +189,7 @@ struct SearchView: View {
             VStack(spacing: 0) {
                 ForEach(Array(recentQueries.enumerated()), id: \.element) { index, q in
                     Button {
-                        store?.submit(q)
+                        submitSearch(q)
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "clock")
@@ -225,7 +227,7 @@ struct SearchView: View {
                 FlowLayout(spacing: 10, runSpacing: 10) {
                     ForEach(suggestions, id: \.self) { term in
                         Button {
-                            store.submit(term)
+                            submitSearch(term)
                         } label: {
                             Text(term)
                                 .font(.callout.weight(.medium))
@@ -275,7 +277,7 @@ struct SearchView: View {
     @ViewBuilder
     private func browseHighlightsPreviewSection(store: SearchStore) -> some View {
         SectionKicker(text: "The library")
-        Text("Your nostrdb cache holds every highlight, article, community, and profile you've ever loaded. Search finds them instantly. Anything not yet on your device — searched across your configured search relays.")
+        Text("Search covers your Highlighter library from the NMP kernel, then checks configured search relays for anything not already projected locally.")
             .font(.system(.subheadline, design: .default))
             .foregroundStyle(Color.highlighterInkMuted)
             .lineSpacing(4)
@@ -537,20 +539,25 @@ struct SearchView: View {
 
     // MARK: - Helpers
 
+    private var recentQueries: [String] {
+        kernel.searchSnapshot?.recentQueries ?? []
+    }
+
+    private func submitSearch(_ query: String) {
+        let searchQuery = query.trimmingCharacters(in: .whitespaces)
+        guard !searchQuery.isEmpty else { return }
+        kernel.app.dispatch(.commitSearchRecentQuery(query: searchQuery))
+        store?.submit(searchQuery)
+    }
+
     private func commitRecentQuery() {
         let searchQuery = (store?.query ?? "").trimmingCharacters(in: .whitespaces)
         guard !searchQuery.isEmpty else { return }
-        var queries = UserDefaults.standard.stringArray(forKey: "hl.search.recent_queries") ?? []
-        queries.removeAll { $0 == searchQuery }
-        queries.insert(searchQuery, at: 0)
-        if queries.count > 10 { queries = Array(queries.prefix(10)) }
-        UserDefaults.standard.set(queries, forKey: "hl.search.recent_queries")
-        recentQueries = queries
+        kernel.app.dispatch(.commitSearchRecentQuery(query: searchQuery))
     }
 
     private func clearRecentQueries() {
-        UserDefaults.standard.removeObject(forKey: "hl.search.recent_queries")
-        recentQueries = []
+        kernel.app.dispatch(.clearSearchRecentQueries)
     }
 
     private func allEmpty(store: SearchStore) -> Bool {

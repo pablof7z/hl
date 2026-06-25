@@ -280,6 +280,18 @@ pub struct AppState {
     /// free-text). Cleared on `Logout` / `IdentityChanged(None)`.
     pub omnibox_outcome: Option<crate::kernel::snapshot::OmniboxOutcome>,
 
+    /// Device-local recent search queries.
+    ///
+    /// Loaded from `{data_dir}/search-recents-v1.json` when Search opens and
+    /// mutated only through `hl.search.commit_recent_query` /
+    /// `hl.search.clear_recent_queries`. Native shells render this snapshot and
+    /// dispatch intents; they do not persist their own search history.
+    ///
+    /// Not a Nostr fact, not cleared on account changes, and bounded by
+    /// `search::RECENT_SEARCH_LIMIT`.
+    pub search_recent_queries: Vec<String>,
+    pub search_recent_queries_loaded: bool,
+
     // ── Phase 4F additions ────────────────────────────────────────────────────
     /// Pull-cursor state for the article feed (kind:30023 over follows).
     ///
@@ -527,6 +539,8 @@ impl Default for AppState {
             // ── Phase 4D additions ────────────────────────────────────────────
             search_results: Vec::new(),
             omnibox_outcome: None,
+            search_recent_queries: Vec::new(),
+            search_recent_queries_loaded: false,
             // ── Phase 4F additions ────────────────────────────────────────────
             article_feed: crate::kernel::domains::feed::FeedState::default(),
             highlight_feed: crate::kernel::domains::feed::FeedState::default(),

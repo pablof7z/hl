@@ -94,6 +94,8 @@ pub(crate) const SEARCH_SCHEMA_ID: &str = SEARCH_RESULTS_SCHEMA_ID;
 /// down before re-opening, so repeated `RunSearch` dispatches never leak a
 /// subscription. Value is arbitrary but stable across runs.
 pub(crate) const SEARCH_SESSION_ID: &str = "hl_search";
+pub(crate) const RECENT_SEARCH_LIMIT: usize = 10;
+pub(crate) const RECENT_SEARCH_STATE_FILE_NAME: &str = "search-recents-v1.json";
 
 // ─── READ side: apply decoded snapshot ───────────────────────────────────────
 
@@ -200,6 +202,51 @@ pub(crate) fn reduce_action_run_search(
     }
 
     effects
+}
+
+pub(crate) fn reduce_action_commit_recent_query(
+    state: &mut AppState,
+    query: String,
+) -> Vec<Effect> {
+    let Some(query) = normalize_recent_query(&query) else {
+        return vec![];
+    };
+    insert_recent_query(&mut state.search_recent_queries, query);
+    state.search_recent_queries_loaded = true;
+    vec![Effect::PersistSearchRecentQueries {
+        queries: state.search_recent_queries.clone(),
+    }]
+}
+
+pub(crate) fn reduce_action_clear_recent_queries(state: &mut AppState) -> Vec<Effect> {
+    state.search_recent_queries.clear();
+    state.search_recent_queries_loaded = true;
+    vec![Effect::PersistSearchRecentQueries { queries: vec![] }]
+}
+
+pub(crate) fn reduce_event_recent_queries_loaded(state: &mut AppState, queries: Vec<String>) {
+    state.search_recent_queries.clear();
+    for query in queries.into_iter().rev() {
+        if let Some(query) = normalize_recent_query(&query) {
+            insert_recent_query(&mut state.search_recent_queries, query);
+        }
+    }
+    state.search_recent_queries_loaded = true;
+}
+
+fn normalize_recent_query(query: &str) -> Option<String> {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn insert_recent_query(recents: &mut Vec<String>, query: String) {
+    recents.retain(|q| q != &query);
+    recents.insert(0, query);
+    recents.truncate(RECENT_SEARCH_LIMIT);
 }
 
 /// Map hl `SearchScope` → `nmp_nip50::SearchScope`.
@@ -322,6 +369,7 @@ pub(crate) fn project_search_snapshot(
             hits,
             // Omnibox classification outcome (#1865) — the shell routes on this.
             omnibox: state.omnibox_outcome.clone(),
+            recent_queries: state.search_recent_queries.clone(),
         },
     ))
 }
@@ -1003,6 +1051,118 @@ mod tests {
             s.hits[0].tags, tags,
             "raw NIP-01 tags must flow through to KernelSearchHitRow verbatim"
         );
+    }
+
+    #[test]
+    fn commit_recent_query_dedups_trims_bounds_and_persists() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+
+        for i in 0..12 {
+            let effects = step(
+                &mut state,
+                &clock,
+                Cmd::Action(AppAction::CommitSearchRecentQuery {
+                    query: format!(" query-{i} "),
+                }),
+            );
+            assert!(matches!(
+                effects.as_slice(),
+                [Effect::PersistSearchRecentQueries { .. }]
+            ));
+        }
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::CommitSearchRecentQuery {
+                query: "query-5".to_string(),
+            }),
+        );
+
+        assert!(state.search_recent_queries_loaded);
+        assert_eq!(state.search_recent_queries.len(), RECENT_SEARCH_LIMIT);
+        assert_eq!(state.search_recent_queries[0], "query-5");
+        assert_eq!(state.search_recent_queries[1], "query-11");
+        assert_eq!(
+            state
+                .search_recent_queries
+                .iter()
+                .filter(|q| q.as_str() == "query-5")
+                .count(),
+            1,
+            "recent search queries must be deduplicated"
+        );
+        match &effects[0] {
+            Effect::PersistSearchRecentQueries { queries } => {
+                assert_eq!(queries, &state.search_recent_queries)
+            }
+            other => panic!("expected PersistSearchRecentQueries, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn empty_recent_query_is_noop() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::CommitSearchRecentQuery {
+                query: "   ".to_string(),
+            }),
+        );
+
+        assert!(effects.is_empty());
+        assert!(state.search_recent_queries.is_empty());
+        assert!(!state.search_recent_queries_loaded);
+    }
+
+    #[test]
+    fn clear_recent_queries_persists_empty_list() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        state.search_recent_queries = vec!["nostr".into(), "rust".into()];
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::ClearSearchRecentQueries),
+        );
+
+        assert!(state.search_recent_queries.is_empty());
+        assert!(state.search_recent_queries_loaded);
+        assert!(matches!(
+            effects.as_slice(),
+            [Effect::PersistSearchRecentQueries { queries }] if queries.is_empty()
+        ));
+    }
+
+    #[test]
+    fn loaded_recent_queries_are_normalized_bounded_and_projected() {
+        let mut state = make_state();
+        let clock = ManualClock::default();
+        let mut loaded = vec![" first ".to_string(), "".to_string(), "second".to_string()];
+        loaded.extend((0..12).map(|i| format!("extra-{i}")));
+
+        step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::SearchRecentQueriesLoaded(loaded)),
+        );
+
+        assert!(state.search_recent_queries_loaded);
+        assert_eq!(state.search_recent_queries.len(), RECENT_SEARCH_LIMIT);
+        assert_eq!(state.search_recent_queries[0], "first");
+        assert_eq!(state.search_recent_queries[1], "second");
+        assert!(!state.search_recent_queries.iter().any(|q| q.is_empty()));
+
+        let snap = project_search_snapshot(&state).expect("snapshot");
+        let crate::kernel::snapshot::ViewSnapshot::Search(s) = snap else {
+            panic!("expected Search snapshot");
+        };
+        assert_eq!(s.recent_queries, state.search_recent_queries);
     }
 
     // ── Phase 7 (gate #4) community-search tests ──────────────────────────────
