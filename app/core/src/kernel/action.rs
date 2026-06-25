@@ -151,7 +151,6 @@ pub(crate) struct JoinRoomPayload {
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct LeaveRoomPayload {
     pub(crate) group_id: String,
-    pub(crate) host_relay_url: String,
     pub(crate) reason: Option<String>,
 }
 
@@ -166,7 +165,6 @@ pub(crate) struct CreateRoomPayload {
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct AddRoomMemberPayload {
     pub group_id: String,
-    pub host_relay_url: String,
     pub pubkey: String,
     pub role: Option<String>,
 }
@@ -174,14 +172,12 @@ pub(crate) struct AddRoomMemberPayload {
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct CreateRoomInvitesPayload {
     pub group_id: String,
-    pub host_relay_url: String,
     pub codes: Vec<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct ShareToRoomPayload {
     pub group_id: String,
-    pub host_relay_url: String,
     pub target_event_id: String,
     pub target_author_pubkey: Option<String>,
     pub repost: bool,
@@ -753,14 +749,12 @@ pub enum AppAction {
     /// Leave a NIP-29 group by publishing a kind:9022 leave-request via
     /// `"nmp.nip29.leave"`. Fire-and-forget (D6).
     ///
-    /// `group_id` is the NIP-29 local group id; `host_relay_url` is the host
-    /// relay WebSocket URL (opaque — D3). `reason` is an optional human-readable
-    /// reason string; empty/`None` omits the content field.
+    /// `group_id` is the NIP-29 local group id. Rust resolves the host relay
+    /// from joined-community state. `reason` is an optional human-readable reason
+    /// string; empty/`None` omits the content field.
     LeaveRoom {
         /// NIP-29 local group id.
         group_id: String,
-        /// Host relay WebSocket URL (opaque — D3).
-        host_relay_url: String,
         /// Optional human-readable reason for leaving.
         reason: Option<String>,
     },
@@ -790,8 +784,6 @@ pub enum AppAction {
     AddRoomMember {
         /// NIP-29 local group id.
         group_id: String,
-        /// Host relay WebSocket URL (opaque — D3).
-        host_relay_url: String,
         /// Raw 64-char lowercase hex pubkey of the user to add.
         pubkey: String,
         /// Optional role (e.g. `"admin"`). `None` = plain member.
@@ -808,8 +800,6 @@ pub enum AppAction {
     CreateRoomInvites {
         /// NIP-29 local group id.
         group_id: String,
-        /// Host relay WebSocket URL (opaque — D3).
-        host_relay_url: String,
         /// Invite codes (≥1 required; max 128 chars each; printable ASCII only).
         codes: Vec<String>,
     },
@@ -829,12 +819,11 @@ pub enum AppAction {
     ///
     /// Kernel is the sole writer for these events on ported screens — no
     /// double-publish with the bespoke lane. Fire-and-forget (D6).
-    /// D3: `group_id` + `host_relay_url` are opaque strings from the caller.
+    /// D3: Swift/native supplies `group_id`; Rust resolves the host relay from
+    /// joined-community state.
     ShareToRoom {
         /// NIP-29 local group id (the `h` tag value).
         group_id: String,
-        /// Host relay WebSocket URL for this group (opaque — D3).
-        host_relay_url: String,
         /// The Nostr event id of the event being shared.
         target_event_id: String,
         /// Optional hex pubkey of the event's author (populates the `p` tag).

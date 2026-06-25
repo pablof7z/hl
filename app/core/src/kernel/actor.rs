@@ -401,11 +401,9 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
             invite_code,
         } => room_home::reduce_action_join_room(group_id, host_relay_url, invite_code),
 
-        AppAction::LeaveRoom {
-            group_id,
-            host_relay_url,
-            reason,
-        } => room_home::reduce_action_leave_room(group_id, host_relay_url, reason),
+        AppAction::LeaveRoom { group_id, reason } => {
+            room_home::reduce_action_leave_room(state, group_id, reason)
+        }
 
         AppAction::CreateRoom {
             group_id,
@@ -416,27 +414,23 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
 
         AppAction::AddRoomMember {
             group_id,
-            host_relay_url,
             pubkey,
             role,
-        } => room_home::reduce_action_add_room_member(group_id, host_relay_url, pubkey, role),
+        } => room_home::reduce_action_add_room_member(state, group_id, pubkey, role),
 
-        AppAction::CreateRoomInvites {
-            group_id,
-            host_relay_url,
-            codes,
-        } => room_home::reduce_action_create_room_invites(group_id, host_relay_url, codes),
+        AppAction::CreateRoomInvites { group_id, codes } => {
+            room_home::reduce_action_create_room_invites(state, group_id, codes)
+        }
 
         // ── Phase 4E additions (append-only) ─────────────────────────────────
         AppAction::ShareToRoom {
             group_id,
-            host_relay_url,
             target_event_id,
             target_author_pubkey,
             repost,
         } => room_home::reduce_action_share_to_room(
+            state,
             group_id,
-            host_relay_url,
             target_event_id,
             target_author_pubkey,
             repost,
@@ -756,7 +750,7 @@ fn reduce_action_envelope(
         }
         "hl.room.leave" => {
             let p = parse!(LeaveRoomPayload);
-            room_home::reduce_action_leave_room(p.group_id, p.host_relay_url, p.reason)
+            room_home::reduce_action_leave_room(state, p.group_id, p.reason)
         }
         "hl.room.create" => {
             let p = parse!(CreateRoomPayload);
@@ -764,17 +758,17 @@ fn reduce_action_envelope(
         }
         "hl.room.add_member" => {
             let p = parse!(AddRoomMemberPayload);
-            room_home::reduce_action_add_room_member(p.group_id, p.host_relay_url, p.pubkey, p.role)
+            room_home::reduce_action_add_room_member(state, p.group_id, p.pubkey, p.role)
         }
         "hl.room.create_invites" => {
             let p = parse!(CreateRoomInvitesPayload);
-            room_home::reduce_action_create_room_invites(p.group_id, p.host_relay_url, p.codes)
+            room_home::reduce_action_create_room_invites(state, p.group_id, p.codes)
         }
         "hl.room.share_to_room" => {
             let p = parse!(ShareToRoomPayload);
             room_home::reduce_action_share_to_room(
+                state,
                 p.group_id,
-                p.host_relay_url,
                 p.target_event_id,
                 p.target_author_pubkey,
                 p.repost,
