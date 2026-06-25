@@ -483,7 +483,7 @@ private fun LibraryTab(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(room.artifacts, key = { it.shareEventId }) { artifact ->
-                    ArtifactCard(artifact = artifact)
+                    ArtifactCard(artifact = artifact, dispatch = dispatch)
                 }
             }
         }
@@ -491,9 +491,12 @@ private fun LibraryTab(
 }
 
 @Composable
-private fun ArtifactCard(artifact: ArtifactRecord) {
+private fun ArtifactCard(
+    artifact: ArtifactRecord,
+    dispatch: (HighlighterAppAction) -> Unit,
+) {
     val playableAudio = selectAudioUrl(artifact.preview.audioUrl, artifact.preview.audioPreviewUrl)
-    val player = rememberPodcastPlayerController()
+    val player = rememberPodcastPlayerController(dispatch)
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
