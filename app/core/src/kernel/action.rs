@@ -292,6 +292,11 @@ pub(crate) struct AudioPlayPayload {
     pub url: String,
     pub guid: String,
     pub artifact_json: String,
+    /// Caller-provided resume position in seconds, used as fallback when the
+    /// podcast_resume_cache has no entry for this guid (e.g., on first launch
+    /// before the kernel has had a chance to populate the cache from disk).
+    #[serde(default)]
+    pub resume_position_seconds: Option<f64>,
 }
 
 #[derive(Debug, serde::Deserialize)]

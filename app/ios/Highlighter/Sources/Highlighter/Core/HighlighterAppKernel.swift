@@ -137,6 +137,11 @@ final class HighlighterAppKernel {
     /// App.swift observes this to trigger the sheet when `shouldPresent` is true.
     private(set) var whatsNew: WhatsNewSnapshot?
 
+    /// Podcast-listening snapshot. Always-resident (opened at init). Carries the
+    /// current episode guid, position, duration, and is_playing so the same-guid
+    /// reuse check in `PodcastPlayerStore.load()` can avoid a double-load.
+    private(set) var podcastListeningSnapshot: PodcastListeningSnapshot?
+
     /// BookPicker snapshot. `nil` until the `ViewId.bookPicker` view is open.
     /// Carries recents + search results from the NMP event store scan. BookPicker.swift
     /// opens the view on appear and closes on dismiss (Phase 7 C teardown).
@@ -159,6 +164,10 @@ final class HighlighterAppKernel {
     /// Camera (presentation, via a registered presenter). Keychain stays inline
     /// in this class (Phase 1).
     let capabilityBridge: KernelCapabilityBridge
+
+    /// Weak back-reference to the app store for legacy Swift surfaces that still
+    /// observe store-owned state.
+    @ObservationIgnored weak var store: HighlighterStore?
 
     // MARK: - Init
 
@@ -209,6 +218,11 @@ final class HighlighterAppKernel {
         // bookmark affordance on article cards reflects state app-wide (not only
         // while the Bookmarks screen is open).
         kernelApp.openView(viewId: .bookmarks, route: .bookmarks)
+
+        // Phase 7 cutover: open the podcast-listening view immediately — it is
+        // always resident so position/state ticks arrive without a view-open
+        // round-trip on the first play.
+        kernelApp.openView(viewId: .podcastListening, route: .podcastListening)
 
         // Note: RoomExplorer is NOT opened here. RoomExplorerView manages its
         // own open/close lifecycle (openRoomExplorer on .task, closeRoomExplorer
@@ -582,17 +596,12 @@ final class HighlighterAppKernel {
              .highlightFeed, .shareComposer:
             break
 
-        // Phase 5+ snapshots (podcast) — managed by their owning views / stores;
-        // no-op here (same pattern as Phase 4+ above).
-        case .podcastListening:
-            break
+        // Phase 5+ snapshots (podcast) — store the latest listening snapshot
+        // and push it into PodcastPlayerStore so SwiftUI reacts immediately.
+        case .podcastListening(let s):
+            podcastListeningSnapshot = s
+            store?.podcastPlayer.receiveListeningSnapshot(s)
 
-        // Kernel-lane comment / feedback / room chat + discussion snapshots
-        // (#1747 migration in flight). hl's Swift still drives these surfaces
-        // through the legacy lane, so the kernel push is a no-op here for now.
-        case .commentThread, .feedbackThreads, .feedbackThread,
-             .roomChat, .roomDiscussions:
-            break
         }
     }
 

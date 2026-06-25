@@ -27,6 +27,13 @@ struct AppEntry: App {
                     // the app-scope store (Phase 7 C2). The store writes bookmark
                     // toggles back through the kernel.
                     store.kernel = kernel
+                    kernel.store = store
+
+                    // Phase 7 cutover: give PodcastPlayerStore a back-reference
+                    // to the kernel so it can dispatch audio actions (play/pause/
+                    // seek) without going through HighlighterStore.
+                    store.podcastPlayer.kernel = kernel
+
                     if let communities = kernel.communities {
                         store.applyCommunitiesSnapshot(communities)
                     }
