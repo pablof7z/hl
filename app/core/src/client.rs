@@ -13,12 +13,11 @@ use parking_lot::RwLock;
 use crate::clock::{Clock, SystemClock};
 use crate::errors::CoreError;
 use crate::events::EventCallback;
-use crate::models::{HighlightRecord, MutationSnapshot};
+use crate::models::MutationSnapshot;
 use crate::nostr_runtime::NostrRuntime;
 use crate::onboarding;
 use crate::podcast_playback;
 use crate::podcast_position;
-use crate::podcast_transcript;
 
 #[derive(uniffi::Object)]
 pub struct HighlighterCore {
@@ -45,13 +44,6 @@ fn mutation_snapshot(result: Result<(), CoreError>) -> MutationSnapshot {
             error: error.to_string(),
         },
     }
-}
-
-fn one_highlight_record(records: Vec<HighlightRecord>) -> Result<HighlightRecord, CoreError> {
-    records
-        .into_iter()
-        .next()
-        .ok_or_else(|| CoreError::Relay("No highlight returned from publish.".into()))
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -157,67 +149,6 @@ impl HighlighterCore {
         .await;
         result.unwrap_or_default()
     }
-
-    pub async fn publish_podcast_clip_highlight(
-        &self,
-        input: podcast_transcript::PodcastClipPublishInput,
-    ) -> podcast_transcript::PodcastClipPublishSnapshot {
-        let result: Result<HighlightRecord, CoreError> = async {
-            let _ = self.require_user_pubkey().await?;
-            let draft = podcast_transcript::clip_highlight_draft(
-                &input.segments,
-                &input.selected_segment_ids,
-                input.note,
-                input.clip_start_seconds,
-                input.clip_end_seconds,
-                input.clip_speaker,
-            );
-            let records = crate::highlights::publish_and_share(
-                &self.runtime,
-                input.artifact,
-                vec![draft],
-                &input.target_group_id,
-            )
-            .await?;
-            one_highlight_record(records)
-        }
-        .await;
-        podcast_transcript::clip_publish_snapshot(result)
-    }
-
-    /// Publish a podcast clip from the composer sheet. Rust owns draft
-    /// construction and whether the clip is solo-published or also reposted
-    /// into a NIP-29 room.
-    pub async fn publish_podcast_composer_clip(
-        &self,
-        input: podcast_transcript::PodcastClipComposerPublishInput,
-    ) -> podcast_transcript::PodcastClipPublishSnapshot {
-        let result: Result<HighlightRecord, CoreError> = async {
-            let _ = self.require_user_pubkey().await?;
-            let draft = podcast_transcript::clip_composer_highlight_draft(
-                &input.segments,
-                input.transcript_available,
-                input.context,
-                input.clip_start_seconds,
-                input.clip_end_seconds,
-            );
-            let target_group_id = input.target_group_id.unwrap_or_default();
-            if target_group_id.trim().is_empty() {
-                crate::highlights::publish(&self.runtime, draft, input.artifact).await
-            } else {
-                let records = crate::highlights::publish_and_share(
-                    &self.runtime,
-                    input.artifact,
-                    vec![draft],
-                    &target_group_id,
-                )
-                .await?;
-                one_highlight_record(records)
-            }
-        }
-        .await;
-        podcast_transcript::clip_publish_snapshot(result)
-    }
 }
 
 impl HighlighterCore {
@@ -264,25 +195,5 @@ impl HighlighterCore {
             podcast_position,
             clock,
         })
-    }
-
-    async fn require_user_pubkey(&self) -> Result<PublicKey, CoreError> {
-        self.runtime
-            .client()
-            .public_key()
-            .await
-            .map_err(|_| CoreError::NotAuthenticated)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn require_user_pubkey_errors_when_logged_out() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let core = HighlighterCore::new_with_data_dir(tmp.path().join("ndb"));
-        assert!(core.require_user_pubkey().await.is_err());
     }
 }

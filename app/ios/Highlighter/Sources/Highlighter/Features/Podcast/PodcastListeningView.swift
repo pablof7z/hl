@@ -74,6 +74,7 @@ struct PodcastListeningView: View {
                     )
                 )
                 .environment(app)
+                .environment(kernel)
             }
         }
         .task(id: artifact?.shareEventId) {

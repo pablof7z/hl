@@ -272,6 +272,7 @@ fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow, now: u64
     // 3. Podcast clip publish correlation_id? (Phase 5J)
     if state.podcast.pending_clip_publish_correlation_id.as_deref() == Some(cid.as_str()) {
         let error = row.error.clone().unwrap_or_default();
+        let event_id = row.event_id.clone().unwrap_or_default();
         tracing::debug!(
             %cid,
             %success,
@@ -279,12 +280,23 @@ fn apply_action_result_row(state: &mut AppState, row: &ActionResultRow, now: u64
             "apply_action_result_row: clip publish result"
         );
         let effects = crate::kernel::domains::podcast::reduce_event_clip_publish_action_result(
-            state, success, error,
+            state, success, error, event_id,
         );
         return effects;
     }
 
-    // 4. Share-to-room / drain / invite publish correlation_id? (#21)
+    // 4. Podcast clip follow-up repost correlation_id?
+    if state.podcast.pending_clip_repost_correlation_id.as_deref() == Some(cid.as_str()) {
+        let error = row.error.clone().unwrap_or_default();
+        return crate::kernel::domains::podcast::reduce_event_clip_repost_action_result(
+            state,
+            cid.clone(),
+            success,
+            error,
+        );
+    }
+
+    // 5. Share-to-room / drain / invite publish correlation_id? (#21)
     if state.share_publish.pending_correlation_id.as_deref() == Some(cid.as_str()) {
         let error = row.error.clone().unwrap_or_default();
         tracing::debug!(

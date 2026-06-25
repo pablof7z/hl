@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ClipComposerSheet: View {
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @Environment(\.dismiss) private var dismiss
 
     let artifact: ArtifactRecord
@@ -82,6 +83,9 @@ struct ClipComposerSheet: View {
                 CommunityPicker(selection: $selectedGroupId)
                     .environment(app)
             }
+            .onChange(of: kernel.podcastListeningSnapshot?.clipPublishPhase) { _, phase in
+                handlePublishPhase(phase)
+            }
         }
         .onAppear {
             if selectedGroupId == nil && !artifact.groupId.isEmpty {
@@ -110,7 +114,9 @@ struct ClipComposerSheet: View {
             HStack(spacing: 0) {
                 timeEditor(label: projection.clipStartLabel, direction: .leading) { delta in
                     let proposed = startSeconds + delta
-                    startSeconds = max(0, min(endSeconds - 5, proposed))
+                    let clamped = max(0, min(endSeconds - 5, proposed))
+                    startSeconds = clamped
+                    player.setClipStart(clamped)
                 }
 
                 Spacer(minLength: 0)
@@ -123,7 +129,9 @@ struct ClipComposerSheet: View {
 
                 timeEditor(label: projection.clipEndLabel, direction: .trailing) { delta in
                     let proposed = endSeconds + delta
-                    endSeconds = max(startSeconds + 5, min(player.duration > 0 ? player.duration : proposed, proposed))
+                    let clamped = max(startSeconds + 5, min(player.duration > 0 ? player.duration : proposed, proposed))
+                    endSeconds = clamped
+                    player.setClipEnd(clamped)
                 }
             }
 
@@ -299,28 +307,33 @@ struct ClipComposerSheet: View {
         isPublishing = true
         publishError = nil
 
-        Task {
-            let outcome = await app.core.publishPodcastComposerClip(
-                input: PodcastClipComposerPublishInput(
-                    artifact: artifact,
-                    segments: player.transcriptSegments,
-                    transcriptAvailable: player.transcriptAvailability == .available,
-                    context: note,
-                    clipStartSeconds: startSeconds,
-                    clipEndSeconds: endSeconds,
-                    targetGroupId: selectedGroupId
-                )
+        let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedGroupId = selectedGroupId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        kernel.app.dispatch(
+            .podcastPublishClip(
+                artifactJson: captureArtifactRecordJson(artifact: artifact),
+                note: trimmedNote.isEmpty ? nil : trimmedNote,
+                targetGroupId: trimmedGroupId?.isEmpty == false ? trimmedGroupId : nil
             )
-            await MainActor.run {
-                isPublishing = false
-                let errorMessage = outcome.error.trimmingCharacters(in: .whitespaces)
-                if errorMessage.isEmpty {
-                    app.shareToast = "Clip shared"
-                    dismiss()
-                } else {
-                    publishError = errorMessage
-                }
-            }
+        )
+    }
+
+    private func handlePublishPhase(_ phase: KernelClipPublishPhase?) {
+        guard isPublishing else { return }
+
+        switch phase {
+        case .done:
+            isPublishing = false
+            publishError = nil
+            app.shareToast = "Clip shared"
+            kernel.app.dispatch(.audioClipClear)
+            dismiss()
+        case .error(let message):
+            isPublishing = false
+            let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+            publishError = trimmed.isEmpty ? "Clip publish failed" : trimmed
+        case .idle, .publishing, nil:
+            break
         }
     }
 }

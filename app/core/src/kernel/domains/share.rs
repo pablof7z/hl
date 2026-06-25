@@ -710,7 +710,7 @@ pub(crate) fn generate_invite_code(length: usize) -> String {
 }
 
 /// Serialise a host-pinned publish template `{ kind, content, tags, host_relay_url }`.
-fn share_template_json(
+pub(crate) fn share_template_json(
     kind: u32,
     content: &str,
     tags: Vec<Vec<String>>,
@@ -1096,6 +1096,26 @@ pub(crate) fn run_effect_publish_share_event(
     dispatch_share_publish_action(handle, "nmp.publish", action_json, correlation_id, tx);
 }
 
+/// Execute `Effect::PublishClipRepostEvent` — same validated `nmp.publish`
+/// host-pinned path as `PublishShareEvent`, but routed back to the podcast clip
+/// FSM instead of the global share FSM.
+pub(crate) fn run_effect_publish_clip_repost_event(
+    json: String,
+    correlation_id: String,
+    nmp: Option<&crate::kernel::actor::NmpHandle>,
+    tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
+) {
+    let Some(handle) = nmp else {
+        tracing::debug!("PublishClipRepostEvent: no live NmpApp (test mode) — no-op");
+        return;
+    };
+
+    let Some(action_json) = share_publish_action_json(&json, "PublishClipRepostEvent") else {
+        return;
+    };
+    dispatch_clip_repost_publish_action(handle, "nmp.publish", action_json, correlation_id, tx);
+}
+
 /// Execute `Effect::DispatchCreateInviteWithCorrelation` — dispatch the validated
 /// `nmp.nip29.create_invite` (kind:9009) action with a correlation id so the
 /// create-invite publish verdict drives the share-mint FSM (finding 3). Shares
@@ -1165,6 +1185,71 @@ fn dispatch_share_publish_action(
         Ok(_) => {
             // Same id — action_results will match the placeholder directly.
         }
+    }
+}
+
+fn share_publish_action_json(json: &str, label: &str) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct ShareTemplate {
+        kind: u32,
+        content: String,
+        tags: Vec<Vec<String>>,
+        host_relay_url: String,
+    }
+
+    let template = match serde_json::from_str::<ShareTemplate>(json) {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::warn!("{label}: failed to deserialize template: {e} — no-op (D6)");
+            return None;
+        }
+    };
+
+    Some(
+        serde_json::json!({
+            "PublishRaw": {
+                "kind": template.kind,
+                "tags": template.tags,
+                "content": template.content,
+                "target": { "Explicit": { "relays": [template.host_relay_url] } },
+            }
+        })
+        .to_string(),
+    )
+}
+
+fn dispatch_clip_repost_publish_action(
+    handle: &crate::kernel::actor::NmpHandle,
+    namespace: &str,
+    action_json: String,
+    placeholder_correlation_id: String,
+    tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
+) {
+    use crate::kernel::action::KernelEvent;
+    use crate::kernel::actor::Cmd;
+
+    let reject = |error: String| {
+        let _ = tx.send(Cmd::Event(KernelEvent::ClipRepostDispatchRejected {
+            correlation_id: placeholder_correlation_id.clone(),
+            error,
+        }));
+    };
+
+    let dispatch_result = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
+        handle.ptr.as_ptr(),
+        namespace,
+        &action_json,
+    );
+
+    match dispatch_result {
+        Err(e) => reject(e),
+        Ok(nmp_id) if nmp_id != placeholder_correlation_id => {
+            let _ = tx.send(Cmd::Event(KernelEvent::ClipRepostCorrelationMinted {
+                placeholder_correlation_id,
+                nmp_correlation_id: nmp_id,
+            }));
+        }
+        Ok(_) => {}
     }
 }
 

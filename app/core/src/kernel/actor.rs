@@ -1007,7 +1007,7 @@ fn reduce_action_envelope(
                     );
                 }
             };
-            podcast::reduce_action_publish_clip(state, artifact, p.note)
+            podcast::reduce_action_publish_clip(state, artifact, p.note, p.target_group_id)
         }
 
         // ── OCR ───────────────────────────────────────────────────────────────
@@ -1682,9 +1682,28 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
         KernelEvent::TranscriptFetchFailed => podcast::reduce_event_transcript_failed(state),
 
         // ── Phase 5J additions (append-only) ─────────────────────────────────
-        KernelEvent::ClipPublishActionResult { success, error } => {
-            podcast::reduce_event_clip_publish_action_result(state, success, error)
-        }
+        KernelEvent::ClipPublishActionResult {
+            success,
+            error,
+            event_id,
+        } => podcast::reduce_event_clip_publish_action_result(state, success, error, event_id),
+        KernelEvent::ClipRepostCorrelationMinted {
+            placeholder_correlation_id,
+            nmp_correlation_id,
+        } => podcast::reduce_event_clip_repost_correlation_minted(
+            state,
+            placeholder_correlation_id,
+            nmp_correlation_id,
+        ),
+        KernelEvent::ClipRepostDispatchRejected {
+            correlation_id,
+            error,
+        } => podcast::reduce_event_clip_repost_action_result(state, correlation_id, false, error),
+        KernelEvent::ClipRepostActionResult {
+            correlation_id,
+            success,
+            error,
+        } => podcast::reduce_event_clip_repost_action_result(state, correlation_id, success, error),
 
         // ── Phase 5E additions (append-only) ─────────────────────────────────
         KernelEvent::CameraCapabilityResult(_) => {
@@ -2270,6 +2289,12 @@ pub(crate) async fn run_effect(
             // the given correlation_id. No-op when nmp is None (test mode injects
             // KernelEvent::ClipPublishActionResult directly).
             blossom::run_effect_publish_capture_with_correlation(json, correlation_id, nmp, tx);
+        }
+        Effect::PublishClipRepostEvent {
+            json,
+            correlation_id,
+        } => {
+            share::run_effect_publish_clip_repost_event(json, correlation_id, nmp, tx);
         }
 
         // ── Phase 7 additions (append-only) ─────────────────────────────────

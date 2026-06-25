@@ -43,7 +43,7 @@ use parking_lot::Mutex;
 use crate::capabilities::{AudioOp, AudioResult, CapabilityRequest};
 use crate::clock::Clock;
 use crate::errors::CoreError;
-use crate::kernel::app::AppState;
+use crate::kernel::app::{AppState, SessionState};
 use crate::kernel::domains::capture_draft::new_correlation_id;
 use crate::kernel::domains::{feed, highlight_feed};
 use crate::kernel::effect::Effect;
@@ -94,6 +94,16 @@ pub struct PodcastState {
     ///
     /// `None` when no publish is in flight.
     pub pending_clip_publish_correlation_id: Option<String>,
+    /// Correlation id for the optional follow-up kind:16 group repost after a
+    /// targeted podcast clip publish.
+    pub pending_clip_repost_correlation_id: Option<String>,
+    /// Target NIP-29 group captured at submit time for the follow-up repost.
+    pub pending_clip_repost_group_id: Option<String>,
+    /// Host relay captured at submit time. Group writes fail closed instead of
+    /// falling back to outbox routing.
+    pub pending_clip_repost_host_relay_url: Option<String>,
+    /// Active author's pubkey captured at submit time for the kind:16 `p` tag.
+    pub pending_clip_repost_author_pubkey_hex: Option<String>,
 }
 
 /// Transcript segment — a time-bounded utterance within an episode.
@@ -346,6 +356,8 @@ pub(crate) fn reduce_action_play(
         transcript_availability: TranscriptAvailability::NotRequested,
         clip_selection: None,
     });
+    state.podcast.clip_publish_phase = KernelClipPublishPhase::Idle;
+    clear_clip_publish_pending(&mut state.podcast);
 
     let mut effects = feed_effects;
     effects.push(Effect::EmitCapabilityRequest(CapabilityRequest::Audio(
@@ -841,11 +853,49 @@ pub(crate) fn reduce_action_clip_clear(state: &mut AppState) -> Vec<Effect> {
     }
     // Reset clip-publish FSM so a fresh selection starts from Idle.
     state.podcast.clip_publish_phase = KernelClipPublishPhase::Idle;
-    state.podcast.pending_clip_publish_correlation_id = None;
+    clear_clip_publish_pending(&mut state.podcast);
     vec![]
 }
 
 // ─── Phase 5J: clip publish ────────────────────────────────────────────────────
+
+fn clear_clip_publish_pending(podcast: &mut PodcastState) {
+    podcast.pending_clip_publish_correlation_id = None;
+    podcast.pending_clip_repost_correlation_id = None;
+    podcast.pending_clip_repost_group_id = None;
+    podcast.pending_clip_repost_host_relay_url = None;
+    podcast.pending_clip_repost_author_pubkey_hex = None;
+}
+
+fn active_pubkey_hex(state: &AppState) -> Option<String> {
+    match &state.session {
+        SessionState::Present { pubkey, .. } if !pubkey.trim().is_empty() => {
+            Some(pubkey.trim().to_string())
+        }
+        _ => None,
+    }
+}
+
+fn host_relay_for_group(state: &AppState, group_id: &str) -> Option<String> {
+    let group_id = group_id.trim();
+    if group_id.is_empty() {
+        return None;
+    }
+    state
+        .communities
+        .iter()
+        .find(|c| c.group_id == group_id)
+        .map(|c| c.host_relay_url.trim().to_string())
+        .filter(|url| !url.is_empty())
+}
+
+fn set_clip_publish_error(state: &mut AppState, message: impl Into<String>) -> Vec<Effect> {
+    clear_clip_publish_pending(&mut state.podcast);
+    state.podcast.clip_publish_phase = KernelClipPublishPhase::Error {
+        message: message.into(),
+    };
+    vec![]
+}
 
 /// Build the kind:9802 clip event content from the current clip selection.
 ///
@@ -918,6 +968,7 @@ pub(crate) fn reduce_action_publish_clip(
     state: &mut AppState,
     artifact: ArtifactRecord,
     note: Option<String>,
+    target_group_id: Option<String>,
 ) -> Vec<Effect> {
     // Guard: only Idle or Error are entry points for a fresh publish.
     match &state.podcast.clip_publish_phase {
@@ -954,6 +1005,28 @@ pub(crate) fn reduce_action_publish_clip(
         return vec![];
     }
     let i_tag_value = format!("podcast:item:guid:{guid}");
+
+    let target_group_id = target_group_id.and_then(|g| {
+        let trimmed = g.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    });
+    let repost_context = if let Some(group_id) = target_group_id.as_deref() {
+        let Some(host_relay_url) = host_relay_for_group(state, group_id) else {
+            tracing::warn!("publish_clip: target group host relay missing — fail closed");
+            return set_clip_publish_error(state, "target group relay not found");
+        };
+        let Some(author_pubkey_hex) = active_pubkey_hex(state) else {
+            tracing::warn!("publish_clip: targeted publish requires active session");
+            return set_clip_publish_error(state, "active session required to share clip to group");
+        };
+        Some((group_id.to_string(), host_relay_url, author_pubkey_hex))
+    } else {
+        None
+    };
 
     // Build event content from selected transcript segments.
     let content = clip_content(clip, &ep.transcript_segments);
@@ -1005,7 +1078,13 @@ pub(crate) fn reduce_action_publish_clip(
 
     // Mint correlation id and store it so apply_action_result_row can route.
     let correlation_id = new_correlation_id();
+    clear_clip_publish_pending(&mut state.podcast);
     state.podcast.pending_clip_publish_correlation_id = Some(correlation_id.clone());
+    if let Some((group_id, host_relay_url, author_pubkey_hex)) = repost_context {
+        state.podcast.pending_clip_repost_group_id = Some(group_id);
+        state.podcast.pending_clip_repost_host_relay_url = Some(host_relay_url);
+        state.podcast.pending_clip_repost_author_pubkey_hex = Some(author_pubkey_hex);
+    }
     state.podcast.clip_publish_phase = KernelClipPublishPhase::Publishing;
 
     vec![Effect::PublishClipWithCorrelation {
@@ -1024,15 +1103,92 @@ pub(crate) fn reduce_event_clip_publish_action_result(
     state: &mut AppState,
     success: bool,
     error: String,
+    event_id: String,
 ) -> Vec<Effect> {
     // Clear the pending id whether success or failure (D6: stale re-delivery no-op).
     state.podcast.pending_clip_publish_correlation_id = None;
 
+    if !success {
+        return set_clip_publish_error(
+            state,
+            if error.trim().is_empty() {
+                "publish failed".to_string()
+            } else {
+                error
+            },
+        );
+    }
+
+    let Some(group_id) = state.podcast.pending_clip_repost_group_id.clone() else {
+        state.podcast.clip_publish_phase = KernelClipPublishPhase::Done;
+        return vec![];
+    };
+
+    let event_id = event_id.trim().to_string();
+    if event_id.is_empty() {
+        return set_clip_publish_error(state, "published clip event id missing");
+    }
+
+    let Some(host_relay_url) = state.podcast.pending_clip_repost_host_relay_url.clone() else {
+        return set_clip_publish_error(state, "target group relay not found");
+    };
+    let Some(author_pubkey_hex) = state.podcast.pending_clip_repost_author_pubkey_hex.clone()
+    else {
+        return set_clip_publish_error(state, "active session required to share clip to group");
+    };
+
+    let tags = crate::kernel::domains::share::build_highlight_repost_tags(
+        &event_id,
+        &author_pubkey_hex,
+        &group_id,
+        "",
+    );
+    let json = crate::kernel::domains::share::share_template_json(
+        crate::kernel::domains::share::KIND_GENERIC_REPOST,
+        "",
+        tags,
+        &host_relay_url,
+    );
+    let correlation_id = new_correlation_id();
+    state.podcast.pending_clip_repost_correlation_id = Some(correlation_id.clone());
+    state.podcast.clip_publish_phase = KernelClipPublishPhase::Publishing;
+
+    vec![Effect::PublishClipRepostEvent {
+        json,
+        correlation_id,
+    }]
+}
+
+pub(crate) fn reduce_event_clip_repost_correlation_minted(
+    state: &mut AppState,
+    placeholder_correlation_id: String,
+    nmp_correlation_id: String,
+) -> Vec<Effect> {
+    if state.podcast.pending_clip_repost_correlation_id.as_deref()
+        == Some(placeholder_correlation_id.as_str())
+    {
+        state.podcast.pending_clip_repost_correlation_id = Some(nmp_correlation_id);
+    }
+    vec![]
+}
+
+pub(crate) fn reduce_event_clip_repost_action_result(
+    state: &mut AppState,
+    correlation_id: String,
+    success: bool,
+    error: String,
+) -> Vec<Effect> {
+    if state.podcast.pending_clip_repost_correlation_id.as_deref() != Some(correlation_id.as_str())
+    {
+        return vec![];
+    }
+
+    clear_clip_publish_pending(&mut state.podcast);
     state.podcast.clip_publish_phase = if success {
         KernelClipPublishPhase::Done
     } else {
         KernelClipPublishPhase::Error {
-            message: if error.is_empty() {
+            message: if error.trim().is_empty() {
                 "publish failed".to_string()
             } else {
                 error
@@ -1047,8 +1203,9 @@ pub(crate) fn reduce_event_clip_publish_action_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kernel::action::{AppAction, KernelEvent};
+    use crate::kernel::action::{AppAction, KernelEvent, SignerKind};
     use crate::kernel::actor::{reduce, Cmd};
+    use crate::kernel::app::SessionState;
     use crate::kernel::clock::{Clock as KClock, ManualClock};
     use crate::kernel::effect::Effect;
     use crate::kernel::models::{ArtifactPreview, Chapter};
@@ -1754,6 +1911,23 @@ mod tests {
         );
     }
 
+    fn community_row(
+        group_id: &str,
+        host_relay_url: &str,
+    ) -> crate::kernel::snapshot::CommunityRow {
+        crate::kernel::snapshot::CommunityRow {
+            group_id: group_id.to_string(),
+            host_relay_url: host_relay_url.to_string(),
+            name: Some(group_id.to_string()),
+            picture: None,
+            about: None,
+            member_count: 1,
+            public: true,
+            open: true,
+            is_admin: false,
+        }
+    }
+
     // 5J-T1: publish_clip_builds_kind9802_with_nip73_itag
     //
     // `hl.podcast.publish_clip` must emit Effect::PublishClipWithCorrelation
@@ -1883,6 +2057,7 @@ mod tests {
             Cmd::Event(KernelEvent::ClipPublishActionResult {
                 success: true,
                 error: String::new(),
+                event_id: "clip-event-1".to_string(),
             }),
         );
 
@@ -1914,6 +2089,7 @@ mod tests {
             Cmd::Event(KernelEvent::ClipPublishActionResult {
                 success: false,
                 error: "relay rejected event".to_string(),
+                event_id: String::new(),
             }),
         );
 
@@ -2090,6 +2266,213 @@ mod tests {
         );
     }
 
+    #[test]
+    fn targeted_publish_schedules_group_repost_after_clip_event_id() {
+        let mut state = make_state();
+        let clk = clock(1_000);
+        state.session = SessionState::Present {
+            pubkey: "author-pubkey".to_string(),
+            signer_kind: SignerKind::LocalNsec,
+        };
+        state.communities = vec![community_row("group-a", "wss://relay.example")];
+
+        setup_loaded_episode_with_clip(&mut state, &clk);
+
+        let artifact_json =
+            serde_json::to_string(&sample_artifact("https://cdn.example/ep.mp3")).unwrap();
+        let payload = serde_json::json!({
+            "artifact_json": artifact_json,
+            "target_group_id": "group-a"
+        })
+        .to_string();
+
+        let effects = step(
+            &mut state,
+            &clk,
+            envelope("hl.podcast.publish_clip", &payload),
+        );
+        assert!(
+            effects
+                .iter()
+                .any(|e| matches!(e, Effect::PublishClipWithCorrelation { .. })),
+            "first effect publishes the kind:9802 clip"
+        );
+        assert_eq!(
+            state.podcast.pending_clip_repost_group_id.as_deref(),
+            Some("group-a")
+        );
+        assert_eq!(
+            state.podcast.pending_clip_repost_host_relay_url.as_deref(),
+            Some("wss://relay.example")
+        );
+
+        let effects = step(
+            &mut state,
+            &clk,
+            Cmd::Event(KernelEvent::ClipPublishActionResult {
+                success: true,
+                error: String::new(),
+                event_id: "clip-event-1".to_string(),
+            }),
+        );
+
+        let repost = effects
+            .iter()
+            .find(|e| matches!(e, Effect::PublishClipRepostEvent { .. }))
+            .expect("targeted publish must schedule follow-up group repost");
+        let Effect::PublishClipRepostEvent {
+            json,
+            correlation_id,
+        } = repost
+        else {
+            unreachable!();
+        };
+        assert_eq!(
+            state.podcast.pending_clip_repost_correlation_id.as_deref(),
+            Some(correlation_id.as_str())
+        );
+        assert_eq!(
+            state.podcast.clip_publish_phase,
+            KernelClipPublishPhase::Publishing,
+            "composer must keep waiting for repost completion"
+        );
+
+        let template: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert_eq!(template["kind"], 16);
+        assert_eq!(template["host_relay_url"], "wss://relay.example");
+        let tags = template["tags"].as_array().unwrap();
+        assert!(tags
+            .iter()
+            .any(|t| t == &serde_json::json!(["e", "clip-event-1", ""])));
+        assert!(tags.iter().any(|t| t == &serde_json::json!(["k", "9802"])));
+        assert!(tags
+            .iter()
+            .any(|t| t == &serde_json::json!(["p", "author-pubkey"])));
+        assert!(tags
+            .iter()
+            .any(|t| t == &serde_json::json!(["h", "group-a"])));
+    }
+
+    #[test]
+    fn targeted_publish_repost_result_completes_or_errors() {
+        let mut state = make_state();
+        let clk = clock(1_000);
+        state.podcast.clip_publish_phase = KernelClipPublishPhase::Publishing;
+        state.podcast.pending_clip_repost_correlation_id = Some("repost-cid".to_string());
+        state.podcast.pending_clip_repost_group_id = Some("group-a".to_string());
+        state.podcast.pending_clip_repost_host_relay_url = Some("wss://relay.example".to_string());
+        state.podcast.pending_clip_repost_author_pubkey_hex = Some("author-pubkey".to_string());
+
+        step(
+            &mut state,
+            &clk,
+            Cmd::Event(KernelEvent::ClipRepostActionResult {
+                correlation_id: "repost-cid".to_string(),
+                success: true,
+                error: String::new(),
+            }),
+        );
+        assert_eq!(
+            state.podcast.clip_publish_phase,
+            KernelClipPublishPhase::Done
+        );
+        assert!(state.podcast.pending_clip_repost_correlation_id.is_none());
+
+        state.podcast.clip_publish_phase = KernelClipPublishPhase::Publishing;
+        state.podcast.pending_clip_repost_correlation_id = Some("repost-cid-2".to_string());
+        step(
+            &mut state,
+            &clk,
+            Cmd::Event(KernelEvent::ClipRepostActionResult {
+                correlation_id: "repost-cid-2".to_string(),
+                success: false,
+                error: "share failed".to_string(),
+            }),
+        );
+        assert!(matches!(
+            &state.podcast.clip_publish_phase,
+            KernelClipPublishPhase::Error { message } if message == "share failed"
+        ));
+    }
+
+    #[test]
+    fn targeted_publish_requires_known_group_and_session_before_clip_publish() {
+        let mut state = make_state();
+        let clk = clock(1_000);
+        setup_loaded_episode_with_clip(&mut state, &clk);
+
+        let artifact_json =
+            serde_json::to_string(&sample_artifact("https://cdn.example/ep.mp3")).unwrap();
+        let payload = serde_json::json!({
+            "artifact_json": artifact_json,
+            "target_group_id": "missing-group"
+        })
+        .to_string();
+
+        let effects = step(
+            &mut state,
+            &clk,
+            envelope("hl.podcast.publish_clip", &payload),
+        );
+        assert!(
+            !effects
+                .iter()
+                .any(|e| matches!(e, Effect::PublishClipWithCorrelation { .. })),
+            "targeted publish must fail before publishing a clip when group cannot be host-pinned"
+        );
+        assert!(matches!(
+            &state.podcast.clip_publish_phase,
+            KernelClipPublishPhase::Error { message } if message == "target group relay not found"
+        ));
+
+        state.podcast.clip_publish_phase = KernelClipPublishPhase::Idle;
+        state.communities = vec![community_row("group-a", "wss://relay.example")];
+        let payload = serde_json::json!({
+            "artifact_json": artifact_json,
+            "target_group_id": "group-a"
+        })
+        .to_string();
+        let effects = step(
+            &mut state,
+            &clk,
+            envelope("hl.podcast.publish_clip", &payload),
+        );
+        assert!(
+            !effects
+                .iter()
+                .any(|e| matches!(e, Effect::PublishClipWithCorrelation { .. })),
+            "targeted publish must fail before publishing a clip without an active session"
+        );
+        assert!(matches!(
+            &state.podcast.clip_publish_phase,
+            KernelClipPublishPhase::Error { message } if message == "active session required to share clip to group"
+        ));
+    }
+
+    #[test]
+    fn duplicate_publish_while_in_flight_is_noop() {
+        let mut state = make_state();
+        let clk = clock(1_000);
+        setup_loaded_episode_with_clip(&mut state, &clk);
+        state.podcast.clip_publish_phase = KernelClipPublishPhase::Publishing;
+
+        let artifact_json =
+            serde_json::to_string(&sample_artifact("https://cdn.example/ep.mp3")).unwrap();
+        let payload = serde_json::json!({ "artifact_json": artifact_json }).to_string();
+
+        let effects = step(
+            &mut state,
+            &clk,
+            envelope("hl.podcast.publish_clip", &payload),
+        );
+        assert!(
+            !effects
+                .iter()
+                .any(|e| matches!(e, Effect::PublishClipWithCorrelation { .. })),
+            "double-tap while Publishing must not dispatch a second publish"
+        );
+    }
+
     // 5J-T7: clip_clear_resets_publish_phase
     //
     // `hl.audio.clip_clear` must reset clip_publish_phase → Idle and
@@ -2103,6 +2486,10 @@ mod tests {
         // Plant a Done phase as if a prior publish completed.
         state.podcast.clip_publish_phase = KernelClipPublishPhase::Done;
         state.podcast.pending_clip_publish_correlation_id = Some("old-cid".to_string());
+        state.podcast.pending_clip_repost_correlation_id = Some("old-repost-cid".to_string());
+        state.podcast.pending_clip_repost_group_id = Some("group-a".to_string());
+        state.podcast.pending_clip_repost_host_relay_url = Some("wss://relay.example".to_string());
+        state.podcast.pending_clip_repost_author_pubkey_hex = Some("author".to_string());
 
         step(&mut state, &clk, envelope("hl.audio.clip_clear", "{}"));
 
@@ -2115,5 +2502,7 @@ mod tests {
             state.podcast.pending_clip_publish_correlation_id.is_none(),
             "clip_clear must clear pending_clip_publish_correlation_id"
         );
+        assert!(state.podcast.pending_clip_repost_correlation_id.is_none());
+        assert!(state.podcast.pending_clip_repost_group_id.is_none());
     }
 }
