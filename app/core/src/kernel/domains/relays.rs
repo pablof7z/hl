@@ -21,6 +21,7 @@
 //! match in actor.rs.
 
 use nmp_ffi::NmpApp;
+use serde_json::json;
 
 use crate::kernel::action::RelayRole;
 use crate::kernel::actor::NmpHandle;
@@ -65,6 +66,37 @@ pub(crate) fn reduce_action_set_relay_role(
     }]
 }
 
+/// Handle the full relay settings list from native UI.
+///
+/// This is the preferred settings-screen write path because kind:30078 is
+/// replaceable: publishing a partial app-data document would drop flags for
+/// relays not included in the write.
+pub(crate) fn reduce_action_set_relay_configs(
+    _state: &mut AppState,
+    rows: Vec<(String, bool, bool, bool, bool)>,
+) -> Vec<Effect> {
+    let mut effects = Vec::with_capacity(rows.len() + 1);
+    let mut app_data_rows = Vec::with_capacity(rows.len());
+    for (url, read, write, rooms, indexer) in rows {
+        match relay_role_from_flags(read, write, indexer) {
+            Some(role) => effects.push(Effect::SetRelayRole {
+                url: url.clone(),
+                role,
+            }),
+            None => effects.push(Effect::RemoveRelay { url: url.clone() }),
+        }
+        app_data_rows.push(RelayAppDataRow {
+            url,
+            rooms,
+            indexer,
+        });
+    }
+    effects.push(Effect::PublishRelayAppData {
+        json: relay_app_data_event_json(&app_data_rows),
+    });
+    effects
+}
+
 /// NIP-65 (kind:10002) role string for a relay's read/write flags, or `None` when
 /// the relay must be OMITTED from kind:10002 (neither read nor write — a
 /// rooms/indexer-only relay, which lives only in the kind:30078 app-data).
@@ -82,6 +114,53 @@ pub fn nip65_relay_role(read: bool, write: bool) -> Option<String> {
         (false, true) => Some("write".to_string()),
         (false, false) => None,
     }
+}
+
+#[derive(Debug, Clone)]
+struct RelayAppDataRow {
+    url: String,
+    rooms: bool,
+    indexer: bool,
+}
+
+fn relay_role_from_flags(read: bool, write: bool, indexer: bool) -> Option<String> {
+    match (read, write, indexer) {
+        (true, true, true) => Some("both,indexer".to_string()),
+        (true, false, true) => Some("read,indexer".to_string()),
+        (false, true, true) => Some("write,indexer".to_string()),
+        (false, false, true) => Some("indexer".to_string()),
+        (true, true, false) => Some("both".to_string()),
+        (true, false, false) => Some("read".to_string()),
+        (false, true, false) => Some("write".to_string()),
+        (false, false, false) => None,
+    }
+}
+
+fn relay_app_data_content(rows: &[RelayAppDataRow]) -> String {
+    let entries: Vec<_> = rows
+        .iter()
+        .filter(|row| row.rooms || row.indexer)
+        .map(|row| {
+            json!({
+                "url": row.url,
+                "rooms": row.rooms,
+                "indexer": row.indexer,
+            })
+        })
+        .collect();
+    serde_json::to_string(&entries).unwrap_or_else(|_| "[]".to_string())
+}
+
+fn relay_app_data_event_json(rows: &[RelayAppDataRow]) -> String {
+    serde_json::to_string(&json!({
+        "kind": 30078,
+        "content": relay_app_data_content(rows),
+        "tags": [["d", "com.highlighter.relays"]],
+    }))
+    .unwrap_or_else(|_| {
+        "{\"kind\":30078,\"content\":\"[]\",\"tags\":[[\"d\",\"com.highlighter.relays\"]]}"
+            .to_string()
+    })
 }
 
 // ─── Effect runners ──────────────────────────────────────────────────────────
@@ -120,6 +199,48 @@ pub(crate) fn run_effect_set_relay_role(url: String, role: String, nmp: Option<&
     let _ = nmp_ref
         .actor_sender()
         .send(nmp_core::ActorCommand::AddRelay { url, role });
+}
+
+/// Execute `Effect::PublishRelayAppData`.
+pub(crate) fn run_effect_publish_relay_app_data(json: String, nmp: Option<&NmpHandle>) {
+    let Some(handle) = nmp else { return };
+    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&json) else {
+        tracing::warn!("PublishRelayAppData: failed to deserialise template — no-op");
+        return;
+    };
+    let kind = value.get("kind").and_then(|v| v.as_u64()).unwrap_or(30078) as u32;
+    let content = value
+        .get("content")
+        .and_then(|v| v.as_str())
+        .unwrap_or("[]")
+        .to_string();
+    let tags = value
+        .get("tags")
+        .and_then(|v| v.as_array())
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|row| row.as_array())
+                .map(|row| {
+                    row.iter()
+                        .filter_map(|cell| cell.as_str().map(ToOwned::to_owned))
+                        .collect::<Vec<_>>()
+                })
+                .filter(|row| !row.is_empty())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| vec![vec!["d".to_string(), "com.highlighter.relays".to_string()]]);
+
+    let _ = nmp_ref
+        .actor_sender()
+        .send(nmp_core::ActorCommand::PublishRawEvent {
+            kind,
+            content,
+            tags,
+            target: nmp_core::publish::PublishTarget::Auto,
+            signer_pubkey: None,
+            correlation_id: None,
+        });
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -388,5 +509,44 @@ mod tests {
                 normalized
             );
         }
+    }
+
+    #[test]
+    fn full_relay_config_publishes_complete_app_data_document() {
+        let rows = vec![
+            ("wss://rooms.example".to_string(), false, false, true, false),
+            ("wss://index.example".to_string(), false, false, false, true),
+            ("wss://plain.example".to_string(), true, true, false, false),
+        ];
+
+        let effects = reduce_action_set_relay_configs(&mut make_state(), rows);
+
+        assert!(matches!(&effects[0], Effect::RemoveRelay { url } if url == "wss://rooms.example"));
+        assert!(
+            matches!(&effects[1], Effect::SetRelayRole { url, role } if url == "wss://index.example" && role == "indexer")
+        );
+        assert!(
+            matches!(&effects[2], Effect::SetRelayRole { url, role } if url == "wss://plain.example" && role == "both")
+        );
+
+        let Effect::PublishRelayAppData { json } = &effects[3] else {
+            panic!("expected app-data publish");
+        };
+        let event: serde_json::Value = serde_json::from_str(json).expect("event json");
+        assert_eq!(event["kind"], 30078);
+        assert_eq!(
+            event["tags"],
+            serde_json::json!([["d", "com.highlighter.relays"]])
+        );
+        let content: serde_json::Value =
+            serde_json::from_str(event["content"].as_str().expect("content"))
+                .expect("content json");
+        assert_eq!(
+            content,
+            serde_json::json!([
+                {"url": "wss://rooms.example", "rooms": true, "indexer": false},
+                {"url": "wss://index.example", "rooms": false, "indexer": true}
+            ])
+        );
     }
 }

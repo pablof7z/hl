@@ -33,6 +33,7 @@ enum HighlighterAction {
     case addRelay(url: String, role: String)
     case removeRelay(url: String)
     case setRelayRole(url: String, role: String)
+    case setRelayConfigs(relays: [RelayConfig])
     // ── Follows ───────────────────────────────────────────────────────────────
     case follow(pubkey: String)
     case unfollow(pubkey: String)
@@ -275,6 +276,18 @@ enum HighlighterAction {
         case .setRelayRole(let url, let role):
             return AppActionEnvelope(namespace: "hl.relay.set_role",
                                      json: jsonObject(["url": url, "role": role]))
+        case .setRelayConfigs(let relays):
+            let rows = relays.map {
+                [
+                    "url": $0.url,
+                    "read": $0.read,
+                    "write": $0.write,
+                    "rooms": $0.rooms,
+                    "indexer": $0.indexer
+                ] as [String: Any]
+            }
+            return AppActionEnvelope(namespace: "hl.relay.set_configs",
+                                     json: jsonAny(["relays": rows]))
         // ── Follows ───────────────────────────────────────────────────────────
         case .follow(let pubkey):
             return AppActionEnvelope(namespace: "hl.profile.follow",

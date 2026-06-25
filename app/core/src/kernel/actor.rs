@@ -642,9 +642,9 @@ fn reduce_action_envelope(
         PublishHighlightPayload, ReactPayload, ReleaseEntityRefPayload, ReleaseProfilePayload,
         RemoveBookmarkPayload, RemoveFromSetPayload, RemoveRelayPayload, ResolveEntityRefPayload,
         RunOmniboxPayload, RunSearchPayload, SelectRootTabPayload, SetBookPickerQueryPayload,
-        SetRelayRolePayload, ShareArtifactToRoomPayload, ShareHighlightToRoomPayload,
-        ShareMintInvitePayload, ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload,
-        ToggleReactionPayload, UnfollowPayload, UnreactPayload,
+        SetRelayConfigsPayload, SetRelayRolePayload, ShareArtifactToRoomPayload,
+        ShareHighlightToRoomPayload, ShareMintInvitePayload, ShareToRoomPayload, SignInNsecPayload,
+        StartRoomDiscoveryPayload, ToggleReactionPayload, UnfollowPayload, UnreactPayload,
     };
 
     match envelope.namespace.as_str() {
@@ -702,6 +702,16 @@ fn reduce_action_envelope(
                 None => return vec![],
             };
             relays::reduce_action_set_relay_role(state, p.url, role)
+        }
+        "hl.relay.set_configs" => {
+            let p = parse!(SetRelayConfigsPayload);
+            relays::reduce_action_set_relay_configs(
+                state,
+                p.relays
+                    .into_iter()
+                    .map(|row| (row.url, row.read, row.write, row.rooms, row.indexer))
+                    .collect(),
+            )
         }
         // ── Follows ───────────────────────────────────────────────────────────
         "hl.profile.follow" => {
@@ -1945,6 +1955,9 @@ pub(crate) async fn run_effect(
         }
         Effect::SetRelayRole { url, role } => {
             relays::run_effect_set_relay_role(url, role, nmp);
+        }
+        Effect::PublishRelayAppData { json } => {
+            relays::run_effect_publish_relay_app_data(json, nmp);
         }
 
         // ── Phase 3B additions (append-only) ─────────────────────────────────

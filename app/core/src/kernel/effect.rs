@@ -89,6 +89,14 @@ pub enum Effect {
     /// single `ActorCommand::AddRelay` with the new role (nmp upserts).
     /// Fire-and-forget. D3: no wss-scheme literals.
     SetRelayRole { url: String, role: String },
+    /// Publish the Highlighter NIP-78 relay app-data event (`kind:30078`) that
+    /// carries non-NIP-65 relay flags (`rooms`, `indexer`).
+    ///
+    /// The JSON is a serde-serialised event template `{ kind:30078, content,
+    /// tags:[["d","com.highlighter.relays"]] }`. The NMP raw-publish path signs
+    /// and broadcasts it for the active account. Fire-and-forget; no native
+    /// side storage is involved.
+    PublishRelayAppData { json: String },
     // ── Phase 3B additions (append-only) ─────────────────────────────────────
     /// Call `nmp_nip29::register::wire_joined_groups(nmp_ref, pubkey, "")`.
     ///
