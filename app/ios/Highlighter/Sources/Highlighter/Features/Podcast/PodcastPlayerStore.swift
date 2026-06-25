@@ -43,17 +43,12 @@ final class PodcastPlayerStore {
 
     // MARK: - Private plumbing
 
-    @ObservationIgnored private let core: HighlighterCore
     @ObservationIgnored weak var kernel: HighlighterAppKernel?
     @ObservationIgnored private let logger = Logger(subsystem: "com.highlighter.app", category: "PodcastPlayer")
     @ObservationIgnored private var transcriptTask: Task<Void, Never>?
     @ObservationIgnored private var waveformTask: Task<Void, Never>?
 
     // MARK: - Lifecycle
-
-    init(core: HighlighterCore) {
-        self.core = core
-    }
 
     deinit {
         transcriptTask?.cancel()
@@ -307,8 +302,8 @@ final class PodcastPlayerStore {
     }
 
     /// Compatibility hook for the existing startup call. Playback rehydration
-    /// is now owned by the kernel podcast-listening snapshot; the old direct
-    /// HighlighterCore rehydration API is intentionally not called here.
+    /// is now owned by the kernel podcast-listening snapshot; no legacy
+    /// rehydration API is called here.
     func rehydrateFromSavedRecord() async {
         guard let snapshot = kernel?.podcastListeningSnapshot, !snapshot.guid.isEmpty else { return }
         receiveListeningSnapshot(snapshot)

@@ -48,6 +48,8 @@ final class HighlighterStore {
     var bookmarkedArticleAddresses: [String] = []
 
     // Internal plumbing
+    /// Legacy core handle retained for the #95 relay-list import path until
+    /// NMP exposes the mailbox-cache projection Highlighter needs there.
     @ObservationIgnored let core: HighlighterCore
     /// Kernel handle. Communities, bookmarks, and profiles are owned by the
     /// kernel's typed snapshots; App.swift pushes them into this store via
@@ -68,8 +70,7 @@ final class HighlighterStore {
     init() {
         let core = HighlighterCore()
         self.core = core
-        let podcastPlayer = PodcastPlayerStore(core: core)
-        self.podcastPlayer = podcastPlayer
+        self.podcastPlayer = PodcastPlayerStore()
         self.isOnboardingComplete = false
         // Surface the MiniPlayer (paused) with whatever episode the user was
         // last listening to, if any. Tapping play wires AVPlayer through the
