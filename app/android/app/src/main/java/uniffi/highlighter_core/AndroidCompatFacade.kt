@@ -688,8 +688,8 @@ sealed class HighlighterAppAction {
     }
 }
 
-class HighlighterNmpApp(config: HighlighterAppConfig) {
-    private val app = HighlighterApp(AppConfig(config.dataDir))
+class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyringHandler) {
+    private val app = HighlighterApp.newWithKeyring(AppConfig(config.dataDir), keyringHandler)
     private var reconciler: HighlighterAppReconciler? = null
     private val closed = AtomicBoolean(false)
     private var aggregate = HighlighterAppState()

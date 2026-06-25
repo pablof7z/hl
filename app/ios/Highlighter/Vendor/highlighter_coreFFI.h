@@ -272,6 +272,13 @@ typedef void (*UniffiCallbackInterfaceHighlighterObserverMethod1)(uint64_t, Rust
     );
 
 #endif
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_NMP_KEYRING_HANDLER_METHOD0
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_NMP_KEYRING_HANDLER_METHOD0
+typedef void (*UniffiCallbackInterfaceNmpKeyringHandlerMethod0)(uint64_t, RustBuffer, RustBuffer* _Nonnull,
+        RustCallStatus *_Nonnull uniffiCallStatus
+    );
+
+#endif
 #ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_EVENT_CALLBACK
 #define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_EVENT_CALLBACK
 typedef struct UniffiVTableCallbackInterfaceEventCallback {
@@ -287,6 +294,14 @@ typedef struct UniffiVTableCallbackInterfaceHighlighterObserver {
     UniffiCallbackInterfaceHighlighterObserverMethod1 _Nonnull onCapabilityRequest;
     UniffiCallbackInterfaceFree _Nonnull uniffiFree;
 } UniffiVTableCallbackInterfaceHighlighterObserver;
+
+#endif
+#ifndef UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_NMP_KEYRING_HANDLER
+#define UNIFFI_FFIDEF_V_TABLE_CALLBACK_INTERFACE_NMP_KEYRING_HANDLER
+typedef struct UniffiVTableCallbackInterfaceNmpKeyringHandler {
+    UniffiCallbackInterfaceNmpKeyringHandlerMethod0 _Nonnull handleKeyringRequest;
+    UniffiCallbackInterfaceFree _Nonnull uniffiFree;
+} UniffiVTableCallbackInterfaceNmpKeyringHandler;
 
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_CLONE_EVENTCALLBACK
@@ -322,6 +337,11 @@ void uniffi_highlighter_core_fn_free_highlighterapp(void*_Nonnull ptr, RustCallS
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_CONSTRUCTOR_HIGHLIGHTERAPP_NEW
 #define UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_CONSTRUCTOR_HIGHLIGHTERAPP_NEW
 void*_Nonnull uniffi_highlighter_core_fn_constructor_highlighterapp_new(RustBuffer config, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_CONSTRUCTOR_HIGHLIGHTERAPP_NEW_WITH_KEYRING
+#define UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_CONSTRUCTOR_HIGHLIGHTERAPP_NEW_WITH_KEYRING
+void*_Nonnull uniffi_highlighter_core_fn_constructor_highlighterapp_new_with_keyring(RustBuffer config, void*_Nonnull keyring_handler, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_METHOD_HIGHLIGHTERAPP_CLOSE_VIEW
@@ -458,6 +478,26 @@ void uniffi_highlighter_core_fn_method_highlighterobserver_on_snapshot(void*_Non
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_METHOD_HIGHLIGHTEROBSERVER_ON_CAPABILITY_REQUEST
 #define UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_METHOD_HIGHLIGHTEROBSERVER_ON_CAPABILITY_REQUEST
 void uniffi_highlighter_core_fn_method_highlighterobserver_on_capability_request(void*_Nonnull ptr, RustBuffer request, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_CLONE_NMPKEYRINGHANDLER
+#define UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_CLONE_NMPKEYRINGHANDLER
+void*_Nonnull uniffi_highlighter_core_fn_clone_nmpkeyringhandler(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_FREE_NMPKEYRINGHANDLER
+#define UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_FREE_NMPKEYRINGHANDLER
+void uniffi_highlighter_core_fn_free_nmpkeyringhandler(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_INIT_CALLBACK_VTABLE_NMPKEYRINGHANDLER
+#define UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_INIT_CALLBACK_VTABLE_NMPKEYRINGHANDLER
+void uniffi_highlighter_core_fn_init_callback_vtable_nmpkeyringhandler(const UniffiVTableCallbackInterfaceNmpKeyringHandler* _Nonnull vtable
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_METHOD_NMPKEYRINGHANDLER_HANDLE_KEYRING_REQUEST
+#define UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_METHOD_NMPKEYRINGHANDLER_HANDLE_KEYRING_REQUEST
+RustBuffer uniffi_highlighter_core_fn_method_nmpkeyringhandler_handle_keyring_request(void*_Nonnull ptr, RustBuffer request_json, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_FN_FUNC_CACHE_KEY_PROJECTION
@@ -1126,9 +1166,21 @@ uint16_t uniffi_highlighter_core_checksum_method_highlighterobserver_on_capabili
 
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_CHECKSUM_METHOD_NMPKEYRINGHANDLER_HANDLE_KEYRING_REQUEST
+#define UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_CHECKSUM_METHOD_NMPKEYRINGHANDLER_HANDLE_KEYRING_REQUEST
+uint16_t uniffi_highlighter_core_checksum_method_nmpkeyringhandler_handle_keyring_request(void
+
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_CHECKSUM_CONSTRUCTOR_HIGHLIGHTERAPP_NEW
 #define UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_CHECKSUM_CONSTRUCTOR_HIGHLIGHTERAPP_NEW
 uint16_t uniffi_highlighter_core_checksum_constructor_highlighterapp_new(void
+
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_CHECKSUM_CONSTRUCTOR_HIGHLIGHTERAPP_NEW_WITH_KEYRING
+#define UNIFFI_FFIDEF_UNIFFI_HIGHLIGHTER_CORE_CHECKSUM_CONSTRUCTOR_HIGHLIGHTERAPP_NEW_WITH_KEYRING
+uint16_t uniffi_highlighter_core_checksum_constructor_highlighterapp_new_with_keyring(void
 
 );
 #endif

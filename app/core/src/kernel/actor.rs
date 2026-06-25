@@ -15,14 +15,18 @@
 //! D8:   No sleeps or poll loops; time advances through the injected Clock.
 //! D9:   Wall-clock reads confined to `SystemClock`; tests inject `ManualClock`.
 
-use std::ffi::c_void;
+use std::ffi::{c_char, c_void, CStr, CString};
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex};
 
 use parking_lot::RwLock;
 use tokio::sync::mpsc;
 
-use nmp_ffi::{nmp_app_free, nmp_external_signer_init, nmp_signer_broker_init, NmpApp};
+use nmp_ffi::{
+    nmp_app_consume_all_builtin_projections, nmp_app_free, nmp_app_new,
+    nmp_app_set_capability_callback, nmp_app_set_storage_path, nmp_app_start,
+    nmp_external_signer_init, nmp_signer_broker_init, NmpApp,
+};
 
 use crate::capabilities::CapabilityResult;
 use crate::kernel::action::{AppAction, KernelEvent};
@@ -33,7 +37,7 @@ use crate::kernel::snapshot::ViewSnapshot;
 use crate::kernel::view::{ViewId, ViewRegistry, ViewRoute};
 use crate::onboarding::OnboardingStore;
 
-use nmp_defaults::{NmpAppBuilder, RunConfig};
+use nmp_defaults::RunConfig;
 
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
 use crate::kernel::domains::{
@@ -129,6 +133,52 @@ extern "C" fn nmp_update_callback(context: *mut c_void, bytes: *const u8, len: u
     let _ = tx.send(Cmd::Event(KernelEvent::NmpSnapshotFrame(frame)));
 }
 
+/// Synchronous callback registered with NMP before `nmp_app_start`.
+///
+/// Cold-start restore reads the keyring during NMP's Start arm. Native code
+/// only executes raw secure-storage JSON; NMP owns key names and policy.
+extern "C" fn nmp_keyring_callback(
+    context: *mut c_void,
+    request_json: *const c_char,
+) -> *mut c_char {
+    let response = if context.is_null() || request_json.is_null() {
+        nmp_capability_error_envelope("", "missing-keyring-context")
+    } else {
+        let request = unsafe { CStr::from_ptr(request_json) }
+            .to_string_lossy()
+            .into_owned();
+        let handler = unsafe { &*(context as *const Arc<dyn NmpKeyringHandler>) };
+        handler.handle_keyring_request(request)
+    };
+    CString::new(response)
+        .unwrap_or_else(|_| c"{}".to_owned())
+        .into_raw()
+}
+
+fn nmp_capability_error_envelope(request_json: &str, reason: &str) -> String {
+    let parsed: serde_json::Value = serde_json::from_str(request_json).unwrap_or_default();
+    let namespace = parsed
+        .get("namespace")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("nmp.keyring.capability");
+    let correlation_id = parsed
+        .get("correlation_id")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let result_json = serde_json::json!({
+        "status": "error",
+        "os_status": -50,
+        "reason": reason,
+    })
+    .to_string();
+    serde_json::json!({
+        "namespace": namespace,
+        "correlation_id": correlation_id,
+        "result_json": result_json,
+    })
+    .to_string()
+}
+
 // ─── NmpApp handle ──────────────────────────────────────────────────────────
 
 /// Owned, `Send + Sync` wrapper around the `NmpApp` raw pointer.
@@ -146,6 +196,8 @@ extern "C" fn nmp_update_callback(context: *mut c_void, bytes: *const u8, len: u
 /// `NonNull` first.
 pub(crate) struct NmpHandle {
     pub(crate) ptr: NonNull<NmpApp>,
+    /// Keeps the native keyring handler alive for NMP's capability callback.
+    _capability_callback_ctx: Option<Box<Arc<dyn NmpKeyringHandler>>>,
     /// Keeps the `mpsc::UnboundedSender<Cmd>` alive for the `nmp_update_callback`
     /// context pointer. Dropped AFTER `nmp_app_free` (declaration order).
     _update_callback_ctx: Option<Box<mpsc::UnboundedSender<Cmd>>>,
@@ -196,6 +248,15 @@ pub trait HighlighterObserver: Send + Sync + 'static {
     fn on_snapshot(&self, view_id: ViewId, snapshot: ViewSnapshot);
     /// The kernel is requesting a native capability execution.
     fn on_capability_request(&self, request: crate::capabilities::CapabilityRequest);
+}
+
+/// Native executor for NMP's keyring capability.
+///
+/// Implementations must be synchronous and must return the raw
+/// `CapabilityEnvelope` JSON for the supplied raw `CapabilityRequest` JSON.
+#[uniffi::export(with_foreign)]
+pub trait NmpKeyringHandler: Send + Sync + 'static {
+    fn handle_keyring_request(&self, request_json: String) -> String;
 }
 
 // ─── Shared state (actor ↔ FFI layer) ───────────────────────────────────────
@@ -3031,28 +3092,45 @@ pub(crate) async fn actor_task(
 ///
 /// Returns `None` if the storage path cannot be created or `nmp_app_start`
 /// returns null (logged as a warning; the actor continues without NMP).
-pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> Option<NmpHandle> {
+pub(crate) fn start_nmp_app(
+    data_dir: &str,
+    tx: mpsc::UnboundedSender<Cmd>,
+    keyring_handler: Option<Arc<dyn NmpKeyringHandler>>,
+) -> Option<NmpHandle> {
     let storage_path = AppState::nmp_storage_path(data_dir);
     if let Err(e) = std::fs::create_dir_all(&storage_path) {
         tracing::warn!(path = %storage_path.display(), error = %e, "failed to create NMP storage dir");
         return None;
     }
 
-    let mut builder = NmpAppBuilder::new();
-    nmp_defaults::register_defaults(&mut builder);
+    let raw = nmp_app_new();
+    let mut raw_ptr = NonNull::new(raw)?;
+    let nmp_ref_mut: &mut NmpApp = unsafe { raw_ptr.as_mut() };
 
-    // Boot sequence per nmp-defaults typestate (#1493 relay gate added):
-    //   Unstarted → StorageSet → ProjectionsDeclared → RelaysDeclared → *mut NmpApp
-    // hl manages its relay set entirely through the bespoke live lane
-    // (nostr_runtime.rs / relays.rs / nmp_app_add_relay at runtime), so nmp's
-    // kernel starts with no built-in relays and the app adds them dynamically.
-    let raw = builder
-        .storage_path(storage_path.to_string_lossy().into_owned())
-        .consume_all_builtin_projections()
-        .without_initial_relays()
-        .start(RunConfig::default());
+    // Manual equivalent of the nmp-defaults typestate builder, with one extra
+    // required pre-start step: register NMP's keyring capability callback before
+    // `nmp_app_start` so cold-start session restore can synchronously recall
+    // `nmp.identity.*` entries.
+    nmp_defaults::register_defaults(nmp_ref_mut);
+    let path = storage_path.to_string_lossy().into_owned();
+    let Ok(path_c) = CString::new(path.as_str()) else {
+        nmp_app_free(raw_ptr.as_ptr());
+        return None;
+    };
+    nmp_app_set_storage_path(raw_ptr.as_ptr(), path_c.as_ptr());
+    nmp_app_consume_all_builtin_projections(raw_ptr.as_ptr());
+    nmp_ref_mut.set_initial_relays_for_start(Vec::new());
 
-    let raw_ptr = NonNull::new(raw)?;
+    let capability_context = keyring_handler.map(|handler| {
+        let ctx_box = Box::new(handler);
+        let ctx_ptr = (&*ctx_box) as *const Arc<dyn NmpKeyringHandler> as *mut c_void;
+        nmp_app_set_capability_callback(raw_ptr.as_ptr(), ctx_ptr, Some(nmp_keyring_callback));
+        ctx_box
+    });
+
+    let config = RunConfig::default();
+    nmp_app_start(raw_ptr.as_ptr(), config.visible_limit, config.emit_hz);
+
     let nmp_ref: &NmpApp = unsafe { raw_ptr.as_ref() };
 
     // Phase 2B: initialise NIP-46 broker (needed for PairBunker and
@@ -3099,6 +3177,15 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
     nmp_ref.register_identity_change_observer(move |active| {
         let _ = tx_id.send(Cmd::Event(KernelEvent::IdentityChanged(active)));
     });
+    // NMP restores persisted identity during Start, before Highlighter can
+    // register the observer above. Replay the current slot once so cold-start
+    // restores update AppState even when no subsequent identity change occurs.
+    let boot_active = nmp_ref
+        .active_account_handle()
+        .lock()
+        .ok()
+        .and_then(|guard| guard.clone());
+    let _ = tx.send(Cmd::Event(KernelEvent::IdentityChanged(boot_active)));
 
     // Phase 3C: wire the follow-list typed snapshot projection so NIP-02
     // kind:3 events from the active account surface in `AppState::follows`.
@@ -3148,6 +3235,7 @@ pub(crate) fn start_nmp_app(data_dir: &str, tx: mpsc::UnboundedSender<Cmd>) -> O
 
     Some(NmpHandle {
         ptr: raw_ptr,
+        _capability_callback_ctx: capability_context,
         _update_callback_ctx: Some(context_box),
     })
 }
@@ -4188,8 +4276,11 @@ mod tests {
         // We assert the function exists and accepts the expected args by calling
         // a no-op path (nmp is None in unit-test mode).
         // The real wiring is tested via integration tests that spin a live app.
-        let _: fn(&str, tokio::sync::mpsc::UnboundedSender<Cmd>) -> Option<NmpHandle> =
-            start_nmp_app;
+        let _: fn(
+            &str,
+            tokio::sync::mpsc::UnboundedSender<Cmd>,
+            Option<Arc<dyn NmpKeyringHandler>>,
+        ) -> Option<NmpHandle> = start_nmp_app;
     }
 
     // 3A-3: decode_dispatch_handles_unknown_schema_id_gracefully (D6)

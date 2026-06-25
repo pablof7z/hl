@@ -18,6 +18,9 @@ use crate::kernel::effect::Effect;
 // ─── Reducer (action) ────────────────────────────────────────────────────────
 
 pub(crate) fn reduce_action_restore_session(state: &mut AppState, now: u64) -> Vec<Effect> {
+    if matches!(state.session, SessionState::Present { .. }) {
+        return vec![Effect::LoadOnboardingFlag];
+    }
     state.session = SessionState::Restoring { started_at: now };
     // Fire both onboarding load and session restore in parallel.
     vec![Effect::LoadOnboardingFlag, Effect::RestoreSessionSecret]
@@ -246,6 +249,25 @@ mod tests {
             "should be Absent after timeout, got {:?}",
             state.session
         );
+    }
+
+    #[test]
+    fn restore_session_does_not_overwrite_present_nmp_identity() {
+        let mut state = make_state();
+        state.session = SessionState::Present {
+            pubkey: "active-pubkey".into(),
+            signer_kind: SignerKind::LocalNsec,
+        };
+        let clock = ManualClock::new(0);
+
+        let effects = step(&mut state, &clock, Cmd::Action(AppAction::RestoreSession));
+
+        assert!(matches!(
+            state.session,
+            SessionState::Present { ref pubkey, .. } if pubkey == "active-pubkey"
+        ));
+        assert_eq!(effects.len(), 1);
+        assert!(matches!(effects[0], Effect::LoadOnboardingFlag));
     }
 
     #[test]

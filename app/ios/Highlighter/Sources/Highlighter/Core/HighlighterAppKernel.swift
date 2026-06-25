@@ -180,7 +180,10 @@ final class HighlighterAppKernel {
             dataDir = NSTemporaryDirectory()
         }
 
-        let kernelApp = HighlighterApp(config: AppConfig(dataDir: dataDir))
+        let kernelApp = HighlighterApp.newWithKeyring(
+            config: AppConfig(dataDir: dataDir),
+            keyringHandler: NativeNmpKeyringHandler()
+        )
         self.app = kernelApp
 
         // Native capability executor. Holds a weak ref back to the kernel so it
@@ -667,6 +670,12 @@ private final class KernelObserver: HighlighterObserver, @unchecked Sendable {
         Task { @MainActor [weak self] in
             self?.kernel?.fulfill(request: request)
         }
+    }
+}
+
+private final class NativeNmpKeyringHandler: NmpKeyringHandler, @unchecked Sendable {
+    func handleKeyringRequest(requestJson: String) -> String {
+        KeychainService.handleNmpKeyringRequestJSON(requestJson)
     }
 }
 

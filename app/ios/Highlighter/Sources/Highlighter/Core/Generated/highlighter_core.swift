@@ -923,6 +923,22 @@ public convenience init(config: AppConfig) {
     }
 
 
+    /**
+     * Construct the kernel with a native NMP keyring capability handler.
+     *
+     * The handler is registered before NMP starts, which is required for
+     * cold-start session restore. Native executes raw secure-storage JSON;
+     * NMP owns the keyring policy and key names.
+     */
+public static func newWithKeyring(config: AppConfig, keyringHandler: NmpKeyringHandler) -> HighlighterApp  {
+    return try!  FfiConverterTypeHighlighterApp_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_constructor_highlighterapp_new_with_keyring(
+        FfiConverterTypeAppConfig_lower(config),
+        FfiConverterTypeNmpKeyringHandler_lower(keyringHandler),$0
+    )
+})
+}
+
 
 
     /**
@@ -1585,6 +1601,192 @@ public func FfiConverterTypeHighlighterObserver_lift(_ pointer: UnsafeMutableRaw
 #endif
 public func FfiConverterTypeHighlighterObserver_lower(_ value: HighlighterObserver) -> UnsafeMutableRawPointer {
     return FfiConverterTypeHighlighterObserver.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Native executor for NMP's keyring capability.
+ *
+ * Implementations must be synchronous and must return the raw
+ * `CapabilityEnvelope` JSON for the supplied raw `CapabilityRequest` JSON.
+ */
+public protocol NmpKeyringHandler: AnyObject, Sendable {
+
+    func handleKeyringRequest(requestJson: String)  -> String
+
+}
+/**
+ * Native executor for NMP's keyring capability.
+ *
+ * Implementations must be synchronous and must return the raw
+ * `CapabilityEnvelope` JSON for the supplied raw `CapabilityRequest` JSON.
+ */
+open class NmpKeyringHandlerImpl: NmpKeyringHandler, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_highlighter_core_fn_clone_nmpkeyringhandler(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_highlighter_core_fn_free_nmpkeyringhandler(pointer, $0) }
+    }
+
+
+
+
+open func handleKeyringRequest(requestJson: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_nmpkeyringhandler_handle_keyring_request(self.uniffiClonePointer(),
+        FfiConverterString.lower(requestJson),$0
+    )
+})
+}
+
+
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceNmpKeyringHandler {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceNmpKeyringHandler] = [UniffiVTableCallbackInterfaceNmpKeyringHandler(
+        handleKeyringRequest: { (
+            uniffiHandle: UInt64,
+            requestJson: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterTypeNmpKeyringHandler.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return uniffiObj.handleKeyringRequest(
+                     requestJson: try FfiConverterString.lift(requestJson)
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCall(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            let result = try? FfiConverterTypeNmpKeyringHandler.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface NmpKeyringHandler: handle missing in uniffiFree")
+            }
+        }
+    )]
+}
+
+private func uniffiCallbackInitNmpKeyringHandler() {
+    uniffi_highlighter_core_fn_init_callback_vtable_nmpkeyringhandler(UniffiCallbackInterfaceNmpKeyringHandler.vtable)
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNmpKeyringHandler: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<NmpKeyringHandler>()
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = NmpKeyringHandler
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> NmpKeyringHandler {
+        return NmpKeyringHandlerImpl(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: NmpKeyringHandler) -> UnsafeMutableRawPointer {
+        guard let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: handleMap.insert(obj: value))) else {
+            fatalError("Cast to UnsafeMutableRawPointer failed")
+        }
+        return ptr
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NmpKeyringHandler {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: NmpKeyringHandler, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNmpKeyringHandler_lift(_ pointer: UnsafeMutableRawPointer) throws -> NmpKeyringHandler {
+    return try FfiConverterTypeNmpKeyringHandler.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNmpKeyringHandler_lower(_ value: NmpKeyringHandler) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeNmpKeyringHandler.lower(value)
 }
 
 
@@ -35908,7 +36110,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlighterobserver_on_capability_request() != 18133) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_nmpkeyringhandler_handle_keyring_request() != 59990) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_constructor_highlighterapp_new() != 21709) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_constructor_highlighterapp_new_with_keyring() != 11190) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_constructor_highlightercore_new() != 37739) {
@@ -35917,6 +36125,7 @@ private let initializationResult: InitializationResult = {
 
     uniffiCallbackInitEventCallback()
     uniffiCallbackInitHighlighterObserver()
+    uniffiCallbackInitNmpKeyringHandler()
     return InitializationResult.ok
 }()
 
