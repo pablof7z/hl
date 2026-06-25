@@ -63,10 +63,10 @@
 //!
 //! ## Fidelity reference
 //!
-//! The live bespoke lane (`app/core/src/capture.rs`) is the fidelity reference
-//! for the phase vocabulary (`CapturePublishPhase`, can-publish predicate, text
-//! trimming). The live module is UNTOUCHED (Non-Negotiable #6). 5F mirrors its
-//! `CapturePublishPhase` as the kernel-owned `CaptureDraftPhase`.
+//! The pre-NMP bespoke capture implementation was the original fidelity
+//! reference for the phase vocabulary (`CapturePublishPhase`, can-publish
+//! predicate, text trimming). This domain is now the kernel-owned capture
+//! authority and exposes that phase vocabulary as `CaptureDraftPhase`.
 //!
 //! ## Raw doctrine (D1)
 //!
@@ -343,6 +343,11 @@ pub(crate) fn reduce_action_set_target_group(
         return vec![];
     }
     state.capture_draft.target_group_id = Some(group_id);
+    if state.capture_draft.publish_phase == CaptureDraftPhase::Idle
+        && !state.ocr.markdown.trim().is_empty()
+    {
+        state.capture_draft.publish_phase = CaptureDraftPhase::Reviewing;
+    }
     vec![]
 }
 
@@ -1655,12 +1660,17 @@ mod tests {
         state.communities = vec![community("group-a", "Group A")];
         inject_ocr(&mut state, &clock);
 
-        // Force Reviewing, set target group — but no has_upload yet.
-        state.capture_draft.publish_phase = CaptureDraftPhase::Reviewing;
+        // Selecting a target group on an OCR-backed no-quote draft enters
+        // Reviewing; without this there is no public action path into the
+        // picture-only publish branch.
         step(
             &mut state,
             &clock,
             envelope("hl.capture.set_target_group", r#"{"group_id":"group-a"}"#),
+        );
+        assert_eq!(
+            state.capture_draft.publish_phase,
+            CaptureDraftPhase::Reviewing
         );
 
         // Without has_upload the markdown path must NOT publish.

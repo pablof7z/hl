@@ -3,6 +3,10 @@ package com.highlighter.app.util
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+
+private const val MAX_PICKED_IMAGE_BYTES = 12 * 1024 * 1024
 
 /**
  * A decoded image selected via [androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia],
@@ -40,7 +44,9 @@ internal data class PickedImage(
  */
 internal fun readPickedImage(context: Context, uri: Uri): PickedImage? =
     runCatching {
-        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        val bytes = context.contentResolver.openInputStream(uri)?.use {
+            it.readBytesBounded(MAX_PICKED_IMAGE_BYTES)
+        }
             ?: return null
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
@@ -51,3 +57,19 @@ internal fun readPickedImage(context: Context, uri: Uri): PickedImage? =
             height = options.outHeight.coerceAtLeast(0).toUInt(),
         )
     }.getOrNull()
+
+private fun InputStream.readBytesBounded(maxBytes: Int): ByteArray {
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    val out = ByteArrayOutputStream()
+    var total = 0
+    while (true) {
+        val read = read(buffer)
+        if (read == -1) break
+        total += read
+        if (total > maxBytes) {
+            throw IllegalArgumentException("Selected image is too large")
+        }
+        out.write(buffer, 0, read)
+    }
+    return out.toByteArray()
+}
