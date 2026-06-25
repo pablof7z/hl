@@ -798,6 +798,11 @@ public protocol HighlighterAppProtocol: AnyObject, Sendable {
     func currentSnapshot(viewId: ViewId)  -> ViewSnapshot?
 
     /**
+     * Rust-owned defaults for adding a relay from native settings forms.
+     */
+    func defaultAddRelayConfig()  -> RelayConfig
+
+    /**
      * Envelope-based fire-and-forget action dispatch. The namespace keys a
      * typed serde payload; the kernel router decodes and routes it.
      * Never returns a Result (Non-Negotiable #3 / D6).
@@ -809,6 +814,11 @@ public protocol HighlighterAppProtocol: AnyObject, Sendable {
      * emit snapshots for this view until `close_view` is called.
      */
     func openView(viewId: ViewId, route: ViewRoute)
+
+    /**
+     * Rust-owned URL normalization, validation, and add-relay projection.
+     */
+    func projectAddRelaySheet(input: AddRelaySheetProjectionInput)  -> AddRelaySheetProjection
 
     /**
      * Deliver the native shell's response to a `CapabilityRequest`.
@@ -966,6 +976,16 @@ open func currentSnapshot(viewId: ViewId) -> ViewSnapshot?  {
 }
 
     /**
+     * Rust-owned defaults for adding a relay from native settings forms.
+     */
+open func defaultAddRelayConfig() -> RelayConfig  {
+    return try!  FfiConverterTypeRelayConfig_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_default_add_relay_config(self.uniffiClonePointer(),$0
+    )
+})
+}
+
+    /**
      * Envelope-based fire-and-forget action dispatch. The namespace keys a
      * typed serde payload; the kernel router decodes and routes it.
      * Never returns a Result (Non-Negotiable #3 / D6).
@@ -987,6 +1007,17 @@ open func openView(viewId: ViewId, route: ViewRoute)  {try! rustCall() {
         FfiConverterTypeViewRoute_lower(route),$0
     )
 }
+}
+
+    /**
+     * Rust-owned URL normalization, validation, and add-relay projection.
+     */
+open func projectAddRelaySheet(input: AddRelaySheetProjectionInput) -> AddRelaySheetProjection  {
+    return try!  FfiConverterTypeAddRelaySheetProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_project_add_relay_sheet(self.uniffiClonePointer(),
+        FfiConverterTypeAddRelaySheetProjectionInput_lower(input),$0
+    )
+})
 }
 
     /**
@@ -36071,10 +36102,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlighterapp_current_snapshot() != 21980) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_default_add_relay_config() != 10507) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlighterapp_dispatch_action() != 62969) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlighterapp_open_view() != 29686) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_project_add_relay_sheet() != 7918) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlighterapp_provide_capability_result() != 16552) {

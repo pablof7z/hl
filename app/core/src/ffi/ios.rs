@@ -3,10 +3,6 @@
 //! This is the NEW lane introduced in Phase 1. It coexists with `HighlighterCore`
 //! (in `client.rs`) — UniFFI supports multiple exported objects in one crate.
 //!
-//! Exactly 10 methods (spec §step 7):
-//!   new / set_observer / dispatch / open_view / close_view /
-//!   current_snapshot / resume / suspend / provide_capability_result / shutdown.
-//!
 //! `dispatch` returns `()` — fire-and-forget, no Result (Non-Negotiable #3 / D6).
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -167,6 +163,19 @@ impl HighlighterApp {
                 role: r.role().to_string(),
             })
             .collect()
+    }
+
+    /// Rust-owned defaults for adding a relay from native settings forms.
+    pub fn default_add_relay_config(&self) -> crate::relays::RelayConfig {
+        crate::relays::default_add_relay_config()
+    }
+
+    /// Rust-owned URL normalization, validation, and add-relay projection.
+    pub fn project_add_relay_sheet(
+        &self,
+        input: crate::relays::AddRelaySheetProjectionInput,
+    ) -> crate::relays::AddRelaySheetProjection {
+        crate::relays::add_relay_sheet_projection(input)
     }
 }
 
