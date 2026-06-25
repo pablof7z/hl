@@ -32,8 +32,7 @@ struct ChatView: View {
         }
         .background(Color.highlighterPaper.ignoresSafeArea())
         .task {
-            let hostRelayUrl = kernel.roomHomeSnapshots[groupId]?.hostRelayUrl ?? ""
-            await store.start(groupId: groupId, hostRelayUrl: hostRelayUrl, kernel: kernel)
+            await store.start(groupId: groupId, kernel: kernel)
         }
         .onDisappear { store.stop() }
         .onChange(of: kernel.roomChatSnapshots[groupId]) { _, _ in

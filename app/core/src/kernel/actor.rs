@@ -1125,7 +1125,7 @@ fn reduce_action_envelope(
         // `hl.chat.open` — register per-room ChatObserver and wire GroupChatProjection.
         "hl.chat.open" => {
             let p: chat::OpenChatPayload = parse!(chat::OpenChatPayload);
-            chat::reduce_action_open_chat(state, p.group_id, p.host_relay_url)
+            chat::reduce_action_open_chat(state, p.group_id)
         }
         // `hl.chat.close` — clear per-room chat buffer in state + emit ReleaseChatRoom.
         "hl.chat.close" => {
@@ -1140,7 +1140,7 @@ fn reduce_action_envelope(
         // `hl.chat.post` — write a kind:9 chat message via nmp.nip29.post_chat_message.
         "hl.chat.post" => {
             let p: chat::PostChatPayload = parse!(chat::PostChatPayload);
-            chat::reduce_action_post_chat(p)
+            chat::reduce_action_post_chat(state, p)
         }
         // `hl.chat.mark_seen` — optional pill-reset hint (currently no-op in kernel).
         "hl.chat.mark_seen" => {

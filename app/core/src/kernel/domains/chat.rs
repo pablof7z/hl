@@ -23,8 +23,9 @@
 //! ## Wire registration
 //!
 //! `register_chat_projection(nmp_ref, group_id, host_relay_url, tx)` is called
-//! when `hl.chat.open` is dispatched. It creates a `GroupChatProjection` scoped
-//! to `GroupId { host_relay_url, local_id: group_id }` and wraps it in a
+//! when `hl.chat.open` is dispatched. Rust derives `host_relay_url` from the
+//! joined-community projection, creates a `GroupChatProjection` scoped to
+//! `GroupId { host_relay_url, local_id: group_id }`, and wraps it in a
 //! `ChatObserver`. Per-room wiring; cleared on close and logout.
 //!
 //! ## threading
@@ -230,18 +231,28 @@ pub(crate) fn reduce_event_chat_room_updated(
 
 // ─── Action reducers ─────────────────────────────────────────────────────────
 
+fn host_relay_for_group(state: &AppState, group_id: &str) -> Option<String> {
+    let group_id = group_id.trim();
+    if group_id.is_empty() {
+        return None;
+    }
+    state
+        .communities
+        .iter()
+        .find(|c| c.group_id == group_id)
+        .map(|c| c.host_relay_url.trim().to_string())
+        .filter(|relay| !relay.is_empty())
+}
+
 /// Handle `hl.chat.open` — emit `Effect::WireGroupChat { group_id, host_relay_url }`.
 ///
 /// Inserts an empty `ChatRoomState` for the group if not already present.
 /// Wiring is deferred to the effect runner (which creates the `ChatObserver`).
-pub(crate) fn reduce_action_open_chat(
-    state: &mut AppState,
-    group_id: String,
-    host_relay_url: String,
-) -> Vec<Effect> {
-    if group_id.trim().is_empty() || host_relay_url.trim().is_empty() {
+pub(crate) fn reduce_action_open_chat(state: &mut AppState, group_id: String) -> Vec<Effect> {
+    let group_id = group_id.trim().to_string();
+    let Some(host_relay_url) = host_relay_for_group(state, &group_id) else {
         return vec![];
-    }
+    };
     state.chat_rooms.entry(group_id.clone()).or_default();
     vec![Effect::WireGroupChat {
         group_id,
@@ -283,9 +294,13 @@ pub(crate) fn reduce_action_load_more_chat(state: &mut AppState, group_id: Strin
 /// D6: empty content → no effects. No active session → no effects.
 /// Payload shape matches `PostChatMessageInput { group, content,
 /// previous_event_id_prefixes, reply_to_event_id }`.
-pub(crate) fn reduce_action_post_chat(payload: PostChatPayload) -> Vec<Effect> {
+pub(crate) fn reduce_action_post_chat(state: &AppState, payload: PostChatPayload) -> Vec<Effect> {
     let content = payload.content.trim().to_string();
-    if content.is_empty() || payload.group_id.trim().is_empty() {
+    let group_id = payload.group_id.trim().to_string();
+    let Some(host_relay_url) = host_relay_for_group(state, &group_id) else {
+        return vec![];
+    };
+    if content.is_empty() {
         return vec![];
     }
 
@@ -293,8 +308,8 @@ pub(crate) fn reduce_action_post_chat(payload: PostChatPayload) -> Vec<Effect> {
     // Use serde_json::json! (never format!) for safe serialisation.
     let mut json_map = serde_json::json!({
         "group": {
-            "host_relay_url": payload.host_relay_url,
-            "local_id": payload.group_id,
+            "host_relay_url": host_relay_url,
+            "local_id": group_id,
         },
         "content": content,
         "previous_event_id_prefixes": [],
@@ -518,7 +533,6 @@ pub(crate) fn compute_room_chat_snapshot(state: &AppState, group_id: &str) -> Ro
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct OpenChatPayload {
     pub group_id: String,
-    pub host_relay_url: String,
 }
 
 /// `hl.chat.close` envelope payload.
@@ -537,7 +551,6 @@ pub(crate) struct LoadMoreChatPayload {
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct PostChatPayload {
     pub group_id: String,
-    pub host_relay_url: String,
     pub content: String,
     pub reply_to_event_id: Option<String>,
 }
@@ -562,6 +575,22 @@ mod tests {
 
     fn make_state() -> AppState {
         AppState::default()
+    }
+
+    fn seed_community(state: &mut AppState, group_id: &str, host_relay_url: &str) {
+        state
+            .communities
+            .push(crate::kernel::snapshot::CommunityRow {
+                group_id: group_id.to_string(),
+                host_relay_url: host_relay_url.to_string(),
+                name: None,
+                picture: None,
+                about: None,
+                member_count: 0,
+                public: true,
+                open: true,
+                is_admin: false,
+            });
     }
 
     fn step(state: &mut AppState, clock: &ManualClock, cmd: Cmd) -> Vec<Effect> {
@@ -720,10 +749,10 @@ mod tests {
     fn post_chat_dispatches_post_chat_message() {
         let mut state = make_state();
         let clock = ManualClock::default();
+        seed_community(&mut state, "test-room", "wss://relay.example.com");
 
         let payload = serde_json::json!({
             "group_id": "test-room",
-            "host_relay_url": "wss://relay.example.com",
             "content": "hello world",
         });
         let envelope = crate::kernel::action::AppActionEnvelope {
@@ -754,6 +783,40 @@ mod tests {
             }
             _ => panic!("expected DispatchChatPost"),
         }
+    }
+
+    #[test]
+    fn open_chat_derives_host_relay_from_joined_community() {
+        let mut state = make_state();
+        seed_community(&mut state, "test-room", "wss://relay.example.com");
+
+        let effects = reduce_action_open_chat(&mut state, "test-room".to_string());
+
+        assert_eq!(effects.len(), 1, "known room must wire chat");
+        match &effects[0] {
+            Effect::WireGroupChat {
+                group_id,
+                host_relay_url,
+            } => {
+                assert_eq!(group_id, "test-room");
+                assert_eq!(host_relay_url, "wss://relay.example.com");
+            }
+            _ => panic!("expected WireGroupChat"),
+        }
+        assert!(
+            state.chat_rooms.contains_key("test-room"),
+            "known room should create a chat buffer"
+        );
+
+        let effects = reduce_action_open_chat(&mut state, "unknown-room".to_string());
+        assert!(
+            effects.is_empty(),
+            "unknown room must fail closed without wiring chat"
+        );
+        assert!(
+            !state.chat_rooms.contains_key("unknown-room"),
+            "unknown room must not create a chat buffer"
+        );
     }
 
     // 7-C4: chat_snapshot_bounded_1000
@@ -881,7 +944,8 @@ mod tests {
         );
 
         // Open then close, then a late observer event must not resurrect it.
-        reduce_action_open_chat(&mut state, group_id.to_string(), "wss://r.example".into());
+        seed_community(&mut state, group_id, "wss://r.example");
+        reduce_action_open_chat(&mut state, group_id.to_string());
         reduce_action_close_chat(&mut state, group_id.to_string());
         assert!(
             !state.chat_rooms.contains_key(group_id),
@@ -908,11 +972,11 @@ mod tests {
     fn malformed_no_op() {
         let mut state = make_state();
         let clock = ManualClock::default();
+        seed_community(&mut state, "test-room", "wss://relay.example.com");
 
         // Empty content
         let payload = serde_json::json!({
             "group_id": "test-room",
-            "host_relay_url": "wss://relay.example.com",
             "content": "",
         });
         let envelope = crate::kernel::action::AppActionEnvelope {
@@ -928,7 +992,6 @@ mod tests {
         // Empty group_id
         let payload2 = serde_json::json!({
             "group_id": "",
-            "host_relay_url": "wss://relay.example.com",
             "content": "hello",
         });
         let envelope2 = crate::kernel::action::AppActionEnvelope {
@@ -939,6 +1002,21 @@ mod tests {
         assert!(
             effects2.is_empty(),
             "empty group_id must produce no effects (D6)"
+        );
+
+        // Unknown group_id: fail closed instead of widening or trusting the UI.
+        let payload3 = serde_json::json!({
+            "group_id": "unknown-room",
+            "content": "hello",
+        });
+        let envelope3 = crate::kernel::action::AppActionEnvelope {
+            namespace: "hl.chat.post".to_string(),
+            json: serde_json::to_string(&payload3).unwrap(),
+        };
+        let effects3 = step(&mut state, &clock, Cmd::ActionEnvelope(envelope3));
+        assert!(
+            effects3.is_empty(),
+            "unknown group_id must produce no effects (D3 fail-closed)"
         );
     }
 
