@@ -48,13 +48,19 @@ pub(crate) fn reduce_event_capability_result(
     match result {
         CapabilityResult::Keychain(kr) => match kr {
             KeychainResult::SessionSecret(Some(secret)) => {
-                // Phase 1 path: keychain returned a secret string (pre-nmp).
-                // In Phase 2, nmp keyring restores fire IdentityChanged instead.
-                state.session = SessionState::Present {
-                    pubkey: secret,
-                    signer_kind: SignerKind::LocalNsec,
-                };
-                vec![]
+                // Keychain returns a secret, not an identity. Never project it
+                // as `active_pubkey`; NMP must install the signer and report
+                // the public key through IdentityChanged(Some(pubkey)).
+                if secret.starts_with("nsec1") {
+                    vec![Effect::AddNsecSigner { nsec: secret }]
+                } else if secret.starts_with("bunker://") || secret.starts_with("nostrconnect://") {
+                    vec![Effect::AddBunkerSigner { uri: secret }]
+                } else {
+                    state.session = SessionState::RestoreFailed {
+                        error: "stored session secret is not a supported signer URI".into(),
+                    };
+                    vec![]
+                }
             }
             KeychainResult::SessionSecret(None) => {
                 state.session = SessionState::Absent;
@@ -239,6 +245,59 @@ mod tests {
             matches!(state.session, SessionState::Absent),
             "should be Absent after timeout, got {:?}",
             state.session
+        );
+    }
+
+    #[test]
+    fn keychain_restore_secret_installs_signer_without_projecting_secret_as_pubkey() {
+        let mut state = make_state();
+        let clock = ManualClock::new(0);
+
+        step(&mut state, &clock, Cmd::Action(AppAction::RestoreSession));
+
+        let nsec = "nsec1testsecret".to_string();
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::CapabilityResult(CapabilityResult::Keychain(
+                KeychainResult::SessionSecret(Some(nsec.clone())),
+            ))),
+        );
+
+        assert!(
+            matches!(state.session, SessionState::Restoring { .. }),
+            "restore must wait for NMP IdentityChanged instead of treating the secret as a pubkey"
+        );
+        assert!(
+            effects.iter().any(
+                |effect| matches!(effect, Effect::AddNsecSigner { nsec: value } if value == &nsec)
+            ),
+            "expected keychain nsec to be installed through NMP"
+        );
+    }
+
+    #[test]
+    fn keychain_restore_bunker_uri_installs_bunker_signer_without_projecting_secret() {
+        let mut state = make_state();
+        let clock = ManualClock::new(0);
+
+        step(&mut state, &clock, Cmd::Action(AppAction::RestoreSession));
+
+        let uri = "bunker://pubkey?relay=wss://relay.example".to_string();
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Event(KernelEvent::CapabilityResult(CapabilityResult::Keychain(
+                KeychainResult::SessionSecret(Some(uri.clone())),
+            ))),
+        );
+
+        assert!(matches!(state.session, SessionState::Restoring { .. }));
+        assert!(
+            effects.iter().any(
+                |effect| matches!(effect, Effect::AddBunkerSigner { uri: value } if value == &uri)
+            ),
+            "expected keychain bunker URI to be installed through NMP"
         );
     }
 
