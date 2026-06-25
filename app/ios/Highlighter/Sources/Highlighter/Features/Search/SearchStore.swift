@@ -15,8 +15,8 @@ enum SearchDirectNavigation: Equatable {
 /// NIP-50 query); results stream back via `kernel.searchSnapshot` →
 /// `applyKernelSnapshot()` (wired from the View's `.onChange`). Swift buckets the
 /// mixed hits by kind. The PEOPLE bucket is now kernel-owned (#1697): a local
-/// kind:0 cache scan via `project_profile_search_rows`. `searchRelays` / recent
-/// queries stay on the bespoke chrome path.
+/// kind:0 cache scan via `project_profile_search_rows`. Recent queries are also
+/// kernel-owned device-local state exposed on `SearchSnapshot`.
 ///
 /// Omnibox (#1865): input classification is delegated to the NMP kernel via
 /// `AppAction.runOmnibox`. The resolved `OmniboxOutcome` in the `ViewId.search`

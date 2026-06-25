@@ -88,6 +88,8 @@ enum HighlighterAction {
     /// resolver (#1865) and route it. The resolved `OmniboxOutcome` is surfaced
     /// in `SearchSnapshot.omnibox`. Empty / whitespace input is a no-op (D6).
     case runOmnibox(query: String)
+    case commitSearchRecentQuery(query: String)
+    case clearSearchRecentQueries
 
     // ── What's New ────────────────────────────────────────────────────────────
     case prepareWhatsNew
@@ -389,6 +391,11 @@ enum HighlighterAction {
         case .runOmnibox(let query):
             return AppActionEnvelope(namespace: "hl.search.omnibox",
                                      json: jsonObject(["query": query]))
+        case .commitSearchRecentQuery(let query):
+            return AppActionEnvelope(namespace: "hl.search.commit_recent_query",
+                                     json: jsonObject(["query": query]))
+        case .clearSearchRecentQueries:
+            return AppActionEnvelope(namespace: "hl.search.clear_recent_queries", json: "{}")
 
         // ── What's New ────────────────────────────────────────────────────────
         case .prepareWhatsNew:

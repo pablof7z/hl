@@ -492,6 +492,10 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
             search::reduce_action_run_search(state, query, scope)
         }
         AppAction::RunOmnibox { query } => omnibox::reduce_action_run_omnibox(query),
+        AppAction::CommitSearchRecentQuery { query } => {
+            search::reduce_action_commit_recent_query(state, query)
+        }
+        AppAction::ClearSearchRecentQueries => search::reduce_action_clear_recent_queries(state),
 
         // ── Phase 5A additions (append-only) ─────────────────────────────────
         AppAction::PrepareWhatsNew => whats_new::reduce_action_prepare_whats_new(),
@@ -631,16 +635,16 @@ fn reduce_action_envelope(
         CaptureSetArtifactRecordPayload, CaptureSetContextPayload, CaptureSetNotePayload,
         CaptureSetQuotePayload, CaptureSetTargetGroupPayload, ClaimProfilePayload,
         ClipExtendSegmentPayload, ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload,
-        ClipSetStartPayload, CreateAccountPayload, CreateAndAddToSetPayload,
-        CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload, JoinRoomPayload,
-        LeaveRoomPayload, LookupIsbnPayload, MarkWhatsNewSeenPayload, OcrRecognizePayload,
-        PairBunkerPayload, PresentSheetPayload, PublishClipPayload, PublishHighlightPayload,
-        ReactPayload, ReleaseEntityRefPayload, ReleaseProfilePayload, RemoveBookmarkPayload,
-        RemoveFromSetPayload, RemoveRelayPayload, ResolveEntityRefPayload, RunOmniboxPayload,
-        RunSearchPayload, SelectRootTabPayload, SetBookPickerQueryPayload, SetRelayRolePayload,
-        ShareArtifactToRoomPayload, ShareHighlightToRoomPayload, ShareMintInvitePayload,
-        ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload, ToggleReactionPayload,
-        UnfollowPayload, UnreactPayload,
+        ClipSetStartPayload, CommitSearchRecentQueryPayload, CreateAccountPayload,
+        CreateAndAddToSetPayload, CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload,
+        JoinRoomPayload, LeaveRoomPayload, LookupIsbnPayload, MarkWhatsNewSeenPayload,
+        OcrRecognizePayload, PairBunkerPayload, PresentSheetPayload, PublishClipPayload,
+        PublishHighlightPayload, ReactPayload, ReleaseEntityRefPayload, ReleaseProfilePayload,
+        RemoveBookmarkPayload, RemoveFromSetPayload, RemoveRelayPayload, ResolveEntityRefPayload,
+        RunOmniboxPayload, RunSearchPayload, SelectRootTabPayload, SetBookPickerQueryPayload,
+        SetRelayRolePayload, ShareArtifactToRoomPayload, ShareHighlightToRoomPayload,
+        ShareMintInvitePayload, ShareToRoomPayload, SignInNsecPayload, StartRoomDiscoveryPayload,
+        ToggleReactionPayload, UnfollowPayload, UnreactPayload,
     };
 
     match envelope.namespace.as_str() {
@@ -864,6 +868,11 @@ fn reduce_action_envelope(
             let p = parse!(RunOmniboxPayload);
             omnibox::reduce_action_run_omnibox(p.query)
         }
+        "hl.search.commit_recent_query" => {
+            let p = parse!(CommitSearchRecentQueryPayload);
+            search::reduce_action_commit_recent_query(state, p.query)
+        }
+        "hl.search.clear_recent_queries" => search::reduce_action_clear_recent_queries(state),
 
         // ── What's New ────────────────────────────────────────────────────────
         "hl.whats_new.prepare" => whats_new::reduce_action_prepare_whats_new(),
@@ -1442,6 +1451,11 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
             // SearchSnapshot::omnibox for the shell to route on the next tick.
             // Also injectable directly from tests via Cmd::Event.
             state.omnibox_outcome = Some(outcome);
+            vec![]
+        }
+
+        KernelEvent::SearchRecentQueriesLoaded(queries) => {
+            search::reduce_event_recent_queries_loaded(state, queries);
             vec![]
         }
 
@@ -2044,6 +2058,21 @@ pub(crate) async fn run_effect(
             omnibox::run_effect_run_omnibox(query, nmp, tx);
         }
 
+        Effect::LoadSearchRecentQueries => {
+            let data_dir = policy.data_dir.clone();
+            let tx_clone = tx.clone();
+            tokio::spawn(async move {
+                run_effect_load_search_recent_queries(&data_dir, &tx_clone).await;
+            });
+        }
+
+        Effect::PersistSearchRecentQueries { queries } => {
+            let data_dir = policy.data_dir.clone();
+            tokio::spawn(async move {
+                run_effect_persist_search_recent_queries(&data_dir, queries).await;
+            });
+        }
+
         // ── Phase 4H additions (append-only) ─────────────────────────────────
         Effect::PublishHighlightEvent { json } => {
             // Publish a kind:9802 highlight via ActorCommand::PublishRawEvent.
@@ -2434,6 +2463,90 @@ pub(crate) async fn run_effect(
     let _ = session_epoch; // carried for future epoch-keyed effect cancellation
 }
 
+// ─── Search recents helpers ──────────────────────────────────────────────────
+
+async fn run_effect_load_search_recent_queries(data_dir: &str, tx: &mpsc::UnboundedSender<Cmd>) {
+    if data_dir.is_empty() {
+        return;
+    }
+    let path = std::path::Path::new(data_dir).join(search::RECENT_SEARCH_STATE_FILE_NAME);
+    let queries = read_search_recent_queries(&path).await;
+    let _ = tx.send(Cmd::Event(
+        crate::kernel::action::KernelEvent::SearchRecentQueriesLoaded(queries),
+    ));
+}
+
+async fn run_effect_persist_search_recent_queries(data_dir: &str, queries: Vec<String>) {
+    if data_dir.is_empty() {
+        return;
+    }
+    let path = std::path::Path::new(data_dir).join(search::RECENT_SEARCH_STATE_FILE_NAME);
+    persist_search_recent_queries_inner(&path, queries).await;
+}
+
+async fn read_search_recent_queries(path: &std::path::Path) -> Vec<String> {
+    #[derive(serde::Deserialize)]
+    struct State {
+        queries: Vec<String>,
+    }
+
+    match tokio::fs::read(path).await {
+        Ok(bytes) => match serde_json::from_slice::<State>(&bytes) {
+            Ok(s) => s.queries,
+            Err(e) => {
+                tracing::warn!(
+                    path = %path.display(),
+                    error = %e,
+                    "read_search_recent_queries: parse error - using empty list (D6)"
+                );
+                vec![]
+            }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => vec![],
+        Err(e) => {
+            tracing::warn!(
+                path = %path.display(),
+                error = %e,
+                "read_search_recent_queries: I/O error - using empty list (D6)"
+            );
+            vec![]
+        }
+    }
+}
+
+async fn persist_search_recent_queries_inner(path: &std::path::Path, queries: Vec<String>) {
+    #[derive(serde::Serialize)]
+    struct State {
+        version: u32,
+        queries: Vec<String>,
+    }
+
+    let bytes = match serde_json::to_vec(&State {
+        version: 1,
+        queries,
+    }) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            tracing::warn!(error = %e, "persist_search_recent_queries: JSON encode error - no-op (D6)");
+            return;
+        }
+    };
+    if let Some(parent) = path.parent() {
+        if let Err(e) = tokio::fs::create_dir_all(parent).await {
+            tracing::warn!(path = %path.display(), error = %e, "persist_search_recent_queries: mkdir error - no-op (D6)");
+            return;
+        }
+    }
+    let tmp = path.with_extension("json.tmp");
+    if let Err(e) = tokio::fs::write(&tmp, &bytes).await {
+        tracing::warn!(path = %tmp.display(), error = %e, "persist_search_recent_queries: write error - no-op (D6)");
+        return;
+    }
+    if let Err(e) = tokio::fs::rename(&tmp, path).await {
+        tracing::warn!(path = %path.display(), error = %e, "persist_search_recent_queries: rename error - no-op (D6)");
+    }
+}
+
 // ─── Phase 5A helpers ────────────────────────────────────────────────────────
 
 /// Execute `Effect::LoadWhatsNewState`:
@@ -2798,6 +2911,9 @@ pub(crate) async fn actor_task(
                 lifecycle_effects.extend(articles::lifecycle_effects_for_view_open(id));
                 // ── Phase 4D: search view lifecycle (no-op on open — projection
                 //    wired by RunSearch dispatch, not by view open) ───────────────
+                if matches!(id, ViewId::Search) && !state.search_recent_queries_loaded {
+                    lifecycle_effects.push(Effect::LoadSearchRecentQueries);
+                }
                 lifecycle_effects.extend(search::lifecycle_effects_for_view_open(id));
                 // ── Phase 4G: article feed lifecycle — register cursor + drain ──
                 lifecycle_effects

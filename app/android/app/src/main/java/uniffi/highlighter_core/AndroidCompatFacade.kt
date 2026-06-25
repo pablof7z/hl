@@ -4,11 +4,15 @@ package uniffi.highlighter_core
 
 import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 private const val TAG = "HlCompatFacade"
@@ -752,9 +756,18 @@ class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyring
             HighlighterAppAction.CloseArticleReader -> closeView(aggregate.articleReader.address.takeIf { it.isNotBlank() }?.let { ViewId.ArticleReader(it) })
             HighlighterAppAction.SearchOpened -> openView(ViewId.Search, ViewRoute.Search)
             HighlighterAppAction.SearchClosed -> closeView(ViewId.Search)
-            is HighlighterAppAction.SubmitSearch -> dispatchEnvelope("hl.search.omnibox", obj("query" to action.query))
+            is HighlighterAppAction.SubmitSearch -> submitSearch(action.query)
             is HighlighterAppAction.SetSearchQuery -> aggregate = aggregate.copy(search = aggregate.search.copy(query = action.query))
-            HighlighterAppAction.ClearSearch -> aggregate = aggregate.copy(search = HighlighterSearchSnapshot())
+            HighlighterAppAction.ClearSearch -> aggregate = aggregate.copy(search = aggregate.search.copy(
+                query = "",
+                isLocalLoading = false,
+                isRelayLoading = false,
+                articles = emptyList(),
+                highlights = emptyList(),
+                communities = emptyList(),
+                profiles = emptyList(),
+            ))
+            HighlighterAppAction.ClearRecentSearches -> dispatchEnvelope("hl.search.clear_recent_queries")
             is HighlighterAppAction.OpenComments -> openView(
                 ViewId.CommentThread(action.rootTagValue),
                 ViewRoute.CommentThread(action.rootTagValue),
@@ -820,6 +833,22 @@ class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyring
     private fun dispatchEnvelope(namespace: String, json: JsonObject = JsonObject(emptyMap())) {
         app.dispatchAction(AppActionEnvelope(namespace, Json.encodeToString(json)))
     }
+
+    private fun submitSearch(raw: String) {
+        val query = raw.trim()
+        if (query.isEmpty()) return
+        aggregate = aggregate.copy(search = aggregate.search.copy(
+            query = query,
+            isLocalLoading = true,
+            isRelayLoading = true,
+        ))
+        dispatchEnvelope("hl.search.commit_recent_query", obj("query" to query))
+        dispatchEnvelope("hl.search.omnibox", obj("query" to query))
+        dispatchEnvelope(
+            "hl.search.run",
+            obj("query" to query, "scope" to "articles_highlights_and_users"),
+        )
+    }
 }
 
 private fun HighlighterAppState.reducing(viewId: ViewId, snapshot: ViewSnapshot): HighlighterAppState =
@@ -852,7 +881,15 @@ private fun HighlighterAppState.reducing(viewId: ViewId, snapshot: ViewSnapshot)
             followingCurationSets = snapshot.v1.followingCurationSets.map { it.toBookmarkSetRecord() },
         ))
         is ViewSnapshot.ArticleReader -> copy(articleReader = snapshot.v1.toCompatArticleReader())
-        is ViewSnapshot.Search -> copy(search = search.copy(articles = snapshot.v1.hits.map { it.toArticleRecord() }))
+        is ViewSnapshot.Search -> copy(search = search.copy(
+            recentQueries = snapshot.v1.recentQueries,
+            recentQueryCount = snapshot.v1.recentQueries.size.toULong(),
+            isLocalLoading = false,
+            isRelayLoading = false,
+            articles = snapshot.v1.hits.filter { it.kind == 30023u }.map { it.toArticleRecord() },
+            highlights = snapshot.v1.hits.filter { it.kind == 9802u }.map { it.toHighlightRecord() },
+            profiles = snapshot.v1.hits.filter { it.kind == 0u }.map { it.toProfileMetadata() },
+        ))
         is ViewSnapshot.HomeFeed -> copy(homeFeed = HighlighterHomeFeedSnapshot(
             items = snapshot.v1.rows.map { it.toCompatHomeFeedItem(snapshot.v1.artifactPreviews) },
         ))
@@ -971,6 +1008,51 @@ private fun KernelSearchHitRow.toArticleRecord() = ArticleRecord(
     publishedAt = null,
     createdAt = createdAt,
 )
+
+private fun KernelSearchHitRow.toHighlightRecord() = HighlightRecord(
+    eventId = id,
+    pubkey = author,
+    quote = content,
+    context = firstTag("context").orEmpty(),
+    note = firstTag("comment").orEmpty(),
+    artifactAddress = firstTag("a").orEmpty(),
+    eventReference = firstTag("e").orEmpty(),
+    externalReference = firstTag("i").orEmpty(),
+    sourceUrl = firstTag("r").orEmpty(),
+    sourceReferenceKey = "",
+    clipStartSeconds = null,
+    clipEndSeconds = null,
+    clipSpeaker = "",
+    clipTranscriptSegmentIds = emptyList(),
+    imageUrl = "",
+    createdAt = createdAt,
+)
+
+private fun KernelSearchHitRow.toProfileMetadata(): ProfileMetadata {
+    val meta = runCatching { Json.decodeFromString<JsonObject>(content) }.getOrNull()
+    fun field(name: String): String = meta
+        ?.get(name)
+        ?.jsonPrimitive
+        ?.contentOrNull
+        ?.trim()
+        .orEmpty()
+    val displayName = field("display_name")
+        .ifBlank { field("displayName") }
+        .ifBlank { field("displayname") }
+    val picture = field("picture").ifBlank { field("image") }
+    return ProfileMetadata(
+        pubkey = author,
+        name = field("name"),
+        displayName = displayName,
+        about = field("about"),
+        picture = picture,
+        banner = field("banner"),
+        nip05 = field("nip05"),
+        website = field("website"),
+        lud16 = field("lud16"),
+        createdAt = createdAt,
+    )
+}
 
 private fun BookmarkSetRow.toBookmarkSetRecord() = BookmarkSetRecord(
     id = dTag,
@@ -1207,7 +1289,7 @@ private fun ArticleRecord.toArtifactPreview() = ArtifactPreview(
 private fun obj(vararg pairs: Pair<String, Any?>): JsonObject = buildJsonObject {
     for ((key, value) in pairs) {
         when (value) {
-            null -> put(key, JsonPrimitive(null))
+            null -> put(key, JsonNull)
             is String -> put(key, value)
             is Boolean -> put(key, value)
             is Int -> put(key, value)

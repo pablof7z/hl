@@ -1001,6 +1001,10 @@ pub struct SearchSnapshot {
     /// navigation, `RejectSecret` shows a safe-reject hint, `FreeText` keeps the
     /// result buckets. The shell consumes it after routing (one-shot).
     pub omnibox: Option<OmniboxOutcome>,
+    /// Device-local recent search queries, newest first. Bounded by the search
+    /// domain before crossing FFI; native shells render these rows and dispatch
+    /// commit/clear actions instead of owning durable search history.
+    pub recent_queries: Vec<String>,
 }
 
 /// Outcome of classifying one omnibox / paste / search input through NMP's
