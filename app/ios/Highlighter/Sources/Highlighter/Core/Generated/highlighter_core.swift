@@ -1159,8 +1159,6 @@ public protocol HighlighterCoreProtocol: AnyObject, Sendable {
      */
     func fetchRelaysForPubkey(pubkeyHex: String) async  -> [RelayConfig]
 
-    func getPodcastListeningClipsSnapshot(artifact: ArtifactRecord?, limit: UInt32) async  -> PodcastListeningClipsSnapshot
-
     func getPodcastPlaybackRehydrationSnapshot(hasCurrentArtifact: Bool)  -> PodcastPlaybackRehydrationSnapshot
 
     func planPodcastPlaybackSession(input: PodcastPlaybackSessionInput)  -> PodcastPlaybackSessionPlan
@@ -1257,24 +1255,6 @@ open func fetchRelaysForPubkey(pubkeyHex: String)async  -> [RelayConfig]  {
             completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
             freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceTypeRelayConfig.lift,
-            errorHandler: nil
-
-        )
-}
-
-open func getPodcastListeningClipsSnapshot(artifact: ArtifactRecord?, limit: UInt32)async  -> PodcastListeningClipsSnapshot  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_get_podcast_listening_clips_snapshot(
-                    self.uniffiClonePointer(),
-                    FfiConverterOptionTypeArtifactRecord.lower(artifact),FfiConverterUInt32.lower(limit)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterTypePodcastListeningClipsSnapshot_lift,
             errorHandler: nil
 
         )
@@ -18759,76 +18739,6 @@ public func FfiConverterTypePodcastClipSelection_lower(_ value: PodcastClipSelec
 }
 
 
-public struct PodcastListeningClipsSnapshot {
-    public var clips: [HighlightRecord]
-    public var error: String
-
-    // Default memberwise initializers are never public by default, so we
-    // declare one manually.
-    public init(clips: [HighlightRecord], error: String) {
-        self.clips = clips
-        self.error = error
-    }
-}
-
-#if compiler(>=6)
-extension PodcastListeningClipsSnapshot: Sendable {}
-#endif
-
-
-extension PodcastListeningClipsSnapshot: Equatable, Hashable {
-    public static func ==(lhs: PodcastListeningClipsSnapshot, rhs: PodcastListeningClipsSnapshot) -> Bool {
-        if lhs.clips != rhs.clips {
-            return false
-        }
-        if lhs.error != rhs.error {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(clips)
-        hasher.combine(error)
-    }
-}
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypePodcastListeningClipsSnapshot: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PodcastListeningClipsSnapshot {
-        return
-            try PodcastListeningClipsSnapshot(
-                clips: FfiConverterSequenceTypeHighlightRecord.read(from: &buf),
-                error: FfiConverterString.read(from: &buf)
-        )
-    }
-
-    public static func write(_ value: PodcastListeningClipsSnapshot, into buf: inout [UInt8]) {
-        FfiConverterSequenceTypeHighlightRecord.write(value.clips, into: &buf)
-        FfiConverterString.write(value.error, into: &buf)
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePodcastListeningClipsSnapshot_lift(_ buf: RustBuffer) throws -> PodcastListeningClipsSnapshot {
-    return try FfiConverterTypePodcastListeningClipsSnapshot.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypePodcastListeningClipsSnapshot_lower(_ value: PodcastListeningClipsSnapshot) -> RustBuffer {
-    return FfiConverterTypePodcastListeningClipsSnapshot.lower(value)
-}
-
-
 public struct PodcastListeningProjection {
     public var showTitle: String
     public var episodeTitle: String
@@ -19172,6 +19082,13 @@ public struct PodcastListeningSnapshot {
      * Device-local — only the published kind:9802 is a nostr fact.
      */
     public var clipPublishPhase: KernelClipPublishPhase
+    /**
+     * Member clips for the currently loaded episode, decoded from the NMP
+     * feed cursor scoped to the episode's NIP-73 source reference.
+     *
+     * Raw kind:9802 fields only. Swift formats names, timestamps, and row copy.
+     */
+    public var memberClips: [HighlightRow]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -19228,7 +19145,13 @@ public struct PodcastListeningSnapshot {
         /**
          * Current clip-publish phase (Idle → Publishing → Done | Error).
          * Device-local — only the published kind:9802 is a nostr fact.
-         */clipPublishPhase: KernelClipPublishPhase) {
+         */clipPublishPhase: KernelClipPublishPhase,
+        /**
+         * Member clips for the currently loaded episode, decoded from the NMP
+         * feed cursor scoped to the episode's NIP-73 source reference.
+         *
+         * Raw kind:9802 fields only. Swift formats names, timestamps, and row copy.
+         */memberClips: [HighlightRow]) {
         self.guid = guid
         self.audioUrl = audioUrl
         self.title = title
@@ -19244,6 +19167,7 @@ public struct PodcastListeningSnapshot {
         self.clipSpeaker = clipSpeaker
         self.clipSelectedSegmentIds = clipSelectedSegmentIds
         self.clipPublishPhase = clipPublishPhase
+        self.memberClips = memberClips
     }
 }
 
@@ -19299,6 +19223,9 @@ extension PodcastListeningSnapshot: Equatable, Hashable {
         if lhs.clipPublishPhase != rhs.clipPublishPhase {
             return false
         }
+        if lhs.memberClips != rhs.memberClips {
+            return false
+        }
         return true
     }
 
@@ -19318,6 +19245,7 @@ extension PodcastListeningSnapshot: Equatable, Hashable {
         hasher.combine(clipSpeaker)
         hasher.combine(clipSelectedSegmentIds)
         hasher.combine(clipPublishPhase)
+        hasher.combine(memberClips)
     }
 }
 
@@ -19344,7 +19272,8 @@ public struct FfiConverterTypePodcastListeningSnapshot: FfiConverterRustBuffer {
                 transcriptAvailability: FfiConverterTypeKernelTranscriptAvailability.read(from: &buf),
                 clipSpeaker: FfiConverterString.read(from: &buf),
                 clipSelectedSegmentIds: FfiConverterSequenceString.read(from: &buf),
-                clipPublishPhase: FfiConverterTypeKernelClipPublishPhase.read(from: &buf)
+                clipPublishPhase: FfiConverterTypeKernelClipPublishPhase.read(from: &buf),
+                memberClips: FfiConverterSequenceTypeHighlightRow.read(from: &buf)
         )
     }
 
@@ -19364,6 +19293,7 @@ public struct FfiConverterTypePodcastListeningSnapshot: FfiConverterRustBuffer {
         FfiConverterString.write(value.clipSpeaker, into: &buf)
         FfiConverterSequenceString.write(value.clipSelectedSegmentIds, into: &buf)
         FfiConverterTypeKernelClipPublishPhase.write(value.clipPublishPhase, into: &buf)
+        FfiConverterSequenceTypeHighlightRow.write(value.memberClips, into: &buf)
     }
 }
 
@@ -36136,9 +36066,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_fetch_relays_for_pubkey() != 45230) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_listening_clips_snapshot() != 47800) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_playback_rehydration_snapshot() != 22927) {

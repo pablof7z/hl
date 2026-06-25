@@ -1491,6 +1491,12 @@ pub struct PodcastListeningSnapshot {
     /// Current clip-publish phase (Idle → Publishing → Done | Error).
     /// Device-local — only the published kind:9802 is a nostr fact.
     pub clip_publish_phase: KernelClipPublishPhase,
+    // ── Phase 7 podcast member clips additions (append-only) ────────────────
+    /// Member clips for the currently loaded episode, decoded from the NMP
+    /// feed cursor scoped to the episode's NIP-73 source reference.
+    ///
+    /// Raw kind:9802 fields only. Swift formats names, timestamps, and row copy.
+    pub member_clips: Vec<HighlightRow>,
 }
 
 // ── Phase 5J additions (append-only) ─────────────────────────────────────────

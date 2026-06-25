@@ -80,10 +80,10 @@ pub use podcast_playback::{
 pub use podcast_transcript::{
     PodcastClipComposerInput, PodcastClipComposerProjection, PodcastClipComposerPublishInput,
     PodcastClipPublishInput, PodcastClipPublishResultInput, PodcastClipPublishResultProjection,
-    PodcastClipPublishSnapshot, PodcastClipSelection, PodcastListeningClipsSnapshot,
-    PodcastListeningProjection, PodcastListeningProjectionInput, PodcastNowPlayingProjection,
-    PodcastNowPlayingProjectionInput, PodcastTimelineRow, PodcastTimelineRowKind,
-    PodcastTimelineRowState, PodcastTranscriptAvailability, PodcastTranscriptLoadApplyInput,
+    PodcastClipPublishSnapshot, PodcastClipSelection, PodcastListeningProjection,
+    PodcastListeningProjectionInput, PodcastNowPlayingProjection, PodcastNowPlayingProjectionInput,
+    PodcastTimelineRow, PodcastTimelineRowKind, PodcastTimelineRowState,
+    PodcastTranscriptAvailability, PodcastTranscriptLoadApplyInput,
     PodcastTranscriptLoadApplyProjection, PodcastTranscriptLoadSnapshot, TranscriptSegment,
 };
 pub use profile::{

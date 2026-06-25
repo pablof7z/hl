@@ -424,9 +424,10 @@ pub(crate) fn run_effect_create_account(
 ///
 /// Called by both `reduce_action_logout` and `reduce_event_identity_changed`
 /// (the `None`/removed account arm). Resets `article_feed`, `highlight_feed`,
-/// and all `room_lanes` to their default empty state. cursor_id is reset to 0
-/// so the next view-open re-registers fresh (idempotent, D6). Rows are cleared
-/// so stale feed content from the departing account never surfaces to the next.
+/// all room/article/podcast feed states to their default empty state. cursor_id
+/// is reset to 0 so the next view-open/action re-registers fresh (idempotent,
+/// D6). Rows are cleared so stale feed content from the departing account never
+/// surfaces to the next.
 pub(crate) fn clear_feed_state_on_identity_lost(state: &mut AppState) {
     state.article_feed = crate::kernel::domains::feed::FeedState::default();
     state.highlight_feed = crate::kernel::domains::feed::FeedState::default();
@@ -436,6 +437,7 @@ pub(crate) fn clear_feed_state_on_identity_lost(state: &mut AppState) {
     // Phase 7: interaction cursor is follow-scoped — clear on identity loss
     // so the next account's follows drive a fresh registration.
     state.home_feed_interactions = crate::kernel::domains::feed::FeedState::default();
+    state.podcast_clip_feed = crate::kernel::domains::feed::FeedState::default();
 }
 
 // ─── #1653 shared account-scoped teardown ──────────────────────────────────────

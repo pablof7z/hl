@@ -197,6 +197,28 @@ pub fn article_highlight_feed_scope(address: &str) -> PullScope {
     PullScope::InterestShape(shape)
 }
 
+/// Build a `PullScope` for podcast member clips (kind:9802 tagged with the
+/// current episode's NIP-73 source reference, usually `#i == podcast:item:guid:…`).
+///
+/// The caller supplies the tag name/value derived from the loaded artifact.
+/// Empty inputs fail closed so an invalid podcast artifact cannot start a broad
+/// kind:9802 scan.
+pub fn podcast_clip_feed_scope(tag_name: &str, tag_value: &str) -> Option<PullScope> {
+    let tag_name = tag_name.trim();
+    let tag_value = tag_value.trim();
+    if tag_name.is_empty() || tag_value.is_empty() {
+        return None;
+    }
+
+    let mut shape = InterestShape::default();
+    shape.kinds = [9802].into_iter().collect();
+    shape.tags.insert(
+        tag_name.to_string(),
+        [tag_value.to_string()].into_iter().collect(),
+    );
+    Some(PullScope::InterestShape(shape))
+}
+
 /// Build a `PullScope` for the home-feed interaction cursor.
 ///
 /// Phase 7 home-feed aggregation: returns kind:1/7/16/1111 events authored by
