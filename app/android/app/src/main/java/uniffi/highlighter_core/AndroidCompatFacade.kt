@@ -874,8 +874,6 @@ class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyring
 
     fun nextSignerRequest(): HighlighterSignerRequestDrain = HighlighterSignerRequestDrain.Idle
     fun decodeNostrEntity(token: String): NostrEntityRef = error("NIP-19 decode not exposed on HighlighterApp")
-    fun setCoreEventCallback(callback: EventCallback) = Unit
-    fun clearCoreEventCallback() = Unit
     fun close() {
         if (closed.compareAndSet(false, true)) app.shutdown()
     }
