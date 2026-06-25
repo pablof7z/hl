@@ -690,8 +690,8 @@ private final class NativeNmpKeyringHandler: NmpKeyringHandler, @unchecked Senda
 // the Phase 3 build spec): member count labels, open/closed indicators,
 // display name fallbacks, NIP-05 label normalisation, etc.
 //
-// Phase 7: delete these helpers when the live lane (`HighlighterCore`) is
-// removed and UI components are updated to consume kernel types directly.
+// Phase 7: delete these helpers when the legacy live lane is removed under #91
+// and UI components are updated to consume kernel types directly.
 
 extension CommunityRow {
     /// Bridge to the legacy `CommunitySummary` expected by existing UI components.
