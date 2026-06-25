@@ -3,6 +3,7 @@
 package uniffi.highlighter_core
 
 import android.util.Log
+import com.highlighter.app.ui.capture.OcrCapabilityBridge
 import com.highlighter.app.ui.podcast.PodcastPlayerHolder
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.serialization.decodeFromString
@@ -356,6 +357,9 @@ fun normalizeIsbn(input: String): String? =
         .takeIf { it.length == 10 || it.length == 13 }
 
 data class HighlighterCaptureSnapshot(
+    val imageHandle: String? = null,
+    val ocrMarkdown: String = "",
+    val isOcrPending: Boolean = false,
     val errorMessage: String? = null,
     val isPublishing: Boolean = false,
     val publishedEventId: String? = null,
@@ -713,7 +717,10 @@ class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyring
         }
 
         override fun onCapabilityRequest(request: CapabilityRequest) {
-            if (!PodcastPlayerHolder.handleCapabilityRequest(request) { app.provideCapabilityResult(it) }) {
+            val handled =
+                PodcastPlayerHolder.handleCapabilityRequest(request) { app.provideCapabilityResult(it) } ||
+                    OcrCapabilityBridge.handleCapabilityRequest(request) { app.provideCapabilityResult(it) }
+            if (!handled) {
                 Log.d(TAG, "capability request requires Android bridge: $request")
             }
         }
@@ -924,6 +931,15 @@ class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyring
                 height = action.height,
             ),
         ))
+        app.provideCapabilityResult(
+            CapabilityResult.Camera(
+                CameraResult.PageImage(
+                    imageHandle = handle.absolutePath,
+                    width = action.width,
+                    height = action.height,
+                ),
+            ),
+        )
         dispatchEnvelope(
             "hl.blossom.upload",
             buildJsonObject {
@@ -1086,6 +1102,9 @@ private fun KernelCaptureSnapshot.toCompatCapture(previous: HighlighterCaptureSn
     val done = publishPhase == KernelCaptureDraftPhase.DONE
     val failed = publishPhase == KernelCaptureDraftPhase.ERROR
     return previous.copy(
+        imageHandle = imageHandle,
+        ocrMarkdown = markdown,
+        isOcrPending = pending,
         errorMessage = publishError.takeIf { failed && it.isNotBlank() },
         isPublishing = publishPhase == KernelCaptureDraftPhase.PUBLISHING,
         publishedEventId = if (done) "published" else previous.publishedEventId,

@@ -2,11 +2,7 @@ package com.highlighter.app.ui.capture
 
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,7 +21,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,7 +47,7 @@ import com.highlighter.app.ui.components.SectionHeader
  * This is the Android parity equivalent of iOS's CapturePageView (drag-on-
  * image selection is a nice-to-have; block/text selection is the v1 target).
  *
- * @param captureResult The raw output of camera capture + OCR.
+ * @param captureResult The raw output of camera capture.
  * @param isUploading True while the Blossom upload is in flight.
  * @param onQuoteSelected Called with (quote, context) when the user confirms a selection.
  * @param onDismiss Called when the user cancels and wants to retake the photo.
@@ -60,6 +55,8 @@ import com.highlighter.app.ui.components.SectionHeader
 @Composable
 internal fun CapturePageReview(
     captureResult: CaptureResult,
+    ocrMarkdown: String,
+    isOcrPending: Boolean,
     isUploading: Boolean,
     onQuoteSelected: (quote: String, context: String) -> Unit,
     onDismiss: () -> Unit,
@@ -122,7 +119,7 @@ internal fun CapturePageReview(
         )
         Spacer(modifier = Modifier.height(4.dp))
 
-        if (captureResult.ocrMarkdown.isNotBlank()) {
+        if (ocrMarkdown.isNotBlank()) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -136,10 +133,23 @@ internal fun CapturePageReview(
                     modifier = Modifier.padding(12.dp),
                 ) {
                     Text(
-                        text = captureResult.ocrMarkdown,
+                        text = ocrMarkdown,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
+            }
+        } else if (isOcrPending) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(vertical = 8.dp),
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                Text(
+                    text = "Recognizing text…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         } else {
             Text(
@@ -180,7 +190,7 @@ internal fun CapturePageReview(
                         // Build a context paragraph: the markdown text that
                         // contains the quote (or the nearest surrounding text),
                         // mirroring iOS's stashedContext logic.
-                        val context = findContext(captureResult.ocrMarkdown, quote)
+                        val context = findContext(ocrMarkdown, quote)
                         onQuoteSelected(quote, context)
                     }
                 },

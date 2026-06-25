@@ -117,7 +117,7 @@ internal fun CapturePanel(
                             "image/jpeg",
                             result.width,
                             result.height,
-                            result.altText,
+                            "",
                         ),
                     )
                     phase = CapturePhase.Review
@@ -618,6 +618,8 @@ private fun CapturePanelReviewWrapper(
         // Phase 1: page image + OCR review + quote selection
         CapturePageReview(
             captureResult = captureResult,
+            ocrMarkdown = capture.ocrMarkdown,
+            isOcrPending = capture.isOcrPending,
             isUploading = capture.isUploading,
             onQuoteSelected = { q, ctx ->
                 quote = q
@@ -714,9 +716,9 @@ private fun CapturePanelReviewWrapper(
                         val artifact = selectedArtifact ?: return@Button
                         val upload = capture.upload ?: return@Button
 
-                        // Build the upload with refreshed alt text — mirrors
-                        // iOS CaptureStore.publish() imageWithAlt construction.
-                        val altText = OcrStructureReconstructor.flattenForAlt(captureResult.ocrMarkdown)
+                        // Alt text is presentation metadata on the image edge;
+                        // OCR markdown itself is produced by the Rust kernel.
+                        val altText = capture.ocrMarkdown.toImageAltText()
                         val imageWithAlt = BlossomUpload(
                             url = upload.url,
                             sha256Hex = upload.sha256Hex,
@@ -804,6 +806,11 @@ private fun BookPickerCompact(
         )
     }
 }
+
+private fun String.toImageAltText(): String =
+    replace("\n\n", " ")
+        .replace("\n", " ")
+        .trim()
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Recent book card (cover + title, horizontal row)
