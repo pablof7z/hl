@@ -38,18 +38,6 @@ struct RootSceneView: View {
                 // NMP pool handles its own lifecycle (see kernel resume()).
             }
         }
-        // Belt-and-suspenders: mirror live-lane auth/onboarding state changes
-        // into the kernel so both lanes agree during Phase 1 coexistence.
-        .onChange(of: store.isLoggedIn) { _, isLoggedIn in
-            if isLoggedIn {
-                // Bridge live-lane login into the NMP kernel so routeKind
-                // transitions to .rootShell. The keychain was already written
-                // before this point, so restoreSession reads the correct secret.
-                kernel.app.dispatch(.restoreSession)
-            } else {
-                kernel.app.dispatch(.logout)
-            }
-        }
         .onChange(of: store.isOnboardingComplete) { _, complete in
             if complete {
                 kernel.app.dispatch(.completeOnboarding)
