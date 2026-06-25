@@ -99,8 +99,8 @@ internal fun MainScaffold(
 
     // Process-wide podcast player (the same singleton any Play affordance
     // resolves via rememberPodcastPlayerController), so the mini player and
-    // full screen drive one engine.
-    val podcastPlayer = rememberPodcastPlayerController()
+    // full screen drive one engine while durable playback state goes to Rust.
+    val podcastPlayer = rememberPodcastPlayerController(dispatch)
     val podcastState by podcastPlayer.state.collectAsStateWithLifecycle()
 
     when (route) {

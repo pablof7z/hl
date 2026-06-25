@@ -3,6 +3,7 @@
 package uniffi.highlighter_core
 
 import android.util.Log
+import com.highlighter.app.ui.podcast.PodcastPlayerHolder
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -646,6 +647,10 @@ sealed class HighlighterAppAction {
     data class SetAddressInCurationSet(val setId: String, val articleAddress: String, val enabled: Boolean) : HighlighterAppAction()
     data class CreateCurationSetAndAdd(val title: String, val articleAddress: String) : HighlighterAppAction()
     data class ToggleArticleBookmark(val address: String) : HighlighterAppAction()
+    data class AudioPlay(val url: String, val guid: String, val artifact: ArtifactRecord) : HighlighterAppAction()
+    data object AudioPause : HighlighterAppAction()
+    data object AudioResume : HighlighterAppAction()
+    data class AudioSeek(val seconds: Double) : HighlighterAppAction()
     data class NetworkPathChanged(val isWifi: Boolean) : HighlighterAppAction()
     data class SetNetworkWifiOnly(val enabled: Boolean) : HighlighterAppAction()
     data class UpsertNetworkRelay(val config: RelayConfig) : HighlighterAppAction()
@@ -708,7 +713,9 @@ class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyring
         }
 
         override fun onCapabilityRequest(request: CapabilityRequest) {
-            Log.d(TAG, "capability request requires Android bridge: $request")
+            if (!PodcastPlayerHolder.handleCapabilityRequest(request) { app.provideCapabilityResult(it) }) {
+                Log.d(TAG, "capability request requires Android bridge: $request")
+            }
         }
     }
 
@@ -824,6 +831,17 @@ class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyring
                 "hl.share.publish_url",
                 obj("url" to action.url, "group_id" to action.groupId, "note" to action.note.orEmpty()),
             )
+            is HighlighterAppAction.AudioPlay -> dispatchEnvelope(
+                "hl.audio.play",
+                obj(
+                    "url" to action.url,
+                    "guid" to action.guid,
+                    "artifact_json" to artifactRecordJson(action.artifact),
+                ),
+            )
+            HighlighterAppAction.AudioPause -> dispatchEnvelope("hl.audio.pause")
+            HighlighterAppAction.AudioResume -> dispatchEnvelope("hl.audio.resume")
+            is HighlighterAppAction.AudioSeek -> dispatchEnvelope("hl.audio.seek", obj("seconds" to action.seconds))
             is HighlighterAppAction.UploadCapturePhoto -> dispatchCaptureUpload(action)
             HighlighterAppAction.ClearCaptureUpload -> {
                 aggregate = aggregate.copy(capture = aggregate.capture.copy(
@@ -935,15 +953,15 @@ class HighlighterNmpApp(config: HighlighterAppConfig, keyringHandler: NmpKeyring
         when (artifact) {
             is HighlighterCaptureArtifact.Existing -> dispatchEnvelope(
                 "hl.capture.set_artifact_record",
-                obj("artifact_json" to captureArtifactRecordJson(artifact.record)),
+                obj("artifact_json" to artifactRecordJson(artifact.record)),
             )
             is HighlighterCaptureArtifact.Preview -> dispatchEnvelope(
                 "hl.capture.set_artifact_preview",
-                obj("preview_json" to captureArtifactPreviewJson(artifact.preview)),
+                obj("preview_json" to artifactPreviewJson(artifact.preview)),
             )
             is HighlighterCaptureArtifact.Pending -> dispatchEnvelope(
                 "hl.capture.set_artifact_preview",
-                obj("preview_json" to captureArtifactPreviewJson(artifact.preview)),
+                obj("preview_json" to artifactPreviewJson(artifact.preview)),
             )
             null -> dispatchEnvelope("hl.capture.clear_artifact")
         }
@@ -1446,6 +1464,53 @@ private fun ArticleRecord.toArtifactPreview() = ArtifactPreview(
     chapters = emptyList(),
 )
 
+private fun artifactRecordJson(artifact: ArtifactRecord): String =
+    Json.encodeToString(buildJsonObject {
+        put("preview", artifactPreviewJsonObject(artifact.preview))
+        put("group_id", artifact.groupId)
+        put("share_event_id", artifact.shareEventId)
+        put("pubkey", artifact.pubkey)
+        artifact.createdAt?.let { put("created_at", it.toLong()) } ?: put("created_at", JsonNull)
+        put("note", artifact.note)
+    })
+
+private fun artifactPreviewJson(preview: ArtifactPreview): String =
+    Json.encodeToString(artifactPreviewJsonObject(preview))
+
+private fun artifactPreviewJsonObject(preview: ArtifactPreview): JsonObject = buildJsonObject {
+    put("id", preview.id)
+    put("url", preview.url)
+    put("title", preview.title)
+    put("author", preview.author)
+    put("image", preview.image)
+    put("description", preview.description)
+    put("source", preview.source)
+    put("domain", preview.domain)
+    put("catalog_id", preview.catalogId)
+    put("catalog_kind", preview.catalogKind)
+    put("podcast_guid", preview.podcastGuid)
+    put("podcast_item_guid", preview.podcastItemGuid)
+    put("podcast_show_title", preview.podcastShowTitle)
+    put("audio_url", preview.audioUrl)
+    put("audio_preview_url", preview.audioPreviewUrl)
+    put("transcript_url", preview.transcriptUrl)
+    put("feed_url", preview.feedUrl)
+    put("published_at", preview.publishedAt)
+    preview.durationSeconds?.let { put("duration_seconds", it) } ?: put("duration_seconds", JsonNull)
+    put("reference_tag_name", preview.referenceTagName)
+    put("reference_tag_value", preview.referenceTagValue)
+    put("reference_kind", preview.referenceKind)
+    put("highlight_tag_name", preview.highlightTagName)
+    put("highlight_tag_value", preview.highlightTagValue)
+    put("highlight_reference_key", preview.highlightReferenceKey)
+    put("chapters", JsonArray(preview.chapters.map { chapter ->
+        buildJsonObject {
+            put("start_seconds", chapter.startSeconds)
+            put("title", chapter.title)
+        }
+    }))
+}
+
 private fun obj(vararg pairs: Pair<String, Any?>): JsonObject = buildJsonObject {
     for ((key, value) in pairs) {
         when (value) {
@@ -1453,6 +1518,9 @@ private fun obj(vararg pairs: Pair<String, Any?>): JsonObject = buildJsonObject 
             is String -> put(key, value)
             is Boolean -> put(key, value)
             is Int -> put(key, value)
+            is Long -> put(key, value)
+            is Double -> put(key, value)
+            is Float -> put(key, value.toDouble())
             is UInt -> put(key, value.toInt())
             is ULong -> put(key, value.toLong())
             is UShort -> put(key, value.toInt())

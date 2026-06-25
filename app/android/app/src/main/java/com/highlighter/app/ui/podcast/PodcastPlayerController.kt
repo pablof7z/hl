@@ -18,8 +18,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import uniffi.highlighter_core.AudioOp
+import uniffi.highlighter_core.AudioResult
 import uniffi.highlighter_core.ArtifactRecord
+import uniffi.highlighter_core.CapabilityRequest
+import uniffi.highlighter_core.CapabilityResult
 import uniffi.highlighter_core.Chapter
+import uniffi.highlighter_core.HighlighterAppAction
 
 /** Speeds offered by the player, matching the iOS speed selector. */
 internal val PODCAST_SPEEDS = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
@@ -66,9 +71,9 @@ internal data class PodcastPlaybackState(
 
 /**
  * Thin wrapper around [ExoPlayer] that exposes a [StateFlow] for Compose,
- * polls position ~1Hz while playing, persists/restores per-episode position,
- * and applies sensible audio-focus defaults. Playback is entirely
- * platform-local; the Rust core only supplies the [ArtifactRecord] metadata.
+ * polls position ~1Hz while playing, and applies sensible audio-focus defaults.
+ * Android only executes media primitives; durable playback state is reported
+ * to the Rust/NMP kernel through audio actions.
  *
  * One instance is shared app-wide via [rememberPodcastPlayerController] so the
  * mini player (in the scaffold) and any Play affordance (e.g. a room artifact)
@@ -76,7 +81,7 @@ internal data class PodcastPlaybackState(
  */
 internal class PodcastPlayerController(
     context: Context,
-    private val positionStore: PodcastPositionStore,
+    private var dispatch: (HighlighterAppAction) -> Unit,
 ) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(Dispatchers.Main.immediate + Job())
@@ -86,6 +91,8 @@ internal class PodcastPlayerController(
 
     private var player: ExoPlayer? = null
     private var pollJob: Job? = null
+    private var lastReportedPositionBucket: Long? = null
+    private var capabilityResult: ((CapabilityResult) -> Unit)? = null
 
     private val listener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -94,7 +101,8 @@ internal class PodcastPlayerController(
             _state.value = _state.value.copy(isBuffering = buffering)
             if (playbackState == Player.STATE_READY) syncDuration()
             if (ended) {
-                persistCurrentPosition()
+                reportProgress(force = true)
+                capabilityResult?.invoke(CapabilityResult.Audio(AudioResult.Ended))
                 _state.value = _state.value.copy(isPlaying = false)
                 stopPolling()
             }
@@ -102,13 +110,20 @@ internal class PodcastPlayerController(
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             _state.value = _state.value.copy(isPlaying = isPlaying)
-            if (isPlaying) startPolling() else { persistCurrentPosition(); stopPolling() }
+            if (isPlaying) {
+                startPolling()
+            } else {
+                reportProgress(force = true)
+                stopPolling()
+            }
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            persistCurrentPosition()
+            val message = error.localizedMessage ?: "Playback error"
+            reportProgress(force = true)
+            capabilityResult?.invoke(CapabilityResult.Audio(AudioResult.Error(message)))
             _state.value = _state.value.copy(
-                errorMessage = error.localizedMessage ?: "Playback error",
+                errorMessage = message,
                 isPlaying = false,
                 isBuffering = false,
             )
@@ -116,24 +131,52 @@ internal class PodcastPlayerController(
         }
     }
 
+    fun updateDispatch(dispatch: (HighlighterAppAction) -> Unit) {
+        this.dispatch = dispatch
+    }
+
+    fun handleAudioOp(
+        op: AudioOp,
+        provideResult: (CapabilityResult) -> Unit,
+    ) {
+        capabilityResult = provideResult
+        scope.launch {
+            when (op) {
+                is AudioOp.Load -> loadFromKernel(op.url, op.resumeAtSeconds)
+                AudioOp.Play -> player?.playWhenReady = true
+                AudioOp.Pause -> player?.playWhenReady = false
+                is AudioOp.Seek -> seekEngineTo(op.seconds, forceReport = true)
+                AudioOp.Stop -> stopFromKernel()
+                is AudioOp.ExtractWaveform -> {
+                    provideResult(
+                        CapabilityResult.Audio(
+                            AudioResult.WaveformPeaks(op.url, emptyList()),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
     /**
-     * Load [artifact] and begin playback. If the same episode is already
-     * loaded this simply resumes. Restores the saved position (when recent)
-     * before playing, matching iOS.
+     * Load [artifact] and begin playback. If the same episode is already loaded
+     * this simply resumes. Durable resume position is owned by Rust/NMP; Android
+     * does not read or write a native position cache.
      */
     fun load(artifact: ArtifactRecord) {
         val url = selectAudioUrl(artifact.preview.audioUrl, artifact.preview.audioPreviewUrl) ?: run {
             _state.value = _state.value.copy(errorMessage = "This episode has no audio to play")
             return
         }
+        val guid = podcastGuid(artifact)
 
         if (_state.value.artifactId == artifact.shareEventId && player != null) {
             play()
             return
         }
 
-        val engine = ensurePlayer()
-        val resumeAt = positionStore.lastPosition(artifact.shareEventId)
+        lastReportedPositionBucket = null
+        dispatch(HighlighterAppAction.AudioPlay(url = url, guid = guid, artifact = artifact))
 
         _state.value = PodcastPlaybackState(
             artifactId = artifact.shareEventId,
@@ -143,34 +186,17 @@ internal class PodcastPlayerController(
             audioUrl = url,
             metadataDurationSeconds = artifact.preview.durationSeconds,
             chapters = artifact.preview.chapters,
-            positionSeconds = resumeAt ?: 0.0,
+            positionSeconds = 0.0,
             speed = _state.value.speed,
         )
-
-        val mediaItem = MediaItem.Builder()
-            .setUri(url)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(artifact.preview.title.ifBlank { "Untitled episode" })
-                    .setArtist(artifact.preview.podcastShowTitle.ifBlank { artifact.preview.author })
-                    .build(),
-            )
-            .build()
-        engine.setMediaItem(mediaItem)
-        engine.setPlaybackSpeed(_state.value.speed)
-        engine.prepare()
-        if (resumeAt != null && resumeAt > 0) {
-            engine.seekTo((resumeAt * 1000).toLong())
-        }
-        engine.playWhenReady = true
     }
 
     fun play() {
-        player?.playWhenReady = true
+        dispatch(HighlighterAppAction.AudioResume)
     }
 
     fun pause() {
-        player?.playWhenReady = false
+        dispatch(HighlighterAppAction.AudioPause)
     }
 
     fun toggle() {
@@ -179,12 +205,10 @@ internal class PodcastPlayerController(
 
     /** Seek to an absolute position (seconds), clamped to [0, duration]. */
     fun seekTo(seconds: Double) {
-        val engine = player ?: return
         val duration = _state.value.effectiveDurationSeconds
         val clamped = if (duration > 0) seconds.coerceIn(0.0, duration) else seconds.coerceAtLeast(0.0)
-        engine.seekTo((clamped * 1000).toLong())
         _state.value = _state.value.copy(positionSeconds = clamped)
-        persistCurrentPosition()
+        dispatch(HighlighterAppAction.AudioSeek(clamped))
     }
 
     /** Relative skip (e.g. ±15s). */
@@ -199,14 +223,8 @@ internal class PodcastPlayerController(
 
     /** Stop playback, drop the episode, and release the engine. */
     fun clear() {
-        persistCurrentPosition()
-        stopPolling()
-        player?.let {
-            it.removeListener(listener)
-            it.release()
-        }
-        player = null
-        _state.value = PodcastPlaybackState(speed = _state.value.speed)
+        dispatch(HighlighterAppAction.AudioPause)
+        stopFromKernel()
     }
 
     /** Release everything; call when the owning scope is torn down. */
@@ -232,6 +250,48 @@ internal class PodcastPlayerController(
         return engine
     }
 
+    private fun loadFromKernel(url: String, resumeAtSeconds: Double?) {
+        val engine = ensurePlayer()
+        val mediaItem = MediaItem.Builder()
+            .setUri(url)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(_state.value.title.ifBlank { "Untitled episode" })
+                    .setArtist(_state.value.showTitle)
+                    .build(),
+            )
+            .build()
+        engine.setMediaItem(mediaItem)
+        engine.setPlaybackSpeed(_state.value.speed)
+        engine.prepare()
+        val resumeAt = resumeAtSeconds?.takeIf { it.isFinite() && it > 0.0 }
+        if (resumeAt != null) {
+            seekEngineTo(resumeAt, forceReport = false)
+            _state.value = _state.value.copy(positionSeconds = resumeAt)
+        }
+        engine.playWhenReady = true
+    }
+
+    private fun seekEngineTo(seconds: Double, forceReport: Boolean) {
+        val engine = player ?: return
+        val clamped = seconds.coerceAtLeast(0.0)
+        engine.seekTo((clamped * 1000).toLong())
+        _state.value = _state.value.copy(positionSeconds = clamped)
+        reportProgress(force = forceReport)
+    }
+
+    private fun stopFromKernel() {
+        reportProgress(force = true)
+        stopPolling()
+        player?.let {
+            it.removeListener(listener)
+            it.release()
+        }
+        player = null
+        capabilityResult = null
+        _state.value = PodcastPlaybackState(speed = _state.value.speed)
+    }
+
     private fun startPolling() {
         if (pollJob?.isActive == true) return
         pollJob = scope.launch {
@@ -251,22 +311,43 @@ internal class PodcastPlayerController(
         val engine = player ?: return
         val pos = (engine.currentPosition.coerceAtLeast(0L)) / 1000.0
         _state.value = _state.value.copy(positionSeconds = pos)
-        persistCurrentPosition()
+        reportProgress()
     }
 
     private fun syncDuration() {
         val engine = player ?: return
         val durationMs = engine.duration
         if (durationMs != C.TIME_UNSET && durationMs > 0) {
-            _state.value = _state.value.copy(durationSeconds = durationMs / 1000.0)
+            val durationSeconds = durationMs / 1000.0
+            _state.value = _state.value.copy(durationSeconds = durationSeconds)
+            capabilityResult?.invoke(
+                CapabilityResult.Audio(AudioResult.Loaded(durationSeconds)),
+            )
         }
     }
 
-    private fun persistCurrentPosition() {
+    private fun reportProgress(force: Boolean = false) {
         val s = _state.value
         if (s.artifactId.isNotEmpty() && s.positionSeconds > 0) {
-            positionStore.save(s.artifactId, s.positionSeconds)
+            val bucket = (s.positionSeconds / POSITION_REPORT_INTERVAL_SECONDS).toLong()
+            if (!force && bucket == lastReportedPositionBucket) return
+            lastReportedPositionBucket = bucket
+            capabilityResult?.invoke(
+                CapabilityResult.Audio(
+                    AudioResult.Progress(
+                        currentSeconds = s.positionSeconds,
+                        isPlaying = s.isPlaying,
+                    ),
+                ),
+            )
         }
+    }
+
+    private fun podcastGuid(artifact: ArtifactRecord): String =
+        artifact.preview.podcastItemGuid.ifBlank { artifact.shareEventId }
+
+    private companion object {
+        const val POSITION_REPORT_INTERVAL_SECONDS = 5.0
     }
 }
 
@@ -277,35 +358,40 @@ internal class PodcastPlayerController(
  * context. Both the scaffold's mini player and the room artifact Play button
  * resolve the same controller through this.
  */
-private object PodcastPlayerHolder {
+internal object PodcastPlayerHolder {
     @Volatile
     private var instance: PodcastPlayerController? = null
 
-    fun get(context: Context): PodcastPlayerController {
-        instance?.let { return it }
+    fun get(context: Context, dispatch: (HighlighterAppAction) -> Unit): PodcastPlayerController {
+        instance?.let {
+            it.updateDispatch(dispatch)
+            return it
+        }
         return synchronized(this) {
             instance ?: PodcastPlayerController(
                 context = context.applicationContext,
-                positionStore = PodcastPositionStore(
-                    SharedPrefsBackingStore(context.applicationContext),
-                ),
+                dispatch = dispatch,
             ).also { instance = it }
         }
     }
-}
 
-/** SharedPreferences-backed [PositionBackingStore]. */
-private class SharedPrefsBackingStore(context: Context) : PositionBackingStore {
-    private val prefs = context.getSharedPreferences("highlighter.podcast", Context.MODE_PRIVATE)
-    override fun getString(key: String): String? = prefs.getString(key, null)
-    override fun putString(key: String, value: String) {
-        prefs.edit().putString(key, value).apply()
+    fun handleCapabilityRequest(
+        request: CapabilityRequest,
+        provideResult: (CapabilityResult) -> Unit,
+    ): Boolean {
+        val op = (request as? CapabilityRequest.Audio)?.v1 ?: return false
+        instance?.handleAudioOp(op, provideResult) ?: provideResult(
+            CapabilityResult.Audio(AudioResult.Error("Podcast player is not available")),
+        )
+        return true
     }
 }
 
 /** Returns the process-wide shared [PodcastPlayerController]. */
 @Composable
-internal fun rememberPodcastPlayerController(): PodcastPlayerController {
+internal fun rememberPodcastPlayerController(
+    dispatch: (HighlighterAppAction) -> Unit,
+): PodcastPlayerController {
     val context = androidx.compose.ui.platform.LocalContext.current
-    return PodcastPlayerHolder.get(context)
+    return PodcastPlayerHolder.get(context, dispatch)
 }
