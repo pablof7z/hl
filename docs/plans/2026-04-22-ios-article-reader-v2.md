@@ -3,7 +3,7 @@
 Status: **deferred** — v1 shipping 2026-04-22. This file tracks the surface
 work that v1 explicitly defers.
 
-Architecture contract carries over from v1: **nostrdb is the single source of
+Architecture contract carries over from v1: **legacy app event store is the single source of
 truth.** Every item below reads and writes through the Rust core's ndb path;
 Swift stores subscribe to deltas.
 
@@ -24,7 +24,7 @@ Swift stores subscribe to deltas.
 
 - Top-right gear → sheet with: font size (S/M/L/XL), serif vs sans body face,
   paper vs cream vs sepia vs dark background.
-- Persist choice in `UserDefaults` (client-only; not a nostr kind).
+- Persist choice in native preference storage (client-only; not a nostr kind).
 - `MarkdownRenderer` takes a `TypographyOptions` struct and parameterizes the
   emitted `NSAttributedString` (font family, base point size, paragraph
   spacing, link color).
@@ -35,7 +35,7 @@ Swift stores subscribe to deltas.
 - `UITextView.contentOffset` → percentage of total body height.
 - Thin progress bar at the top of the nav bar (0%–100%).
 - "X min left" readout derived from remaining words ÷ 240 wpm.
-- Optional: persist scroll position per `a`-tag in `UserDefaults` so reopening
+- Optional: persist scroll position per `a`-tag in native preference storage so reopening
   the article lands the reader where they left off.
 
 ### 4. Bookmarks (NIP-51 `kind:10003`)

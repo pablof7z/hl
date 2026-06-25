@@ -5,7 +5,7 @@
 
 ## 1. System Overview
 
-Highlighter is a Nostr-native application. All data flows through Nostr relays as signed events. The system has three layers:
+Highlighter is a Nostr-native application. All product data flows through Nostr relays as signed events. Native mobile clients use the Rust/NMP app core as their source of truth for runtime, event store identity, relay routing, protocol actions, and bounded projections; native Swift/Kotlin code renders and executes OS capabilities.
 
 ```
 ┌──────────────────────────────────────────────────┐
@@ -27,8 +27,8 @@ Highlighter is a Nostr-native application. All data flows through Nostr relays a
                        │
 ┌──────────────────────▼───────────────────────────┐
 │              STORAGE / PERSISTENCE                │
-│  Event database (configurable backend)           │
-│  Media/blob storage (NIP-96 or external)         │
+│  Relay-owned MMM event storage and Bleve search │
+│  Blossom/NIP-96 media storage                    │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -238,26 +238,26 @@ Replies to artifact share threads follow NIP-7D: the `kind:11` event is the root
 
 ## 5. Client Architecture
 
-### Shared Rust Core
+### Shared Rust/NMP Core
 
-The mobile (Android/iOS) and desktop apps share a Rust core library that handles:
+The mobile (Android/iOS) and desktop apps share a Rust/NMP core. Native code renders projections and executes OS capabilities; Rust/NMP owns product state and protocol behavior:
 
 ```
 ┌─────────────────────────────────────────┐
-│              RUST CORE                   │
+│              RUST/NMP CORE               │
 │                                          │
 │  ┌──────────────┐  ┌──────────────────┐ │
-│  │ Nostr Client │  │ NIP-29 Groups    │ │
-│  │ - Relay mgmt │  │ - Join/leave     │ │
-│  │ - Event sign │  │ - Membership     │ │
-│  │ - NIP-42 auth│  │ - Moderation     │ │
+│  │ NMP Runtime  │  │ NIP-29 Groups    │ │
+│  │ - Event store│  │ - Join/leave     │ │
+│  │ - Routing    │  │ - Membership     │ │
+│  │ - Sign/publish│ │ - Moderation     │ │
 │  └──────────────┘  └──────────────────┘ │
 │                                          │
 │  ┌──────────────┐  ┌──────────────────┐ │
-│  │ Data Layer   │  │ Content Engine   │ │
-│  │ - Local DB   │  │ - URL extraction │ │
-│  │ - Sync       │  │ - Highlight mgmt │ │
-│  │ - Cache      │  │ - Search/index   │ │
+│  │ App Kernel   │  │ Content Engine   │ │
+│  │ - TEA actor  │  │ - Artifacts      │ │
+│  │ - Snapshots  │  │ - Highlights     │ │
+│  │ - Capabilities│ │ - Search/rooms   │ │
 │  └──────────────┘  └──────────────────┘ │
 │                                          │
 │  ┌──────────────────────────────────┐   │
@@ -275,7 +275,7 @@ The mobile (Android/iOS) and desktop apps share a Rust core library that handles
 
 ### Web App
 
-The web app is a separate codebase (modern SPA framework — specific stack TBD) that implements the same Nostr protocol interactions but through JavaScript/TypeScript Nostr libraries. It connects to the same relay infrastructure.
+The web app is a separate codebase that currently implements the same Nostr protocol interactions through JavaScript/TypeScript Nostr libraries. Web NMP bridge work is deferred to #65; mobile/native NMP cutover can close before web moves.
 
 Key web-specific concerns:
 - NIP-07 (browser extension signing) and NIP-46 (remote signing) support
@@ -283,13 +283,15 @@ Key web-specific concerns:
 - Browser extension companion for highlight capture
 - Progressive web app capabilities for mobile web
 
-### Offline & Sync
+### Mobile Offline & Sync
 
-The Rust core provides:
-- Local event database (SQLite or similar)
-- Background sync when connectivity returns
-- Optimistic UI (post events locally, confirm when relay accepts)
-- Conflict resolution follows Nostr conventions (latest timestamp wins for replaceable events)
+The Rust/NMP core provides:
+- NMP-owned event ingestion and app-client event-store identity.
+- Open-interest and screen-shaped projections for mobile/desktop views.
+- Relay routing and protocol writes, including NIP-29, NIP-22, NIP-25, NIP-51, search, bookmarks, podcast, capture, comments, and sharing.
+- Offline/sync behavior and optimistic action state. Native code must not add another product database or protocol cache.
+
+Allowed native persistence is limited to OS capability and presentation exceptions: keychain/keystore secrets, signer handles, media/image caches, share-sheet/App Group handoff payloads, temporary file handles, and transient UI state. Each exception needs a logout/deletion or lifecycle boundary.
 
 ---
 
@@ -342,10 +344,10 @@ All authentication is Nostr-native:
 | Component | Technology | Notes |
 |---|---|---|
 | **Relay** | Go (khatru + relay29) | Our NIP-29-compatible relay. Single deployable binary. |
-| **Relay storage** | Configurable (PostgreSQL, BadgerDB, etc.) | khatru supports pluggable event stores |
+| **Relay storage** | Croissant MMM event store + Bleve indexes | Relay-owned event/search storage. This is not app-client persistence to delete during NMP mobile cutover. |
 | **Web app** | SPA (framework TBD) | Deployed as static site + API routes for SSR of public pages |
-| **Mobile apps** | Rust core + Kotlin (Android) / Swift (iOS) | Shared logic, native UI |
-| **Desktop app** | Rust core + native or Tauri | Same shared logic as mobile |
+| **Mobile apps** | Rust/NMP core + Kotlin (Android) / Swift (iOS) | Shared runtime/projections, native rendering and OS capabilities |
+| **Desktop app** | Rust/NMP core + native or Tauri | Same shared logic as mobile |
 | **Media storage** | NIP-96 compatible server or S3-backed | For images, avatars, file uploads |
 | **Browser extension** | JS/TS | Highlight capture from any webpage |
 

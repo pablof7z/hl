@@ -81,7 +81,7 @@ For every row below:
 These files currently own business behavior and should not survive as product state owners:
 
 - `Core/HighlighterStore.swift`
-- `Core/SafeHighlighterCore.swift`
+- the legacy safe-core wrapper file
 - `Core/EventBridge.swift`
 - `Session/AppSessionStore.swift`
 - `Core/RoomExplorerConfig.swift`

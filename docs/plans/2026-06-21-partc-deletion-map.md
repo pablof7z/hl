@@ -1,17 +1,17 @@
 # Part C Deletion Map — bespoke-lane teardown blueprint
 
 Status: **pre-Part-C audit (read-only)**. Branch `wf/phase7-teardown`, HEAD `ee3dc234`.
-Purpose: the concrete blueprint for deleting the bespoke `HighlighterCore` lane +
-dropping `nostr-sdk`/`nostrdb` — what deletes NOW vs what is GATED on which gate,
+Purpose: the concrete blueprint for deleting the bespoke legacy core facade lane +
+dropping `nostr-sdk` and legacy app event store — what deletes NOW vs what is GATED on which gate,
 for the user's Part-C gate decision.
 
 ## Headline counts
 
-- **iOS bespoke-FFI call-sites remaining: ~235** across **~83 Swift files** (`safeCore.`/`.core.`, excluding the generated bindings + the `SafeHighlighterCore` wrapper defs).
+- **iOS bespoke-FFI call-sites remaining: ~235** across **~83 Swift files** (`safeCore.`/`.core.`, excluding the generated bindings + the legacy safe-core wrapper definitions).
 - **Screens already kernel-cut: 27** (primary data + all writes on the kernel; only presentation-projection / coexist-reads remain → mechanically stripped at Part C).
 - **Gated remnant clusters: 8** (2 awaiting in-flight kernel cherry-picks, 3 nmp-issue-gated, podcast lane, room-admin, share-flow) **+ 1 session/data foundation** (removed with the auth-flip at Part C).
 - **Rust bespoke modules: ~50** (`app/core/src/*.rs`, ~51k LOC). At a FULL Part-C delete: all ~50 go. Under a GATED-PARTIAL delete: **~18 modules must stay** (the ones the live remnants still call); **~32 deletable** once the cut screens' coexist-reads are stripped.
-- **`nostr-sdk` referenced in 39 `app/core/src` files; `nostrdb`/`ndb` in 36.** Kernel production code: **zero** nostr-sdk deps (the only hit, `kernel/domains/articles.rs:586`, is a `#[cfg(test)]` parity import).
+- **`nostr-sdk` referenced in 39 `app/core/src` files; legacy app event store/`ndb` in 36.** Kernel production code: **zero** nostr-sdk deps (the only hit, `kernel/domains/articles.rs:586`, is a `#[cfg(test)]` parity import).
 
 ---
 
@@ -125,13 +125,13 @@ throwaway two-store bridge:
 ## 4. Grep-proof targets
 
 - **FULL deletion (all gates resolved):**
-  `grep -rn "HighlighterCore\|nostr_sdk\|nostrdb" app/core/src` → **0**, and remove
-  `nostr-sdk` / `nostr` / `nostr-ndb` / `nostrdb` from `app/core/Cargo.toml`
-  (lines 17–20, 61). iOS: `grep -rn "safeCore\.\|SafeHighlighterCore\|HighlighterCore"
-  app/ios/.../Sources` (excl. Generated) → 0; delete `SafeHighlighterCore.swift`,
+  `grep -rn "legacy core facade\|nostr_sdk\|legacy app event store" app/core/src` → **0**, and remove
+  `nostr-sdk` / `nostr` / `nostr-ndb` / legacy app event store from `app/core/Cargo.toml`
+  (lines 17–20, 61). iOS: `grep -rn "safeCore\.\|legacy safe-core wrapper\|legacy core facade"
+  app/ios/.../Sources` (excl. Generated) → 0; delete the legacy safe-core wrapper file,
   `AppSessionStore.swift`, `EventBridge.swift`.
 - **GATED-PARTIAL deletion (today's reality):** the ~18 gated modules + their
-  `nostr_sdk`/`nostrdb` usage remain; everything in §2's "already-cut domains" +
+  `nostr_sdk`/legacy app event store usage remain; everything in §2's "already-cut domains" +
   "foundation" deletes. Expected residual grep hits = only the gated-remnant modules
   listed in §2.
 

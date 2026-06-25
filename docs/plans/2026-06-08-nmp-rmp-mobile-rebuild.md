@@ -200,7 +200,7 @@ Generated bindings may still contain low-level UniFFI implementation errors inte
 
 | Capability | iOS | Android | Rust Owns |
 |---|---|---|---|
-| Secure storage | Keychain | Android Keystore / EncryptedSharedPreferences | What secrets exist, restore policy, logout cleanup, error display. |
+| Secure storage | Keychain | Android Keystore / encrypted preference storage | What secrets exist, restore policy, logout cleanup, error display. |
 | Signer handoff | URL scheme / Nostr Connect | NIP-55 signer intents plus NIP-46 | Auth state machine, permissions, retry, relay selection, signer errors. |
 | Camera/photos | AVFoundation, PhotosUI | CameraX, Photo Picker | Capture flow state, accepted image policy, publish decision. |
 | OCR | Vision text recognition | ML Kit Text Recognition | Reconstruction, selection, quote/context derivation, confidence policy. |
@@ -273,7 +273,7 @@ Deliverables:
 - Implement NIP-46 and Android NIP-55 capability flows with Rust-owned signer policy.
 - Replace hardcoded relay decisions with Rust routing policy, outbox planning, app/user relay roles, and audited Highlighter relay bootstrap.
 - Move relay diagnostics and network settings into Rust snapshots/actions.
-- Keep nostrdb/event-store internals inside Rust.
+- Keep legacy app event store/event-store internals inside Rust.
 
 Gate:
 
@@ -341,9 +341,9 @@ Gate:
 
 Deliverables:
 
-- Delete `SafeHighlighterCore`, `EventBridge`, Swift feature stores that own facts, old generated API wrappers, broad Rust `get_*`/`publish_*`/`subscribe_*` FFI surface, native caches, and old query/subscribe view wiring.
+- Delete legacy safe-core wrapper, `EventBridge`, Swift feature stores that own facts, old generated API wrappers, broad Rust `get_*`/`publish_*`/`subscribe_*` FFI surface, native caches, and old query/subscribe view wiring.
 - Keep only rendering adapters and capability executors in Swift/Kotlin.
-- Add architecture lint tests that fail on native product stores, native `UserDefaults` app facts, hardcoded relay policy outside audited config, production sleeps, and broad throwing FFI product methods.
+- Add architecture lint tests that fail on native product stores, native preference storage app facts, hardcoded relay policy outside audited config, production sleeps, and broad throwing FFI product methods.
 
 Gate:
 

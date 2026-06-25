@@ -15,6 +15,12 @@
 | Desktop | In scope for launch | Same Rust core as mobile, native desktop UI (macOS/Windows/Linux) |
 | Relay hosting | Highlighter-operated default relay | Full control over UX; protocol remains open for third-party relays |
 
+### 2026-06 Mobile Architecture Update
+
+The mobile/desktop rows in this document now mean Rust core plus NMP, not a bespoke app-client Nostr stack. NMP owns native app runtime, event ingestion, event store identity, relay routing, protocol writes, search/open-interest orchestration, durable product state, and bounded projections. Native iOS/Android code owns presentation and OS capability execution only.
+
+The web app still uses its SvelteKit/NDK stack for now. Moving web to the same NMP ownership boundary is explicitly deferred to #65 and is not a mobile close blocker.
+
 ---
 
 ## 1. Surface Overview
@@ -300,28 +306,28 @@ src/
 
 ---
 
-## 4. Mobile Apps — Rust Core + Native UI
+## 4. Mobile Apps — Rust/NMP Core + Native UI
 
 ### Architecture
 
 ```
 ┌─────────────────────────────────────────────────┐
-│                  RUST CORE                       │
+│                  RUST/NMP CORE                   │
 │                  (shared library)                │
 │                                                  │
 │  ┌──────────────┐  ┌──────────────────────────┐│
-│  │ Nostr Client  │  │ NIP-29 Groups            ││
-│  │ - Relay pool  │  │ - Join/leave/create      ││
-│  │ - Event sign  │  │ - Membership state       ││
-│  │ - NIP-42 auth │  │ - Moderation             ││
-│  │ - Sub filters │  │ - Group metadata cache    ││
+│  │ NMP Runtime   │  │ NIP-29 Groups            ││
+│  │ - Event store │  │ - Join/leave/create      ││
+│  │ - Open views  │  │ - Membership state       ││
+│  │ - Routing     │  │ - Moderation             ││
+│  │ - Sign/publish│  │ - Group projections       ││
 │  └──────────────┘  └──────────────────────────┘│
 │                                                  │
 │  ┌──────────────┐  ┌──────────────────────────┐│
-│  │ Data Layer   │  │ Content Engine           ││
-│  │ - SQLite DB  │  │ - URL metadata extraction││
-│  │ - Sync engine│  │ - Highlight management   ││
-│  │ - Event cache│  │ - Search / full-text idx ││
+│  │ App Kernel   │  │ Content Engine           ││
+│  │ - TEA actor  │  │ - Artifact projections   ││
+│  │ - Snapshots  │  │ - Highlight management   ││
+│  │ - Capabilities│ │ - Search/open interests  ││
 │  └──────────────┘  └──────────────────────────┘│
 │                                                  │
 │  ┌──────────────────────────────────────────┐   │
@@ -339,27 +345,27 @@ src/
       └───────────┘ └────────┘ └───────────┘
 ```
 
-### Rust Core — Responsibilities
+### Rust/NMP Core — Responsibilities
 
-The Rust core is the single source of truth for protocol logic, data, and sync. Native UIs are thin presentation layers.
+The Rust/NMP core is the single source of truth for protocol logic, data, routing, and sync. Native UIs are thin presentation and OS capability layers.
 
 | Module | Responsibility |
 |---|---|
-| **Nostr Client** | Relay pool management, WebSocket connections, event creation/signing/verification, NIP-42 auth handshake, subscription filters |
-| **NIP-29 Groups** | Group lifecycle (create, join, leave, fork), membership state machine, role management, invite code handling |
-| **Data Layer** | SQLite for local event storage, background sync engine, conflict resolution, event cache with expiry |
-| **Content Engine** | URL metadata extraction (title, author, image, description), highlight text management, full-text search indexing |
-| **FFI Bridge** | C ABI exposing the core API to Swift (iOS) and Kotlin (Android) via UniFFI or hand-written bindings |
+| **NMP substrate** | Event ingestion, event-store identity, open-interest lifecycle, relay routing, signing/publish plumbing, and NIP-42/NIP-65 behavior |
+| **NIP-29 Groups** | Group lifecycle (create, join, leave, fork), membership projections, role management, invite code handling, and host-relay policy |
+| **App Kernel** | TEA actor, typed actions, capability requests, bounded snapshots, and user-visible error/state projections |
+| **Content Engine** | Artifact, highlight, discussion, search, podcast, capture, bookmark, and room projections/actions |
+| **FFI Bridge** | Bounded API to Swift (iOS) and Kotlin (Android) via UniFFI or hand-written bindings |
 
-### Rust Core — Key Decisions
+### Rust/NMP Core — Key Decisions
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| **Nostr library** | `nostr-sdk` (Rust) | Official Rust Nostr SDK; supports NIP-01 through NIP-46+, relay pool, event builder |
-| **Local storage** | SQLite via `rusqlite` | Proven, embedded, works on all platforms. Full-text search via FTS5. |
+| **Nostr substrate** | `nostr-multi-platform` | One shared ownership boundary for native app runtime, routing, event store, protocol actions, and projections |
+| **App-client storage** | NMP-owned event store/projections | Avoids a second native database or divergent product cache in Swift/Kotlin |
 | **FFI approach** | UniFFI (Mozilla) | Auto-generates Swift and Kotlin bindings from Rust. Battle-tested (used by Firefox, Matrix). |
-| **Async runtime** | `tokio` | Industry standard; `nostr-sdk` uses it. |
-| **Sync strategy** | Optimistic local-first | Post events locally, confirm when relay accepts. Queue offline events. |
+| **Capability model** | Native executes, Rust/NMP decides | Keychain/keystore, media playback, camera/OCR, share sheets, and file handles report raw results back to Rust |
+| **Sync strategy** | NMP open-interest and projection model | Open screens declare interest; NMP owns relay selection, ingestion, and bounded view updates |
 
 ### iOS App — Swift UI
 
@@ -367,12 +373,12 @@ The Rust core is the single source of truth for protocol logic, data, and sync. 
 |---|---|
 | **Minimum iOS** | 17.0+ (SwiftUI, latest APIs) |
 | **UI framework** | SwiftUI |
-| **Architecture** | MVVM — ViewModels call Rust core via FFI |
+| **Architecture** | SwiftUI renders Rust/NMP snapshots and dispatches typed actions/capability results |
 | **Navigation** | SwiftUI NavigationStack |
 | **Key screens** | Group list → Group home → Artifact detail → Highlight view → Discussion thread; Vault (personal highlights); Discover; Profile |
 | **Share extension** | iOS Share Sheet integration for capturing highlights from Safari, Books, etc. |
 | **Notifications** | APNs for group activity (new highlights, discussions, mentions) — relay pushes to push notification service |
-| **Offline** | Full offline via Rust core local SQLite. Optimistic UI. Background sync. |
+| **Offline** | NMP-owned event store and projections. Swift may keep only presentation state and accepted OS capability/cache exceptions. |
 
 ### Android App — Kotlin UI
 
@@ -380,19 +386,19 @@ The Rust core is the single source of truth for protocol logic, data, and sync. 
 |---|---|
 | **Minimum Android** | API 26+ (Android 8.0) |
 | **UI framework** | Jetpack Compose |
-| **Architecture** | MVVM — ViewModels call Rust core via FFI |
+| **Architecture** | Compose renders Rust/NMP snapshots and dispatches typed actions/capability results |
 | **Navigation** | Compose Navigation |
 | **Key screens** | Same as iOS, adapted to Material Design 3 |
 | **Share extension** | Android Share Sheet for highlight capture from any app |
 | **Notifications** | FCM for group activity |
-| **Offline** | Same as iOS — Rust core handles all offline logic |
+| **Offline** | Same as iOS — Rust/NMP owns offline/sync logic; Kotlin may keep only presentation state and accepted OS capability/cache exceptions |
 
 ### Mobile-Specific Concerns
 
 | Concern | Approach |
 |---|---|
 | **Push notifications** | Relay pushes events to a lightweight notification service → APNs/FCM. Not all events — just mentions, group invites, and highlights-on-your-artifacts. |
-| **Background sync** | Rust core manages background WebSocket connections. iOS: background fetch intervals. Android: WorkManager. |
+| **Background sync** | Rust/NMP owns sync policy and relay work. iOS/Android only execute permitted background capability hooks. |
 | **Key management** | Nsec stored in platform secure enclave (iOS Keychain, Android Keystore). NIP-46 remote signing as alternative. |
 | **Deep linking** | `highlighter://group/{id}`, `highlighter://artifact/{id}`, `highlighter://highlight/{id}` — opens directly in app. |
 | **Share-to-app** | Both platforms: share URL/text from any app → Highlighter creates draft artifact or highlight. |
@@ -400,18 +406,18 @@ The Rust core is the single source of truth for protocol logic, data, and sync. 
 
 ---
 
-## 5. Desktop App — Rust Core + Native UI
+## 5. Desktop App — Rust/NMP Core + Native UI
 
 ### Architecture
 
-Same Rust core as mobile, with a desktop-native UI layer.
+Same Rust/NMP core as mobile, with a desktop-native UI layer.
 
 | Aspect | Detail |
 |---|---|
 | **UI framework** | Platform-native (macOS: AppKit/SwiftUI, Windows: WinUI, Linux: GTK4) — OR a single cross-platform desktop UI (TBD based on team capacity) |
-| **Architecture** | Same Rust core via FFI. Desktop-optimized layouts. |
+| **Architecture** | Same Rust/NMP projections and actions via FFI. Desktop-optimized layouts. |
 | **Key differentiators** | Multi-column layout, keyboard-driven workflows, drag-and-drop highlight creation, larger artifact reading view |
-| **Offline** | Same as mobile — Rust core SQLite, full offline capability |
+| **Offline** | Same as mobile — NMP-owned event store and projections |
 
 ### Desktop-Specific Concerns
 
@@ -460,7 +466,7 @@ All surfaces talk to the same relay infrastructure. The data model is identical:
 - A user's identity (Nostr keypair) works across all surfaces
 - A user's data follows them — groups, highlights, artifacts are portable
 
-The webapp uses NDK (TypeScript) for protocol. Mobile/desktop use the Rust core. Both implement the same Nostr protocol interactions. Any divergence in event handling is a bug.
+The webapp currently uses NDK (TypeScript) for protocol and remains explicitly deferred to #65 for NMP bridge work. Mobile/desktop use the Rust/NMP core. Both must implement the same Nostr protocol interactions; any product-level divergence in event handling is a bug.
 
 ---
 

@@ -34,7 +34,7 @@ Add `var podcastPlayer = PodcastPlayerStore()` to `HighlighterStore` (`Core/High
 `PodcastPlayerStore` keeps everything it has today (AVPlayer + KVO + transport methods + clip Mark In/Out + publish) and adds:
 
 - `currentArtifact: ArtifactRecord?` — what's loaded.
-- `episodePosition: Double` — the seek position; persisted via `UserDefaults` keyed by `podcastItemGuid` so resuming on relaunch works.
+- `episodePosition: Double` — the seek position; persisted via native preference storage keyed by `podcastItemGuid` so resuming on relaunch works.
 - `transcriptSegments: [TranscriptSegment]` — moved from the per-view state.
 - `transcriptAvailability: .loading | .available | .unavailable` — drives layer toggles and the no-transcript fallback.
 - `comments: [String: [CommentRecord]]` — keyed by clip event id; lazy-loaded when a clip card expands.
@@ -130,7 +130,7 @@ Each member clip card in the rail is collapsed by default (avatar + name + range
 
 ### Resume-on-relaunch
 
-`PodcastPlayerStore` writes `(podcastItemGuid, position, lastPlayedAt)` to `UserDefaults` every 5s while playing. On `HighlighterStore` init, if a record exists from the last 7 days, the MiniPlayer rehydrates with it (paused). Tapping play resumes.
+`PodcastPlayerStore` writes `(podcastItemGuid, position, lastPlayedAt)` to native preference storage every 5s while playing. On `HighlighterStore` init, if a record exists from the last 7 days, the MiniPlayer rehydrates with it (paused). Tapping play resumes.
 
 ---
 
