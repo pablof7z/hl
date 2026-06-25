@@ -682,6 +682,17 @@ pub enum Effect {
         /// Correlation id to thread through nmp for action_results routing.
         correlation_id: String,
     },
+    /// Publish the kind:16 repost that shares a freshly-published podcast clip
+    /// into a NIP-29 group. Uses the same validated `nmp.publish` PublishRaw
+    /// ingress as the generic share flow, but routes completion back into the
+    /// podcast clip FSM so iOS observes final Done/Error from the podcast
+    /// listening snapshot.
+    PublishClipRepostEvent {
+        /// serde_json template: `{ kind, content, tags, host_relay_url }`.
+        json: String,
+        /// Reducer-minted placeholder correlation id.
+        correlation_id: String,
+    },
 
     // ── Phase 7 discussions additions (append-only) ──────────────────────────
     /// Publish a kind:11 discussion thread via `ActorCommand::PublishRawEvent`.

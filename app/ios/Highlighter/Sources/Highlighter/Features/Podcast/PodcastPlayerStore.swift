@@ -258,6 +258,7 @@ final class PodcastPlayerStore {
 
     func clearClip() {
         applyClipSelection(clearClipSelection())
+        kernel?.app.dispatch(.audioClipClear)
     }
 
     func extendClipToSegment(_ segment: TranscriptSegment) {
@@ -276,6 +277,7 @@ final class PodcastPlayerStore {
                 value: value
             )
         )
+        kernel?.app.dispatch(.audioClipSetStart(seconds: clipStart ?? value))
     }
 
     func setClipEnd(_ value: TimeInterval) {
@@ -286,39 +288,7 @@ final class PodcastPlayerStore {
                 durationSeconds: duration
             )
         )
-    }
-
-    // MARK: - Publish
-
-    func publish(
-        artifact: ArtifactRecord,
-        targetGroupId: String,
-        note: String,
-        segments: [TranscriptSegment],
-        core: HighlighterCore
-    ) async -> PodcastClipPublishSnapshot {
-        isPublishing = true
-        publishError = nil
-        defer { isPublishing = false }
-
-        let outcome = await core.publishPodcastClipHighlight(input: PodcastClipPublishInput(
-            artifact: artifact,
-            targetGroupId: targetGroupId,
-            note: note,
-            segments: segments,
-            selectedSegmentIds: selectedSegmentIds,
-            clipStartSeconds: clipStart,
-            clipEndSeconds: clipEnd,
-            clipSpeaker: speaker
-        ))
-        let result = clipPublishResultProjection(
-            input: PodcastClipPublishResultInput(snapshot: outcome)
-        )
-        guard result.didPublish else {
-            publishError = result.errorMessage
-            return outcome
-        }
-        return outcome
+        kernel?.app.dispatch(.audioClipSetEnd(seconds: clipEnd ?? value, durationSeconds: duration))
     }
 
     // MARK: - Transcript

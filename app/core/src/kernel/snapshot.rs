@@ -1503,9 +1503,9 @@ pub struct PodcastListeningSnapshot {
 
 /// FSM phase for a podcast-clip publish round-trip.
 ///
-/// `Idle` before the user triggers publish; `Publishing` once the
-/// `Effect::PublishClipWithCorrelation` is in flight; `Done` when the
-/// `action_results` projection confirms publish; `Error` on any failure.
+/// `Idle` before the user triggers publish; `Publishing` while the kind:9802
+/// publish and optional kind:16 group repost are in flight; `Done` when all
+/// required publishes are confirmed by `action_results`; `Error` on any failure.
 ///
 /// DEVICE-LOCAL — the published kind:9802 is the nostr fact, not this FSM.
 ///
@@ -1515,10 +1515,10 @@ pub enum KernelClipPublishPhase {
     /// No publish in flight.
     #[default]
     Idle,
-    /// `Effect::PublishClipWithCorrelation` is in flight; awaiting
-    /// the `action_results` verdict keyed by `correlation_id`.
+    /// Publish is in flight; awaiting the `action_results` verdict keyed by
+    /// correlation id.
     Publishing,
-    /// The kind:9802 event was accepted by at least one relay. D1: raw.
+    /// Required publish work was accepted by at least one relay. D1: raw.
     Done,
     /// The publish was rejected or the correlation_id never arrived. D1: raw.
     Error {

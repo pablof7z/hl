@@ -126,6 +126,15 @@ enum HighlighterAction {
     case audioSeek(seconds: Double)
     /// Explicitly persist the current resume position (call on app resign-active).
     case audioSetResume(seconds: Double)
+    /// Update the kernel-owned podcast clip start.
+    case audioClipSetStart(seconds: Double)
+    /// Update the kernel-owned podcast clip end.
+    case audioClipSetEnd(seconds: Double, durationSeconds: Double)
+    /// Clear the kernel-owned podcast clip selection and publish FSM.
+    case audioClipClear
+    /// Publish the current kernel-owned podcast clip selection as a kind:9802,
+    /// optionally followed by a kind:16 repost into a target group.
+    case podcastPublishClip(artifactJson: String, note: String?, targetGroupId: String?)
 
     // ── Capture draft (Phase 5F) ──────────────────────────────────────────────────
     case captureSetQuote(quote: String)
@@ -456,6 +465,19 @@ enum HighlighterAction {
         case .audioSetResume(let seconds):
             return AppActionEnvelope(namespace: "hl.audio.set_resume",
                                      json: jsonAny(["seconds": seconds]))
+        case .audioClipSetStart(let seconds):
+            return AppActionEnvelope(namespace: "hl.audio.clip_set_start",
+                                     json: jsonAny(["value": seconds]))
+        case .audioClipSetEnd(let seconds, let durationSeconds):
+            return AppActionEnvelope(namespace: "hl.audio.clip_set_end",
+                                     json: jsonAny(["value": seconds, "duration_seconds": durationSeconds]))
+        case .audioClipClear:
+            return AppActionEnvelope(namespace: "hl.audio.clip_clear", json: "{}")
+        case .podcastPublishClip(let artifactJson, let note, let targetGroupId):
+            var dict: [String: Any] = ["artifact_json": artifactJson]
+            if let note { dict["note"] = note }
+            if let targetGroupId { dict["target_group_id"] = targetGroupId }
+            return AppActionEnvelope(namespace: "hl.podcast.publish_clip", json: jsonAny(dict))
 
         // ── Capture draft (Phase 5F) ──────────────────────────────────────────────────
         case .captureSetQuote(let quote):

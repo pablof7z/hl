@@ -383,6 +383,8 @@ pub(crate) struct ClipSetEndPayload {
 pub(crate) struct PublishClipPayload {
     pub artifact_json: String,
     pub note: Option<String>,
+    #[serde(default)]
+    pub target_group_id: Option<String>,
 }
 
 // ── Phase 5D additions (append-only) ─────────────────────────────────────────
@@ -1696,6 +1698,28 @@ pub enum KernelEvent {
         /// `true` when nmp reports a `"published"` status.
         success: bool,
         /// Raw error message on failure; empty on success. D1.
+        error: String,
+        /// Published kind:9802 event id. Required when a targeted clip publish
+        /// needs to schedule the follow-up kind:16 group repost.
+        event_id: String,
+    },
+    /// nmp minted a real correlation id for the podcast clip's follow-up
+    /// kind:16 group repost. Swaps the reducer placeholder before action_results
+    /// arrives.
+    ClipRepostCorrelationMinted {
+        placeholder_correlation_id: String,
+        nmp_correlation_id: String,
+    },
+    /// nmp rejected dispatching the follow-up kind:16 repost before a publish
+    /// terminal could be written to action_results.
+    ClipRepostDispatchRejected {
+        correlation_id: String,
+        error: String,
+    },
+    /// The podcast clip follow-up kind:16 group repost settled via action_results.
+    ClipRepostActionResult {
+        correlation_id: String,
+        success: bool,
         error: String,
     },
 
