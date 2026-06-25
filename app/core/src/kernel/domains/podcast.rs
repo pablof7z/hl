@@ -45,10 +45,11 @@ use crate::clock::Clock;
 use crate::errors::CoreError;
 use crate::kernel::app::AppState;
 use crate::kernel::domains::capture_draft::new_correlation_id;
+use crate::kernel::domains::{feed, highlight_feed};
 use crate::kernel::effect::Effect;
 use crate::kernel::models::{ArtifactRecord, PodcastPositionRecord};
 use crate::kernel::snapshot::{
-    KernelClipPublishPhase, KernelTranscriptAvailability, KernelTranscriptSegment,
+    HighlightRow, KernelClipPublishPhase, KernelTranscriptAvailability, KernelTranscriptSegment,
     PodcastListeningSnapshot, ViewSnapshot,
 };
 
@@ -63,6 +64,14 @@ const POSITION_MAX_AGE_SECS: u64 = 7 * 24 * 60 * 60;
 
 /// State file name within `data_dir`.
 pub(crate) const POSITION_FILE_NAME: &str = "podcast-position-v1.json";
+
+/// Feed key for the current episode's member clips.
+///
+/// One stable cursor is re-registered whenever `hl.audio.play` loads a new
+/// episode; the feed buffer is cleared before each registration.
+pub(crate) const PODCAST_CLIP_FEED_KEY: &str = "hl.feed.podcast_clips.current";
+
+const PODCAST_MEMBER_CLIP_LIMIT: usize = 128;
 
 // ─── In-kernel playback state ─────────────────────────────────────────────────
 
@@ -323,6 +332,8 @@ pub(crate) fn reduce_action_play(
 
     let resume_at = saved_position.filter(|p| p.is_finite() && *p >= 0.0);
 
+    let feed_effects = podcast_clip_feed_effects_for_artifact(state, &artifact);
+
     state.podcast.current = Some(LoadedEpisode {
         guid,
         artifact,
@@ -336,12 +347,14 @@ pub(crate) fn reduce_action_play(
         clip_selection: None,
     });
 
-    vec![Effect::EmitCapabilityRequest(CapabilityRequest::Audio(
+    let mut effects = feed_effects;
+    effects.push(Effect::EmitCapabilityRequest(CapabilityRequest::Audio(
         AudioOp::Load {
             url,
             resume_at_seconds: resume_at,
         },
-    ))]
+    )));
+    effects
 }
 
 /// Reduce `hl.audio.pause` — emit `AudioOp::Pause`.
@@ -595,7 +608,57 @@ pub(crate) fn project_podcast_listening_snapshot(state: &AppState) -> Option<Vie
             .unwrap_or_default(),
         // ── Phase 5J additions (append-only) ─────────────────────────────────
         clip_publish_phase: state.podcast.clip_publish_phase.clone(),
+        // ── Phase 7 podcast member clips additions (append-only) ─────────────
+        member_clips: podcast_member_clips(state),
     }))
+}
+
+fn podcast_clip_feed_effects_for_artifact(
+    state: &mut AppState,
+    artifact: &ArtifactRecord,
+) -> Vec<Effect> {
+    state.podcast_clip_feed.clear();
+
+    let reference = crate::podcast_transcript::podcast_clip_reference(artifact);
+    let Some(scope) = feed::podcast_clip_feed_scope(&reference.tag_name, &reference.tag_value)
+    else {
+        return vec![];
+    };
+
+    let key = PODCAST_CLIP_FEED_KEY.to_string();
+    let mut effects = feed::reduce_register_feed_cursor(key.clone(), scope);
+    effects.extend(feed::reduce_drain_feed(key));
+    effects
+}
+
+fn podcast_member_clips(state: &AppState) -> Vec<HighlightRow> {
+    let Some(ep) = state.podcast.current.as_ref() else {
+        return vec![];
+    };
+    let reference = crate::podcast_transcript::podcast_clip_reference(&ep.artifact);
+    if reference.tag_name.is_empty() || reference.tag_value.is_empty() {
+        return vec![];
+    }
+    let reference_key = format!("{}:{}", reference.tag_name, reference.tag_value);
+
+    let mut clips: Vec<HighlightRow> = state
+        .podcast_clip_feed
+        .rows
+        .iter()
+        .filter_map(highlight_feed::decode_highlight_row)
+        .filter(|row| row.source_reference_key == reference_key)
+        .collect();
+
+    clips.sort_unstable_by(|a, b| {
+        b.created_at
+            .cmp(&a.created_at)
+            .then_with(|| a.event_id.cmp(&b.event_id))
+    });
+
+    let mut seen = std::collections::HashSet::new();
+    clips.retain(|row| seen.insert(row.event_id.clone()));
+    clips.truncate(PODCAST_MEMBER_CLIP_LIMIT);
+    clips
 }
 
 // ─── Phase 5I action reducers ─────────────────────────────────────────────────
@@ -1046,6 +1109,27 @@ mod tests {
         }
     }
 
+    fn podcast_clip_event(
+        id: &str,
+        tag_value: &str,
+        start: &str,
+    ) -> nmp_core::substrate::KernelEvent {
+        nmp_core::substrate::KernelEvent {
+            id: id.to_string(),
+            author: format!("author-{id}"),
+            kind: 9802,
+            created_at: 1_700_000_000,
+            tags: vec![
+                vec!["i".to_string(), tag_value.to_string()],
+                vec!["start".to_string(), start.to_string()],
+                vec!["end".to_string(), "45.000".to_string()],
+                vec!["speaker".to_string(), "Host".to_string()],
+            ],
+            content: format!("clip quote {id}"),
+            relay_provenance: vec![],
+        }
+    }
+
     // 5H-T1: play_emits_audio_capability_request
     //
     // AppAction::AudioPlay must emit CapabilityRequest::Audio(AudioOp::Load) and
@@ -1087,6 +1171,94 @@ mod tests {
         let ep = state.podcast.current.as_ref().unwrap();
         assert_eq!(ep.guid, "ep-guid");
         assert!(!ep.is_playing);
+    }
+
+    #[test]
+    fn audio_play_registers_scoped_podcast_clip_feed() {
+        let mut state = make_state();
+        let clk = clock(1_000);
+
+        let effects = step(
+            &mut state,
+            &clk,
+            Cmd::Action(AppAction::AudioPlay {
+                url: "https://cdn.example/ep.mp3".into(),
+                guid: "ep-guid".into(),
+                artifact_json: serde_json::to_string(&sample_artifact(
+                    "https://cdn.example/ep.mp3",
+                ))
+                .unwrap(),
+            }),
+        );
+
+        assert!(effects.iter().any(|e| {
+            matches!(
+                e,
+                Effect::DrainFeed { key } if key == PODCAST_CLIP_FEED_KEY
+            )
+        }));
+
+        let register = effects
+            .iter()
+            .find_map(|e| match e {
+                Effect::RegisterFeedCursor { key, scope, .. } if key == PODCAST_CLIP_FEED_KEY => {
+                    Some(scope)
+                }
+                _ => None,
+            })
+            .expect("audio play must register podcast clip feed");
+
+        match register {
+            nmp_core::PullScope::InterestShape(shape) => {
+                assert!(shape.kinds.contains(&9802));
+                let i_values = shape.tags.get("i").expect("must filter by #i");
+                assert!(i_values.contains("podcast:item:guid:ep-guid"));
+            }
+            _ => panic!("expected InterestShape scope"),
+        }
+    }
+
+    #[test]
+    fn podcast_listening_snapshot_projects_current_episode_member_clips() {
+        let mut state = make_state();
+        let clk = clock(1_000);
+
+        step(
+            &mut state,
+            &clk,
+            Cmd::Action(AppAction::AudioPlay {
+                url: "https://cdn.example/ep.mp3".into(),
+                guid: "ep-guid".into(),
+                artifact_json: serde_json::to_string(&sample_artifact(
+                    "https://cdn.example/ep.mp3",
+                ))
+                .unwrap(),
+            }),
+        );
+
+        state.podcast_clip_feed.rows.push(podcast_clip_event(
+            "clip-1",
+            "podcast:item:guid:ep-guid",
+            "12.000",
+        ));
+        state.podcast_clip_feed.rows.push(podcast_clip_event(
+            "other-episode",
+            "podcast:item:guid:other-guid",
+            "20.000",
+        ));
+
+        let snapshot = match project_podcast_listening_snapshot(&state).expect("snapshot") {
+            ViewSnapshot::PodcastListening(snapshot) => snapshot,
+            other => panic!("expected podcast listening snapshot, got {other:?}"),
+        };
+
+        assert_eq!(snapshot.member_clips.len(), 1);
+        assert_eq!(snapshot.member_clips[0].event_id, "clip-1");
+        assert_eq!(
+            snapshot.member_clips[0].source_reference_key,
+            "i:podcast:item:guid:ep-guid"
+        );
+        assert_eq!(snapshot.member_clips[0].clip_start_seconds, Some(12.0));
     }
 
     // 5H-T2: play_with_saved_resume_position

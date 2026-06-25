@@ -13,8 +13,7 @@ use parking_lot::RwLock;
 use crate::clock::{Clock, SystemClock};
 use crate::errors::CoreError;
 use crate::events::EventCallback;
-use crate::highlights;
-use crate::models::{ArtifactRecord, HighlightRecord, MutationSnapshot};
+use crate::models::{HighlightRecord, MutationSnapshot};
 use crate::nostr_runtime::NostrRuntime;
 use crate::onboarding;
 use crate::podcast_playback;
@@ -101,32 +100,6 @@ impl HighlighterCore {
             self.podcast_position.current()
         };
         podcast_playback::rehydration_snapshot(has_current_artifact, record)
-    }
-
-    pub async fn get_podcast_listening_clips_snapshot(
-        &self,
-        artifact: Option<ArtifactRecord>,
-        limit: u32,
-    ) -> podcast_transcript::PodcastListeningClipsSnapshot {
-        let result = (|| {
-            let Some(artifact) = artifact else {
-                return Ok(Vec::new());
-            };
-            let reference = podcast_transcript::podcast_clip_reference(&artifact);
-            let Some(tag) = reference.tag_name.trim().chars().next() else {
-                return Ok(Vec::new());
-            };
-            highlights::query_for_reference(
-                self.runtime.ndb(),
-                tag,
-                reference.tag_value.trim(),
-                if limit == 0 { reference.limit } else { limit },
-            )
-        })();
-        match result {
-            Ok(clips) => podcast_transcript::listening_clips_snapshot(clips, ""),
-            Err(error) => podcast_transcript::listening_clips_snapshot(Vec::new(), error),
-        }
     }
 
     pub fn set_event_callback(&self, callback: Arc<dyn EventCallback>) {

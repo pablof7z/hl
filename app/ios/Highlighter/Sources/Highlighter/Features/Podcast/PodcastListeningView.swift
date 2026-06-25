@@ -30,6 +30,7 @@ struct PodcastListeningView: View {
     var heroNamespace: Namespace.ID? = nil
 
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     @Environment(\.dismiss) private var dismiss
 
     // Layer toggles
@@ -45,7 +46,6 @@ struct PodcastListeningView: View {
 
     // Auto-scroll
     @State private var lastManualScroll = Date.distantPast
-    @State private var memberClips: [HighlightRecord] = []
 
     private var player: PodcastPlayerStore { app.podcastPlayer }
 
@@ -58,9 +58,7 @@ struct PodcastListeningView: View {
                 content
             }
         }
-        .sheet(isPresented: $showComposer, onDismiss: {
-            Task { await loadClips() }
-        }) {
+        .sheet(isPresented: $showComposer) {
             if let artifact = player.currentArtifact,
                let start = clipRangeStart,
                let end = clipRangeEnd {
@@ -82,9 +80,6 @@ struct PodcastListeningView: View {
             if let artifact, artifact.shareEventId != player.currentArtifact?.shareEventId {
                 player.load(artifact: artifact)
             }
-        }
-        .task(id: player.currentArtifact?.shareEventId) {
-            await loadClips()
         }
     }
 
@@ -430,13 +425,26 @@ struct PodcastListeningView: View {
         showComposer = true
     }
 
-    // MARK: - Helpers
-
-    private func loadClips() async {
-        let snapshot = await app.core.getPodcastListeningClipsSnapshot(
-            artifact: player.currentArtifact,
-            limit: 128
-        )
-        memberClips = snapshot.clips
+    private var memberClips: [HighlightRecord] {
+        (kernel.podcastListeningSnapshot?.memberClips ?? []).map { row in
+            HighlightRecord(
+                eventId: row.eventId,
+                pubkey: row.authorPubkey,
+                quote: row.content,
+                context: row.context,
+                note: row.note ?? "",
+                artifactAddress: row.artifactAddress,
+                eventReference: row.eventReference,
+                externalReference: row.externalReference,
+                sourceUrl: row.sourceUrl,
+                sourceReferenceKey: row.sourceReferenceKey,
+                clipStartSeconds: row.clipStartSeconds,
+                clipEndSeconds: row.clipEndSeconds,
+                clipSpeaker: row.clipSpeaker,
+                clipTranscriptSegmentIds: row.clipTranscriptSegmentIds,
+                imageUrl: row.imageUrl,
+                createdAt: row.createdAt
+            )
+        }
     }
 }

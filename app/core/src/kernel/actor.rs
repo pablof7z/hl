@@ -1520,6 +1520,7 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
                 "hl.feed.highlights" => Some(&mut state.highlight_feed),
                 // Phase 7: home-feed interaction cursor (kind:1/7/16/1111).
                 home_feed::HOME_INTERACTIONS_FEED_KEY => Some(&mut state.home_feed_interactions),
+                podcast::PODCAST_CLIP_FEED_KEY => Some(&mut state.podcast_clip_feed),
                 k if k.starts_with("hl.feed.room.") => {
                     // Lazily insert a FeedState for this group_id if not present.
                     let group_key = k.to_string();
@@ -2833,6 +2834,7 @@ fn feed_state_cursor_id(state: &AppState, key: &str) -> u64 {
         "hl.feed.articles" => state.article_feed.cursor_id,
         "hl.feed.highlights" => state.highlight_feed.cursor_id,
         home_feed::HOME_INTERACTIONS_FEED_KEY => state.home_feed_interactions.cursor_id,
+        podcast::PODCAST_CLIP_FEED_KEY => state.podcast_clip_feed.cursor_id,
         k if k.starts_with("hl.feed.room.") => state.room_lanes.get(k).map_or(0, |fs| fs.cursor_id),
         k if k.starts_with(room_home::ROOM_HIGHLIGHT_FEED_KEY_PREFIX) => state
             .room_highlight_feeds
@@ -2856,6 +2858,7 @@ fn feed_state_after_seq(state: &AppState, key: &str) -> u64 {
         "hl.feed.articles" => state.article_feed.after_seq,
         "hl.feed.highlights" => state.highlight_feed.after_seq,
         home_feed::HOME_INTERACTIONS_FEED_KEY => state.home_feed_interactions.after_seq,
+        podcast::PODCAST_CLIP_FEED_KEY => state.podcast_clip_feed.after_seq,
         k if k.starts_with("hl.feed.room.") => state.room_lanes.get(k).map_or(0, |fs| fs.after_seq),
         k if k.starts_with(room_home::ROOM_HIGHLIGHT_FEED_KEY_PREFIX) => state
             .room_highlight_feeds
@@ -3099,6 +3102,9 @@ pub(crate) async fn actor_task(
                             home_feed::HOME_INTERACTIONS_FEED_KEY => {
                                 state.home_feed_interactions.cursor_id = allocated_id;
                             }
+                            podcast::PODCAST_CLIP_FEED_KEY => {
+                                state.podcast_clip_feed.cursor_id = allocated_id;
+                            }
                             k if k.starts_with("hl.feed.room.") => {
                                 state.room_lanes.entry(k.to_string()).or_default().cursor_id =
                                     allocated_id;
@@ -3142,6 +3148,9 @@ pub(crate) async fn actor_task(
                         "hl.feed.highlights" => state.highlight_feed.clear(),
                         home_feed::HOME_INTERACTIONS_FEED_KEY => {
                             state.home_feed_interactions.clear();
+                        }
+                        podcast::PODCAST_CLIP_FEED_KEY => {
+                            state.podcast_clip_feed.clear();
                         }
                         k if k.starts_with("hl.feed.room.") => {
                             if let Some(fs) = state.room_lanes.get_mut(k) {

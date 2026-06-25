@@ -345,6 +345,15 @@ pub struct AppState {
     /// scan (D5). Cleared on `Logout` / `IdentityChanged(None)`.
     pub home_feed_interactions: crate::kernel::domains::feed::FeedState,
 
+    // ── Phase 7 podcast member clips additions (append-only) ────────────────
+    /// Pull-cursor state for the currently loaded podcast episode's member
+    /// clips: kind:9802 events tagged with the episode's NIP-73 `i` reference.
+    ///
+    /// Registered when `hl.audio.play` loads an episode, re-registered on
+    /// episode changes, and projected into `PodcastListeningSnapshot.member_clips`.
+    /// Cleared on `Logout` / `IdentityChanged(None)`.
+    pub podcast_clip_feed: crate::kernel::domains::feed::FeedState,
+
     // ── Phase 5A additions ────────────────────────────────────────────────────
     /// What's New seen-state — device-local, never published to Nostr.
     ///
@@ -549,6 +558,8 @@ impl Default for AppState {
             article_highlight_feeds: HashMap::new(),
             // ── Phase 7 home-feed aggregation additions ───────────────────────
             home_feed_interactions: crate::kernel::domains::feed::FeedState::default(),
+            // ── Phase 7 podcast member clips additions ────────────────────────
+            podcast_clip_feed: crate::kernel::domains::feed::FeedState::default(),
             // ── Phase 5A additions ────────────────────────────────────────────
             whats_new: crate::kernel::domains::whats_new::WhatsNewState::default(),
             // ── Phase 5C additions ────────────────────────────────────────────

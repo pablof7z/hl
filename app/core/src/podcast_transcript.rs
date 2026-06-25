@@ -193,12 +193,6 @@ pub struct PodcastListeningProjection {
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct PodcastListeningClipsSnapshot {
-    pub clips: Vec<HighlightRecord>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, uniffi::Record)]
 pub struct PodcastNowPlayingProjectionInput {
     pub artifact: ArtifactRecord,
 }
@@ -577,16 +571,6 @@ pub fn listening_projection(input: PodcastListeningProjectionInput) -> PodcastLi
             input.transcript_available,
             input.current_time_seconds,
         ),
-    }
-}
-
-pub fn listening_clips_snapshot(
-    clips: Vec<HighlightRecord>,
-    error: impl ToString,
-) -> PodcastListeningClipsSnapshot {
-    PodcastListeningClipsSnapshot {
-        clips,
-        error: error.to_string(),
     }
 }
 
@@ -1980,16 +1964,6 @@ HOST: Segment text.
         assert_eq!(projection.episode_title, "Untitled episode");
         assert_eq!(projection.episode_meta, "1m");
         assert_eq!(projection.current_speaker_or_timestamp, "1:02");
-    }
-
-    #[test]
-    fn listening_clips_snapshot_preserves_clips_and_error() {
-        let snapshot =
-            listening_clips_snapshot(vec![highlight("clip-a", Some(15.0))], "cache unavailable");
-
-        assert_eq!(snapshot.clips.len(), 1);
-        assert_eq!(snapshot.clips[0].event_id, "clip-a");
-        assert_eq!(snapshot.error, "cache unavailable");
     }
 
     #[test]
