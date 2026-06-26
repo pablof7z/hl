@@ -74,16 +74,25 @@ enum ContentTreeBodyRenderer {
         profileNames: [String: String] = [:],
         resolveEntity: (@Sendable (String) -> NostrEntityRef?)? = nil
     ) -> MarkdownRenderer.Output {
-        let walker = TreeWalker(
+        // Recover GFM-style footnote definitions that survive CommonMark
+        // parsing as literal `[^id]: body` text inside paragraph nodes.
+        let footnoteScan = ContentTreeFootnotes.scan(tree: tree)
+        let definitionsById = Dictionary(
+            uniqueKeysWithValues: footnoteScan.definitions.map { ($0.id, $0) }
+        )
+
+        var walker = TreeWalker(
             tree: tree,
             accent: accent,
             ink: ink,
             muted: muted,
             bodyPointSize: bodyPointSize,
             profileNames: profileNames,
-            resolveEntity: resolveEntity
+            resolveEntity: resolveEntity,
+            definitionsById: definitionsById,
+            definitionRootIndices: footnoteScan.definitionRootIndices
         )
-        let rawSegments = walker.walk()
+        let (rawSegments, footnoteAnchors) = walker.walk()
 
         // Overlay highlights on each text segment — identical strategy to
         // `MarkdownRenderer.render`: a highlight is applied to whichever segment
@@ -106,16 +115,22 @@ enum ContentTreeBodyRenderer {
             return .text(mutable)
         }
 
-        // The nmp `content_tree` (CommonMark) does not model `[^id]` footnotes —
-        // those were a bespoke pre-processor concern outside the kernel data
-        // model. So the migrated body carries no footnote block / anchors; the
-        // reader's footnote affordance degrades to a no-op (decision #2: support
-        // footnotes only if the data model has them — it does not).
+        // Build the footnote block from recovered definitions, mirroring the
+        // bespoke `MarkdownRenderer.render` path. Empty when no definitions
+        // were found (backwards-compatible with articles that use no footnotes).
+        let footnotes = MarkdownRenderer.renderFootnotes(
+            footnoteScan.definitions,
+            accent: accent,
+            ink: ink,
+            muted: muted,
+            bodyPointSize: bodyPointSize
+        )
+
         return MarkdownRenderer.Output(
             segments: segments,
-            footnotes: NSAttributedString(),
+            footnotes: footnotes,
             highlightsById: highlightsById,
-            footnoteAnchors: [:]
+            footnoteAnchors: footnoteAnchors
         )
     }
 }
@@ -136,6 +151,15 @@ private struct TreeWalker {
     let bodyPointSize: CGFloat
     let profileNames: [String: String]
     let resolveEntity: (@Sendable (String) -> NostrEntityRef?)?
+
+    // Footnote definitions recovered by ContentTreeFootnotes.scan. Used by
+    // renderPlainText to replace [^id] references with superscript runs.
+    let definitionsById: [String: FootnotePreprocessor.Definition]
+    // Root indices that are definition paragraphs — skipped during walk().
+    let definitionRootIndices: Set<UInt32>
+    // Inline footnote anchor positions, populated as [^id] references are
+    // rendered. Mirrors BodyWalker.footnoteAnchors.
+    var footnoteAnchors: [Int: NSRange] = [:]
 
     // Cached fonts — mirror the bespoke `BodyWalker` serif styling so the
     // migrated body reads identically.
@@ -163,7 +187,7 @@ private struct TreeWalker {
     private var mono: UIFont { UIFont.monospacedSystemFont(ofSize: bodyPointSize - 2, weight: .regular) }
     private var monoSmall: UIFont { UIFont.monospacedSystemFont(ofSize: max(11, bodyPointSize - 6), weight: .semibold) }
 
-    func walk() -> [MarkdownRenderer.BodySegment] {
+    mutating func walk() -> ([MarkdownRenderer.BodySegment], [Int: NSRange]) {
         // The emitter is the single recursive surface. Block containers
         // (blockQuote / list-item / any future container) recurse through
         // `emitBlock`, which is what makes the renderer fully block-aware at
@@ -174,13 +198,17 @@ private struct TreeWalker {
         // `NSAttributedString`, so a depth-recursive append-into-text scheme
         // would drop them (the original bug). Driving the recursion from the
         // segment layer preserves document order across nested rich blocks.
+        //
+        // Definition root paragraphs are skipped here; they are rendered into
+        // the separate footnote block by ContentTreeBodyRenderer.render.
         var emitter = SegmentEmitter()
         for root in tree.roots {
+            guard !definitionRootIndices.contains(root) else { continue }
             guard let node = tree.node(at: root) else { continue }
             emitBlock(node, into: &emitter, indent: 0)
         }
         emitter.flush()
-        return emitter.segments
+        return (emitter.segments, footnoteAnchors)
     }
 
     /// Running accumulator for the hybrid output: a selectable prose buffer plus
@@ -220,7 +248,7 @@ private struct TreeWalker {
     /// produced beneath block-quotes / list items so nested structure reads
     /// visually. Rich segments are depth-agnostic (the reader renders them as
     /// full-width slices) but still flush in correct document order.
-    private func emitBlock(_ node: NostrWireNode, into emitter: inout SegmentEmitter, indent: CGFloat) {
+    private mutating func emitBlock(_ node: NostrWireNode, into emitter: inout SegmentEmitter, indent: CGFloat) {
         switch node {
         // — Containers: recurse into their block children. —
         case .blockQuote(let children):
@@ -291,7 +319,7 @@ private struct TreeWalker {
     /// quote's muted-italic styling AND recurse (so a nested list / code block /
     /// rule / image inside a quote is no longer dropped). Rich children still
     /// flush as their own segments.
-    private func emitBlock(_ node: NostrWireNode, into emitter: inout SegmentEmitter, indent: CGFloat, quote: Bool) {
+    private mutating func emitBlock(_ node: NostrWireNode, into emitter: inout SegmentEmitter, indent: CGFloat, quote: Bool) {
         guard quote else { emitBlock(node, into: &emitter, indent: indent); return }
         switch node {
         case .blockQuote, .list, .image, .media, .eventRef, .placeholder:
@@ -323,7 +351,7 @@ private struct TreeWalker {
     /// block-quote / image / media / extra paragraphs) recurses through
     /// `emitBlock`, indented one further level — so nested blocks inside a list
     /// item are never dropped.
-    private func emitListItem(
+    private mutating func emitListItem(
         bullet: String,
         children: [UInt32],
         into emitter: inout SegmentEmitter,
@@ -437,7 +465,7 @@ private struct TreeWalker {
 
     // MARK: - Block rendering (leaf / prose blocks)
 
-    private func renderBlock(_ node: NostrWireNode) -> NSAttributedString {
+    private mutating func renderBlock(_ node: NostrWireNode) -> NSAttributedString {
         switch node {
         case .heading(let level, let children):
             return renderHeading(level: level, children: children)
@@ -489,7 +517,7 @@ private struct TreeWalker {
         }
     }
 
-    private func renderHeading(level: UInt8, children: [UInt32]) -> NSAttributedString {
+    private mutating func renderHeading(level: UInt8, children: [UInt32]) -> NSAttributedString {
         let base = UIFontDescriptor.preferredFontDescriptor(withTextStyle: .body)
             .withDesign(.serif) ?? UIFontDescriptor.preferredFontDescriptor(withTextStyle: .body)
         let pointSize: CGFloat
@@ -523,7 +551,7 @@ private struct TreeWalker {
     /// dropped here either. Any rich child (image / media / card / placeholder)
     /// that would normally be its own segment is rendered as a visible chip so
     /// it survives the attributed-string-only context.
-    private func flattenContainer(_ node: NostrWireNode) -> NSAttributedString {
+    private mutating func flattenContainer(_ node: NostrWireNode) -> NSAttributedString {
         var emitter = SegmentEmitter()
         emitBlock(node, into: &emitter, indent: 0)
         emitter.flush()
@@ -594,7 +622,7 @@ private struct TreeWalker {
 
     // MARK: - Inline rendering
 
-    private func renderInlines(_ indices: [UInt32]) -> NSAttributedString {
+    private mutating func renderInlines(_ indices: [UInt32]) -> NSAttributedString {
         let out = NSMutableAttributedString()
         for idx in indices {
             out.append(renderInline(idx))
@@ -602,15 +630,17 @@ private struct TreeWalker {
         return out
     }
 
-    private func renderInline(_ index: UInt32) -> NSAttributedString {
+    private mutating func renderInline(_ index: UInt32) -> NSAttributedString {
         guard let node = tree.node(at: index) else { return NSAttributedString() }
         return renderInlineNode(nodeOrSelf: node)
     }
 
-    private func renderInlineNode(nodeOrSelf node: NostrWireNode) -> NSAttributedString {
+    private mutating func renderInlineNode(nodeOrSelf node: NostrWireNode) -> NSAttributedString {
         switch node {
         case .text(let value):
-            return NSAttributedString(string: value, attributes: [.font: serif, .foregroundColor: ink])
+            // Route through renderPlainText so [^id] references are replaced
+            // with superscript runs when matching definitions exist.
+            return renderPlainText(value)
         case .softBreak:
             return NSAttributedString(string: " ", attributes: [.font: serif])
         case .hardBreak:
@@ -725,6 +755,73 @@ private struct TreeWalker {
                 attributes: [.font: serif, .foregroundColor: accent]
             )
         }
+    }
+
+    /// Scan a plain-text value for `[^id]` footnote references and replace
+    /// known ids with superscript runs. Mirrors `BodyWalker.renderPlainText`
+    /// in `MarkdownRenderer.swift`. Unknown ids render as literal text.
+    ///
+    /// Populates `footnoteAnchors[number]` with the NSRange of the superscript
+    /// marker within the returned attributed string (position within the local
+    /// output, mirroring BodyWalker).
+    private mutating func renderPlainText(_ value: String) -> NSAttributedString {
+        guard value.contains("[^"), !definitionsById.isEmpty else {
+            return NSAttributedString(string: value, attributes: [.font: serif, .foregroundColor: ink])
+        }
+
+        let out = NSMutableAttributedString()
+        var i = value.startIndex
+
+        while i < value.endIndex {
+            guard let special = value.range(of: "[^", range: i..<value.endIndex) else {
+                out.append(NSAttributedString(
+                    string: String(value[i...]),
+                    attributes: [.font: serif, .foregroundColor: ink]
+                ))
+                break
+            }
+
+            if special.lowerBound > i {
+                out.append(NSAttributedString(
+                    string: String(value[i..<special.lowerBound]),
+                    attributes: [.font: serif, .foregroundColor: ink]
+                ))
+            }
+
+            let afterOpen = value[special.upperBound...]
+            guard let closeRange = afterOpen.range(of: "]") else {
+                // No closing bracket found — treat the remainder as literal.
+                out.append(NSAttributedString(
+                    string: String(value[special.lowerBound...]),
+                    attributes: [.font: serif, .foregroundColor: ink]
+                ))
+                return out
+            }
+
+            let id = String(afterOpen[afterOpen.startIndex..<closeRange.lowerBound])
+            if let def = definitionsById[id] {
+                let marker = "[\(def.number)]"
+                let rangeStart = out.length
+                let superSize = max(10, bodyPointSize - 6)
+                out.append(NSAttributedString(string: marker, attributes: [
+                    .font: UIFont.systemFont(ofSize: superSize, weight: .semibold),
+                    .foregroundColor: accent,
+                    .baselineOffset: bodyPointSize * 0.35,
+                    MarkdownRenderer.footnoteReferenceAttribute: def.number,
+                    .link: URL(string: "highlighter://footnote/\(def.number)")!
+                ]))
+                footnoteAnchors[def.number] = NSRange(location: rangeStart, length: marker.utf16.count)
+            } else {
+                // Unknown id — keep the literal bracket syntax.
+                out.append(NSAttributedString(
+                    string: "[^\(id)]",
+                    attributes: [.font: serif, .foregroundColor: ink]
+                ))
+            }
+            i = closeRange.upperBound
+        }
+
+        return out
     }
 
     private func shortEntity(_ value: String) -> String {

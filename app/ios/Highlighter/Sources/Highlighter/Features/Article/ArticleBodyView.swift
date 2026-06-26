@@ -176,42 +176,12 @@ struct ArticleBodyView: UIViewRepresentable {
         private func selectionText(
             _ tv: UITextView
         ) -> (quote: String, context: String, hasQuote: Bool) {
-            let range = tv.selectedRange
-            guard range.length > 0 else { return ("", "", false) }
-            guard let textRange = Range(range, in: tv.text) else { return ("", "", false) }
-            let quote = String(tv.text[textRange])
-
-            // Context: the paragraph the selection starts in. Find the
-            // paragraph bounds by scanning for double-newlines on either side.
-            let full = tv.text as NSString
-            var start = range.location
-            var end = range.location + range.length
-            while start > 0 {
-                let prior = full.substring(with: NSRange(location: start - 1, length: 1))
-                if prior == "\n" {
-                    // Stop one step before a double-newline paragraph break.
-                    if start >= 2, full.substring(with: NSRange(location: start - 2, length: 1)) == "\n" {
-                        break
-                    }
-                }
-                start -= 1
-            }
-            while end < full.length {
-                if end + 1 < full.length,
-                   full.substring(with: NSRange(location: end, length: 1)) == "\n",
-                   full.substring(with: NSRange(location: end + 1, length: 1)) == "\n" {
-                    break
-                }
-                end += 1
-            }
-            let paragraphRange = NSRange(location: start, length: max(0, end - start))
-            let paragraph = full.substring(with: paragraphRange)
-            // D1: inline article_reader_selection_projection — trim both sides,
-            // clear context when it equals the quote, set hasQuote if non-empty.
-            let trimmedQuote = quote.trimmingCharacters(in: .whitespaces)
-            let trimmedContext = paragraph.trimmingCharacters(in: .whitespaces)
-            let context = trimmedContext == trimmedQuote ? "" : trimmedContext
-            return (trimmedQuote, context, !trimmedQuote.isEmpty)
+            // Delegate to the pure, unit-tested function so the paragraph-scan
+            // logic lives in one place and can be tested without UITextView.
+            ArticleReaderSelection.project(
+                fullText: tv.text,
+                selectedRange: tv.selectedRange
+            )
         }
 
         // MARK: Tap hit-testing

@@ -233,6 +233,7 @@ private struct ReaderScroll: View {
     @State private var imageToOpen: IdentifiableURL?
     @State private var profileNavPubkey: String?
     @State private var profileNavActive = false
+    @State private var readingProgress: Double = 0
     @Environment(HighlighterStore.self) private var app
 
     private struct IdentifiableURL: Identifiable {
@@ -280,6 +281,29 @@ private struct ReaderScroll: View {
             }
         }
         .ignoresSafeArea(edges: coverURL == nil ? [] : .top)
+        .onScrollGeometryChange(for: Double.self) { geo in
+            ReadingProgress.fraction(
+                contentOffsetY: geo.contentOffset.y,
+                contentHeight: geo.contentSize.height,
+                viewportHeight: geo.containerSize.height
+            )
+        } action: { _, newValue in
+            readingProgress = newValue
+        }
+        .overlay(alignment: .top) {
+            if rendered != nil {
+                GeometryReader { geo in
+                    Color.highlighterAccent
+                        .frame(
+                            width: max(0, geo.size.width * readingProgress),
+                            height: 3
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .animation(.linear(duration: 0.08), value: readingProgress)
+                }
+                .frame(height: 3)
+            }
+        }
         .fullScreenCover(item: $imageToOpen) { item in
             ImageZoomView(url: item.url, onDismiss: { imageToOpen = nil })
         }
