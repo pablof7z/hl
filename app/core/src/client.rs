@@ -5,6 +5,7 @@
 //! an `.await` point (the guard isn't `Send`). Long-running protocol work
 //! happens in `Session` / feature modules, which own their own async state.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -13,14 +14,13 @@ use crate::clock::{Clock, SystemClock};
 use crate::errors::CoreError;
 use crate::events::EventCallback;
 use crate::models::MutationSnapshot;
-use crate::nostr_runtime::NostrRuntime;
 use crate::onboarding;
 use crate::podcast_playback;
 use crate::podcast_position;
 
 #[derive(uniffi::Object)]
 pub struct HighlighterCore {
-    runtime: Arc<NostrRuntime>,
+    data_dir: PathBuf,
     /// Shared with every pump task so `set_event_callback` can replace the
     /// callback atomically mid-flight.
     callback_slot: Arc<RwLock<Option<Arc<dyn EventCallback>>>>,
@@ -49,9 +49,8 @@ fn mutation_snapshot(result: Result<(), CoreError>) -> MutationSnapshot {
 impl HighlighterCore {
     #[uniffi::constructor]
     pub fn new() -> Arc<Self> {
-        let runtime =
-            Arc::new(NostrRuntime::new().expect("nostr runtime initialization must succeed"));
-        Self::assemble(runtime)
+        let data_dir = default_data_dir().expect("nostr runtime initialization must succeed");
+        Self::assemble(data_dir)
     }
 
     pub fn plan_podcast_playback_session(
@@ -99,48 +98,50 @@ impl HighlighterCore {
 }
 
 impl HighlighterCore {
-    /// Internal access for feature modules (artifacts, groups, highlights,
-    /// recent_books) to the shared Client + Ndb. Not exposed to Swift.
+    /// The directory used for durable on-disk stores (onboarding flag, podcast
+    /// positions, etc.). Not exposed to Swift.
     #[allow(dead_code)]
-    pub(crate) fn runtime(&self) -> &NostrRuntime {
-        &self.runtime
+    pub(crate) fn data_dir(&self) -> &Path {
+        &self.data_dir
     }
 
-    /// Construct with an isolated nostrdb path. Used by tests to avoid
+    /// Construct with an isolated data directory. Used by tests to avoid
     /// polluting the real application data dir. Not annotated with
     /// `#[uniffi::export]`, so it stays out of the Swift surface.
     #[doc(hidden)]
     pub fn new_with_data_dir(data_dir: std::path::PathBuf) -> Arc<Self> {
-        let runtime = Arc::new(
-            NostrRuntime::with_data_dir(data_dir)
-                .expect("nostr runtime initialization must succeed"),
-        );
-        Self::assemble(runtime)
+        Self::assemble(data_dir)
     }
 
-    fn assemble(runtime: Arc<NostrRuntime>) -> Arc<Self> {
+    fn assemble(data_dir: PathBuf) -> Arc<Self> {
         let clock: Arc<dyn Clock> = Arc::new(SystemClock);
-        Self::assemble_with_clock(runtime, clock)
+        Self::assemble_with_clock(data_dir, clock)
     }
 
-    fn assemble_with_clock(runtime: Arc<NostrRuntime>, clock: Arc<dyn Clock>) -> Arc<Self> {
+    fn assemble_with_clock(data_dir: PathBuf, clock: Arc<dyn Clock>) -> Arc<Self> {
         let callback_slot: Arc<RwLock<Option<Arc<dyn EventCallback>>>> =
             Arc::new(RwLock::new(None));
-        // Register relay diagnostics with the app event bus before handing
-        // out the Arc<Self>. The runtime seeds its bounded diagnostics map
-        // from the SDK pool and then reacts to relay status notifications.
-        runtime.install_diagnostics_callback(callback_slot.clone());
-        let onboarding = Arc::new(onboarding::OnboardingStore::new(runtime.data_dir()));
+        let onboarding = Arc::new(onboarding::OnboardingStore::new(&data_dir));
         let podcast_position = Arc::new(podcast_position::PodcastPositionStore::new_with_clock(
-            runtime.data_dir(),
+            &data_dir,
             clock.clone(),
         ));
         Arc::new(Self {
-            runtime,
+            data_dir,
             callback_slot,
             onboarding,
             podcast_position,
             clock,
         })
     }
+}
+
+/// Resolve the platform-appropriate data directory. On iOS we're inside a
+/// sandboxed container; `dirs::data_dir()` resolves to
+/// `<app>/Library/Application Support`, the correct location for persistent,
+/// non-user-visible data.
+fn default_data_dir() -> Result<PathBuf, CoreError> {
+    let base = dirs::data_dir()
+        .ok_or_else(|| CoreError::Cache("no platform data_dir available".into()))?;
+    Ok(base.join("highlighter").join("ndb"))
 }
