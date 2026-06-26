@@ -104,9 +104,11 @@ pub(crate) fn apply_discovered_groups(state: &mut AppState, payload: &[u8]) {
 /// `room_home::lifecycle_effects_for_view_open`).
 ///
 /// When `id == ViewId::RoomExplorer` and `room_policy.discovery_relay` is
-/// non-empty, emits the two effects that wire and start discovery (identical
-/// to `AppAction::StartRoomDiscovery`). This means Swift only has to call
-/// `openView(RoomExplorer)` — no explicit action dispatch needed (Phase 3G).
+/// non-empty, emits the two effects that wire and start discovery. This means
+/// Swift only has to call `openView(RoomExplorer)` — discovery is derived in
+/// core from `room_policy.discovery_relay`, with no UI-supplied relay or
+/// explicit action dispatch (Phase 3G; the legacy `StartRoomDiscovery` action
+/// was removed in #89).
 ///
 /// Returns empty `Vec` for any other view.
 pub(crate) fn lifecycle_effects_for_view_open(
@@ -128,7 +130,9 @@ pub(crate) fn lifecycle_effects_for_view_open(
 
 // ─── Action reducer ──────────────────────────────────────────────────────────
 
-/// Handle `AppAction::StartRoomDiscovery { relay_url }`.
+/// Start room discovery against `relay_url`. Called by
+/// `lifecycle_effects_for_view_open` when the RoomExplorer view opens (the
+/// relay is derived in core from `room_policy.discovery_relay`).
 ///
 /// Emits two effects:
 /// 1. `Effect::DispatchNip29Action` — pushes the relay-discovery interest via
@@ -347,7 +351,7 @@ pub(crate) fn project_room_explorer_snapshot(state: &AppState) -> Option<ViewSna
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kernel::action::{AppAction, KernelEvent};
+    use crate::kernel::action::KernelEvent;
     use crate::kernel::actor::{reduce, Cmd};
     use crate::kernel::clock::{Clock, ManualClock};
     use crate::kernel::snapshot::{CommunityRow, DiscoveredRow, ViewSnapshot};
@@ -391,25 +395,19 @@ mod tests {
 
     // 3E-T1: start_room_discovery_pushes_interest
     //
-    // AppAction::StartRoomDiscovery must emit exactly one DispatchNip29Action
+    // reduce_action_start_room_discovery must emit one DispatchNip29Action
     // (namespace="nmp.nip29.discover", json contains relay_url) AND one
     // WireGroupDiscovery effect. Fire-and-forget (#3).
+    // Note: AppAction::StartRoomDiscovery has been removed (Slice B, issue #89).
+    // The lifecycle auto-starts discovery via lifecycle_effects_for_view_open.
     #[test]
     fn start_room_discovery_pushes_interest() {
-        let mut state = make_state();
-        let clock = ManualClock::default();
         let relay = "wss://groups.test.relay";
 
-        let effects = step(
-            &mut state,
-            &clock,
-            Cmd::Action(AppAction::StartRoomDiscovery {
-                relay_url: relay.to_string(),
-            }),
-        );
+        let effects = reduce_action_start_room_discovery(relay.to_string());
 
         // Must emit exactly two effects.
-        assert_eq!(effects.len(), 2, "StartRoomDiscovery must emit 2 effects");
+        assert_eq!(effects.len(), 2, "start_room_discovery must emit 2 effects");
 
         // First: DispatchNip29Action with correct namespace and relay_url in json.
         match &effects[0] {

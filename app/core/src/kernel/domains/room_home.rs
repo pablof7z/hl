@@ -244,7 +244,7 @@ pub(crate) fn apply_group_events_frame(state: &mut AppState, payload: &[u8]) {
 
 // ─── Action reducers ─────────────────────────────────────────────────────────
 
-/// Handle `AppAction::JoinRoom { group_id, host_relay_url, invite_code }`.
+/// Handle `AppAction::JoinRoom { group_id, invite_code }`.
 ///
 /// Dispatches `"nmp.nip29.join"` via `Effect::DispatchNip29Action`.
 /// The payload is built with `serde_json::json!` (never `format!`) to guarantee
@@ -257,12 +257,27 @@ pub(crate) fn apply_group_events_frame(state: &mut AppState, payload: &[u8]) {
 ///
 /// Fire-and-forget (D6, Non-Negotiable #3). The updated joined-groups list
 /// arrives via `KernelEvent::JoinedGroupsUpdated` after the projection tick.
-/// No relay URL literals here — host_relay_url is opaque from the caller (D3).
+///
+/// D3 compliance: `host_relay_url` is resolved from `AppState` (discovered_groups
+/// first, then communities) — no relay URL ever crosses the iOS FFI boundary for
+/// this action. Fails closed (empty effects) when no relay can be resolved.
 pub(crate) fn reduce_action_join_room(
+    state: &AppState,
     group_id: String,
-    host_relay_url: String,
     invite_code: Option<String>,
 ) -> Vec<Effect> {
+    // TODO(#89): if a future invite-link/deep-link join targets a closed group
+    // that is absent from both `discovered_groups` and `communities`, this
+    // fail-closed branch silently no-ops. Such a flow would need to carry the
+    // host relay through a typed invite payload (or resolve it from the invite
+    // coordinate) rather than reintroducing a UI-supplied `host_relay_url`.
+    let Some(host_relay_url) = host_relay_for_discovered_or_joined(state, &group_id) else {
+        tracing::trace!(
+            group_id = %group_id,
+            "room_home::join_room: no relay URL in discovered_groups or communities; skipping dispatch (D3 fail-closed)"
+        );
+        return vec![];
+    };
     let json = serde_json::json!({
         "group": {
             "host_relay_url": host_relay_url,
@@ -275,6 +290,25 @@ pub(crate) fn reduce_action_join_room(
         namespace: "nmp.nip29.join".to_string(),
         json,
     }]
+}
+
+/// Resolve `host_relay_url` for `group_id` by checking `discovered_groups` first
+/// (fresher data for not-yet-joined groups), then falling back to `communities`
+/// (joined groups, which always have a relay). Returns `None` when neither source
+/// carries the group_id (fail-closed — see D3).
+fn host_relay_for_discovered_or_joined(state: &AppState, group_id: &str) -> Option<String> {
+    // 1. Check discovered_groups — preferred for groups visible in the explorer.
+    if let Some(url) = state
+        .discovered_groups
+        .iter()
+        .find(|g| g.group_id == group_id)
+        .map(|g| g.host_relay_url.trim().to_string())
+        .filter(|url| !url.is_empty())
+    {
+        return Some(url);
+    }
+    // 2. Fall back to joined communities (re-join of already-joined group).
+    host_relay_for_joined_group(state, group_id)
 }
 
 fn host_relay_for_joined_group(state: &AppState, group_id: &str) -> Option<String> {
@@ -1425,6 +1459,7 @@ mod tests {
     #[test]
     fn join_room_dispatches_nip29_join_with_serde_payload() {
         let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
         let clock = ManualClock::default();
 
         let effects = step(
@@ -1432,7 +1467,6 @@ mod tests {
             &clock,
             Cmd::Action(AppAction::JoinRoom {
                 group_id: TEST_GROUP.to_string(),
-                host_relay_url: TEST_RELAY.to_string(),
                 invite_code: Some("mycode".to_string()),
             }),
         );
@@ -1470,7 +1504,9 @@ mod tests {
     // JoinRoom without an invite_code must produce valid JSON with null invite_code.
     #[test]
     fn join_room_no_invite_code_payload_valid() {
-        let effects = reduce_action_join_room(TEST_GROUP.to_string(), TEST_RELAY.to_string(), None);
+        let mut state = make_state();
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        let effects = reduce_action_join_room(&state, TEST_GROUP.to_string(), None);
         assert_eq!(effects.len(), 1);
         if let Effect::DispatchNip29Action { json, .. } = &effects[0] {
             let parsed: serde_json::Value = serde_json::from_str(json)
@@ -1480,6 +1516,80 @@ mod tests {
                 "invite_code must be null when None"
             );
         }
+    }
+
+    // 89-T1: join_room_resolves_host_relay_from_discovered_groups
+    //
+    // JoinRoom must derive host_relay_url from discovered_groups (preferred
+    // source — discovered data is fresher than joined communities for a
+    // not-yet-joined group).
+    #[test]
+    fn join_room_resolves_host_relay_from_discovered_groups() {
+        use crate::kernel::snapshot::DiscoveredRow;
+        let mut state = make_state();
+        state.discovered_groups = vec![DiscoveredRow {
+            group_id: TEST_GROUP.to_string(),
+            host_relay_url: TEST_RELAY.to_string(),
+            name: None,
+            picture: None,
+            about: None,
+            member_count: 0,
+            public: true,
+            open: true,
+        }];
+        // No communities seeded — must resolve from discovered_groups.
+        let effects = reduce_action_join_room(&state, TEST_GROUP.to_string(), None);
+        assert_eq!(effects.len(), 1, "must emit exactly one effect");
+        if let Effect::DispatchNip29Action { namespace, json } = &effects[0] {
+            assert_eq!(namespace, "nmp.nip29.join");
+            let parsed: serde_json::Value =
+                serde_json::from_str(json).expect("must be valid JSON");
+            assert_eq!(
+                parsed["group"]["host_relay_url"].as_str().unwrap(),
+                TEST_RELAY,
+                "host_relay_url must come from discovered_groups"
+            );
+        } else {
+            panic!("expected DispatchNip29Action, got {:?}", effects[0]);
+        }
+    }
+
+    // 89-T2: join_room_falls_back_to_communities
+    //
+    // When discovered_groups has no match, JoinRoom must fall back to communities.
+    #[test]
+    fn join_room_falls_back_to_communities() {
+        let mut state = make_state();
+        // No discovered_groups — only joined communities.
+        state.communities = vec![make_community_row(TEST_GROUP, TEST_RELAY)];
+        let effects = reduce_action_join_room(&state, TEST_GROUP.to_string(), None);
+        assert_eq!(effects.len(), 1, "must emit exactly one effect");
+        if let Effect::DispatchNip29Action { namespace, json } = &effects[0] {
+            assert_eq!(namespace, "nmp.nip29.join");
+            let parsed: serde_json::Value =
+                serde_json::from_str(json).expect("must be valid JSON");
+            assert_eq!(
+                parsed["group"]["host_relay_url"].as_str().unwrap(),
+                TEST_RELAY,
+                "host_relay_url must fall back to communities"
+            );
+        } else {
+            panic!("expected DispatchNip29Action, got {:?}", effects[0]);
+        }
+    }
+
+    // 89-T3: join_room_noops_when_unknown
+    //
+    // When neither discovered_groups nor communities carry the group_id,
+    // JoinRoom must return empty effects (fail-closed, D3).
+    #[test]
+    fn join_room_noops_when_unknown() {
+        let state = make_state(); // empty discovered_groups + communities
+        let effects = reduce_action_join_room(&state, TEST_GROUP.to_string(), None);
+        assert!(
+            effects.is_empty(),
+            "must return no effects when relay cannot be resolved"
+        );
     }
 
     // 3F-T8: create_room_dispatches_create_public_group
@@ -1707,8 +1817,9 @@ mod tests {
         // A group_id with a quote in it should still produce valid JSON
         // (serde_json escapes it; format! would break the JSON structure).
         let tricky_group = r#"room"with"quotes"#;
-        let effects =
-            reduce_action_join_room(tricky_group.to_string(), TEST_RELAY.to_string(), None);
+        let mut state = make_state();
+        state.communities = vec![make_community_row(tricky_group, TEST_RELAY)];
+        let effects = reduce_action_join_room(&state, tricky_group.to_string(), None);
         if let Effect::DispatchNip29Action { json, .. } = &effects[0] {
             // This MUST parse cleanly — if format! were used, the JSON would be broken.
             let parsed: Result<serde_json::Value, _> = serde_json::from_str(json);

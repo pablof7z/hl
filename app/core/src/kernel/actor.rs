@@ -381,11 +381,6 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
 
         AppAction::Unfollow { pubkey } => follows::reduce_action_unfollow(pubkey),
 
-        // ── Phase 3E additions ────────────────────────────────────────────────
-        AppAction::StartRoomDiscovery { relay_url } => {
-            discovery::reduce_action_start_room_discovery(relay_url)
-        }
-
         // ── Phase 3D additions ────────────────────────────────────────────────
         AppAction::ClaimProfile { pubkey } => profiles::reduce_action_claim_profile(pubkey),
 
@@ -402,9 +397,8 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         // ── Phase 3F additions (append-only) ─────────────────────────────────
         AppAction::JoinRoom {
             group_id,
-            host_relay_url,
             invite_code,
-        } => room_home::reduce_action_join_room(group_id, host_relay_url, invite_code),
+        } => room_home::reduce_action_join_room(state, group_id, invite_code),
 
         AppAction::LeaveRoom { group_id, reason } => {
             room_home::reduce_action_leave_room(state, group_id, reason)
@@ -657,7 +651,7 @@ fn reduce_action_envelope(
         RunOmniboxPayload, RunSearchPayload, SelectRootTabPayload, SetBookPickerQueryPayload,
         SetRelayConfigsPayload, SetRelayRolePayload, ShareArtifactToRoomPayload,
         ShareHighlightToRoomPayload, ShareMintInvitePayload, ShareToRoomPayload, SignInNsecPayload,
-        StartRoomDiscoveryPayload, ToggleReactionPayload, UnfollowPayload, UnreactPayload,
+        ToggleReactionPayload, UnfollowPayload, UnreactPayload,
     };
 
     match envelope.namespace.as_str() {
@@ -756,16 +750,10 @@ fn reduce_action_envelope(
             vec![Effect::ReleaseEntityRef { key: p.key }]
         }
 
-        // ── Room discovery ────────────────────────────────────────────────────
-        "hl.room.start_discovery" => {
-            let p = parse!(StartRoomDiscoveryPayload);
-            discovery::reduce_action_start_room_discovery(p.relay_url)
-        }
-
         // ── Room actions ──────────────────────────────────────────────────────
         "hl.room.join" => {
             let p = parse!(JoinRoomPayload);
-            room_home::reduce_action_join_room(p.group_id, p.host_relay_url, p.invite_code)
+            room_home::reduce_action_join_room(state, p.group_id, p.invite_code)
         }
         "hl.room.leave" => {
             let p = parse!(LeaveRoomPayload);

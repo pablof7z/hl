@@ -131,10 +131,10 @@ pub struct AppState {
 
     // ── Phase 3E additions ────────────────────────────────────────────────────
     /// Discovered groups from the active discovery relay, decoded from the
-    /// `"nmp.nip29.discovered_groups"` typed sidecar. Empty until
-    /// `AppAction::StartRoomDiscovery` is dispatched and the projection frame
-    /// arrives. Bounded by the discovery relay's group catalog (cap at 256
-    /// per §2.2 of the 3E spec).
+    /// `"nmp.nip29.discovered_groups"` typed sidecar. Empty until the
+    /// RoomExplorer view opens (discovery auto-starts in core) and the
+    /// projection frame arrives. Bounded by the discovery relay's group catalog
+    /// (cap at 256 per §2.2 of the 3E spec).
     pub discovered_groups: Vec<crate::kernel::snapshot::DiscoveredRow>,
 
     /// Room policy injected at construction time (D3: no wss-scheme literals

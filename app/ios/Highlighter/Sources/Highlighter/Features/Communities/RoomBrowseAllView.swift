@@ -75,10 +75,9 @@ struct RoomBrowseAllView: View {
                     room: room,
                     onJoin: {
                         // Dispatch JoinRoom kernel action — fire-and-forget (D6).
-                        // CommunitySummary.relayUrl carries DiscoveredRow.hostRelayUrl.
+                        // Core resolves host_relay_url from discovered_groups / communities (D3).
                         kernel.app.dispatch(.joinRoom(
                             groupId: room.id,
-                            hostRelayUrl: room.relayUrl,
                             inviteCode: nil
                         ))
                         previewRoom = nil

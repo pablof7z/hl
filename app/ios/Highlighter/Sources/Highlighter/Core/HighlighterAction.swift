@@ -42,11 +42,8 @@ enum HighlighterAction {
     case claimProfile(pubkey: String)
     case releaseProfile(pubkey: String)
 
-    // ── Room discovery ────────────────────────────────────────────────────────
-    case startRoomDiscovery(relayUrl: String)
-
     // ── Room actions ──────────────────────────────────────────────────────────
-    case joinRoom(groupId: String, hostRelayUrl: String, inviteCode: String?)
+    case joinRoom(groupId: String, inviteCode: String?)
     /// Leave a NIP-29 group (kind:9022 leave-request). Fire-and-forget.
     case leaveRoom(groupId: String, reason: String?)
     case createRoom(groupId: String, name: String, about: String?)
@@ -326,14 +323,9 @@ enum HighlighterAction {
             return AppActionEnvelope(namespace: "hl.profile.release",
                                      json: jsonObject(["pubkey": pubkey]))
 
-        // ── Room discovery ────────────────────────────────────────────────────
-        case .startRoomDiscovery(let relayUrl):
-            return AppActionEnvelope(namespace: "hl.room.start_discovery",
-                                     json: jsonObject(["relay_url": relayUrl]))
-
         // ── Room actions ──────────────────────────────────────────────────────
-        case .joinRoom(let groupId, let hostRelayUrl, let inviteCode):
-            var dict: [String: Any] = ["group_id": groupId, "host_relay_url": hostRelayUrl]
+        case .joinRoom(let groupId, let inviteCode):
+            var dict: [String: Any] = ["group_id": groupId]
             if let code = inviteCode { dict["invite_code"] = code }
             return AppActionEnvelope(namespace: "hl.room.join", json: jsonAny(dict))
         case .leaveRoom(let groupId, let reason):

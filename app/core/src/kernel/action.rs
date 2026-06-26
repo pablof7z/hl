@@ -127,11 +127,6 @@ pub(crate) struct UnfollowPayload {
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub(crate) struct StartRoomDiscoveryPayload {
-    pub relay_url: String,
-}
-
-#[derive(Debug, serde::Deserialize)]
 pub(crate) struct ClaimProfilePayload {
     pub pubkey: String,
 }
@@ -144,7 +139,6 @@ pub(crate) struct ReleaseProfilePayload {
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct JoinRoomPayload {
     pub group_id: String,
-    pub host_relay_url: String,
     pub invite_code: Option<String>,
 }
 
@@ -703,16 +697,6 @@ pub enum AppAction {
         pubkey: String,
     },
 
-    // ── Phase 3E additions (append-only) ─────────────────────────────────────
-    /// Start room discovery on a relay — dispatches `"nmp.nip29.discover"` action
-    /// (pushes the relay_discovery_interest) and wires the DiscoveredGroupsProjection.
-    /// `relay_url` is the WebSocket relay URL to discover rooms on (opaque string;
-    /// kernel never constructs relay URLs — D3). Fire-and-forget: the discovered
-    /// groups catalog arrives via the `DiscoveredGroupsUpdated` projection event.
-    StartRoomDiscovery {
-        relay_url: String,
-    },
-
     // ── Phase 3D additions (append-only) ─────────────────────────────────────
     /// Open a profile view for `pubkey` — triggers `nmp_app_claim_profile` via
     /// `Effect::ClaimProfile`. The profile card arrives back as
@@ -751,15 +735,14 @@ pub enum AppAction {
     /// `"nmp.nip29.join"`. The relay's response arrives as a joined-groups
     /// projection update (`KernelEvent::JoinedGroupsUpdated`). Fire-and-forget.
     ///
-    /// `group_id` is the NIP-29 local group id; `host_relay_url` is the relay
-    /// URL (opaque string — kernel never constructs URLs, D3). `invite_code`
-    /// is required for closed groups, optional for open groups.
-    ///
+    /// `group_id` is the NIP-29 local group id. The kernel resolves
+    /// `host_relay_url` from `AppState::discovered_groups` (preferred) or
+    /// `AppState::communities` (fallback). No relay URL crosses the FFI
+    /// boundary for this action (D3). `invite_code` is required for closed
+    /// groups, optional for open groups. Fails closed when no relay found.
     JoinRoom {
         /// NIP-29 local group id.
         group_id: String,
-        /// Host relay WebSocket URL (opaque — D3).
-        host_relay_url: String,
         /// Optional preauth invite code for closed groups.
         invite_code: Option<String>,
     },
