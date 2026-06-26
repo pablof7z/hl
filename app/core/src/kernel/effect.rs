@@ -143,8 +143,9 @@ pub enum Effect {
     /// Wire the `DiscoveredGroupsProjection` event observer + typed snapshot
     /// projection for `relay_url` into the live `NmpApp`.
     ///
-    /// Called when `AppAction::StartRoomDiscovery` is dispatched. Registers the
-    /// observer that accumulates kind:39000/39001/39002 events from the relay.
+    /// Emitted when the RoomExplorer view opens (discovery is started in core
+    /// from `room_policy.discovery_relay`). Registers the observer that
+    /// accumulates kind:39000/39001/39002 events from the relay.
     /// Fire-and-forget: the snapshot arrives via the NMP update callback as
     /// `KernelEvent::NmpSnapshotFrame` on the next projection tick.
     WireGroupDiscovery {

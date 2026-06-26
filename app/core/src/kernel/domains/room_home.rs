@@ -266,6 +266,11 @@ pub(crate) fn reduce_action_join_room(
     group_id: String,
     invite_code: Option<String>,
 ) -> Vec<Effect> {
+    // TODO(#89): if a future invite-link/deep-link join targets a closed group
+    // that is absent from both `discovered_groups` and `communities`, this
+    // fail-closed branch silently no-ops. Such a flow would need to carry the
+    // host relay through a typed invite payload (or resolve it from the invite
+    // coordinate) rather than reintroducing a UI-supplied `host_relay_url`.
     let Some(host_relay_url) = host_relay_for_discovered_or_joined(state, &group_id) else {
         tracing::trace!(
             group_id = %group_id,

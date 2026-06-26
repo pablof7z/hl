@@ -104,9 +104,11 @@ pub(crate) fn apply_discovered_groups(state: &mut AppState, payload: &[u8]) {
 /// `room_home::lifecycle_effects_for_view_open`).
 ///
 /// When `id == ViewId::RoomExplorer` and `room_policy.discovery_relay` is
-/// non-empty, emits the two effects that wire and start discovery (identical
-/// to `AppAction::StartRoomDiscovery`). This means Swift only has to call
-/// `openView(RoomExplorer)` — no explicit action dispatch needed (Phase 3G).
+/// non-empty, emits the two effects that wire and start discovery. This means
+/// Swift only has to call `openView(RoomExplorer)` — discovery is derived in
+/// core from `room_policy.discovery_relay`, with no UI-supplied relay or
+/// explicit action dispatch (Phase 3G; the legacy `StartRoomDiscovery` action
+/// was removed in #89).
 ///
 /// Returns empty `Vec` for any other view.
 pub(crate) fn lifecycle_effects_for_view_open(
@@ -128,7 +130,9 @@ pub(crate) fn lifecycle_effects_for_view_open(
 
 // ─── Action reducer ──────────────────────────────────────────────────────────
 
-/// Handle `AppAction::StartRoomDiscovery { relay_url }`.
+/// Start room discovery against `relay_url`. Called by
+/// `lifecycle_effects_for_view_open` when the RoomExplorer view opens (the
+/// relay is derived in core from `room_policy.discovery_relay`).
 ///
 /// Emits two effects:
 /// 1. `Effect::DispatchNip29Action` — pushes the relay-discovery interest via
