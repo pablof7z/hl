@@ -37,7 +37,6 @@ pub mod test_ndb;
 pub mod time_labels;
 pub mod waveform;
 
-pub use artifacts::ArtifactPublishSnapshot;
 pub use client::HighlighterCore;
 pub use errors::CoreError;
 pub use events::{
