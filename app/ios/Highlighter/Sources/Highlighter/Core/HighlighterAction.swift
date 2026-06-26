@@ -42,9 +42,6 @@ enum HighlighterAction {
     case claimProfile(pubkey: String)
     case releaseProfile(pubkey: String)
 
-    // ── Room discovery ────────────────────────────────────────────────────────
-    case startRoomDiscovery(relayUrl: String)
-
     // ── Room actions ──────────────────────────────────────────────────────────
     case joinRoom(groupId: String, inviteCode: String?)
     /// Leave a NIP-29 group (kind:9022 leave-request). Fire-and-forget.
@@ -325,11 +322,6 @@ enum HighlighterAction {
         case .releaseProfile(let pubkey):
             return AppActionEnvelope(namespace: "hl.profile.release",
                                      json: jsonObject(["pubkey": pubkey]))
-
-        // ── Room discovery ────────────────────────────────────────────────────
-        case .startRoomDiscovery(let relayUrl):
-            return AppActionEnvelope(namespace: "hl.room.start_discovery",
-                                     json: jsonObject(["relay_url": relayUrl]))
 
         // ── Room actions ──────────────────────────────────────────────────────
         case .joinRoom(let groupId, let inviteCode):

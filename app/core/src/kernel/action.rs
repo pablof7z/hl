@@ -127,11 +127,6 @@ pub(crate) struct UnfollowPayload {
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub(crate) struct StartRoomDiscoveryPayload {
-    pub relay_url: String,
-}
-
-#[derive(Debug, serde::Deserialize)]
 pub(crate) struct ClaimProfilePayload {
     pub pubkey: String,
 }
@@ -700,16 +695,6 @@ pub enum AppAction {
     /// set and republishes. Symmetric with `Follow`; fire-and-forget (D6).
     Unfollow {
         pubkey: String,
-    },
-
-    // ── Phase 3E additions (append-only) ─────────────────────────────────────
-    /// Start room discovery on a relay — dispatches `"nmp.nip29.discover"` action
-    /// (pushes the relay_discovery_interest) and wires the DiscoveredGroupsProjection.
-    /// `relay_url` is the WebSocket relay URL to discover rooms on (opaque string;
-    /// kernel never constructs relay URLs — D3). Fire-and-forget: the discovered
-    /// groups catalog arrives via the `DiscoveredGroupsUpdated` projection event.
-    StartRoomDiscovery {
-        relay_url: String,
     },
 
     // ── Phase 3D additions (append-only) ─────────────────────────────────────

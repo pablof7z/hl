@@ -381,11 +381,6 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
 
         AppAction::Unfollow { pubkey } => follows::reduce_action_unfollow(pubkey),
 
-        // ── Phase 3E additions ────────────────────────────────────────────────
-        AppAction::StartRoomDiscovery { relay_url } => {
-            discovery::reduce_action_start_room_discovery(relay_url)
-        }
-
         // ── Phase 3D additions ────────────────────────────────────────────────
         AppAction::ClaimProfile { pubkey } => profiles::reduce_action_claim_profile(pubkey),
 
@@ -656,7 +651,7 @@ fn reduce_action_envelope(
         RunOmniboxPayload, RunSearchPayload, SelectRootTabPayload, SetBookPickerQueryPayload,
         SetRelayConfigsPayload, SetRelayRolePayload, ShareArtifactToRoomPayload,
         ShareHighlightToRoomPayload, ShareMintInvitePayload, ShareToRoomPayload, SignInNsecPayload,
-        StartRoomDiscoveryPayload, ToggleReactionPayload, UnfollowPayload, UnreactPayload,
+        ToggleReactionPayload, UnfollowPayload, UnreactPayload,
     };
 
     match envelope.namespace.as_str() {
@@ -753,12 +748,6 @@ fn reduce_action_envelope(
         "hl.entity.release" => {
             let p = parse!(ReleaseEntityRefPayload);
             vec![Effect::ReleaseEntityRef { key: p.key }]
-        }
-
-        // ── Room discovery ────────────────────────────────────────────────────
-        "hl.room.start_discovery" => {
-            let p = parse!(StartRoomDiscoveryPayload);
-            discovery::reduce_action_start_room_discovery(p.relay_url)
         }
 
         // ── Room actions ──────────────────────────────────────────────────────

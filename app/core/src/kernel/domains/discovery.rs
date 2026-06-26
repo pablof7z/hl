@@ -347,7 +347,7 @@ pub(crate) fn project_room_explorer_snapshot(state: &AppState) -> Option<ViewSna
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kernel::action::{AppAction, KernelEvent};
+    use crate::kernel::action::KernelEvent;
     use crate::kernel::actor::{reduce, Cmd};
     use crate::kernel::clock::{Clock, ManualClock};
     use crate::kernel::snapshot::{CommunityRow, DiscoveredRow, ViewSnapshot};
@@ -391,25 +391,19 @@ mod tests {
 
     // 3E-T1: start_room_discovery_pushes_interest
     //
-    // AppAction::StartRoomDiscovery must emit exactly one DispatchNip29Action
+    // reduce_action_start_room_discovery must emit one DispatchNip29Action
     // (namespace="nmp.nip29.discover", json contains relay_url) AND one
     // WireGroupDiscovery effect. Fire-and-forget (#3).
+    // Note: AppAction::StartRoomDiscovery has been removed (Slice B, issue #89).
+    // The lifecycle auto-starts discovery via lifecycle_effects_for_view_open.
     #[test]
     fn start_room_discovery_pushes_interest() {
-        let mut state = make_state();
-        let clock = ManualClock::default();
         let relay = "wss://groups.test.relay";
 
-        let effects = step(
-            &mut state,
-            &clock,
-            Cmd::Action(AppAction::StartRoomDiscovery {
-                relay_url: relay.to_string(),
-            }),
-        );
+        let effects = reduce_action_start_room_discovery(relay.to_string());
 
         // Must emit exactly two effects.
-        assert_eq!(effects.len(), 2, "StartRoomDiscovery must emit 2 effects");
+        assert_eq!(effects.len(), 2, "start_room_discovery must emit 2 effects");
 
         // First: DispatchNip29Action with correct namespace and relay_url in json.
         match &effects[0] {
