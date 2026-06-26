@@ -110,7 +110,7 @@ struct BookmarkMenuButton: View {
         // (#1653 NIT #8). Targets the right set even across kinds/authors.
         guard let set = kernel.bookmarks?.myCurationSets.first(where: { $0.dTag == item.id })
         else { return }
-        let setCoordinate = "\(set.kind):\(set.pubkey):\(set.dTag)"
+        let setCoordinate = set.setCoordinate
         if item.isMember {
             kernel.app.dispatch(.removeFromSet(setCoordinate: setCoordinate, itemCoordinate: articleAddress))
         } else {
@@ -119,12 +119,19 @@ struct BookmarkMenuButton: View {
     }
 }
 
-/// Tiny modal that prompts for a new collection title. Cancel discards;
-/// Save invokes `onCreate(title)`. Title field is auto-focused so the
-/// keyboard shows immediately.
+/// Tiny modal that prompts for a collection title. Cancel discards; Save
+/// invokes `onCreate(title)`. Title field is auto-focused so the keyboard shows
+/// immediately. Parametrised (with defaults preserving the original
+/// "New collection" create flow) so the same sheet drives rename (#63) by
+/// passing `initialTitle`, `navTitle`, and `saveLabel`.
 struct NewCollectionSheet: View {
     var onCancel: () -> Void
     var onCreate: (String) -> Void
+    var initialTitle: String = ""
+    var navTitle: String = "New collection"
+    var saveLabel: String = "Save"
+    var helperText: String =
+        "Group articles, podcasts, or notes you want to share or revisit. You can add to it from any artifact."
 
     @Environment(HighlighterStore.self) private var app
     @State private var title: String = ""
@@ -133,7 +140,7 @@ struct NewCollectionSheet: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Group articles, podcasts, or notes you want to share or revisit. You can add to it from any artifact.")
+                Text(helperText)
                     .font(.footnote)
                     .foregroundStyle(Color.highlighterInkMuted)
 
@@ -147,19 +154,22 @@ struct NewCollectionSheet: View {
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
-            .navigationTitle("New collection")
+            .navigationTitle(navTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel", action: onCancel)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") { commit() }
+                    Button(saveLabel) { commit() }
                         .fontWeight(.semibold)
                         .disabled(!canCreateCollection)
                 }
             }
-            .onAppear { focused = true }
+            .onAppear {
+                if title.isEmpty { title = initialTitle }
+                focused = true
+            }
         }
     }
 

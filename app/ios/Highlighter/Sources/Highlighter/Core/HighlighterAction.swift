@@ -208,6 +208,19 @@ enum HighlighterAction {
     /// add `itemCoordinate` as its first member. Fire-and-forget.
     case createAndAddToSet(title: String, itemCoordinate: String)
 
+    // ── Issue #63 curation set management ────────────────────────────────────────
+    /// Rename the kind:30004 curation set identified by `setCoordinate`.
+    /// Preserves all membership and metadata tags; only the title changes.
+    /// Fire-and-forget (D6). No-op when the set is not found in kernel state.
+    case renameSet(setCoordinate: String, title: String)
+    /// Delete the kind:30004 curation set identified by `setCoordinate`.
+    /// Publishes a NIP-09 kind:5 deletion event. Fire-and-forget (D6).
+    /// No-op when the set is not found in kernel state.
+    case deleteSet(setCoordinate: String)
+    /// Create a brand-new empty kind:30004 curation set with `title`.
+    /// No initial member is added. Fire-and-forget (D6).
+    case createSet(title: String)
+
     // ── Profile update (Phase 7 Part C) ──────────────────────────────────────────
     /// Publish an updated kind:0 profile metadata event via the kernel.
     /// Fire-and-forget (D6). Rust preserves unknown kind:0 fields (round-trip safe).
@@ -597,6 +610,23 @@ enum HighlighterAction {
             return AppActionEnvelope(
                 namespace: "hl.curation.create_and_add",
                 json: jsonObject(["title": title, "item_coordinate": itemCoordinate])
+            )
+
+        // ── Issue #63 curation set management ────────────────────────────────
+        case .renameSet(let setCoordinate, let title):
+            return AppActionEnvelope(
+                namespace: "hl.curation.rename_set",
+                json: jsonObject(["set_coordinate": setCoordinate, "title": title])
+            )
+        case .deleteSet(let setCoordinate):
+            return AppActionEnvelope(
+                namespace: "hl.curation.delete_set",
+                json: jsonObject(["set_coordinate": setCoordinate])
+            )
+        case .createSet(let title):
+            return AppActionEnvelope(
+                namespace: "hl.curation.create_set",
+                json: jsonObject(["title": title])
             )
 
         // ── Profile update (Phase 7 Part C) ──────────────────────────────────

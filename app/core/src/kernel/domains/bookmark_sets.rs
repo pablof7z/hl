@@ -448,6 +448,193 @@ pub(crate) fn reduce_action_create_and_add_to_set(
     }
 }
 
+/// Handle `AppAction::RenameSet { set_coordinate, title }`.
+///
+/// Finds the curation set in `AppState::all_curation_sets` by matching the
+/// `set_coordinate` against `"<kind>:<pubkey>:<d_tag>"`. Builds an updated
+/// kind:30004 event replacing the `title` tag (and injecting one if absent)
+/// while preserving ALL other tags verbatim — membership (`a`), description,
+/// image, `e`/`r`/`t`, relay hints, and any custom tags.
+///
+/// The lossless round-trip is identical to `build_set_publish_effect` but
+/// additionally replaces `title` in the non-`a` tag loop: for each `title`
+/// tag found in `raw_tags` it is skipped (not emitted verbatim), then the
+/// new title is appended once after the loop, before the `a` block.
+///
+/// D6: no-op when the set cannot be found or serialisation fails.
+pub(crate) fn reduce_action_rename_set(
+    state: &AppState,
+    set_coordinate: String,
+    title: String,
+) -> Vec<Effect> {
+    let Some(row) = find_owned_curation_set(state, &set_coordinate) else {
+        tracing::trace!(
+            set = %set_coordinate,
+            "bookmark_sets::rename_set: set not found or not owned — no-op (D6)"
+        );
+        return vec![];
+    };
+
+    let mut tags: Vec<serde_json::Value> = Vec::new();
+    let content = row.content.clone();
+
+    if row.raw_tags.is_empty() {
+        // Synthesised fallback (no source event to round-trip).
+        tags.push(serde_json::json!(["d", row.d_tag]));
+        // New title replaces old
+        tags.push(serde_json::json!(["title", &title]));
+        if let Some(description) = &row.description {
+            tags.push(serde_json::json!(["description", description]));
+        }
+        if let Some(image) = &row.image {
+            tags.push(serde_json::json!(["image", image]));
+        }
+        for id in &row.note_ids {
+            tags.push(serde_json::json!(["e", id]));
+        }
+        for r in &row.r_refs {
+            tags.push(serde_json::json!(["r", r]));
+        }
+        for t in &row.topics {
+            tags.push(serde_json::json!(["t", t]));
+        }
+        for addr in &row.article_addresses {
+            tags.push(serde_json::json!(["a", addr]));
+        }
+    } else {
+        // Lossless round-trip: copy every non-`a`, non-`title` tag verbatim.
+        // The `a` block and `title` are managed dimensions re-emitted below.
+        for raw in &row.raw_tags {
+            let key = raw.first().map(String::as_str);
+            if key == Some("a") {
+                continue; // managed — re-emitted below
+            }
+            if key == Some("title") {
+                continue; // managed — replaced below
+            }
+            tags.push(serde_json::Value::Array(
+                raw.iter()
+                    .map(|s| serde_json::Value::String(s.clone()))
+                    .collect(),
+            ));
+        }
+        // Emit the new title once, after the non-managed tags (whether or not the
+        // source event carried a `title` tag — create-if-absent, replace-if-present).
+        tags.push(serde_json::json!(["title", &title]));
+        // Re-emit the `a` membership block (unchanged)
+        for addr in &row.article_addresses {
+            tags.push(serde_json::json!(["a", addr]));
+        }
+    }
+
+    let template = serde_json::json!({
+        "kind": KIND_CURATION_SET,
+        "content": content,
+        "tags": tags,
+    });
+    match serde_json::to_string(&template) {
+        Ok(json) => vec![Effect::PublishSetEvent { json }],
+        Err(e) => {
+            tracing::trace!(
+                error = %e,
+                "bookmark_sets::rename_set: serialisation failed — no-op (D6)"
+            );
+            vec![]
+        }
+    }
+}
+
+/// Handle `AppAction::DeleteSet { set_coordinate }`.
+///
+/// Finds the curation set in `AppState::all_curation_sets` to verify it
+/// exists (no-op if not found — D6). Builds a NIP-09 kind:5 deletion event
+/// template with an `["a", "<set_coordinate>"]` tag and a `["k", "30004"]`
+/// tag, then emits `Effect::PublishSetEvent` with the template JSON.
+///
+/// The kind-agnostic `run_effect_publish_set_event` runner handles the actual
+/// publish via `ActorCommand::PublishRawEvent` with `kind: 5`. No local state
+/// mutation — the deleted set disappears from `myCurationSets` after the
+/// relay-echo loop completes and the `SetListProjection` re-snapshots.
+///
+/// D6: no-op when the set cannot be found or serialisation fails.
+pub(crate) fn reduce_action_delete_set(
+    state: &AppState,
+    set_coordinate: String,
+) -> Vec<Effect> {
+    // Verify the set exists AND is owned by the active account before issuing the
+    // deletion (D6 no-op on miss / not-mine — never kind:5 someone else's set).
+    if find_owned_curation_set(state, &set_coordinate).is_none() {
+        tracing::trace!(
+            set = %set_coordinate,
+            "bookmark_sets::delete_set: set not found or not owned — no-op (D6)"
+        );
+        return vec![];
+    }
+
+    let template = serde_json::json!({
+        "kind": 5u32,
+        "content": "",
+        "tags": [
+            ["a", set_coordinate],
+            ["k", "30004"],
+        ],
+    });
+    match serde_json::to_string(&template) {
+        Ok(json) => vec![Effect::PublishSetEvent { json }],
+        Err(e) => {
+            tracing::trace!(
+                error = %e,
+                "bookmark_sets::delete_set: serialisation failed — no-op (D6)"
+            );
+            vec![]
+        }
+    }
+}
+
+/// Handle `AppAction::CreateSet { title }`.
+///
+/// Creates a brand-new empty kind:30004 curation set. Like
+/// `reduce_action_create_and_add_to_set` but without an initial member. The
+/// `d_tag` is derived from `title` + `now` (same slug algorithm). Emits
+/// `Effect::PublishSetEvent` with the event template. D6: no-op on
+/// serialisation failure.
+pub(crate) fn reduce_action_create_set(
+    _state: &AppState,
+    title: String,
+    now: u64,
+) -> Vec<Effect> {
+    let slug: String = title
+        .to_lowercase()
+        .chars()
+        .map(|c| if c == ' ' { '-' } else { c })
+        .filter(|c| c.is_alphanumeric() || *c == '-')
+        .take(40)
+        .collect();
+    let d_tag = format!("{slug}-{now}");
+
+    let tags = vec![
+        serde_json::json!(["d", d_tag]),
+        serde_json::json!(["title", &title]),
+        // No `a` tags — empty set by design
+    ];
+
+    let template = serde_json::json!({
+        "kind": KIND_CURATION_SET,
+        "content": "",
+        "tags": tags,
+    });
+    match serde_json::to_string(&template) {
+        Ok(json) => vec![Effect::PublishSetEvent { json }],
+        Err(e) => {
+            tracing::trace!(
+                error = %e,
+                "bookmark_sets::create_set: serialisation failed — no-op (D6)"
+            );
+            vec![]
+        }
+    }
+}
+
 /// Find a curation set by its `"<kind>:<pubkey>:<d_tag>"` coordinate.
 ///
 /// Parses the coordinate into `(kind_str, pubkey, d_tag)` and looks up
@@ -464,6 +651,23 @@ fn find_curation_set(state: &AppState, set_coordinate: &str) -> Option<BookmarkS
         .iter()
         .find(|r| r.pubkey == pubkey && r.d_tag == d_tag)
         .cloned()
+}
+
+/// Like `find_curation_set`, but additionally enforces that the resolved set is
+/// owned by the active account (`row.pubkey == active_pubkey(state)`).
+///
+/// `all_curation_sets` also holds the user's `following_curation_sets` (others'
+/// sets, surfaced read-only in the Explore pane). Rename/delete MUST never touch
+/// those — publishing a kind:30004 replacement or a kind:5 deletion under
+/// someone else's coordinate is both invalid (we can't sign as them) and a
+/// data-safety hazard. Returns `None` (→ D6 no-op) when the set is missing OR
+/// not owned by the active account.
+fn find_owned_curation_set(state: &AppState, set_coordinate: &str) -> Option<BookmarkSetRow> {
+    let row = find_curation_set(state, set_coordinate)?;
+    match active_pubkey(state) {
+        Some(active) if active == row.pubkey => Some(row),
+        _ => None,
+    }
 }
 
 /// Serialise a modified curation set into an `Effect::PublishSetEvent` with the
@@ -1477,6 +1681,520 @@ mod tests {
             }
             other => panic!("expected one PushBookmarkSetsInterest on switch, got {other:?}"),
         }
+    }
+
+    // ── Issue #63: RenameSet, DeleteSet, CreateSet ────────────────────────────
+
+    // 1653-T-RENAME-1: rename_set emits PublishSetEvent preserving membership and
+    // all non-`title` tags (round-trip fidelity — top correctness risk).
+    #[test]
+    fn rename_set_emits_publish_preserving_membership() {
+        let pk = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let mut state = make_state_with_session(pk);
+        let clock = ManualClock::default();
+
+        let a1 = "30023:bbbb000000000000000000000000000000000000000000000000000000000002:essay";
+        let a2 = "30023:cccc000000000000000000000000000000000000000000000000000000000003:talk";
+
+        let mut set_row = row_set("d", pk, 30004);
+        set_row.title = Some("Old Title".to_string());
+        set_row.description = Some("A description".to_string());
+        set_row.article_addresses = vec![a1.to_string(), a2.to_string()];
+        // raw_tags simulating a real round-trip event
+        set_row.raw_tags = vec![
+            vec!["d".to_string(), "d".to_string()],
+            vec!["title".to_string(), "Old Title".to_string()],
+            vec!["description".to_string(), "A description".to_string()],
+            vec!["a".to_string(), a1.to_string()],
+            vec!["a".to_string(), a2.to_string()],
+        ];
+        state.all_curation_sets = vec![set_row];
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::RenameSet {
+                set_coordinate: format!("30004:{pk}:d"),
+                title: "New Title".to_string(),
+            }),
+        );
+
+        assert_eq!(effects.len(), 1, "RenameSet must emit exactly one effect");
+        match &effects[0] {
+            Effect::PublishSetEvent { json } => {
+                let parsed: serde_json::Value = serde_json::from_str(json).unwrap();
+                assert_eq!(parsed["kind"].as_u64(), Some(30004));
+                let tags = parsed["tags"].as_array().unwrap();
+
+                // d_tag preserved
+                let has_d = tags.iter().any(|t| {
+                    t.as_array()
+                        .map(|a| {
+                            a.first().and_then(|v| v.as_str()) == Some("d")
+                                && a.get(1).and_then(|v| v.as_str()) == Some("d")
+                        })
+                        .unwrap_or(false)
+                });
+                assert!(has_d, "d tag must be preserved");
+
+                // NEW title present
+                let has_new_title = tags.iter().any(|t| {
+                    t.as_array()
+                        .map(|a| {
+                            a.first().and_then(|v| v.as_str()) == Some("title")
+                                && a.get(1).and_then(|v| v.as_str()) == Some("New Title")
+                        })
+                        .unwrap_or(false)
+                });
+                assert!(has_new_title, "new title must be in tags");
+
+                // OLD title NOT present
+                let has_old_title = tags.iter().any(|t| {
+                    t.as_array()
+                        .map(|a| {
+                            a.first().and_then(|v| v.as_str()) == Some("title")
+                                && a.get(1).and_then(|v| v.as_str()) == Some("Old Title")
+                        })
+                        .unwrap_or(false)
+                });
+                assert!(!has_old_title, "old title must NOT be in tags");
+
+                // description preserved
+                let has_desc = tags.iter().any(|t| {
+                    t.as_array()
+                        .map(|a| {
+                            a.first().and_then(|v| v.as_str()) == Some("description")
+                                && a.get(1).and_then(|v| v.as_str()) == Some("A description")
+                        })
+                        .unwrap_or(false)
+                });
+                assert!(has_desc, "description must be preserved");
+
+                // BOTH `a` tags preserved
+                let has_a1 = tags.iter().any(|t| {
+                    t.as_array()
+                        .map(|a| {
+                            a.first().and_then(|v| v.as_str()) == Some("a")
+                                && a.get(1).and_then(|v| v.as_str()) == Some(a1)
+                        })
+                        .unwrap_or(false)
+                });
+                let has_a2 = tags.iter().any(|t| {
+                    t.as_array()
+                        .map(|a| {
+                            a.first().and_then(|v| v.as_str()) == Some("a")
+                                && a.get(1).and_then(|v| v.as_str()) == Some(a2)
+                        })
+                        .unwrap_or(false)
+                });
+                assert!(has_a1, "first a tag must be preserved");
+                assert!(has_a2, "second a tag must be preserved");
+            }
+            other => panic!("expected PublishSetEvent, got: {other:?}"),
+        }
+    }
+
+    // 1653-T-RENAME-2: rename_set no-op when set not found (D6).
+    #[test]
+    fn rename_set_noop_when_set_not_found() {
+        let pk = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let mut state = make_state_with_session(pk);
+        let clock = ManualClock::default();
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::RenameSet {
+                set_coordinate: format!("30004:{pk}:nonexistent"),
+                title: "New Title".to_string(),
+            }),
+        );
+        assert!(
+            effects.is_empty(),
+            "RenameSet must be no-op when set not found (D6)"
+        );
+    }
+
+    // 1653-T-DELETE-1: delete_set emits kind:5 PublishSetEvent with `a` coordinate
+    // and `k` == "30004" tags.
+    #[test]
+    fn delete_set_emits_kind5_with_a_coordinate() {
+        let pk = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let mut state = make_state_with_session(pk);
+        let clock = ManualClock::default();
+
+        let set_row = row_set("my-set", pk, 30004);
+        state.all_curation_sets = vec![set_row];
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::DeleteSet {
+                set_coordinate: format!("30004:{pk}:my-set"),
+            }),
+        );
+
+        assert_eq!(effects.len(), 1, "DeleteSet must emit exactly one effect");
+        match &effects[0] {
+            Effect::PublishSetEvent { json } => {
+                let parsed: serde_json::Value = serde_json::from_str(json).unwrap();
+                assert_eq!(
+                    parsed["kind"].as_u64(),
+                    Some(5),
+                    "deletion event must be kind 5"
+                );
+                let tags = parsed["tags"].as_array().unwrap();
+
+                // `a` tag with the coordinate
+                let expected_coord = format!("30004:{pk}:my-set");
+                let has_a_coord = tags.iter().any(|t| {
+                    t.as_array()
+                        .map(|a| {
+                            a.first().and_then(|v| v.as_str()) == Some("a")
+                                && a.get(1).and_then(|v| v.as_str())
+                                    == Some(expected_coord.as_str())
+                        })
+                        .unwrap_or(false)
+                });
+                assert!(
+                    has_a_coord,
+                    "deletion event must have `a` tag with the set coordinate"
+                );
+
+                // `k` == "30004" tag
+                let has_k_tag = tags.iter().any(|t| {
+                    t.as_array()
+                        .map(|a| {
+                            a.first().and_then(|v| v.as_str()) == Some("k")
+                                && a.get(1).and_then(|v| v.as_str()) == Some("30004")
+                        })
+                        .unwrap_or(false)
+                });
+                assert!(
+                    has_k_tag,
+                    "deletion event must have `k`==\"30004\" tag"
+                );
+            }
+            other => panic!("expected PublishSetEvent, got: {other:?}"),
+        }
+    }
+
+    // 1653-T-DELETE-2: delete_set no-op when set not found (D6).
+    #[test]
+    fn delete_set_noop_when_set_not_found() {
+        let pk = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let mut state = make_state_with_session(pk);
+        let clock = ManualClock::default();
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::DeleteSet {
+                set_coordinate: format!("30004:{pk}:nonexistent"),
+            }),
+        );
+        assert!(
+            effects.is_empty(),
+            "DeleteSet must be no-op when set not found (D6)"
+        );
+    }
+
+    // #63 ownership safety: rename_set must NOT touch a set authored by someone
+    // else (a `following_curation_sets` row living in `all_curation_sets`). We
+    // can't sign as them and must never publish a kind:30004 under their
+    // coordinate — D6 no-op.
+    #[test]
+    fn rename_set_noop_when_not_owned() {
+        let me = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let other = "dddd000000000000000000000000000000000000000000000000000000000004";
+        let mut state = make_state_with_session(me);
+        let clock = ManualClock::default();
+
+        // A set authored by `other`, present in all_curation_sets (Explore pane).
+        let mut set_row = row_set("their-set", other, 30004);
+        set_row.title = Some("Their Title".to_string());
+        set_row.raw_tags = vec![
+            vec!["d".to_string(), "their-set".to_string()],
+            vec!["title".to_string(), "Their Title".to_string()],
+        ];
+        state.all_curation_sets = vec![set_row];
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::RenameSet {
+                set_coordinate: format!("30004:{other}:their-set"),
+                title: "Hijacked Title".to_string(),
+            }),
+        );
+        assert!(
+            effects.is_empty(),
+            "RenameSet must be no-op for a set not owned by the active account (D6)"
+        );
+    }
+
+    // #63 ownership safety: delete_set must NOT issue a kind:5 deletion for a set
+    // authored by someone else — D6 no-op.
+    #[test]
+    fn delete_set_noop_when_not_owned() {
+        let me = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let other = "dddd000000000000000000000000000000000000000000000000000000000004";
+        let mut state = make_state_with_session(me);
+        let clock = ManualClock::default();
+
+        let set_row = row_set("their-set", other, 30004);
+        state.all_curation_sets = vec![set_row];
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::DeleteSet {
+                set_coordinate: format!("30004:{other}:their-set"),
+            }),
+        );
+        assert!(
+            effects.is_empty(),
+            "DeleteSet must be no-op for a set not owned by the active account (D6)"
+        );
+    }
+
+    // 1653-T-CREATE-1: create_set emits empty kind:30004 event with title and
+    // derived d tag, NO `a` tag.
+    #[test]
+    fn create_set_emits_empty_curation_set() {
+        let pk = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let mut state = make_state_with_session(pk);
+        let clock = ManualClock::default();
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::CreateSet {
+                title: "My New Collection".to_string(),
+            }),
+        );
+
+        assert_eq!(effects.len(), 1, "CreateSet must emit exactly one effect");
+        match &effects[0] {
+            Effect::PublishSetEvent { json } => {
+                let parsed: serde_json::Value = serde_json::from_str(json).unwrap();
+                assert_eq!(parsed["kind"].as_u64(), Some(30004));
+                let tags = parsed["tags"].as_array().unwrap();
+
+                // title tag present
+                let has_title = tags.iter().any(|t| {
+                    t.as_array()
+                        .map(|a| {
+                            a.first().and_then(|v| v.as_str()) == Some("title")
+                                && a.get(1).and_then(|v| v.as_str())
+                                    == Some("My New Collection")
+                        })
+                        .unwrap_or(false)
+                });
+                assert!(has_title, "title tag must be present");
+
+                // d tag present (derived from title)
+                let has_d = tags.iter().any(|t| {
+                    t.as_array()
+                        .map(|a| a.first().and_then(|v| v.as_str()) == Some("d"))
+                        .unwrap_or(false)
+                });
+                assert!(has_d, "d tag must be present");
+
+                // NO `a` tag
+                let has_a = tags.iter().any(|t| {
+                    t.as_array()
+                        .map(|a| a.first().and_then(|v| v.as_str()) == Some("a"))
+                        .unwrap_or(false)
+                });
+                assert!(!has_a, "create_set must NOT have any `a` tags (empty set)");
+            }
+            other => panic!("expected PublishSetEvent, got: {other:?}"),
+        }
+    }
+
+    // 1653-T-NS-RENAME: string-namespace routing for rename_set must produce
+    // the same effect as the typed arm.
+    #[test]
+    fn namespace_routing_rename_set() {
+        use crate::kernel::action::AppActionEnvelope;
+        let pk = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let mut state = make_state_with_session(pk);
+        let clock = ManualClock::default();
+
+        let mut set_row = row_set("my-set", pk, 30004);
+        set_row.title = Some("Old Title".to_string());
+        set_row.raw_tags = vec![
+            vec!["d".to_string(), "my-set".to_string()],
+            vec!["title".to_string(), "Old Title".to_string()],
+        ];
+        state.all_curation_sets = vec![set_row.clone()];
+
+        // Via typed arm
+        let typed_effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::RenameSet {
+                set_coordinate: format!("30004:{pk}:my-set"),
+                title: "New Title".to_string(),
+            }),
+        );
+        assert_eq!(typed_effects.len(), 1, "typed RenameSet must emit one effect");
+        let Effect::PublishSetEvent { json: typed_json } = &typed_effects[0] else {
+            panic!("expected PublishSetEvent");
+        };
+
+        // Re-seed state
+        state.all_curation_sets = vec![set_row];
+
+        // Via string-namespace arm
+        let ns_payload = serde_json::json!({
+            "set_coordinate": format!("30004:{pk}:my-set"),
+            "title": "New Title",
+        });
+        let ns_effects = step(
+            &mut state,
+            &clock,
+            Cmd::ActionEnvelope(AppActionEnvelope {
+                namespace: "hl.curation.rename_set".to_string(),
+                json: ns_payload.to_string(),
+            }),
+        );
+        assert_eq!(
+            ns_effects.len(),
+            1,
+            "string-namespace RenameSet must emit one effect"
+        );
+        let Effect::PublishSetEvent { json: ns_json } = &ns_effects[0] else {
+            panic!("expected PublishSetEvent from namespace route");
+        };
+
+        let typed_v: serde_json::Value = serde_json::from_str(typed_json).unwrap();
+        let ns_v: serde_json::Value = serde_json::from_str(ns_json).unwrap();
+        assert_eq!(
+            typed_v, ns_v,
+            "typed and namespace paths must produce identical effects"
+        );
+    }
+
+    // 1653-T-NS-DELETE: string-namespace routing for delete_set.
+    #[test]
+    fn namespace_routing_delete_set() {
+        use crate::kernel::action::AppActionEnvelope;
+        let pk = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let mut state = make_state_with_session(pk);
+        let clock = ManualClock::default();
+
+        let set_row = row_set("my-set", pk, 30004);
+        state.all_curation_sets = vec![set_row.clone()];
+
+        // Via typed arm
+        let typed_effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::DeleteSet {
+                set_coordinate: format!("30004:{pk}:my-set"),
+            }),
+        );
+        assert_eq!(typed_effects.len(), 1);
+
+        // Re-seed state
+        state.all_curation_sets = vec![set_row];
+
+        // Via string-namespace arm
+        let ns_payload = serde_json::json!({
+            "set_coordinate": format!("30004:{pk}:my-set"),
+        });
+        let ns_effects = step(
+            &mut state,
+            &clock,
+            Cmd::ActionEnvelope(AppActionEnvelope {
+                namespace: "hl.curation.delete_set".to_string(),
+                json: ns_payload.to_string(),
+            }),
+        );
+        assert_eq!(
+            ns_effects.len(),
+            1,
+            "string-namespace DeleteSet must emit one effect"
+        );
+        let Effect::PublishSetEvent { json: typed_j } = &typed_effects[0] else {
+            panic!()
+        };
+        let Effect::PublishSetEvent { json: ns_j } = &ns_effects[0] else {
+            panic!()
+        };
+        let t: serde_json::Value = serde_json::from_str(typed_j).unwrap();
+        let n: serde_json::Value = serde_json::from_str(ns_j).unwrap();
+        assert_eq!(
+            t, n,
+            "typed and namespace delete paths must produce identical effects"
+        );
+    }
+
+    // 1653-T-NS-CREATE: string-namespace routing for create_set.
+    #[test]
+    fn namespace_routing_create_set() {
+        use crate::kernel::action::AppActionEnvelope;
+        let pk = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let mut state = make_state_with_session(pk);
+        let clock = ManualClock::default();
+
+        // Via typed arm
+        let typed_effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::CreateSet {
+                title: "Collection A".to_string(),
+            }),
+        );
+        assert_eq!(typed_effects.len(), 1);
+
+        // Via string-namespace arm
+        let ns_payload = serde_json::json!({
+            "title": "Collection A",
+        });
+        let ns_effects = step(
+            &mut state,
+            &clock,
+            Cmd::ActionEnvelope(AppActionEnvelope {
+                namespace: "hl.curation.create_set".to_string(),
+                json: ns_payload.to_string(),
+            }),
+        );
+        assert_eq!(
+            ns_effects.len(),
+            1,
+            "string-namespace CreateSet must emit one effect"
+        );
+        let Effect::PublishSetEvent { json: typed_j } = &typed_effects[0] else {
+            panic!()
+        };
+        let Effect::PublishSetEvent { json: ns_j } = &ns_effects[0] else {
+            panic!()
+        };
+        let t: serde_json::Value = serde_json::from_str(typed_j).unwrap();
+        let n: serde_json::Value = serde_json::from_str(ns_j).unwrap();
+        // kind must match; d_tag differs (different timestamps) so only check kind+title
+        assert_eq!(t["kind"], n["kind"], "kind must match");
+        let t_title = t["tags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tag| tag[0].as_str() == Some("title"))
+            .and_then(|t| t[1].as_str())
+            .unwrap_or("");
+        let n_title = n["tags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tag| tag[0].as_str() == Some("title"))
+            .and_then(|t| t[1].as_str())
+            .unwrap_or("");
+        assert_eq!(
+            t_title, n_title,
+            "title must match between typed and namespace paths"
+        );
     }
 
     // ── Parity tests: ONE consumer-shaped fixture, bespoke vs kernel ──────────

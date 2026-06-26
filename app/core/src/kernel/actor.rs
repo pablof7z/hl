@@ -465,6 +465,20 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
             item_coordinate,
         } => bookmark_sets::reduce_action_create_and_add_to_set(state, title, item_coordinate, now),
 
+        // ── Issue #63 additions (append-only) ─────────────────────────────────
+        AppAction::RenameSet {
+            set_coordinate,
+            title,
+        } => bookmark_sets::reduce_action_rename_set(state, set_coordinate, title),
+
+        AppAction::DeleteSet { set_coordinate } => {
+            bookmark_sets::reduce_action_delete_set(state, set_coordinate)
+        }
+
+        AppAction::CreateSet { title } => {
+            bookmark_sets::reduce_action_create_set(state, title, now)
+        }
+
         // ── Phase 4A additions ────────────────────────────────────────────────
         // OpenArticle / CloseArticle are fire-and-forget signals from native to
         // coordinate article reader lifecycle. No NMP action is needed — the
@@ -634,7 +648,8 @@ fn reduce_action_envelope(
         CaptureSetQuotePayload, CaptureSetTargetGroupPayload, ClaimProfilePayload,
         ClipExtendSegmentPayload, ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload,
         ClipSetStartPayload, CommitSearchRecentQueryPayload, CreateAccountPayload,
-        CreateAndAddToSetPayload, CreateRoomInvitesPayload, CreateRoomPayload, FollowPayload,
+        CreateAndAddToSetPayload, CreateRoomInvitesPayload, CreateRoomPayload, CreateSetPayload,
+        DeleteSetPayload, FollowPayload, RenameSetPayload,
         JoinRoomPayload, LeaveRoomPayload, LookupIsbnPayload, MarkWhatsNewSeenPayload,
         OcrRecognizePayload, PairBunkerPayload, PresentSheetPayload, PublishClipPayload,
         PublishHighlightPayload, ReactPayload, ReleaseEntityRefPayload, ReleaseProfilePayload,
@@ -831,6 +846,18 @@ fn reduce_action_envelope(
                 p.item_coordinate,
                 now,
             )
+        }
+        "hl.curation.rename_set" => {
+            let p = parse!(RenameSetPayload);
+            bookmark_sets::reduce_action_rename_set(state, p.set_coordinate, p.title)
+        }
+        "hl.curation.delete_set" => {
+            let p = parse!(DeleteSetPayload);
+            bookmark_sets::reduce_action_delete_set(state, p.set_coordinate)
+        }
+        "hl.curation.create_set" => {
+            let p = parse!(CreateSetPayload);
+            bookmark_sets::reduce_action_create_set(state, p.title, now)
         }
 
         // ── Articles ──────────────────────────────────────────────────────────

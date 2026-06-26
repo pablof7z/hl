@@ -8,6 +8,8 @@ struct BookmarksView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var store = BookmarkStore()
     @State private var filter: BookmarkLibraryFilter = .articles
+    /// #63: presents the "New collection" title sheet → `.createSet(title:)`.
+    @State private var newCollectionPresented = false
 
     var body: some View {
         NavigationStack {
@@ -26,6 +28,16 @@ struct BookmarksView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     scopePicker
                 }
+                if showsCreateCollectionButton {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            newCollectionPresented = true
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                        .accessibilityLabel("New collection")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                 }
@@ -35,6 +47,16 @@ struct BookmarksView: View {
             }
             .navigationDestination(for: BookmarkSetRecord.self) { rec in
                 SetDetailView(record: rec)
+            }
+            .sheet(isPresented: $newCollectionPresented) {
+                NewCollectionSheet(
+                    onCancel: { newCollectionPresented = false },
+                    onCreate: { title in
+                        newCollectionPresented = false
+                        kernel.app.dispatch(.createSet(title: title))
+                    }
+                )
+                .presentationDetents([.medium])
             }
         }
         .task {
@@ -47,6 +69,12 @@ struct BookmarksView: View {
             store.applyKernelSnapshot()
         }
         .onDisappear { store.stop() }
+    }
+
+    /// The create affordance belongs only to the user's own Collections pane
+    /// (#63). It is hidden on Articles/Web and on the read-only Explore scope.
+    private var showsCreateCollectionButton: Bool {
+        store.scope == .mine && filter == .collections && app.currentUser != nil
     }
 
     private var scopePicker: some View {
@@ -393,7 +421,26 @@ struct BookmarkedArticleRow: View {
 
 struct CollectionRow: View {
     @Environment(HighlighterStore.self) private var app
+    @Environment(HighlighterAppKernel.self) private var kernel
     let record: BookmarkSetRecord
+
+    @State private var renamePresented = false
+    @State private var deleteConfirmPresented = false
+
+    /// Rename/Delete are shown ONLY for curation sets (kind:30004 — the only
+    /// kind the core reducer manages) owned by the active account. The user's
+    /// own bookmark sets (30003) and others' following sets are excluded (#63).
+    private var isOwnedCurationSet: Bool {
+        record.kind == 30004 && record.isOwned(by: app.currentUser?.pubkey)
+    }
+
+    /// Canonical web share URL, resolved in Rust. `nil` for non-30004 sets
+    /// (the FFI rejects them) so Share/Copy-Link only appear for curation sets.
+    private var shareURL: URL? {
+        let snapshot = curationSetShareUrlSnapshot(coordinate: record.setCoordinate)
+        guard snapshot.error.isEmpty, !snapshot.url.isEmpty else { return nil }
+        return URL(string: snapshot.url)
+    }
 
     var body: some View {
         let curator = curatorDisplay
@@ -452,6 +499,62 @@ struct CollectionRow: View {
         }
         .task(id: record.pubkey) {
             await app.requestProfile(pubkeyHex: record.pubkey)
+        }
+        .contextMenu { contextMenuItems }
+        .sheet(isPresented: $renamePresented) {
+            NewCollectionSheet(
+                onCancel: { renamePresented = false },
+                onCreate: { title in
+                    renamePresented = false
+                    kernel.app.dispatch(
+                        .renameSet(setCoordinate: record.setCoordinate, title: title)
+                    )
+                },
+                initialTitle: record.title,
+                navTitle: "Rename collection",
+                saveLabel: "Rename",
+                helperText: "Give this collection a new name. Members are preserved."
+            )
+            .presentationDetents([.medium])
+        }
+        .confirmationDialog(
+            "Delete this collection?",
+            isPresented: $deleteConfirmPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                kernel.app.dispatch(.deleteSet(setCoordinate: record.setCoordinate))
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This publishes a deletion request. The collection's items are not deleted.")
+        }
+    }
+
+    @ViewBuilder
+    private var contextMenuItems: some View {
+        if let url = shareURL {
+            ShareLink(item: url, subject: Text(rowProjection.displayTitle)) {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+            Button {
+                UIPasteboard.general.string = url.absoluteString
+            } label: {
+                Label("Copy Link", systemImage: "doc.on.doc")
+            }
+        }
+        if isOwnedCurationSet {
+            Divider()
+            Button {
+                renamePresented = true
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                deleteConfirmPresented = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
         }
     }
 
