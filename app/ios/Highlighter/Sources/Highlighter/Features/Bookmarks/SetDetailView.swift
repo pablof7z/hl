@@ -9,6 +9,15 @@ struct SetDetailView: View {
     @State private var isCollectionEmpty = false
     @State private var isLoading = false
 
+    /// Canonical web share URL for this set, resolved in Rust. `nil` for
+    /// non-30004 sets (the FFI rejects them) so the toolbar Share item only
+    /// appears for curation sets (#63).
+    private var shareURL: URL? {
+        let snapshot = curationSetShareUrlSnapshot(coordinate: record.setCoordinate)
+        guard snapshot.error.isEmpty, !snapshot.url.isEmpty else { return nil }
+        return URL(string: snapshot.url)
+    }
+
     var body: some View {
         Group {
             if isLoading {
@@ -26,6 +35,16 @@ struct SetDetailView: View {
         }
         .navigationTitle(displayTitle)
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            if let url = shareURL {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ShareLink(item: url, subject: Text(displayTitle)) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .accessibilityLabel("Share collection")
+                }
+            }
+        }
         .task { await loadArticles() }
         .task(id: record.pubkey) {
             await app.requestProfile(pubkeyHex: record.pubkey)

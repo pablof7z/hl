@@ -467,10 +467,10 @@ pub(crate) fn reduce_action_rename_set(
     set_coordinate: String,
     title: String,
 ) -> Vec<Effect> {
-    let Some(row) = find_curation_set(state, &set_coordinate) else {
+    let Some(row) = find_owned_curation_set(state, &set_coordinate) else {
         tracing::trace!(
             set = %set_coordinate,
-            "bookmark_sets::rename_set: set not found — no-op (D6)"
+            "bookmark_sets::rename_set: set not found or not owned — no-op (D6)"
         );
         return vec![];
     };
@@ -504,14 +504,12 @@ pub(crate) fn reduce_action_rename_set(
     } else {
         // Lossless round-trip: copy every non-`a`, non-`title` tag verbatim.
         // The `a` block and `title` are managed dimensions re-emitted below.
-        let mut found_title = false;
         for raw in &row.raw_tags {
             let key = raw.first().map(String::as_str);
             if key == Some("a") {
                 continue; // managed — re-emitted below
             }
             if key == Some("title") {
-                found_title = true;
                 continue; // managed — replaced below
             }
             tags.push(serde_json::Value::Array(
@@ -520,8 +518,8 @@ pub(crate) fn reduce_action_rename_set(
                     .collect(),
             ));
         }
-        // Emit the new title (once, after non-managed tags)
-        let _ = found_title; // suppress unused-variable warning; title always emitted
+        // Emit the new title once, after the non-managed tags (whether or not the
+        // source event carried a `title` tag — create-if-absent, replace-if-present).
         tags.push(serde_json::json!(["title", &title]));
         // Re-emit the `a` membership block (unchanged)
         for addr in &row.article_addresses {
@@ -563,11 +561,12 @@ pub(crate) fn reduce_action_delete_set(
     state: &AppState,
     set_coordinate: String,
 ) -> Vec<Effect> {
-    // Verify the set exists before issuing the deletion (D6 no-op on miss).
-    if find_curation_set(state, &set_coordinate).is_none() {
+    // Verify the set exists AND is owned by the active account before issuing the
+    // deletion (D6 no-op on miss / not-mine — never kind:5 someone else's set).
+    if find_owned_curation_set(state, &set_coordinate).is_none() {
         tracing::trace!(
             set = %set_coordinate,
-            "bookmark_sets::delete_set: set not found — no-op (D6)"
+            "bookmark_sets::delete_set: set not found or not owned — no-op (D6)"
         );
         return vec![];
     }
@@ -652,6 +651,23 @@ fn find_curation_set(state: &AppState, set_coordinate: &str) -> Option<BookmarkS
         .iter()
         .find(|r| r.pubkey == pubkey && r.d_tag == d_tag)
         .cloned()
+}
+
+/// Like `find_curation_set`, but additionally enforces that the resolved set is
+/// owned by the active account (`row.pubkey == active_pubkey(state)`).
+///
+/// `all_curation_sets` also holds the user's `following_curation_sets` (others'
+/// sets, surfaced read-only in the Explore pane). Rename/delete MUST never touch
+/// those — publishing a kind:30004 replacement or a kind:5 deletion under
+/// someone else's coordinate is both invalid (we can't sign as them) and a
+/// data-safety hazard. Returns `None` (→ D6 no-op) when the set is missing OR
+/// not owned by the active account.
+fn find_owned_curation_set(state: &AppState, set_coordinate: &str) -> Option<BookmarkSetRow> {
+    let row = find_curation_set(state, set_coordinate)?;
+    match active_pubkey(state) {
+        Some(active) if active == row.pubkey => Some(row),
+        _ => None,
+    }
 }
 
 /// Serialise a modified curation set into an `Effect::PublishSetEvent` with the
@@ -1880,6 +1896,65 @@ mod tests {
         assert!(
             effects.is_empty(),
             "DeleteSet must be no-op when set not found (D6)"
+        );
+    }
+
+    // #63 ownership safety: rename_set must NOT touch a set authored by someone
+    // else (a `following_curation_sets` row living in `all_curation_sets`). We
+    // can't sign as them and must never publish a kind:30004 under their
+    // coordinate — D6 no-op.
+    #[test]
+    fn rename_set_noop_when_not_owned() {
+        let me = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let other = "dddd000000000000000000000000000000000000000000000000000000000004";
+        let mut state = make_state_with_session(me);
+        let clock = ManualClock::default();
+
+        // A set authored by `other`, present in all_curation_sets (Explore pane).
+        let mut set_row = row_set("their-set", other, 30004);
+        set_row.title = Some("Their Title".to_string());
+        set_row.raw_tags = vec![
+            vec!["d".to_string(), "their-set".to_string()],
+            vec!["title".to_string(), "Their Title".to_string()],
+        ];
+        state.all_curation_sets = vec![set_row];
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::RenameSet {
+                set_coordinate: format!("30004:{other}:their-set"),
+                title: "Hijacked Title".to_string(),
+            }),
+        );
+        assert!(
+            effects.is_empty(),
+            "RenameSet must be no-op for a set not owned by the active account (D6)"
+        );
+    }
+
+    // #63 ownership safety: delete_set must NOT issue a kind:5 deletion for a set
+    // authored by someone else — D6 no-op.
+    #[test]
+    fn delete_set_noop_when_not_owned() {
+        let me = "aaaa000000000000000000000000000000000000000000000000000000000001";
+        let other = "dddd000000000000000000000000000000000000000000000000000000000004";
+        let mut state = make_state_with_session(me);
+        let clock = ManualClock::default();
+
+        let set_row = row_set("their-set", other, 30004);
+        state.all_curation_sets = vec![set_row];
+
+        let effects = step(
+            &mut state,
+            &clock,
+            Cmd::Action(AppAction::DeleteSet {
+                set_coordinate: format!("30004:{other}:their-set"),
+            }),
+        );
+        assert!(
+            effects.is_empty(),
+            "DeleteSet must be no-op for a set not owned by the active account (D6)"
         );
     }
 

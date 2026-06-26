@@ -10,12 +10,12 @@ use nostr_sdk::prelude::*;
 
 const HIGHLIGHT_SHARE_BASE_URL: &str = "https://beta.highlighter.com/highlight/";
 const ARTICLE_SHARE_BASE_URL: &str = "https://highlighter.com/a/";
-/// Curation sets (kind:30004) share the same `/a/<naddr>` base as articles.
-/// The naddr encoding carries kind=30004 so any nostr-aware client can decode
-/// the set; the web route `/a/` handles arbitrary naddr events generically.
-/// (Web app at time of audit: `/note/[id]` and `/a/` are the naddr routes;
-/// using `/a/` matches the production article share URL pattern.)
-const CURATION_SET_SHARE_BASE_URL: &str = "https://highlighter.com/a/";
+/// Curation sets (kind:30004) resolve via the web app's canonical `/note/<naddr>`
+/// route. Verified against `web/src/routes/`: there is NO `/a/` route; every
+/// naddr link-builder targets `/note/<naddr>` (server/nostr.ts:535,
+/// artifact-preview.ts:675, ndk/artifacts.ts:788). The naddr encoding carries
+/// kind=30004 so the generic `/note/[id]` handler decodes the set correctly.
+const CURATION_SET_SHARE_BASE_URL: &str = "https://highlighter.com/note/";
 const HIGHLIGHT_EVENT_KIND: u32 = 9802;
 const ARTICLE_EVENT_KIND: u16 = 30023;
 const CURATION_SET_EVENT_KIND: u16 = 30004;
@@ -343,6 +343,12 @@ mod tests {
         let expected_d_tag = "my-reading-list".to_owned();
         let coordinate = format!("30004:{expected_author}:{expected_d_tag}");
         let url = curation_set_share_url(coordinate).expect("share url");
+
+        // Route fix (B2): web app has no `/a/` route; naddr resolves via `/note/`.
+        assert!(
+            url.starts_with("https://highlighter.com/note/naddr1"),
+            "curation set URL must use the canonical /note/<naddr> route, got: {url}"
+        );
 
         let naddr = url
             .strip_prefix(CURATION_SET_SHARE_BASE_URL)

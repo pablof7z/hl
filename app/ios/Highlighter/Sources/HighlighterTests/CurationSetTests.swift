@@ -56,10 +56,10 @@ struct CurationSetShareTests {
         // URL must be non-empty and error must be empty on success
         #expect(!result.url.isEmpty, "url must be non-empty for a valid coordinate")
         #expect(result.error.isEmpty, "error must be empty on success")
-        // URL must start with the canonical base
+        // URL must start with the canonical /note/ route (web app has no /a/ route)
         #expect(
-            result.url.hasPrefix("https://highlighter.com/a/naddr1"),
-            "URL must use the canonical https://highlighter.com/a/ route with naddr bech32"
+            result.url.hasPrefix("https://highlighter.com/note/naddr1"),
+            "URL must use the canonical https://highlighter.com/note/ route with naddr bech32"
         )
     }
 
