@@ -22,7 +22,6 @@ pub mod events;
 pub mod feedback;
 pub mod highlights;
 pub mod models;
-pub mod nostr_runtime;
 pub mod ocr;
 pub mod onboarding;
 
@@ -32,8 +31,6 @@ pub mod podcast_transcript;
 pub mod profile;
 pub mod relays;
 pub mod share_links;
-#[cfg(test)]
-pub mod test_ndb;
 pub mod time_labels;
 pub mod waveform;
 

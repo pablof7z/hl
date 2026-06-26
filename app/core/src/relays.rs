@@ -16,7 +16,6 @@ use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
 use nostr_sdk::prelude::*;
-use nostrdb::{Filter as NdbFilter, Ndb, Transaction};
 use serde::{Deserialize, Serialize};
 
 use crate::errors::CoreError;
@@ -1228,39 +1227,6 @@ pub(crate) fn parse_nip65_event(event: &Event) -> Vec<(String, bool, bool)> {
     out
 }
 
-/// Newest kind:10002 for `user_hex` cached in nostrdb, or `None`.
-fn latest_nip65(ndb: &Ndb, user_hex: &str) -> Result<Option<Event>, CoreError> {
-    if user_hex.is_empty() {
-        return Ok(None);
-    }
-    let author = PublicKey::from_hex(user_hex)
-        .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
-    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
-    let pk_bytes: [u8; 32] = author.to_bytes();
-    let filter = NdbFilter::new()
-        .kinds([KIND_RELAY_LIST as u64])
-        .authors([&pk_bytes])
-        .build();
-    let results = ndb
-        .query(&txn, &[filter], 8)
-        .map_err(|e| CoreError::Cache(format!("query relay list: {e}")))?;
-    let mut newest: Option<Event> = None;
-    for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
-            continue;
-        };
-        let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else {
-            continue;
-        };
-        newest = Some(match newest {
-            Some(prev) if prev.created_at >= event.created_at => prev,
-            _ => event,
-        });
-    }
-    Ok(newest)
-}
-
 // -- NIP-78 app-data (kind:30078) for rooms/indexer flags --------------------
 
 const KIND_APP_DATA: u16 = 30078;
@@ -1297,122 +1263,6 @@ pub(crate) fn app_data_content(rows: &[RelayConfig]) -> String {
 
 fn parse_app_data_event(event: &Event) -> Vec<AppDataEntry> {
     serde_json::from_str::<Vec<AppDataEntry>>(&event.content).unwrap_or_default()
-}
-
-fn latest_app_data(ndb: &Ndb, user_hex: &str) -> Result<Option<Event>, CoreError> {
-    if user_hex.is_empty() {
-        return Ok(None);
-    }
-    let author = PublicKey::from_hex(user_hex)
-        .map_err(|e| CoreError::InvalidInput(format!("invalid user pubkey: {e}")))?;
-    let txn = Transaction::new(ndb).map_err(|e| CoreError::Cache(format!("open ndb txn: {e}")))?;
-    let pk_bytes: [u8; 32] = author.to_bytes();
-    let filter = NdbFilter::new()
-        .kinds([KIND_APP_DATA as u64])
-        .authors([&pk_bytes])
-        .tags([APP_DATA_D_TAG], 'd')
-        .build();
-    let results = ndb
-        .query(&txn, &[filter], 8)
-        .map_err(|e| CoreError::Cache(format!("query relay app-data: {e}")))?;
-    let mut newest: Option<Event> = None;
-    for r in &results {
-        let Ok(note) = ndb.get_note_by_key(&txn, r.note_key) else {
-            continue;
-        };
-        let Ok(json) = note.json() else { continue };
-        let Ok(event) = Event::from_json(&json) else {
-            continue;
-        };
-        newest = Some(match newest {
-            Some(prev) if prev.created_at >= event.created_at => prev,
-            _ => event,
-        });
-    }
-    Ok(newest)
-}
-
-// -- Merge + public API ------------------------------------------------------
-
-/// Merge kind:10002 and kind:30078 into the user's effective relay list,
-/// deduped by URL. Falls back to `seed_defaults()` when neither event is
-/// cached.
-///
-/// **Defaulting rule for Rooms:** if the merged result has no row flagged
-/// `rooms`, append `highlighter_relay()` with `rooms = true` (and read/write
-/// off so it doesn't pollute the user's NIP-65 outbox). Highlighter is
-/// the canonical rooms host for the app — without it the rooms surfaces
-/// can't load anything. The user can remove it via the UI by toggling
-/// Rooms off and adding another relay with Rooms on; once any Rooms-
-/// flagged row exists in NIP-78 this fallback stops firing.
-pub fn query_relays(ndb: &Ndb, user_hex: &str) -> Result<Vec<RelayConfig>, CoreError> {
-    let nip65 = latest_nip65(ndb, user_hex)?
-        .as_ref()
-        .map(parse_nip65_event)
-        .unwrap_or_default();
-    let app_data = latest_app_data(ndb, user_hex)?
-        .as_ref()
-        .map(parse_app_data_event)
-        .unwrap_or_default();
-
-    if nip65.is_empty() && app_data.is_empty() {
-        return Ok(seed_defaults());
-    }
-
-    let mut rows: Vec<RelayConfig> = Vec::new();
-    for (url, read, write) in nip65 {
-        rows.push(RelayConfig {
-            url,
-            read,
-            write,
-            rooms: false,
-            indexer: false,
-        });
-    }
-    for entry in app_data {
-        if let Some(row) = rows.iter_mut().find(|r| r.url == entry.url) {
-            row.rooms = entry.rooms;
-            row.indexer = entry.indexer;
-        } else {
-            rows.push(RelayConfig {
-                url: entry.url,
-                read: false,
-                write: false,
-                rooms: entry.rooms,
-                indexer: entry.indexer,
-            });
-        }
-    }
-
-    // Rooms invariant: relay.highlighter.com is always present with rooms=true.
-    let rooms_relay = highlighter_relay();
-    if let Some(row) = rows.iter_mut().find(|r| r.url == rooms_relay) {
-        row.rooms = true;
-    } else {
-        rows.push(RelayConfig {
-            url: rooms_relay.to_string(),
-            read: false,
-            write: false,
-            rooms: true,
-            indexer: false,
-        });
-    }
-
-    // Indexer invariant: purplepag.es is always present with indexer=true.
-    let indexer_relay = purple_pages_relay();
-    if let Some(row) = rows.iter_mut().find(|r| r.url == indexer_relay) {
-        row.indexer = true;
-    } else {
-        rows.push(RelayConfig {
-            url: indexer_relay.to_string(),
-            read: false,
-            write: false,
-            rooms: false,
-            indexer: true,
-        });
-    }
-
-    Ok(rows)
 }
 
 // -- Tests -------------------------------------------------------------------
