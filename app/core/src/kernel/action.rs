@@ -144,7 +144,6 @@ pub(crate) struct ReleaseProfilePayload {
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct JoinRoomPayload {
     pub group_id: String,
-    pub host_relay_url: String,
     pub invite_code: Option<String>,
 }
 
@@ -751,15 +750,14 @@ pub enum AppAction {
     /// `"nmp.nip29.join"`. The relay's response arrives as a joined-groups
     /// projection update (`KernelEvent::JoinedGroupsUpdated`). Fire-and-forget.
     ///
-    /// `group_id` is the NIP-29 local group id; `host_relay_url` is the relay
-    /// URL (opaque string — kernel never constructs URLs, D3). `invite_code`
-    /// is required for closed groups, optional for open groups.
-    ///
+    /// `group_id` is the NIP-29 local group id. The kernel resolves
+    /// `host_relay_url` from `AppState::discovered_groups` (preferred) or
+    /// `AppState::communities` (fallback). No relay URL crosses the FFI
+    /// boundary for this action (D3). `invite_code` is required for closed
+    /// groups, optional for open groups. Fails closed when no relay found.
     JoinRoom {
         /// NIP-29 local group id.
         group_id: String,
-        /// Host relay WebSocket URL (opaque — D3).
-        host_relay_url: String,
         /// Optional preauth invite code for closed groups.
         invite_code: Option<String>,
     },

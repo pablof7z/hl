@@ -104,7 +104,6 @@ struct RoomExplorerView: View {
                                 ?? kernel.roomExplorer?.featured.first(where: { $0.groupId == room.id }) {
                                 kernel.app.dispatch(.joinRoom(
                                     groupId: discoveredRow.groupId,
-                                    hostRelayUrl: discoveredRow.hostRelayUrl,
                                     inviteCode: nil
                                 ))
                             }

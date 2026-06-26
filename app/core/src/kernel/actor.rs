@@ -402,9 +402,8 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         // ── Phase 3F additions (append-only) ─────────────────────────────────
         AppAction::JoinRoom {
             group_id,
-            host_relay_url,
             invite_code,
-        } => room_home::reduce_action_join_room(group_id, host_relay_url, invite_code),
+        } => room_home::reduce_action_join_room(state, group_id, invite_code),
 
         AppAction::LeaveRoom { group_id, reason } => {
             room_home::reduce_action_leave_room(state, group_id, reason)
@@ -765,7 +764,7 @@ fn reduce_action_envelope(
         // ── Room actions ──────────────────────────────────────────────────────
         "hl.room.join" => {
             let p = parse!(JoinRoomPayload);
-            room_home::reduce_action_join_room(p.group_id, p.host_relay_url, p.invite_code)
+            room_home::reduce_action_join_room(state, p.group_id, p.invite_code)
         }
         "hl.room.leave" => {
             let p = parse!(LeaveRoomPayload);

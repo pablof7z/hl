@@ -461,7 +461,7 @@ private struct TabContent: View {
                     RoomPreviewSheet(
                         room: room,
                         onJoin: {
-                            kernel.app.dispatch(.joinRoom(groupId: room.id, hostRelayUrl: room.relayUrl, inviteCode: nil))
+                            kernel.app.dispatch(.joinRoom(groupId: room.id, inviteCode: nil))
                             previewRoom = nil
                         },
                         onOpenRoom: {
