@@ -8,6 +8,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use nostr_sdk::prelude::{FromBech32, Nip19, PublicKey};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 
@@ -177,6 +178,109 @@ impl HighlighterApp {
     ) -> crate::relays::AddRelaySheetProjection {
         crate::relays::add_relay_sheet_projection(input)
     }
+
+    /// Project another user's importable relay list from NMP's mailbox cache.
+    ///
+    /// This is intentionally a bounded cache preview, not a bespoke network
+    /// fetch. The mailbox cache is the same instance written by NMP's kind:10002
+    /// parser and read by routing.
+    pub fn import_relays_for_pubkey(
+        &self,
+        pubkey: String,
+    ) -> crate::relays::ImportRelaysFetchSnapshot {
+        crate::relays::import_relays_fetch_snapshot(self.import_relays_for_pubkey_inner(&pubkey))
+    }
+
+    /// Rust-owned projection for the import-relays source field.
+    pub fn project_import_relays_source(
+        &self,
+        input: crate::relays::ImportRelaysSourceProjectionInput,
+    ) -> crate::relays::ImportRelaysSourceProjection {
+        crate::relays::import_relays_source_projection(input)
+    }
+
+    /// Rust-owned projection for discovered import relay rows.
+    pub fn project_import_relays(
+        &self,
+        input: crate::relays::ImportRelaysProjectionInput,
+    ) -> crate::relays::ImportRelaysProjection {
+        crate::relays::import_relays_projection(input)
+    }
+
+    /// Toggle one import-relay row, preserving the fetched-row order.
+    pub fn toggle_import_relay_selection(
+        &self,
+        fetched: Vec<crate::relays::RelayConfig>,
+        selected_urls: Vec<String>,
+        url: String,
+    ) -> Vec<String> {
+        crate::relays::toggle_import_relay_selection(fetched, selected_urls, url)
+    }
+}
+
+impl HighlighterApp {
+    fn import_relays_for_pubkey_inner(
+        &self,
+        pubkey: &str,
+    ) -> Result<Vec<crate::relays::RelayConfig>, crate::errors::CoreError> {
+        let author = parse_pubkey(pubkey)?;
+        let cache = self
+            .shared
+            .mailbox_cache
+            .lock()
+            .map_err(|_| crate::errors::CoreError::Cache("mailbox cache lock poisoned".into()))?
+            .clone()
+            .ok_or_else(|| {
+                crate::errors::CoreError::Cache("NMP mailbox cache unavailable".into())
+            })?;
+        let Some(snapshot) = cache.snapshot(&author) else {
+            return Ok(Vec::new());
+        };
+
+        let mut rows = std::collections::BTreeMap::<String, (bool, bool)>::new();
+        for url in snapshot.both {
+            rows.entry(url)
+                .and_modify(|roles| *roles = (true, true))
+                .or_insert((true, true));
+        }
+        for url in snapshot.read {
+            rows.entry(url)
+                .and_modify(|roles| roles.0 = true)
+                .or_insert((true, false));
+        }
+        for url in snapshot.write {
+            rows.entry(url)
+                .and_modify(|roles| roles.1 = true)
+                .or_insert((false, true));
+        }
+
+        Ok(rows
+            .into_iter()
+            .map(|(url, (read, write))| crate::relays::RelayConfig {
+                url,
+                read,
+                write,
+                rooms: false,
+                indexer: false,
+            })
+            .collect())
+    }
+}
+
+fn parse_pubkey(input: &str) -> Result<String, crate::errors::CoreError> {
+    let trimmed = input.trim();
+    let pubkey = PublicKey::from_hex(trimmed)
+        .or_else(|_| {
+            Nip19::from_bech32(trimmed)
+                .ok()
+                .and_then(|decoded| match decoded {
+                    Nip19::Pubkey(pk) => Some(pk),
+                    _ => None,
+                })
+                .ok_or(nostr_sdk::key::Error::InvalidPublicKey)
+        })
+        .map_err(|e| crate::errors::CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
+    Ok(pubkey.to_hex())
 }
 
 fn new_highlighter_app_inner(
@@ -206,6 +310,9 @@ fn new_highlighter_app_inner(
         let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
         if let Ok(mut guard) = shared.relay_slot.lock() {
             *guard = Some(nmp_ref.configured_relays_handle());
+        }
+        if let Ok(mut guard) = shared.mailbox_cache.lock() {
+            *guard = handle.mailbox_cache.clone();
         }
     }
 

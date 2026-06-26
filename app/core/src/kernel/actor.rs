@@ -22,6 +22,7 @@ use std::sync::{Arc, Mutex};
 use parking_lot::RwLock;
 use tokio::sync::mpsc;
 
+use nmp_core::substrate::MailboxCache;
 use nmp_ffi::{
     nmp_app_consume_all_builtin_projections, nmp_app_free, nmp_app_new,
     nmp_app_set_capability_callback, nmp_app_set_storage_path, nmp_app_start,
@@ -196,6 +197,7 @@ fn nmp_capability_error_envelope(request_json: &str, reason: &str) -> String {
 /// `NonNull` first.
 pub(crate) struct NmpHandle {
     pub(crate) ptr: NonNull<NmpApp>,
+    pub(crate) mailbox_cache: Option<Arc<dyn MailboxCache>>,
     /// Keeps the native keyring handler alive for NMP's capability callback.
     _capability_callback_ctx: Option<Box<Arc<dyn NmpKeyringHandler>>>,
     /// Keeps the `mpsc::UnboundedSender<Cmd>` alive for the `nmp_update_callback`
@@ -272,6 +274,8 @@ pub(crate) struct SharedState {
     /// Used by `relay_list_snapshot()` for direct FFI reads without going
     /// through the actor channel (Arc-shared; updated by the NMP actor).
     pub relay_slot: Mutex<Option<nmp_core::AppRelaySlot>>,
+    /// Shared NMP-owned NIP-65 mailbox cache read handle.
+    pub mailbox_cache: Mutex<Option<Arc<dyn MailboxCache>>>,
 }
 
 impl SharedState {
@@ -280,6 +284,7 @@ impl SharedState {
             snapshots: Mutex::new(std::collections::HashMap::new()),
             observer: RwLock::new(None),
             relay_slot: Mutex::new(None),
+            mailbox_cache: Mutex::new(None),
         })
     }
 }
@@ -3260,7 +3265,10 @@ pub(crate) fn start_nmp_app(
     // required pre-start step: register NMP's keyring capability callback before
     // `nmp_app_start` so cold-start session restore can synchronously recall
     // `nmp.identity.*` entries.
-    nmp_defaults::register_defaults(nmp_ref_mut);
+    let runtime_handles = nmp_defaults::register_defaults_with_handles(
+        nmp_ref_mut,
+        nmp_defaults::NmpDefaults::default(),
+    );
     let path = storage_path.to_string_lossy().into_owned();
     let Ok(path_c) = CString::new(path.as_str()) else {
         nmp_app_free(raw_ptr.as_ptr());
@@ -3384,6 +3392,7 @@ pub(crate) fn start_nmp_app(
 
     Some(NmpHandle {
         ptr: raw_ptr,
+        mailbox_cache: runtime_handles.mailbox_cache,
         _capability_callback_ctx: capability_context,
         _update_callback_ctx: Some(context_box),
     })

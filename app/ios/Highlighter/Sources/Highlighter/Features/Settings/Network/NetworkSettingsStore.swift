@@ -259,11 +259,23 @@ final class NetworkSettingsStore {
         recomputeAggregates()
     }
 
-    /// Fetch another user's kind:10002 relay list from the indexer relay pool.
-    /// Used by the "Import from npub" flow in ImportRelaysSheet. #95 owns
-    /// moving this final legacy-core fetch to the NMP mailbox-cache projection.
-    func fetchRelaysForPubkey(_ pubkeyHex: String) async -> [RelayConfig] {
-        await appStore?.core.fetchRelaysForPubkey(pubkeyHex: pubkeyHex) ?? []
+    /// Preview another user's kind:10002 relay list from NMP's mailbox cache.
+    func importRelaysForPubkey(_ pubkey: String) -> ImportRelaysFetchSnapshot {
+        kernel.importRelaysForPubkey(pubkey)
+    }
+
+    func importRelaysProjection(fetched: [RelayConfig], selectedUrls: [String]) -> ImportRelaysProjection {
+        kernel.projectImportRelays(ImportRelaysProjectionInput(fetched: fetched, selectedUrls: selectedUrls))
+    }
+
+    func importRelaysSourceProjection(npub: String, isFetching: Bool) -> ImportRelaysSourceProjection {
+        kernel.projectImportRelaysSource(
+            ImportRelaysSourceProjectionInput(npub: npub, isFetching: isFetching)
+        )
+    }
+
+    func toggleImportRelaySelection(fetched: [RelayConfig], selectedUrls: [String], url: String) -> [String] {
+        kernel.toggleImportRelaySelection(fetched: fetched, selectedUrls: selectedUrls, url: url)
     }
 
     // MARK: - Private

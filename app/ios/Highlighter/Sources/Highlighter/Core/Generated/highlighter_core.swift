@@ -810,6 +810,15 @@ public protocol HighlighterAppProtocol: AnyObject, Sendable {
     func dispatchAction(action: AppActionEnvelope)
 
     /**
+     * Project another user's importable relay list from NMP's mailbox cache.
+     *
+     * This is intentionally a bounded cache preview, not a bespoke network
+     * fetch. The mailbox cache is the same instance written by NMP's kind:10002
+     * parser and read by routing.
+     */
+    func importRelaysForPubkey(pubkey: String)  -> ImportRelaysFetchSnapshot
+
+    /**
      * Register a bounded projection for a view. Subsequent state changes will
      * emit snapshots for this view until `close_view` is called.
      */
@@ -819,6 +828,16 @@ public protocol HighlighterAppProtocol: AnyObject, Sendable {
      * Rust-owned URL normalization, validation, and add-relay projection.
      */
     func projectAddRelaySheet(input: AddRelaySheetProjectionInput)  -> AddRelaySheetProjection
+
+    /**
+     * Rust-owned projection for discovered import relay rows.
+     */
+    func projectImportRelays(input: ImportRelaysProjectionInput)  -> ImportRelaysProjection
+
+    /**
+     * Rust-owned projection for the import-relays source field.
+     */
+    func projectImportRelaysSource(input: ImportRelaysSourceProjectionInput)  -> ImportRelaysSourceProjection
 
     /**
      * Deliver the native shell's response to a `CapabilityRequest`.
@@ -859,6 +878,11 @@ public protocol HighlighterAppProtocol: AnyObject, Sendable {
      * on wall-clock time (D8 / D9).
      */
     func tick()
+
+    /**
+     * Toggle one import-relay row, preserving the fetched-row order.
+     */
+    func toggleImportRelaySelection(fetched: [RelayConfig], selectedUrls: [String], url: String)  -> [String]
 
 }
 /**
@@ -998,6 +1022,21 @@ open func dispatchAction(action: AppActionEnvelope)  {try! rustCall() {
 }
 
     /**
+     * Project another user's importable relay list from NMP's mailbox cache.
+     *
+     * This is intentionally a bounded cache preview, not a bespoke network
+     * fetch. The mailbox cache is the same instance written by NMP's kind:10002
+     * parser and read by routing.
+     */
+open func importRelaysForPubkey(pubkey: String) -> ImportRelaysFetchSnapshot  {
+    return try!  FfiConverterTypeImportRelaysFetchSnapshot_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_import_relays_for_pubkey(self.uniffiClonePointer(),
+        FfiConverterString.lower(pubkey),$0
+    )
+})
+}
+
+    /**
      * Register a bounded projection for a view. Subsequent state changes will
      * emit snapshots for this view until `close_view` is called.
      */
@@ -1016,6 +1055,28 @@ open func projectAddRelaySheet(input: AddRelaySheetProjectionInput) -> AddRelayS
     return try!  FfiConverterTypeAddRelaySheetProjection_lift(try! rustCall() {
     uniffi_highlighter_core_fn_method_highlighterapp_project_add_relay_sheet(self.uniffiClonePointer(),
         FfiConverterTypeAddRelaySheetProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Rust-owned projection for discovered import relay rows.
+     */
+open func projectImportRelays(input: ImportRelaysProjectionInput) -> ImportRelaysProjection  {
+    return try!  FfiConverterTypeImportRelaysProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_project_import_relays(self.uniffiClonePointer(),
+        FfiConverterTypeImportRelaysProjectionInput_lower(input),$0
+    )
+})
+}
+
+    /**
+     * Rust-owned projection for the import-relays source field.
+     */
+open func projectImportRelaysSource(input: ImportRelaysSourceProjectionInput) -> ImportRelaysSourceProjection  {
+    return try!  FfiConverterTypeImportRelaysSourceProjection_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_project_import_relays_source(self.uniffiClonePointer(),
+        FfiConverterTypeImportRelaysSourceProjectionInput_lower(input),$0
     )
 })
 }
@@ -1091,6 +1152,19 @@ open func tick()  {try! rustCall() {
 }
 }
 
+    /**
+     * Toggle one import-relay row, preserving the fetched-row order.
+     */
+open func toggleImportRelaySelection(fetched: [RelayConfig], selectedUrls: [String], url: String) -> [String]  {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_toggle_import_relay_selection(self.uniffiClonePointer(),
+        FfiConverterSequenceTypeRelayConfig.lower(fetched),
+        FfiConverterSequenceString.lower(selectedUrls),
+        FfiConverterString.lower(url),$0
+    )
+})
+}
+
 
 }
 
@@ -1150,14 +1224,6 @@ public func FfiConverterTypeHighlighterApp_lower(_ value: HighlighterApp) -> Uns
 
 
 public protocol HighlighterCoreProtocol: AnyObject, Sendable {
-
-    /**
-     * Fetch another nostr user's relay list (kind:10002 NIP-65) from the
-     * indexer relay pool and return their configured relays. Used by the
-     * "Import from npub" flow. Returns an empty list on parse errors or when
-     * no kind:10002 is found within the 8-second timeout.
-     */
-    func fetchRelaysForPubkey(pubkeyHex: String) async  -> [RelayConfig]
 
     func getPodcastPlaybackRehydrationSnapshot(hasCurrentArtifact: Bool)  -> PodcastPlaybackRehydrationSnapshot
 
@@ -1226,30 +1292,6 @@ public convenience init() {
 
 
 
-
-    /**
-     * Fetch another nostr user's relay list (kind:10002 NIP-65) from the
-     * indexer relay pool and return their configured relays. Used by the
-     * "Import from npub" flow. Returns an empty list on parse errors or when
-     * no kind:10002 is found within the 8-second timeout.
-     */
-open func fetchRelaysForPubkey(pubkeyHex: String)async  -> [RelayConfig]  {
-    return
-        try!  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_highlighter_core_fn_method_highlightercore_fetch_relays_for_pubkey(
-                    self.uniffiClonePointer(),
-                    FfiConverterString.lower(pubkeyHex)
-                )
-            },
-            pollFunc: ffi_highlighter_core_rust_future_poll_rust_buffer,
-            completeFunc: ffi_highlighter_core_rust_future_complete_rust_buffer,
-            freeFunc: ffi_highlighter_core_rust_future_free_rust_buffer,
-            liftFunc: FfiConverterSequenceTypeRelayConfig.lift,
-            errorHandler: nil
-
-        )
-}
 
 open func getPodcastPlaybackRehydrationSnapshot(hasCurrentArtifact: Bool) -> PodcastPlaybackRehydrationSnapshot  {
     return try!  FfiConverterTypePodcastPlaybackRehydrationSnapshot_lift(try! rustCall() {
@@ -35532,10 +35574,19 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlighterapp_dispatch_action() != 62969) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_import_relays_for_pubkey() != 61507) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_highlighter_core_checksum_method_highlighterapp_open_view() != 29686) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlighterapp_project_add_relay_sheet() != 7918) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_project_import_relays() != 32052) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_project_import_relays_source() != 15620) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlighterapp_provide_capability_result() != 16552) {
@@ -35559,7 +35610,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_highlighter_core_checksum_method_highlighterapp_tick() != 48249) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_highlighter_core_checksum_method_highlightercore_fetch_relays_for_pubkey() != 45230) {
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_toggle_import_relay_selection() != 4399) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlightercore_get_podcast_playback_rehydration_snapshot() != 22927) {

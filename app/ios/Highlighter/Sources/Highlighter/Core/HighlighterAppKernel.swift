@@ -494,6 +494,23 @@ final class HighlighterAppKernel {
         app.relayListSnapshot()
     }
 
+    /// Relay-import preview from NMP's kind:10002 mailbox cache.
+    func importRelaysForPubkey(_ pubkey: String) -> ImportRelaysFetchSnapshot {
+        app.importRelaysForPubkey(pubkey: pubkey)
+    }
+
+    func projectImportRelaysSource(_ input: ImportRelaysSourceProjectionInput) -> ImportRelaysSourceProjection {
+        app.projectImportRelaysSource(input: input)
+    }
+
+    func projectImportRelays(_ input: ImportRelaysProjectionInput) -> ImportRelaysProjection {
+        app.projectImportRelays(input: input)
+    }
+
+    func toggleImportRelaySelection(fetched: [RelayConfig], selectedUrls: [String], url: String) -> [String] {
+        app.toggleImportRelaySelection(fetched: fetched, selectedUrls: selectedUrls, url: url)
+    }
+
     // MARK: - Phase 7: relay diagnostics lifecycle
 
     /// Open the relay-diagnostics view. The kernel streams `RelayDiagnosticsViewSnapshot`

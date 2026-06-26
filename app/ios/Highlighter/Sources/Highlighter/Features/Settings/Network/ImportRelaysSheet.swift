@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Lets the user import another nostr account's relay list. Takes an npub
-/// (or hex pubkey), fetches that user's kind:10002 via the Indexer pool,
+/// (or hex pubkey), previews that user's NMP-cached kind:10002 mailbox,
 /// and shows the discovered relays with checkboxes. Merging is opt-in —
 /// only rows the user ticks get upserted.
 struct ImportRelaysSheet: View {
@@ -17,42 +17,11 @@ struct ImportRelaysSheet: View {
     @State private var isApplying = false
 
     private var projection: ImportRelaysProjection {
-        // D1: inline import_relays_projection — map fetched relays to rows, compute counts.
-        let selectedSet = Set(selectedUrls)
-        var selectedConfigs: [RelayConfig] = []
-        let rows: [ImportRelayRow] = fetched.map { config in
-            let isSelected = selectedSet.contains(config.url)
-            if isSelected { selectedConfigs.append(config) }
-            let displayUrl = config.url.hasPrefix("wss://")
-                ? String(config.url.dropFirst(6))
-                : config.url
-            let roleLabel: String
-            switch (config.read, config.write) {
-            case (true, true):  roleLabel = "Read + Write"
-            case (true, false): roleLabel = "Read"
-            case (false, true): roleLabel = "Write"
-            default:            roleLabel = "No roles"
-            }
-            return ImportRelayRow(
-                config: config,
-                displayUrl: displayUrl,
-                roleLabel: roleLabel,
-                isSelected: isSelected
-            )
-        }
-        let foundCount = rows.count
-        return ImportRelaysProjection(
-            rows: rows,
-            selectedCount: UInt64(selectedConfigs.count),
-            foundTitle: "Found \(foundCount) relay\(foundCount == 1 ? "" : "s")",
-            canApply: !selectedConfigs.isEmpty,
-            selectedConfigs: selectedConfigs
-        )
+        store.importRelaysProjection(fetched: fetched, selectedUrls: selectedUrls)
     }
 
     private var sourceProjection: ImportRelaysSourceProjection {
-        let submitNpub = npubText.trimmingCharacters(in: .whitespaces)
-        return ImportRelaysSourceProjection(submitNpub: submitNpub, canFetch: !submitNpub.isEmpty && !isFetching)
+        store.importRelaysSourceProjection(npub: npubText, isFetching: isFetching)
     }
 
     var body: some View {
@@ -107,8 +76,6 @@ struct ImportRelaysSheet: View {
             .disabled(!sourceProjection.canFetch)
         } header: {
             Text("Source")
-        } footer: {
-            Text("Highlighter will fetch the user's kind:10002 event through your Indexer relays. Turn on Indexer for at least one relay first.")
         }
     }
 
@@ -160,12 +127,14 @@ struct ImportRelaysSheet: View {
         selectedUrls = []
         isFetching = true
         defer { isFetching = false }
-        let configs = await store.fetchRelaysForPubkey(source.submitNpub)
-        if configs.isEmpty {
-            errorText = "No relay list found for that pubkey. Make sure you have at least one Indexer relay enabled and the user has published a kind:10002 event."
+        let snapshot = store.importRelaysForPubkey(source.submitNpub)
+        if !snapshot.errorMessage.isEmpty {
+            errorText = snapshot.errorMessage
+        } else if snapshot.fetched.isEmpty {
+            errorText = "No cached relay list found for that pubkey."
         } else {
-            fetched = configs
-            selectedUrls = configs.map { $0.url }
+            fetched = snapshot.fetched
+            selectedUrls = snapshot.selectedUrls
         }
     }
 
@@ -180,14 +149,10 @@ struct ImportRelaysSheet: View {
     }
 
     private func toggle(_ url: String) {
-        // D1: toggle url in selectedUrls while preserving fetched order.
-        if selectedUrls.contains(url) {
-            selectedUrls = selectedUrls.filter { $0 != url }
-        } else {
-            let fetchedOrder = fetched.map { $0.url }
-            selectedUrls = (selectedUrls + [url]).sorted { a, b in
-                (fetchedOrder.firstIndex(of: a) ?? Int.max) < (fetchedOrder.firstIndex(of: b) ?? Int.max)
-            }
-        }
+        selectedUrls = store.toggleImportRelaySelection(
+            fetched: fetched,
+            selectedUrls: selectedUrls,
+            url: url
+        )
     }
 }
