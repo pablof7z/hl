@@ -17,7 +17,9 @@
 
 ### 2026-06 Mobile Architecture Update
 
-The mobile/desktop rows in this document now mean Rust core plus NMP, not a bespoke app-client Nostr stack. NMP owns native app runtime, event ingestion, event store identity, relay routing, protocol writes, search/open-interest orchestration, durable product state, and bounded projections. Native iOS/Android code owns presentation and OS capability execution only.
+The mobile/desktop rows in this document now mean Rust core plus NMP, not a bespoke app-client Nostr stack. NMP owns native app runtime, event ingestion, event store identity, relay routing, protocol writes, search/open-interest orchestration, durable product state, and bounded projections. Native iOS/Android code owns presentation and OS capability execution only. This migration is complete: the legacy `NostrRuntime`/nostrdb lane has been deleted (#91) and iOS no longer constructs `HighlighterCore` for product surfaces (#89).
+
+Relay-owned storage — Croissant MMM event store, Bleve search indexes, Blossom media, LiveKit, relay settings, and NIP-29 membership/moderation state — is separate relay infrastructure and is not app-client persistence. It is not in scope for the mobile NMP ownership boundary and is not deleted by mobile NMP migration work.
 
 The web app still uses its SvelteKit/NDK stack for now. Moving web to the same NMP ownership boundary is explicitly deferred to #65 and is not a mobile close blocker.
 
