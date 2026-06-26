@@ -1605,48 +1605,6 @@ mod tests {
         event.tags.iter().map(|t| t.as_slice().to_vec()).collect()
     }
 
-    struct ShareEventSpec<'a> {
-        group_id: &'a str,
-        d_tag: &'a str,
-        title: &'a str,
-        source: &'a str,
-        reference_value: &'a str,
-        reference_kind: &'a str,
-        url: &'a str,
-        created_at: u64,
-    }
-
-    fn share_event(keys: &Keys, spec: ShareEventSpec<'_>) -> Event {
-        let mut tags = vec![
-            Tag::parse(vec!["h".to_string(), spec.group_id.to_string()]).unwrap(),
-            Tag::identifier(spec.d_tag),
-            Tag::parse(vec!["title".to_string(), spec.title.to_string()]).unwrap(),
-            Tag::parse(vec!["source".to_string(), spec.source.to_string()]).unwrap(),
-        ];
-        if !spec.reference_value.is_empty() {
-            tags.push(
-                Tag::parse(vec![
-                    "i".to_string(),
-                    spec.reference_value.to_string(),
-                    spec.url.to_string(),
-                ])
-                .unwrap(),
-            );
-        }
-        if !spec.reference_kind.is_empty() {
-            tags.push(Tag::parse(vec!["k".to_string(), spec.reference_kind.to_string()]).unwrap());
-        }
-        if !spec.url.is_empty() {
-            tags.push(Tag::parse(vec!["r".to_string(), spec.url.to_string()]).unwrap());
-        }
-
-        EventBuilder::new(Kind::Custom(11), "")
-            .tags(tags)
-            .custom_created_at(Timestamp::from(spec.created_at))
-            .sign_with_keys(keys)
-            .expect("sign")
-    }
-
     fn highlight_for_source_key(
         event_id: &str,
         source_key: &str,
