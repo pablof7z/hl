@@ -16,8 +16,6 @@ serde_json = "1"
 hex = "0.4"
 nostr-sdk = { version = "0.44.1", features = ["nip49", "nip04", "nip44"] }
 nostr = { version = "0.44", default-features = false, features = ["std", "nip46"] }
-nostr-ndb = "0.44.0"
-nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", rev = "2619b9bc4cbd7d8d9198a3be0ae8f1f8f51040cb" }
 nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "fc0589fc88d61912779741fcce7d4e7176cf9a30", default-features = false }
 # NMP tracks the master branch via GIT deps (NOT local path deps) so hl is
 # decoupled from the local monorepo checkout. `cargo update` refreshes Cargo.lock
@@ -57,9 +55,6 @@ zeroize = "1"
 
 [target.'cfg(target_os = "android")'.dependencies]
 tracing-android = "0.2"
-
-[patch.crates-io]
-nostrdb = { git = "https://github.com/pablof7z/nostrdb-rs", rev = "2619b9bc4cbd7d8d9198a3be0ae8f1f8f51040cb" }
 
 [[bin]]
 name = "uniffi-bindgen"

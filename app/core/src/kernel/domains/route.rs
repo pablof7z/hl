@@ -5,8 +5,8 @@
 //!         (actions); OnboardingStateLoaded (event); LoadOnboardingFlag (effect);
 //!         and the project_app_root / project_root_shell snapshot helpers.
 
-use nostr_ndb::nostr::nips::nip19::ToBech32;
-use nostr_ndb::nostr::PublicKey;
+use nostr::nips::nip19::ToBech32;
+use nostr::PublicKey;
 
 use crate::onboarding::OnboardingStore;
 
