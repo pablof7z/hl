@@ -21,7 +21,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::errors::CoreError;
 use crate::models::{Nip11Document, RelayDiagnostic, RelayStatus};
-use crate::nostr_runtime::NostrRuntime;
 
 // -- Relay policy ------------------------------------------------------------
 
@@ -1414,127 +1413,6 @@ pub fn query_relays(ndb: &Ndb, user_hex: &str) -> Result<Vec<RelayConfig>, CoreE
     }
 
     Ok(rows)
-}
-
-/// Publish kind:10002 (NIP-65) with the current rows' read/write flags.
-pub async fn publish_nip65(
-    runtime: &NostrRuntime,
-    rows: &[RelayConfig],
-) -> Result<String, CoreError> {
-    let tags = nip65_tags(rows)?;
-    let builder = EventBuilder::new(Kind::Custom(KIND_RELAY_LIST), "").tags(tags);
-    let client = runtime.client();
-    let event = client
-        .sign_event_builder(builder)
-        .await
-        .map_err(|e| CoreError::Signer(format!("sign relay list: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish relay list: {e}")))?;
-    crate::nostr_runtime::mirror_social_trio_to_purple(client, &event).await;
-    Ok(event.id.to_hex())
-}
-
-/// Publish kind:30078 app-data with the current rows' rooms/indexer flags.
-pub async fn publish_app_data(
-    runtime: &NostrRuntime,
-    rows: &[RelayConfig],
-) -> Result<String, CoreError> {
-    let content = app_data_content(rows);
-    let d_tag = Tag::parse(vec!["d".to_string(), APP_DATA_D_TAG.to_string()])
-        .map_err(|e| CoreError::Other(format!("build d tag: {e}")))?;
-    let builder = EventBuilder::new(Kind::Custom(KIND_APP_DATA), content).tags([d_tag]);
-    let client = runtime.client();
-    let event = client
-        .sign_event_builder(builder)
-        .await
-        .map_err(|e| CoreError::Signer(format!("sign relay app-data: {e}")))?;
-    client
-        .send_event(&event)
-        .await
-        .map_err(|e| CoreError::Relay(format!("publish relay app-data: {e}")))?;
-    Ok(event.id.to_hex())
-}
-
-/// Replace the user's relay list with `rows`. Re-publishes both NIP-65 and
-/// NIP-78 so every flag is durable. Validates that every row's URL is a
-/// non-empty `ws://` or `wss://` URL with no duplicates.
-pub async fn set_relays(runtime: &NostrRuntime, rows: Vec<RelayConfig>) -> Result<(), CoreError> {
-    if rows.is_empty() {
-        return Err(CoreError::InvalidInput(
-            "relay list must not be empty".into(),
-        ));
-    }
-    let mut seen = std::collections::HashSet::new();
-    for row in &rows {
-        let url = row.url.trim();
-        if !relay_url_is_valid(url) {
-            return Err(CoreError::InvalidInput(format!(
-                "relay URL must use a websocket scheme: {url}"
-            )));
-        }
-        if !seen.insert(url.to_string()) {
-            return Err(CoreError::InvalidInput(format!(
-                "duplicate relay URL in list: {url}"
-            )));
-        }
-    }
-    publish_nip65(runtime, &rows).await?;
-    publish_app_data(runtime, &rows).await?;
-    Ok(())
-}
-
-/// Insert-or-update a single relay. Reads the current list, replaces the row
-/// with matching URL (or appends), and re-publishes.
-pub async fn upsert_relay(
-    runtime: &NostrRuntime,
-    user_hex: &str,
-    cfg: RelayConfig,
-) -> Result<(), CoreError> {
-    let mut rows = query_relays(runtime.ndb(), user_hex)?;
-    if let Some(existing) = rows.iter_mut().find(|r| r.url == cfg.url) {
-        *existing = cfg;
-    } else {
-        rows.push(cfg);
-    }
-    set_relays(runtime, rows).await
-}
-
-/// Remove a relay by URL. Errors if the URL isn't in the list.
-pub async fn remove_relay(
-    runtime: &NostrRuntime,
-    user_hex: &str,
-    url: String,
-) -> Result<(), CoreError> {
-    let mut rows = query_relays(runtime.ndb(), user_hex)?;
-    let before = rows.len();
-    rows.retain(|r| r.url != url);
-    if rows.len() == before {
-        return Err(CoreError::NotFound);
-    }
-    set_relays(runtime, rows).await
-}
-
-/// Atomically update a single relay's role flags without touching its URL.
-pub async fn set_relay_roles(
-    runtime: &NostrRuntime,
-    user_hex: &str,
-    url: String,
-    read: bool,
-    write: bool,
-    rooms: bool,
-    indexer: bool,
-) -> Result<(), CoreError> {
-    let mut rows = query_relays(runtime.ndb(), user_hex)?;
-    let Some(row) = rows.iter_mut().find(|r| r.url == url) else {
-        return Err(CoreError::NotFound);
-    };
-    row.read = read;
-    row.write = write;
-    row.rooms = rooms;
-    row.indexer = indexer;
-    set_relays(runtime, rows).await
 }
 
 // -- Tests -------------------------------------------------------------------
