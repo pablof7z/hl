@@ -7426,6 +7426,81 @@ public func FfiConverterTypeCurationMenuItem_lower(_ value: CurationMenuItem) ->
 }
 
 
+/**
+ * Snapshot type for `curation_set_share_url_snapshot` — mirrors
+ * `ArticleShareUrlSnapshot`. On success `url` is set and `error` is empty;
+ * on failure `url` is empty and `error` carries the reason.
+ */
+public struct CurationSetShareUrlSnapshot {
+    public var url: String
+    public var error: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(url: String, error: String) {
+        self.url = url
+        self.error = error
+    }
+}
+
+#if compiler(>=6)
+extension CurationSetShareUrlSnapshot: Sendable {}
+#endif
+
+
+extension CurationSetShareUrlSnapshot: Equatable, Hashable {
+    public static func ==(lhs: CurationSetShareUrlSnapshot, rhs: CurationSetShareUrlSnapshot) -> Bool {
+        if lhs.url != rhs.url {
+            return false
+        }
+        if lhs.error != rhs.error {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(url)
+        hasher.combine(error)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeCurationSetShareUrlSnapshot: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> CurationSetShareUrlSnapshot {
+        return
+            try CurationSetShareUrlSnapshot(
+                url: FfiConverterString.read(from: &buf),
+                error: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: CurationSetShareUrlSnapshot, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.url, into: &buf)
+        FfiConverterString.write(value.error, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurationSetShareUrlSnapshot_lift(_ buf: RustBuffer) throws -> CurationSetShareUrlSnapshot {
+    return try FfiConverterTypeCurationSetShareUrlSnapshot.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeCurationSetShareUrlSnapshot_lower(_ value: CurationSetShareUrlSnapshot) -> RustBuffer {
+    return FfiConverterTypeCurationSetShareUrlSnapshot.lower(value)
+}
+
+
 public struct CurrentUser {
     public var pubkey: String
     public var npub: String
@@ -35299,6 +35374,17 @@ public func clipComposerProjection(input: PodcastClipComposerInput) -> PodcastCl
 })
 }
 /**
+ * FFI-exported wrapper around `curation_set_share_url`. Returns a
+ * `CurationSetShareUrlSnapshot` with the resolved URL or an error string.
+ */
+public func curationSetShareUrlSnapshot(coordinate: String) -> CurationSetShareUrlSnapshot  {
+    return try!  FfiConverterTypeCurationSetShareUrlSnapshot_lift(try! rustCall() {
+    uniffi_highlighter_core_fn_func_curation_set_share_url_snapshot(
+        FfiConverterString.lower(coordinate),$0
+    )
+})
+}
+/**
  * Download raw artwork bytes from `url`. Returns `None` on any error.
  */
 public func downloadPodcastArtwork(url: String)async  -> Data?  {
@@ -35506,6 +35592,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_func_clip_composer_projection() != 42526) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_func_curation_set_share_url_snapshot() != 30289) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_func_download_podcast_artwork() != 64329) {

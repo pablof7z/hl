@@ -10,13 +10,110 @@ use nostr_sdk::prelude::*;
 
 const HIGHLIGHT_SHARE_BASE_URL: &str = "https://beta.highlighter.com/highlight/";
 const ARTICLE_SHARE_BASE_URL: &str = "https://highlighter.com/a/";
+/// Curation sets (kind:30004) share the same `/a/<naddr>` base as articles.
+/// The naddr encoding carries kind=30004 so any nostr-aware client can decode
+/// the set; the web route `/a/` handles arbitrary naddr events generically.
+/// (Web app at time of audit: `/note/[id]` and `/a/` are the naddr routes;
+/// using `/a/` matches the production article share URL pattern.)
+const CURATION_SET_SHARE_BASE_URL: &str = "https://highlighter.com/a/";
 const HIGHLIGHT_EVENT_KIND: u32 = 9802;
 const ARTICLE_EVENT_KIND: u16 = 30023;
+const CURATION_SET_EVENT_KIND: u16 = 30004;
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ArticleShareUrlSnapshot {
     pub url: String,
     pub error: String,
+}
+
+/// Snapshot type for `curation_set_share_url_snapshot` — mirrors
+/// `ArticleShareUrlSnapshot`. On success `url` is set and `error` is empty;
+/// on failure `url` is empty and `error` carries the reason.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CurationSetShareUrlSnapshot {
+    pub url: String,
+    pub error: String,
+}
+
+/// FFI-exported wrapper around `curation_set_share_url`. Returns a
+/// `CurationSetShareUrlSnapshot` with the resolved URL or an error string.
+#[uniffi::export]
+pub fn curation_set_share_url_snapshot(coordinate: String) -> CurationSetShareUrlSnapshot {
+    match curation_set_share_url(coordinate) {
+        Ok(url) => CurationSetShareUrlSnapshot {
+            url,
+            error: String::new(),
+        },
+        Err(error) => CurationSetShareUrlSnapshot {
+            url: String::new(),
+            error: error.to_string(),
+        },
+    }
+}
+
+/// Build a canonical share URL for a kind:30004 curation set from its
+/// `"30004:<pubkey_hex>:<d_tag>"` coordinate.
+///
+/// Encodes the coordinate as an `naddr` bech32 with a relay hint pointing to
+/// `relay.highlighter.com`, then prepends the canonical base URL. The naddr
+/// encoding carries kind=30004 so any nostr-aware client can resolve the set.
+///
+/// Returns `Err(CoreError::InvalidInput)` when:
+/// - the coordinate does not have exactly three colon-delimited parts,
+/// - the kind is not 30004,
+/// - the pubkey is not valid hex, or
+/// - the d_tag is empty.
+pub fn curation_set_share_url(coordinate: String) -> Result<String, CoreError> {
+    let (kind, public_key, identifier) = curation_set_address_parts(&coordinate)?;
+    let coordinate = Coordinate {
+        kind,
+        public_key,
+        identifier,
+    };
+    let relay = RelayUrl::parse(highlighter_relay())
+        .map_err(|e| CoreError::InvalidInput(format!("bad relay hint: {e}")))?;
+    let naddr = Nip19Coordinate::new(coordinate, [relay])
+        .to_bech32()
+        .map_err(|e| CoreError::InvalidInput(format!("encode naddr: {e}")))?;
+
+    Ok(format!("{CURATION_SET_SHARE_BASE_URL}{naddr}"))
+}
+
+/// Parse and validate a `"30004:<pubkey_hex>:<d_tag>"` coordinate string.
+/// Returns `(Kind, PublicKey, identifier)` on success.
+fn curation_set_address_parts(coordinate: &str) -> Result<(Kind, PublicKey, String), CoreError> {
+    let mut parts = coordinate.trim().splitn(3, ':');
+    let kind_str = parts
+        .next()
+        .ok_or_else(|| CoreError::InvalidInput("coordinate missing kind".into()))?;
+    let kind_num = kind_str
+        .parse::<u16>()
+        .map_err(|e| CoreError::InvalidInput(format!("bad coordinate kind: {e}")))?;
+    if kind_num != CURATION_SET_EVENT_KIND {
+        return Err(CoreError::InvalidInput(
+            "coordinate is not a kind:30004 curation set".into(),
+        ));
+    }
+
+    let pubkey_hex = parts
+        .next()
+        .ok_or_else(|| CoreError::InvalidInput("coordinate missing pubkey".into()))?
+        .trim();
+    let public_key = PublicKey::from_hex(pubkey_hex)
+        .map_err(|e| CoreError::InvalidInput(format!("bad coordinate pubkey: {e}")))?;
+
+    let identifier = parts
+        .next()
+        .ok_or_else(|| CoreError::InvalidInput("coordinate missing d_tag".into()))?
+        .trim()
+        .to_owned();
+    if identifier.is_empty() {
+        return Err(CoreError::InvalidInput(
+            "coordinate d_tag must not be empty".into(),
+        ));
+    }
+
+    Ok((Kind::from(kind_num), public_key, identifier))
 }
 
 pub fn article_share_url_snapshot(address: String) -> ArticleShareUrlSnapshot {
@@ -236,5 +333,69 @@ mod tests {
     #[test]
     fn highlight_share_url_rejects_bad_event_id() {
         assert!(highlight_share_url("not-hex".to_owned(), Some(author_hex())).is_err());
+    }
+
+    // ── Issue #63: curation set share URL ────────────────────────────────────
+
+    #[test]
+    fn curation_set_share_url_encodes_naddr_kind_30004() {
+        let expected_author = author_hex();
+        let expected_d_tag = "my-reading-list".to_owned();
+        let coordinate = format!("30004:{expected_author}:{expected_d_tag}");
+        let url = curation_set_share_url(coordinate).expect("share url");
+
+        let naddr = url
+            .strip_prefix(CURATION_SET_SHARE_BASE_URL)
+            .expect("canonical curation set route prefix must match");
+
+        let decoded = decode_nostr_entity(naddr).expect("decode naddr");
+        match decoded {
+            NostrEntityRef::Address {
+                kind,
+                pubkey_hex,
+                d_tag,
+                relays,
+            } => {
+                assert_eq!(kind, 30004u32, "naddr kind must be 30004");
+                assert_eq!(pubkey_hex, expected_author, "pubkey must match");
+                assert_eq!(d_tag, expected_d_tag, "d_tag must match");
+                assert_eq!(
+                    relays,
+                    vec![crate::relays::highlighter_relay().to_owned()],
+                    "relay hint must be present"
+                );
+            }
+            other => panic!("expected Address variant, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn curation_set_share_url_rejects_non_30004() {
+        // kind:30003 (bookmark set, not curation set) must be rejected
+        assert!(
+            curation_set_share_url(format!("30003:{}:my-set", author_hex())).is_err(),
+            "non-30004 coordinate must be rejected"
+        );
+        // kind:30023 (article) must be rejected
+        assert!(
+            curation_set_share_url(format!("30023:{}:my-article", author_hex())).is_err(),
+            "non-30004 coordinate must be rejected"
+        );
+    }
+
+    #[test]
+    fn curation_set_share_url_rejects_malformed_coordinate() {
+        assert!(
+            curation_set_share_url("not-a-coordinate".to_owned()).is_err(),
+            "malformed coordinate must be rejected"
+        );
+        assert!(
+            curation_set_share_url("30004:bad-pubkey:my-set".to_owned()).is_err(),
+            "bad pubkey must be rejected"
+        );
+        assert!(
+            curation_set_share_url(format!("30004:{}:", author_hex())).is_err(),
+            "empty d_tag must be rejected"
+        );
     }
 }

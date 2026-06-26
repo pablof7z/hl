@@ -523,6 +523,25 @@ pub(crate) struct CreateAndAddToSetPayload {
     pub item_coordinate: String,
 }
 
+/// `hl.curation.rename_set` payload.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct RenameSetPayload {
+    pub set_coordinate: String,
+    pub title: String,
+}
+
+/// `hl.curation.delete_set` payload.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct DeleteSetPayload {
+    pub set_coordinate: String,
+}
+
+/// `hl.curation.create_set` payload.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct CreateSetPayload {
+    pub title: String,
+}
+
 // ── Phase 7 entity-ref payload structs (append-only) ─────────────────────────
 
 #[derive(Debug, serde::Deserialize)]
@@ -909,6 +928,54 @@ pub enum AppAction {
         title: String,
         /// NIP-33 address of the article to add as the first member.
         item_coordinate: String,
+    },
+
+    // ── Issue #63 additions (append-only) ────────────────────────────────────
+
+    /// Rename the kind:30004 curation set identified by `set_coordinate`.
+    ///
+    /// Kernel is the sole kind:30004 writer for ported screens (no live-lane
+    /// double-publish). Fire-and-forget (D6, Non-Negotiable #3): the updated
+    /// set event arrives back as a `BookmarkSetsUpdated` frame once the NMP
+    /// relay-echo loop closes and the `SetListProjection` re-snapshots.
+    /// Round-trip-preserving: all tags (membership, description, image, etc.)
+    /// are carried verbatim; only the `title` tag is replaced.
+    ///
+    /// No-op when the set cannot be found in `AppState::all_curation_sets` (D6).
+    RenameSet {
+        /// NIP-33 address of the curation set to rename (`"30004:<pk>:<d>"`).
+        set_coordinate: String,
+        /// New display title for the set.
+        title: String,
+    },
+
+    /// Delete the kind:30004 curation set identified by `set_coordinate` by
+    /// publishing a NIP-09 kind:5 deletion event referencing the set coordinate.
+    ///
+    /// Emits `Effect::PublishSetEvent` with a kind:5 template containing an
+    /// `["a", "<coordinate>"]` tag and a `["k", "30004"]` tag. The kind-agnostic
+    /// `run_effect_publish_set_event` runner handles the actual publish.
+    ///
+    /// Fire-and-forget (D6). No local state mutation — the deleted set disappears
+    /// from `myCurationSets` once the relay echoes the deletion and the
+    /// `SetListProjection` re-snapshots (D6, Non-Negotiable #3).
+    ///
+    /// No-op when the set cannot be found in `AppState::all_curation_sets` (D6).
+    DeleteSet {
+        /// NIP-33 address of the curation set to delete (`"30004:<pk>:<d>"`).
+        set_coordinate: String,
+    },
+
+    /// Create a brand-new empty kind:30004 curation set with the given `title`.
+    ///
+    /// Unlike `CreateAndAddToSet`, no initial member is added. The `d_tag` is
+    /// derived from `title` + the current unix timestamp (collision-resistant,
+    /// human-readable). Kernel sole writer; fire-and-forget (D6). The new set
+    /// appears in `myCurationSets` after the NMP relay-echo loop closes and
+    /// `SetListProjection` re-snapshots.
+    CreateSet {
+        /// Display title for the new set.
+        title: String,
     },
 
     // ── Phase 4B additions (append-only) ─────────────────────────────────────

@@ -110,7 +110,7 @@ pub use relays::{
     RelayNip11ProbeSnapshot, RelayRemoveProjection, RelayRemoveProjectionInput, RelayRowProjection,
     RelayRowProjectionInput, RelaySettingsProjection, RelayStatusTone,
 };
-pub use share_links::ArticleShareUrlSnapshot;
+pub use share_links::{ArticleShareUrlSnapshot, CurationSetShareUrlSnapshot};
 pub use time_labels::{
     RelativeTimeLabelInput, RelativeTimeLabelProjection, RelativeTimeLabelStyle,
 };
