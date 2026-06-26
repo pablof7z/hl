@@ -41,8 +41,8 @@ fn encode_payload_for_namespace(namespace: &str, json: &str) -> Result<Vec<u8>, 
         "nmp.nip29.share_event_in_group" => {
             encode::<nmp_nip29::action::ShareEventInGroupInput>(namespace, json)
         }
-        "nmp.nip29.post_chat_message" => {
-            encode::<nmp_nip29::action::PostChatMessageInput>(namespace, json)
+        "nmp.nip29.publish_group_event" => {
+            encode::<nmp_nip29::action::PublishGroupEventInput>(namespace, json)
         }
         "nmp.publish" => encode::<nmp_core::publish::PublishAction>(namespace, json),
         "nmp.nip51.add_bookmark" | "nmp.nip51.remove_bookmark" => {

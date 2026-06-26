@@ -55,11 +55,10 @@
 //! * D8 -- `on_kernel_event` has no blocking awaits.
 //! * D9 -- `created_at` comes from the protocol event; kernel never stamps time.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use nmp_core::KernelEventObserver;
 use nmp_ffi::NmpApp;
-use nmp_nip29::{GroupEventsProjection, GroupId};
 use tokio::sync::mpsc;
 
 use crate::kernel::action::{KernelEvent, PostDiscussionPayload};
@@ -89,26 +88,37 @@ pub(crate) const ROOM_DISCUSSIONS_CAP: usize = 64;
 /// D6: non-kind:11 or kind:11 without `["t","discussion"]` -> silent return.
 /// D8: `on_kernel_event` is synchronous; channel send is non-blocking.
 struct DiscussionObserver {
-    projection: Arc<GroupEventsProjection>,
     group_id: String,
     tx: mpsc::UnboundedSender<Cmd>,
+    events: Mutex<Vec<GroupEventRow>>,
 }
 
 impl KernelEventObserver for DiscussionObserver {
     fn on_kernel_event(&self, event: &nmp_core::substrate::KernelEvent) {
-        // Delegate ingest first so the projection buffers ALL h-tagged events.
-        self.projection.on_kernel_event(event);
-
-        // Filter: only act on kind:11 events with the discussion marker tag.
         if event.kind != KIND_DISCUSSION {
             return;
         }
         if !has_discussion_marker(&event.tags) {
             return;
         }
+        if h_tag_value(&event.tags) != Some(self.group_id.as_str()) {
+            return;
+        }
 
-        // Rebuild the bounded snapshot from the projection's current state.
-        let rows = build_discussion_rows(self.projection.snapshot().events.as_slice());
+        let rows = {
+            let Ok(mut events) = self.events.lock() else {
+                return;
+            };
+            events.push(GroupEventRow::from_kernel_event(event));
+            events.sort_by(|a, b| {
+                b.created_at
+                    .cmp(&a.created_at)
+                    .then_with(|| b.id.cmp(&a.id))
+            });
+            events.dedup_by(|a, b| a.id == b.id);
+            events.truncate(ROOM_DISCUSSIONS_CAP);
+            build_discussion_rows(events.as_slice())
+        };
 
         let _ = self
             .tx
@@ -119,12 +129,44 @@ impl KernelEventObserver for DiscussionObserver {
     }
 }
 
+#[derive(Clone, Debug)]
+struct GroupEventRow {
+    id: String,
+    pubkey: String,
+    content: String,
+    created_at: u64,
+    kind: u32,
+    tags: Vec<Vec<String>>,
+    #[allow(dead_code)]
+    relay_provenance: Vec<String>,
+}
+
+impl GroupEventRow {
+    fn from_kernel_event(event: &nmp_core::substrate::KernelEvent) -> Self {
+        Self {
+            id: event.id.clone(),
+            pubkey: event.author.clone(),
+            content: event.content.clone(),
+            created_at: event.created_at,
+            kind: event.kind,
+            tags: event.tags.clone(),
+            relay_provenance: event.relay_provenance.clone(),
+        }
+    }
+}
+
 // Filtering helpers
 
 /// Returns `true` when `tags` contains a `["t", "discussion"]` entry.
 fn has_discussion_marker(tags: &[Vec<String>]) -> bool {
     tags.iter()
         .any(|t| t.len() >= 2 && t[0] == "t" && t[1] == DISCUSSION_MARKER_TAG)
+}
+
+fn h_tag_value(tags: &[Vec<String>]) -> Option<&str> {
+    tags.iter()
+        .find(|t| t.len() >= 2 && t[0] == "h" && !t[1].is_empty())
+        .map(|t| t[1].as_str())
 }
 
 /// Extract the `["title", value]` tag value, or empty string if absent.
@@ -175,7 +217,7 @@ fn extract_artifact_coordinate(tags: &[Vec<String>]) -> Option<String> {
 /// `ROOM_DISCUSSIONS_CAP` (64).
 ///
 /// D1: all fields are raw protocol data. D6: missing tags -> defaults (no panic).
-fn build_discussion_rows(events: &[nmp_nip29::GroupEventRow]) -> Vec<DiscussionRow> {
+fn build_discussion_rows(events: &[GroupEventRow]) -> Vec<DiscussionRow> {
     let mut rows: Vec<DiscussionRow> = events
         .iter()
         .filter(|e| e.kind == KIND_DISCUSSION && has_discussion_marker(&e.tags))
@@ -311,14 +353,16 @@ pub(crate) fn run_effect_publish_discussion(
 
     let _ = nmp_ref
         .actor_sender()
-        .send(nmp_core::ActorCommand::PublishRawEvent {
-            kind: template.kind,
-            content: template.content,
-            tags: template.tags,
-            target: nmp_core::publish::PublishTarget::Auto,
-            signer_pubkey: None,
-            correlation_id: None,
-        });
+        .send(nmp_core::actor::ActorCommand::Publish(
+            nmp_core::actor::PublishCommand::RawEvent {
+                kind: template.kind,
+                content: template.content,
+                tags: template.tags,
+                target: nmp_core::publish::PublishTarget::Auto,
+                signer_pubkey: None,
+                correlation_id: None,
+            },
+        ));
 }
 
 // Snapshot computation
@@ -365,27 +409,20 @@ pub(crate) fn compute_room_discussions_snapshot(
 ///
 /// Called from the actor when `ViewId::RoomDiscussions { group_id }` opens.
 ///
-/// D6: if `register_event_observer` returns id `0` (slot full), the observer is
+/// D6: if `register_live_event_tap` returns id `0` (slot full), the observer is
 /// silently dropped and room discussions will not update for this room.
 pub(crate) fn register_discussion_observer(
     nmp_ref: &NmpApp,
     group_id: String,
     tx: mpsc::UnboundedSender<Cmd>,
 ) {
-    // GroupId needs (host_relay_url, local_id). The projection's accepts()
-    // method filters only by local_id (h-tag match), so host_relay_url can be
-    // empty here without affecting event routing. The DiscussionObserver
-    // registers against all events from nmp and applies its own kind:11 +
-    // discussion-marker filter on top.
-    let gid = GroupId::new("", group_id.clone());
-    let projection = Arc::new(GroupEventsProjection::new(gid));
     let observer = Arc::new(DiscussionObserver {
-        projection,
         group_id,
         tx,
+        events: Mutex::new(Vec::new()),
     });
 
-    let observer_id = nmp_ref.register_event_observer(observer as Arc<dyn KernelEventObserver>);
+    let observer_id = nmp_ref.register_live_event_tap(observer as Arc<dyn KernelEventObserver>);
     if observer_id.0 == 0 {
         tracing::warn!(
             "discussions::register_discussion_observer: event-observer registration failed (D6)"
@@ -420,7 +457,7 @@ mod tests {
         group_id: &str,
         created_at: u64,
         attachment_url: Option<&str>,
-    ) -> nmp_nip29::GroupEventRow {
+    ) -> GroupEventRow {
         let mut tags = vec![
             vec!["h".to_string(), group_id.to_string()],
             vec!["t".to_string(), "discussion".to_string()],
@@ -429,7 +466,7 @@ mod tests {
         if let Some(url) = attachment_url {
             tags.push(vec!["r".to_string(), url.to_string()]);
         }
-        nmp_nip29::GroupEventRow {
+        GroupEventRow {
             id: id.to_string(),
             pubkey: pubkey.to_string(),
             content: body.to_string(),
@@ -458,7 +495,7 @@ mod tests {
         assert_eq!(rows[0].event_id, "evt_good");
 
         // kind:7 must not appear.
-        let kind7_row = nmp_nip29::GroupEventRow {
+        let kind7_row = GroupEventRow {
             id: "evt_kind7".to_string(),
             pubkey: PUBKEY_A.to_string(),
             content: "+".to_string(),
@@ -471,7 +508,7 @@ mod tests {
         assert!(rows.is_empty(), "kind:7 must be filtered out");
 
         // kind:11 without discussion marker must not appear.
-        let kind11_no_marker = nmp_nip29::GroupEventRow {
+        let kind11_no_marker = GroupEventRow {
             id: "evt_no_marker".to_string(),
             pubkey: PUBKEY_A.to_string(),
             content: "body".to_string(),
@@ -527,7 +564,7 @@ mod tests {
 
         // Two discussions referencing the SAME artifact + one referencing an
         // unseeded artifact (must not produce a chip).
-        let referencing = |id: &str, created_at: u64, address: &str| nmp_nip29::GroupEventRow {
+        let referencing = |id: &str, created_at: u64, address: &str| GroupEventRow {
             id: id.to_string(),
             pubkey: PUBKEY_A.to_string(),
             content: "look at this".to_string(),
@@ -617,7 +654,7 @@ mod tests {
         assert!(rows[0].attachment_url.is_none());
 
         // Empty r-tag value should yield None.
-        let empty_r_row = nmp_nip29::GroupEventRow {
+        let empty_r_row = GroupEventRow {
             id: "evt_empty_r".to_string(),
             pubkey: PUBKEY_A.to_string(),
             content: "body".to_string(),
@@ -702,7 +739,7 @@ mod tests {
         let clock = ManualClock::new(2_000_000);
         let mut state = make_state();
 
-        let rows: Vec<nmp_nip29::GroupEventRow> = (1u64..=70)
+        let rows: Vec<GroupEventRow> = (1u64..=70)
             .map(|i| {
                 make_kind11_row(
                     &format!("evt_{i:04}"),

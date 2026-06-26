@@ -365,7 +365,6 @@ mod tests {
     fn make_profile_card(pubkey: &str) -> ProfileCardModel {
         ProfileCardModel {
             pubkey: pubkey.to_string(),
-            npub: String::new(),
             display_name: Some("Alice".to_string()),
             name: Some("alice".to_string()),
             raw_display_name: Some("Alice".to_string()),

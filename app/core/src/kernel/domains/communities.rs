@@ -18,7 +18,6 @@
 
 use nmp_ffi::NmpApp;
 use nmp_nip29::decode_joined_groups_snapshot;
-use nmp_nip29::register::wire_joined_groups;
 
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
@@ -44,7 +43,7 @@ use crate::kernel::snapshot::{CommunitiesSnapshot, CommunityRow, ViewSnapshot};
 /// interest separately; hl relies on the standing kind:39001/39002 subscriptions
 /// from the active-account interest set for now.)
 pub(crate) fn register_joined_groups_projection(nmp_ref: &NmpApp, active_pubkey: String) {
-    wire_joined_groups(nmp_ref, active_pubkey, String::new());
+    nmp_ref.open_joined_groups(active_pubkey, String::new());
 }
 
 // ─── Frame decode (called from projections::dispatch_typed_frame) ─────────────

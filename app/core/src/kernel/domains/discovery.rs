@@ -50,7 +50,6 @@ use nmp_nip29::action::{
     CreateInviteInput, CreatePublicGroupInput, DiscoverGroupsInput, JoinGroupInput, PutUserInput,
 };
 use nmp_nip29::decode_discovered_groups_snapshot;
-use nmp_nip29::register::open_group_discovery;
 
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
@@ -262,14 +261,10 @@ pub(crate) fn run_effect_dispatch_nip29_action(
 /// An empty `relay_url` is a silent no-op (guarded by `open_group_discovery`).
 /// D6: no panic on failure — `open_group_discovery` is fallible-graceful.
 pub(crate) fn run_effect_wire_group_discovery(relay_url: String, nmp_ref: &NmpApp) {
-    // open_group_discovery returns None for empty relay_url or a poisoned
-    // observer slot — both are silent no-ops (D6). Discovery is app-lifetime
-    // (fire-and-forget): the handle is dropped here without calling
-    // close_group_discovery, so the observer stays live until the NmpApp is
-    // freed. GroupDiscoveryHandle has no Drop impl so drop is a no-op on the
-    // kernel side (same behaviour as the old wire_group_discovery which had
-    // no teardown path).
-    let _ = open_group_discovery(nmp_ref, relay_url);
+    if relay_url.trim().is_empty() {
+        return;
+    }
+    let _ = nmp_ref.open_group_discovery(relay_url);
 }
 
 // ─── Discovery policy helpers ────────────────────────────────────────────────

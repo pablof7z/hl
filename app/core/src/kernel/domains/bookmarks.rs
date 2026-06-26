@@ -353,7 +353,7 @@ pub(crate) fn register_bookmark_list_projection(
     let projection = Arc::new(BookmarkListProjection::new(active_account_slot));
 
     let observer_id =
-        nmp_ref.register_event_observer(Arc::clone(&projection) as Arc<dyn KernelEventObserver>);
+        nmp_ref.register_live_event_tap(Arc::clone(&projection) as Arc<dyn KernelEventObserver>);
     if observer_id.0 == 0 {
         // Observer slot is full or poisoned — skip projection registration.
         tracing::warn!(

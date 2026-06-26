@@ -27,7 +27,7 @@
 //!
 //! nmp-nip51 only ships `BookmarkListProjection` (kind:10003). Kinds 30003,
 //! 30004, and 39701 have no native nmp observer — this module registers custom
-//! `KernelEventObserver` implementations via `nmp_ref.register_event_observer`.
+//! `KernelEventObserver` implementations via `nmp_ref.register_live_event_tap`.
 //!
 //! ## Threading
 //!
@@ -61,6 +61,14 @@ const KIND_WEB_BOOKMARK: u32 = 39701;
 /// "unassigned" sentinel). Idempotent push: re-opening the view replaces the
 /// prior entry under this id.
 pub(crate) const BOOKMARK_SETS_INTEREST_ID: u64 = 0x1653_5001;
+
+fn bookmark_sets_sub_identity() -> nmp_core::subs::SubIdentity {
+    nmp_core::subs::SubIdentity::new(
+        nmp_core::subs::SubOwnerKey::new(BOOKMARK_SETS_INTEREST_ID),
+        nmp_core::subs::SubKey::new(BOOKMARK_SETS_INTEREST_ID),
+        nmp_core::subs::SubScope::Global,
+    )
+}
 
 // ── Schema IDs ────────────────────────────────────────────────────────────────
 
@@ -569,14 +577,16 @@ pub(crate) fn run_effect_publish_set_event(
 
     let _ = nmp_ref
         .actor_sender()
-        .send(nmp_core::ActorCommand::PublishRawEvent {
-            kind: template.kind,
-            content: template.content,
-            tags: template.tags,
-            target: nmp_core::publish::PublishTarget::Auto,
-            signer_pubkey: None,
-            correlation_id: None,
-        });
+        .send(nmp_core::actor::ActorCommand::Publish(
+            nmp_core::actor::PublishCommand::RawEvent {
+                kind: template.kind,
+                content: template.content,
+                tags: template.tags,
+                target: nmp_core::publish::PublishTarget::Auto,
+                signer_pubkey: None,
+                correlation_id: None,
+            },
+        ));
 }
 
 // ── View-scoped interest lifecycle (#1653 BLOCKING #1 + HIGH #7) ─────────────
@@ -704,14 +714,17 @@ pub(crate) fn run_effect_push_interest(
         return;
     }
 
-    nmp_ref.push_interest(LogicalInterest {
-        id: InterestId(BOOKMARK_SETS_INTEREST_ID),
-        scope: InterestScope::ActiveAccount,
-        shape,
-        hints: Vec::new(),
-        lifecycle: InterestLifecycle::Tailing,
-        is_indexer_discovery: false,
-    });
+    nmp_ref.ensure_interest(
+        bookmark_sets_sub_identity(),
+        LogicalInterest {
+            id: InterestId(BOOKMARK_SETS_INTEREST_ID),
+            scope: InterestScope::ActiveAccount,
+            shape,
+            hints: Vec::new(),
+            lifecycle: InterestLifecycle::Tailing,
+            is_indexer_discovery: false,
+        },
+    );
 }
 
 /// Execute `Effect::WithdrawBookmarkSetsInterest` — withdraw the interest and
@@ -730,9 +743,9 @@ pub(crate) fn run_effect_withdraw_interest(nmp: Option<&crate::kernel::actor::Nm
     let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
     let _ = nmp_ref
         .actor_sender()
-        .send(nmp_core::ActorCommand::WithdrawInterest(InterestId(
-            BOOKMARK_SETS_INTEREST_ID,
-        )));
+        .send(nmp_core::actor::ActorCommand::Interests(
+            nmp_core::actor::InterestsCommand::DropInterestOwner(bookmark_sets_sub_identity()),
+        ));
 }
 
 // ── Projection registration ───────────────────────────────────────────────────
@@ -754,7 +767,7 @@ pub(crate) fn register_set_projections(
     let set_proj = Arc::new(SetListProjection::new());
 
     let observer_id =
-        nmp_ref.register_event_observer(Arc::clone(&set_proj) as Arc<dyn KernelEventObserver>);
+        nmp_ref.register_live_event_tap(Arc::clone(&set_proj) as Arc<dyn KernelEventObserver>);
     if observer_id.0 == 0 {
         tracing::warn!(
             "bookmark_sets::register_set_projections: SetListProjection observer registration failed (D6)"
@@ -779,7 +792,7 @@ pub(crate) fn register_set_projections(
     let web_proj = Arc::new(WebBookmarkProjection::new(active_account_slot));
 
     let web_observer_id =
-        nmp_ref.register_event_observer(Arc::clone(&web_proj) as Arc<dyn KernelEventObserver>);
+        nmp_ref.register_live_event_tap(Arc::clone(&web_proj) as Arc<dyn KernelEventObserver>);
     if web_observer_id.0 == 0 {
         tracing::warn!(
             "bookmark_sets::register_set_projections: WebBookmarkProjection observer registration failed (D6)"

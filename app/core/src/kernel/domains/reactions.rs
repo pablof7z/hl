@@ -443,7 +443,7 @@ pub(crate) fn run_effect_dispatch_react_action(
 /// `IdentityChanged(Some)` is needed or desired (re-calling would STACK
 /// observers, causing memory leaks and duplicate events).
 ///
-/// D6: if `register_event_observer` returns id `0` (slot full), the observer
+/// D6: if `register_live_event_tap` returns id `0` (slot full), the observer
 /// is silently dropped and reaction state will not update (logged as a warning).
 pub(crate) fn register_reaction_projection(
     nmp_ref: &NmpApp,
@@ -458,7 +458,7 @@ pub(crate) fn register_reaction_projection(
         tx,
     });
 
-    let observer_id = nmp_ref.register_event_observer(observer as Arc<dyn KernelEventObserver>);
+    let observer_id = nmp_ref.register_live_event_tap(observer as Arc<dyn KernelEventObserver>);
     if observer_id.0 == 0 {
         // Observer slot is full or poisoned — reaction counts will not update.
         tracing::warn!(

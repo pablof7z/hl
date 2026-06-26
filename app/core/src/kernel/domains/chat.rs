@@ -52,13 +52,13 @@
 //! * Non-Negotiable #3 — `reduce_action_post_chat` returns `Vec<Effect>` (never
 //!   `Result`); fire-and-forget.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
 use nmp_core::substrate::ActionPayload;
 use nmp_core::KernelEventObserver;
 use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string};
-use nmp_nip29::{action::PostChatMessageInput, GroupChatProjection, GroupId};
+use nmp_nip29::{action::PublishGroupEventInput, GroupId};
 use tokio::sync::mpsc;
 
 use crate::kernel::action::KernelEvent;
@@ -113,8 +113,8 @@ pub struct ChatRoomState {
 /// D6: kind:11 events are silently dropped at step 1.
 struct ChatObserver {
     group_id: String,
-    projection: Arc<GroupChatProjection>,
     tx: mpsc::UnboundedSender<Cmd>,
+    messages: Mutex<Vec<ChatMessageRawRow>>,
     /// Accumulated `event_id → reply_to_event_id` recovered from raw tags.
     /// `GroupChatProjection.snapshot()` does not carry `reply_to`, and a single
     /// `on_kernel_event` only has the raw tags for the *triggering* event — so we
@@ -132,8 +132,9 @@ impl KernelEventObserver for ChatObserver {
             return;
         }
 
-        // Delegate ingest to the projection (updates its internal BoundedMessageMap).
-        self.projection.on_kernel_event(event);
+        if h_tag_value(&event.tags) != Some(self.group_id.as_str()) {
+            return;
+        }
 
         // Recover reply_to_event_id from the raw event tags and remember it,
         // keyed by this event's id. Per design: prefer ["e", id, "", "reply"]
@@ -144,42 +145,40 @@ impl KernelEventObserver for ChatObserver {
             }
         }
 
-        // Snapshot the updated group message list (brief Mutex acquire).
-        let snapshot = self.projection.snapshot();
-
-        // Build raw rows from the GroupChatMessage list, looking each message's
-        // reply_to up in the accumulated index so EVERY message retains its
-        // reply preview across subsequent events (not just the triggering one).
-        let mut messages: Vec<ChatMessageRawRow> = {
+        let messages: Vec<ChatMessageRawRow> = {
             let idx = self.reply_index.lock().ok();
-            snapshot
-                .messages
-                .into_iter()
-                .map(|m| {
-                    let reply = idx.as_ref().and_then(|i| i.get(&m.id).cloned());
-                    ChatMessageRawRow {
-                        event_id: m.id,
-                        author_pubkey: m.pubkey,
-                        content: m.content,
-                        created_at: m.created_at,
-                        reply_to_event_id: reply,
-                    }
-                })
-                .collect()
+            let reply = idx.as_ref().and_then(|i| i.get(&event.id).cloned());
+            let Ok(mut messages) = self.messages.lock() else {
+                return;
+            };
+            messages.push(ChatMessageRawRow {
+                event_id: event.id.clone(),
+                author_pubkey: event.author.clone(),
+                content: event.content.clone(),
+                created_at: event.created_at,
+                reply_to_event_id: reply,
+            });
+            messages.sort_by(|a, b| {
+                b.created_at
+                    .cmp(&a.created_at)
+                    .then_with(|| b.event_id.cmp(&a.event_id))
+            });
+            messages.dedup_by(|a, b| a.event_id == b.event_id);
+            messages.truncate(CHAT_MAX_MESSAGES);
+            messages.clone()
         };
-
-        // Sort newest-first for the authoritative buffer
-        messages.sort_by(|a, b| {
-            b.created_at
-                .cmp(&a.created_at)
-                .then_with(|| b.event_id.cmp(&a.event_id))
-        });
 
         let _ = self.tx.send(Cmd::Event(KernelEvent::ChatRoomUpdated {
             group_id: self.group_id.clone(),
             messages,
         }));
     }
+}
+
+fn h_tag_value(tags: &[Vec<String>]) -> Option<&str> {
+    tags.iter()
+        .find(|t| t.len() >= 2 && t[0] == "h" && !t[1].is_empty())
+        .map(|t| t[1].as_str())
 }
 
 /// Recover `reply_to_event_id` from raw event tags.
@@ -304,20 +303,26 @@ pub(crate) fn reduce_action_post_chat(state: &AppState, payload: PostChatPayload
         return vec![];
     }
 
-    // Build the PostChatMessageInput wire shape.
+    // Build the generic NIP-29 publish_group_event wire shape.
     // Use serde_json::json! (never format!) for safe serialisation.
     let mut json_map = serde_json::json!({
         "group": {
             "host_relay_url": host_relay_url,
             "local_id": group_id,
         },
+        "kind": KIND_CHAT_MESSAGE,
         "content": content,
-        "previous_event_id_prefixes": [],
+        "tags": [],
     });
 
     if let Some(reply) = payload.reply_to_event_id {
         if !reply.trim().is_empty() {
-            json_map["reply_to_event_id"] = serde_json::Value::String(reply);
+            json_map["tags"] = serde_json::Value::Array(vec![serde_json::Value::Array(vec![
+                serde_json::Value::String("e".to_string()),
+                serde_json::Value::String(reply),
+                serde_json::Value::String(String::new()),
+                serde_json::Value::String("reply".to_string()),
+            ])]);
         }
     }
 
@@ -363,19 +368,18 @@ pub(crate) fn run_effect_wire_group_chat(
 ) {
     let Some(handle) = nmp else { return };
 
-    let gid = GroupId::new(host_relay_url, group_id.clone());
-    let projection = Arc::new(GroupChatProjection::new(gid));
+    let _gid = GroupId::new(host_relay_url, group_id.clone());
     let observer = Arc::new(ChatObserver {
         group_id,
-        projection,
         tx,
+        messages: Mutex::new(Vec::new()),
         reply_index: std::sync::Mutex::new(std::collections::HashMap::new()),
     });
 
     // SAFETY: ptr is a valid non-null NmpApp pointer kept alive by NmpHandle
     // for the full actor lifetime (outlives this call).
     let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
-    let observer_id = nmp_ref.register_event_observer(observer as Arc<dyn KernelEventObserver>);
+    let observer_id = nmp_ref.register_live_event_tap(observer as Arc<dyn KernelEventObserver>);
     if observer_id.0 == 0 {
         tracing::warn!("chat::run_effect_wire_group_chat: event-observer registration failed (D6)");
     }
@@ -395,10 +399,10 @@ pub(crate) fn run_effect_dispatch_chat_post(
 ) {
     let Some(handle) = nmp else { return };
 
-    let action = match serde_json::from_str::<PostChatMessageInput>(&json) {
+    let action = match serde_json::from_str::<PublishGroupEventInput>(&json) {
         Ok(a) => a,
         Err(e) => {
-            tracing::warn!(error = %e, "chat: failed to deserialise PostChatMessageInput");
+            tracing::warn!(error = %e, "chat: failed to deserialise PublishGroupEventInput");
             return;
         }
     };
@@ -406,7 +410,7 @@ pub(crate) fn run_effect_dispatch_chat_post(
     let correlation_id = uuid::Uuid::new_v4().to_string();
     let envelope = encode_dispatch_envelope(
         &correlation_id,
-        "nmp.nip29.post_chat_message",
+        "nmp.nip29.publish_group_event",
         DISPATCH_ENVELOPE_SCHEMA_VERSION,
         &payload_bytes,
     );
@@ -638,17 +642,14 @@ mod tests {
     // RoomChatSnapshot. This tests the observer-level kind gate.
     #[test]
     fn chat_consumes_group_chat_projection_kind9_only() {
-        use nmp_nip29::GroupId;
         use tokio::sync::mpsc;
 
         let (tx, mut rx) = mpsc::unbounded_channel::<Cmd>();
         let group_id = "test-room".to_string();
-        let gid = GroupId::new("wss://relay.example.com", group_id.clone());
-        let projection = Arc::new(GroupChatProjection::new(gid));
         let observer = ChatObserver {
             group_id: group_id.clone(),
-            projection,
             tx,
+            messages: Mutex::new(Vec::new()),
             reply_index: std::sync::Mutex::new(std::collections::HashMap::new()),
         };
 
@@ -741,12 +742,12 @@ mod tests {
         assert!(result3.is_none(), "no e tag → no reply_to");
     }
 
-    // 7-C3: post_chat_dispatches_post_chat_message
+    // 7-C3: post_chat_dispatches_publish_group_event
     //
     // hl.chat.post must produce exactly one Effect::DispatchChatPost with a
-    // serde-valid JSON payload containing group/content/previous_event_id_prefixes.
+    // serde-valid JSON payload containing group/kind/content/tags.
     #[test]
-    fn post_chat_dispatches_post_chat_message() {
+    fn post_chat_dispatches_publish_group_event() {
         let mut state = make_state();
         let clock = ManualClock::default();
         seed_community(&mut state, "test-room", "wss://relay.example.com");
@@ -772,13 +773,11 @@ mod tests {
                     parsed["group"]["host_relay_url"].as_str().unwrap(),
                     "wss://relay.example.com"
                 );
+                assert_eq!(parsed["kind"].as_u64().unwrap(), KIND_CHAT_MESSAGE as u64);
                 assert_eq!(parsed["content"].as_str().unwrap(), "hello world");
                 assert!(
-                    parsed["previous_event_id_prefixes"]
-                        .as_array()
-                        .unwrap()
-                        .is_empty(),
-                    "previous_event_id_prefixes must be empty array"
+                    parsed["tags"].as_array().unwrap().is_empty(),
+                    "tags must be empty array"
                 );
             }
             _ => panic!("expected DispatchChatPost"),

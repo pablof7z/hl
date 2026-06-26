@@ -50,8 +50,7 @@ use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SC
 use nmp_core::substrate::ActionPayload;
 use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
 use nmp_nip29::action::{RepostInGroupInput, ShareEventInGroupInput};
-use nmp_nip29::decode_group_events_snapshot;
-use nmp_nip29::register::wire_group_events;
+use nmp_nip29::decode_group_timeline_snapshot;
 use nmp_nip29::GroupId;
 
 use crate::kernel::app::AppState;
@@ -64,7 +63,7 @@ use crate::kernel::snapshot::{
 use crate::kernel::view::ViewId;
 
 // Re-export schema ID so projections.rs can match without importing nmp_nip29 directly.
-pub(crate) use nmp_nip29::GROUP_EVENTS_SCHEMA_ID;
+pub(crate) use nmp_nip29::GROUP_TIMELINE_SCHEMA_ID;
 
 /// Bounded cap for room-home events buffered in `AppState::room_home_events`.
 /// Lane bodies are empty in Phase 3F; the cap protects against memory growth
@@ -205,7 +204,7 @@ pub(crate) fn run_effect_wire_group_events(
     }
 
     let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
-    wire_group_events(nmp_ref, GroupId::new(host_relay_url, group_id));
+    nmp_ref.open_group_timeline(GroupId::new(host_relay_url, group_id));
 }
 
 // ─── Frame decode (called from projections::dispatch_typed_frame) ─────────────
@@ -219,9 +218,14 @@ pub(crate) fn run_effect_wire_group_events(
 ///
 /// D6: any decode error leaves `AppState::room_home_events` unchanged (no-op).
 pub(crate) fn apply_group_events_frame(state: &mut AppState, payload: &[u8]) {
-    match decode_group_events_snapshot(payload) {
+    match decode_group_timeline_snapshot(payload) {
         Ok(snapshot) => {
-            let key = snapshot.group_id.clone();
+            let Some(key) = state.room_home_timeline_group_id.clone() else {
+                tracing::trace!(
+                    "room_home::apply_group_events_frame: no active room timeline key — frame ignored (D6)"
+                );
+                return;
+            };
             let capped: Vec<_> = snapshot
                 .events
                 .into_iter()

@@ -2470,14 +2470,16 @@ pub(crate) async fn run_effect(
 
             let _ = nmp_ref
                 .actor_sender()
-                .send(nmp_core::ActorCommand::PublishRawEvent {
-                    kind: 0,
-                    content: content_json,
-                    tags: vec![],
-                    target: nmp_core::publish::PublishTarget::Auto,
-                    signer_pubkey: None,
-                    correlation_id: None,
-                });
+                .send(nmp_core::actor::ActorCommand::Publish(
+                    nmp_core::actor::PublishCommand::RawEvent {
+                        kind: 0,
+                        content: content_json,
+                        tags: vec![],
+                        target: nmp_core::publish::PublishTarget::Auto,
+                        signer_pubkey: None,
+                        correlation_id: None,
+                    },
+                ));
         }
 
         Effect::ApplyNetworkPath { is_wifi, wifi_only } => {
@@ -3082,6 +3084,7 @@ pub(crate) async fn actor_task(
             match &effect {
                 Effect::WireGroupEvents { group_id } => {
                     // Resolve host_relay_url from communities and wire the projection.
+                    state.room_home_timeline_group_id = Some(group_id.clone());
                     room_home::run_effect_wire_group_events(
                         group_id.clone(),
                         &state,
@@ -3092,6 +3095,9 @@ pub(crate) async fn actor_task(
                 Effect::ReleaseGroupEvents { group_id } => {
                     // Clear the hl-side event buffer to bound memory.
                     state.room_home_events.remove(group_id);
+                    if state.room_home_timeline_group_id.as_deref() == Some(group_id.as_str()) {
+                        state.room_home_timeline_group_id = None;
+                    }
                     continue;
                 }
                 // ── Phase 4F inline effect handlers ──────────────────────────
