@@ -129,7 +129,7 @@ enum MarkdownRenderer {
 
     // MARK: - Footnote block rendering
 
-    private static func renderFootnotes(
+    static func renderFootnotes(
         _ defs: [FootnotePreprocessor.Definition],
         accent: UIColor,
         ink: UIColor,
