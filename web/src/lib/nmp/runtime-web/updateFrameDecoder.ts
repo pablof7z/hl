@@ -11,6 +11,7 @@
 //   if (frame) {
 //     // frame.projectionKeys — list of all projection keys in this snapshot
 //     // frame.refsProfileBytes — raw NRRD sidecar for RefProfileStore
+//     // frame.refsEventBytes — raw NRRD sidecar for RefEventStore (#65 S4)
 //     // frame.sessionId / .snapshotEpoch — for RefRowCache identity tracking
 //   }
 
@@ -22,14 +23,18 @@ import type { SnapshotFrame } from "../generated/nmp/transport/snapshot-frame.js
 
 /** The typed projection key for the profile resolver sidecar (mirrors REFS_PROFILE_KEY). */
 export const REFS_PROFILE_PROJECTION_KEY = "refs.profile";
+/** The typed projection key for the event resolver sidecar (mirrors REFS_EVENT_KEY). */
+export const REFS_EVENT_PROJECTION_KEY = "refs.event";
 const NRRD_FILE_IDENTIFIER = "NRRD";
 
-/** Decoded UpdateFrame — projection keys + optional refs.profile sidecar + identity fields. */
+/** Decoded UpdateFrame — projection keys + optional refs.profile / refs.event sidecars + identity fields. */
 export type DecodedUpdateFrame = {
   /** All projection keys present in this snapshot (builtin + app-registered). */
   projectionKeys: string[];
   /** Raw NRRD bytes of the `refs.profile` sidecar, or undefined when absent. */
   refsProfileBytes?: Uint8Array;
+  /** Raw NRRD bytes of the `refs.event` sidecar, or undefined when absent. */
+  refsEventBytes?: Uint8Array;
   /** Session identity from the SnapshotFrame (for RefRowCache identity tracking). */
   sessionId: bigint;
   /** Snapshot epoch from the SnapshotFrame (for RefRowCache baseline rebuild). */
@@ -83,6 +88,15 @@ function decodeFromSnapshot(snap: SnapshotFrame): DecodedUpdateFrame {
       // Surface raw sidecar bytes for RefProfileStore to merge (ADR-0063).
       // Copy so the view outlives the ByteBuffer.
       result.refsProfileBytes = payloadBytes.slice();
+    }
+
+    if (
+      key === REFS_EVENT_PROJECTION_KEY &&
+      payload.fileIdentifier() === NRRD_FILE_IDENTIFIER
+    ) {
+      // Surface raw sidecar bytes for RefEventStore to merge (ADR-0063, #65 S4).
+      // Copy so the view outlives the ByteBuffer.
+      result.refsEventBytes = payloadBytes.slice();
     }
   }
 
