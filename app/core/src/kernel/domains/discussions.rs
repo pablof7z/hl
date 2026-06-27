@@ -4,7 +4,7 @@
 //! ## Responsibilities
 //!
 //! * **READ** — per-room `DiscussionObserver` wraps `GroupEventsProjection`
-//!   (nmp-nip29, pinned d16aea60) as a `KernelEventObserver`. On each raw
+//!   (nmp-nip29) as an `ObservedProjectionSink`. On each scoped
 //!   Nostr event the observer:
 //!   (a) delegates ingest to the underlying `GroupEventsProjection`,
 //!   (b) filters to kind==11 events that carry a `["t","discussion"]` tag, and
@@ -57,8 +57,10 @@
 
 use std::sync::{Arc, Mutex};
 
-use nmp_core::KernelEventObserver;
+use nmp_core::substrate::{ObservedProjection, ObservedProjectionRegistrar};
+use nmp_core::ObservedProjectionSink;
 use nmp_ffi::NmpApp;
+use nmp_planner::InterestShape;
 use tokio::sync::mpsc;
 
 use crate::kernel::action::{KernelEvent, PostDiscussionPayload};
@@ -77,7 +79,7 @@ const DISCUSSION_MARKER_TAG: &str = "discussion";
 /// Maximum rows retained per room in `AppState::room_discussions`.
 pub(crate) const ROOM_DISCUSSIONS_CAP: usize = 64;
 
-// READ side: KernelEventObserver wrapper
+// READ side: observed-projection sink wrapper
 
 /// Observer wrapper for a single NIP-29 room. Ingests raw Nostr events into
 /// `GroupEventsProjection` and produces `KernelEvent::RoomDiscussionsUpdated`
@@ -93,7 +95,7 @@ struct DiscussionObserver {
     events: Mutex<Vec<GroupEventRow>>,
 }
 
-impl KernelEventObserver for DiscussionObserver {
+impl ObservedProjectionSink for DiscussionObserver {
     fn on_kernel_event(&self, event: &nmp_core::substrate::KernelEvent) {
         if event.kind != KIND_DISCUSSION {
             return;
@@ -405,24 +407,46 @@ pub(crate) fn compute_room_discussions_snapshot(
 // Projection registration
 
 /// Wire a fresh `DiscussionObserver` (wrapping a new `GroupEventsProjection` for
-/// `group_id`) as a `KernelEventObserver` against `nmp_ref`.
+/// `group_id`) as an observed projection against `nmp_ref`.
 ///
 /// Called from the actor when `ViewId::RoomDiscussions { group_id }` opens.
 ///
-/// D6: if `register_live_event_tap` returns id `0` (slot full), the observer is
+/// D6: if `open_observed_projection` returns id `0` (slot full), the observer is
 /// silently dropped and room discussions will not update for this room.
 pub(crate) fn register_discussion_observer(
     nmp_ref: &NmpApp,
     group_id: String,
+    host_relay_url: String,
     tx: mpsc::UnboundedSender<Cmd>,
 ) {
+    let group_id = group_id.trim().to_string();
+    let host_relay_url = host_relay_url.trim().to_string();
+    if group_id.is_empty() || host_relay_url.is_empty() {
+        return;
+    }
+
     let observer = Arc::new(DiscussionObserver {
-        group_id,
+        group_id: group_id.clone(),
         tx,
         events: Mutex::new(Vec::new()),
     });
 
-    let observer_id = nmp_ref.register_live_event_tap(observer as Arc<dyn KernelEventObserver>);
+    let mut shape = InterestShape::default();
+    shape.kinds.insert(KIND_DISCUSSION);
+    shape
+        .tags
+        .entry("h".to_string())
+        .or_default()
+        .insert(group_id.clone());
+    shape.relay_pin = Some(host_relay_url);
+
+    let observer_id = nmp_ref.open_observed_projection(ObservedProjection::from_shape(
+        observer as Arc<dyn ObservedProjectionSink>,
+        format!("hl.discussions.{group_id}"),
+        1,
+        shape,
+        ROOM_DISCUSSIONS_CAP,
+    ));
     if observer_id.0 == 0 {
         tracing::warn!(
             "discussions::register_discussion_observer: event-observer registration failed (D6)"

@@ -29,7 +29,7 @@ use crate::kernel::snapshot::{CommunitiesSnapshot, CommunityRow, ViewSnapshot};
 /// against `nmp_ref` for `active_pubkey`.
 ///
 /// Delegates directly to `nmp_nip29::register::wire_joined_groups`, which:
-///   - Registers a `JoinedGroupsProjection` as a `KernelEventObserver` (ingest).
+///   - Registers a `JoinedGroupsProjection` as an observed projection (ingest).
 ///   - Registers a typed FlatBuffers sidecar under `"nmp.nip29.joined_groups"`.
 ///
 /// Must be called:

@@ -17,26 +17,25 @@ hex = "0.4"
 nostr-sdk = { version = "0.44.1", features = ["nip49", "nip04", "nip44"] }
 nostr = { version = "0.44", default-features = false, features = ["std", "nip46"] }
 nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "fc0589fc88d61912779741fcce7d4e7176cf9a30", default-features = false }
-# NMP tracks the master branch via GIT deps (NOT local path deps) so hl is
-# decoupled from the local monorepo checkout. `cargo update` refreshes Cargo.lock
-# to the current master tip; a rebuild then picks up the latest NMP automatically.
-nmp-core = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
-nmp-planner = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
-nmp-ffi = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master", features = ["signer-broker", "external-signer"] }
-nmp-defaults = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
-nmp-signers = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
-nmp-nip11 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
-nmp-nip02 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
-nmp-nip25 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
-nmp-nip29 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
-nmp-nip22 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
-nmp-nip50 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
-nmp-nip51 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
-nmp-nip78 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
-nmp-blossom = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
-nmp-content = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
-nmp-store = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
-nmp-kinds = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
+# NMP is consumed from a released tag so hl does not float across transient
+# framework contracts between releases.
+nmp-core = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
+nmp-planner = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
+nmp-ffi = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3", features = ["signer-broker", "external-signer"] }
+nmp-defaults = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
+nmp-signers = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
+nmp-nip11 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
+nmp-nip02 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
+nmp-nip25 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
+nmp-nip29 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
+nmp-nip22 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
+nmp-nip50 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
+nmp-nip51 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
+nmp-nip78 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
+nmp-blossom = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
+nmp-content = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
+nmp-store = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
+nmp-kinds = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 futures = "0.3"

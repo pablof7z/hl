@@ -584,7 +584,7 @@ pub enum Effect {
 
     // ── Phase 7 chat additions (append-only) ─────────────────────────────────
     /// Register a `ChatObserver` wrapping a fresh `GroupChatProjection` scoped to
-    /// `group_id` as a `KernelEventObserver` against the live `NmpApp`.
+    /// `group_id` as an observed projection against the live `NmpApp`.
     ///
     /// Sent when `hl.chat.open` is dispatched. The observer filters to kind:9,
     /// recovers `reply_to_event_id` from raw tags, and sends
