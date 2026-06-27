@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Dev-only probe for the NMP web bridge (GitHub #65, Slices 1–3).
+  // Dev-only probe for the NMP web bridge (GitHub #65, Slices 1–4).
   //
   // NOT linked from nav. Used by Playwright tests to assert data-* attributes.
   //
@@ -23,6 +23,11 @@
   //     (set once refs.profile sidecar carries it), or "" if not yet resolved.
   //     Mirrors ?resolve_profile=<pubkeyHex> query param.
   //
+  // Slice 4 event read-proof attributes (S4, #65):
+  //   data-resolved-event-id      = canonical hex event id, or "" if not yet resolved.
+  //     Mirrors ?resolve_event=<hexId> query param.
+  //   data-resolved-event-content = event content string, or "" if not yet resolved.
+  //
   // Slice 2 query params (mirrors ?relay_bootstrap= pattern):
   //   ?set_identity_pubkey=<hex>          — install NIP-07 identity via setSigner
   //   ?begin_sign=<url-encoded-json>      — start a sign round-trip after setSigner
@@ -31,6 +36,9 @@
   //   ?relay_bootstrap=<json>             — [[url, role], ...] relay bootstrap list
   //   ?resolve_profile=<pubkeyHex>        — resolve a profile by pubkey after start
   //   ?resolve_profile_hint=<relayUrl>    — relay URL hint for the resolve_ref call
+  //
+  // Slice 4 query params:
+  //   ?resolve_event=<hexId>              — resolve an event by id after start
 
   import { onMount } from 'svelte';
   import { browser } from '$app/environment';
@@ -40,6 +48,9 @@
   const REF_NS_PROFILE = 0;
   const REF_SHAPE_PROFILE_REF = 0;
   const REF_LIVENESS_LIVE = 1;
+  // S4: event resolve
+  const REF_NS_EVENT = 1;
+  const REF_SHAPE_EVENT_EMBED = 0;
 
   let snapshot: RuntimeSnapshot | null = $state(null);
   let startError: string | null = $state(null);
@@ -48,6 +59,9 @@
   let signResult: string | null = $state(null);   // null = pending (or no begin_sign param)
   // S3: resolved profile display name (null = not yet resolved / no param)
   let resolvedDisplayName: string | null = $state(null);
+  // S4: resolved event id + content (null = not yet resolved / no param)
+  let resolvedEventId: string | null = $state(null);
+  let resolvedEventContent: string | null = $state(null);
 
   function formatStatus(s: RuntimeSnapshot['status']): string {
     if (typeof s === 'string') return s;
@@ -70,10 +84,15 @@
     // Optional relay URL hint for the resolve_ref call (speeds up discovery).
     const resolveProfileHint = params.get('resolve_profile_hint');
     // Consumer ID scoped to this probe mount — released on unmount.
-    const CONSUMER_ID = 'nmp-probe-s3';
+    const CONSUMER_ID_S3 = 'nmp-probe-s3';
+
+    // S4: ?resolve_event param — the event hex id we want to resolve.
+    const resolveEventParam = params.get('resolve_event');
+    // Consumer ID for event resolution — released on unmount.
+    const CONSUMER_ID_S4 = 'nmp-probe-s4';
 
     // Subscribe so we always have the latest snapshot. Also watch sign events and
-    // resolved profiles.
+    // resolved profiles/events.
     const unsub = client.subscribe((snap) => {
       snapshot = snap;
       // Update sign result from the event stream (only if begin_sign was requested).
@@ -90,6 +109,14 @@
         const profile = client.resolveProfile(resolveProfileParam);
         if (profile?.displayName) {
           resolvedDisplayName = profile.displayName;
+        }
+      }
+      // S4: check if the resolved event has arrived in the store.
+      if (resolveEventParam && resolvedEventId === null) {
+        const ev = client.resolvedEvent(resolveEventParam);
+        if (ev) {
+          resolvedEventId = ev.id;
+          resolvedEventContent = ev.content;
         }
       }
     });
@@ -140,9 +167,16 @@
             resolveProfileParam,
             REF_SHAPE_PROFILE_REF,
             REF_LIVENESS_LIVE,
-            CONSUMER_ID,
+            CONSUMER_ID_S3,
             hints,
           );
+        }
+
+        // ─── S4: resolve event ──────────────────────────────────────────────
+        if (resolveEventParam) {
+          // resolveEvent is fire-and-forget from the probe's perspective: the
+          // subscription above polls `client.resolvedEvent()` on each snapshot.
+          await client.resolveEvent(resolveEventParam, CONSUMER_ID_S4);
         }
       })
       .catch((err: unknown) => {
@@ -150,9 +184,12 @@
       });
 
     return () => {
-      // Release the ref on unmount (consumer-id discipline, ADR-0063).
+      // Release the refs on unmount (consumer-id discipline, ADR-0063).
       if (resolveProfileParam) {
-        void client.releaseRef(REF_NS_PROFILE, resolveProfileParam, CONSUMER_ID);
+        void client.releaseRef(REF_NS_PROFILE, resolveProfileParam, CONSUMER_ID_S3);
+      }
+      if (resolveEventParam) {
+        void client.releaseRef(REF_NS_EVENT, resolveEventParam, CONSUMER_ID_S4);
       }
       unsub();
     };
@@ -172,6 +209,9 @@
     (snapshot?.projectionKeys ?? []).join(',')
   );
   const dataResolvedProfileDisplayname = $derived(resolvedDisplayName ?? '');
+  // S4 attrs
+  const dataResolvedEventId = $derived(resolvedEventId ?? '');
+  const dataResolvedEventContent = $derived(resolvedEventContent ?? '');
 </script>
 
 <main
@@ -183,6 +223,8 @@
   data-sign-result={dataSignResult}
   data-projection-keys={dataProjectionKeys}
   data-resolved-profile-displayname={dataResolvedProfileDisplayname}
+  data-resolved-event-id={dataResolvedEventId}
+  data-resolved-event-content={dataResolvedEventContent}
 >
   <h1>NMP Bridge Probe</h1>
 
@@ -207,6 +249,12 @@
 
     <dt>Resolved profile display name</dt>
     <dd>{dataResolvedProfileDisplayname || '(none yet)'}</dd>
+
+    <dt>Resolved event id</dt>
+    <dd>{dataResolvedEventId || '(none yet)'}</dd>
+
+    <dt>Resolved event content</dt>
+    <dd>{dataResolvedEventContent || '(none yet)'}</dd>
   </dl>
 
   {#if startError}
