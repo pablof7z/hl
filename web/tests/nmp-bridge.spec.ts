@@ -526,3 +526,96 @@ test.describe("NMP read proof (#65 S3, single-ref profile decode)", () => {
     },
   );
 });
+
+// ─── Slice 4: read proof — single-ref event resolve ───────────────────────────
+
+test.describe("NMP bridge @wasm event resolve", () => {
+  test(
+    "@wasm S4: single-ref event resolves via fixture relay",
+    async ({ page }) => {
+      test.setTimeout(60_000);
+
+      const consoleMessages: string[] = [];
+      page.on("console", (msg) => consoleMessages.push(`[${msg.type()}] ${msg.text()}`));
+      page.on("pageerror", (err) => consoleMessages.push(`[pageerror] ${err.message}`));
+
+      const { startEventFixtureRelay } = await import("./fixture-relay.js");
+      const relay = await startEventFixtureRelay();
+
+      try {
+        // relay_bootstrap (single relay) as "read" — where the wasm subscribes.
+        // Events do NOT require NIP-65 discovery; no outbox relay needed.
+        // set_identity_pubkey anchors the relay connection to the event author's pubkey.
+        const relayBootstrap = JSON.stringify([[relay.url, "read"]]);
+        const url =
+          `${PROBE}` +
+          `?relay_bootstrap=${encodeURIComponent(relayBootstrap)}` +
+          `&resolve_event=${relay.eventId}` +
+          `&set_identity_pubkey=${relay.pubkey}`;
+
+        await page.goto(url);
+
+        const shell = page.locator(SHELL);
+
+        // Real worker must boot.
+        await expect(shell).toHaveAttribute("data-bridge-kind", "worker", { timeout: 30_000 });
+
+        // Wait for first UpdateFrame — runtime is running and frames are flowing.
+        await expect(shell).toHaveAttribute("data-has-snapshot", "true", { timeout: 30_000 });
+
+        // Identity must be installed before the relay subscription anchors.
+        await expect(shell).toHaveAttribute("data-identity-set", "true", { timeout: 15_000 });
+
+        // Wait for the resolved event content.
+        // The wasm runtime opens a REQ for the event id to the fixture relay,
+        // receives the seeded kind:1 event, ingests it, and pushes a refs.event
+        // sidecar (NRRD KCEV batch) in the next UpdateFrame. The host-side
+        // RefEventStore decodes the ClaimedEventsSnapshot and the probe surfaces
+        // the content.
+        await expect(shell)
+          .toHaveAttribute("data-resolved-event-content", relay.content, { timeout: 60_000 })
+          .catch(async (err: unknown) => {
+            const projKeys = await shell
+              .getAttribute("data-projection-keys")
+              .catch(() => "(error)");
+            const resolvedContent = await shell
+              .getAttribute("data-resolved-event-content")
+              .catch(() => "(error)");
+            const resolvedId = await shell
+              .getAttribute("data-resolved-event-id")
+              .catch(() => "(error)");
+            const filters = relay.receivedFilters();
+            const probeEventsJson = await page
+              .$eval("details pre", (el) => el.textContent ?? "")
+              .catch(() => "(details not found)");
+            console.error(
+              "[nmp-bridge @wasm S4] HONEST FAILURE: event did not resolve.\n" +
+              `  relay.url = ${relay.url}\n` +
+              `  relay.eventId = ${relay.eventId}\n` +
+              `  relay.pubkey = ${relay.pubkey}\n` +
+              `  relay.connectionCount = ${relay.connectionCount()}\n` +
+              `  relay.receivedFilters (${filters.length} REQ sets total) = ${JSON.stringify(filters)}\n` +
+              `  data-projection-keys = ${projKeys}\n` +
+              `  data-resolved-event-id = ${resolvedId}\n` +
+              `  data-resolved-event-content = ${resolvedContent}\n` +
+              `  probe events (last 32): ${probeEventsJson.slice(0, 2000)}\n` +
+              "  Worker console:\n" +
+                (consoleMessages.length ? consoleMessages.join("\n") : "(none)"),
+            );
+            throw err;
+          });
+
+        const resolvedContent = await shell.getAttribute("data-resolved-event-content");
+        const resolvedId = await shell.getAttribute("data-resolved-event-id");
+        console.log(
+          `[nmp-bridge @wasm S4] Resolved event id = "${resolvedId}" (expected "${relay.eventId}")`,
+        );
+        console.log(
+          `[nmp-bridge @wasm S4] Resolved content = "${resolvedContent}" (expected "${relay.content}")`,
+        );
+      } finally {
+        await relay.close();
+      }
+    },
+  );
+});

@@ -223,3 +223,61 @@ export async function startProfileFixtureRelay(): Promise<ProfileFixtureRelay> {
     displayName,
   };
 }
+
+export type EventFixtureRelay = {
+  /** Relay URL — pass as relay_bootstrap host param. */
+  url: string;
+  /** Hex event id of the seeded kind:1 event. */
+  eventId: string;
+  /** Content of the seeded kind:1 event. */
+  content: string;
+  /** Hex pubkey of the event author (used as set_identity_pubkey to anchor relay). */
+  pubkey: string;
+  /** Number of inbound WebSocket connections to the relay. */
+  connectionCount(): number;
+  /** All NIP-01 REQ filter arrays received by the relay. */
+  receivedFilters(): NostrFilter[][];
+  /** Gracefully close the relay server. */
+  close(): Promise<void>;
+};
+
+/**
+ * Single-relay event fixture for hermetic NMP single-ref event resolution.
+ *
+ * Events do NOT require NIP-65 discovery — the kernel fetches them directly
+ * from whichever relay is listed in relay_bootstrap. A single relay is
+ * sufficient for the event round-trip.
+ *
+ * Serves a deterministic signed kind:1 event that can be fetched via
+ * resolveRef(namespace=1, key=eventId, shape=0, liveness=1).
+ */
+export async function startEventFixtureRelay(): Promise<EventFixtureRelay> {
+  const sk = generateSecretKey();
+  const pubkey = getPublicKey(sk);
+  const content = "Hello NMP event resolve round-trip";
+  const now = Math.floor(Date.now() / 1000);
+  const allFilters: NostrFilter[][] = [];
+
+  const event = finalizeEvent(
+    {
+      kind: 1,
+      created_at: now - 5,
+      tags: [],
+      content,
+    },
+    sk,
+  ) as NostrEvent;
+
+  const events: NostrEvent[] = [event];
+  const server = await startServer(events, allFilters);
+
+  return {
+    url: server.url,
+    eventId: event.id,
+    content,
+    pubkey,
+    connectionCount: server.connectionCount,
+    receivedFilters: () => allFilters,
+    close: server.close,
+  };
+}
