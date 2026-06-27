@@ -24,8 +24,9 @@ import {
 import { fulfilSignRequestViaExtension } from "./runtime-web/signBroker";
 import { decodeUpdateFrame } from "./runtime-web/updateFrameDecoder";
 import { RefProfileStore, type ProfileWire } from "./runtime-web/refProfileStore";
+import { RefEventStore, type ClaimedEventWire } from "./runtime-web/refEventStore";
 
-export type { IdentityRelayPermission, RuntimeStatus, WorkerEvent, WorkerRequest, ProfileWire };
+export type { IdentityRelayPermission, RuntimeStatus, WorkerEvent, WorkerRequest, ProfileWire, ClaimedEventWire };
 
 /** Snapshot emitted after every worker event. */
 export type RuntimeSnapshot = {
@@ -96,6 +97,18 @@ export type NmpClient = {
    *  and the runtime must have pushed a snapshot carrying the profile row).
    *  Pure read — does NOT trigger a network fetch. */
   resolveProfile(pubkeyHex: string): ProfileWire | undefined;
+  /** #65 S4 — convenience wrapper around resolveRef for event resolution.
+   *  Calls resolveRef(namespace=1, key=eventId, shape=0, liveness=1, consumerId).
+   *  The wasm issues a REQ for the event; on receipt it emits a refs.event sidecar
+   *  (NRRD KCEV batch) in subsequent UpdateFrames. Use `resolvedEvent()` to read
+   *  the decoded result. */
+  resolveEvent(eventId: string, consumerId: string): Promise<RuntimeSnapshot>;
+  /** #65 S4 — look up the decoded `ClaimedEventWire` for a primaryId in the
+   *  host-side cache. Returns `undefined` until a `refs.event` sidecar has been
+   *  applied for this event (i.e. `resolveEvent` / `resolveRef` must be called
+   *  first and the runtime must have pushed a snapshot carrying the event row).
+   *  Pure read — does NOT trigger a network fetch. */
+  resolvedEvent(primaryId: string): ClaimedEventWire | undefined;
 };
 
 const APP_ID = "highlighter";
@@ -153,6 +166,8 @@ abstract class BaseNmpClient implements NmpClient {
   private _listeners = new Set<(snapshot: RuntimeSnapshot) => void>();
   // #65 S3 — stateful profile store: rebuilt incrementally each frame.
   private _profileStore = new RefProfileStore();
+  // #65 S4 — stateful event store: rebuilt incrementally each frame.
+  private _eventStore = new RefEventStore();
   private _projectionKeys: string[] = [];
 
   constructor(private readonly _bridgeKind: RuntimeSnapshot["bridgeKind"]) {}
@@ -171,6 +186,16 @@ abstract class BaseNmpClient implements NmpClient {
     return this._profileStore.profile(pubkeyHex);
   }
 
+  // #65 S4 — event store wiring
+  async resolveEvent(eventId: string, consumerId: string): Promise<RuntimeSnapshot> {
+    // namespace=1 (event), shape=0 (Embed), liveness=1 (Live)
+    return this.resolveRef(1, eventId, 0, 1, consumerId);
+  }
+
+  resolvedEvent(primaryId: string): ClaimedEventWire | undefined {
+    return this._eventStore.event(primaryId);
+  }
+
   subscribe(listener: (snapshot: RuntimeSnapshot) => void): () => void {
     this._listeners.add(listener);
     listener(this.snapshot());
@@ -187,13 +212,20 @@ abstract class BaseNmpClient implements NmpClient {
       this._latestUpdateBytes = bytes;
       // Mirror the kernel run-state on first frame.
       this._status = "running";
-      // #65 S3 — decode projection keys + apply refs.profile sidecar.
+      // #65 S3/S4 — decode projection keys + apply refs.profile / refs.event sidecars.
       const decoded = decodeUpdateFrame(bytes);
       if (decoded) {
         this._projectionKeys = decoded.projectionKeys;
         if (decoded.refsProfileBytes) {
           this._profileStore.applySidecar(
             decoded.refsProfileBytes,
+            decoded.sessionId,
+            decoded.snapshotEpoch,
+          );
+        }
+        if (decoded.refsEventBytes) {
+          this._eventStore.applySidecar(
+            decoded.refsEventBytes,
             decoded.sessionId,
             decoded.snapshotEpoch,
           );
