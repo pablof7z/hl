@@ -406,17 +406,22 @@ test.describe("NMP read proof (#65 S3, single-ref profile decode)", () => {
   //     but profile_lookup().contains(Alice) = false so bump_profile_row
   //     was not called at the ingest site and refs.profile row stays absent)
   //
-  // The HL kernel manages profiles through its bespoke actor path
-  // (claimed_profiles map, hl.profile.claim action) — not through the
-  // nmp_nip01::Kind0Parser → ProfileCache → ProfileLookup seam that
-  // ref_profile_row_payload() reads. These are separate subsystems.
+  // Root cause: the committed web wasm is the GENERIC nmp-browser-runtime,
+  // whose handle_start composition never calls set_profile_lookup(), so the
+  // kernel keeps its production default empty_profile_lookup() and
+  // ref_profile_row_payload() → profile_for_pubkey() is always None.
   //
-  // To unblock: the HL nmp-browser-runtime composition root must wire
-  // nmp_nip01::Kind0Parser + ProfileCache and call set_profile_lookup(),
-  // exactly as the native FFI path does via nmp-nip01.
+  // To unblock: an HL nmp-browser-runtime composition root must wire
+  // nmp_nip01::Kind0Parser + ProfileCache and call set_profile_lookup()
+  // (the nmp-app-highlighter web composition — an upstream/wasm-build task).
+  //
+  // NOTE: refs.EVENT does NOT share this defect — ref_event_row_payload()
+  // reads the kernel's own event store (populated by generic ingestion), so
+  // an event-by-ref resolve round-trips through THIS wasm today. The next
+  // read slice should be a refs.event resolve proof (no upstream change).
   //
   // Step 0 (above) remains the deterministic regression guard. The
-  // fixture-relay.ts infrastructure is preserved for when Step 1 can land.
+  // fixture-relay.ts infrastructure is preserved for the event-ref proof.
   //
   // eslint-disable-next-line playwright/no-skipped-test
   test.skip(
