@@ -216,7 +216,7 @@ pub(crate) fn reduce_event_identity_changed(
             // AppState::follows so stale contacts don't outlive the session.
             state.follows = Vec::new();
             // ── Phase 3D: clear profile state on account removal ──────────────
-            // own_profile and claimed_profiles belong to the departing account.
+            // own_profile and profile refs belong to the departing account.
             super::profiles::clear_on_identity_lost(state);
             // ── Phase 4C: clear bookmark list on account removal ──────────────
             // Wipe AppState::bookmarks so stale bookmarks don't outlive the
@@ -483,7 +483,7 @@ pub(crate) fn clear_feed_state_on_identity_lost(state: &mut AppState) {
 /// with empty (not prior-account) accumulators.
 #[must_use]
 pub(crate) fn clear_account_scoped_state_on_switch(state: &mut AppState) -> Vec<Effect> {
-    // own_profile and claimed_profiles belong to the departing account.
+    // own_profile and profile refs belong to the departing account.
     super::profiles::clear_on_identity_lost(state);
     // claimed_events belong to the departing account.
     state.claimed_events.clear();
@@ -1547,7 +1547,7 @@ mod tests {
         state.room_home_events.insert("g".into(), vec![]);
         state.chat_rooms.insert("g".into(), Default::default());
         state.artifact_preview_requests.insert("a:x".into());
-        // own_profile / claimed_profiles / articles / search_results /
+        // own_profile / profile_refs / articles / search_results /
         // artifact_previews carry nmp/heavy row types with no cheap constructor;
         // the per-domain clear tests (profiles/reactions/articles/search/
         // artifact_preview) cover those. assert_all_account_scoped_cleared still
@@ -1585,7 +1585,7 @@ mod tests {
         assert!(state.room_discussions.is_empty(), "room_discussions");
         assert!(state.room_home_events.is_empty(), "room_home_events");
         assert!(state.own_profile.is_none(), "own_profile");
-        assert!(state.claimed_profiles.is_empty(), "claimed_profiles");
+        assert!(state.profile_refs.profiles().is_empty(), "profile_refs");
         assert!(state.chat_rooms.is_empty(), "chat_rooms");
         assert!(state.artifact_previews.is_empty(), "artifact_previews");
         assert!(

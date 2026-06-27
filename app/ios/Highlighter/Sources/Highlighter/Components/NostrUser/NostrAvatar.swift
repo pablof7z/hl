@@ -15,7 +15,7 @@ public struct NostrAvatar: View {
     public let size: CGFloat
     public let consumerID: String?
     @State private var generatedConsumerID: String
-    @State private var claimedPubkey: String?
+    @State private var resolvedPubkey: String?
 
     public init(
         pubkey: String,
@@ -30,7 +30,7 @@ public struct NostrAvatar: View {
         self._generatedConsumerID = State(
             initialValue: consumerID ?? "nostr-avatar.\(UUID().uuidString)"
         )
-        self._claimedPubkey = State(initialValue: nil)
+        self._resolvedPubkey = State(initialValue: nil)
     }
 
     public init(profile: ProfileWire, size: CGFloat = 40) {
@@ -41,7 +41,7 @@ public struct NostrAvatar: View {
         self._generatedConsumerID = State(
             initialValue: "nostr-avatar.static.\(UUID().uuidString)"
         )
-        self._claimedPubkey = State(initialValue: nil)
+        self._resolvedPubkey = State(initialValue: nil)
     }
 
     public var body: some View {
@@ -63,20 +63,23 @@ public struct NostrAvatar: View {
         .accessibilityHidden(true)
         .task(id: pubkey) {
             await MainActor.run {
-                if let claimedPubkey, claimedPubkey != pubkey {
-                    profileHost?.releaseProfile(
-                        pubkey: claimedPubkey,
+                if let resolvedPubkey, resolvedPubkey != pubkey {
+                    profileHost?.releaseProfileRef(
+                        pubkey: resolvedPubkey,
                         consumerID: generatedConsumerID
                     )
                 }
-                claimedPubkey = pubkey
-                profileHost?.claimProfile(pubkey: pubkey, consumerID: generatedConsumerID)
+                resolvedPubkey = pubkey
+                profileHost?.resolveProfileRef(pubkey: pubkey, consumerID: generatedConsumerID)
             }
         }
         .onDisappear {
-            if let claimedPubkey {
-                profileHost?.releaseProfile(pubkey: claimedPubkey, consumerID: generatedConsumerID)
-                self.claimedPubkey = nil
+            if let resolvedPubkey {
+                profileHost?.releaseProfileRef(
+                    pubkey: resolvedPubkey,
+                    consumerID: generatedConsumerID
+                )
+                self.resolvedPubkey = nil
             }
         }
     }

@@ -62,8 +62,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
-use nmp_core::substrate::ActionPayload;
-use nmp_core::KernelEventObserver;
+use nmp_core::substrate::{ActionPayload, ObservedProjection, ObservedProjectionRegistrar};
+use nmp_core::ObservedProjectionSink;
 use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
 use nmp_nip25::{
     ReactAction, ReactionProjection, UnreactAction, KIND_REACTION, KIND_REACTION_DELETE,
@@ -74,7 +74,7 @@ use crate::kernel::action::KernelEvent;
 use crate::kernel::actor::Cmd;
 use crate::kernel::app::AppState;
 
-// ─── READ side: KernelEventObserver wrapper ──────────────────────────────────
+// ─── READ side: ObservedProjectionSink wrapper ───────────────────────────────
 
 /// Observer wrapper that ingests NMP `KernelEvent`s (raw Nostr events) into
 /// the `ReactionProjection` and then sends `KernelEvent::ReactionStateUpdated`
@@ -114,7 +114,7 @@ struct ReactionObserver {
     tx: mpsc::UnboundedSender<Cmd>,
 }
 
-impl KernelEventObserver for ReactionObserver {
+impl ObservedProjectionSink for ReactionObserver {
     fn on_kernel_event(&self, event: &nmp_core::substrate::KernelEvent) {
         match event.kind {
             KIND_REACTION => self.handle_kind7(event),
@@ -458,7 +458,13 @@ pub(crate) fn register_reaction_projection(
         tx,
     });
 
-    let observer_id = nmp_ref.register_live_event_tap(observer as Arc<dyn KernelEventObserver>);
+    let observer_id = nmp_ref.open_observed_projection(ObservedProjection::from_kinds(
+        observer as Arc<dyn ObservedProjectionSink>,
+        "hl.reactions",
+        1,
+        [KIND_REACTION, KIND_REACTION_DELETE],
+        512,
+    ));
     if observer_id.0 == 0 {
         // Observer slot is full or poisoned — reaction counts will not update.
         tracing::warn!(

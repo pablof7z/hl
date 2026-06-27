@@ -38,9 +38,9 @@ enum HighlighterAction {
     case follow(pubkey: String)
     case unfollow(pubkey: String)
 
-    // ── Profiles (claim / release) ────────────────────────────────────────────
-    case claimProfile(pubkey: String)
-    case releaseProfile(pubkey: String)
+    // ── Profiles (resolve / release refs) ─────────────────────────────────────
+    case resolveProfileRef(pubkey: String)
+    case releaseProfileRef(pubkey: String)
 
     // ── Room actions ──────────────────────────────────────────────────────────
     case joinRoom(groupId: String, inviteCode: String?)
@@ -316,11 +316,11 @@ enum HighlighterAction {
                                      json: jsonObject(["pubkey": pubkey]))
 
         // ── Profiles ──────────────────────────────────────────────────────────
-        case .claimProfile(let pubkey):
-            return AppActionEnvelope(namespace: "hl.profile.claim",
+        case .resolveProfileRef(let pubkey):
+            return AppActionEnvelope(namespace: "hl.profile.resolve_ref",
                                      json: jsonObject(["pubkey": pubkey]))
-        case .releaseProfile(let pubkey):
-            return AppActionEnvelope(namespace: "hl.profile.release",
+        case .releaseProfileRef(let pubkey):
+            return AppActionEnvelope(namespace: "hl.profile.release_ref",
                                      json: jsonObject(["pubkey": pubkey]))
 
         // ── Room actions ──────────────────────────────────────────────────────

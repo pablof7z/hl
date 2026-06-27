@@ -259,18 +259,18 @@ final class HighlighterAppKernel {
         app.openView(viewId: .roomExplorer, route: .roomExplorer)
     }
 
-    /// Open a profile view for `pubkey` and send `ClaimProfile` to NMP.
+    /// Open a profile view for `pubkey` and resolve its profile ref through NMP.
     /// Call from `ProfileView.task(id:)`. Idempotent — nop if already open.
     func openProfile(pubkey: String) {
         let viewId = ViewId.profile(pubkey: pubkey)
         app.openView(viewId: viewId, route: .profile(pubkey: pubkey))
-        app.dispatch(.claimProfile(pubkey: pubkey))
+        app.dispatch(.resolveProfileRef(pubkey: pubkey))
     }
 
-    /// Close a profile view for `pubkey` and send `ReleaseProfile` to NMP.
+    /// Close a profile view for `pubkey` and release its profile ref through NMP.
     /// Call from `ProfileView.onDisappear`. Clears the cached snapshot.
     func closeProfile(pubkey: String) {
-        app.dispatch(.releaseProfile(pubkey: pubkey))
+        app.dispatch(.releaseProfileRef(pubkey: pubkey))
         app.closeView(viewId: .profile(pubkey: pubkey))
         profileSnapshots.removeValue(forKey: pubkey)
     }

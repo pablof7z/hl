@@ -127,12 +127,12 @@ pub(crate) struct UnfollowPayload {
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub(crate) struct ClaimProfilePayload {
+pub(crate) struct ResolveProfileRefPayload {
     pub pubkey: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub(crate) struct ReleaseProfilePayload {
+pub(crate) struct ReleaseProfileRefPayload {
     pub pubkey: String,
 }
 
@@ -698,22 +698,21 @@ pub enum AppAction {
     },
 
     // ── Phase 3D additions (append-only) ─────────────────────────────────────
-    /// Open a profile view for `pubkey` — triggers `nmp_app_claim_profile` via
-    /// `Effect::ClaimProfile`. The profile card arrives back as
-    /// `KernelEvent::ProfileCardUpdated` via the `"claimed_profiles"` typed
-    /// sidecar on the NMP update callback.
+    /// Open a profile view for `pubkey` — triggers `nmp_app_resolve_ref` via
+    /// `Effect::ResolveProfileRef`. The profile card arrives through the
+    /// `refs.profile` NMP update callback path.
     ///
     /// `pubkey` is a raw 64-char lowercase hex pubkey. The kernel uses a stable
     /// consumer-id (`"hl.profile.<pubkey>"`) so the refcount is scoped to this
     /// view instance. Fire-and-forget (D6, Non-Negotiable #3).
-    ClaimProfile {
+    ResolveProfileRef {
         pubkey: String,
     },
 
-    /// Close a profile view — triggers `nmp_app_release_profile`. Decrements the
+    /// Close a profile view — triggers `nmp_app_release_ref`. Decrements the
     /// per-consumer refcount; when it reaches zero NMP cancels the kind:0
     /// subscription. Fire-and-forget (D6).
-    ReleaseProfile {
+    ReleaseProfileRef {
         pubkey: String,
     },
 
@@ -914,7 +913,6 @@ pub enum AppAction {
     },
 
     // ── Issue #63 additions (append-only) ────────────────────────────────────
-
     /// Rename the kind:30004 curation set identified by `set_coordinate`.
     ///
     /// Kernel is the sole kind:30004 writer for ported screens (no live-lane
@@ -1357,13 +1355,10 @@ pub enum KernelEvent {
     DiscoveredGroupsUpdated(Vec<crate::kernel::snapshot::DiscoveredRow>),
 
     // ── Phase 3D additions (append-only) ─────────────────────────────────────
-    /// A profile card from the `"claimed_profiles"` typed sidecar was decoded.
+    /// A profile card from the NMP profile ref resolver was decoded.
     ///
-    /// Produced by `projections::dispatch_typed_frame` when the
-    /// `"claimed_profiles"` schema_id sidecar arrives. Carries one updated
-    /// `ProfileCardModel` for the given `pubkey`. The reducer stores it in
-    /// `AppState::claimed_profiles` so the `ViewId::Profile{pubkey}` snapshot
-    /// can read it directly (non-blocking HashMap lookup).
+    /// Legacy test hook for one decoded profile card. Production profile cards
+    /// arrive through `refs.profile`.
     ///
     /// Also produced when the `"profile"` (own-account) sidecar arrives for
     /// the active account's pubkey, in case the Profile view is open for the

@@ -154,27 +154,27 @@ pub enum Effect {
     },
 
     // ── Phase 3D additions (append-only) ─────────────────────────────────────
-    /// Call `nmp_app_claim_profile(raw_ptr, pubkey, "hl.profile.<pubkey>",
-    /// force:0, liveness:Live)`.
+    /// Call `nmp_app_resolve_ref(Profile, pubkey, "hl.profile.<pubkey>",
+    /// profile.card, Live)`.
     ///
     /// Sent when the UI opens a `ViewId::Profile{pubkey}` view (triggered by
-    /// `AppAction::ClaimProfile`). `Live` liveness (`c_int = 1`) keeps a
+    /// `AppAction::ResolveProfileRef`). `Live` liveness (`c_int = 1`) keeps a
     /// `Tailing` kind:0 subscription open so profile edits arrive reactively
-    /// while the view is on screen. The updated card arrives back through the
-    /// `"claimed_profiles"` typed sidecar as `KernelEvent::ProfileCardUpdated`.
-    /// Fire-and-forget (D6, Non-Negotiable #3): nmp handles the claim async.
-    ClaimProfile {
-        /// Raw 64-char lowercase hex pubkey to claim.
+    /// while the view is on screen. The updated card arrives through
+    /// `refs.profile`.
+    /// Fire-and-forget (D6, Non-Negotiable #3): nmp handles resolution async.
+    ResolveProfileRef {
+        /// Raw 64-char lowercase hex pubkey to resolve.
         pubkey: String,
     },
 
-    /// Call `nmp_app_release_profile(raw_ptr, pubkey, "hl.profile.<pubkey>")`.
+    /// Call `nmp_app_release_ref(Profile, pubkey, "hl.profile.<pubkey>")`.
     ///
     /// Sent when the UI closes a `ViewId::Profile{pubkey}` view (triggered by
-    /// `AppAction::ReleaseProfile`). Decrements the per-consumer refcount;
+    /// `AppAction::ReleaseProfileRef`). Decrements the per-consumer refcount;
     /// when zero, NMP cancels the Tailing kind:0 subscription and removes the
-    /// card from `claimed_profiles`. Fire-and-forget (D6).
-    ReleaseProfile {
+    /// `refs.profile` row. Fire-and-forget (D6).
+    ReleaseProfileRef {
         /// Raw 64-char lowercase hex pubkey to release.
         pubkey: String,
     },

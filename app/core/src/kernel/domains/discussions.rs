@@ -57,8 +57,10 @@
 
 use std::sync::{Arc, Mutex};
 
-use nmp_core::KernelEventObserver;
+use nmp_core::substrate::{ObservedProjection, ObservedProjectionRegistrar};
+use nmp_core::ObservedProjectionSink;
 use nmp_ffi::NmpApp;
+use nmp_planner::InterestShape;
 use tokio::sync::mpsc;
 
 use crate::kernel::action::{KernelEvent, PostDiscussionPayload};
@@ -77,7 +79,7 @@ const DISCUSSION_MARKER_TAG: &str = "discussion";
 /// Maximum rows retained per room in `AppState::room_discussions`.
 pub(crate) const ROOM_DISCUSSIONS_CAP: usize = 64;
 
-// READ side: KernelEventObserver wrapper
+// READ side: ObservedProjectionSink wrapper
 
 /// Observer wrapper for a single NIP-29 room. Ingests raw Nostr events into
 /// `GroupEventsProjection` and produces `KernelEvent::RoomDiscussionsUpdated`
@@ -93,7 +95,7 @@ struct DiscussionObserver {
     events: Mutex<Vec<GroupEventRow>>,
 }
 
-impl KernelEventObserver for DiscussionObserver {
+impl ObservedProjectionSink for DiscussionObserver {
     fn on_kernel_event(&self, event: &nmp_core::substrate::KernelEvent) {
         if event.kind != KIND_DISCUSSION {
             return;
@@ -416,13 +418,32 @@ pub(crate) fn register_discussion_observer(
     group_id: String,
     tx: mpsc::UnboundedSender<Cmd>,
 ) {
+    let consumer_id = format!("hl.discussions.{group_id}");
+    let mut shape = InterestShape::default();
+    shape.kinds.insert(KIND_DISCUSSION);
+    shape
+        .tags
+        .entry("h".to_string())
+        .or_default()
+        .insert(group_id.clone());
+    shape
+        .tags
+        .entry("t".to_string())
+        .or_default()
+        .insert(DISCUSSION_MARKER_TAG.to_string());
     let observer = Arc::new(DiscussionObserver {
         group_id,
         tx,
         events: Mutex::new(Vec::new()),
     });
 
-    let observer_id = nmp_ref.register_live_event_tap(observer as Arc<dyn KernelEventObserver>);
+    let observer_id = nmp_ref.open_observed_projection(ObservedProjection::from_shape(
+        observer as Arc<dyn ObservedProjectionSink>,
+        consumer_id,
+        1,
+        shape,
+        ROOM_DISCUSSIONS_CAP,
+    ));
     if observer_id.0 == 0 {
         tracing::warn!(
             "discussions::register_discussion_observer: event-observer registration failed (D6)"

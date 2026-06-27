@@ -62,8 +62,8 @@
 use std::sync::{Arc, Mutex};
 
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
-use nmp_core::substrate::ActionPayload;
-use nmp_core::KernelEventObserver;
+use nmp_core::substrate::{ActionPayload, ObservedProjection, ObservedProjectionRegistrar};
+use nmp_core::ObservedProjectionSink;
 use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
 use nmp_nip51::{BookmarkItem, BookmarkListProjection, BookmarkUpdateInput};
 
@@ -76,6 +76,7 @@ use crate::kernel::snapshot::{ArtifactPreviewRow, BookmarkRow};
 /// Schema id used when the hl-owned typed snapshot projection serialises the
 /// `BookmarkListSnapshot` to JSON. Matched in `projections::dispatch_typed_frame`.
 pub(crate) const BOOKMARK_SCHEMA_ID: &str = "hl.bookmarks";
+const KIND_BOOKMARK_LIST: u32 = 10003;
 
 // ─── Articles pane: artifact-preview hydration (Phase 7) ────────────────────
 
@@ -352,8 +353,13 @@ pub(crate) fn register_bookmark_list_projection(
 ) {
     let projection = Arc::new(BookmarkListProjection::new(active_account_slot));
 
-    let observer_id =
-        nmp_ref.register_live_event_tap(Arc::clone(&projection) as Arc<dyn KernelEventObserver>);
+    let observer_id = nmp_ref.open_observed_projection(ObservedProjection::from_kinds(
+        Arc::clone(&projection) as Arc<dyn ObservedProjectionSink>,
+        BOOKMARK_SCHEMA_ID,
+        0,
+        [KIND_BOOKMARK_LIST],
+        64,
+    ));
     if observer_id.0 == 0 {
         // Observer slot is full or poisoned — skip projection registration.
         tracing::warn!(

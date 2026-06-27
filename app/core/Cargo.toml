@@ -16,7 +16,7 @@ serde_json = "1"
 hex = "0.4"
 nostr-sdk = { version = "0.44.1", features = ["nip49", "nip04", "nip44"] }
 nostr = { version = "0.44", default-features = false, features = ["std", "nip46"] }
-nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "fc0589fc88d61912779741fcce7d4e7176cf9a30", default-features = false }
+nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "b03ea2d9c81266a773a3146343809476e00183ab", default-features = false }
 # NMP tracks the master branch via GIT deps (NOT local path deps) so hl is
 # decoupled from the local monorepo checkout. `cargo update` refreshes Cargo.lock
 # to the current master tip; a rebuild then picks up the latest NMP automatically.

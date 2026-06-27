@@ -144,23 +144,21 @@ pub struct AppState {
     // ── Phase 3D additions ────────────────────────────────────────────────────
     /// The active account's own profile card, decoded from the `"profile"`
     /// built-in typed sidecar. `None` until the first `"profile"` frame arrives
-    /// from the NMP update callback. No `ClaimProfile` call is needed for the
+    /// from the NMP update callback. No profile ref resolve is needed for the
     /// own account — the kernel projects it automatically.
     ///
     /// Used as the fallback source for a `ViewId::Profile{pubkey}` where
-    /// `pubkey` equals the active account (before a `claimed_profiles` entry
-    /// arrives, or if the view is the own-profile screen).
+    /// `pubkey` equals the active account before a `refs.profile` row arrives.
     pub own_profile: Option<nmp_core::typed_projections::ProfileCardModel>,
 
-    /// Profiles for visited pubkeys, decoded from the `"claimed_profiles"`
-    /// typed sidecar. Keyed by raw hex pubkey (64 lowercase chars). Populated
-    /// by `nmp_app_claim_profile` / released by `nmp_app_release_profile`
-    /// (driven by `Effect::ClaimProfile` / `Effect::ReleaseProfile`).
+    /// Profiles for visited pubkeys, decoded from NMP `refs.profile` row-delta
+    /// updates. This is the canonical host-side mirror owned by NMP's
+    /// `RefProfileStore`, not a second app-owned map.
     ///
     /// Bounded by the number of concurrently open `Profile` views — never
     /// grows with the unbounded event store (Non-Negotiable #7). Cleared on
     /// `IdentityChanged(None)` and `Logout`.
-    pub claimed_profiles: HashMap<String, nmp_core::typed_projections::ProfileCardModel>,
+    pub profile_refs: nmp_core::refs::RefProfileStore,
 
     // ── Phase 7 entity-ref additions (append-only) ────────────────────────────
     /// Events claimed via `nmp_app_resolve_ref(namespace=1)` for entity cards.
@@ -534,7 +532,7 @@ impl Default for AppState {
             discovered_groups: Vec::new(),
             room_policy: RoomPolicy::default(),
             own_profile: None,
-            claimed_profiles: HashMap::new(),
+            profile_refs: nmp_core::refs::RefProfileStore::new(),
             claimed_events: HashMap::new(),
             // ── Phase 3F additions ────────────────────────────────────────────
             room_home_events: HashMap::new(),

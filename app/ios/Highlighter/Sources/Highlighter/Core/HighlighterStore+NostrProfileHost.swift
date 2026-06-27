@@ -16,11 +16,13 @@ extension HighlighterStore: NostrProfileHost {
         )
     }
 
-    public func claimProfile(pubkey: String, consumerID: String) {
-        requestProfile(pubkeyHex: pubkey)
+    public func resolveProfileRef(pubkey: String, consumerID: String) {
+        app.dispatch(.resolveProfileRef(pubkey: pubkey))
     }
 
-    public func releaseProfile(pubkey: String, consumerID: String) {}
+    public func releaseProfileRef(pubkey: String, consumerID: String) {
+        app.dispatch(.releaseProfileRef(pubkey: pubkey))
+    }
 
     static func profileWire(from meta: ProfileMetadata, pubkeyHex: String) -> ProfileWire {
         let display = Self.firstNonEmpty(meta.displayName, meta.name)

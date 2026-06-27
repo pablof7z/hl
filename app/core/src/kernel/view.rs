@@ -36,8 +36,9 @@ pub enum ViewId {
     /// Profile detail view for a specific pubkey.
     ///
     /// `pubkey` is a raw 64-char lowercase hex pubkey. The view is opened by
-    /// `AppAction::ClaimProfile{pubkey}` (which also sends `Effect::ClaimProfile`
-    /// to register the NMP interest) and closed by `AppAction::ReleaseProfile`.
+    /// `AppAction::ResolveProfileRef{pubkey}` (which also sends
+    /// `Effect::ResolveProfileRef` to register the NMP interest) and closed by
+    /// `AppAction::ReleaseProfileRef`.
     Profile {
         /// Raw 64-char hex pubkey of the profile being viewed.
         pubkey: String,

@@ -1,4 +1,4 @@
-//! Profiles domain — claim/release API + `ProfileSnapshot` projection (slice 3D).
+//! Profiles domain — resolve/release refs + `ProfileSnapshot` projection.
 //!
 //! ## Responsibilities
 //!
@@ -7,20 +7,19 @@
 //!   `b"KPRF"`. Called from `projections::dispatch_typed_frame` when the arm
 //!   matches. Decode fn: `nmp_core::typed_projections::decode_profile`.
 //!
-//! * **READ (visited profiles)** — populated into `AppState::claimed_profiles`
-//!   via `KernelEvent::ProfileCardUpdated` (actor.rs). The former bulk
-//!   `"claimed_profiles"` typed sidecar was deleted by NMP ADR-0063 Lane H;
-//!   visited-profile resolution is now served by the per-key `refs.profile`
-//!   row-delta projection (`nmp_core::refs::RefProfileStore`). Model:
+//! * **READ (visited profiles)** — populated into `AppState::profile_refs` from
+//!   the per-key `refs.profile` row-delta projection
+//!   (`nmp_core::refs::RefProfileStore`). Model:
 //!   `ProfileCardModel` (raw hex pubkey, optional display fields, nip05,
 //!   about, lud16, etc.) — no bech32 or NIP-05 label formatting (D3 / raw-data
 //!   doctrine). Swift formats every display string.
 //!
-//! * **CLAIM / RELEASE** — `AppAction::ClaimProfile { pubkey }` (emitted when a
-//!   `ViewId::Profile{pubkey}` view is opened) → `Effect::ClaimProfile { pubkey }`
-//!   → `nmp_app_claim_profile(raw_ptr, pubkey, consumer_id, force:0, liveness:Live)`.
-//!   `AppAction::ReleaseProfile { pubkey }` (emitted on view close) →
-//!   `Effect::ReleaseProfile { pubkey }` → `nmp_app_release_profile(raw_ptr, pubkey,
+//! * **RESOLVE / RELEASE** — `AppAction::ResolveProfileRef { pubkey }` (emitted
+//!   when a `ViewId::Profile{pubkey}` view is opened) →
+//!   `Effect::ResolveProfileRef { pubkey }` → `nmp_app_resolve_ref(Profile, pubkey,
+//!   consumer_id, profile.card, Live)`.
+//!   `AppAction::ReleaseProfileRef { pubkey }` (emitted on view close) →
+//!   `Effect::ReleaseProfileRef { pubkey }` → `nmp_app_release_ref(Profile, pubkey,
 //!   consumer_id)`. Consumer id is `"hl.profile.<pubkey>"` — stable, one per view.
 //!
 //! * **SNAPSHOT** — `project_profile_snapshot(state, pubkey)` assembles a
@@ -31,9 +30,9 @@
 //!
 //! ## NMP C ABI
 //!
-//! `nmp_app_claim_profile` and `nmp_app_release_profile` are `#[no_mangle] extern "C"`
-//! in `crates/nmp-ffi/src/timeline.rs:141`. Their FFI signatures are declared
-//! in this module so the profiles effect runner can call them without going
+//! `nmp_app_resolve_ref` and `nmp_app_release_ref` are `#[no_mangle] extern "C"`
+//! in `crates/nmp-ffi/src/resolve_ref.rs`. Their FFI signatures are declared in
+//! this module so the profiles effect runner can call them without going
 //! through an intermediate Rust wrapper.
 //!
 //! ## Threading
@@ -101,7 +100,7 @@ const CONSUMER_ID_PREFIX: &str = "hl.profile.";
 ///
 /// Called from `projections::dispatch_typed_frame` when `schema_id == "profile"`.
 /// The `"profile"` built-in carries the active account's own kind:0 card; it does
-/// NOT require a `ClaimProfile` call (the kernel registers it at boot).
+/// NOT require a profile ref resolve call (the kernel registers it at boot).
 ///
 /// D6: any decode error leaves `AppState::own_profile` unchanged (silent no-op).
 pub(crate) fn apply_own_profile(state: &mut AppState, payload: &[u8]) {
@@ -118,42 +117,39 @@ pub(crate) fn apply_own_profile(state: &mut AppState, payload: &[u8]) {
     }
 }
 
-// ─── READ side: claimed profiles projection (ADR-0063: removed) ──────────────
-//
-// NMP ADR-0063 Lane H deleted the bulk `"claimed_profiles"` typed sidecar
-// (`decode_claimed_profiles` / `ClaimedProfilesModel` / `CLAIMED_PROFILES_*`).
-// Visited-profile resolution is now served by the per-key `refs.profile`
-// row-delta projection (`nmp_core::refs::RefProfileStore`, sidecar key
-// `nmp_core::refs::host_store::REFS_PROFILE_KEY`), which is a STATEFUL merge
-// cache (row deltas keyed by `(session_id, snapshot_epoch)`) rather than a
-// whole-snapshot replace.
-//
-// `AppState::claimed_profiles` is retained: it still backs the
-// `ViewId::Profile{pubkey}` snapshot (`project_profile_snapshot`) and is
-// populated through `KernelEvent::ProfileCardUpdated` (actor.rs). The
-// claimed-profiles *sidecar decode path* is the only thing removed here — the
-// bulk decoder no longer exists in nmp-core.
-//
-// FOLLOW-UP (refs.profile adoption): wire `RefProfileStore` into `AppState`,
-// add a `refs.profile` arm in `projections::dispatch_typed_frame` that threads
-// the frame's `(session_id, snapshot_epoch)` into `RefProfileStore::apply_sidecar`,
-// and read visited-profile cards from it. That is a stateful-cache migration
-// (frame-identity plumbing) tracked separately from this drift fix.
+// ─── READ side: refs.profile host store ─────────────────────────────────────
+
+/// Apply a `refs.profile` NRRD sidecar payload to the NMP host store.
+///
+/// The store is stateful: every apply must carry the update frame's
+/// `(session_id, snapshot_epoch)` so identity switches and kernel resets force
+/// the correct baseline semantics. Malformed sidecars are D6 no-ops inside NMP's
+/// `RefProfileStore`.
+pub(crate) fn apply_refs_profile(
+    state: &mut AppState,
+    payload: &[u8],
+    session_id: u64,
+    snapshot_epoch: u64,
+) {
+    state
+        .profile_refs
+        .apply_sidecar(payload, session_id, snapshot_epoch);
+}
 
 // ─── WRITE side: view-lifecycle helpers ─────────────────────────────────────
 
 /// Pure function called by the actor loop when a view is opened.
 ///
-/// Returns `[Effect::ClaimProfile { pubkey }]` for `ViewId::Profile` so the
-/// actor runs the NMP claim immediately upon view registration — without going
-/// through `AppAction::ClaimProfile` in the reducer. This is the primary
-/// lifecycle path; `reduce_action_claim_profile` below covers the (rare)
+/// Returns `[Effect::ResolveProfileRef { pubkey }]` for `ViewId::Profile` so the
+/// actor resolves the NMP ref immediately upon view registration — without going
+/// through `AppAction::ResolveProfileRef` in the reducer. This is the primary
+/// lifecycle path; `reduce_action_resolve_profile_ref` below covers the (rare)
 /// direct-dispatch path from native code.
 ///
 /// Returns an empty Vec for all other `ViewId` variants.
 pub(crate) fn lifecycle_effects_for_view_open(id: &crate::kernel::view::ViewId) -> Vec<Effect> {
     if let crate::kernel::view::ViewId::Profile { pubkey } = id {
-        vec![Effect::ClaimProfile {
+        vec![Effect::ResolveProfileRef {
             pubkey: pubkey.clone(),
         }]
     } else {
@@ -163,14 +159,14 @@ pub(crate) fn lifecycle_effects_for_view_open(id: &crate::kernel::view::ViewId) 
 
 /// Pure function called by the actor loop when a view is closed.
 ///
-/// Returns `[Effect::ReleaseProfile { pubkey }]` for `ViewId::Profile`.
+/// Returns `[Effect::ReleaseProfileRef { pubkey }]` for `ViewId::Profile`.
 /// Called before `registry.close()` so the subscription is released before the
 /// view leaves the active registry (avoids an orphaned claim).
 ///
 /// Returns an empty Vec for all other `ViewId` variants.
 pub(crate) fn lifecycle_effects_for_view_close(id: &crate::kernel::view::ViewId) -> Vec<Effect> {
     if let crate::kernel::view::ViewId::Profile { pubkey } = id {
-        vec![Effect::ReleaseProfile {
+        vec![Effect::ReleaseProfileRef {
             pubkey: pubkey.clone(),
         }]
     } else {
@@ -180,28 +176,30 @@ pub(crate) fn lifecycle_effects_for_view_close(id: &crate::kernel::view::ViewId)
 
 // ─── WRITE side: reduce_action helpers ──────────────────────────────────────
 
-/// Handle `AppAction::ClaimProfile { pubkey }` — emit `Effect::ClaimProfile`.
+/// Handle `AppAction::ResolveProfileRef { pubkey }` — emit
+/// `Effect::ResolveProfileRef`.
 ///
 /// Secondary path: covers the rare case where native code dispatches
-/// `AppAction::ClaimProfile` directly (e.g., prefetch before opening the view).
+/// `AppAction::ResolveProfileRef` directly (e.g., prefetch before opening the view).
 /// The primary lifecycle path is `lifecycle_effects_for_view_open` above,
 /// called by the actor loop on `Cmd::OpenView(ViewId::Profile{..})`.
-pub(crate) fn reduce_action_claim_profile(pubkey: String) -> Vec<Effect> {
-    vec![Effect::ClaimProfile { pubkey }]
+pub(crate) fn reduce_action_resolve_profile_ref(pubkey: String) -> Vec<Effect> {
+    vec![Effect::ResolveProfileRef { pubkey }]
 }
 
-/// Handle `AppAction::ReleaseProfile { pubkey }` — emit `Effect::ReleaseProfile`.
+/// Handle `AppAction::ReleaseProfileRef { pubkey }` — emit
+/// `Effect::ReleaseProfileRef`.
 ///
 /// Secondary path: covers the rare case where native code dispatches
-/// `AppAction::ReleaseProfile` directly. The primary lifecycle path is
+/// `AppAction::ReleaseProfileRef` directly. The primary lifecycle path is
 /// `lifecycle_effects_for_view_close` above, called on `Cmd::CloseView`.
-pub(crate) fn reduce_action_release_profile(pubkey: String) -> Vec<Effect> {
-    vec![Effect::ReleaseProfile { pubkey }]
+pub(crate) fn reduce_action_release_profile_ref(pubkey: String) -> Vec<Effect> {
+    vec![Effect::ReleaseProfileRef { pubkey }]
 }
 
 // ─── Effect runners ──────────────────────────────────────────────────────────
 
-/// Execute `Effect::ClaimProfile` — calls `nmp_app_resolve_ref` for the
+/// Execute `Effect::ResolveProfileRef` — calls `nmp_app_resolve_ref` for the
 /// `(Profile, pubkey)` reference under the stable consumer-id
 /// `"hl.profile.<pubkey>"`, `shape = profile.card`, `liveness = Live`.
 ///
@@ -211,7 +209,7 @@ pub(crate) fn reduce_action_release_profile(pubkey: String) -> Vec<Effect> {
 ///
 /// No-op if `nmp` is `None` (test mode — tests inject `ProfileCardUpdated`
 /// directly into the reducer via `Cmd::Event`).
-pub(crate) fn run_effect_claim_profile(pubkey: String, nmp: Option<&NmpHandle>) {
+pub(crate) fn run_effect_resolve_profile_ref(pubkey: String, nmp: Option<&NmpHandle>) {
     let Some(handle) = nmp else { return };
 
     let consumer_id = format!("{CONSUMER_ID_PREFIX}{pubkey}");
@@ -241,7 +239,7 @@ pub(crate) fn run_effect_claim_profile(pubkey: String, nmp: Option<&NmpHandle>) 
     }
 }
 
-/// Execute `Effect::ReleaseProfile` — calls `nmp_app_release_ref` for the
+/// Execute `Effect::ReleaseProfileRef` — calls `nmp_app_release_ref` for the
 /// `(Profile, pubkey)` reference under consumer-id `"hl.profile.<pubkey>"`.
 ///
 /// Decrements the per-consumer refcount. When the count reaches zero NMP
@@ -249,7 +247,7 @@ pub(crate) fn run_effect_claim_profile(pubkey: String, nmp: Option<&NmpHandle>) 
 /// null/invalid key is a silent no-op in nmp-ffi.
 ///
 /// No-op if `nmp` is `None` (test mode).
-pub(crate) fn run_effect_release_profile(pubkey: String, nmp: Option<&NmpHandle>) {
+pub(crate) fn run_effect_release_profile_ref(pubkey: String, nmp: Option<&NmpHandle>) {
     let Some(handle) = nmp else { return };
 
     let consumer_id = format!("{CONSUMER_ID_PREFIX}{pubkey}");
@@ -280,7 +278,7 @@ pub(crate) fn run_effect_release_profile(pubkey: String, nmp: Option<&NmpHandle>
 /// Assemble a `ViewSnapshot::Profile` for the given `pubkey`.
 ///
 /// Sources:
-/// - Identity fields: `ProfileCardModel` from `AppState::claimed_profiles`
+/// - Identity fields: `ProfileCardModel` from `AppState::profile_refs`
 ///   (or `AppState::own_profile` if the viewed pubkey is the active account).
 /// - `is_following`: derived from `AppState::is_following(pubkey)` (3C).
 /// - `communities`: the subset of `AppState::communities` that the viewed
@@ -291,14 +289,15 @@ pub(crate) fn run_effect_release_profile(pubkey: String, nmp: Option<&NmpHandle>
 ///   to satisfy the spec; the vec may be empty if the viewed pubkey is not in
 ///   any of the active account's joined rooms.
 ///
-/// Returns `None` if neither `claimed_profiles` nor `own_profile` has a card
+/// Returns `None` if neither `refs.profile` nor `own_profile` has a card
 /// for this pubkey (data not yet arrived — the view renders a loading state).
 ///
 /// Called from `actor::project_snapshot` on the actor thread for every open
 /// `ViewId::Profile{pubkey}`. Non-blocking (HashMap lookup + Vec clone only).
 pub(crate) fn project_profile_snapshot(state: &AppState, pubkey: &str) -> Option<ViewSnapshot> {
-    // Try claimed_profiles first; fall back to own_profile for the active account.
-    let card = state.claimed_profiles.get(pubkey).or_else(|| {
+    // Try refs.profile first; fall back to own_profile for the active account.
+    let refs_card = state.profile_refs.profile(pubkey);
+    let card = refs_card.as_ref().or_else(|| {
         // If the viewed pubkey is the active account, use the own_profile card.
         state.own_profile.as_ref().filter(|p| p.pubkey == pubkey)
     })?;
@@ -333,11 +332,11 @@ pub(crate) fn project_profile_snapshot(state: &AppState, pubkey: &str) -> Option
 /// Clear profile state on `IdentityChanged(None)` or logout.
 ///
 /// Called from `auth::reduce_event_identity_changed` when the identity is
-/// removed. Own profile and claimed profiles belong to the departing account
+/// removed. Own profile and profile refs belong to the departing account
 /// and must not survive into the next session.
 pub(crate) fn clear_on_identity_lost(state: &mut AppState) {
     state.own_profile = None;
-    state.claimed_profiles.clear();
+    state.profile_refs = nmp_core::refs::RefProfileStore::new();
 }
 
 // ─── Unit tests ──────────────────────────────────────────────────────────────
@@ -351,6 +350,7 @@ mod tests {
     use crate::kernel::effect::Effect;
     use crate::kernel::snapshot::ViewSnapshot;
     use crate::kernel::view::ViewId;
+    use nmp_core::refs::{encode_ref_row_delta_batch, RefRow, RefRowDeltaBatch};
     use nmp_core::typed_projections::ProfileCardModel;
 
     fn make_state() -> AppState {
@@ -380,14 +380,25 @@ mod tests {
         }
     }
 
-    // 3D-T1: open_view(ViewId::Profile{pk}) → lifecycle_effects_for_view_open → Effect::ClaimProfile{pk}
+    fn apply_profile_ref(state: &mut AppState, card: ProfileCardModel) {
+        let pubkey = card.pubkey.clone();
+        let payload = nmp_core::typed_projections::encode_profile(&card);
+        let batch = RefRowDeltaBatch {
+            namespace: "profile".to_string(),
+            baseline: false,
+            rows: vec![RefRow::changed(pubkey, 1, payload)],
+        };
+        apply_refs_profile(state, &encode_ref_row_delta_batch(&batch), 1, 0);
+    }
+
+    // 3D-T1: open_view(ViewId::Profile{pk}) emits ResolveProfileRef.
     //
     // The actor loop calls `lifecycle_effects_for_view_open` when it receives
     // `Cmd::OpenView(ViewId::Profile{..})`. This is the PRIMARY lifecycle path
-    // that ties ClaimProfile to view open (the finding the codex review raised).
+    // that ties ref resolution to view open.
     // We test the extracted pure function directly so the test stays synchronous.
     #[test]
-    fn claim_profile_on_view_open_emits_effect() {
+    fn resolve_profile_ref_on_view_open_emits_effect() {
         let pk = "deadbeef00000000000000000000000000000000000000000000000000000001";
         let id = ViewId::Profile {
             pubkey: pk.to_string(),
@@ -399,10 +410,10 @@ mod tests {
             "opening a Profile view must emit exactly one lifecycle effect"
         );
         match &effects[0] {
-            Effect::ClaimProfile { pubkey } => {
+            Effect::ResolveProfileRef { pubkey } => {
                 assert_eq!(pubkey, pk, "pubkey threads through verbatim");
             }
-            other => panic!("expected Effect::ClaimProfile, got {:?}", other),
+            other => panic!("expected Effect::ResolveProfileRef, got {:?}", other),
         }
 
         // Non-Profile views produce no lifecycle effects.
@@ -413,11 +424,11 @@ mod tests {
         );
     }
 
-    // 3D-T2: close_view(ViewId::Profile{pk}) → lifecycle_effects_for_view_close → Effect::ReleaseProfile{pk}
+    // 3D-T2: close_view(ViewId::Profile{pk}) emits ReleaseProfileRef.
     //
     // The actor loop calls `lifecycle_effects_for_view_close` when it receives
     // `Cmd::CloseView(ViewId::Profile{..})`. This is the PRIMARY lifecycle path
-    // that ties ReleaseProfile to view close (the finding the codex review raised).
+    // that ties ref release to view close.
     #[test]
     fn release_profile_on_view_close_emits_effect() {
         let pk = "cafebabe00000000000000000000000000000000000000000000000000000002";
@@ -431,10 +442,10 @@ mod tests {
             "closing a Profile view must emit exactly one lifecycle effect"
         );
         match &effects[0] {
-            Effect::ReleaseProfile { pubkey } => {
+            Effect::ReleaseProfileRef { pubkey } => {
                 assert_eq!(pubkey, pk, "pubkey threads through verbatim");
             }
-            other => panic!("expected Effect::ReleaseProfile, got {:?}", other),
+            other => panic!("expected Effect::ReleaseProfileRef, got {:?}", other),
         }
 
         // Non-Profile views produce no lifecycle effects.
@@ -448,7 +459,7 @@ mod tests {
     // 3D-T3: profile_frame_updates_state_raw_fields
     //
     // Injecting KernelEvent::ProfileCardUpdated stores the ProfileCardModel in
-    // AppState::claimed_profiles and makes project_profile_snapshot return the
+    // AppState::profile_refs and makes project_profile_snapshot return the
     // raw fields (no label-stripping, no bech32 encoding).
     #[test]
     fn profile_frame_updates_state_raw_fields() {
@@ -466,13 +477,10 @@ mod tests {
             }),
         );
 
-        // The model must be stored in claimed_profiles.
-        assert!(
-            state.claimed_profiles.contains_key(pk),
-            "ProfileCardUpdated must insert into claimed_profiles"
-        );
-
-        let stored = &state.claimed_profiles[pk];
+        let stored = state
+            .profile_refs
+            .profile(pk)
+            .expect("ProfileCardUpdated must update refs.profile store");
         assert_eq!(stored.pubkey, pk, "pubkey stored verbatim");
         assert_eq!(
             stored.nip05, "alice@example.com",
@@ -511,14 +519,7 @@ mod tests {
         let card = make_profile_card(pk);
 
         // Insert profile but do NOT add to follows.
-        step(
-            &mut state,
-            &clock,
-            Cmd::Event(KernelEvent::ProfileCardUpdated {
-                pubkey: pk.to_string(),
-                card: Box::new(card.clone()),
-            }),
-        );
+        apply_profile_ref(&mut state, card.clone());
 
         let snap1 = project_profile_snapshot(&state, pk).unwrap();
         if let ViewSnapshot::Profile(ps) = snap1 {
@@ -549,9 +550,6 @@ mod tests {
     // 3D-T5: malformed_profile_frame_no_ops
     //
     // apply_own_profile with garbage bytes must not panic or corrupt AppState (D6).
-    // (The bulk `claimed_profiles` sidecar decode path was removed by NMP
-    // ADR-0063 Lane H; `claimed_profiles` is now populated via
-    // `KernelEvent::ProfileCardUpdated`.)
     #[test]
     fn malformed_profile_frame_no_ops() {
         let mut state = make_state();
@@ -570,7 +568,7 @@ mod tests {
     // 3D-T6: closed_profile_view_emits_no_snapshot
     //
     // project_profile_snapshot returns None when the pubkey has no data in
-    // claimed_profiles or own_profile (view renders a loading state).
+    // refs.profile or own_profile (view renders a loading state).
     #[test]
     fn closed_profile_view_emits_no_snapshot() {
         let state = make_state();
@@ -584,7 +582,7 @@ mod tests {
 
     // 3D-T7: profile_cleared_on_identity_changed_none
     //
-    // own_profile and claimed_profiles must be wiped when IdentityChanged(None)
+    // own_profile and profile refs must be wiped when IdentityChanged(None)
     // fires so stale profile data from the previous account does not survive.
     #[test]
     fn profile_cleared_on_identity_changed_none() {
@@ -594,9 +592,7 @@ mod tests {
 
         // Seed state.
         state.own_profile = Some(make_profile_card(pk));
-        state
-            .claimed_profiles
-            .insert(pk.to_string(), make_profile_card(pk));
+        apply_profile_ref(&mut state, make_profile_card(pk));
 
         // IdentityChanged(None) must clear profiles.
         step(
@@ -610,8 +606,8 @@ mod tests {
             "own_profile must be None after IdentityChanged(None)"
         );
         assert!(
-            state.claimed_profiles.is_empty(),
-            "claimed_profiles must be empty after IdentityChanged(None)"
+            state.profile_refs.profile(pk).is_none(),
+            "profile refs must be empty after IdentityChanged(None)"
         );
     }
 
@@ -632,9 +628,7 @@ mod tests {
         );
 
         state.own_profile = Some(make_profile_card(pk));
-        state
-            .claimed_profiles
-            .insert(pk.to_string(), make_profile_card(pk));
+        apply_profile_ref(&mut state, make_profile_card(pk));
 
         step(&mut state, &clock, Cmd::Action(AppAction::Logout));
 
@@ -643,33 +637,33 @@ mod tests {
             "own_profile must be None after Logout"
         );
         assert!(
-            state.claimed_profiles.is_empty(),
-            "claimed_profiles must be empty after Logout"
+            state.profile_refs.profile(pk).is_none(),
+            "profile refs must be empty after Logout"
         );
     }
 
-    // 3D-T9: claim_release_fire_and_forget (Non-Negotiable #3)
+    // 3D-T9: resolve_release_fire_and_forget (Non-Negotiable #3)
     //
-    // Both ClaimProfile and ReleaseProfile dispatch must return () — they are
+    // Both resolve and release dispatch must return () — they are
     // fire-and-forget actions with no Result propagation.
     #[test]
-    fn claim_release_fire_and_forget() {
+    fn resolve_release_fire_and_forget() {
         let mut state = make_state();
         let clock = ManualClock::new(0);
         let pk = "aaaa000000000000000000000000000000000000000000000000000000000001";
 
         // Both return Vec<Effect> which models the () contract (Non-Negotiable #3).
-        let _claim: Vec<Effect> = step(
+        let _resolve: Vec<Effect> = step(
             &mut state,
             &clock,
-            Cmd::Action(AppAction::ClaimProfile {
+            Cmd::Action(AppAction::ResolveProfileRef {
                 pubkey: pk.to_string(),
             }),
         );
         let _release: Vec<Effect> = step(
             &mut state,
             &clock,
-            Cmd::Action(AppAction::ReleaseProfile {
+            Cmd::Action(AppAction::ReleaseProfileRef {
                 pubkey: pk.to_string(),
             }),
         );
@@ -679,7 +673,7 @@ mod tests {
     // 3D-T10: own_profile_surfaces_for_active_account_pubkey
     //
     // If the viewed pubkey matches the active account's own_profile, the snapshot
-    // must fall back to own_profile when claimed_profiles has no entry for it.
+    // must fall back to own_profile when refs.profile has no entry for it.
     #[test]
     fn own_profile_surfaces_for_active_account_pubkey() {
         let mut state = make_state();
@@ -688,7 +682,7 @@ mod tests {
         // Set own_profile — simulates the "profile" sidecar for the active account.
         state.own_profile = Some(make_profile_card(pk));
 
-        // claimed_profiles is empty — should fall back to own_profile.
+        // refs.profile is empty — should fall back to own_profile.
         let snap = project_profile_snapshot(&state, pk).unwrap();
         if let ViewSnapshot::Profile(ps) = snap {
             assert_eq!(ps.pubkey, pk, "own_profile pubkey must match");

@@ -27,6 +27,7 @@
 //! level). Malformed payloads are a silent no-op. Neither case corrupts
 //! `AppState` — the previous value is left unchanged.
 
+use nmp_core::refs::REFS_PROFILE_KEY;
 use nmp_core::typed_projections::{
     decode_action_results, ACTION_RESULTS_SCHEMA_ID, PROFILE_SCHEMA_ID, RELAY_DIAGNOSTICS_SCHEMA_ID,
 };
@@ -76,6 +77,13 @@ pub(crate) fn dispatch_typed_frame(
         Ok(Ok(p)) => p,
         Ok(Err(_)) | Err(_) => return vec![], // decode error or panic — D6
     };
+    let frame_copy = frame_bytes.to_vec();
+    let envelope_result =
+        std::panic::catch_unwind(move || nmp_core::decode_snapshot_envelope(&frame_copy));
+    let envelope = match envelope_result {
+        Ok(Ok(e)) => e,
+        Ok(Err(_)) | Err(_) => return vec![],
+    };
 
     let mut effects: Vec<Effect> = Vec::new();
 
@@ -111,18 +119,12 @@ pub(crate) fn dispatch_typed_frame(
 
             // ── Phase 3D arm: "profile" ─────────────────────────────────────
             // Active account's own profile card (built-in Tier-2 projection).
-            // Decoded into AppState::own_profile. No ClaimProfile needed — the
-            // kernel emits this sidecar automatically for the active account.
+            // Decoded into AppState::own_profile. No profile ref resolve is
+            // needed — the kernel emits this sidecar automatically for the
+            // active account.
             PROFILE_SCHEMA_ID => {
                 profiles::apply_own_profile(state, &proj.payload);
             }
-
-            // ── Phase 3D arm: "claimed_profiles" — REMOVED (ADR-0063 Lane H) ──
-            // NMP deleted the bulk `"claimed_profiles"` typed sidecar; visited-
-            // profile resolution is now served by the per-key `refs.profile`
-            // row-delta projection (`nmp_core::refs::RefProfileStore`). See the
-            // FOLLOW-UP note in `profiles.rs`. `AppState::claimed_profiles` is
-            // still populated via `KernelEvent::ProfileCardUpdated`.
 
             // ── Phase 3E arm: "nmp.nip29.discovered_groups" ──────────────────
             // Decode the `"nmp.nip29.discovered_groups"` FlatBuffers payload via
@@ -220,12 +222,16 @@ pub(crate) fn dispatch_typed_frame(
             }
 
             // ── Phase 7 arm: "refs.profile" ──────────────────────────────────
-            // ADR-0063 Lane H: visited-profile cards now arrive as per-key
-            // row-delta projection (`RefProfileStore`). The bulk apply path
-            // has been removed; this arm is a no-op until the
-            // `RefProfileStore::apply_sidecar` wire-up lands as a follow-up.
-            "refs.profile" => {
-                // TODO(refs.profile): wire RefProfileStore when ADR-0063 Lane H lands.
+            // ADR-0063 Lane H: visited-profile cards arrive as per-key row
+            // deltas. Apply them through NMP's host store under the frame
+            // identity so baselines reset on session/epoch changes.
+            REFS_PROFILE_KEY => {
+                profiles::apply_refs_profile(
+                    state,
+                    &proj.payload,
+                    envelope.session_id,
+                    envelope.snapshot_epoch,
+                );
             }
 
             // ── Phase 7 arm: "refs.event" ─────────────────────────────────────

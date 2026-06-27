@@ -67,10 +67,10 @@ final class ProfileStore {
     }
 
     /// One-shot setup called from `ProfileView.task`. Opens the kernel profile
-    /// view (which sends `ClaimProfile` to NMP) and applies any buffered
+    /// view (which resolves the profile ref through NMP) and applies any buffered
     /// profile snapshot.
     func start() async {
-        // Phase 3G: open kernel view — sends Effect::ClaimProfile to NMP.
+        // Phase 3G: open kernel view — resolves the profile ref through NMP.
         kernel?.openProfile(pubkey: pubkey)
 
         // Apply any snapshot already buffered by the kernel (fast path if the
@@ -81,9 +81,9 @@ final class ProfileStore {
         isLoadingInitial = false
     }
 
-    /// Called from `ProfileView.onDisappear`. Sends `ReleaseProfile` to NMP.
+    /// Called from `ProfileView.onDisappear`. Releases the profile ref through NMP.
     func stop() {
-        // Phase 3G: close kernel view — sends Effect::ReleaseProfile to NMP.
+        // Phase 3G: close kernel view — sends Effect::ReleaseProfileRef to NMP.
         kernel?.closeProfile(pubkey: pubkey)
     }
 

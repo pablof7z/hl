@@ -54,8 +54,8 @@
 use std::sync::Arc;
 
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
-use nmp_core::substrate::ActionPayload;
-use nmp_core::KernelEventObserver;
+use nmp_core::substrate::{ActionPayload, ObservedProjection, ObservedProjectionRegistrar};
+use nmp_core::ObservedProjectionSink;
 use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
 use nmp_nip22::{CommentThreadProjection, CommentThreadSnapshot, PostCommentAction, KIND_COMMENT};
 use tokio::sync::mpsc;
@@ -65,7 +65,7 @@ use crate::kernel::actor::Cmd;
 use crate::kernel::app::AppState;
 use crate::kernel::snapshot::{CommentRecordRow, CommentThreadKernelSnapshot};
 
-// ─── READ side: KernelEventObserver wrapper ──────────────────────────────────
+// ─── READ side: ObservedProjectionSink wrapper ───────────────────────────────
 
 /// Observer wrapper that ingests NMP `KernelEvent`s (raw Nostr events) into
 /// the `CommentThreadProjection` and sends `KernelEvent::CommentThreadUpdated`
@@ -84,7 +84,7 @@ struct CommentObserver {
     tx: mpsc::UnboundedSender<Cmd>,
 }
 
-impl KernelEventObserver for CommentObserver {
+impl ObservedProjectionSink for CommentObserver {
     fn on_kernel_event(&self, event: &nmp_core::substrate::KernelEvent) {
         if event.kind != KIND_COMMENT {
             return;
@@ -315,7 +315,13 @@ pub(crate) fn register_comment_projection(nmp_ref: &NmpApp, tx: mpsc::UnboundedS
     let projection = Arc::new(CommentThreadProjection::new());
     let observer = Arc::new(CommentObserver { projection, tx });
 
-    let observer_id = nmp_ref.register_live_event_tap(observer as Arc<dyn KernelEventObserver>);
+    let observer_id = nmp_ref.open_observed_projection(ObservedProjection::from_kinds(
+        observer as Arc<dyn ObservedProjectionSink>,
+        "hl.comments",
+        1,
+        [KIND_COMMENT],
+        512,
+    ));
     if observer_id.0 == 0 {
         // Observer slot is full or poisoned — comment threads will not update.
         tracing::warn!(

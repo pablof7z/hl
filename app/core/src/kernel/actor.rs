@@ -382,9 +382,13 @@ fn reduce_action(state: &mut AppState, action: AppAction, now: u64) -> Vec<Effec
         AppAction::Unfollow { pubkey } => follows::reduce_action_unfollow(pubkey),
 
         // ── Phase 3D additions ────────────────────────────────────────────────
-        AppAction::ClaimProfile { pubkey } => profiles::reduce_action_claim_profile(pubkey),
+        AppAction::ResolveProfileRef { pubkey } => {
+            profiles::reduce_action_resolve_profile_ref(pubkey)
+        }
 
-        AppAction::ReleaseProfile { pubkey } => profiles::reduce_action_release_profile(pubkey),
+        AppAction::ReleaseProfileRef { pubkey } => {
+            profiles::reduce_action_release_profile_ref(pubkey)
+        }
 
         // ── Phase 7 entity-ref additions (append-only) ────────────────────────
         AppAction::ResolveEntityRef { key } => {
@@ -639,14 +643,14 @@ fn reduce_action_envelope(
         AudioPlayPayload, AudioSeekPayload, AudioSetResumePayload, BlossomUploadPayload,
         CaptureSelectWordPayload, CaptureSetArtifactPreviewPayload,
         CaptureSetArtifactRecordPayload, CaptureSetContextPayload, CaptureSetNotePayload,
-        CaptureSetQuotePayload, CaptureSetTargetGroupPayload, ClaimProfilePayload,
+        CaptureSetQuotePayload, CaptureSetTargetGroupPayload, ResolveProfileRefPayload,
         ClipExtendSegmentPayload, ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload,
         ClipSetStartPayload, CommitSearchRecentQueryPayload, CreateAccountPayload,
         CreateAndAddToSetPayload, CreateRoomInvitesPayload, CreateRoomPayload, CreateSetPayload,
         DeleteSetPayload, FollowPayload, RenameSetPayload,
         JoinRoomPayload, LeaveRoomPayload, LookupIsbnPayload, MarkWhatsNewSeenPayload,
         OcrRecognizePayload, PairBunkerPayload, PresentSheetPayload, PublishClipPayload,
-        PublishHighlightPayload, ReactPayload, ReleaseEntityRefPayload, ReleaseProfilePayload,
+        PublishHighlightPayload, ReactPayload, ReleaseEntityRefPayload, ReleaseProfileRefPayload,
         RemoveBookmarkPayload, RemoveFromSetPayload, RemoveRelayPayload, ResolveEntityRefPayload,
         RunOmniboxPayload, RunSearchPayload, SelectRootTabPayload, SetBookPickerQueryPayload,
         SetRelayConfigsPayload, SetRelayRolePayload, ShareArtifactToRoomPayload,
@@ -730,14 +734,14 @@ fn reduce_action_envelope(
             follows::reduce_action_unfollow(p.pubkey)
         }
 
-        // ── Profiles (claim/release) ──────────────────────────────────────────
-        "hl.profile.claim" => {
-            let p = parse!(ClaimProfilePayload);
-            profiles::reduce_action_claim_profile(p.pubkey)
+        // ── Profiles (resolve/release) ────────────────────────────────────────
+        "hl.profile.resolve_ref" => {
+            let p = parse!(ResolveProfileRefPayload);
+            profiles::reduce_action_resolve_profile_ref(p.pubkey)
         }
-        "hl.profile.release" => {
-            let p = parse!(ReleaseProfilePayload);
-            profiles::reduce_action_release_profile(p.pubkey)
+        "hl.profile.release_ref" => {
+            let p = parse!(ReleaseProfileRefPayload);
+            profiles::reduce_action_release_profile_ref(p.pubkey)
         }
 
         // ── Entity ref (resolve/release) ──────────────────────────────────────
@@ -1349,13 +1353,14 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
 
         // ── Phase 3D additions (append-only) ─────────────────────────────────
         KernelEvent::ProfileCardUpdated { pubkey, card } => {
-            // Store the decoded ProfileCardModel in claimed_profiles keyed by
-            // the raw hex pubkey. The "profile" (own account) sidecar also
-            // goes through this path for ViewId::Profile views where the viewed
-            // pubkey matches the active account — own_profile is the read-side
-            // fallback, claimed_profiles is the authoritative path for views.
-            // `card` is `Box<ProfileCardModel>`; deref-move to owned model.
-            state.claimed_profiles.insert(pubkey, *card);
+            let payload = nmp_core::typed_projections::encode_profile(card.as_ref());
+            let batch = nmp_core::refs::RefRowDeltaBatch {
+                namespace: "profile".to_string(),
+                baseline: false,
+                rows: vec![nmp_core::refs::RefRow::changed(pubkey, 1, payload)],
+            };
+            let payload = nmp_core::refs::encode_ref_row_delta_batch(&batch);
+            profiles::apply_refs_profile(state, &payload, 0, 0);
             vec![]
         }
 
@@ -2016,20 +2021,20 @@ pub(crate) async fn run_effect(
         }
 
         // ── Phase 3D additions ────────────────────────────────────────────────
-        Effect::ClaimProfile { pubkey } => {
-            // Call nmp_app_claim_profile with liveness=Live so a Tailing kind:0
+        Effect::ResolveProfileRef { pubkey } => {
+            // Call nmp_app_resolve_ref with liveness=Live so a Tailing kind:0
             // subscription stays open while the view is on screen. The updated
-            // card arrives back through the "claimed_profiles" typed sidecar as
-            // KernelEvent::ProfileCardUpdated. No-op in test mode (nmp=None).
-            profiles::run_effect_claim_profile(pubkey, nmp);
+            // card arrives back through refs.profile. No-op in
+            // test mode (nmp=None).
+            profiles::run_effect_resolve_profile_ref(pubkey, nmp);
         }
 
-        Effect::ReleaseProfile { pubkey } => {
-            // Call nmp_app_release_profile to decrement the per-consumer refcount.
+        Effect::ReleaseProfileRef { pubkey } => {
+            // Call nmp_app_release_ref to decrement the per-consumer refcount.
             // When the count reaches zero NMP cancels the Tailing kind:0
-            // subscription and removes the card from claimed_profiles. No-op in
+            // subscription and clears the refs.profile row. No-op in
             // test mode (nmp=None).
-            profiles::run_effect_release_profile(pubkey, nmp);
+            profiles::run_effect_release_profile_ref(pubkey, nmp);
         }
 
         // ── Phase 7 entity-ref additions (append-only) ────────────────────────
@@ -2940,7 +2945,7 @@ pub(crate) async fn actor_task(
         let is_shutdown = matches!(cmd, Cmd::Shutdown);
 
         // Handle view registry mutations before reducing (they need the registry).
-        // Phase 3D: also gather lifecycle effects for profile claim/release — these
+        // Phase 3D: also gather lifecycle effects for profile resolve/release — these
         // are side-effects of view open/close, not of AppAction dispatch, so they
         // live here rather than in the pure reducer.
         let mut lifecycle_effects: Vec<Effect> = Vec::new();
@@ -3088,7 +3093,7 @@ pub(crate) async fn actor_task(
             effects.extend(bookmark_sets::lifecycle_effects_for_follow_update(&state));
         }
 
-        // Run lifecycle effects first (profile claim/release), then reducer effects.
+        // Run lifecycle effects first (profile resolve/release), then reducer effects.
         // Phase 3F: WireGroupEvents and ReleaseGroupEvents require AppState and are
         // handled INLINE here before the generic run_effect path (they need to
         // resolve host_relay_url from AppState::communities or mutate room_home_events).
