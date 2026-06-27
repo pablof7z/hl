@@ -1,0 +1,30 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const __wbg_nmpwasmruntime_free: (a: number, b: number) => void;
+export const nmp_encode_npub: (a: number, b: number) => [number, number];
+export const nmpwasmruntime_handle_dispatch_bytes: (a: number, b: number, c: number) => any;
+export const nmpwasmruntime_handle_json: (a: number, b: number, c: number) => any;
+export const nmpwasmruntime_new: () => number;
+export const nmpwasmruntime_prepare_store: (a: number, b: number, c: number, d: number, e: number) => any;
+export const nmpwasmruntime_recent_routing_decisions: (a: number) => [number, number];
+export const nmpwasmruntime_set_snapshot_callback: (a: number, b: number) => void;
+export const rustsecp256k1_v0_10_0_default_error_callback_fn: (a: number, b: number) => void;
+export const rustsecp256k1_v0_10_0_default_illegal_callback_fn: (a: number, b: number) => void;
+export const rustsecp256k1_v0_10_0_context_destroy: (a: number) => void;
+export const rustsecp256k1_v0_10_0_context_create: (a: number) => number;
+export const wasm_bindgen_5107baffd0a75d26___convert__closures_____invoke___wasm_bindgen_5107baffd0a75d26___JsValue__core_996c9f5f00cf318b___result__Result_____wasm_bindgen_5107baffd0a75d26___JsError___true_: (a: number, b: number, c: any) => [number, number];
+export const wasm_bindgen_5107baffd0a75d26___convert__closures_____invoke___js_sys_994cffaf55f38238___Function_fn_wasm_bindgen_5107baffd0a75d26___JsValue_____wasm_bindgen_5107baffd0a75d26___sys__Undefined___js_sys_994cffaf55f38238___Function_fn_wasm_bindgen_5107baffd0a75d26___JsValue_____wasm_bindgen_5107baffd0a75d26___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
+export const wasm_bindgen_5107baffd0a75d26___convert__closures_____invoke___web_sys_2222d82dbcf7556e___features__gen_CloseEvent__CloseEvent______true_: (a: number, b: number, c: any) => void;
+export const wasm_bindgen_5107baffd0a75d26___convert__closures_____invoke___web_sys_2222d82dbcf7556e___features__gen_CloseEvent__CloseEvent______true__2: (a: number, b: number, c: any) => void;
+export const wasm_bindgen_5107baffd0a75d26___convert__closures_____invoke___web_sys_2222d82dbcf7556e___features__gen_CloseEvent__CloseEvent______true__3: (a: number, b: number, c: any) => void;
+export const wasm_bindgen_5107baffd0a75d26___convert__closures_____invoke_______true_: (a: number, b: number) => void;
+export const __wbindgen_malloc: (a: number, b: number) => number;
+export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+export const __wbindgen_exn_store: (a: number) => void;
+export const __externref_table_alloc: () => number;
+export const __wbindgen_externrefs: WebAssembly.Table;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
+export const __wbindgen_destroy_closure: (a: number, b: number) => void;
+export const __externref_table_dealloc: (a: number) => void;
+export const __wbindgen_start: () => void;

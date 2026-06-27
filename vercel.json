@@ -1,5 +1,16 @@
 {
   "buildCommand": "cd web && node scripts/generate-changelog.js && npm run build && cd .. && cp -r web/.vercel/output .vercel/output",
   "outputDirectory": ".vercel/output",
-  "installCommand": "cd web && npm install"
+  "installCommand": "cd web && npm install",
+  "headers": [
+    {
+      "source": "/nmp-wasm/(.*\\.wasm)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/wasm"
+        }
+      ]
+    }
+  ]
 }
