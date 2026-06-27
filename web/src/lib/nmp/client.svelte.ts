@@ -22,8 +22,10 @@ import {
   type WorkerRequest,
 } from "./runtime-web/protocol";
 import { fulfilSignRequestViaExtension } from "./runtime-web/signBroker";
+import { decodeUpdateFrame } from "./runtime-web/updateFrameDecoder";
+import { RefProfileStore, type ProfileWire } from "./runtime-web/refProfileStore";
 
-export type { IdentityRelayPermission, RuntimeStatus, WorkerEvent, WorkerRequest };
+export type { IdentityRelayPermission, RuntimeStatus, WorkerEvent, WorkerRequest, ProfileWire };
 
 /** Snapshot emitted after every worker event. */
 export type RuntimeSnapshot = {
@@ -34,6 +36,11 @@ export type RuntimeSnapshot = {
   /** Raw UpdateFrame bytes from the most recent `update_bytes` event.
    *  Undefined until the first frame arrives. */
   latestUpdateBytes?: Uint8Array;
+  // ── #65 Slice 3: decoded projection state ────────────────────────────────
+  /** All projection keys present in the most recent decoded UpdateFrame. Empty
+   *  until the first frame arrives. Includes kernel builtin keys (refs.profile
+   *  etc.) and any app-registered projection keys. */
+  projectionKeys: string[];
 };
 
 export type NmpClient = {
@@ -56,6 +63,39 @@ export type NmpClient = {
    *  caller should watch `subscribe()` for `sign_completed`/`sign_failed`.
    *  Fails closed (capability_failure) on the degraded path. */
   beginSign(accountPubkey: string, unsignedJson: string): void;
+  /** #65 S3 — ADR-0063 structured reference-resolution control. Sends a
+   *  `resolve_ref` to the wasm runtime; the runtime opens a subscription and
+   *  pushes resolved data via the `refs.*` sidecar projections in subsequent
+   *  UpdateFrame bytes. The decoded result surfaces via `resolvedProfiles` in
+   *  the snapshot.
+   *
+   *  Namespace / shape / liveness integer codes mirror the Lane D FFI:
+   *    namespace: 0 = profile, 1 = event
+   *    shape:     profile → 0 = ref (avatar subset), 1 = card (full)
+   *    liveness:  0 = CacheOk (background fetch), 1 = Live (tailing sub)
+   */
+  resolveRef(
+    namespace: number,
+    key: string,
+    shape: number,
+    liveness: number,
+    consumerId: string,
+    hints?: string[],
+  ): Promise<RuntimeSnapshot>;
+  /** #65 S3 — ADR-0063 structured reference release. Signals the runtime that
+   *  this consumer no longer needs the resolved reference (refcount bookkeeping).
+   *  Release the ref in onDestroy / onUnmount to avoid refcount leaks. */
+  releaseRef(
+    namespace: number,
+    key: string,
+    consumerId: string,
+  ): Promise<RuntimeSnapshot>;
+  /** #65 S3 — look up the decoded `ProfileWire` for a pubkey in the
+   *  host-side cache. Returns `undefined` until a `refs.profile` sidecar
+   *  has been applied for this pubkey (i.e. `resolveRef` must be called first
+   *  and the runtime must have pushed a snapshot carrying the profile row).
+   *  Pure read — does NOT trigger a network fetch. */
+  resolveProfile(pubkeyHex: string): ProfileWire | undefined;
 };
 
 const APP_ID = "highlighter";
@@ -111,6 +151,9 @@ abstract class BaseNmpClient implements NmpClient {
   private _latestUpdateBytes: Uint8Array | undefined;
   private _status: RuntimeStatus = "ready";
   private _listeners = new Set<(snapshot: RuntimeSnapshot) => void>();
+  // #65 S3 — stateful profile store: rebuilt incrementally each frame.
+  private _profileStore = new RefProfileStore();
+  private _projectionKeys: string[] = [];
 
   constructor(private readonly _bridgeKind: RuntimeSnapshot["bridgeKind"]) {}
 
@@ -120,7 +163,12 @@ abstract class BaseNmpClient implements NmpClient {
       bridgeKind: this._bridgeKind,
       events: [...this._events],
       latestUpdateBytes: this._latestUpdateBytes,
+      projectionKeys: [...this._projectionKeys],
     };
+  }
+
+  resolveProfile(pubkeyHex: string): ProfileWire | undefined {
+    return this._profileStore.profile(pubkeyHex);
   }
 
   subscribe(listener: (snapshot: RuntimeSnapshot) => void): () => void {
@@ -139,6 +187,18 @@ abstract class BaseNmpClient implements NmpClient {
       this._latestUpdateBytes = bytes;
       // Mirror the kernel run-state on first frame.
       this._status = "running";
+      // #65 S3 — decode projection keys + apply refs.profile sidecar.
+      const decoded = decodeUpdateFrame(bytes);
+      if (decoded) {
+        this._projectionKeys = decoded.projectionKeys;
+        if (decoded.refsProfileBytes) {
+          this._profileStore.applySidecar(
+            decoded.refsProfileBytes,
+            decoded.sessionId,
+            decoded.snapshotEpoch,
+          );
+        }
+      }
     }
     this._events = [event, ...this._events].slice(0, 32);
     const snap = this.snapshot();
@@ -155,6 +215,20 @@ abstract class BaseNmpClient implements NmpClient {
   }): Promise<RuntimeSnapshot>;
   abstract setSigner(pubkeyHex: string, identityRelays?: IdentityRelayPermission[]): Promise<RuntimeSnapshot>;
   abstract beginSign(accountPubkey: string, unsignedJson: string): void;
+  abstract resolveRef(
+    namespace: number,
+    key: string,
+    shape: number,
+    liveness: number,
+    consumerId: string,
+    hints?: string[],
+  ): Promise<RuntimeSnapshot>;
+  abstract releaseRef(
+    namespace: number,
+    key: string,
+    consumerId: string,
+  ): Promise<RuntimeSnapshot>;
+  // resolveProfile is implemented in BaseNmpClient; no abstract needed.
 }
 
 // ─── Worker implementation ────────────────────────────────────────────────────
@@ -234,6 +308,51 @@ class WorkerNmpClient extends BaseNmpClient {
       account_pubkey: accountPubkey,
       unsigned_json: unsignedJson,
     } satisfies WorkerRequest);
+  }
+
+  async resolveRef(
+    namespace: number,
+    key: string,
+    shape: number,
+    liveness: number,
+    consumerId: string,
+    hints?: string[],
+  ): Promise<RuntimeSnapshot> {
+    await this.helloReady;
+    const correlationId = `web-resolve-${this.nextCorrelationId++}`;
+    return this.request(
+      {
+        type: "resolve_ref",
+        namespace,
+        key,
+        consumer_id: consumerId,
+        shape,
+        liveness,
+        hints: hints ?? [],
+        event_author: null,
+        correlation_id: correlationId,
+      },
+      correlationId,
+    );
+  }
+
+  async releaseRef(
+    namespace: number,
+    key: string,
+    consumerId: string,
+  ): Promise<RuntimeSnapshot> {
+    await this.helloReady;
+    const correlationId = `web-release-${this.nextCorrelationId++}`;
+    return this.request(
+      {
+        type: "release_ref",
+        namespace,
+        key,
+        consumer_id: consumerId,
+        correlation_id: correlationId,
+      },
+      correlationId,
+    );
   }
 
   private request(request: WorkerRequest, explicitCorrelationId?: string): Promise<RuntimeSnapshot> {
@@ -336,6 +455,43 @@ class InProcessNmpClient extends BaseNmpClient {
       type: "begin_sign",
       account_pubkey: accountPubkey,
       unsigned_json: unsignedJson,
+    });
+  }
+
+  async resolveRef(
+    namespace: number,
+    key: string,
+    shape: number,
+    liveness: number,
+    consumerId: string,
+    hints?: string[],
+  ): Promise<RuntimeSnapshot> {
+    const correlationId = `web-resolve-${this.nextCorrelationId++}`;
+    return this.send({
+      type: "resolve_ref",
+      namespace,
+      key,
+      consumer_id: consumerId,
+      shape,
+      liveness,
+      hints: hints ?? [],
+      event_author: null,
+      correlation_id: correlationId,
+    });
+  }
+
+  async releaseRef(
+    namespace: number,
+    key: string,
+    consumerId: string,
+  ): Promise<RuntimeSnapshot> {
+    const correlationId = `web-release-${this.nextCorrelationId++}`;
+    return this.send({
+      type: "release_ref",
+      namespace,
+      key,
+      consumer_id: consumerId,
+      correlation_id: correlationId,
     });
   }
 

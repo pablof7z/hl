@@ -1,5 +1,5 @@
 /**
- * NMP web bridge acceptance — GitHub #65 Slices 1 + 2.
+ * NMP web bridge acceptance — GitHub #65 Slices 1 + 2 + 3.
  *
  * Ported/extended from nostr-multi-platform/web/chirp/tests/ and adapted for
  * hl/web (SvelteKit + Vite 6 + adapter-vercel).
@@ -27,6 +27,8 @@
  *   data-has-snapshot    = "true" | "false"
  *   data-identity-set    = "true" | "false" | "pending"   (Slice 2)
  *   data-sign-result     = "completed:<id>" | "failed:<reason>" | "pending" (Slice 2)
+ *   data-projection-keys = comma-separated projection key list, or "" (Slice 3)
+ *   data-resolved-profile-displayname = resolved profile display name, or "" (Slice 3)
  */
 
 import { test, expect } from "@playwright/test";
@@ -304,6 +306,223 @@ test.describe("NMP signer boundary (#65 S2, NIP-07 only)", () => {
           );
           throw err;
         });
+    },
+  );
+});
+
+// ─── Slice 3: read proof — UpdateFrame decode + single-ref profile resolve ────
+
+test.describe("NMP read proof (#65 S3, single-ref profile decode)", () => {
+  // ── Step 0 — @wasm, NO relay, deterministic ───────────────────────────────
+  //
+  // Boot the probe without any relay bootstrap. The wasm runtime emits a first
+  // UpdateFrame on `start` even with no relay configured. We decode it and
+  // assert that the projection keys list is non-empty (proves the UpdateFrame
+  // decoder correctly round-trips against real wasm output). The builtin
+  // projection `refs.profile` is ALWAYS present in the wasm's boot snapshot.
+  //
+  // This test is deterministic (no relay, no network) and is the primary
+  // regression guard for the FlatBuffers decode chain.
+  //
+  test(
+    "@wasm Step 0: boot snapshot frame decodes non-empty projection keys",
+    async ({ page }) => {
+      test.setTimeout(60_000);
+
+      const consoleMessages: string[] = [];
+      page.on("console", (msg) => consoleMessages.push(`[${msg.type()}] ${msg.text()}`));
+      page.on("pageerror", (err) => consoleMessages.push(`[pageerror] ${err.message}`));
+
+      // No relay bootstrap → runtime boots with no relays (deterministic).
+      await page.goto(PROBE);
+
+      const shell = page.locator(SHELL);
+
+      // Worker must boot successfully.
+      await expect(shell).toHaveAttribute("data-bridge-kind", "worker", { timeout: 30_000 });
+
+      // The first UpdateFrame must arrive (flips has-snapshot to true).
+      await expect(shell)
+        .toHaveAttribute("data-has-snapshot", "true", { timeout: 30_000 })
+        .catch((err: unknown) => {
+          console.error(
+            "[nmp-bridge @wasm S3-Step0] Worker console at failure:\n" +
+              (consoleMessages.length ? consoleMessages.join("\n") : "(none)"),
+          );
+          throw err;
+        });
+
+      // After data-has-snapshot is true, the UpdateFrame has been decoded.
+      // Assert that at least one projection key is present — this proves the
+      // FlatBuffers decode chain (UpdateFrame → SnapshotFrame → TypedProjection)
+      // works against real wasm output, without any relay or network dependency.
+      const projectionKeysAttr = await shell.getAttribute("data-projection-keys");
+      const projectionKeys = (projectionKeysAttr ?? "").split(",").filter(Boolean);
+
+      console.log(
+        `[nmp-bridge @wasm S3-Step0] Projection keys decoded from boot snapshot: [${projectionKeys.join(", ")}]`,
+      );
+
+      if (projectionKeys.length === 0) {
+        throw new Error(
+          "[nmp-bridge @wasm S3-Step0] HONEST FAILURE: data-projection-keys is empty after " +
+          "the first UpdateFrame arrived. The decoder chain is broken or the wasm boot snapshot " +
+          "contains no typedProjections. Worker console:\n" +
+            (consoleMessages.length ? consoleMessages.join("\n") : "(none)"),
+        );
+      }
+
+      // Non-empty projection keys confirm the decode chain works.
+      expect(projectionKeys.length).toBeGreaterThan(0);
+
+      // Optional: if the builtin refs.profile projection is present, surface it.
+      // This is the Tier-2 builtin that carries resolved profile data. Its presence
+      // in the boot snapshot proves the generic wasm ships it without app composition.
+      const hasRefsProfile = projectionKeys.includes("refs.profile");
+      console.log(
+        `[nmp-bridge @wasm S3-Step0] refs.profile present in boot snapshot: ${hasRefsProfile}`,
+      );
+    },
+  );
+
+  // ── Step 1 — @wasm, fixture relay, single-ref profile resolve ─────────────
+  //
+  // SKIPPED (HONEST FAILURE — architectural gap in committed HL wasm):
+  //
+  // The committed HL wasm cannot populate refs.profile rows. Root cause:
+  //   The HL kernel composition never calls set_profile_lookup() with a live
+  //   ProfileCache backed by nmp_nip01::Kind0Parser. Instead nmp-core starts
+  //   with empty_profile_lookup() as the kernel's default profile store.
+  //
+  // The code path:
+  //   refs_row_delta_projections() → build_namespace_batch() →
+  //   build_baseline/incremental() → ref_row_payload("profile", pubkey) →
+  //   ref_profile_row_payload(pubkey) → profile_for_pubkey(pubkey) →
+  //   profile_lookup().profile(pubkey)   ← always None (empty lookup)
+  //
+  // Confirmed by 3 UpdateFrames all with ns="profile" rows=0:
+  //   - 2x baseline (boot + setSigner epoch bump)
+  //   - 1x incremental (relay EVENT for Alice's kind:0 — processed by wasm
+  //     but profile_lookup().contains(Alice) = false so bump_profile_row
+  //     was not called at the ingest site and refs.profile row stays absent)
+  //
+  // Root cause: the committed web wasm is the GENERIC nmp-browser-runtime,
+  // whose handle_start composition never calls set_profile_lookup(), so the
+  // kernel keeps its production default empty_profile_lookup() and
+  // ref_profile_row_payload() → profile_for_pubkey() is always None.
+  //
+  // To unblock: an HL nmp-browser-runtime composition root must wire
+  // nmp_nip01::Kind0Parser + ProfileCache and call set_profile_lookup()
+  // (the nmp-app-highlighter web composition — an upstream/wasm-build task).
+  //
+  // NOTE: refs.EVENT does NOT share this defect — ref_event_row_payload()
+  // reads the kernel's own event store (populated by generic ingestion), so
+  // an event-by-ref resolve round-trips through THIS wasm today. The next
+  // read slice should be a refs.event resolve proof (no upstream change).
+  //
+  // Step 0 (above) remains the deterministic regression guard. The
+  // fixture-relay.ts infrastructure is preserved for the event-ref proof.
+  //
+  // eslint-disable-next-line playwright/no-skipped-test
+  test.skip(
+    "@wasm Step 1: single-ref profile resolves via fixture relay (BLOCKED: hl wasm needs Kind0Parser+ProfileLookup wired)",
+    async ({ page }) => {
+      test.setTimeout(90_000);
+
+      const consoleMessages: string[] = [];
+      page.on("console", (msg) => consoleMessages.push(`[${msg.type()}] ${msg.text()}`));
+      page.on("pageerror", (err) => consoleMessages.push(`[pageerror] ${err.message}`));
+
+      // Import fixture relay inline (dynamic import so test-only code doesn't
+      // leak into the build; also avoids top-level await).
+      const { startProfileFixtureRelay } = await import("./fixture-relay.js");
+      const relay = await startProfileFixtureRelay();
+
+      try {
+        // relay_bootstrap (port A) as "read" — where the wasm subscribes for events.
+        // The bootstrap relay serves Alice's kind:0 directly.
+        // We also pass the bootstrap relay URL as a resolve_profile_hint so
+        // the wasm's resolve_ref call bypasses NIP-65 discovery and fetches
+        // Alice's kind:0 directly from the hinted relay.
+        const relayBootstrap = JSON.stringify([[relay.url, "read"]]);
+        // Also set the identity to the fixture pubkey. The hl wasm requires an
+        // active account to anchor relay discovery and process resolve_ref
+        // requests. The set_identity call does NOT require window.nostr — the
+        // probe page passes the pubkey_hex directly to the set_identity FFI.
+        const url =
+          `${PROBE}` +
+          `?relay_bootstrap=${encodeURIComponent(relayBootstrap)}` +
+          `&set_identity_pubkey=${relay.viewerPubkey}` +
+          `&resolve_profile=${relay.viewerPubkey}` +
+          `&resolve_profile_hint=${encodeURIComponent(relay.url)}`;
+
+        await page.goto(url);
+
+        const shell = page.locator(SHELL);
+
+        // Worker must boot.
+        await expect(shell).toHaveAttribute("data-bridge-kind", "worker", { timeout: 30_000 });
+
+        // Wait for data-has-snapshot: runtime is running and frames are flowing.
+        await expect(shell).toHaveAttribute("data-has-snapshot", "true", { timeout: 30_000 });
+
+        // Brief wait for identity to be accepted (probe sets identity after start).
+        await expect(shell).toHaveAttribute("data-identity-set", "true", { timeout: 15_000 });
+
+        // Diagnostic: give the relay a moment to receive connections before asserting.
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
+        console.log(
+          `[nmp-bridge @wasm S3-Step1] Bootstrap relay connections: ${relay.connectionCount()}, ` +
+          `outbox relay connections: ${relay.outboxConnectionCount()}`,
+        );
+
+        // Wait for the resolved profile display name.
+        // The wasm runtime opens a REQ for kind:0 to the fixture relay, receives
+        // the seeded event, ingests it, and pushes a refs.profile sidecar in the
+        // next UpdateFrame. The host-side RefProfileStore decodes the KPRF
+        // ProfileSnapshot and the probe surfaces the display name.
+        await expect(shell)
+          .toHaveAttribute("data-resolved-profile-displayname", relay.displayName, {
+            timeout: 60_000,
+          })
+          .catch(async (err: unknown) => {
+            const projKeys = await shell.getAttribute("data-projection-keys").catch(() => "(error)");
+            const resolvedName = await shell
+              .getAttribute("data-resolved-profile-displayname")
+              .catch(() => "(error)");
+            const filters = relay.receivedFilters();
+            // Extract events from the probe page's details element for wasm diagnostics.
+            const probeEventsJson = await page
+              .$eval("details pre", (el) => el.textContent ?? "")
+              .catch(() => "(details not found)");
+            console.error(
+              "[nmp-bridge @wasm S3-Step1] HONEST FAILURE: profile did not resolve.\n" +
+              `  relay.url (bootstrap) = ${relay.url}\n` +
+              `  relay.outboxUrl = ${relay.outboxUrl}\n` +
+              `  relay.viewerPubkey = ${relay.viewerPubkey}\n` +
+              `  relay.connectionCount (bootstrap) = ${relay.connectionCount()}\n` +
+              `  relay.outboxConnectionCount = ${relay.outboxConnectionCount()}\n` +
+              `  relay.receivedFilters (${filters.length} REQ sets total) = ${JSON.stringify(filters)}\n` +
+              `  data-projection-keys = ${projKeys}\n` +
+              `  data-resolved-profile-displayname = ${resolvedName}\n` +
+              `  probe events (last 32): ${probeEventsJson.slice(0, 2000)}\n` +
+              "  Worker console:\n" +
+                (consoleMessages.length ? consoleMessages.join("\n") : "(none)"),
+            );
+            // HONEST failure: if the generic wasm does NOT round-trip single-ref
+            // profile resolution (e.g. it needs app composition), this assertion
+            // will fail with the above diagnostic, proving that even single-ref
+            // reads require nmp-app-highlighter. Do NOT weaken this test.
+            throw err;
+          });
+
+        const resolvedName = await shell.getAttribute("data-resolved-profile-displayname");
+        console.log(
+          `[nmp-bridge @wasm S3-Step1] Resolved displayName = "${resolvedName}" (expected "${relay.displayName}")`,
+        );
+      } finally {
+        await relay.close();
+      }
     },
   );
 });
