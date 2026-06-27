@@ -171,6 +171,7 @@ test.describe("NMP signer boundary (#65 S2, NIP-07 only)", () => {
       const secretKey = generateSecretKey();
       const pubkeyHex = getPublicKeyHex(secretKey);
       const unsignedJson = JSON.stringify({
+        pubkey: pubkeyHex,
         kind: 1,
         created_at: Math.floor(Date.now() / 1000),
         tags: [],
@@ -269,7 +270,11 @@ test.describe("NMP signer boundary (#65 S2, NIP-07 only)", () => {
         };
       }, pubkeyHex);
 
+      // The wasm runtime deserializes unsigned_json into a Nostr event struct
+      // that requires `pubkey` (the account pubkey) in the unsigned payload —
+      // the id field is absent (not yet hashed); sig absent (not yet signed).
       const unsignedJson = JSON.stringify({
+        pubkey: pubkeyHex,
         kind: 1,
         created_at: Math.floor(Date.now() / 1000),
         tags: [],
