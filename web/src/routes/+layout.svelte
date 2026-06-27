@@ -25,6 +25,10 @@
   import { ndk, ensureClientNdk } from '$lib/ndk/client';
   import type { SeoMetadata } from '$lib/seo';
   import { NDK_CONTEXT_KEY } from '$lib/ndk/utils/ndk';
+  import { NDKNip07Signer } from '@nostr-dev-kit/ndk';
+  import { browser } from '$app/environment';
+  import { getClient } from '$lib/nmp/client.svelte';
+  import { hasNostrExtension } from '$lib/features/auth/auth';
 
   let { children }: LayoutProps = $props();
   const seo = $derived((page.data as { seo?: SeoMetadata }).seo);
@@ -89,6 +93,28 @@
     void ensureClientNdk().catch((error) => {
       console.error('Failed to connect client NDK', error);
     });
+  });
+
+  // #65 S2 — NIP-07 session-restore effect.
+  //
+  // When the user reloads with an active extension session, re-installs the
+  // NIP-07 identity in the wasm bridge so it survives reload. Fires whenever
+  // ndk.$currentUser changes (login OR session restore from localStorage).
+  //
+  // Gate: browser + window.nostr present + active signer is NDKNip07Signer.
+  // This ensures we ONLY call setSigner for extension accounts, never for
+  // private-key (NDKPrivateKeySigner) or bunker (NDKNip46Signer) sessions —
+  // those are NDK-only (upstream #2119/#2068).
+  $effect(() => {
+    const user = ndk.$currentUser;
+    if (!browser || !user || !hasNostrExtension()) return;
+    if (!(ndk.signer instanceof NDKNip07Signer)) return;
+    // Best-effort, non-blocking. Must not throw or break any existing NDK flow.
+    void getClient()
+      .setSigner(user.pubkey)
+      .catch((err: unknown) => {
+        console.warn('[nmp] session-restore setSigner failed (best-effort):', err);
+      });
   });
 </script>
 

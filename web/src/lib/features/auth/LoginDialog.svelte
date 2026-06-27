@@ -4,7 +4,9 @@
   import { onDestroy } from 'svelte';
   import * as Dialog from '$lib/components/ui/dialog';
   import * as Tabs from '$lib/components/ui/tabs';
+  import { browser } from '$app/environment';
   import { ndk } from '$lib/ndk/client';
+  import { getClient } from '$lib/nmp/client.svelte';
   import ExtensionLoginForm from './ExtensionLoginForm.svelte';
   import PrivateKeyLoginForm from './PrivateKeyLoginForm.svelte';
   import RemoteLoginForm from './RemoteLoginForm.svelte';
@@ -80,6 +82,16 @@
       pending = true;
       error = '';
       await ndk.$sessions.login(new NDKNip07Signer());
+      // #65 S2 — install NIP-07 identity in the wasm bridge as a parallel
+      // authority. Best-effort: must NOT block or break login if the bridge
+      // degrades. NDK keeps its own signer and does all reads/writes.
+      if (browser && ndk.$currentUser) {
+        void getClient()
+          .setSigner(ndk.$currentUser.pubkey)
+          .catch((err: unknown) => {
+            console.warn('[nmp] post-login setSigner failed (best-effort):', err);
+          });
+      }
       finishLogin();
     } catch (caught) {
       error = caught instanceof Error ? caught.message : "Couldn't log in with the extension.";
@@ -91,6 +103,9 @@
   async function loginWithPrivateKey() {
     if (!ndk.$sessions || pending || !privateKey.trim()) return;
 
+    // NMP bridge: local-key (nsec) signer is unsupported by the current wasm
+    // runtime — the Rust LocalKey provider is not yet exposed to the web bridge
+    // (#2119/#2068). NDK handles all signing for private-key sessions.
     try {
       pending = true;
       error = '';
@@ -138,6 +153,8 @@
   async function loginWithBunker() {
     if (!ndk.$sessions || connectingBunker || !bunkerUri.trim().startsWith('bunker://')) return;
 
+    // NMP bridge: NIP-46 (bunker) signer is unsupported by the current wasm
+    // runtime (#2119/#2068). NDK handles all signing for bunker sessions.
     try {
       error = '';
       connectingBunker = true;
