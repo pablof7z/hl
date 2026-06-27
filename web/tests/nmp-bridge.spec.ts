@@ -544,13 +544,17 @@ test.describe("NMP bridge @wasm event resolve", () => {
 
       try {
         // relay_bootstrap (single relay) as "read" — where the wasm subscribes.
-        // Events do NOT require NIP-65 discovery; no outbox relay needed.
-        // set_identity_pubkey anchors the relay connection to the event author's pubkey.
+        // resolve_event_relay: relay URL hint passed as NIP-19 nevent relay TLV so
+        //   the wasm knows where to fetch the event (bypasses/augments NIP-65 lookup).
+        // resolve_event_author: author pubkey hint (NIP-19 nevent author TLV) used
+        //   for NIP-65 relay discovery; same as set_identity_pubkey in our fixture.
+        // set_identity_pubkey anchors the relay connection + provides author context.
         const relayBootstrap = JSON.stringify([[relay.url, "read"]]);
         const url =
           `${PROBE}` +
           `?relay_bootstrap=${encodeURIComponent(relayBootstrap)}` +
           `&resolve_event=${relay.eventId}` +
+          `&resolve_event_relay=${encodeURIComponent(relay.url)}` +
           `&set_identity_pubkey=${relay.pubkey}`;
 
         await page.goto(url);
@@ -567,11 +571,30 @@ test.describe("NMP bridge @wasm event resolve", () => {
         await expect(shell).toHaveAttribute("data-identity-set", "true", { timeout: 15_000 });
 
         // Wait for the resolved event content.
-        // The wasm runtime opens a REQ for the event id to the fixture relay,
-        // receives the seeded kind:1 event, ingests it, and pushes a refs.event
-        // sidecar (NRRD KCEV batch) in the next UpdateFrame. The host-side
-        // RefEventStore decodes the ClaimedEventsSnapshot and the probe surfaces
-        // the content.
+        //
+        // What the wasm DOES do (confirmed by diagnostic logging):
+        //   1. resolve_ref(1, eventId) causes the wasm to issue {ids:[eventId],limit:1} REQs.
+        //   2. The relay responds with the kind:1 event + EOSE.
+        //   3. The refs.event NRRD sidecar arrives (file_identifier="NRRD", ns="event").
+        //   4. The NRRD baseline has rows=0 — the event does NOT appear as a KCEV row.
+        //   5. Incremental updates also have rows=0 even after the event is served.
+        //
+        // ROOT CAUSE (HONEST FAILURE — do not weaken this test):
+        //   The wasm's refs.event projection (ClaimedEventsSnapshot) is empty because
+        //   the committed wasm binary only populates refs.event for events that have been
+        //   "claimed" through the kernel's internal write pathway (e.g., authored and
+        //   published via dispatch, or explicitly saved/highlighted by the user). Events
+        //   fetched externally via resolve_ref {ids:[eventId]} subscriptions land in the
+        //   raw Nostr-SDK event buffer but are not promoted to the ClaimedEventsSnapshot
+        //   tier that refs.event reads from.
+        //
+        //   This contradicts the task description's note that "refs.EVENT does NOT share
+        //   this defect — ref_event_row_payload() reads the kernel's own event store
+        //   (populated by generic ingestion)". In the CURRENTLY COMMITTED WASM, generic
+        //   ingestion via resolve_ref does not populate ClaimedEventsSnapshot.
+        //
+        //   When the upstream wasm wires the event-claim path correctly, this assertion
+        //   will become green without any changes to the host-side code.
         await expect(shell)
           .toHaveAttribute("data-resolved-event-content", relay.content, { timeout: 60_000 })
           .catch(async (err: unknown) => {
@@ -590,6 +613,8 @@ test.describe("NMP bridge @wasm event resolve", () => {
               .catch(() => "(details not found)");
             console.error(
               "[nmp-bridge @wasm S4] HONEST FAILURE: event did not resolve.\n" +
+              "  The wasm issues {ids:[eventId]} REQs (confirmed) but ClaimedEventsSnapshot\n" +
+              "  refs.event NRRD stays empty (0 rows) even after the relay serves the event.\n" +
               `  relay.url = ${relay.url}\n` +
               `  relay.eventId = ${relay.eventId}\n` +
               `  relay.pubkey = ${relay.pubkey}\n` +
@@ -599,7 +624,7 @@ test.describe("NMP bridge @wasm event resolve", () => {
               `  data-resolved-event-id = ${resolvedId}\n` +
               `  data-resolved-event-content = ${resolvedContent}\n` +
               `  probe events (last 32): ${probeEventsJson.slice(0, 2000)}\n` +
-              "  Worker console:\n" +
+              "  Page console:\n" +
                 (consoleMessages.length ? consoleMessages.join("\n") : "(none)"),
             );
             throw err;

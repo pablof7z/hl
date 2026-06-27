@@ -244,12 +244,33 @@ export type EventFixtureRelay = {
 /**
  * Single-relay event fixture for hermetic NMP single-ref event resolution.
  *
- * Events do NOT require NIP-65 discovery — the kernel fetches them directly
- * from whichever relay is listed in relay_bootstrap. A single relay is
- * sufficient for the event round-trip.
+ * CURRENT STATE (HONEST FAILURE — as of committed wasm binary):
  *
- * Serves a deterministic signed kind:1 event that can be fetched via
- * resolveRef(namespace=1, key=eventId, shape=0, liveness=1).
+ * The wasm DOES issue `{ids:[eventId], limit:1}` REQs when resolve_ref(1,
+ * eventId) is called. The relay serves the kind:1 event. But the refs.event
+ * NRRD sidecar (ClaimedEventsSnapshot) stays empty — 0 rows in both the
+ * baseline and incremental batches.
+ *
+ * ROOT CAUSE: The wasm's refs.event projection (ClaimedEventsSnapshot) only
+ * populates events that have been "claimed" through the kernel's internal write
+ * pathway (authored, published, or explicitly saved by the user). Events fetched
+ * externally via resolve_ref {ids:[eventId]} subscriptions are stored in the
+ * raw Nostr-SDK event buffer but not promoted to the ClaimedEventsSnapshot tier.
+ *
+ * The fixture is deliberately kept simple (kind:1 + kind:10002) so it can be
+ * evolved when the upstream wasm wires the event-claim path:
+ *   - kind:1 event: authored by the identity keypair, should eventually
+ *     appear as a KCEV row in refs.event once the claim path is wired.
+ *   - kind:10002 relay list: NIP-65 discovery so the wasm routes the
+ *     {ids:[eventId]} REQ to the correct relay.
+ *
+ * Expected (not yet working) flow:
+ *   1. Wasm connects via relay_bootstrap.
+ *   2. Wasm calls set_identity → subscriptions → relay serves kind:10002.
+ *   3. Probe retries resolveEvent(eventId) on each UpdateFrame.
+ *   4. Wasm issues {ids:[eventId],limit:1} → relay serves kind:1 event.
+ *   5. Wasm claims event → emits refs.event NRRD with KCEV row. [NOT YET]
+ *   6. Host decodes ClaimedEventsSnapshot → surfaces id + content.   [NOT YET]
  */
 export async function startEventFixtureRelay(): Promise<EventFixtureRelay> {
   const sk = generateSecretKey();
@@ -258,18 +279,42 @@ export async function startEventFixtureRelay(): Promise<EventFixtureRelay> {
   const now = Math.floor(Date.now() / 1000);
   const allFilters: NostrFilter[][] = [];
 
+  // Start the server first so we know its URL, then build events that
+  // reference that URL. Use a live-reference array so events pushed after
+  // server.start() are still served to subsequent REQ messages.
+  const events: NostrEvent[] = [];
+  const server = await startServer(events, allFilters);
+
+  // kind:1 (regular note) — the most basic event type. The wasm stores kind:1
+  // events under their hex event ID (no NIP-33 addressable key remapping).
+  // When resolve_ref(1, eventId) is called, the wasm issues {ids:[eventId]}
+  // to the relay and ingests the event. The NRRD row key matches the hex event
+  // ID, so host-side cache.get("event", eventId) finds the KCEV payload.
   const event = finalizeEvent(
     {
       kind: 1,
-      created_at: now - 5,
+      created_at: now - 10,
       tags: [],
       content,
     },
     sk,
   ) as NostrEvent;
 
-  const events: NostrEvent[] = [event];
-  const server = await startServer(events, allFilters);
+  // NIP-65 relay list (kind:10002) pointing to this relay itself.
+  // The wasm discovers this after setSigner, confirming our relay as the
+  // author's outbox (so the relay-pool sends the {ids:[eventId]} REQ here).
+  const relayList = finalizeEvent(
+    {
+      kind: 10002,
+      created_at: now - 5,
+      tags: [["r", server.url]],
+      content: "",
+    },
+    sk,
+  ) as NostrEvent;
+
+  // Populate the live events array (server has a reference to it).
+  events.push(event, relayList);
 
   return {
     url: server.url,

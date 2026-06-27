@@ -82,6 +82,7 @@ export type NmpClient = {
     liveness: number,
     consumerId: string,
     hints?: string[],
+    eventAuthor?: string | null,
   ): Promise<RuntimeSnapshot>;
   /** #65 S3 — ADR-0063 structured reference release. Signals the runtime that
    *  this consumer no longer needs the resolved reference (refcount bookkeeping).
@@ -101,8 +102,18 @@ export type NmpClient = {
    *  Calls resolveRef(namespace=1, key=eventId, shape=0, liveness=1, consumerId).
    *  The wasm issues a REQ for the event; on receipt it emits a refs.event sidecar
    *  (NRRD KCEV batch) in subsequent UpdateFrames. Use `resolvedEvent()` to read
-   *  the decoded result. */
-  resolveEvent(eventId: string, consumerId: string): Promise<RuntimeSnapshot>;
+   *  the decoded result.
+   *
+   *  opts.relayHints: relay URL hints (NIP-19 nevent TLV hints) — the wasm uses
+   *    these to know which relay to query for the event when no other relay info
+   *    is available. Pass the relay URL where the event is known to exist.
+   *  opts.eventAuthor: hex pubkey of the event author (NIP-19 nevent TLV author).
+   *    Provides the wasm with author context for relay discovery (NIP-65). */
+  resolveEvent(
+    eventId: string,
+    consumerId: string,
+    opts?: { relayHints?: string[]; eventAuthor?: string },
+  ): Promise<RuntimeSnapshot>;
   /** #65 S4 — look up the decoded `ClaimedEventWire` for a primaryId in the
    *  host-side cache. Returns `undefined` until a `refs.event` sidecar has been
    *  applied for this event (i.e. `resolveEvent` / `resolveRef` must be called
@@ -187,9 +198,15 @@ abstract class BaseNmpClient implements NmpClient {
   }
 
   // #65 S4 — event store wiring
-  async resolveEvent(eventId: string, consumerId: string): Promise<RuntimeSnapshot> {
+  async resolveEvent(
+    eventId: string,
+    consumerId: string,
+    opts?: { relayHints?: string[]; eventAuthor?: string },
+  ): Promise<RuntimeSnapshot> {
     // namespace=1 (event), shape=0 (Embed), liveness=1 (Live)
-    return this.resolveRef(1, eventId, 0, 1, consumerId);
+    // Pass relay hints and event_author so the wasm knows where to fetch the event
+    // (NIP-19 nevent TLV fields — relay hints + author pubkey for NIP-65 discovery).
+    return this.resolveRef(1, eventId, 0, 1, consumerId, opts?.relayHints, opts?.eventAuthor ?? null);
   }
 
   resolvedEvent(primaryId: string): ClaimedEventWire | undefined {
@@ -254,6 +271,7 @@ abstract class BaseNmpClient implements NmpClient {
     liveness: number,
     consumerId: string,
     hints?: string[],
+    eventAuthor?: string | null,
   ): Promise<RuntimeSnapshot>;
   abstract releaseRef(
     namespace: number,
@@ -349,6 +367,7 @@ class WorkerNmpClient extends BaseNmpClient {
     liveness: number,
     consumerId: string,
     hints?: string[],
+    eventAuthor?: string | null,
   ): Promise<RuntimeSnapshot> {
     await this.helloReady;
     const correlationId = `web-resolve-${this.nextCorrelationId++}`;
@@ -361,7 +380,7 @@ class WorkerNmpClient extends BaseNmpClient {
         shape,
         liveness,
         hints: hints ?? [],
-        event_author: null,
+        event_author: eventAuthor ?? null,
         correlation_id: correlationId,
       },
       correlationId,
@@ -497,6 +516,7 @@ class InProcessNmpClient extends BaseNmpClient {
     liveness: number,
     consumerId: string,
     hints?: string[],
+    eventAuthor?: string | null,
   ): Promise<RuntimeSnapshot> {
     const correlationId = `web-resolve-${this.nextCorrelationId++}`;
     return this.send({
@@ -507,7 +527,7 @@ class InProcessNmpClient extends BaseNmpClient {
       shape,
       liveness,
       hints: hints ?? [],
-      event_author: null,
+      event_author: eventAuthor ?? null,
       correlation_id: correlationId,
     });
   }
