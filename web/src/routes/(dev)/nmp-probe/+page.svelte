@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Dev-only probe for the NMP web bridge (GitHub #65, Slice 1 + Slice 2).
+  // Dev-only probe for the NMP web bridge (GitHub #65, Slices 1–3).
   //
   // NOT linked from nav. Used by Playwright tests to assert data-* attributes.
   //
@@ -16,19 +16,38 @@
   //     Set once a sign_completed or sign_failed event arrives, when beginSign
   //     was triggered via ?begin_sign= query param.
   //
+  // Slice 3 read-proof attributes (S3, #65):
+  //   data-projection-keys = comma-separated list of projection keys from the first
+  //     decoded UpdateFrame, or "" until a frame arrives.
+  //   data-resolved-profile-displayname = display name of the resolved profile
+  //     (set once refs.profile sidecar carries it), or "" if not yet resolved.
+  //     Mirrors ?resolve_profile=<pubkeyHex> query param.
+  //
   // Slice 2 query params (mirrors ?relay_bootstrap= pattern):
   //   ?set_identity_pubkey=<hex>          — install NIP-07 identity via setSigner
   //   ?begin_sign=<url-encoded-json>      — start a sign round-trip after setSigner
+  //
+  // Slice 3 query params:
+  //   ?relay_bootstrap=<json>             — [[url, role], ...] relay bootstrap list
+  //   ?resolve_profile=<pubkeyHex>        — resolve a profile by pubkey after start
+  //   ?resolve_profile_hint=<relayUrl>    — relay URL hint for the resolve_ref call
 
   import { onMount } from 'svelte';
   import { browser } from '$app/environment';
   import { getClient, type RuntimeSnapshot, type WorkerEvent } from '$lib/nmp/client.svelte';
+
+  // Namespace / shape / liveness codes (mirror Lane D FFI — see actions.ts in chirp).
+  const REF_NS_PROFILE = 0;
+  const REF_SHAPE_PROFILE_REF = 0;
+  const REF_LIVENESS_LIVE = 1;
 
   let snapshot: RuntimeSnapshot | null = $state(null);
   let startError: string | null = $state(null);
   // Signer state (S2)
   let identitySet: boolean | null = $state(null); // null = pending
   let signResult: string | null = $state(null);   // null = pending (or no begin_sign param)
+  // S3: resolved profile display name (null = not yet resolved / no param)
+  let resolvedDisplayName: string | null = $state(null);
 
   function formatStatus(s: RuntimeSnapshot['status']): string {
     if (typeof s === 'string') return s;
@@ -46,7 +65,15 @@
     const client = getClient();
     const params = new URL(window.location.href).searchParams;
 
-    // Subscribe so we always have the latest snapshot. Also watch sign events.
+    // S3: ?resolve_profile param — the pubkey we want to resolve.
+    const resolveProfileParam = params.get('resolve_profile');
+    // Optional relay URL hint for the resolve_ref call (speeds up discovery).
+    const resolveProfileHint = params.get('resolve_profile_hint');
+    // Consumer ID scoped to this probe mount — released on unmount.
+    const CONSUMER_ID = 'nmp-probe-s3';
+
+    // Subscribe so we always have the latest snapshot. Also watch sign events and
+    // resolved profiles.
     const unsub = client.subscribe((snap) => {
       snapshot = snap;
       // Update sign result from the event stream (only if begin_sign was requested).
@@ -56,6 +83,13 @@
           signResult = `completed:${signEv.correlation_id}`;
         } else if (signEv?.type === 'sign_failed') {
           signResult = `failed:${signEv.reason}`;
+        }
+      }
+      // S3: check if the resolved profile has arrived in the store.
+      if (resolveProfileParam && resolvedDisplayName === null) {
+        const profile = client.resolveProfile(resolveProfileParam);
+        if (profile?.displayName) {
+          resolvedDisplayName = profile.displayName;
         }
       }
     });
@@ -94,12 +128,34 @@
             client.beginSign(identityPubkeyParam, decodeURIComponent(beginSignParam));
           }
         }
+
+        // ─── S3: resolve profile ────────────────────────────────────────────
+        if (resolveProfileParam) {
+          // resolveRef is fire-and-forget from the probe's perspective: the
+          // subscription above polls `client.resolveProfile()` on each snapshot.
+          // Pass the optional relay hint so the wasm can bypass NIP-65 discovery.
+          const hints = resolveProfileHint ? [resolveProfileHint] : [];
+          await client.resolveRef(
+            REF_NS_PROFILE,
+            resolveProfileParam,
+            REF_SHAPE_PROFILE_REF,
+            REF_LIVENESS_LIVE,
+            CONSUMER_ID,
+            hints,
+          );
+        }
       })
       .catch((err: unknown) => {
         startError = err instanceof Error ? err.message : String(err);
       });
 
-    return unsub;
+    return () => {
+      // Release the ref on unmount (consumer-id discipline, ADR-0063).
+      if (resolveProfileParam) {
+        void client.releaseRef(REF_NS_PROFILE, resolveProfileParam, CONSUMER_ID);
+      }
+      unsub();
+    };
   });
 
   // Derived data-* values for non-signer attrs
@@ -111,6 +167,11 @@
     identitySet === null ? 'pending' : identitySet ? 'true' : 'false'
   );
   const dataSignResult = $derived(signResult ?? 'pending');
+  // S3 attrs
+  const dataProjectionKeys = $derived(
+    (snapshot?.projectionKeys ?? []).join(',')
+  );
+  const dataResolvedProfileDisplayname = $derived(resolvedDisplayName ?? '');
 </script>
 
 <main
@@ -120,6 +181,8 @@
   data-has-snapshot={hasSnapshot}
   data-identity-set={dataIdentitySet}
   data-sign-result={dataSignResult}
+  data-projection-keys={dataProjectionKeys}
+  data-resolved-profile-displayname={dataResolvedProfileDisplayname}
 >
   <h1>NMP Bridge Probe</h1>
 
@@ -138,6 +201,12 @@
 
     <dt>Sign result</dt>
     <dd>{dataSignResult}</dd>
+
+    <dt>Projection keys</dt>
+    <dd>{dataProjectionKeys || '(none yet)'}</dd>
+
+    <dt>Resolved profile display name</dt>
+    <dd>{dataResolvedProfileDisplayname || '(none yet)'}</dd>
   </dl>
 
   {#if startError}
