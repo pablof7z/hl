@@ -19,23 +19,23 @@ nostr = { version = "0.44", default-features = false, features = ["std", "nip46"
 nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "fc0589fc88d61912779741fcce7d4e7176cf9a30", default-features = false }
 # NMP is consumed from a released tag so hl does not float across transient
 # framework contracts between releases.
-nmp-core = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
-nmp-planner = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
-nmp-ffi = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3", features = ["signer-broker", "external-signer"] }
-nmp-defaults = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
-nmp-signers = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
-nmp-nip11 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
-nmp-nip02 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
-nmp-nip25 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
-nmp-nip29 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
-nmp-nip22 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
-nmp-nip50 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
-nmp-nip51 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
-nmp-nip78 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
-nmp-blossom = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
-nmp-content = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
-nmp-store = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
-nmp-kinds = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.3" }
+nmp-core = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4" }
+nmp-planner = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4" }
+nmp-ffi = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4", features = ["signer-broker", "external-signer"] }
+nmp-defaults = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4" }
+nmp-signers = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4" }
+nmp-nip11 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4" }
+nmp-nip02 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4" }
+nmp-nip25 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4" }
+nmp-nip29 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4" }
+nmp-nip22 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4" }
+nmp-nip50 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4" }
+nmp-nip51 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4" }
+nmp-nip78 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4" }
+nmp-blossom = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4" }
+nmp-content = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4" }
+nmp-store = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4" }
+nmp-kinds = { git = "https://github.com/pablof7z/nostr-multi-platform.git", tag = "nmp-v0.8.4" }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 futures = "0.3"
