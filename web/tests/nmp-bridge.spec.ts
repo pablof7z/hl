@@ -65,14 +65,22 @@ test.describe("NMP bridge boot", () => {
     },
   );
 
-  // @wasm tier — skipped until the wasm artifact is built and vendored.
-  // To enable: run `bun run build:wasm` from web/, then re-run `bun run test:e2e`.
+  // @wasm tier — enabled once the wasm artifact is built and vendored.
   // The test name includes @wasm so it can also be excluded via --grep-invert.
-  test.skip(
+  test(
     "@wasm real wasm runtime boots in a Worker and emits an UpdateFrame",
     async ({ page }) => {
+      // Capture all worker/page console output and errors to aid diagnosis.
+      const consoleMessages: string[] = [];
+      page.on("console", (msg) => {
+        consoleMessages.push(`[${msg.type()}] ${msg.text()}`);
+      });
+      page.on("pageerror", (err) => {
+        consoleMessages.push(`[pageerror] ${err.message}`);
+      });
+
       // NOTE: This test requires web/static/nmp-wasm/ to be populated.
-      // Run `bun run build:wasm` first.
+      // Run `bun run build:wasm` first, or populate via the vendored copies.
       await page.goto(PROBE);
 
       const shell = page.locator(SHELL);
@@ -82,7 +90,17 @@ test.describe("NMP bridge boot", () => {
 
       // The first UpdateFrame flips data-has-snapshot to "true" — an event only
       // the real NmpWasmRuntime can emit (DegradedRuntime never produces one).
-      await expect(shell).toHaveAttribute("data-has-snapshot", "true", { timeout: 30_000 });
+      await expect(shell)
+        .toHaveAttribute("data-has-snapshot", "true", { timeout: 30_000 })
+        .catch((err: unknown) => {
+          // On failure, dump the captured console log so the root cause is
+          // visible in the Playwright report without needing a trace viewer.
+          console.error(
+            "[nmp-bridge @wasm] Worker console at failure:\n" +
+              (consoleMessages.length ? consoleMessages.join("\n") : "(none)"),
+          );
+          throw err;
+        });
 
       // Once data-has-snapshot is true, the status should be "running".
       await expect(shell).toHaveAttribute("data-runtime-status", "running", { timeout: 30_000 });
