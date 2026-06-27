@@ -158,11 +158,15 @@ test.describe("NMP signer boundary (#65 S2, NIP-07 only)", () => {
   // ── Fallback tier (PR-blocking, no wasm required) ──────────────────────────
 
   test(
-    "fallback path: setSigner and beginSign return honest capability_failure (no crash)",
+    "fallback path: setSigner returns honest capability_failure (no crash)",
     async ({ page }) => {
       // Force in-process degraded runtime. DegradedRuntime.handle() returns
-      // capability_failure for set_identity and sign_failed for begin_sign —
-      // never throws. This proves the degraded path is safe to call.
+      // capability_failure for set_identity (and sign_failed for begin_sign) —
+      // never throws. This proves the degraded path is safe to call: the probe
+      // only fires beginSign after a successful setSigner, so on the degraded
+      // path identity stays unset and the sign result stays "pending" (no
+      // crash, no hang). The degraded begin_sign→sign_failed branch itself is
+      // covered at the unit level in degradedRuntime.ts.
       await page.addInitScript(() => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete (window as any).Worker;
