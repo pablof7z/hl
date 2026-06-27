@@ -30,7 +30,7 @@
 //! typed snapshot projection against the live `NmpApp`. It follows the Chirp
 //! pattern in `apps/chirp/nmp-app-chirp/src/ffi/register.rs::nmp_app_chirp_register_follow_list`.
 //! ADR-0063: the projection is a PURE READ over the shared `ContactsLookup`
-//! (no `KernelEventObserver`); account changes are tracked internally by the
+//! (no filterless event observer); account changes are tracked internally by the
 //! runtime registrar, so a single boot-time call suffices.
 //!
 //! ## Threading
@@ -146,7 +146,7 @@ pub(crate) fn run_effect_dispatch_follow_action(
 /// `nmp_nip02::register_follow_state_runtime`, mirroring the Chirp pattern in
 /// `apps/chirp/nmp-app-chirp/src/ffi/register.rs::nmp_app_chirp_register_follow_list`.
 ///
-/// ADR-0063: `FollowListProjection` is no longer a `KernelEventObserver`; it is
+/// ADR-0063: `FollowListProjection` is no longer a filterless event observer; it is
 /// a PURE READ over the shared `nmp_core::substrate::ContactsLookup` (written by
 /// `nmp_nip01::Kind3Parser` on every kind:3 ingest, including cache-serve and
 /// local publishes). `register_follow_state_runtime` sources both the active-

@@ -3,7 +3,7 @@
 //! ## Responsibilities
 //!
 //! * **READ** — register a `ChatObserver` wrapper around `GroupChatProjection`
-//!   (nmp-nip29) per open room as a `KernelEventObserver`. On each kind:9 event
+//!   (nmp-nip29) per open room as an `ObservedProjectionSink`. On each kind:9 event
 //!   (kind:11 is filtered out here — see §D6 note) the observer:
 //!   (a) delegates ingest to the underlying `GroupChatProjection`,
 //!   (b) snapshots the group's message list,
@@ -55,10 +55,11 @@
 use std::sync::{Arc, Mutex};
 
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
-use nmp_core::substrate::ActionPayload;
-use nmp_core::KernelEventObserver;
+use nmp_core::substrate::{ActionPayload, ObservedProjection, ObservedProjectionRegistrar};
+use nmp_core::ObservedProjectionSink;
 use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string};
 use nmp_nip29::{action::PublishGroupEventInput, GroupId};
+use nmp_planner::InterestShape;
 use tokio::sync::mpsc;
 
 use crate::kernel::action::KernelEvent;
@@ -94,7 +95,7 @@ pub struct ChatRoomState {
     pub activity_revision: u64,
 }
 
-// ─── READ side: KernelEventObserver wrapper ──────────────────────────────────
+// ─── READ side: observed-projection sink wrapper ─────────────────────────────
 
 /// Observer wrapper that ingests NMP `KernelEvent`s (raw Nostr events) into
 /// the `GroupChatProjection` and sends `KernelEvent::ChatRoomUpdated` back into
@@ -124,7 +125,7 @@ struct ChatObserver {
     reply_index: std::sync::Mutex<std::collections::HashMap<String, String>>,
 }
 
-impl KernelEventObserver for ChatObserver {
+impl ObservedProjectionSink for ChatObserver {
     fn on_kernel_event(&self, event: &nmp_core::substrate::KernelEvent) {
         // D6: only kind:9 chat messages enter the HL chat read model.
         // GroupChatProjection accepts kind:9 and kind:11; we gate here.
@@ -352,7 +353,7 @@ pub(crate) fn reduce_action_mark_seen(
 // ─── Effect runners ──────────────────────────────────────────────────────────
 
 /// Execute `Effect::WireGroupChat` — register a `ChatObserver` wrapping a fresh
-/// `GroupChatProjection` scoped to `group_id` as a `KernelEventObserver` against
+/// `GroupChatProjection` scoped to `group_id` as an observed projection against
 /// `nmp_ref`.
 ///
 /// Creates a NEW `GroupChatProjection` per group per session. Fire-and-forget (D6):
@@ -379,7 +380,22 @@ pub(crate) fn run_effect_wire_group_chat(
     // SAFETY: ptr is a valid non-null NmpApp pointer kept alive by NmpHandle
     // for the full actor lifetime (outlives this call).
     let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
-    let observer_id = nmp_ref.register_live_event_tap(observer as Arc<dyn KernelEventObserver>);
+    let mut shape = InterestShape::default();
+    shape.kinds.insert(KIND_CHAT_MESSAGE);
+    shape
+        .tags
+        .entry("h".to_string())
+        .or_default()
+        .insert(_gid.local_id.clone());
+    shape.relay_pin = Some(_gid.host_relay_url.clone());
+
+    let observer_id = nmp_ref.open_observed_projection(ObservedProjection::from_shape(
+        observer as Arc<dyn ObservedProjectionSink>,
+        format!("hl.chat.{}", _gid.local_id),
+        1,
+        shape,
+        CHAT_MAX_MESSAGES,
+    ));
     if observer_id.0 == 0 {
         tracing::warn!("chat::run_effect_wire_group_chat: event-observer registration failed (D6)");
     }

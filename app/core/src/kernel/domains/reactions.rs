@@ -3,7 +3,7 @@
 //! ## Responsibilities
 //!
 //! * **READ** — register a `ReactionObserver` wrapper around `ReactionProjection`
-//!   (nmp-nip25) as a `KernelEventObserver`. On each kind:7/kind:5 event the
+//!   (nmp-nip25) as an `ObservedProjectionSink`. On each kind:7/kind:5 event the
 //!   observer (a) updates the underlying `ReactionProjection` by delegating to
 //!   its own `on_kernel_event` impl, then (b) extracts the `["e", target_event_id]`
 //!   tag and calls `projection.snapshot_for(target_event_id)` to produce a
@@ -62,8 +62,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
-use nmp_core::substrate::ActionPayload;
-use nmp_core::KernelEventObserver;
+use nmp_core::substrate::{ActionPayload, ObservedProjection, ObservedProjectionRegistrar};
+use nmp_core::ObservedProjectionSink;
 use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
 use nmp_nip25::{
     ReactAction, ReactionProjection, UnreactAction, KIND_REACTION, KIND_REACTION_DELETE,
@@ -74,7 +74,7 @@ use crate::kernel::action::KernelEvent;
 use crate::kernel::actor::Cmd;
 use crate::kernel::app::AppState;
 
-// ─── READ side: KernelEventObserver wrapper ──────────────────────────────────
+// ─── READ side: observed-projection sink wrapper ─────────────────────────────
 
 /// Observer wrapper that ingests NMP `KernelEvent`s (raw Nostr events) into
 /// the `ReactionProjection` and then sends `KernelEvent::ReactionStateUpdated`
@@ -114,7 +114,7 @@ struct ReactionObserver {
     tx: mpsc::UnboundedSender<Cmd>,
 }
 
-impl KernelEventObserver for ReactionObserver {
+impl ObservedProjectionSink for ReactionObserver {
     fn on_kernel_event(&self, event: &nmp_core::substrate::KernelEvent) {
         match event.kind {
             KIND_REACTION => self.handle_kind7(event),
@@ -424,7 +424,7 @@ pub(crate) fn run_effect_dispatch_react_action(
 // ─── Projection registration ─────────────────────────────────────────────────
 
 /// Wire the `ReactionObserver` (wrapping `ReactionProjection`) as a
-/// `KernelEventObserver` against `nmp_ref`.
+/// observed projection against `nmp_ref`.
 ///
 /// On each ingested kind:7 or kind:5 event the observer:
 /// 1. Reads the current viewer from `active_account` and calls
@@ -443,7 +443,7 @@ pub(crate) fn run_effect_dispatch_react_action(
 /// `IdentityChanged(Some)` is needed or desired (re-calling would STACK
 /// observers, causing memory leaks and duplicate events).
 ///
-/// D6: if `register_live_event_tap` returns id `0` (slot full), the observer
+/// D6: if `open_observed_projection` returns id `0` (slot full), the observer
 /// is silently dropped and reaction state will not update (logged as a warning).
 pub(crate) fn register_reaction_projection(
     nmp_ref: &NmpApp,
@@ -458,7 +458,13 @@ pub(crate) fn register_reaction_projection(
         tx,
     });
 
-    let observer_id = nmp_ref.register_live_event_tap(observer as Arc<dyn KernelEventObserver>);
+    let observer_id = nmp_ref.open_observed_projection(ObservedProjection::from_kinds(
+        observer as Arc<dyn ObservedProjectionSink>,
+        "hl.reactions",
+        1,
+        [KIND_REACTION, KIND_REACTION_DELETE],
+        512,
+    ));
     if observer_id.0 == 0 {
         // Observer slot is full or poisoned — reaction counts will not update.
         tracing::warn!(

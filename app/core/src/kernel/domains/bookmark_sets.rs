@@ -3,7 +3,7 @@
 //!
 //! ## Responsibilities
 //!
-//! * **READ (sets)** — a `SetListProjection` implements `KernelEventObserver`
+//! * **READ (sets)** — a `SetListProjection` implements `ObservedProjectionSink`
 //!   for kind:30003 and kind:30004. It accumulates all observed events, one
 //!   per `(author, d_tag)` key with newest-wins supersession. A registered
 //!   typed-snapshot closure serialises the full collection to JSON every NMP
@@ -11,7 +11,7 @@
 //!   the JSON, applies active-account / follows filtering, and stores results
 //!   in `AppState::all_bookmark_sets` + `AppState::all_curation_sets`.
 //!
-//! * **READ (web)** — a `WebBookmarkProjection` implements `KernelEventObserver`
+//! * **READ (web)** — a `WebBookmarkProjection` implements `ObservedProjectionSink`
 //!   for kind:39701. Only the active account's events are kept (like
 //!   `BookmarkListProjection`). Schema_id `"hl.web_bookmarks"`. `apply_web_bookmarks`
 //!   stores `WebBookmarkRow`s in `AppState::web_bookmarks`.
@@ -27,7 +27,7 @@
 //!
 //! nmp-nip51 only ships `BookmarkListProjection` (kind:10003). Kinds 30003,
 //! 30004, and 39701 have no native nmp observer — this module registers custom
-//! `KernelEventObserver` implementations via `nmp_ref.register_live_event_tap`.
+//! `ObservedProjectionSink` implementations via `nmp_ref.open_observed_projection`.
 //!
 //! ## Threading
 //!
@@ -39,8 +39,10 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use nmp_core::substrate::KernelEvent as NmpKernelEvent;
-use nmp_core::KernelEventObserver;
+use nmp_core::substrate::{
+    KernelEvent as NmpKernelEvent, ObservedProjection, ObservedProjectionRegistrar,
+};
+use nmp_core::ObservedProjectionSink;
 use nmp_ffi::NmpApp;
 use nmp_planner::{InterestId, InterestLifecycle, InterestScope, InterestShape, LogicalInterest};
 // Pubkey is `type Pubkey = String` in the planner; authors are admitted as raw hex.
@@ -145,7 +147,7 @@ impl SetListProjection {
     }
 }
 
-impl KernelEventObserver for SetListProjection {
+impl ObservedProjectionSink for SetListProjection {
     fn on_kernel_event(&self, event: &NmpKernelEvent) {
         if event.kind != KIND_BOOKMARK_SET && event.kind != KIND_CURATION_SET {
             return;
@@ -211,7 +213,7 @@ impl WebBookmarkProjection {
     }
 }
 
-impl KernelEventObserver for WebBookmarkProjection {
+impl ObservedProjectionSink for WebBookmarkProjection {
     fn on_kernel_event(&self, event: &NmpKernelEvent) {
         if event.kind != KIND_WEB_BOOKMARK {
             return;
@@ -970,8 +972,13 @@ pub(crate) fn register_set_projections(
     // ── SetListProjection (kind:30003 + kind:30004, all authors) ─────────────
     let set_proj = Arc::new(SetListProjection::new());
 
-    let observer_id =
-        nmp_ref.register_live_event_tap(Arc::clone(&set_proj) as Arc<dyn KernelEventObserver>);
+    let observer_id = nmp_ref.open_observed_projection(ObservedProjection::from_kinds(
+        Arc::clone(&set_proj) as Arc<dyn ObservedProjectionSink>,
+        BOOKMARK_SETS_SCHEMA_ID,
+        1,
+        [KIND_BOOKMARK_SET, KIND_CURATION_SET],
+        512,
+    ));
     if observer_id.0 == 0 {
         tracing::warn!(
             "bookmark_sets::register_set_projections: SetListProjection observer registration failed (D6)"
@@ -995,8 +1002,13 @@ pub(crate) fn register_set_projections(
     // ── WebBookmarkProjection (kind:39701, active account only) ──────────────
     let web_proj = Arc::new(WebBookmarkProjection::new(active_account_slot));
 
-    let web_observer_id =
-        nmp_ref.register_live_event_tap(Arc::clone(&web_proj) as Arc<dyn KernelEventObserver>);
+    let web_observer_id = nmp_ref.open_observed_projection(ObservedProjection::from_kinds(
+        Arc::clone(&web_proj) as Arc<dyn ObservedProjectionSink>,
+        WEB_BOOKMARKS_SCHEMA_ID,
+        0,
+        [KIND_WEB_BOOKMARK],
+        512,
+    ));
     if web_observer_id.0 == 0 {
         tracing::warn!(
             "bookmark_sets::register_set_projections: WebBookmarkProjection observer registration failed (D6)"

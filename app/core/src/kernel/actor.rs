@@ -2331,7 +2331,7 @@ pub(crate) async fn run_effect(
             host_relay_url,
         } => {
             // Register a ChatObserver (wrapping a fresh GroupChatProjection scoped to
-            // group_id) as a KernelEventObserver against the live NmpApp. The observer
+            // group_id) as an observed projection against the live NmpApp. The observer
             // filters to kind:9 events only, recovers reply_to_event_id from raw tags,
             // and sends KernelEvent::ChatRoomUpdated into the actor channel.
             // No-op when nmp is None (test mode — tests inject ChatRoomUpdated directly).
@@ -2985,12 +2985,21 @@ pub(crate) async fn actor_task(
                 if let (ViewId::RoomDiscussions { group_id }, Some(handle)) =
                     (id, nmp_handle.as_ref())
                 {
-                    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
-                    discussions::register_discussion_observer(
-                        nmp_ref,
-                        group_id.clone(),
-                        tx.clone(),
-                    );
+                    if let Some(host_relay_url) = state
+                        .communities
+                        .iter()
+                        .find(|community| community.group_id == *group_id)
+                        .map(|community| community.host_relay_url.clone())
+                        .filter(|relay| !relay.trim().is_empty())
+                    {
+                        let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+                        discussions::register_discussion_observer(
+                            nmp_ref,
+                            group_id.clone(),
+                            host_relay_url,
+                            tx.clone(),
+                        );
+                    }
                 }
             }
             Cmd::CloseView(id) => {

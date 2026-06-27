@@ -62,8 +62,8 @@
 use std::sync::{Arc, Mutex};
 
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
-use nmp_core::substrate::ActionPayload;
-use nmp_core::KernelEventObserver;
+use nmp_core::substrate::{ActionPayload, ObservedProjection, ObservedProjectionRegistrar};
+use nmp_core::ObservedProjectionSink;
 use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
 use nmp_nip51::{BookmarkItem, BookmarkListProjection, BookmarkUpdateInput};
 
@@ -352,8 +352,13 @@ pub(crate) fn register_bookmark_list_projection(
 ) {
     let projection = Arc::new(BookmarkListProjection::new(active_account_slot));
 
-    let observer_id =
-        nmp_ref.register_live_event_tap(Arc::clone(&projection) as Arc<dyn KernelEventObserver>);
+    let observer_id = nmp_ref.open_observed_projection(ObservedProjection::from_kinds(
+        Arc::clone(&projection) as Arc<dyn ObservedProjectionSink>,
+        BOOKMARK_SCHEMA_ID,
+        0,
+        [10003],
+        512,
+    ));
     if observer_id.0 == 0 {
         // Observer slot is full or poisoned — skip projection registration.
         tracing::warn!(
