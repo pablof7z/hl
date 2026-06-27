@@ -1,0 +1,10 @@
+[
+  [
+    "user",
+    "resolve all github issues, you own everything, all the way to landing them in master and testing them -- work TDD style -- use workflows -- opus planner, sonnet coder, opus reviewer"
+  ],
+  [
+    "assistant",
+    "Parallel TDD implementations: #95 landed with tests passing, two in flight with updated scopes (#62/#63), three blocked on NMP APIs and dependencies; pausing until coders report to resume review and land to main."
+  ]
+]

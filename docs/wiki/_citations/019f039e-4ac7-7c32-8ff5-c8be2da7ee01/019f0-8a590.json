@@ -1,0 +1,6 @@
+{
+  "id": "019f0-8a590",
+  "ts": "2026-06-26T11:40:05Z",
+  "session": "019f039e-4ac7-7c32-8ff5-c8be2da7ee01",
+  "text": "User: I was just told this from NMP's repo:\n\nThis unblocks pablof7z/hl#95 — Highlighter can now switch its relay-import preview to this handle and drop another HighlighterCore iOS dependency. [...] Assistant: One caveat: the new NMP handle is a preview over the NMP-owned mailbox cache, not a synchronous network fetch API. That matches the upstream note wording (“relay-import preview”) and avoids reintroducing the legacy runtime dependency."
+}

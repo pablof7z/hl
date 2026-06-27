@@ -1,0 +1,6 @@
+{
+  "id": "019f0-5d611",
+  "ts": "2026-06-26T11:40:05Z",
+  "session": "019f039e-4ac7-7c32-8ff5-c8be2da7ee01",
+  "text": "Assistant: I’m keeping the import fetch read-only and cache-bounded: no raw events, no additional relay client, no second mailbox cache. If the target user’s kind:10002 is not already in NMP’s cache, the existing empty-result UI will still surface the miss.\n"
+}

@@ -1,0 +1,179 @@
+{
+  "schema": "xcodebuildmcp.output.build-run-result",
+  "schemaVersion": "2",
+  "didError": false,
+  "error": null,
+  "data": {
+    "request": {
+      "scheme": "Highlighter",
+      "projectPath": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Highlighter.xcodeproj",
+      "derivedDataPath": "/Users/pablofernandez/Library/Developer/XcodeBuildMCP/workspaces/hl-61546de807a0/DerivedData/Highlighter-e5ea4dcc998f",
+      "configuration": "Debug",
+      "platform": "iOS Simulator",
+      "simulatorId": "000B3DA4-5A93-41F6-BA88-12665CF29867"
+    },
+    "summary": {
+      "status": "SUCCEEDED",
+      "durationMs": 122512,
+      "target": "simulator"
+    },
+    "artifacts": {
+      "appPath": "/Users/pablofernandez/Library/Developer/XcodeBuildMCP/workspaces/hl-61546de807a0/DerivedData/Highlighter-e5ea4dcc998f/Build/Products/Debug-iphonesimulator/Highlighter.app",
+      "bundleId": "com.highlighter.app",
+      "processId": 88648,
+      "simulatorId": "000B3DA4-5A93-41F6-BA88-12665CF29867",
+      "buildLogPath": "/Users/pablofernandez/Library/Developer/XcodeBuildMCP/workspaces/hl-61546de807a0/logs/build_run_sim_2026-06-25T06-48-02-618Z_pid66417_cf239975.log",
+      "runtimeLogPath": "/Users/pablofernandez/Library/Developer/XcodeBuildMCP/workspaces/hl-61546de807a0/logs/com.highlighter.app_2026-06-25T06-50-02-989Z_helperpid88621_ownerpid66417_e72d61fb.log",
+      "osLogPath": "/Users/pablofernandez/Library/Developer/XcodeBuildMCP/workspaces/hl-61546de807a0/logs/com.highlighter.app_oslog_2026-06-25T06-50-05-120Z_helperpid88681_ownerpid66417_a850d966.log"
+    },
+    "diagnostics": {
+      "warnings": [
+        {
+          "message": "unused variable: `tx`"
+        },
+        {
+          "message": "constant `COMMUNITY_SEARCH_CAP` is never used"
+        },
+        {
+          "message": "struct `CandidateCommunity` is never constructed"
+        },
+        {
+          "message": "function `project_community_search_rows` is never used"
+        },
+        {
+          "message": "function `profile_contains_ci` is never used"
+        },
+        {
+          "message": "constant `PROFILE_SEARCH_CAP` is never used"
+        },
+        {
+          "message": "function `profile_search_row_from_hit` is never used"
+        },
+        {
+          "message": "function `profile_search_row_from_parts` is never used"
+        },
+        {
+          "message": "function `upsert_profile_search_cache` is never used"
+        },
+        {
+          "message": "function `merge_profile_search_rows` is never used"
+        },
+        {
+          "message": "function `project_profile_search_rows` is never used"
+        },
+        {
+          "message": "function `profile_search_row_primary_label` is never used"
+        },
+        {
+          "message": "fields `onboarding` and `clock` are never read"
+        },
+        {
+          "message": "struct `NostrConnectOptions` is never constructed"
+        },
+        {
+          "message": "`highlighter-core` (lib) generated 14 warnings (run `cargo fix --lib -p highlighter-core` to apply 1 suggestion)"
+        },
+        {
+          "message": "'+' was deprecated in iOS 26.0: Use string interpolation on `Text` instead: `Text(\"Hello \\(name)\")`",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Vendor/nmp/Components/NostrContent/NostrContentView.swift:79"
+        },
+        {
+          "message": "'+' was deprecated in iOS 26.0: Use string interpolation on `Text` instead: `Text(\"Hello \\(name)\")`",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Vendor/nmp/Components/NostrContent/NostrContentView.swift:133"
+        },
+        {
+          "message": "'+' was deprecated in iOS 26.0: Use string interpolation on `Text` instead: `Text(\"Hello \\(name)\")`",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Vendor/nmp/Components/NostrContent/NostrContentView.swift:135"
+        },
+        {
+          "message": "'+' was deprecated in iOS 26.0: Use string interpolation on `Text` instead: `Text(\"Hello \\(name)\")`",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Vendor/nmp/Components/NostrContent/NostrContentView.swift:139"
+        },
+        {
+          "message": "'+' was deprecated in iOS 26.0: Use string interpolation on `Text` instead: `Text(\"Hello \\(name)\")`",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Vendor/nmp/Components/NostrContent/NostrContentView.swift:156"
+        },
+        {
+          "message": "'+' was deprecated in iOS 26.0: Use string interpolation on `Text` instead: `Text(\"Hello \\(name)\")`",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Vendor/nmp/Components/NostrContent/NostrContentView.swift:254"
+        },
+        {
+          "message": "'+' was deprecated in iOS 26.0: Use string interpolation on `Text` instead: `Text(\"Hello \\(name)\")`",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Vendor/nmp/Components/NostrContent/NostrContentView.swift:276"
+        },
+        {
+          "message": "'+' was deprecated in iOS 26.0: Use string interpolation on `Text` instead: `Text(\"Hello \\(name)\")`",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Core/RichText/NostrRichText.swift:60"
+        },
+        {
+          "message": "'+' was deprecated in iOS 26.0: Use string interpolation on `Text` instead: `Text(\"Hello \\(name)\")`",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Core/RichText/NostrRichText.swift:69"
+        },
+        {
+          "message": "value 'error' was defined but never used; consider replacing with boolean test",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Features/Capture/OCRService.swift:15"
+        },
+        {
+          "message": "main actor-isolated property 'banner' can not be referenced from a Sendable closure",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Features/Profile/EditProfileSheet.swift:144"
+        },
+        {
+          "message": "main actor-isolated static property 'titleAndIcon' can not be referenced from a Sendable closure",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Features/Profile/EditProfileSheet.swift:145"
+        },
+        {
+          "message": "main actor-isolated property 'picture' can not be referenced from a Sendable closure",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Features/Profile/EditProfileSheet.swift:192"
+        },
+        {
+          "message": "main actor-isolated property 'report' can not be referenced from a Sendable closure",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Core/KernelCapabilityBridge.swift:200"
+        },
+        {
+          "message": "call to main actor-isolated instance method 'progressResult()' in a synchronous nonisolated context",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Core/KernelCapabilityBridge.swift:200"
+        },
+        {
+          "message": "main actor-isolated property 'report' can not be referenced from a Sendable closure",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Core/KernelCapabilityBridge.swift:208"
+        },
+        {
+          "message": "capture of 'completion' with non-Sendable type '(AudioResult) -> Void' in a '@Sendable' closure",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Core/KernelCapabilityBridge.swift:236"
+        },
+        {
+          "message": "call to main actor-isolated instance method 'progressResult()' in a synchronous nonisolated context",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Core/KernelCapabilityBridge.swift:236"
+        },
+        {
+          "message": "'init(destination:isActive:label:)' was deprecated in iOS 16.0: use NavigationLink(value:label:), or navigationDestination(isPresented:destination:), inside a NavigationStack or NavigationSplitView",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Features/Article/ArticleReaderView.swift:271"
+        },
+        {
+          "message": "capture of 'session' with non-Sendable type 'AVCaptureSession' in a '@Sendable' closure",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Features/Capture/BookScannerModel.swift:74"
+        },
+        {
+          "message": "add '@preconcurrency' to treat 'Sendable'-related errors from module 'AVFoundation' as warnings",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Features/Capture/BookScannerModel.swift:1"
+        },
+        {
+          "message": "capture of 'device' with non-Sendable type 'AVCaptureDevice' in a '@Sendable' closure",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Features/Capture/BookScannerModel.swift:102"
+        },
+        {
+          "message": "capture of 'session' with non-Sendable type 'AVCaptureSession' in a '@Sendable' closure",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Features/Capture/BookScannerModel.swift:156"
+        },
+        {
+          "message": "main actor-isolated property 'metadataOutput' can not be mutated from a Sendable closure",
+          "location": "/Users/pablofernandez/Work/hl/app/ios/Highlighter/Sources/Highlighter/Features/Capture/BookScannerModel.swift:177"
+        }
+      ],
+      "errors": []
+    }
+  },
+  "nextSteps": [
+    "Stop app in simulator: xcodebuildmcp simulator stop --simulator-id 000B3DA4-5A93-41F6-BA88-12665CF29867 --bundle-id com.highlighter.app"
+  ]
+}

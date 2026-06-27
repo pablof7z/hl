@@ -1,0 +1,6 @@
+{
+  "id": "9ae03-c7936",
+  "ts": "2026-06-26T19:53:27Z",
+  "session": "9ae03596-fa74-4208-88c6-a90bd3b176e4",
+  "text": "2. **If the next tick is gated on an event** (CI finishing, a PR comment, a log line) and no Monitor is already running for it: arm one now with `persistent: true`. Its events wake this loop immediately — you do not wait for the ScheduleWakeup deadline. Arm once; on later ticks call TaskList first and skip if a monitor is already running. [...]    - `delaySeconds`: with a Monitor armed this is the fallback heartbeat (lean 1200–1800s). Without one, pick based on what you observed this turn — quiet branch? wait longer. Lots in flight? wait shorter. Read the tool's own description for cache-aware delay guidance."
+}

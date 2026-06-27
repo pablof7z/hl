@@ -1,0 +1,46 @@
+{
+  "schema": "xcodebuildmcp.output.ui-action-result",
+  "schemaVersion": "2",
+  "didError": false,
+  "error": null,
+  "data": {
+    "summary": {
+      "status": "SUCCEEDED"
+    },
+    "action": {
+      "type": "tap",
+      "elementRef": "e33",
+      "x": 197,
+      "y": 365
+    },
+    "artifacts": {
+      "simulatorId": "000B3DA4-5A93-41F6-BA88-12665CF29867"
+    },
+    "capture": {
+      "type": "runtime-snapshot",
+      "rs": "1",
+      "screenHash": "1vq3l52",
+      "seq": 47,
+      "count": 67,
+      "targets": [
+        "e18|tap|button|Account menu||",
+        "e19|tap|button|||",
+        "e23|tap|button|Capture highlight||plus",
+        "e39|tap|tab|Highlights|1|text.quote",
+        "e41|tap|tab|Rooms|0|square.grid.2x2",
+        "e55|tap|tab|Search|0|magnifyingglass"
+      ],
+      "scroll": [],
+      "text": [
+        "e20|text|text|8||",
+        "e29|text|text|No highlights yet||",
+        "e30|text|text|Quotes surfaced by people you follow, your rooms, and articles from your network will land here.||"
+      ],
+      "udid": "000B3DA4-5A93-41F6-BA88-12665CF29867"
+    }
+  },
+  "nextSteps": [
+    "Batch same-screen taps: xcodebuildmcp ui-automation batch --json '{\"simulatorId\":\"000B3DA4-5A93-41F6-BA88-12665CF29867\",\"steps\":[{\"action\":\"tap\",\"elementRef\":\"e18\"},{\"action\":\"tap\",\"elementRef\":\"e19\"}]}'",
+    "Tap an elementRef: xcodebuildmcp ui-automation tap --simulator-id 000B3DA4-5A93-41F6-BA88-12665CF29867 --element-ref e18"
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "id": "9ae03-9d1e5",
+  "ts": "2026-06-26T20:09:22Z",
+  "session": "9ae03596-fa74-4208-88c6-a90bd3b176e4",
+  "text": "I verified the coordinator's claim rather than trusting it: `web/src/routes/` has no `a` directory, and every naddr link-builder targets `/note/<naddr>` (`server/nostr.ts:535`, `artifact-preview.ts:675`, `ndk/artifacts.ts:788`). Changed `CURATION_SET_SHARE_BASE_URL` to **`https://highlighter.com/note/`** and added explicit `/note/` prefix assertions in both the Rust and Swift tests."
+}

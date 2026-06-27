@@ -1,0 +1,10 @@
+{
+  "schema": "xcodebuildmcp.output.error",
+  "schemaVersion": "1",
+  "didError": true,
+  "error": "Daemon invocation failed: Daemon request timed out after 30000ms",
+  "data": {
+    "category": "runtime",
+    "code": "DAEMON_TRANSPORT_FAILED"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "schema": "xcodebuildmcp.output.error",
+  "schemaVersion": "1",
+  "didError": true,
+  "error": "Parameter validation failed: Invalid parameters:\npostDelay: Post-delay must be at most 10 seconds",
+  "data": {
+    "category": "validation",
+    "code": "PARAMETER_VALIDATION_FAILED"
+  }
+}

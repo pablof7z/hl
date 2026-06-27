@@ -1,0 +1,6 @@
+{
+  "id": "9ae03-bd455",
+  "ts": "2026-06-26T19:54:09Z",
+  "session": "9ae03596-fa74-4208-88c6-a90bd3b176e4",
+  "text": "\nUser: A session-scoped Stop hook is now active with condition: \"resolve all github issues, you own everything, all the way to landing them in master and testing them -- work TDD style -- use workflows -- opus planner, sonnet coder, opus reviewer\". Briefly acknowledge the goal, then immediately start (or continue) working toward it — treat the condition itself as your directive and do not pause to ask the user what to do. The hook will block stopping until the condition holds. It auto-clears once the condition is met — do not tell the user to run `/goal clear` after success; that's only for clearing a goal early."
+}

@@ -1,0 +1,6 @@
+{
+  "id": "019f0-03d82",
+  "ts": "2026-06-26T11:48:07Z",
+  "session": "019f039e-4ac7-7c32-8ff5-c8be2da7ee01",
+  "text": "- **Artifacts** are identified by source references and metadata tags, not a dedicated custom event kind"
+}

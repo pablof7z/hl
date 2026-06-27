@@ -1,0 +1,6 @@
+{
+  "id": "9ae03-5dcfa",
+  "ts": "2026-06-26T19:53:27Z",
+  "session": "9ae03596-fa74-4208-88c6-a90bd3b176e4",
+  "text": "3. **Briefly confirm**: that this is the autonomous default in dynamic-pacing mode, that you ran the check now, whether a Monitor is the primary wake signal, and what fallback delay you're about to pick. Write this as text *before* calling ScheduleWakeup — the turn ends as soon as that tool returns. [...]    - `prompt`: the literal string `<<autonomous-loop-dynamic>>` — the dynamic-mode sentinel expands at fire time to the full instructions (first fire / first fire post-compact / loop.md edited) or a dynamic-pacing-specific short reminder (subsequent fires). Do not pass the full instructions; that is handled automatically."
+}

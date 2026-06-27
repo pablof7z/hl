@@ -1,0 +1,46 @@
+{
+  "schema": "xcodebuildmcp.output.ui-action-result",
+  "schemaVersion": "2",
+  "didError": false,
+  "error": null,
+  "data": {
+    "summary": {
+      "status": "SUCCEEDED"
+    },
+    "action": {
+      "type": "type-text",
+      "elementRef": "e23",
+      "textLength": 63
+    },
+    "artifacts": {
+      "simulatorId": "000B3DA4-5A93-41F6-BA88-12665CF29867"
+    },
+    "capture": {
+      "type": "runtime-snapshot",
+      "rs": "1",
+      "screenHash": "1erwyxo",
+      "seq": 41,
+      "count": 102,
+      "targets": [
+        "e23|typeText|text-field||[REDACTED_NSEC1]|",
+        "e10|tap|button|Back||BackButton",
+        "e33|tap|button|Sign in||",
+        "e34|tap|button|Create a new account||"
+      ],
+      "scroll": [
+        "e15|swipe|scroll-view|||"
+      ],
+      "text": [
+        "e20|text|text|Highlighter||",
+        "e21|text|text|Sign in with your Nostr identity||",
+        "e22|text|text|Or paste a key or bunker URI||"
+      ],
+      "udid": "000B3DA4-5A93-41F6-BA88-12665CF29867"
+    }
+  },
+  "nextSteps": [
+    "Batch same-screen taps: xcodebuildmcp ui-automation batch --json '{\"simulatorId\":\"000B3DA4-5A93-41F6-BA88-12665CF29867\",\"steps\":[{\"action\":\"tap\",\"elementRef\":\"e33\"},{\"action\":\"tap\",\"elementRef\":\"e34\"}]}'",
+    "Tap an elementRef: xcodebuildmcp ui-automation tap --simulator-id 000B3DA4-5A93-41F6-BA88-12665CF29867 --element-ref e33",
+    "Scroll visible content: xcodebuildmcp ui-automation swipe --simulator-id 000B3DA4-5A93-41F6-BA88-12665CF29867 --within-element-ref e15 --direction up --distance 0.5"
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "schema": "xcodebuildmcp.output.ui-action-result",
+  "schemaVersion": "2",
+  "didError": true,
+  "error": "Element ref 'e17' does not support 'typeText'.",
+  "data": {
+    "summary": {
+      "status": "FAILED"
+    },
+    "action": {
+      "type": "type-text",
+      "elementRef": "e17",
+      "textLength": 23
+    },
+    "artifacts": {
+      "simulatorId": "000B3DA4-5A93-41F6-BA88-12665CF29867"
+    },
+    "uiError": {
+      "code": "TARGET_NOT_ACTIONABLE",
+      "message": "Element ref 'e17' does not support 'typeText'.",
+      "recoveryHint": "Choose an elementRef that lists the required action, or refresh with snapshot_ui.",
+      "elementRef": "e17",
+      "candidates": [],
+      "snapshotAgeMs": 19669
+    }
+  }
+}

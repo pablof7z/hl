@@ -1,0 +1,6 @@
+{
+  "id": "9ae03-0b62f",
+  "ts": "2026-06-26T19:53:27Z",
+  "session": "9ae03596-fa74-4208-88c6-a90bd3b176e4",
+  "text": "6. **To stop the loop**, omit the ScheduleWakeup call and TaskStop any Monitor you armed (use TaskList to find the task ID if it is no longer in context). Before you stop, send a one-line outcome via PushNotification — the user may be away and waiting to hear it's done. Skip this if you're stopping because the user just told you to; they're already here."
+}

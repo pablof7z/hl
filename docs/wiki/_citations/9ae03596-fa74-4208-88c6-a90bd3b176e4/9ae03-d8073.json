@@ -1,0 +1,6 @@
+{
+  "id": "9ae03-d8073",
+  "ts": "2026-06-26T20:09:22Z",
+  "session": "9ae03596-fa74-4208-88c6-a90bd3b176e4",
+  "text": "- UI: `isOwnedCurationSet = record.kind == 30004 && record.isOwned(by: app.currentUser?.pubkey)` (BookmarksView CollectionRow). `isOwned(by:)` compares `pubkey == pubkeyHex` — BOTH hex (record.pubkey derives from event.author = hex; currentUser.pubkey = appRoot.activePubkeyHex, App.swift:81). No hex/npub mismatch. nil pubkey → false → fail-closed (no rename/delete). kind:30003 bookmark lists excluded (kind==30004 required); following/others' sets excluded (pubkey != active). \n- Reducer also enforces ownership: find_owned_curation_set (bookmark_sets.rs:665-671) returns None → D6 no-op unless active_pubkey(state)==row.pubkey (both raw hex from session, format-matched). So even a hand-crafted envelope can't rename/delete someone else's set.\n- Tests rename_set_noop_when_not_owned / delete_set_noop_when_not_owned (1907/1939) genuinely assert effects.is_empty() for a set authored by `other`.\n"
+}

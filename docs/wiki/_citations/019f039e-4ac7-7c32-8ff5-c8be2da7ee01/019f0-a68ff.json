@@ -1,0 +1,6 @@
+{
+  "id": "019f0-a68ff",
+  "ts": "2026-06-26T11:48:54Z",
+  "session": "019f039e-4ac7-7c32-8ff5-c8be2da7ee01",
+  "text": "Groups are relay-native, portable, have built-in membership/role/moderation semantics, and support the four access×visibility combinations Highlighter needs. See `docs/technical-architecture.md` §3."
+}

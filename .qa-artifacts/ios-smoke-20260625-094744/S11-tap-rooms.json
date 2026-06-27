@@ -1,0 +1,25 @@
+{
+  "schema": "xcodebuildmcp.output.ui-action-result",
+  "schemaVersion": "2",
+  "didError": true,
+  "error": "Element ref 'e41' was not found in the current runtime UI snapshot.",
+  "data": {
+    "summary": {
+      "status": "FAILED"
+    },
+    "action": {
+      "type": "tap",
+      "elementRef": "e41"
+    },
+    "artifacts": {
+      "simulatorId": "000B3DA4-5A93-41F6-BA88-12665CF29867"
+    },
+    "uiError": {
+      "code": "ELEMENT_REF_NOT_FOUND",
+      "message": "Element ref 'e41' was not found in the current runtime UI snapshot.",
+      "recoveryHint": "Run snapshot_ui again and retry with an elementRef from the latest snapshot.",
+      "elementRef": "e41",
+      "snapshotAgeMs": 4823
+    }
+  }
+}

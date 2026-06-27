@@ -1,0 +1,6 @@
+{
+  "id": "9ae03-e5ca1",
+  "ts": "2026-06-26T20:08:51Z",
+  "session": "9ae03596-fa74-4208-88c6-a90bd3b176e4",
+  "text": "\nIn `ReaderScroll.body` (`ScrollView` at ArticleReaderView line 256): deployment target is iOS 26.1, so use the modern API — attach `.onScrollGeometryChange(for: Double.self) { geo in ReadingProgress.fraction(contentOffsetY: geo.contentOffset.y, contentHeight: geo.contentSize.height, viewportHeight: geo.containerSize.height) } action: { _, newValue in progress = newValue }` with a new `@State private var progress: Double = 0`. Render a thin top progress bar via `.overlay(alignment: .top)` (a `GeometryReader`-width `Capsule`/`Rectangle` scaled by `progress`, `Color.highlighterAccent`) or reuse the existing bottom-`safeAreaInset` slot pattern. Keep it inside `ReaderScroll` so it only shows once `rendered != nil`. [...] - **C2 view wiring**: `ReaderScroll` gains `@State private var readingProgress: Double = 0`, `.onScrollGeometryChange` feeding `ReadingProgress.fraction`, and a `.overlay(alignment: .top)` thin 3pt `Color.highlighterAccent` progress bar (shown only when `rendered != nil`, animated `.linear(0.08s)`). Compiles cleanly. Manual-verify only (no automated UI test)."
+}

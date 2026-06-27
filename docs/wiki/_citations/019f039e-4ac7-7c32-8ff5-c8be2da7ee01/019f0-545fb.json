@@ -1,0 +1,6 @@
+{
+  "id": "019f0-545fb",
+  "ts": "2026-06-26T11:49:07Z",
+  "session": "019f039e-4ac7-7c32-8ff5-c8be2da7ee01",
+  "text": "- **Artifact shares** use `kind:11` threads inside NIP-29 groups\n- **Artifacts** are identified by source references and metadata tags, not a dedicated custom event kind\n- **Highlights** use `kind:9802`\n- **Discussion replies** use `kind:1111`"
+}
