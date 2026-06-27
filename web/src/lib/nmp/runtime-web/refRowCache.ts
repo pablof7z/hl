@@ -136,7 +136,11 @@ export class RefRowCache {
     decodeOk: DecodeOk,
   ): RefRowApplyOutcome {
     const batch = decodeRefRowDeltaBatch(payload);
-    if (!batch) return EMPTY_OUTCOME();
+    if (!batch) {
+      console.log('[nmp-s4-diag] NRRD decode failed for payload len=' + payload.length);
+      return EMPTY_OUTCOME();
+    }
+    console.log('[nmp-s4-diag] NRRD ns=' + batch.namespace + ' baseline=' + batch.baseline + ' rows=' + batch.rows.length + ' (session=' + sessionId + ' epoch=' + epoch + ')');
     return this.apply(batch, sessionId, epoch, decodeOk);
   }
 

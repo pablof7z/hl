@@ -371,6 +371,7 @@ class WorkerNmpClient extends BaseNmpClient {
   ): Promise<RuntimeSnapshot> {
     await this.helloReady;
     const correlationId = `web-resolve-${this.nextCorrelationId++}`;
+    console.log('[nmp-s4-diag] resolveRef ns=' + namespace + ' key=' + key + ' consumer=' + consumerId + ' liveness=' + liveness + ' hints=' + JSON.stringify(hints ?? []));
     return this.request(
       {
         type: "resolve_ref",

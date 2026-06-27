@@ -180,9 +180,11 @@
     client
       .start({ relay_bootstrap: relayBootstrap })
       .then(async () => {
+        console.log('[nmp-s4-diag] probe: start resolved');
         // After runtime is started, install the NIP-07 identity if requested.
         if (identityPubkeyParam) {
           const snap = await client.setSigner(identityPubkeyParam);
+          console.log('[nmp-s4-diag] probe: setSigner resolved identity=' + identityPubkeyParam.slice(0, 8));
           // action_accepted on the most recent event means identity was installed.
           const last = snap.events[0];
           identitySet = last?.type === 'action_accepted';
@@ -217,6 +219,7 @@
           // Pass relay hint and author so the wasm knows where to fetch the event.
           // relayHints: NIP-19 nevent relay TLV — which relay to query for the event.
           // eventAuthor: NIP-19 nevent author TLV — used for NIP-65 relay discovery.
+          console.log('[nmp-s4-diag] probe: calling resolveEvent param=' + resolveEventParam + ' relay=' + resolveEventRelay + ' author=' + resolveEventAuthor);
           const relayHints = resolveEventRelay ? [resolveEventRelay] : [];
           await client.resolveEvent(resolveEventParam, CONSUMER_ID_S4, {
             relayHints,

@@ -63,6 +63,13 @@ export function decodeUpdateFrame(bytes: Uint8Array): DecodedUpdateFrame | undef
 }
 
 function decodeFromSnapshot(snap: SnapshotFrame): DecodedUpdateFrame {
+  // Surface kernel ring-buffer logs to the browser console for diagnostics.
+  const logsLen = snap.logsLength();
+  for (let li = 0; li < logsLen; li++) {
+    const entry = snap.logs(li);
+    if (entry) console.log('[nmp-kernel] ' + entry);
+  }
+
   const result: DecodedUpdateFrame = {
     projectionKeys: [],
     sessionId: snap.sessionId(),
