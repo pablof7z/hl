@@ -93,8 +93,11 @@ cp "${PKG_OUT}/nmp-browser-runtime.d.ts"       "${STATIC_OUT}/"
 cp "${PKG_OUT}/nmp-browser-runtime_bg.wasm.d.ts" "${STATIC_OUT}/"
 
 # Copy the snippets directory (contains the SQLite shim stub emitted by wasm-pack).
-# We merge rather than replace so the sqlite3.mjs / sqlite3.wasm copies below are
-# not wiped if the snippet hash changes.
+# Replace (not merge): a stale snippet-hash dir from a previous NMP rev would
+# otherwise linger, and the `ls | head -1` below could then select the wrong
+# hash dir — copying sqlite3.mjs beside the wrong shim and silently degrading
+# the @wasm tier. A clean replace keeps exactly one (current) snippet dir.
+rm -rf "${STATIC_OUT}/snippets"
 cp -r "${PKG_OUT}/snippets" "${STATIC_OUT}/"
 
 # Copy the sqlite.org official SQLite WASM engine alongside the shim.
