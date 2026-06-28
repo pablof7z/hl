@@ -139,7 +139,7 @@ pub(crate) fn dispatch_typed_frame(
             // in `AppState::room_home_events` keyed by `group_id`. Capped at
             // 256 rows per group (ROOM_HOME_EVENTS_CAP). Lane bodies deferred to
             // Phase 4. D6: decode errors are silent no-ops.
-            super::room_home::GROUP_TIMELINE_SCHEMA_ID => {
+            super::room_home::GROUP_EVENTS_SCHEMA_ID => {
                 super::room_home::apply_group_events_frame(state, &proj.payload);
             }
 

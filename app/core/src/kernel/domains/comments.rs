@@ -57,7 +57,9 @@ use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SC
 use nmp_core::substrate::{ActionPayload, ObservedProjection, ObservedProjectionRegistrar};
 use nmp_core::ObservedProjectionSink;
 use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
-use nmp_nip22::{CommentThreadProjection, CommentThreadSnapshot, PostCommentAction, KIND_COMMENT};
+use nmp_nip22::{
+    CommentThreadProjection, CommentThreadSnapshot, PostCommentAction, KIND_NIP22_COMMENT,
+};
 use tokio::sync::mpsc;
 
 use crate::kernel::action::{KernelEvent, PostCommentPayload};
@@ -86,7 +88,7 @@ struct CommentObserver {
 
 impl ObservedProjectionSink for CommentObserver {
     fn on_kernel_event(&self, event: &nmp_core::substrate::KernelEvent) {
-        if event.kind != KIND_COMMENT {
+        if event.kind != KIND_NIP22_COMMENT {
             return;
         }
         // Delegate ingest to the projection first (updates internal entries map).
@@ -319,7 +321,7 @@ pub(crate) fn register_comment_projection(nmp_ref: &NmpApp, tx: mpsc::UnboundedS
         observer as Arc<dyn ObservedProjectionSink>,
         "hl.comments",
         1,
-        [KIND_COMMENT],
+        [KIND_NIP22_COMMENT],
         512,
     ));
     if observer_id.0 == 0 {
@@ -804,7 +806,7 @@ mod tests {
         let event = nmp_core::substrate::KernelEvent {
             id: "cccc000000000000000000000000000000000000000000000000000000000006".to_string(),
             author: "aaaa000000000000000000000000000000000000000000000000000000000001".to_string(),
-            kind: KIND_COMMENT,
+            kind: KIND_NIP22_COMMENT,
             created_at: 1_000_000,
             tags: vec![
                 vec!["E".to_string(), root.to_string()],
@@ -845,7 +847,7 @@ mod tests {
         let event = nmp_core::substrate::KernelEvent {
             id: "cccc000000000000000000000000000000000000000000000000000000000007".to_string(),
             author: "aaaa000000000000000000000000000000000000000000000000000000000001".to_string(),
-            kind: KIND_COMMENT,
+            kind: KIND_NIP22_COMMENT,
             created_at: 1_000_000,
             tags: vec![], // No root scope tag — malformed
             content: "orphaned comment".to_string(),

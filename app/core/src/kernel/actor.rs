@@ -38,8 +38,6 @@ use crate::kernel::snapshot::ViewSnapshot;
 use crate::kernel::view::{ViewId, ViewRegistry, ViewRoute};
 use crate::onboarding::OnboardingStore;
 
-use nmp_defaults::RunConfig;
-
 // Domain handlers — each owns the reducer/event/effect/snapshot arms for its slice.
 use crate::kernel::domains::{
     articles,
@@ -3108,7 +3106,7 @@ pub(crate) async fn actor_task(
             match &effect {
                 Effect::WireGroupEvents { group_id } => {
                     // Resolve host_relay_url from communities and wire the projection.
-                    state.room_home_timeline_group_id = Some(group_id.clone());
+                    state.room_home_group_events_group_id = Some(group_id.clone());
                     room_home::run_effect_wire_group_events(
                         group_id.clone(),
                         &state,
@@ -3119,8 +3117,8 @@ pub(crate) async fn actor_task(
                 Effect::ReleaseGroupEvents { group_id } => {
                     // Clear the hl-side event buffer to bound memory.
                     state.room_home_events.remove(group_id);
-                    if state.room_home_timeline_group_id.as_deref() == Some(group_id.as_str()) {
-                        state.room_home_timeline_group_id = None;
+                    if state.room_home_group_events_group_id.as_deref() == Some(group_id.as_str()) {
+                        state.room_home_group_events_group_id = None;
                     }
                     continue;
                 }
@@ -3315,8 +3313,7 @@ pub(crate) fn start_nmp_app(
         ctx_box
     });
 
-    let config = RunConfig::default();
-    nmp_app_start(raw_ptr.as_ptr(), config.visible_limit, config.emit_hz);
+    nmp_app_start(raw_ptr.as_ptr(), 256, 4);
 
     let nmp_ref: &NmpApp = unsafe { raw_ptr.as_ref() };
 

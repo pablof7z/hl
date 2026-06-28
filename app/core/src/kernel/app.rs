@@ -177,11 +177,11 @@ pub struct AppState {
     /// (`ROOM_HOME_EVENTS_CAP` in `room_home.rs`). Lane bodies are empty in
     /// Phase 3F — the events are buffered so Phase 4 can decode feed content
     /// without re-opening a subscription (Non-Negotiable #7).
-    pub room_home_events: HashMap<String, Vec<nmp_nip29::GroupTimelineEvent>>,
-    /// Current singleton NMP group timeline sidecar owner. NMP `open_group_timeline`
-    /// replaces the previous room timeline view, so the typed frame itself does
+    pub room_home_events: HashMap<String, Vec<nmp_nip29::GroupEvent>>,
+    /// Current singleton NMP group-events sidecar owner. NMP `open_group_events`
+    /// replaces the previous room group-events view, so the typed frame itself does
     /// not carry a group id.
-    pub room_home_timeline_group_id: Option<String>,
+    pub room_home_group_events_group_id: Option<String>,
 
     // ── #1653 additions ──────────────────────────────────────────────────────
     /// All kind:30003 bookmark-set rows observed this session, keyed by
@@ -538,7 +538,7 @@ impl Default for AppState {
             claimed_events: HashMap::new(),
             // ── Phase 3F additions ────────────────────────────────────────────
             room_home_events: HashMap::new(),
-            room_home_timeline_group_id: None,
+            room_home_group_events_group_id: None,
             // ── #1653 additions ───────────────────────────────────────────────
             all_bookmark_sets: Vec::new(),
             all_curation_sets: Vec::new(),
