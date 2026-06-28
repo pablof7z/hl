@@ -242,6 +242,9 @@ pub fn home_interaction_feed_scope(follow_pubkeys: &[String]) -> Option<PullScop
     Some(PullScope::InterestShape(shape))
 }
 
+/// Event kinds that make up the room-lane read model.
+pub(crate) const ROOM_LANE_EVENT_KINDS: [u32; 2] = [9, 11];
+
 /// Build a `PullScope` for a room-lane feed (kind:9 and kind:11 tagged with `#h`).
 ///
 /// Used by Phase 4I. `group_id` is the NIP-29 local group id (the `#h` tag value).
@@ -250,7 +253,7 @@ pub fn home_interaction_feed_scope(follow_pubkeys: &[String]) -> Option<PullScop
 #[allow(dead_code)]
 pub fn room_lane_scope(group_id: &str) -> PullScope {
     let mut shape = InterestShape::default();
-    shape.kinds = [9, 11].into_iter().collect();
+    shape.kinds = ROOM_LANE_EVENT_KINDS.into_iter().collect();
     shape.tags.insert(
         "h".to_string(),
         [group_id.to_string()].into_iter().collect(),
