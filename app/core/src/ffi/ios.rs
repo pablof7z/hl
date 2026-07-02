@@ -8,7 +8,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use nostr_sdk::prelude::{FromBech32, Nip19, PublicKey};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 
@@ -269,18 +268,11 @@ impl HighlighterApp {
 
 fn parse_pubkey(input: &str) -> Result<String, crate::errors::CoreError> {
     let trimmed = input.trim();
-    let pubkey = PublicKey::from_hex(trimmed)
-        .or_else(|_| {
-            Nip19::from_bech32(trimmed)
-                .ok()
-                .and_then(|decoded| match decoded {
-                    Nip19::Pubkey(pk) => Some(pk),
-                    _ => None,
-                })
-                .ok_or(nostr_sdk::key::Error::InvalidPublicKey)
-        })
-        .map_err(|e| crate::errors::CoreError::InvalidInput(format!("invalid pubkey: {e}")))?;
-    Ok(pubkey.to_hex())
+    if nmp_nostr_id::encode_npub(trimmed).is_ok() {
+        return Ok(trimmed.to_owned());
+    }
+    nmp_nostr_id::decode_npub(trimmed)
+        .map_err(|e| crate::errors::CoreError::InvalidInput(format!("invalid pubkey: {e}")))
 }
 
 fn new_highlighter_app_inner(
