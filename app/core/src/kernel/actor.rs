@@ -15,19 +15,13 @@
 //! D8:   No sleeps or poll loops; time advances through the injected Clock.
 //! D9:   Wall-clock reads confined to `SystemClock`; tests inject `ManualClock`.
 
-use std::ffi::{c_char, c_void, CStr, CString};
-use std::ptr::NonNull;
 use std::sync::{Arc, Mutex};
 
 use parking_lot::RwLock;
 use tokio::sync::mpsc;
 
 use nmp_core::substrate::MailboxCache;
-use nmp_ffi::{
-    nmp_app_consume_all_builtin_projections, nmp_app_free, nmp_app_new,
-    nmp_app_set_capability_callback, nmp_app_set_storage_path, nmp_app_start,
-    nmp_external_signer_init, nmp_signer_broker_init, NmpApp,
-};
+use nmp_native_runtime::{new_app, NmpApp};
 
 use crate::capabilities::CapabilityResult;
 use crate::kernel::action::{AppAction, KernelEvent};
@@ -91,130 +85,43 @@ use crate::kernel::domains::{
     whats_new,
 };
 
-// ─── NMP update-callback C ABI ──────────────────────────────────────────────
+// ─── NMP update / capability sinks ──────────────────────────────────────────
+//
+// `nmp-ffi`'s raw `extern "C"` callback doorway (context pointer + manual
+// lifetime bookkeeping) is gone. `nmp_native_runtime::NmpApp` accepts plain
+// Rust sinks via `nmp_uniffi_support::set_update_sink` / `set_capability_callback`
+// — the same shared bridging mechanics 29er's own UniFFI facade uses (see
+// `nmp-app-29er/src/app.rs::set_update_sink` and `capability.rs`).
 
-/// C ABI signature for the NMP update callback.
-///
-/// `nmp_app_set_update_callback` is `#[no_mangle] extern "C"` in nmp-ffi, so we
-/// declare it here via an `extern "C"` block. `context` carries a pointer to a
-/// heap-allocated `mpsc::UnboundedSender<Cmd>`; `bytes` + `len` are the raw
-/// snapshot-frame bytes, valid only for the duration of the call.
-type NmpUpdateCallbackFn = extern "C" fn(context: *mut c_void, bytes: *const u8, len: usize);
-
-#[allow(improper_ctypes)] // NmpApp is opaque; the pointer is safe — nmp-ffi uses the same ABI.
-extern "C" {
-    fn nmp_app_set_update_callback(
-        app: *mut NmpApp,
-        context: *mut c_void,
-        callback: Option<NmpUpdateCallbackFn>,
-    );
-}
-
-/// Actual C callback: copies the frame bytes and forwards them to the actor
-/// channel as `KernelEvent::NmpSnapshotFrame`. Non-blocking by design — the
-/// actor decodes the frame in `reduce_event` on its own thread.
-///
-/// SAFETY: `context` is a `*const mpsc::UnboundedSender<Cmd>` kept alive by
-/// the `Box` in `NmpHandle::_update_callback_ctx` for the full lifetime of the
-/// `NmpApp`. `bytes` is valid for `len` bytes for the duration of this call
-/// (nmp-ffi contract); we copy before returning.
-extern "C" fn nmp_update_callback(context: *mut c_void, bytes: *const u8, len: usize) {
-    if context.is_null() || bytes.is_null() {
-        return;
-    }
-    // SAFETY: context is non-null and points to the Box<UnboundedSender<Cmd>>
-    // kept alive by NmpHandle::_update_callback_ctx. The sender outlives any
-    // callback invocation because it is dropped after the NmpApp is freed.
-    let tx = unsafe { &*(context as *const mpsc::UnboundedSender<Cmd>) };
-    // Copy the frame bytes; they are only valid for this call's duration.
-    let frame = unsafe { std::slice::from_raw_parts(bytes, len) }.to_vec();
+/// Forward an NMP snapshot frame into the actor channel as
+/// `KernelEvent::NmpSnapshotFrame`. Non-blocking by design — the actor decodes
+/// the frame in `reduce_event` on its own thread.
+fn forward_update_frame(tx: &mpsc::UnboundedSender<Cmd>, frame: Vec<u8>) {
     // Fire-and-forget: drop the frame if the actor has shut down.
     let _ = tx.send(Cmd::Event(KernelEvent::NmpSnapshotFrame(frame)));
 }
 
-/// Synchronous callback registered with NMP before `nmp_app_start`.
+/// Route a keyring capability request JSON to the registered
+/// `NmpKeyringHandler` and return its response JSON.
 ///
 /// Cold-start restore reads the keyring during NMP's Start arm. Native code
 /// only executes raw secure-storage JSON; NMP owns key names and policy.
-extern "C" fn nmp_keyring_callback(
-    context: *mut c_void,
-    request_json: *const c_char,
-) -> *mut c_char {
-    let response = if context.is_null() || request_json.is_null() {
-        nmp_capability_error_envelope("", "missing-keyring-context")
-    } else {
-        let request = unsafe { CStr::from_ptr(request_json) }
-            .to_string_lossy()
-            .into_owned();
-        let handler = unsafe { &*(context as *const Arc<dyn NmpKeyringHandler>) };
-        handler.handle_keyring_request(request)
-    };
-    CString::new(response)
-        .unwrap_or_else(|_| c"{}".to_owned())
-        .into_raw()
-}
-
-fn nmp_capability_error_envelope(request_json: &str, reason: &str) -> String {
-    let parsed: serde_json::Value = serde_json::from_str(request_json).unwrap_or_default();
-    let namespace = parsed
-        .get("namespace")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("nmp.keyring.capability");
-    let correlation_id = parsed
-        .get("correlation_id")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("");
-    let result_json = serde_json::json!({
-        "status": "error",
-        "os_status": -50,
-        "reason": reason,
-    })
-    .to_string();
-    serde_json::json!({
-        "namespace": namespace,
-        "correlation_id": correlation_id,
-        "result_json": result_json,
-    })
-    .to_string()
+fn forward_keyring_request(handler: &Arc<dyn NmpKeyringHandler>, request_json: String) -> String {
+    handler.handle_keyring_request(request_json)
 }
 
 // ─── NmpApp handle ──────────────────────────────────────────────────────────
 
-/// Owned, `Send + Sync` wrapper around the `NmpApp` raw pointer.
-///
-/// `NmpApp` is actor-backed and thread-safe for host API calls (see
-/// nmp-ffi SAFETY docs). The raw pointer is freed exactly once in `Drop`.
-///
-/// `_update_callback_ctx` keeps the heap-allocated `UnboundedSender<Cmd>` that
-/// the update callback's `context` pointer refers to alive for the full lifetime
-/// of the `NmpApp`. It must be dropped AFTER `nmp_app_free` so no in-flight
-/// callback can race against a freed context. `Drop` frees the NmpApp first
-/// (via `nmp_app_free`), then drops `_update_callback_ctx` — Rust drops fields
-/// in declaration order, so `_update_callback_ctx` must come AFTER the raw
-/// pointer field. We enforce this by keeping both in this struct with the
-/// `NonNull` first.
+/// Owned wrapper around the `nmp_native_runtime::NmpApp` runtime.
 pub(crate) struct NmpHandle {
-    pub(crate) ptr: NonNull<NmpApp>,
+    pub(crate) app: NmpApp,
     pub(crate) mailbox_cache: Option<Arc<dyn MailboxCache>>,
-    /// Keeps the native keyring handler alive for NMP's capability callback.
-    _capability_callback_ctx: Option<Box<Arc<dyn NmpKeyringHandler>>>,
-    /// Keeps the `mpsc::UnboundedSender<Cmd>` alive for the `nmp_update_callback`
-    /// context pointer. Dropped AFTER `nmp_app_free` (declaration order).
-    _update_callback_ctx: Option<Box<mpsc::UnboundedSender<Cmd>>>,
 }
-
-// SAFETY: NmpApp is designed for cross-thread host calls (nmp-ffi docs).
-unsafe impl Send for NmpHandle {}
-unsafe impl Sync for NmpHandle {}
 
 impl Drop for NmpHandle {
     fn drop(&mut self) {
-        // Free NmpApp first. After this returns, nmp-ffi guarantees no further
-        // callback invocations can start (the quiescence gate ensures any
-        // in-flight call has returned before nmp_app_free returns). It is then
-        // safe for `_update_callback_ctx` to drop.
-        nmp_app_free(self.ptr.as_ptr());
-        // _update_callback_ctx drops here (after the app is freed).
+        // Idempotent teardown: clears sinks, sends Shutdown, joins threads.
+        self.app.shutdown();
     }
 }
 
@@ -1991,7 +1898,7 @@ pub(crate) async fn run_effect(
             // follows account switches. Fire-and-forget: snapshot arrives on the
             // next NMP update-callback tick.
             if let Some(handle) = nmp {
-                let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+                let nmp_ref: &NmpApp = &handle.app;
                 communities::register_joined_groups_projection(nmp_ref, pubkey);
             }
         }
@@ -2008,7 +1915,7 @@ pub(crate) async fn run_effect(
 
         Effect::WireGroupDiscovery { relay_url } => {
             if let Some(handle) = nmp {
-                let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+                let nmp_ref: &NmpApp = &handle.app;
                 discovery::run_effect_wire_group_discovery(relay_url, nmp_ref);
             }
         }
@@ -2444,7 +2351,7 @@ pub(crate) async fn run_effect(
                 tracing::debug!("UpdateProfile: no live NmpApp (test mode) — no-op");
                 return;
             };
-            let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
+            let nmp_ref: &NmpApp = &handle.app;
 
             let mut content_map: std::collections::HashMap<&str, String> =
                 std::collections::HashMap::new();
@@ -2990,7 +2897,7 @@ pub(crate) async fn actor_task(
                         .map(|community| community.host_relay_url.clone())
                         .filter(|relay| !relay.trim().is_empty())
                     {
-                        let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+                        let nmp_ref: &NmpApp = &handle.app;
                         discussions::register_discussion_observer(
                             nmp_ref,
                             group_id.clone(),
@@ -3021,10 +2928,8 @@ pub(crate) async fn actor_task(
                     // when nmp_handle is None (test mode); close_search itself is
                     // idempotent on an unknown session.
                     if let Some(handle) = nmp_handle.as_ref() {
-                        // SAFETY: handle.ptr is a valid non-null NmpApp pointer
-                        // kept alive by NmpHandle for the full actor lifetime.
-                        let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
-                        nmp_ref.close_search(search::SEARCH_SESSION_ID);
+                        let nmp_ref: &NmpApp = &handle.app;
+                        nmp_ref.close_search_session(search::SEARCH_SESSION_ID);
                     }
                 }
                 lifecycle_effects.extend(search::lifecycle_effects_for_view_close(id));
@@ -3285,46 +3190,56 @@ pub(crate) fn start_nmp_app(
         return None;
     }
 
-    let raw = nmp_app_new();
-    let mut raw_ptr = NonNull::new(raw)?;
-    let nmp_ref_mut: &mut NmpApp = unsafe { raw_ptr.as_mut() };
+    let mut app = new_app();
 
-    // Manual equivalent of the nmp-defaults typestate builder, with one extra
-    // required pre-start step: register NMP's keyring capability callback before
-    // `nmp_app_start` so cold-start session restore can synchronously recall
-    // `nmp.identity.*` entries.
-    let runtime_handles = nmp_defaults::register_defaults_with_handles(
-        nmp_ref_mut,
-        nmp_defaults::NmpDefaults::default(),
+    // ADR-0069 explicit composition (nmp-defaults / register_defaults are
+    // deleted upstream): install the reusable substrate floor, then register
+    // exactly the protocol features hl uses, by owner crate. Mirrors the
+    // shape of `nmp-cli`'s `lib.rs.tmpl` starter and 29er's
+    // `compose_29er_runtime`. MUST run before `start()`.
+    let substrate_handles = nmp_substrate::install(&mut app, nmp_substrate::SubstrateConfig::default());
+    nmp_nip50::register_search_scopes(&app);
+    nmp_nip50::register_input_scopes(&app);
+    nmp_nip02::register_follow_actions(&mut app);
+    nmp_core::substrate::ProtocolDescriptor::register_actions(&nmp_nip25::Nip25Descriptor, &mut app);
+    nmp_nip29::register_input_scopes(&app);
+    let nip29_registered = nmp_nip29::register::register_actions(&mut app);
+    debug_assert!(
+        nip29_registered.is_ok(),
+        "nmp-nip29 register_actions reported a namespace collision: {nip29_registered:?}"
     );
+    nmp_nip51::register_bookmark_runtime(&mut app);
+    nmp_nip51::register_bookmark_set_runtime(&mut app);
+    nmp_nip51::register_web_bookmark_runtime(&mut app);
+    nmp_nip22::register_runtime(&mut app);
+    nmp_blossom::register_actions(&mut app);
+    nmp_nip11::register(&app);
+
     let path = storage_path.to_string_lossy().into_owned();
-    let Ok(path_c) = CString::new(path.as_str()) else {
-        nmp_app_free(raw_ptr.as_ptr());
-        return None;
-    };
-    nmp_app_set_storage_path(raw_ptr.as_ptr(), path_c.as_ptr());
-    nmp_app_consume_all_builtin_projections(raw_ptr.as_ptr());
-    nmp_ref_mut.set_initial_relays_for_start(Vec::new());
+    app.set_storage_path(Some(path));
+    app.consume_all_builtin_projections();
+    app.set_initial_relays_for_start(Vec::new());
 
-    let capability_context = keyring_handler.map(|handler| {
-        let ctx_box = Box::new(handler);
-        let ctx_ptr = (&*ctx_box) as *const Arc<dyn NmpKeyringHandler> as *mut c_void;
-        nmp_app_set_capability_callback(raw_ptr.as_ptr(), ctx_ptr, Some(nmp_keyring_callback));
-        ctx_box
-    });
-
-    nmp_app_start(raw_ptr.as_ptr(), 256, 4);
-
-    let nmp_ref: &NmpApp = unsafe { raw_ptr.as_ref() };
+    if let Some(handler) = keyring_handler {
+        nmp_uniffi_support::set_capability_callback(
+            &app,
+            Some(Box::new(handler)),
+            forward_keyring_request,
+        );
+    }
 
     // Phase 2B: initialise NIP-46 broker (needed for PairBunker and
-    // StartNostrConnect). Idempotent per ADR-0052 §D3 — safe to call once.
-    nmp_signer_broker_init(raw_ptr.as_ptr());
+    // StartNostrConnect). Idempotent — safe to call once, before start.
+    app.init_signer_broker();
 
     // Phase 2B: initialise NIP-55 external-signer driver (needed for
-    // SignInNip55). nmp_app_signin_nip55 lazy-inits too, but calling
-    // explicitly here makes the init order deterministic.
-    nmp_external_signer_init(raw_ptr.as_ptr());
+    // SignInNip55). signin_nip55 lazy-inits too, but calling explicitly here
+    // makes the init order deterministic.
+    app.init_external_signer();
+
+    nmp_uniffi_support::start_runtime(&app, 256, 4);
+
+    let nmp_ref: &NmpApp = &app;
 
     // Phase 3B: register JoinedGroupsProjection at boot.
     // If an account is already active (e.g. persisted from a prior session),
@@ -3400,28 +3315,14 @@ pub(crate) fn start_nmp_app(
     // it auto-tracks identity switches.
     bookmark_sets::register_set_projections(nmp_ref, nmp_ref.active_account_handle());
 
-    // Phase 3A: register the update callback so NMP snapshot frames are
-    // forwarded into the actor as KernelEvent::NmpSnapshotFrame. The
-    // context_box is stored in NmpHandle::_update_callback_ctx to keep the
-    // sender alive for the full lifetime of the NmpApp. Registered ONCE at
-    // boot (bridge_registered_once_at_boot).
-    let context_box = {
-        let ctx_box = Box::new(tx);
-        let ctx_ptr = (&*ctx_box) as *const mpsc::UnboundedSender<Cmd> as *mut c_void;
-        // SAFETY: raw_ptr is a valid non-null NmpApp pointer; ctx_ptr points
-        // to the Box we just allocated (returned below, kept alive by NmpHandle).
-        // nmp_update_callback is a valid extern-C fn matching the expected ABI.
-        unsafe {
-            nmp_app_set_update_callback(raw_ptr.as_ptr(), ctx_ptr, Some(nmp_update_callback));
-        }
-        ctx_box
-    };
+    // Phase 3A: register the update sink so NMP snapshot frames are forwarded
+    // into the actor as KernelEvent::NmpSnapshotFrame. Registered ONCE at boot
+    // (bridge_registered_once_at_boot).
+    nmp_uniffi_support::set_update_sink(&app, Some(Box::new(tx)), forward_update_frame);
 
     Some(NmpHandle {
-        ptr: raw_ptr,
-        mailbox_cache: runtime_handles.mailbox_cache,
-        _capability_callback_ctx: capability_context,
-        _update_callback_ctx: Some(context_box),
+        app,
+        mailbox_cache: Some(substrate_handles.mailbox_cache),
     })
 }
 

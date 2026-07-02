@@ -50,7 +50,6 @@ use nmp_blossom::UploadInput;
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
 use nmp_core::substrate::ActionPayload;
 use nmp_core::typed_projections::ActionResultRow;
-use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string};
 
 use crate::kernel::action::KernelEvent;
 use crate::kernel::app::AppState;
@@ -459,64 +458,47 @@ pub(crate) fn run_effect_blossom_upload(
         &payload_bytes,
     );
 
-    let result_ptr =
-        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
+    let outcome = nmp_uniffi_support::dispatch_action_vec(&handle.app, envelope);
 
-    if result_ptr.is_null() {
-        // D6: null return is an nmp bug; treat as a failure.
-        let _ = tx.send(Cmd::Event(KernelEvent::BlossomUploadResult {
-            success: false,
-            blob_url: String::new(),
-            error: "nmp_app_dispatch_action returned null".to_string(),
-        }));
-        return;
-    }
-
-    // Parse the result JSON while the pointer is still valid, then free it.
-    let result_json = {
-        let cstr = unsafe { std::ffi::CStr::from_ptr(result_ptr) };
-        let s = cstr.to_string_lossy().to_string();
-        nmp_free_string(result_ptr);
-        s
-    };
-
-    // Extract the nmp-minted correlation_id from `{"correlation_id":"…"}`.
-    let nmp_cid = serde_json::from_str::<serde_json::Value>(&result_json)
-        .ok()
-        .and_then(|v| {
-            v.get("correlation_id")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_string)
-        });
-
-    match nmp_cid {
-        Some(nmp_id) if nmp_id != correlation_id => {
-            // nmp minted a different id; swap the placeholder in AppState so
-            // apply_action_result_row can match the real id when the
-            // action_results frame arrives.
-            tracing::debug!(
-                placeholder_cid = %correlation_id,
-                nmp_cid = %nmp_id,
-                "run_effect_blossom_upload: swapping placeholder with nmp id"
-            );
-            let _ = tx.send(Cmd::Event(KernelEvent::NmpBlossomCorrelationMinted {
-                placeholder_correlation_id: correlation_id,
-                nmp_correlation_id: nmp_id,
-            }));
-        }
-        Some(_) => {
-            // nmp returned the same id — no swap needed, action_results will match.
-        }
-        None => {
-            // nmp returned an error JSON or no correlation_id. Upload was rejected.
+    match outcome.error {
+        None => match outcome.correlation_id {
+            Some(nmp_id) if nmp_id != correlation_id => {
+                // nmp minted a different id; swap the placeholder in AppState so
+                // apply_action_result_row can match the real id when the
+                // action_results frame arrives.
+                tracing::debug!(
+                    placeholder_cid = %correlation_id,
+                    nmp_cid = %nmp_id,
+                    "run_effect_blossom_upload: swapping placeholder with nmp id"
+                );
+                let _ = tx.send(Cmd::Event(KernelEvent::NmpBlossomCorrelationMinted {
+                    placeholder_correlation_id: correlation_id,
+                    nmp_correlation_id: nmp_id,
+                }));
+            }
+            Some(_) => {
+                // nmp returned the same id — no swap needed, action_results will match.
+            }
+            None => {
+                // D6: an accepted dispatch always carries a correlation_id; treat a
+                // missing one as an nmp bug and surface it as a failure.
+                let _ = tx.send(Cmd::Event(KernelEvent::BlossomUploadResult {
+                    success: false,
+                    blob_url: String::new(),
+                    error: "action dispatch accepted but missing correlation_id".to_string(),
+                }));
+            }
+        },
+        Some(error) => {
+            // nmp rejected the upload (e.g. reserved kind, fail-closed validation).
             tracing::warn!(
-                result = %result_json,
+                %error,
                 "run_effect_blossom_upload: nmp rejected upload — emitting failure"
             );
             let _ = tx.send(Cmd::Event(KernelEvent::BlossomUploadResult {
                 success: false,
                 blob_url: String::new(),
-                error: result_json,
+                error,
             }));
         }
     }
@@ -575,7 +557,7 @@ pub(crate) fn run_effect_publish_capture_with_correlation(
     // This is the ONLY correct way to get a correlation_id on a PublishRaw at
     // b4404159: `ActorCommand::PublishRawEvent::correlation_id` is passed
     // directly into the engine, not via `nmp_app_dispatch_action`.
-    let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
+    let nmp_ref: &nmp_native_runtime::NmpApp = &handle.app;
     let _ = nmp_ref
         .actor_sender()
         .send(nmp_core::actor::ActorCommand::Publish(

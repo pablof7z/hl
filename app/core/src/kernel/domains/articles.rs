@@ -17,7 +17,7 @@
 //! ## NMP projection seam
 //!
 //! `nmp-defaults::register_longform_projection` is called by
-//! `nmp_defaults::register_defaults` (which hl calls at boot in `start_nmp_app`)
+//! hl's explicit `start_nmp_app` composition (ADR-0069)
 //! with the default `NmpDefaults { longform: true, .. }`. The projection
 //! observer accumulates kind:30023 events; the typed FlatBuffers sidecar arrives
 //! via the update callback as `KernelEvent::NmpSnapshotFrame` with

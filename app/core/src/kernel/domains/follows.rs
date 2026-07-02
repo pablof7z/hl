@@ -42,7 +42,7 @@
 
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
 use nmp_core::substrate::ActionPayload;
-use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
+use nmp_native_runtime::NmpApp;
 use nmp_nip02::wire::typed_fb::decode_follow_list;
 use nmp_nip02::{register_follow_state_runtime, PubkeyAction};
 
@@ -128,16 +128,7 @@ pub(crate) fn run_effect_dispatch_follow_action(
         &payload_bytes,
     );
 
-    let result_ptr =
-        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
-
-    // Free the returned correlation-id JSON string. nmp-ffi returns a
-    // CString::into_raw pointer; `nmp_free_string` is the canonical free path
-    // (same Rust allocator as the allocation). Calling host `free()` is UB.
-    // A null pointer is a no-op (nmp-ffi D6 null-safety contract).
-    if !result_ptr.is_null() {
-        nmp_free_string(result_ptr);
-    }
+    let _ = nmp_uniffi_support::dispatch_action_vec(&handle.app, envelope);
 }
 
 // ─── Projection registration ─────────────────────────────────────────────────
@@ -162,11 +153,9 @@ pub(crate) fn run_effect_dispatch_follow_action(
 /// Must be called once at boot (after `nmp_app_start`). Account changes are
 /// tracked internally via the identity-change observer NMP installs.
 pub(crate) fn register_follow_list_projection(nmp_ref: &NmpApp) {
-    // The shared ContactsLookup — the SAME Arc the Kind3Parser writes into via
-    // the ingest pipeline. Passed explicitly so the generic runtime registrar
-    // depends only on nmp-core traits, not on nmp-ffi (matches Chirp exactly).
-    let contacts_lookup = nmp_ref.contacts_lookup();
-    register_follow_state_runtime(nmp_ref, contacts_lookup);
+    // `register_follow_state_runtime` now sources the shared ContactsLookup
+    // internally (single-arg signature on current master).
+    register_follow_state_runtime(nmp_ref);
 }
 
 // ─── Unit tests ──────────────────────────────────────────────────────────────

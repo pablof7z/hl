@@ -16,7 +16,7 @@
 //! 5. `reduce_event_joined_groups_updated` stores the rows in `AppState.communities`.
 //! 6. `project_communities_snapshot` projects them into `ViewSnapshot::Communities`.
 
-use nmp_ffi::NmpApp;
+use nmp_native_runtime::NmpApp;
 use nmp_nip29::decode_joined_groups_snapshot;
 
 use crate::kernel::app::AppState;

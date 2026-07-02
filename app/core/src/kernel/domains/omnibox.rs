@@ -38,7 +38,7 @@
 //! ## Recognizer registration
 //!
 //! The required recognizers are registered for free by
-//! `nmp_defaults::register_defaults` (called in `actor::start_nmp_app`):
+//! hl's explicit `start_nmp_app` composition (ADR-0069):
 //!   * `nmp_nip50::register_input_scopes` (always) → `nip50.profiles`,
 //!     `nip50.notes`, `nip50.longform`,
 //!   * `nmp_nip29::register_input_scopes` (gated on `NmpDefaults::social`, which
@@ -56,13 +56,12 @@
 //! No projection rework, no per-session demultiplexing.
 
 use std::collections::BTreeSet;
-use std::ffi::{c_char, CStr, CString};
 
 use nmp_core::substrate::{
     InputIntentClassification, InputIntentRejection, InputIntentRequest, InputIntentTarget,
     InputScopeId, TextSearchTargets,
 };
-use nmp_ffi::{nmp_free_string, NmpApp};
+use nmp_native_runtime::NmpApp;
 use nmp_nip50::{SearchRequest, SearchScope as NmpSearchScope, SearchTargets};
 
 use crate::kernel::action::KernelEvent;
@@ -70,33 +69,12 @@ use crate::kernel::actor::NmpHandle;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::OmniboxOutcome;
 
-// ─── NMP input-intent C-ABI (reached by symbol; see module docs) ─────────────
-
-#[allow(improper_ctypes)] // NmpApp is opaque; nmp-ffi uses the same ABI.
-extern "C" {
-    /// Pure classifier: parses an `InputIntentRequest` JSON, snapshots the app's
-    /// registered recognizers, runs `nmp_intent::classify`, returns
-    /// `{"ok":true,"classification":…}` (never NULL; a `SecretLike` rejection
-    /// carries no copy of the input).
-    fn nmp_app_intent_classify(app: *mut NmpApp, request_json: *const c_char) -> *mut c_char;
-
-    /// Classify, then act on the top candidate. Used here only for a NIP-05 top
-    /// candidate, whose `ResolveNip05Command` (HTTP reverse lookup) the dispatch
-    /// lane enqueues onto the actor. Returns `{"ok":true,"dispatched":…}`.
-    fn nmp_app_intent_dispatch(
-        app: *mut NmpApp,
-        request_json: *const c_char,
-        session_id: *const c_char,
-    ) -> *mut c_char;
-}
-
-/// Wrapper for the `nmp_app_intent_classify` JSON envelope.
-#[derive(serde::Deserialize)]
-struct ClassifyResponse {
-    #[serde(default)]
-    ok: bool,
-    classification: Option<InputIntentClassification>,
-}
+// ─── NMP input-intent (typed native-runtime methods; see module docs) ───────
+//
+// The retired C-ABI `nmp_app_intent_classify` / `nmp_app_intent_dispatch`
+// doorway serialised to/from JSON across the FFI boundary. The typed
+// `NmpApp::classify_input_intent` / `dispatch_input_intent` methods take and
+// return `nmp_core::substrate` types directly — no JSON round-trip needed.
 
 /// NIP-29 `Registered` target payload (mirrors `nmp_nip29` `GroupIdentPayload`;
 /// kept local so the omnibox does not couple to the exact export path).
@@ -214,24 +192,12 @@ pub(crate) fn run_effect_run_omnibox(
     tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
 ) {
     let Some(handle) = nmp else { return };
-    let app_ptr = handle.ptr.as_ptr();
+    let nmp_ref: &NmpApp = &handle.app;
 
     let request = build_request(&query);
-    let request_json = match serde_json::to_string(&request) {
-        Ok(j) => j,
-        Err(_) => return,
-    };
-
-    let classification = match classify_ffi(app_ptr, &request_json) {
-        Some(c) => c,
-        None => return,
-    };
-
+    let classification = nmp_ref.classify_input_intent(&request);
     let outcome = classification_to_outcome(&query, classification);
 
-    // SAFETY: app_ptr is a valid non-null NmpApp pointer kept alive by the
-    // NmpHandle for the full actor lifetime.
-    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
     match &outcome {
         // Free text → open the single multi-kind NIP-50 search session.
         OmniboxOutcome::FreeText { query } => {
@@ -240,8 +206,10 @@ pub(crate) fn run_effect_run_omnibox(
         // NIP-05 → enqueue the HTTP `.well-known/nostr.json` reverse lookup. The
         // dispatch lane re-classifies and routes the (NIP-05 top) candidate to
         // `ResolveNip05Command`; the resolved profile claim arrives reactively.
+        // The result is intentionally discarded (D6, fire-and-forget) — the
+        // resolved profile claim arrives reactively.
         OmniboxOutcome::ResolveNip05 { .. } => {
-            dispatch_ffi(app_ptr, &request_json);
+            let _ = nmp_ref.dispatch_input_intent(&request, None);
         }
         // Navigate / OpenGroup / RelayUrl / RejectSecret / NoMatch — no in-core
         // side effect; the shell routes from the emitted outcome.
@@ -267,47 +235,6 @@ fn open_multi_kind_search(nmp_ref: &NmpApp, query: &str) {
         None => return,
     };
     let _key = nmp_ref.open_search(request, super::search::SEARCH_SESSION_ID);
-}
-
-/// Call `nmp_app_intent_classify` and parse the classification, freeing the
-/// returned C string. Returns `None` on any FFI / parse error (D6).
-fn classify_ffi(app_ptr: *mut NmpApp, request_json: &str) -> Option<InputIntentClassification> {
-    let c_request = CString::new(request_json).ok()?;
-    // SAFETY: app_ptr is valid; c_request is a valid NUL-terminated C string;
-    // the returned pointer is heap-owned by Rust and freed below.
-    let raw = unsafe { nmp_app_intent_classify(app_ptr, c_request.as_ptr()) };
-    if raw.is_null() {
-        return None;
-    }
-    let json = unsafe { CStr::from_ptr(raw) }
-        .to_str()
-        .ok()
-        .map(str::to_owned);
-    nmp_free_string(raw);
-    let response: ClassifyResponse = serde_json::from_str(&json?).ok()?;
-    if !response.ok {
-        return None;
-    }
-    response.classification
-}
-
-/// Call `nmp_app_intent_dispatch` to act on the top candidate (NIP-05 enqueue),
-/// freeing the returned C string. The result JSON is intentionally discarded —
-/// the resolved profile arrives reactively (D6, fire-and-forget).
-fn dispatch_ffi(app_ptr: *mut NmpApp, request_json: &str) {
-    let Ok(c_request) = CString::new(request_json) else {
-        return;
-    };
-    // Empty session id: the NIP-05 branch ignores it (only `TextQuery` uses it).
-    let Ok(c_session) = CString::new("") else {
-        return;
-    };
-    // SAFETY: app_ptr is valid; both C strings are valid NUL-terminated; the
-    // returned pointer is heap-owned by Rust and freed immediately below.
-    let raw = unsafe { nmp_app_intent_dispatch(app_ptr, c_request.as_ptr(), c_session.as_ptr()) };
-    if !raw.is_null() {
-        nmp_free_string(raw);
-    }
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────────

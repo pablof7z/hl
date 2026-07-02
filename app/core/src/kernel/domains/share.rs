@@ -1161,7 +1161,7 @@ fn dispatch_share_publish_action(
     };
 
     let dispatch_result = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
-        handle.ptr.as_ptr(),
+        &handle.app,
         namespace,
         &action_json,
     );
@@ -1234,7 +1234,7 @@ fn dispatch_clip_repost_publish_action(
     };
 
     let dispatch_result = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
-        handle.ptr.as_ptr(),
+        &handle.app,
         namespace,
         &action_json,
     );

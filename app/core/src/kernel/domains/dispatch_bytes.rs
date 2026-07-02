@@ -12,7 +12,7 @@ use serde::de::DeserializeOwned;
 
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
 use nmp_core::substrate::ActionPayload;
-use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
+use nmp_native_runtime::NmpApp;
 
 static NEXT_CORRELATION_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -29,7 +29,7 @@ fn encode_payload_for_namespace(namespace: &str, json: &str) -> Result<Vec<u8>, 
         "nmp.nip29.discover" => encode::<nmp_nip29::action::DiscoverGroupsInput>(namespace, json),
         "nmp.nip29.join" => encode::<nmp_nip29::action::JoinGroupInput>(namespace, json),
         "nmp.nip29.create_public_group" => {
-            encode::<nmp_nip29::action::CreatePublicGroupInput>(namespace, json)
+            encode::<nmp_nip29::action::CreateGroupInput>(namespace, json)
         }
         "nmp.nip29.put_user" => encode::<nmp_nip29::action::PutUserInput>(namespace, json),
         "nmp.nip29.create_invite" => {
@@ -67,17 +67,14 @@ where
 /// Dispatch an hl action through the NMP typed byte doorway.
 ///
 /// Encodes `json` into the typed `ActionPayload` bytes for `namespace`, wraps
-/// them in a `DispatchEnvelope`, and calls `nmp_app_dispatch_action_bytes`.
+/// them in a `DispatchEnvelope`, and calls `nmp_uniffi_support::dispatch_action_vec`.
 /// Returns the echoed correlation_id on accept, or an error string on
 /// rejection (D6).
 pub(crate) fn dispatch_action_bytes_for(
-    app: *mut NmpApp,
+    app: &NmpApp,
     namespace: &str,
     json: &str,
 ) -> Result<String, String> {
-    if app.is_null() {
-        return Err("runtime app is not available".to_string());
-    }
     let payload = encode_payload_for_namespace(namespace, json)?;
     let correlation_id = mint_correlation_id();
     let envelope = encode_dispatch_envelope(
@@ -86,23 +83,12 @@ pub(crate) fn dispatch_action_bytes_for(
         DISPATCH_ENVELOPE_SCHEMA_VERSION,
         &payload,
     );
-    let ptr = nmp_app_dispatch_action_bytes(app, envelope.as_ptr(), envelope.len());
-    if ptr.is_null() {
-        return Err("action dispatch returned null".to_string());
+    let outcome = nmp_uniffi_support::dispatch_action_vec(app, envelope);
+    if let Some(error) = outcome.error {
+        return Err(error);
     }
-    let text = unsafe { std::ffi::CStr::from_ptr(ptr) }
-        .to_string_lossy()
-        .into_owned();
-    nmp_free_string(ptr);
-    let value: serde_json::Value = serde_json::from_str(&text)
-        .map_err(|e| format!("action dispatch returned invalid JSON: {e}"))?;
-    if let Some(error) = value.get("error").and_then(serde_json::Value::as_str) {
-        return Err(error.to_string());
-    }
-    value
-        .get("correlation_id")
-        .and_then(serde_json::Value::as_str)
+    outcome
+        .correlation_id
         .filter(|id| !id.is_empty())
-        .map(str::to_string)
         .ok_or_else(|| "action dispatch envelope missing correlation_id".to_string())
 }

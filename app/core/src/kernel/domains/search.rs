@@ -66,7 +66,7 @@
 //!
 //! Search is read-only (no write action for search hits) — no double-publish risk.
 
-use nmp_ffi::NmpApp;
+use nmp_native_runtime::NmpApp;
 use nmp_nip50::{
     decode_search_results_snapshot, SearchRequest, SearchScope as NmpSearchScope, SearchTargets,
     DEFAULT_MAX_SEARCH_HITS, SEARCH_RESULTS_SCHEMA_ID,
@@ -327,9 +327,7 @@ pub(crate) fn run_effect_run_search(
         }
     };
 
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime.
-    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+    let nmp_ref: &NmpApp = &handle.app;
 
     // Open the NIP-50 search session. NMP owns the relay resolution, cache-FTS
     // seed, per-relay pinned interests, result projection, and typed `N50S`

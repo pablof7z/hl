@@ -17,24 +17,27 @@ hex = "0.4"
 nostr-sdk = { version = "0.44.1", features = ["nip49", "nip04", "nip44"] }
 nostr = { version = "0.44", default-features = false, features = ["std", "nip46"] }
 nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "fc0589fc88d61912779741fcce7d4e7176cf9a30", default-features = false }
-# Pinned to the NMP master rev that includes the GroupEvents read-door rename.
-nmp-core = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4" }
-nmp-planner = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4" }
-nmp-ffi = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4", features = ["signer-broker", "external-signer"] }
-nmp-defaults = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4" }
-nmp-signers = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4" }
-nmp-nip11 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4" }
-nmp-nip02 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4" }
-nmp-nip25 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4" }
-nmp-nip29 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4" }
-nmp-nip22 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4" }
-nmp-nip50 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4" }
-nmp-nip51 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4" }
-nmp-nip78 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4" }
-nmp-blossom = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4" }
-nmp-content = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4" }
-nmp-store = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4" }
-nmp-kinds = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "97059e297fd10db4bc400af6b131eeed76a240c4" }
+# Pinned to current NMP master (post clean-break: nmp-ffi/nmp-defaults deleted,
+# nmp-native-runtime + nmp-uniffi-support + nmp-substrate are the replacements —
+# see hl issue #123 / nostr-multi-platform issue #2720).
+nmp-core = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
+nmp-planner = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
+nmp-native-runtime = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2", features = ["signer-broker", "external-signer"] }
+nmp-uniffi-support = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
+nmp-substrate = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
+nmp-signers = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
+nmp-nip11 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
+nmp-nip02 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
+nmp-nip25 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
+nmp-nip29 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
+nmp-nip22 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
+nmp-nip50 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
+nmp-nip51 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
+nmp-nip78 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
+nmp-blossom = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
+nmp-content = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
+nmp-store = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
+nmp-kinds = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "ae650cf0864f6e335ad02286919e17b1ca62f3e2" }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 futures = "0.3"

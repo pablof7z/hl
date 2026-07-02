@@ -307,7 +307,7 @@ fn new_highlighter_app_inner(
 
     // Capture NMP's relay slot for direct FFI access (bypasses actor channel for reads).
     if let Some(ref handle) = nmp {
-        let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
+        let nmp_ref: &nmp_native_runtime::NmpApp = &handle.app;
         if let Ok(mut guard) = shared.relay_slot.lock() {
             *guard = Some(nmp_ref.configured_relays_handle());
         }

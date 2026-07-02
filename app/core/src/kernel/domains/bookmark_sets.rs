@@ -43,7 +43,7 @@ use nmp_core::substrate::{
     KernelEvent as NmpKernelEvent, ObservedProjection, ObservedProjectionRegistrar,
 };
 use nmp_core::ObservedProjectionSink;
-use nmp_ffi::NmpApp;
+use nmp_native_runtime::NmpApp;
 use nmp_planner::{InterestId, InterestLifecycle, InterestScope, InterestShape, LogicalInterest};
 // Pubkey is `type Pubkey = String` in the planner; authors are admitted as raw hex.
 
@@ -767,7 +767,7 @@ pub(crate) fn run_effect_publish_set_event(
         tracing::debug!("PublishSetEvent: no live NmpApp (test mode)");
         return;
     };
-    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+    let nmp_ref: &NmpApp = &handle.app;
 
     #[derive(serde::Deserialize)]
     struct EventTemplate {
@@ -900,7 +900,7 @@ pub(crate) fn run_effect_push_interest(
         tracing::debug!("PushBookmarkSetsInterest: no live NmpApp (test mode)");
         return;
     };
-    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+    let nmp_ref: &NmpApp = &handle.app;
 
     let mut shape = InterestShape::default();
     shape.kinds.insert(KIND_BOOKMARK_SET);
@@ -946,7 +946,7 @@ pub(crate) fn run_effect_withdraw_interest(nmp: Option<&crate::kernel::actor::Nm
     let Some(handle) = nmp else {
         return;
     };
-    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+    let nmp_ref: &NmpApp = &handle.app;
     let _ = nmp_ref
         .actor_sender()
         .send(nmp_core::actor::ActorCommand::Interests(

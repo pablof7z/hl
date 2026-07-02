@@ -1476,7 +1476,7 @@ pub enum KernelEvent {
     /// named feed cursor.
     ///
     /// Produced by the `DrainFeed` effect runner after decoding the binary Page
-    /// wire from `nmp_ffi::pull::nmp_app_pull_page`. The reducer routes on `key`
+    /// wire from `NmpApp::mirror_pull_page_raw_bytes`. The reducer routes on `key`
     /// to the correct `FeedState` in `AppState` and calls
     /// `feed::apply_feed_page`.
     ///
