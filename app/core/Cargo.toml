@@ -65,6 +65,7 @@ name = "uniffi-bindgen"
 path = "src/bin/uniffi-bindgen.rs"
 
 [dev-dependencies]
+nmp-nostr-id = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
 tempfile = "3"
 
 # Pre-existing codebase uses sort_by with closures throughout; suppress at

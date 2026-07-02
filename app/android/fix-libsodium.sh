@@ -43,7 +43,7 @@ if [ "$ARCHIVE_SIZE" -lt 200 ]; then
 
     # Clean crates that depend on libsodium so they re-link against the fixed archive
     cd "$CORE_DIR"
-    cargo clean --target aarch64-linux-android --release -p highlighter-core -p nostrdb -p nostr-ndb -p nostr-sdk 2>/dev/null || true
+    cargo clean --target aarch64-linux-android --release -p highlighter-core -p nostr-sdk 2>/dev/null || true
     AR="$LLVM_AR" RANLIB="$LLVM_RANLIB" cargo ndk -t arm64-v8a -o "$JNI_OUT_DIR" build --release
 else
     echo "fix-libsodium: libsodium.a looks valid (${ARCHIVE_SIZE} bytes), no fixup needed"

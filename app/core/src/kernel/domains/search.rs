@@ -60,7 +60,7 @@
 //! `event_store_handle()` slot), decodes each kind:0 into a `ProfileSearchRow`,
 //! and ships the matches back as `KernelEvent::ProfileSearchScanned` →
 //! `merge_profile_search_rows`. This REPLACES the bespoke
-//! `crate::search::search_profiles` nostrdb scan: the profiles bucket now has
+//! `crate::search::search_profiles` local scan: the profiles bucket now has
 //! exactly ONE production source (D4). `search_profiles` survives only as the
 //! `#[cfg(test)]` parity oracle for `parity_profile_scan_matches_bespoke_algorithm`.
 //!
@@ -393,7 +393,7 @@ struct CandidateCommunity {
 ///
 /// Parity target: `crate::search::search_communities` (bespoke live lane).
 /// Algorithm mirrors the bespoke scan, adapted for the kernel's in-memory
-/// `DiscoveredRow` + `CommunityRow` sources instead of nostrdb:
+/// `DiscoveredRow` + `CommunityRow` sources instead of a bespoke store scan:
 ///
 /// 1. Trim query. Return empty for blank (D6).
 /// 2. Lowercase query once.
@@ -408,7 +408,7 @@ struct CandidateCommunity {
 /// 7. Truncate to `limit`.
 /// 8. Emit raw `CommunitySearchRow` (D1: no formatted strings, no fallbacks).
 ///
-/// Pure function — no I/O, no ndb scan. Called from `project_search_snapshot`.
+/// Pure function — no I/O, no local store scan. Called from `project_search_snapshot`.
 pub(crate) fn project_community_search_rows(
     discovered: &[crate::kernel::snapshot::DiscoveredRow],
     communities: &[crate::kernel::snapshot::CommunityRow],
@@ -621,7 +621,7 @@ pub(crate) fn upsert_profile_search_cache(_state: &mut crate::kernel::app::AppSt
 /// Merge decoded `ProfileSearchRow`s into `AppState::profile_search_cache`.
 ///
 /// Deduplicates by pubkey — newest `created_at` wins (kind:0 is replaceable,
-/// same dedup as the bespoke `search_profiles` nostrdb scan). Shared by the
+/// same dedup as the bespoke `search_profiles` scan). Shared by the
 /// relay-hit path (`upsert_profile_search_cache`) and the local kind:0
 /// store-scan path (`KernelEvent::ProfileSearchScanned`), so both production
 /// sources write through ONE dedup (D4).
@@ -636,7 +636,7 @@ pub(crate) fn merge_profile_search_rows(
 ///
 /// Parity target: `crate::search::search_profiles` (bespoke live lane).
 /// Algorithm mirrors the bespoke scan, adapted for the kernel's in-memory
-/// `ProfileSearchRow` cache instead of nostrdb:
+/// `ProfileSearchRow` cache instead of a bespoke store query:
 ///
 /// 1. Trim query. Return empty for blank (D6).
 /// 2. Filter: case-insensitive substring match on name/display_name/nip05/about.
@@ -646,7 +646,7 @@ pub(crate) fn merge_profile_search_rows(
 /// 4. Truncate to `limit`.
 /// 5. Emit raw `ProfileSearchRow` (D1: no formatted strings, no fallbacks).
 ///
-/// Pure function — no I/O, no ndb scan. Called from `project_search_snapshot`.
+/// Pure function — no I/O, no local store scan. Called from `project_search_snapshot`.
 pub(crate) fn project_profile_search_rows(
     cache: &[crate::kernel::snapshot::ProfileSearchRow],
     query: &str,
@@ -1476,7 +1476,7 @@ mod tests {
     // The kernel scan receives equivalent DiscoveredRow inputs.
     // We assert the same group_ids in the same order as the expected output.
     //
-    // NOTE: bespoke search_communities scans nostrdb (not available in kernel unit
+    // NOTE: bespoke search_communities used a direct store scan (not available in kernel unit
     // tests). We validate parity by comparing against the documented algorithm
     // output on the shared fixture, confirmed by checking bespoke test 1403.
     #[test]

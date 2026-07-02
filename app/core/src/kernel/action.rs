@@ -914,7 +914,6 @@ pub enum AppAction {
     },
 
     // ── Issue #63 additions (append-only) ────────────────────────────────────
-
     /// Rename the kind:30004 curation set identified by `set_coordinate`.
     ///
     /// Kernel is the sole kind:30004 writer for ported screens (no live-lane
@@ -1855,7 +1854,7 @@ pub enum KernelEvent {
     /// the SOLE production driver of the search profiles bucket — relay NIP-50
     /// search runs the articles/highlights scope (no kind:0), so the local store
     /// scan is what populates the people results (replacing the bespoke
-    /// `crate::search::search_profiles` nostrdb scan — D4 single source).
+    /// `crate::search::search_profiles` scan — D4 single source).
     ///
     /// Raw protocol rows only (D1). Bounded by the scan limit
     /// (`PROFILE_SEARCH_CACHE_SCAN_LIMIT`) — never unbounded (Non-Negotiable #7).

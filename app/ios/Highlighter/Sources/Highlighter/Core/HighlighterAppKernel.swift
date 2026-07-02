@@ -488,7 +488,7 @@ final class HighlighterAppKernel {
 
     /// Relay list snapshot from NMP's configured_relays slot. Used by
     /// `NetworkSettingsStore.load()` to hydrate the relay list without reading
-    /// nostrdb. The role string carries read/write/indexer; rooms are restored
+    /// the NMP-owned core store. The role string carries read/write/indexer; rooms are restored
     /// when NMP exposes the Highlighter app-data projection.
     var relayListSnapshot: [KernelRelayRow] {
         app.relayListSnapshot()

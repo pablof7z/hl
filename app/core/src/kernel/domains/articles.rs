@@ -203,8 +203,8 @@ fn content_tree_json(bytes: &[u8]) -> String {
 /// enriched NIP-84/NIP-73 fields the highlight feed does — quote/context/clip/
 /// image), sorted newest-first and deduped by event id. Empty when the feed has
 /// not been registered yet (the brief window between OpenView and the first
-/// page) — the bespoke lane likewise shows the seeded article with no overlays
-/// until ndb answers. Mirrors `highlights::query_for_article` (kind:9802 `#a`).
+/// page) — the seeded article can show before the NMP feed answers.
+/// Mirrors `highlights::query_for_article` (kind:9802 `#a`).
 fn article_highlight_rows(state: &AppState, address: &str) -> Vec<HighlightRow> {
     let key = format!("{ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX}{address}");
     let Some(fs) = state.article_highlight_feeds.get(&key) else {
@@ -558,7 +558,7 @@ mod tests {
     }
 
     // Phase 7: the article-highlight feed scope is the kind:9802 `#a` filter that
-    // mirrors the bespoke `highlights::query_for_article` NdbFilter exactly.
+    // mirrors the bespoke `highlights::query_for_article` filter exactly.
     #[test]
     fn article_highlight_feed_scope_filters_kind_and_address() {
         use nmp_core::PullScope;

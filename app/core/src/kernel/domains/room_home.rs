@@ -2617,7 +2617,7 @@ mod tests {
 
     // ─── Parity tests: kernel snapshot vs crate::room_home::query_room_home_snapshot
     //
-    // Each test injects the SAME event fixture into BOTH a real nostrdb (bespoke
+    // Each test injects the SAME event fixture into BOTH the legacy bespoke path
     // path: crate::room_home::query_room_home_snapshot) AND kernel AppState (kernel
     // path: project_room_home_snapshot). Both functions are called and their section
     // counts are compared field-for-field. Any drift in highlight-matching,
@@ -2774,8 +2774,8 @@ mod tests {
 
         // P1: parity_artifact_and_highlight_lane_counts_match
         //
-        // Inject one kind:11 artifact share and one kind:9802 highlight into BOTH a
-        // real nostrdb (for the bespoke crate::room_home::query_room_home_snapshot
+        // Inject one kind:11 artifact share and one kind:9802 highlight into BOTH the
+        // legacy path (for the bespoke crate::room_home::query_room_home_snapshot
         // call) AND kernel AppState (for project_room_home_snapshot). Assert that
         // artifacts, highlights, highlights_by_reference, and assembled_lanes counts
         // agree. Fails if highlight-matching or coordinate-precedence drifts.
@@ -2899,7 +2899,7 @@ mod tests {
         //
         // A lane with a comment but no highlights must survive the dormant filter in
         // both bespoke (build_visible_room_lanes:75) and kernel (assembled_lanes).
-        // The bespoke path reads kind:1111 from nostrdb; kernel reads from
+        // The bespoke path reads kind:1111 directly; kernel reads from
         // state.comment_threads. Both must produce 1 lane and 1 comments_by_reference.
         #[test]
         fn parity_comment_only_lane_not_dormant() {
@@ -2976,7 +2976,7 @@ mod tests {
         // P4: parity_full_lane_all_five_sections
         //
         // Full fixture: kind:11 artifact + kind:9802 highlight + kind:1111 comment.
-        // Inject into both nostrdb and kernel AppState. All five section counts AND
+        // Inject into both the legacy path and kernel AppState. All five section counts AND
         // lane content counts must agree between bespoke and kernel.
         #[test]
         fn parity_full_lane_all_five_sections() {

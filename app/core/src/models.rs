@@ -709,9 +709,8 @@ pub struct Nip11Document {
     pub icon: Option<String>,
 }
 
-/// Local nostrdb cache statistics. Rough — `disk_bytes` is the sum of file
-/// sizes in the ndb directory; `event_count_estimate` is an upper bound
-/// returned by a single kinds-wildcard query.
+/// Local NMP cache statistics. Rough — `disk_bytes` is the sum of persisted
+/// store files; `event_count_estimate` is an upper-bound diagnostic.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CacheStats {
     pub disk_bytes: u64,

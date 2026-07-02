@@ -836,9 +836,9 @@ pub enum Effect {
     // ── Phase 7 Part C additions (append-only) ───────────────────────────────
     /// Update the active account's kind:0 profile metadata.
     ///
-    /// The effect runner reads the existing kind:0 from nostrdb, merges the
-    /// supplied fields (preserving unknown fields — round-trip safe), signs,
-    /// and publishes a new kind:0 replaceable event.
+    /// The effect runner reads the existing kind:0 through the NMP-owned core,
+    /// merges the supplied fields (preserving unknown fields — round-trip
+    /// safe), signs, and publishes a new kind:0 replaceable event.
     ///
     /// Phase 7 Part C stub: no-op until the bespoke lane is deleted.
     /// Fire-and-forget (D6, Non-Negotiable #3).

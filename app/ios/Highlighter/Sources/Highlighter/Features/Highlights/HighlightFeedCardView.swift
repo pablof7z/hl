@@ -647,7 +647,7 @@ struct HighlightFeedCardView: View {
         guard let addr = resource.articleAddress else { return }
 
         // Pure parse of "30023:pubkeyHex:d-tag" — the author pubkey is the
-        // second segment. Replaces the nostrdb article lookup (D1 inline).
+        // second segment. Replaces the legacy article lookup (D1 inline).
         let parts = addr.split(separator: ":", maxSplits: 2).map(String.init)
         if parts.count >= 3, !parts[1].isEmpty {
             let pubkey = parts[1]

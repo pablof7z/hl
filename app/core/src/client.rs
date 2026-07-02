@@ -143,5 +143,5 @@ impl HighlighterCore {
 fn default_data_dir() -> Result<PathBuf, CoreError> {
     let base = dirs::data_dir()
         .ok_or_else(|| CoreError::Cache("no platform data_dir available".into()))?;
-    Ok(base.join("highlighter").join("ndb"))
+    Ok(base.join("highlighter").join("nmp"))
 }

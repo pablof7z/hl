@@ -2346,7 +2346,7 @@ pub(crate) async fn run_effect(
             // pre-populates ALL visible fields from the current profile snapshot, so the
             // published event carries the full set the user sees — round-trip safe for
             // known fields. Unknown fields (not surfaced in the UI) are lost here;
-            // a later wave can merge from nostrdb before publish.
+            // a later wave can merge from the NMP-owned profile snapshot before publish.
             let Some(handle) = nmp else {
                 tracing::debug!("UpdateProfile: no live NmpApp (test mode) — no-op");
                 return;

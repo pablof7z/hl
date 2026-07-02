@@ -184,7 +184,7 @@ pub fn highlight_feed_scope() -> PullScope {
 ///
 /// Phase 7: the article reader overlay needs the highlights anchored to the
 /// article being read. Mirrors the bespoke `highlights::query_for_article`
-/// NdbFilter (`kinds([9802]).tags([address], 'a')`) — but expressed as an
+/// filter (`kinds([9802]).tags([address], 'a')`) — but expressed as an
 /// `InterestShape` so it flows through the same feed-pull engine the room-lane
 /// (4I) and home (4G/4H) feeds use. `address` is the `"<kind>:<pubkey>:<d>"`
 /// coordinate (D3: opaque from the caller, never constructed by the kernel).
@@ -455,11 +455,8 @@ pub(crate) fn run_effect_drain_feed(
 
     // Rust owns the returned Vec<u8> — no separate free call (nmp-ffi's
     // NmpMirrorBytes ptr/len/cap wrapper + nmp_mirror_free_bytes are gone).
-    let owned_bytes = nmp_ref.mirror_pull_page_raw_bytes(
-        cursor_id,
-        FEED_PAGE_SIZE,
-        FEED_RAW_BYTE_CAP as usize,
-    );
+    let owned_bytes =
+        nmp_ref.mirror_pull_page_raw_bytes(cursor_id, FEED_PAGE_SIZE, FEED_RAW_BYTE_CAP as usize);
 
     let result = decode_pull_page_wire(key.clone(), cursor_id, &owned_bytes);
 
@@ -926,7 +923,7 @@ mod tests {
     fn malformed_page_no_ops() {
         // Simulate garbage bytes that look like a Page variant but are truncated.
         let garbage: Vec<u8> = vec![0u8, 0xDE, 0xAD, 0xBE, 0xEF]; // variant=Page, then truncated
-        // decode_pull_page_wire must return None on malformed input (D6: no panic).
+                                                                  // decode_pull_page_wire must return None on malformed input (D6: no panic).
         let result = decode_pull_page_wire("test.key".into(), 1, &garbage);
         assert!(result.is_none(), "malformed wire must produce no-op");
     }

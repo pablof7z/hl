@@ -1,7 +1,6 @@
-//! NIP-01 kind:0 profile metadata query. The profile view reads from nostrdb
-//! first; the relay-side hydrate happens via
-//! `SubscriptionKind::UserProfile` so stale cache rows get refreshed while
-//! the view is open.
+//! NIP-01 kind:0 profile metadata parsing. Profile data reaches the app
+//! through NMP-owned projections; this module only maps raw kind:0 event
+//! content into Highlighter's profile snapshot shape.
 
 use nostr_sdk::prelude::*;
 use serde::Deserialize;

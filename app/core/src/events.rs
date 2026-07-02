@@ -184,7 +184,7 @@ pub enum DataChangeType {
     /// The current user's NIP-51 kind:10003 bookmark list was updated
     /// (either by us via `toggle_bookmark` or by another client relaying a
     /// newer event). App-scope delta — Swift re-queries the authoritative
-    /// list from nostrdb.
+    /// list from the NMP-owned core snapshot.
     BookmarksUpdated,
     /// One of the current user's kind:30003 / kind:30004 sets changed.
     /// View-scoped — the BookmarkStore re-queries on receipt.
@@ -195,7 +195,7 @@ pub enum DataChangeType {
     /// A NIP-B0 kind:39701 web bookmark from the current user changed.
     /// View-scoped — the BookmarkStore re-queries on receipt.
     WebBookmarksUpdated,
-    /// A referenced NIP-19 entity resolved from nostrdb after its
+    /// A referenced NIP-19 entity resolved by the NMP-owned core after its
     /// view-scoped subscription warmed the cache. Swift applies the payload
     /// directly to the card that installed the subscription.
     NostrEntityResolved {

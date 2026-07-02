@@ -7,7 +7,7 @@
 //!
 //! * **free text** → multi-scope relay search (profiles kind:0 + notes kind:1 +
 //!   articles kind:30023), surfaced through the existing `search_results`
-//!   sidecar; the shell additionally keeps its local nostrdb buckets,
+//!   sidecar,
 //! * a pasted **NIP-19/21 reference** (`npub…`, `nostr:nevent…`, `naddr…`) →
 //!   navigate directly (profile / thread / article / group),
 //! * a **NIP-05** identifier (`name@domain`) → HTTP `.well-known` reverse lookup
@@ -48,7 +48,7 @@
 //! ## Free-text dispatch
 //!
 //! Rather than open one session per `nip50.*` `TextQuery` candidate the
-//! classifier emits, the omnibox opens a single multi-kind `NmpApp::open_search`
+//! classifier emits, the omnibox opens a single multi-kind NMP search
 //! session (`SearchScope::Kinds({0,1,30023})`) under the existing
 //! `search::SEARCH_SESSION_ID`. Results stream back through the same typed
 //! `N50S` sidecar and the existing `search::apply_search_results` projection, so
