@@ -463,18 +463,18 @@ pub fn highlight_share_url_snapshot(
     author_pubkey_hex: &str,
 ) -> HighlightShareUrlSnapshot {
     match (|| -> Result<String, CoreError> {
-        let id = nostr_sdk::prelude::EventId::from_hex(event_id_hex)
+        nmp_nostr_id::encode_note(event_id_hex)
             .map_err(|e| CoreError::InvalidInput(format!("bad event id: {e}")))?;
-        let author = nostr_sdk::prelude::PublicKey::from_hex(author_pubkey_hex.trim())
+        let author = author_pubkey_hex.trim();
+        nmp_nostr_id::encode_npub(author)
             .map_err(|e| CoreError::InvalidInput(format!("bad author pubkey: {e}")))?;
-        let relay = nostr_sdk::prelude::RelayUrl::parse(highlighter_relay())
-            .map_err(|e| CoreError::InvalidInput(format!("bad relay: {e}")))?;
-        let nevent = nostr_sdk::nips::nip19::Nip19Event::new(id)
-            .author(author)
-            .kind(nostr_sdk::prelude::Kind::from(KIND_HIGHLIGHT as u16))
-            .relays([relay]);
-        nostr_sdk::nips::nip19::ToBech32::to_bech32(&nevent)
-            .map_err(|e| CoreError::InvalidInput(format!("encode nevent: {e}")))
+        nmp_nostr_id::encode_nevent(&nmp_nostr_id::NeventData {
+            event_id: event_id_hex.to_owned(),
+            relays: vec![highlighter_relay().to_owned()],
+            author: Some(author.to_owned()),
+            kind: Some(u32::from(KIND_HIGHLIGHT)),
+        })
+        .map_err(|e| CoreError::InvalidInput(format!("encode nevent: {e}")))
     })() {
         Ok(nevent) => HighlightShareUrlSnapshot {
             share_url: Some(format!("https://beta.highlighter.com/highlight/{nevent}")),
