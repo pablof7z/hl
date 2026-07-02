@@ -16,13 +16,11 @@
 //!
 //! ## NMP projection seam
 //!
-//! `nmp-defaults::register_longform_projection` is called by
-//! hl's explicit `start_nmp_app` composition (ADR-0069)
-//! with the default `NmpDefaults { longform: true, .. }`. The projection
-//! observer accumulates kind:30023 events; the typed FlatBuffers sidecar arrives
-//! via the update callback as `KernelEvent::NmpSnapshotFrame` with
-//! `schema_id == "nmp.nip23.articles"`. No separate registration call is needed
-//! from hl — the default boot sequence is sufficient.
+//! `nmp_nip23::register` is called by hl's explicit `start_nmp_app`
+//! composition (ADR-0069). The projection observer accumulates kind:30023
+//! events; the typed FlatBuffers sidecar arrives via the update callback as
+//! `KernelEvent::NmpSnapshotFrame` with `schema_id == "nmp.nip23.articles"`.
+//! No separate registration call is needed from hl beyond the crate installer.
 //!
 //! ## No WRITE side in 4A
 //!

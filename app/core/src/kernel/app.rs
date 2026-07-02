@@ -152,15 +152,21 @@ pub struct AppState {
     /// arrives, or if the view is the own-profile screen).
     pub own_profile: Option<nmp_core::typed_projections::ProfileCardModel>,
 
-    /// Profiles for visited pubkeys, decoded from the `"claimed_profiles"`
-    /// typed sidecar. Keyed by raw hex pubkey (64 lowercase chars). Populated
-    /// by `nmp_app_claim_profile` / released by `nmp_app_release_profile`
-    /// (driven by `Effect::ClaimProfile` / `Effect::ReleaseProfile`).
+    /// Profiles for visited pubkeys, mirrored from the `refs.profile`
+    /// stateful host store. Keyed by raw hex pubkey (64 lowercase chars).
+    /// Populated by `NmpApp::resolve_ref(Profile, ..)` and released by
+    /// `NmpApp::release_ref(Profile, ..)` through the profile view lifecycle.
     ///
     /// Bounded by the number of concurrently open `Profile` views — never
     /// grows with the unbounded event store (Non-Negotiable #7). Cleared on
     /// `IdentityChanged(None)` and `Logout`.
     pub claimed_profiles: HashMap<String, nmp_core::typed_projections::ProfileCardModel>,
+
+    /// Stateful merge cache for NMP's `refs.profile` row-delta projection.
+    /// The cache tracks per-key revisions by `(session_id, snapshot_epoch)`;
+    /// `claimed_profiles` is the snapshot-friendly mirror read by existing
+    /// profile views.
+    pub ref_profile_store: nmp_core::refs::RefProfileStore,
 
     // ── Phase 7 entity-ref additions (append-only) ────────────────────────────
     /// Events claimed via `nmp_app_resolve_ref(namespace=1)` for entity cards.
@@ -535,6 +541,7 @@ impl Default for AppState {
             room_policy: RoomPolicy::default(),
             own_profile: None,
             claimed_profiles: HashMap::new(),
+            ref_profile_store: nmp_core::refs::RefProfileStore::new(),
             claimed_events: HashMap::new(),
             // ── Phase 3F additions ────────────────────────────────────────────
             room_home_events: HashMap::new(),

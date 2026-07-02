@@ -34,15 +34,14 @@
 //! `Address{coordinate, relay?}`, `Url{url}`, `Hashtag{hashtag}` — serialised
 //! with `#[serde(tag = "type", rename_all = "snake_case")]`.
 //!
-//! NOTE: `nmp-defaults::register_bookmark_runtime` (called by
-//! `register_defaults` at boot) already registers a `BookmarkListProjection`
+//! NOTE: `nmp_nip51::register` already registers a `BookmarkListProjection`
 //! as a kind:10003 observer AND wires the add/remove action modules. This
 //! module creates a SECOND `BookmarkListProjection` (also pointing at the
-//! live active-account slot) for the hl-typed-snapshot path. Double-
+//! live active-account slot) for the hl-typed-snapshot path. Double
 //! observation is harmless (both observe the same events, read-only). The hl
-//! projection is NOT registered with `register_bookmark_actions` — the
-//! actions are already wired by nmp-defaults and calling them again would
-//! result in duplicate action registrations.
+//! projection is NOT registered with `register_bookmark_actions` because the
+//! actions are already wired by nmp_nip51 and calling them again would result
+//! in duplicate action registrations.
 //!
 //! ## Projection registration
 //!
@@ -324,11 +323,11 @@ pub(crate) fn run_effect_dispatch_bookmark_action(
 /// projection against `nmp_ref`.
 ///
 /// This creates a SECOND `BookmarkListProjection` (beyond the one wired by
-/// `nmp-defaults::register_bookmark_runtime` at boot). Both observe the same
+/// `nmp_nip51::register` at boot). Both observe the same
 /// kind:10003 events — the second one is exclusively for the hl typed-snapshot
 /// path (`"hl.bookmarks"` key → serde-JSON payload → `dispatch_typed_frame`
 /// arm → `BookmarksUpdated`). The write actions are NOT re-registered here
-/// (nmp-defaults already wired them; double-registration would create
+/// (nmp_nip51 already wired them; double-registration would create
 /// duplicate kind:10003 publishes).
 ///
 /// `active_account_slot` is the live `Arc<Mutex<Option<String>>>` that NMP

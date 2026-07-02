@@ -125,6 +125,20 @@ impl Drop for NmpHandle {
     }
 }
 
+fn log_nmp_register<T: std::fmt::Debug>(
+    name: &str,
+    result: Result<T, nmp_core::substrate::RegistrationError>,
+) {
+    if let Err(error) = result {
+        tracing::warn!(
+            registration = name,
+            error = ?error,
+            "NMP protocol registration failed"
+        );
+        debug_assert!(false, "NMP protocol registration failed: {name}: {error:?}");
+    }
+}
+
 // ─── Command channel ────────────────────────────────────────────────────────
 
 /// Everything the actor can receive.
@@ -1254,11 +1268,10 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
 
         // ── Phase 3D additions (append-only) ─────────────────────────────────
         KernelEvent::ProfileCardUpdated { pubkey, card } => {
-            // Store the decoded ProfileCardModel in claimed_profiles keyed by
-            // the raw hex pubkey. The "profile" (own account) sidecar also
-            // goes through this path for ViewId::Profile views where the viewed
-            // pubkey matches the active account — own_profile is the read-side
-            // fallback, claimed_profiles is the authoritative path for views.
+            // Store injected ProfileCardModel rows in claimed_profiles keyed by
+            // the raw hex pubkey. The live visited-profile path is
+            // `refs.profile`; this event remains useful for reducer tests and
+            // own-profile injection.
             // `card` is `Box<ProfileCardModel>`; deref-move to owned model.
             state.claimed_profiles.insert(pubkey, *card);
             vec![]
@@ -1922,18 +1935,18 @@ pub(crate) async fn run_effect(
 
         // ── Phase 3D additions ────────────────────────────────────────────────
         Effect::ClaimProfile { pubkey } => {
-            // Call nmp_app_claim_profile with liveness=Live so a Tailing kind:0
+            // Resolve the profile with liveness=Live so a Tailing kind:0
             // subscription stays open while the view is on screen. The updated
-            // card arrives back through the "claimed_profiles" typed sidecar as
-            // KernelEvent::ProfileCardUpdated. No-op in test mode (nmp=None).
+            // card arrives back through `refs.profile`. No-op in test mode
+            // (nmp=None).
             profiles::run_effect_claim_profile(pubkey, nmp);
         }
 
         Effect::ReleaseProfile { pubkey } => {
-            // Call nmp_app_release_profile to decrement the per-consumer refcount.
+            // Release the profile ref to decrement the per-consumer refcount.
             // When the count reaches zero NMP cancels the Tailing kind:0
-            // subscription and removes the card from claimed_profiles. No-op in
-            // test mode (nmp=None).
+            // subscription and emits a `refs.profile` clear. No-op in test mode
+            // (nmp=None).
             profiles::run_effect_release_profile(pubkey, nmp);
         }
 
@@ -3195,34 +3208,51 @@ pub(crate) fn start_nmp_app(
 
     let mut app = new_app();
 
-    // ADR-0069 explicit composition (nmp-defaults / register_defaults are
-    // deleted upstream): install the reusable substrate floor, then register
-    // exactly the protocol features hl uses, by owner crate. Mirrors the
-    // shape of `nmp-cli`'s `lib.rs.tmpl` starter and 29er's
-    // `compose_29er_runtime`. MUST run before `start()`.
+    // ADR-0069 explicit composition: install the reusable substrate floor,
+    // then register exactly the protocol features hl uses through each owner
+    // crate's public installer. MUST run before `start()`.
     let substrate_handles =
         nmp_substrate::install(&mut app, nmp_substrate::SubstrateConfig::default());
-    nmp_nip50::register_search_scopes(&app);
-    nmp_nip50::register_input_scopes(&app);
-    nmp_nip02::register_follow_actions(&mut app);
-    nmp_core::substrate::ProtocolDescriptor::register_actions(
-        &nmp_nip25::Nip25Descriptor,
-        &mut app,
+    log_nmp_register(
+        "nmp-nip50",
+        nmp_nip50::register(&app, nmp_nip50::Config::default()),
     );
-    nmp_nip29::register_input_scopes(&app);
-    let nip29_registered = nmp_nip29::register::register_actions(&mut app);
-    debug_assert!(
-        nip29_registered.is_ok(),
-        "nmp-nip29 register_actions reported a namespace collision: {nip29_registered:?}"
+    log_nmp_register(
+        "nmp-nip02",
+        nmp_nip02::register(&mut app, nmp_nip02::Config::default()),
     );
-    nmp_nip51::register_bookmark_runtime(&mut app);
-    nmp_nip51::register_bookmark_set_runtime(&mut app);
-    nmp_nip51::register_web_bookmark_runtime(&mut app);
-    nmp_replies::register_actions(&mut app);
-    nmp_nip22::register_runtime(&mut app);
-    nmp_nip23::register_longform_projection(&mut app);
-    nmp_blossom::register_actions(&mut app);
-    nmp_nip11::register(&app);
+    log_nmp_register(
+        "nmp-nip25",
+        nmp_nip25::register(&mut app, nmp_nip25::Config::default()),
+    );
+    log_nmp_register(
+        "nmp-nip29",
+        nmp_nip29::register(&mut app, nmp_nip29::Config::default()),
+    );
+    log_nmp_register(
+        "nmp-nip51",
+        nmp_nip51::register(&mut app, nmp_nip51::Config::default()),
+    );
+    log_nmp_register(
+        "nmp-replies",
+        nmp_replies::register(&mut app, nmp_replies::Config::default()),
+    );
+    log_nmp_register(
+        "nmp-nip22",
+        nmp_nip22::register(&mut app, nmp_nip22::Config::default()),
+    );
+    log_nmp_register(
+        "nmp-nip23",
+        nmp_nip23::register(&app, nmp_nip23::Config::default()),
+    );
+    log_nmp_register(
+        "nmp-blossom",
+        nmp_blossom::register(&mut app, nmp_blossom::Config::default()),
+    );
+    log_nmp_register(
+        "nmp-nip11",
+        nmp_nip11::register(&app, nmp_nip11::Config::default()),
+    );
 
     let path = storage_path.to_string_lossy().into_owned();
     app.set_storage_path(Some(path));
@@ -3273,10 +3303,10 @@ pub(crate) fn start_nmp_app(
     reactions::register_reaction_projection(nmp_ref, nmp_ref.active_account_handle(), tx.clone());
 
     // Phase 7: register CommentObserver ONCE at boot. Creates a SECOND
-    // CommentThreadProjection (separate from the one in nmp-defaults
-    // register_defaults). Double-observation is harmless — both projections
+    // CommentThreadProjection (separate from the one installed by
+    // nmp_nip22::register). Double-observation is harmless — both projections
     // read the same kind:1111 events. The post_comment action is NOT
-    // re-registered (nmp-defaults already wired it via register_defaults).
+    // re-registered because nmp_nip22 already wired it.
     comments::register_comment_projection(nmp_ref, tx.clone());
 
     // Wire identity-change observer → KernelEvent::IdentityChanged.
@@ -3295,24 +3325,15 @@ pub(crate) fn start_nmp_app(
         .and_then(|guard| guard.clone());
     let _ = tx.send(Cmd::Event(KernelEvent::IdentityChanged(boot_active)));
 
-    // Phase 3C: wire the follow-list typed snapshot projection so NIP-02
-    // kind:3 events from the active account surface in `AppState::follows`.
-    // ADR-0063: the follow list is now a PURE READ over the shared
-    // `ContactsLookup` (written by nmp_nip01::Kind3Parser). The active-account
-    // slot and contacts lookup are sourced from `NmpApp` inside the NMP runtime
-    // registrar — no manual slot is passed. Demand-driven kind:3 acquisition is
-    // handled by `register_follow_state_runtime`'s OpenInterest enqueue.
-    follows::register_follow_list_projection(nmp_ref);
-
     // Phase 4C: wire the hl BookmarkListProjection typed snapshot so NIP-51
     // kind:10003 events from the active account surface in `AppState::bookmarks`.
-    // Note: nmp-defaults::register_bookmark_runtime (called via register_defaults
-    // above) already wires a separate BookmarkListProjection as a kind:10003
-    // observer AND registers the add/remove bookmark action modules. This call
+    // Note: nmp_nip51::register above already wires a separate
+    // BookmarkListProjection as a kind:10003 observer AND registers the
+    // add/remove bookmark action modules. This call
     // creates a SECOND projection (also pointing at the live active-account slot)
     // exclusively for the hl typed-snapshot path ("hl.bookmarks" key). Double-
     // observation is harmless — both projections read the same events. The write
-    // actions are NOT re-registered here (nmp-defaults already wired them).
+    // actions are NOT re-registered here (nmp_nip51 already wired them).
     bookmarks::register_bookmark_list_projection(nmp_ref, nmp_ref.active_account_handle());
 
     // #1653: wire SetListProjection (kind:30003/30004, all authors) and

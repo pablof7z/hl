@@ -39,10 +39,9 @@
 //!
 //! The required recognizers are registered for free by
 //! hl's explicit `start_nmp_app` composition (ADR-0069):
-//!   * `nmp_nip50::register_input_scopes` (always) → `nip50.profiles`,
-//!     `nip50.notes`, `nip50.longform`,
-//!   * `nmp_nip29::register_input_scopes` (gated on `NmpDefaults::social`, which
-//!     defaults to `true`) → `nip29.groups`.
+//!   * `nmp_nip50::register` → `nip50.profiles`, `nip50.notes`,
+//!     `nip50.longform`,
+//!   * `nmp_nip29::register` → `nip29.groups`.
 //! No additional composition wiring is needed in hl.
 //!
 //! ## Free-text dispatch
@@ -89,7 +88,7 @@ struct GroupIdentPayload {
 /// hl's omnibox allow-list: every result class the field accepts.
 ///
 /// `nostr.ref` is the synthetic always-allowed direct-reference scope; the four
-/// protocol scopes are served by the recognizers `register_defaults` installs.
+/// protocol scopes are served by the recognizers installed in `start_nmp_app`.
 fn omnibox_scopes() -> Vec<InputScopeId> {
     vec![
         InputScopeId::nostr_ref(),

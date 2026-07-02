@@ -18,28 +18,28 @@ nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "fc
 # Pinned to current NMP master (post clean-break: nmp-ffi/nmp-defaults deleted,
 # nmp-native-runtime + nmp-uniffi-support + nmp-substrate are the replacements —
 # see hl issue #123 / nostr-multi-platform issue #2720).
-nmp-core = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-planner = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-native-runtime = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3", features = ["signer-broker", "external-signer"] }
-nmp-uniffi-support = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-substrate = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-signers = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-nip11 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-nip02 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-nip25 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-nip29 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-nip22 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-replies = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-nip23 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-nip50 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-nip51 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-nip78 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-blossom = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-content = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-ownership = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-store = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-kinds = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
-nmp-nostr-id = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "9450c1fccbd35f383f0b814477afa289361998f3" }
+nmp-core = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-planner = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-native-runtime = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0", features = ["signer-broker", "external-signer"] }
+nmp-uniffi-support = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-substrate = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-signers = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-nip11 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-nip02 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-nip25 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-nip29 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-nip22 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-replies = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-nip23 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-nip50 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-nip51 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-nip78 = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-blossom = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-content = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-ownership = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-store = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-kinds = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
+nmp-nostr-id = { git = "https://github.com/pablof7z/nostr-multi-platform.git", rev = "d1cf909436a32503386feb43f836819e5b33d3b0" }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 futures = "0.3"

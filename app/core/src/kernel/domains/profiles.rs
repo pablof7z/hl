@@ -1,4 +1,4 @@
-//! Profiles domain — claim/release API + `ProfileSnapshot` projection (slice 3D).
+//! Profiles domain — resolve-ref lifecycle + `ProfileSnapshot` projection (slice 3D).
 //!
 //! ## Responsibilities
 //!
@@ -8,19 +8,19 @@
 //!   matches. Decode fn: `nmp_core::typed_projections::decode_profile`.
 //!
 //! * **READ (visited profiles)** — populated into `AppState::claimed_profiles`
-//!   via `KernelEvent::ProfileCardUpdated` (actor.rs). The former bulk
-//!   `"claimed_profiles"` typed sidecar was deleted by NMP ADR-0063 Lane H;
+//!   by mirroring the stateful `nmp_core::refs::RefProfileStore`. The former
+//!   bulk `"claimed_profiles"` typed sidecar was deleted by NMP ADR-0063 Lane H;
 //!   visited-profile resolution is now served by the per-key `refs.profile`
-//!   row-delta projection (`nmp_core::refs::RefProfileStore`). Model:
+//!   row-delta projection. Model:
 //!   `ProfileCardModel` (raw hex pubkey, optional display fields, nip05,
 //!   about, lud16, etc.) — no bech32 or NIP-05 label formatting (D3 / raw-data
 //!   doctrine). Swift formats every display string.
 //!
-//! * **CLAIM / RELEASE** — `AppAction::ClaimProfile { pubkey }` (emitted when a
+//! * **RESOLVE / RELEASE** — `AppAction::ClaimProfile { pubkey }` (emitted when a
 //!   `ViewId::Profile{pubkey}` view is opened) → `Effect::ClaimProfile { pubkey }`
-//!   → `nmp_app_claim_profile(raw_ptr, pubkey, consumer_id, force:0, liveness:Live)`.
+//!   → `NmpApp::resolve_ref(Profile, pubkey, consumer_id, Profile(Card), Live)`.
 //!   `AppAction::ReleaseProfile { pubkey }` (emitted on view close) →
-//!   `Effect::ReleaseProfile { pubkey }` → `nmp_app_release_profile(raw_ptr, pubkey,
+//!   `Effect::ReleaseProfile { pubkey }` → `NmpApp::release_ref(Profile, pubkey,
 //!   consumer_id)`. Consumer id is `"hl.profile.<pubkey>"` — stable, one per view.
 //!
 //! * **SNAPSHOT** — `project_profile_snapshot(state, pubkey)` assembles a
@@ -28,13 +28,6 @@
 //!   (Phase 3C) + the subset of `AppState::communities` that matches the viewed
 //!   pubkey (Phase 3D communities-on-profile, optional). Phase 4 (articles /
 //!   highlights) deferred.
-//!
-//! ## NMP C ABI
-//!
-//! `nmp_app_claim_profile` and `nmp_app_release_profile` are `#[no_mangle] extern "C"`
-//! in `crates/nmp-ffi/src/timeline.rs:141`. Their FFI signatures are declared
-//! in this module so the profiles effect runner can call them without going
-//! through an intermediate Rust wrapper.
 //!
 //! ## Threading
 //!
@@ -52,10 +45,8 @@ use crate::kernel::snapshot::{CommunityRow, ProfileSnapshot, ViewSnapshot};
 
 // ─── resolve_ref (ADR-0063 Lane H) ──────────────────────────────────────────
 //
-// The per-kind `nmp_app_claim_profile` / `nmp_app_release_profile` C-ABI
-// symbols were deleted; profiles resolve through the unified, origin-blind
-// `NmpApp::resolve_ref` / `NmpApp::release_ref` (typed — no C-ABI namespace/
-// shape/liveness int codes anymore).
+// Profiles resolve through the unified, origin-blind `NmpApp::resolve_ref` /
+// `NmpApp::release_ref` path with typed namespace/shape/liveness values.
 
 /// Stable consumer-id prefix. The per-pubkey suffix makes each profile view
 /// an independent refcount owner.
@@ -86,25 +77,25 @@ pub(crate) fn apply_own_profile(state: &mut AppState, payload: &[u8]) {
 
 // ─── READ side: claimed profiles projection (ADR-0063: removed) ──────────────
 //
-// NMP ADR-0063 Lane H deleted the bulk `"claimed_profiles"` typed sidecar
-// (`decode_claimed_profiles` / `ClaimedProfilesModel` / `CLAIMED_PROFILES_*`).
+// NMP ADR-0063 Lane H deleted the bulk `"claimed_profiles"` typed sidecar.
 // Visited-profile resolution is now served by the per-key `refs.profile`
-// row-delta projection (`nmp_core::refs::RefProfileStore`, sidecar key
-// `nmp_core::refs::host_store::REFS_PROFILE_KEY`), which is a STATEFUL merge
-// cache (row deltas keyed by `(session_id, snapshot_epoch)`) rather than a
-// whole-snapshot replace.
-//
-// `AppState::claimed_profiles` is retained: it still backs the
-// `ViewId::Profile{pubkey}` snapshot (`project_profile_snapshot`) and is
-// populated through `KernelEvent::ProfileCardUpdated` (actor.rs). The
-// claimed-profiles *sidecar decode path* is the only thing removed here — the
-// bulk decoder no longer exists in nmp-core.
-//
-// FOLLOW-UP (refs.profile adoption): wire `RefProfileStore` into `AppState`,
-// add a `refs.profile` arm in `projections::dispatch_typed_frame` that threads
-// the frame's `(session_id, snapshot_epoch)` into `RefProfileStore::apply_sidecar`,
-// and read visited-profile cards from it. That is a stateful-cache migration
-// (frame-identity plumbing) tracked separately from this drift fix.
+// row-delta projection, which is a stateful merge cache keyed by frame
+// `(session_id, snapshot_epoch)`. `AppState::claimed_profiles` is retained as
+// the snapshot-friendly read model for existing profile views.
+
+pub(crate) fn apply_refs_profile(
+    state: &mut AppState,
+    payload: &[u8],
+    session_id: u64,
+    snapshot_epoch: u64,
+) {
+    let outcome = state
+        .ref_profile_store
+        .apply_sidecar(payload, session_id, snapshot_epoch);
+    if !outcome.changed_keys.is_empty() || state.ref_profile_store.baselined() {
+        state.claimed_profiles = state.ref_profile_store.profiles().into_iter().collect();
+    }
+}
 
 // ─── WRITE side: view-lifecycle helpers ─────────────────────────────────────
 
@@ -167,7 +158,7 @@ pub(crate) fn reduce_action_release_profile(pubkey: String) -> Vec<Effect> {
 
 // ─── Effect runners ──────────────────────────────────────────────────────────
 
-/// Execute `Effect::ClaimProfile` — calls `nmp_app_resolve_ref` for the
+/// Execute `Effect::ClaimProfile` — calls `NmpApp::resolve_ref` for the
 /// `(Profile, pubkey)` reference under the stable consumer-id
 /// `"hl.profile.<pubkey>"`, `shape = profile.card`, `liveness = Live`.
 ///
@@ -269,6 +260,7 @@ pub(crate) fn project_profile_snapshot(state: &AppState, pubkey: &str) -> Option
 pub(crate) fn clear_on_identity_lost(state: &mut AppState) {
     state.own_profile = None;
     state.claimed_profiles.clear();
+    state.ref_profile_store = nmp_core::refs::RefProfileStore::new();
 }
 
 // ─── Unit tests ──────────────────────────────────────────────────────────────
