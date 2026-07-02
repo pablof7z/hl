@@ -761,7 +761,7 @@ pub enum AppAction {
     },
 
     /// Create a new public NIP-29 group by publishing kind:9007 + kind:9002
-    /// via `"nmp.nip29.create_public_group"`. Fire-and-forget.
+    /// via `"nmp.nip29.create_group"`. Fire-and-forget.
     ///
     /// `group_id` is the desired local group id (`[a-z0-9-_]+`). `name` is
     /// the human-readable display name (required). `about` is optional.

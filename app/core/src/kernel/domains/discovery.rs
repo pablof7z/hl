@@ -204,7 +204,7 @@ pub(crate) fn run_effect_dispatch_nip29_action(
                 return;
             }
         },
-        "nmp.nip29.create_public_group" => match serde_json::from_str::<CreateGroupInput>(&json) {
+        "nmp.nip29.create_group" => match serde_json::from_str::<CreateGroupInput>(&json) {
             Ok(a) => a.encode(),
             Err(e) => {
                 tracing::warn!(error = %e, "nip29: failed to deserialise CreateGroupInput");
