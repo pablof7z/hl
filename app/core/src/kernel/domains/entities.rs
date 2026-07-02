@@ -5,20 +5,11 @@
 //! The `project_entity_ref_snapshot` function assembles a `KernelEntitySnapshot`
 //! from the cached row for an open `ViewId::EntityRef { key }` view.
 
-use std::ffi::CString;
-use std::os::raw::c_int;
-
-use nmp_ffi::{nmp_app_release_ref, nmp_app_resolve_ref};
-
 use crate::kernel::actor::NmpHandle;
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::{KernelEntitySnapshot, ViewSnapshot};
 
-// NMP resolve_ref constants for event namespace (ADR-0063).
-const EVENT_NAMESPACE: c_int = 1;
-const EVENT_EMBED_SHAPE: c_int = 2;
-const LIVENESS_LIVE: c_int = 1;
 const CONSUMER_ID_PREFIX: &str = "hl.entity.";
 
 /// Apply a `"refs.event"` NRRD batch to `AppState::claimed_events`.
@@ -81,42 +72,26 @@ pub(crate) fn lifecycle_effects_for_view_close(id: &crate::kernel::view::ViewId)
     }
 }
 
-/// Run `Effect::ResolveEntityRef` — call `nmp_app_resolve_ref(namespace=1, ...)`.
+/// Run `Effect::ResolveEntityRef` — call `NmpApp::resolve_ref(Event, ...)`.
 pub(crate) fn run_effect_resolve_entity_ref(key: String, nmp: Option<&NmpHandle>) {
     let Some(handle) = nmp else { return };
-    let Ok(key_c) = CString::new(key.as_str()) else {
-        return;
-    };
-    let consumer_id = format!("{}{}", CONSUMER_ID_PREFIX, key);
-    let Ok(consumer_c) = CString::new(consumer_id) else {
-        return;
-    };
-    nmp_app_resolve_ref(
-        handle.ptr.as_ptr(),
-        EVENT_NAMESPACE,
-        key_c.as_ptr(),
-        consumer_c.as_ptr(),
-        EVENT_EMBED_SHAPE,
-        LIVENESS_LIVE,
+    let consumer_id = format!("{CONSUMER_ID_PREFIX}{key}");
+    handle.app.resolve_ref(
+        nmp_core::RefNamespace::Event,
+        key,
+        consumer_id,
+        nmp_core::RefShape::Event(nmp_core::EventShape::Embed),
+        nmp_core::RefLiveness::Live,
     );
 }
 
-/// Run `Effect::ReleaseEntityRef` — call `nmp_app_release_ref(namespace=1, ...)`.
+/// Run `Effect::ReleaseEntityRef` — call `NmpApp::release_ref(Event, ...)`.
 pub(crate) fn run_effect_release_entity_ref(key: String, nmp: Option<&NmpHandle>) {
     let Some(handle) = nmp else { return };
-    let Ok(key_c) = CString::new(key.as_str()) else {
-        return;
-    };
-    let consumer_id = format!("{}{}", CONSUMER_ID_PREFIX, key);
-    let Ok(consumer_c) = CString::new(consumer_id) else {
-        return;
-    };
-    nmp_app_release_ref(
-        handle.ptr.as_ptr(),
-        EVENT_NAMESPACE,
-        key_c.as_ptr(),
-        consumer_c.as_ptr(),
-    );
+    let consumer_id = format!("{CONSUMER_ID_PREFIX}{key}");
+    handle
+        .app
+        .release_ref(nmp_core::RefNamespace::Event, key, consumer_id);
 }
 
 // ─── Stateless uniffi helpers ────────────────────────────────────────────────

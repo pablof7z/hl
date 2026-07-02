@@ -3,13 +3,13 @@ import Observation
 
 /// Canonical identity for the article reader. Pass this to
 /// `ArticleReaderView`; the store derives everything from `pubkey` + `dTag`
-/// and falls back to the seed for the first paint while ndb catches up.
+/// and falls back to the seed for the first paint while NMP catches up.
 struct ArticleReaderTarget: Hashable, Sendable {
     let address: String
     let pubkey: String
     let dTag: String
     /// Optional seed used for the first paint (article cards already hold an
-    /// `ArticleRecord`; reusing it avoids a blank flash while ndb answers).
+    /// `ArticleRecord`; reusing it avoids a blank flash while NMP answers).
     let seed: ArticleRecord?
 
     init(route: ArticleReaderRoute, seed: ArticleRecord? = nil) {
@@ -53,8 +53,8 @@ struct ArticleReaderTarget: Hashable, Sendable {
 /// `.onDisappear`. Subscribes via `subscribe_article` so live article and
 /// highlight deltas trigger Rust-classified re-queries.
 ///
-/// Architecture: **nostrdb is the source of truth.** The store never holds
-/// data that isn't already in (or en-route to) ndb.
+/// Architecture: **Rust/NMP is the source of truth.** The store never holds
+/// data that isn't already in (or en-route to) the core snapshot.
 @MainActor
 @Observable
 final class ArticleReaderStore {

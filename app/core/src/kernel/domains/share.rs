@@ -700,13 +700,17 @@ const INVITE_CODE_ALPHABET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrst
 /// fact) but the kernel owns it so the relay never sees a code minted by two
 /// different code paths.
 pub(crate) fn generate_invite_code(length: usize) -> String {
-    use nostr_sdk::secp256k1::rand::{rngs::OsRng, RngCore};
-    let mut buf = vec![0u8; length];
-    OsRng.fill_bytes(&mut buf);
     let n = INVITE_CODE_ALPHABET.len() as u32;
-    buf.iter()
-        .map(|byte| INVITE_CODE_ALPHABET[(*byte as u32 % n) as usize] as char)
-        .collect()
+    let mut code = String::with_capacity(length);
+    while code.len() < length {
+        for byte in uuid::Uuid::new_v4().as_bytes() {
+            if code.len() == length {
+                break;
+            }
+            code.push(INVITE_CODE_ALPHABET[(*byte as u32 % n) as usize] as char);
+        }
+    }
+    code
 }
 
 /// Serialise a host-pinned publish template `{ kind, content, tags, host_relay_url }`.
@@ -1161,7 +1165,7 @@ fn dispatch_share_publish_action(
     };
 
     let dispatch_result = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
-        handle.ptr.as_ptr(),
+        &handle.app,
         namespace,
         &action_json,
     );
@@ -1234,7 +1238,7 @@ fn dispatch_clip_repost_publish_action(
     };
 
     let dispatch_result = crate::kernel::domains::dispatch_bytes::dispatch_action_bytes_for(
-        handle.ptr.as_ptr(),
+        &handle.app,
         namespace,
         &action_json,
     );

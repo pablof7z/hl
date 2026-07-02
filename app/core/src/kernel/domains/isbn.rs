@@ -48,7 +48,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use nmp_ffi::NmpApp;
+use nmp_native_runtime::NmpApp;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::mpsc::UnboundedSender;
@@ -403,8 +403,6 @@ pub(crate) async fn run_effect_scan_book_picker_recents(
 ) {
     use nmp_store::{EventStore, StoreQuery};
 
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime.
     let Some(handle) = nmp else {
         let _ = tx.send(crate::kernel::actor::Cmd::Event(
             crate::kernel::action::KernelEvent::BookPickerRecentsLoaded {
@@ -414,7 +412,7 @@ pub(crate) async fn run_effect_scan_book_picker_recents(
         ));
         return;
     };
-    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+    let nmp_ref: &NmpApp = &handle.app;
 
     let store: std::sync::Arc<dyn EventStore> = {
         let slot = nmp_ref.event_store_handle();

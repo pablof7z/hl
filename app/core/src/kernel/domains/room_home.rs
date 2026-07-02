@@ -48,8 +48,8 @@
 
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
 use nmp_core::substrate::ActionPayload;
-use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
-use nmp_nip29::action::{RepostInGroupInput, ShareEventInGroupInput};
+use nmp_native_runtime::{Nip29GroupEventsSession, NmpApp};
+use nmp_nip29::action::PublishGroupEventInput;
 use nmp_nip29::decode_group_events_snapshot;
 use nmp_nip29::GroupId;
 
@@ -204,11 +204,11 @@ pub(crate) fn run_effect_wire_group_events(
         return;
     }
 
-    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
-    nmp_ref.open_group_events(
+    let nmp_ref: &NmpApp = &handle.app;
+    let _handle = nmp_ref.open_nip29_group_events_session(Nip29GroupEventsSession::new(
         GroupId::new(host_relay_url, group_id),
         ROOM_LANE_EVENT_KINDS.to_vec(),
-    );
+    ));
 }
 
 // ─── Frame decode (called from projections::dispatch_typed_frame) ─────────────
@@ -516,28 +516,25 @@ pub(crate) fn reduce_action_share_to_room(
         );
         return vec![];
     };
-    let namespace = if repost {
-        "nmp.nip29.repost_in_group"
-    } else {
-        "nmp.nip29.share_event_in_group"
-    };
+    let kind = if repost { 16_u32 } else { 11_u32 };
+    let mut tags = vec![vec!["e".to_string(), target_event_id]];
+    if let Some(author) = target_author_pubkey {
+        tags.push(vec!["p".to_string(), author]);
+    }
 
     let json = serde_json::json!({
         "group": {
             "host_relay_url": host_relay_url,
             "local_id": group_id
         },
-        "target": {
-            "event_id": target_event_id,
-            "author_pubkey": target_author_pubkey
-        },
+        "kind": kind,
         "content": "",
-        "additional_tags": []
+        "tags": tags
     })
     .to_string();
 
     vec![Effect::DispatchShareToRoom {
-        namespace: namespace.to_string(),
+        namespace: "nmp.nip29.publish_group_event".to_string(),
         json,
     }]
 }
@@ -562,22 +559,15 @@ pub(crate) fn run_effect_dispatch_share_to_room(
     // Route by namespace: deserialise the pre-built JSON to the typed struct,
     // then encode as FlatBuffers for the bytes doorway (ADR-0064 / Cut-B).
     let payload_bytes: Vec<u8> = match namespace.as_str() {
-        "nmp.nip29.share_event_in_group" => {
-            match serde_json::from_str::<ShareEventInGroupInput>(&json) {
+        "nmp.nip29.publish_group_event" => {
+            match serde_json::from_str::<PublishGroupEventInput>(&json) {
                 Ok(a) => a.encode(),
                 Err(e) => {
-                    tracing::warn!(error = %e, "room_home: failed to deserialise ShareEventInGroupInput");
+                    tracing::warn!(error = %e, "room_home: failed to deserialise PublishGroupEventInput");
                     return;
                 }
             }
         }
-        "nmp.nip29.repost_in_group" => match serde_json::from_str::<RepostInGroupInput>(&json) {
-            Ok(a) => a.encode(),
-            Err(e) => {
-                tracing::warn!(error = %e, "room_home: failed to deserialise RepostInGroupInput");
-                return;
-            }
-        },
         other => {
             tracing::warn!(
                 namespace = other,
@@ -595,12 +585,7 @@ pub(crate) fn run_effect_dispatch_share_to_room(
         &payload_bytes,
     );
 
-    let result_ptr =
-        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
-
-    if !result_ptr.is_null() {
-        nmp_free_string(result_ptr);
-    }
+    let _ = nmp_uniffi_support::dispatch_action_vec(&handle.app, envelope);
 }
 
 // ─── Room-home aggregation helpers ────────────────────────────────────────────
@@ -1546,8 +1531,7 @@ mod tests {
         assert_eq!(effects.len(), 1, "must emit exactly one effect");
         if let Effect::DispatchNip29Action { namespace, json } = &effects[0] {
             assert_eq!(namespace, "nmp.nip29.join");
-            let parsed: serde_json::Value =
-                serde_json::from_str(json).expect("must be valid JSON");
+            let parsed: serde_json::Value = serde_json::from_str(json).expect("must be valid JSON");
             assert_eq!(
                 parsed["group"]["host_relay_url"].as_str().unwrap(),
                 TEST_RELAY,
@@ -1570,8 +1554,7 @@ mod tests {
         assert_eq!(effects.len(), 1, "must emit exactly one effect");
         if let Effect::DispatchNip29Action { namespace, json } = &effects[0] {
             assert_eq!(namespace, "nmp.nip29.join");
-            let parsed: serde_json::Value =
-                serde_json::from_str(json).expect("must be valid JSON");
+            let parsed: serde_json::Value = serde_json::from_str(json).expect("must be valid JSON");
             assert_eq!(
                 parsed["group"]["host_relay_url"].as_str().unwrap(),
                 TEST_RELAY,
@@ -1870,8 +1853,8 @@ mod tests {
         match &effects[0] {
             Effect::DispatchShareToRoom { namespace, json } => {
                 assert_eq!(
-                    namespace, "nmp.nip29.share_event_in_group",
-                    "repost=false must route to share_event_in_group (kind:11)"
+                    namespace, "nmp.nip29.publish_group_event",
+                    "repost=false must route through generic group publish"
                 );
 
                 let parsed: serde_json::Value =
@@ -1881,14 +1864,11 @@ mod tests {
                     TEST_RELAY
                 );
                 assert_eq!(parsed["group"]["local_id"].as_str().unwrap(), TEST_GROUP);
-                assert_eq!(
-                    parsed["target"]["event_id"].as_str().unwrap(),
-                    target_event_id
-                );
-                assert_eq!(
-                    parsed["target"]["author_pubkey"].as_str().unwrap(),
-                    author_pubkey
-                );
+                assert_eq!(parsed["kind"].as_u64().unwrap(), 11);
+                assert_eq!(parsed["tags"][0][0].as_str().unwrap(), "e");
+                assert_eq!(parsed["tags"][0][1].as_str().unwrap(), target_event_id);
+                assert_eq!(parsed["tags"][1][0].as_str().unwrap(), "p");
+                assert_eq!(parsed["tags"][1][1].as_str().unwrap(), author_pubkey);
             }
             other => panic!("expected DispatchShareToRoom, got {other:?}"),
         }
@@ -1925,18 +1905,20 @@ mod tests {
         match &effects[0] {
             Effect::DispatchShareToRoom { namespace, json } => {
                 assert_eq!(
-                    namespace, "nmp.nip29.repost_in_group",
-                    "repost=true must route to repost_in_group (kind:16)"
+                    namespace, "nmp.nip29.publish_group_event",
+                    "repost=true must route through generic group publish"
                 );
 
                 let parsed: serde_json::Value =
                     serde_json::from_str(json).expect("repost payload must be valid JSON");
                 assert_eq!(parsed["group"]["local_id"].as_str().unwrap(), TEST_GROUP);
-                assert_eq!(parsed["target"]["event_id"].as_str().unwrap(), "event-xyz");
-                // author_pubkey absent → JSON null (serde serialises Option::None as null)
-                assert!(
-                    parsed["target"]["author_pubkey"].is_null(),
-                    "author_pubkey must be null when not provided"
+                assert_eq!(parsed["kind"].as_u64().unwrap(), 16);
+                assert_eq!(parsed["tags"][0][0].as_str().unwrap(), "e");
+                assert_eq!(parsed["tags"][0][1].as_str().unwrap(), "event-xyz");
+                assert_eq!(
+                    parsed["tags"].as_array().unwrap().len(),
+                    1,
+                    "author tag must be absent when no target author is provided"
                 );
             }
             other => panic!("expected DispatchShareToRoom, got {other:?}"),
@@ -1973,7 +1955,7 @@ mod tests {
             );
             let v = parsed.unwrap();
             assert_eq!(v["group"]["local_id"].as_str().unwrap(), tricky_group);
-            assert_eq!(v["target"]["event_id"].as_str().unwrap(), tricky_event_id);
+            assert_eq!(v["tags"][0][1].as_str().unwrap(), tricky_event_id);
         } else {
             panic!("expected DispatchShareToRoom");
         }
@@ -2453,6 +2435,7 @@ mod tests {
             root_tag_name: "A".to_string(),
             root_tag_value: root_val.to_string(),
             root_kind: "30023".to_string(),
+            root_author_pubkey: "e".repeat(64),
             parent_tag_name: "a".to_string(),
             parent_tag_value: root_val.to_string(),
             parent_kind: "30023".to_string(),
@@ -2634,7 +2617,7 @@ mod tests {
 
     // ─── Parity tests: kernel snapshot vs crate::room_home::query_room_home_snapshot
     //
-    // Each test injects the SAME event fixture into BOTH a real nostrdb (bespoke
+    // Each test injects the SAME event fixture into BOTH the legacy bespoke path
     // path: crate::room_home::query_room_home_snapshot) AND kernel AppState (kernel
     // path: project_room_home_snapshot). Both functions are called and their section
     // counts are compared field-for-field. Any drift in highlight-matching,
@@ -2791,8 +2774,8 @@ mod tests {
 
         // P1: parity_artifact_and_highlight_lane_counts_match
         //
-        // Inject one kind:11 artifact share and one kind:9802 highlight into BOTH a
-        // real nostrdb (for the bespoke crate::room_home::query_room_home_snapshot
+        // Inject one kind:11 artifact share and one kind:9802 highlight into BOTH the
+        // legacy path (for the bespoke crate::room_home::query_room_home_snapshot
         // call) AND kernel AppState (for project_room_home_snapshot). Assert that
         // artifacts, highlights, highlights_by_reference, and assembled_lanes counts
         // agree. Fails if highlight-matching or coordinate-precedence drifts.
@@ -2916,7 +2899,7 @@ mod tests {
         //
         // A lane with a comment but no highlights must survive the dormant filter in
         // both bespoke (build_visible_room_lanes:75) and kernel (assembled_lanes).
-        // The bespoke path reads kind:1111 from nostrdb; kernel reads from
+        // The bespoke path reads kind:1111 directly; kernel reads from
         // state.comment_threads. Both must produce 1 lane and 1 comments_by_reference.
         #[test]
         fn parity_comment_only_lane_not_dormant() {
@@ -2957,6 +2940,7 @@ mod tests {
                 root_tag_name: "A".to_string(),
                 root_tag_value: root_val.to_string(),
                 root_kind: "30023".to_string(),
+                root_author_pubkey: comment_ev.pubkey.to_hex(),
                 parent_tag_name: "a".to_string(),
                 parent_tag_value: root_val.to_string(),
                 parent_kind: "30023".to_string(),
@@ -2992,7 +2976,7 @@ mod tests {
         // P4: parity_full_lane_all_five_sections
         //
         // Full fixture: kind:11 artifact + kind:9802 highlight + kind:1111 comment.
-        // Inject into both nostrdb and kernel AppState. All five section counts AND
+        // Inject into both the legacy path and kernel AppState. All five section counts AND
         // lane content counts must agree between bespoke and kernel.
         #[test]
         fn parity_full_lane_all_five_sections() {
@@ -3040,6 +3024,7 @@ mod tests {
                 root_tag_name: "A".to_string(),
                 root_tag_value: root_val.to_string(),
                 root_kind: "30023".to_string(),
+                root_author_pubkey: comment_ev.pubkey.to_hex(),
                 parent_tag_name: "a".to_string(),
                 parent_tag_value: root_val.to_string(),
                 parent_kind: "30023".to_string(),

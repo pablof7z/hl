@@ -15,8 +15,9 @@
 use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
-use nostr_sdk::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+#[cfg(test)]
+use serde::Serialize;
 
 use crate::errors::CoreError;
 use crate::models::{Nip11Document, RelayDiagnostic, RelayStatus};
@@ -1176,16 +1177,15 @@ fn aggregate_state_label(total_visible_relays: u64, connected_count: u64) -> Str
 
 // -- NIP-65 (kind:10002) -----------------------------------------------------
 
-const KIND_RELAY_LIST: u16 = 10002;
-
 /// Build the `["r", url, marker?]` tags for the provided rows. Rows with
 /// neither `read` nor `write` are skipped — NIP-65 has no concept of a
 /// "disabled" relay entry, only "inbox/outbox/both".
 ///
 /// `pub(crate)` so the kernel `nip65_relay_role` parity test asserts the kernel's
 /// role-marker decision matches this bespoke reference (gotcha #7).
-pub(crate) fn nip65_tags(rows: &[RelayConfig]) -> Result<Vec<Tag>, CoreError> {
-    let mut tags: Vec<Tag> = Vec::new();
+#[cfg(test)]
+pub(crate) fn nip65_tags(rows: &[RelayConfig]) -> Result<Vec<Vec<String>>, CoreError> {
+    let mut tags: Vec<Vec<String>> = Vec::new();
     for row in rows {
         let marker = match (row.read, row.write) {
             (true, true) => None,
@@ -1193,31 +1193,28 @@ pub(crate) fn nip65_tags(rows: &[RelayConfig]) -> Result<Vec<Tag>, CoreError> {
             (false, true) => Some("write"),
             (false, false) => continue,
         };
-        let parts: Vec<String> = match marker {
+        tags.push(match marker {
             Some(m) => vec!["r".into(), row.url.clone(), m.into()],
             None => vec!["r".into(), row.url.clone()],
-        };
-        tags.push(
-            Tag::parse(parts).map_err(|e| CoreError::Other(format!("build relay tag: {e}")))?,
-        );
+        });
     }
     Ok(tags)
 }
 
 /// Parse a kind:10002 event into `(url, read, write)` rows.
-pub(crate) fn parse_nip65_event(event: &Event) -> Vec<(String, bool, bool)> {
+#[cfg(test)]
+pub(crate) fn parse_nip65_tags(tags: &[Vec<String>]) -> Vec<(String, bool, bool)> {
     let mut out: Vec<(String, bool, bool)> = Vec::new();
-    for tag in event.tags.iter() {
-        let slice = tag.as_slice();
-        if slice.first().map(String::as_str) != Some("r") {
+    for tag in tags.iter() {
+        if tag.first().map(String::as_str) != Some("r") {
             continue;
         }
-        let Some(url) = slice.get(1) else { continue };
+        let Some(url) = tag.get(1) else { continue };
         let url = url.trim().to_string();
         if url.is_empty() {
             continue;
         }
-        let (read, write) = match slice.get(2).map(String::as_str) {
+        let (read, write) = match tag.get(2).map(String::as_str) {
             Some("read") => (true, false),
             Some("write") => (false, true),
             _ => (true, true),
@@ -1229,11 +1226,9 @@ pub(crate) fn parse_nip65_event(event: &Event) -> Vec<(String, bool, bool)> {
 
 // -- NIP-78 app-data (kind:30078) for rooms/indexer flags --------------------
 
-const KIND_APP_DATA: u16 = 30078;
-const APP_DATA_D_TAG: &str = "com.highlighter.relays";
-
 /// Per-row payload stored in the NIP-78 event's JSON content. Flat shape so
 /// it round-trips losslessly.
+#[cfg(test)]
 #[derive(Debug, Serialize, Deserialize)]
 struct AppDataEntry {
     url: String,
@@ -1248,6 +1243,7 @@ struct AppDataEntry {
 ///
 /// `pub(crate)` so the kernel relay-app-data parity test can assert the kernel's
 /// `relay_app_data_content` matches this bespoke format byte-for-byte (gotcha #7).
+#[cfg(test)]
 pub(crate) fn app_data_content(rows: &[RelayConfig]) -> String {
     let entries: Vec<AppDataEntry> = rows
         .iter()
@@ -1261,8 +1257,9 @@ pub(crate) fn app_data_content(rows: &[RelayConfig]) -> String {
     serde_json::to_string(&entries).unwrap_or_else(|_| "[]".into())
 }
 
-fn parse_app_data_event(event: &Event) -> Vec<AppDataEntry> {
-    serde_json::from_str::<Vec<AppDataEntry>>(&event.content).unwrap_or_default()
+#[cfg(test)]
+fn parse_app_data_content(content: &str) -> Vec<AppDataEntry> {
+    serde_json::from_str::<Vec<AppDataEntry>>(content).unwrap_or_default()
 }
 
 // -- Tests -------------------------------------------------------------------
@@ -2173,17 +2170,15 @@ mod tests {
         let tags = nip65_tags(&sample_rows()).expect("build tags");
         let hl = tags
             .iter()
-            .find(|t| {
-                t.as_slice().get(1).map(String::as_str) == Some("wss://relay.highlighter.com")
-            })
+            .find(|t| t.get(1).map(String::as_str) == Some("wss://relay.highlighter.com"))
             .expect("hl tag");
-        assert_eq!(hl.as_slice().len(), 2);
+        assert_eq!(hl.len(), 2);
 
         let damus = tags
             .iter()
-            .find(|t| t.as_slice().get(1).map(String::as_str) == Some("wss://relay.damus.io"))
+            .find(|t| t.get(1).map(String::as_str) == Some("wss://relay.damus.io"))
             .expect("damus tag");
-        assert_eq!(damus.as_slice().get(2).map(String::as_str), Some("read"));
+        assert_eq!(damus.get(2).map(String::as_str), Some("read"));
     }
 
     #[test]
@@ -2191,20 +2186,15 @@ mod tests {
         let tags = nip65_tags(&sample_rows()).expect("build tags");
         assert!(tags
             .iter()
-            .all(|t| t.as_slice().get(1).map(String::as_str) != Some("wss://purplepag.es")));
+            .all(|t| t.get(1).map(String::as_str) != Some("wss://purplepag.es")));
     }
 
     #[test]
     fn nip65_roundtrip_preserves_read_write_flags() {
-        let keys = Keys::generate();
         let rows = sample_rows();
         let tags = nip65_tags(&rows).expect("build tags");
-        let event = EventBuilder::new(Kind::Custom(KIND_RELAY_LIST), "")
-            .tags(tags)
-            .sign_with_keys(&keys)
-            .expect("sign");
 
-        let parsed = parse_nip65_event(&event);
+        let parsed = parse_nip65_tags(&tags);
         assert_eq!(parsed.len(), 2);
 
         let hl = parsed
@@ -2222,16 +2212,10 @@ mod tests {
 
     #[test]
     fn app_data_content_round_trip_preserves_rooms_and_indexer() {
-        let keys = Keys::generate();
         let rows = sample_rows();
         let content = app_data_content(&rows);
-        let d_tag = Tag::parse(vec!["d".to_string(), APP_DATA_D_TAG.to_string()]).expect("d tag");
-        let event = EventBuilder::new(Kind::Custom(KIND_APP_DATA), content)
-            .tags([d_tag])
-            .sign_with_keys(&keys)
-            .expect("sign");
 
-        let entries = parse_app_data_event(&event);
+        let entries = parse_app_data_content(&content);
         assert_eq!(entries.len(), 2);
 
         let hl = entries
@@ -2249,14 +2233,9 @@ mod tests {
 
     #[test]
     fn parse_nip65_event_handles_missing_marker_as_both() {
-        let keys = Keys::generate();
-        let tag = Tag::parse(vec!["r".to_string(), "wss://one.example".to_string()]).expect("tag");
-        let event = EventBuilder::new(Kind::Custom(KIND_RELAY_LIST), "")
-            .tags([tag])
-            .sign_with_keys(&keys)
-            .expect("sign");
+        let tags = vec![vec!["r".to_string(), "wss://one.example".to_string()]];
 
-        let parsed = parse_nip65_event(&event);
+        let parsed = parse_nip65_tags(&tags);
         assert_eq!(parsed.len(), 1);
         assert!(parsed[0].1 && parsed[0].2);
     }

@@ -20,7 +20,7 @@
 //! do NOT belong here. Append write-side additions to the bottom of each
 //! match in actor.rs.
 
-use nmp_ffi::NmpApp;
+use nmp_native_runtime::NmpApp;
 use serde_json::json;
 
 use crate::kernel::action::RelayRole;
@@ -173,7 +173,7 @@ fn relay_app_data_event_json(rows: &[RelayAppDataRow]) -> String {
 /// `KernelEvent`s directly).
 pub(crate) fn run_effect_add_relay(url: String, role: String, nmp: Option<&NmpHandle>) {
     let Some(handle) = nmp else { return };
-    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+    let nmp_ref: &NmpApp = &handle.app;
     let _ = nmp_ref
         .actor_sender()
         .send(nmp_core::actor::ActorCommand::Relay(
@@ -184,7 +184,7 @@ pub(crate) fn run_effect_add_relay(url: String, role: String, nmp: Option<&NmpHa
 /// Execute `Effect::RemoveRelay`.
 pub(crate) fn run_effect_remove_relay(url: String, nmp: Option<&NmpHandle>) {
     let Some(handle) = nmp else { return };
-    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+    let nmp_ref: &NmpApp = &handle.app;
     let _ = nmp_ref
         .actor_sender()
         .send(nmp_core::actor::ActorCommand::Relay(
@@ -198,7 +198,7 @@ pub(crate) fn run_effect_remove_relay(url: String, nmp: Option<&NmpHandle>) {
 /// `ActorCommand::AddRelay` with the new role (T66a upsert semantics).
 pub(crate) fn run_effect_set_relay_role(url: String, role: String, nmp: Option<&NmpHandle>) {
     let Some(handle) = nmp else { return };
-    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+    let nmp_ref: &NmpApp = &handle.app;
     // T66a: AddRelay on an existing URL is an upsert (overrides the role).
     let _ = nmp_ref
         .actor_sender()
@@ -210,7 +210,7 @@ pub(crate) fn run_effect_set_relay_role(url: String, role: String, nmp: Option<&
 /// Execute `Effect::PublishRelayAppData`.
 pub(crate) fn run_effect_publish_relay_app_data(json: String, nmp: Option<&NmpHandle>) {
     let Some(handle) = nmp else { return };
-    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+    let nmp_ref: &NmpApp = &handle.app;
     let Ok(value) = serde_json::from_str::<serde_json::Value>(&json) else {
         tracing::warn!("PublishRelayAppData: failed to deserialise template — no-op");
         return;

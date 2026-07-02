@@ -10,8 +10,8 @@ import Observation
 /// a dedicated `@Observable` store (e.g. `RoomStore`) whose lifetime
 /// matches the view. That keeps
 /// Swift Observation granular and keeps the architectural contract that
-/// nostrdb is the only source of truth: any data Swift shows must have
-/// been read from (or written to) nostrdb first.
+/// Rust/NMP is the only source of truth: any data Swift shows must come
+/// from NMP-owned core snapshots.
 @MainActor
 @Observable
 final class HighlighterStore {
@@ -28,7 +28,7 @@ final class HighlighterStore {
     /// Transient toast shown when Rust or a platform handoff requests an
     /// app-scope banner. Cleared by the banner after a few seconds.
     var shareToast: String?
-    /// Render projection for requested profile pubkeys. Rust/nostrdb remain
+    /// Render projection for requested profile pubkeys. Rust/NMP remain
     /// the source of truth; this app-scope snapshot only lets existing
     /// SwiftUI surfaces render names and avatars synchronously, then refresh
     /// when a fresh kind:0 arrives from a relay.

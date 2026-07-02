@@ -43,56 +43,22 @@
 //! synchronous and non-blocking (FlatBuffers decode only — no I/O). D6: decode
 //! errors leave `AppState` fields unchanged (silent no-op).
 
-use std::ffi::CString;
-use std::os::raw::{c_char, c_int};
-
 use nmp_core::typed_projections::decode_profile;
-use nmp_ffi::NmpApp;
 
 use crate::kernel::actor::NmpHandle;
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::{CommunityRow, ProfileSnapshot, ViewSnapshot};
 
-// ─── nmp-ffi resolve_ref constants (ADR-0063 Lane H) ────────────────────────
-
-// ADR-0063 Lane D/H: the per-kind `nmp_app_claim_profile` /
-// `nmp_app_release_profile` symbols were deleted; profiles now resolve through
-// the unified, origin-blind `nmp_app_resolve_ref` / `nmp_app_release_ref`
-// C-ABI (both `#[no_mangle] extern "C"` in nmp-ffi/src/resolve_ref.rs). We
-// declare them here to drive the profiles effect runner without a wrapper.
-#[allow(improper_ctypes)] // NmpApp is opaque; the pointer is safe.
-extern "C" {
-    fn nmp_app_resolve_ref(
-        app: *mut NmpApp,
-        namespace: c_int,
-        key: *const c_char,
-        consumer_id: *const c_char,
-        shape: c_int,
-        liveness: c_int,
-    );
-    fn nmp_app_release_ref(
-        app: *mut NmpApp,
-        namespace: c_int,
-        key: *const c_char,
-        consumer_id: *const c_char,
-    );
-}
-
-// `RefNamespace` FFI code: 0 = Profile (resolve_ref.rs `decode_namespace`).
-const REF_NAMESPACE_PROFILE: c_int = 0;
-
-// `RefShape` FFI code: 1 = profile.card — the full `ProfileCard` shape used by
-// an open profile screen (resolve_ref.rs `decode_shape` `(0,1)`).
-const REF_SHAPE_PROFILE_CARD: c_int = 1;
-
-// `RefLiveness` int (D6: 0 = CacheOk, non-zero = Live; refs.rs `from_ffi`).
-// We use `1` (Live/Tailing) for open profile views so profile edits arrive
-// reactively while the view is open.
-const LIVENESS_LIVE: c_int = 1;
+// ─── resolve_ref (ADR-0063 Lane H) ──────────────────────────────────────────
+//
+// The per-kind `nmp_app_claim_profile` / `nmp_app_release_profile` C-ABI
+// symbols were deleted; profiles resolve through the unified, origin-blind
+// `NmpApp::resolve_ref` / `NmpApp::release_ref` (typed — no C-ABI namespace/
+// shape/liveness int codes anymore).
 
 /// Stable consumer-id prefix. The per-pubkey suffix makes each profile view
-/// an independent refcount owner. Must not contain NUL bytes.
+/// an independent refcount owner.
 const CONSUMER_ID_PREFIX: &str = "hl.profile.";
 
 // ─── READ side: own profile projection ──────────────────────────────────────
@@ -213,66 +179,31 @@ pub(crate) fn reduce_action_release_profile(pubkey: String) -> Vec<Effect> {
 /// directly into the reducer via `Cmd::Event`).
 pub(crate) fn run_effect_claim_profile(pubkey: String, nmp: Option<&NmpHandle>) {
     let Some(handle) = nmp else { return };
-
     let consumer_id = format!("{CONSUMER_ID_PREFIX}{pubkey}");
-
-    let pubkey_c = match CString::new(pubkey) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let consumer_c = match CString::new(consumer_id) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. pubkey_c and consumer_c are valid
-    // CStrings alive for the duration of this call. nmp_app_resolve_ref is
-    // FFI-clean (null/invalid key is a silent no-op — nmp D6 contract).
-    unsafe {
-        nmp_app_resolve_ref(
-            handle.ptr.as_ptr(),
-            REF_NAMESPACE_PROFILE,
-            pubkey_c.as_ptr(),
-            consumer_c.as_ptr(),
-            REF_SHAPE_PROFILE_CARD,
-            LIVENESS_LIVE, // liveness = Live (Tailing sub)
-        );
-    }
+    // D6: an invalid (non-hex) pubkey is a silent no-op inside resolve_ref.
+    handle.app.resolve_ref(
+        nmp_core::RefNamespace::Profile,
+        pubkey,
+        consumer_id,
+        nmp_core::RefShape::Profile(nmp_core::ProfileShape::Card),
+        nmp_core::RefLiveness::Live, // Tailing sub — open profile view needs live edits.
+    );
 }
 
-/// Execute `Effect::ReleaseProfile` — calls `nmp_app_release_ref` for the
+/// Execute `Effect::ReleaseProfile` — calls `NmpApp::release_ref` for the
 /// `(Profile, pubkey)` reference under consumer-id `"hl.profile.<pubkey>"`.
 ///
 /// Decrements the per-consumer refcount. When the count reaches zero NMP
 /// cancels the kind:0 subscription and tears down the resolver slot. D6:
-/// null/invalid key is a silent no-op in nmp-ffi.
+/// releasing an unknown or already-released pair is a silent no-op.
 ///
 /// No-op if `nmp` is `None` (test mode).
 pub(crate) fn run_effect_release_profile(pubkey: String, nmp: Option<&NmpHandle>) {
     let Some(handle) = nmp else { return };
-
     let consumer_id = format!("{CONSUMER_ID_PREFIX}{pubkey}");
-
-    let pubkey_c = match CString::new(pubkey) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-    let consumer_c = match CString::new(consumer_id) {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-
-    // SAFETY: handle.ptr is a valid non-null NmpApp pointer kept alive by
-    // NmpHandle for the full actor lifetime. CStrings alive for duration of call.
-    unsafe {
-        nmp_app_release_ref(
-            handle.ptr.as_ptr(),
-            REF_NAMESPACE_PROFILE,
-            pubkey_c.as_ptr(),
-            consumer_c.as_ptr(),
-        );
-    }
+    handle
+        .app
+        .release_ref(nmp_core::RefNamespace::Profile, pubkey, consumer_id);
 }
 
 // ─── Snapshot projection ─────────────────────────────────────────────────────

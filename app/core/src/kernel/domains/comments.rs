@@ -56,10 +56,9 @@ use std::sync::Arc;
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
 use nmp_core::substrate::{ActionPayload, ObservedProjection, ObservedProjectionRegistrar};
 use nmp_core::ObservedProjectionSink;
-use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
-use nmp_nip22::{
-    CommentThreadProjection, CommentThreadSnapshot, PostCommentAction, KIND_NIP22_COMMENT,
-};
+use nmp_native_runtime::NmpApp;
+use nmp_nip22::{CommentThreadProjection, CommentThreadSnapshot, KIND_NIP22_COMMENT};
+use nmp_replies::ReplyAction;
 use tokio::sync::mpsc;
 
 use crate::kernel::action::{KernelEvent, PostCommentPayload};
@@ -133,8 +132,8 @@ pub(crate) fn reduce_event_comment_thread_updated(
 
 /// Handle the `hl.comment.post` envelope action.
 ///
-/// Serialises the NIP-22 `PostCommentAction` payload via `serde_json` and emits
-/// `Effect::DispatchCommentAction` with namespace `"nmp.nip22.post_comment"`.
+/// Serialises the app-facing `nmp-replies` reply payload via `serde_json` and
+/// emits `Effect::DispatchCommentAction`.
 ///
 /// D6 guards:
 /// - Empty `root_tag_value` (trimmed) → return `vec![]` (no-op).
@@ -151,26 +150,36 @@ pub(crate) fn reduce_action_post_comment(
         return vec![];
     }
 
-    // Build serde wire shape matching `nmp_nip22::PostCommentAction`.
-    // Use serde_json::json! (never format!) for safe serialisation.
-    let mut json_map = serde_json::json!({
-        "root_tag_name": payload.root_tag_name,
-        "root_tag_value": payload.root_tag_value,
-        "root_kind": payload.root_kind,
-        "content": payload.content,
-    });
+    let mut action = ReplyAction {
+        target_event_id: None,
+        target_kind: payload.root_kind,
+        target_author_pubkey: payload.root_author_pubkey,
+        target_address: None,
+        target_external_uri: None,
+        relay_hint: None,
+        content: payload.content,
+    };
 
     if let Some(parent_id) = payload.parent_event_id {
-        json_map["parent_event_id"] = serde_json::Value::String(parent_id);
-    }
-    if let Some(root_author) = payload.root_author_pubkey {
-        json_map["root_author_pubkey"] = serde_json::Value::String(root_author);
-    }
-    if let Some(parent_author) = payload.parent_author_pubkey {
-        json_map["parent_author_pubkey"] = serde_json::Value::String(parent_author);
+        action.target_event_id = Some(parent_id);
+        action.target_kind = KIND_NIP22_COMMENT;
+        action.target_author_pubkey = payload.parent_author_pubkey;
+    } else {
+        match payload.root_tag_name.as_str() {
+            "A" => action.target_address = Some(payload.root_tag_value),
+            "E" => action.target_event_id = Some(payload.root_tag_value),
+            "I" => action.target_external_uri = Some(payload.root_tag_value),
+            other => {
+                tracing::trace!(
+                    root_tag_name = other,
+                    "comments::reduce_action_post_comment: unsupported root tag - no effect emitted"
+                );
+                return vec![];
+            }
+        }
     }
 
-    let json = match serde_json::to_string(&json_map) {
+    let json = match serde_json::to_string(&action) {
         Ok(s) => s,
         Err(e) => {
             tracing::warn!(error = %e, "comments::reduce_action_post_comment: serde error — no effect emitted");
@@ -183,8 +192,8 @@ pub(crate) fn reduce_action_post_comment(
 
 // ─── Effect runner ───────────────────────────────────────────────────────────
 
-/// Execute `Effect::DispatchCommentAction` — calls `nmp_app_dispatch_action`
-/// with namespace `"nmp.nip22.post_comment"` and the serialised JSON payload.
+/// Execute `Effect::DispatchCommentAction` through the `nmp.replies.reply`
+/// action owner.
 ///
 /// Fire-and-forget (D6, Non-Negotiable #3): the returned correlation_id JSON
 /// string is freed and discarded. The authoritative comment thread arrives back
@@ -199,10 +208,10 @@ pub(crate) fn run_effect_dispatch_comment_action(
 ) {
     let Some(handle) = nmp else { return };
 
-    let action = match serde_json::from_str::<PostCommentAction>(&json) {
+    let action = match serde_json::from_str::<ReplyAction>(&json) {
         Ok(a) => a,
         Err(e) => {
-            tracing::warn!(error = %e, "comments: failed to deserialise PostCommentAction");
+            tracing::warn!(error = %e, "comments: failed to deserialise ReplyAction");
             return;
         }
     };
@@ -210,17 +219,12 @@ pub(crate) fn run_effect_dispatch_comment_action(
     let correlation_id = uuid::Uuid::new_v4().to_string();
     let envelope = encode_dispatch_envelope(
         &correlation_id,
-        "nmp.nip22.post_comment",
+        "nmp.replies.reply",
         DISPATCH_ENVELOPE_SCHEMA_VERSION,
         &payload_bytes,
     );
 
-    let result_ptr =
-        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
-
-    if !result_ptr.is_null() {
-        nmp_free_string(result_ptr);
-    }
+    let _ = nmp_uniffi_support::dispatch_action_vec(&handle.app, envelope);
 }
 
 // ─── Snapshot computation ─────────────────────────────────────────────────────
@@ -375,6 +379,8 @@ mod tests {
             root_tag_name: "E".to_string(),
             root_tag_value: root_val.to_string(),
             root_kind: "1".to_string(),
+            root_author_pubkey: "aaaa000000000000000000000000000000000000000000000000000000000001"
+                .to_string(),
             parent_tag_name: "e".to_string(),
             parent_tag_value: parent_val.to_string(),
             parent_kind: "1".to_string(),
@@ -429,7 +435,7 @@ mod tests {
     // 7-T2: post_comment_dispatches_nip22_with_correct_payload
     //
     // hl.comment.post must produce exactly one Effect::DispatchCommentAction
-    // with a serde-valid JSON payload containing all PostCommentAction fields.
+    // with a serde-valid JSON payload containing all ReplyAction fields.
     #[test]
     fn post_comment_dispatches_nip22_with_correct_payload() {
         let mut state = make_state();
@@ -454,9 +460,11 @@ mod tests {
             Effect::DispatchCommentAction { json } => {
                 let parsed: serde_json::Value =
                     serde_json::from_str(json).expect("payload must be valid JSON");
-                assert_eq!(parsed["root_tag_name"].as_str().unwrap(), "E");
-                assert_eq!(parsed["root_tag_value"].as_str().unwrap(), root);
-                assert_eq!(parsed["root_kind"].as_u64().unwrap(), 1);
+                assert_eq!(parsed["target_event_id"].as_str().unwrap(), root);
+                assert_eq!(parsed["target_kind"].as_u64().unwrap(), 1);
+                assert!(parsed["target_author_pubkey"].is_null());
+                assert!(parsed["target_address"].is_null());
+                assert!(parsed["target_external_uri"].is_null());
                 assert_eq!(parsed["content"].as_str().unwrap(), "hello world");
             }
             _ => panic!("expected DispatchCommentAction"),
@@ -580,7 +588,7 @@ mod tests {
 
     // 7-T4: reply_sets_correct_parent_scope
     //
-    // Posting with parent_event_id=Some(...) includes it in the JSON payload.
+    // Posting with parent_event_id=Some(...) targets the parent comment.
     #[test]
     fn reply_sets_correct_parent_scope() {
         let mut state = make_state();
@@ -607,9 +615,13 @@ mod tests {
             Effect::DispatchCommentAction { json } => {
                 let parsed: serde_json::Value = serde_json::from_str(json).unwrap();
                 assert_eq!(
-                    parsed["parent_event_id"].as_str().unwrap(),
+                    parsed["target_event_id"].as_str().unwrap(),
                     parent_id,
-                    "parent_event_id must be in payload"
+                    "parent event must be the reply action target"
+                );
+                assert_eq!(
+                    parsed["target_kind"].as_u64().unwrap(),
+                    KIND_NIP22_COMMENT as u64
                 );
             }
             _ => panic!("expected DispatchCommentAction"),
@@ -634,6 +646,7 @@ mod tests {
             root_tag_name: "E".to_string(),
             root_tag_value: root.to_string(),
             root_kind: "30023".to_string(),
+            root_author_pubkey: author.to_string(),
             parent_tag_name: "e".to_string(),
             parent_tag_value: root.to_string(),
             parent_kind: "30023".to_string(),
@@ -727,6 +740,8 @@ mod tests {
             root_tag_name: "E".to_string(),
             root_tag_value: root.to_string(),
             root_kind: "1".to_string(),
+            root_author_pubkey: "aaaa000000000000000000000000000000000000000000000000000000000001"
+                .to_string(),
             parent_tag_name: "e".to_string(),
             // parent != root → this is a reply
             parent_tag_value: "aaaa000000000000000000000000000000000000000000000000000000000001"

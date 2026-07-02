@@ -64,7 +64,7 @@ use std::sync::{Arc, Mutex};
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
 use nmp_core::substrate::{ActionPayload, ObservedProjection, ObservedProjectionRegistrar};
 use nmp_core::ObservedProjectionSink;
-use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
+use nmp_native_runtime::NmpApp;
 use nmp_nip51::{BookmarkItem, BookmarkListProjection, BookmarkUpdateInput};
 
 use crate::kernel::app::AppState;
@@ -315,12 +315,7 @@ pub(crate) fn run_effect_dispatch_bookmark_action(
         &payload_bytes,
     );
 
-    let result_ptr =
-        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
-
-    if !result_ptr.is_null() {
-        nmp_free_string(result_ptr);
-    }
+    let _ = nmp_uniffi_support::dispatch_action_vec(&handle.app, envelope);
 }
 
 // ─── Projection registration ─────────────────────────────────────────────────
@@ -376,7 +371,15 @@ pub(crate) fn register_bookmark_list_projection(
     // and BookmarkListMetadata do not (only Serialize) at b4404159 — so we
     // serialise the items Vec directly to avoid the asymmetry.
     let typed_proj = Arc::clone(&projection);
-    nmp_ref.register_typed_snapshot_projection(BOOKMARK_SCHEMA_ID, move || {
+    let Ok(projection_key) = nmp_ownership::DynamicProjectionKey::app_owned(BOOKMARK_SCHEMA_ID)
+    else {
+        tracing::warn!(
+            key = BOOKMARK_SCHEMA_ID,
+            "bookmarks::register_bookmark_list_projection: invalid app-owned projection key"
+        );
+        return;
+    };
+    nmp_ref.register_typed_snapshot_projection(projection_key, move || {
         let snapshot = typed_proj.snapshot();
         // Serialise items Vec<BookmarkItem> to JSON bytes (serde envelope).
         let payload = match serde_json::to_vec(&snapshot.items) {

@@ -17,7 +17,7 @@
 //! ## NMP projection seam
 //!
 //! `nmp-defaults::register_longform_projection` is called by
-//! `nmp_defaults::register_defaults` (which hl calls at boot in `start_nmp_app`)
+//! hl's explicit `start_nmp_app` composition (ADR-0069)
 //! with the default `NmpDefaults { longform: true, .. }`. The projection
 //! observer accumulates kind:30023 events; the typed FlatBuffers sidecar arrives
 //! via the update callback as `KernelEvent::NmpSnapshotFrame` with
@@ -44,7 +44,7 @@
 
 use std::collections::BTreeMap;
 
-use nmp_content::wire::longform_fb::decode_longform_articles;
+use nmp_nip23::wire::longform_fb::decode_longform_articles;
 
 use crate::kernel::app::AppState;
 use crate::kernel::snapshot::{
@@ -58,7 +58,7 @@ use crate::kernel::view::ViewId;
 pub(crate) const ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX: &str = "hl.feed.article_highlights.";
 
 // Re-export so `projections.rs` can match without importing nmp_content directly.
-pub(crate) use nmp_content::wire::longform_fb::SCHEMA_ID as ARTICLES_SCHEMA_ID;
+pub(crate) use nmp_nip23::wire::longform_fb::SCHEMA_ID as ARTICLES_SCHEMA_ID;
 
 // ─── READ side: projection frame apply ──────────────────────────────────────
 
@@ -87,8 +87,8 @@ pub(crate) fn apply_articles(state: &mut AppState, payload: &[u8]) {
                         address: address.clone(),
                         id: doc.id.clone(),
                         author_pubkey: doc.author_pubkey.clone(),
-                        author_display_name: doc.author_display_name.clone(),
-                        author_picture_url: doc.author_picture_url.clone(),
+                        author_display_name: None,
+                        author_picture_url: None,
                         title: doc.title.clone(),
                         summary: doc.summary.clone(),
                         hero_image_url: doc.hero_image_url.clone(),
@@ -203,8 +203,8 @@ fn content_tree_json(bytes: &[u8]) -> String {
 /// enriched NIP-84/NIP-73 fields the highlight feed does — quote/context/clip/
 /// image), sorted newest-first and deduped by event id. Empty when the feed has
 /// not been registered yet (the brief window between OpenView and the first
-/// page) — the bespoke lane likewise shows the seeded article with no overlays
-/// until ndb answers. Mirrors `highlights::query_for_article` (kind:9802 `#a`).
+/// page) — the seeded article can show before the NMP feed answers.
+/// Mirrors `highlights::query_for_article` (kind:9802 `#a`).
 fn article_highlight_rows(state: &AppState, address: &str) -> Vec<HighlightRow> {
     let key = format!("{ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX}{address}");
     let Some(fs) = state.article_highlight_feeds.get(&key) else {
@@ -275,8 +275,8 @@ mod tests {
     use crate::kernel::actor::{reduce, Cmd};
     use crate::kernel::clock::{Clock, ManualClock};
     use crate::kernel::effect::Effect;
-    use nmp_content::longform::ArticleFeedItem;
-    use nmp_content::wire::longform_fb::encode_longform_articles;
+    use nmp_nip23::wire::longform_fb::encode_longform_articles;
+    use nmp_nip23::ArticleFeedItem;
     use std::collections::BTreeMap;
 
     fn make_state() -> AppState {
@@ -558,7 +558,7 @@ mod tests {
     }
 
     // Phase 7: the article-highlight feed scope is the kind:9802 `#a` filter that
-    // mirrors the bespoke `highlights::query_for_article` NdbFilter exactly.
+    // mirrors the bespoke `highlights::query_for_article` filter exactly.
     #[test]
     fn article_highlight_feed_scope_filters_kind_and_address() {
         use nmp_core::PullScope;

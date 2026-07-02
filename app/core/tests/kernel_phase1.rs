@@ -8,8 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use highlighter_core::capabilities::{CapabilityRequest, CapabilityResult, KeychainResult};
 use highlighter_core::kernel::{
-    AppAction, AppConfig, AppRootSnapshot, HighlighterObserver, RootShellSnapshot, RootTab, ViewId,
-    ViewRoute, ViewSnapshot,
+    AppAction, AppConfig, HighlighterObserver, RootTab, ViewId, ViewRoute, ViewSnapshot,
 };
 use highlighter_core::HighlighterApp;
 
@@ -61,6 +60,11 @@ fn make_app() -> (
     let obs = Arc::new(RecordingObserver::default());
     app.set_observer(obs.clone());
     (app, obs, tmp)
+}
+
+fn fixture_nsec() -> String {
+    nmp_nostr_id::encode_nsec("0000000000000000000000000000000000000000000000000000000000000001")
+        .expect("fixture secret key must encode as nsec")
 }
 
 // ─── Dispatch returns unit (gate 1) ─────────────────────────────────────────
@@ -174,9 +178,9 @@ async fn session_restore_success_route_selection() {
 
     // Provide a successful session secret.
     app.provide_capability_result(CapabilityResult::Keychain(KeychainResult::SessionSecret(
-        Some("my_nsec_key".into()),
+        Some(fixture_nsec()),
     )));
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     if let Some(ViewSnapshot::AppRoot(snap)) = app.current_snapshot(ViewId::AppRoot) {
         assert!(snap.session_present);
@@ -198,7 +202,7 @@ async fn logout_clears_session_via_actor() {
     // Set up session.
     app.dispatch(AppAction::CompleteOnboarding);
     app.provide_capability_result(CapabilityResult::Keychain(KeychainResult::SessionSecret(
-        Some("nsec_placeholder".into()),
+        Some(fixture_nsec()),
     )));
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 

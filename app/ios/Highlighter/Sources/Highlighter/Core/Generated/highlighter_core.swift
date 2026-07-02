@@ -5214,9 +5214,8 @@ public func FfiConverterTypeBookmarksSnapshot_lower(_ value: BookmarksSnapshot) 
 
 
 /**
- * Local nostrdb cache statistics. Rough — `disk_bytes` is the sum of file
- * sizes in the ndb directory; `event_count_estimate` is an upper bound
- * returned by a single kinds-wildcard query.
+ * Local NMP cache statistics. Rough — `disk_bytes` is the sum of persisted
+ * store files; `event_count_estimate` is an upper-bound diagnostic.
  */
 public struct CacheStats {
     public var diskBytes: UInt64
@@ -23351,11 +23350,11 @@ public func FfiConverterTypeRelayDiagRow_lower(_ value: RelayDiagRow) -> RustBuf
 
 
 /**
- * Live diagnostic snapshot for a single relay in the nostr-sdk connection
- * pool. `NostrRuntime` refreshes the bounded map from the pool on demand
- * and updates it from relay status notifications; Swift receives first
- * paint through `NetworkSettingsSnapshot` and listens for diagnostics
- * deltas to render changes.
+ * Live diagnostic snapshot for a single relay in the NMP connection pool.
+ * The Rust core refreshes the bounded map from runtime state and updates it
+ * from relay status notifications; Swift receives first paint through
+ * `NetworkSettingsSnapshot` and listens for diagnostics deltas to render
+ * changes.
  */
 public struct RelayDiagnostic {
     public var url: String
@@ -28290,7 +28289,7 @@ public enum DataChangeType {
      * The current user's NIP-51 kind:10003 bookmark list was updated
      * (either by us via `toggle_bookmark` or by another client relaying a
      * newer event). App-scope delta — Swift re-queries the authoritative
-     * list from nostrdb.
+     * list from the NMP-owned core snapshot.
      */
     case bookmarksUpdated
     /**
@@ -28309,7 +28308,7 @@ public enum DataChangeType {
      */
     case webBookmarksUpdated
     /**
-     * A referenced NIP-19 entity resolved from nostrdb after its
+     * A referenced NIP-19 entity resolved by the NMP-owned core after its
      * view-scoped subscription warmed the cache. Swift applies the payload
      * directly to the card that installed the subscription.
      */
@@ -30940,10 +30939,9 @@ extension RelayRole: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Connection state of a single relay the app is talking to. Mirrors the
- * nostr-sdk internal `RelayStatus` but trimmed to the values the UI cares
- * about. `Initialized` / `Pending` / `Sleeping` are collapsed into
- * `Connecting` — from the user's perspective all three mean "not yet on
- * the wire but trying".
+ * NMP relay runtime state but trims it to the values the UI cares about.
+ * Startup/pending/sleeping states collapse into `Connecting` — from the
+ * user's perspective they all mean "not yet on the wire but trying".
  */
 
 public enum RelayStatus {

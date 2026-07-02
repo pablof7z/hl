@@ -654,10 +654,9 @@ impl Default for NostrConnectOptions {
 }
 
 /// Connection state of a single relay the app is talking to. Mirrors the
-/// nostr-sdk internal `RelayStatus` but trimmed to the values the UI cares
-/// about. `Initialized` / `Pending` / `Sleeping` are collapsed into
-/// `Connecting` — from the user's perspective all three mean "not yet on
-/// the wire but trying".
+/// NMP relay runtime state but trims it to the values the UI cares about.
+/// Startup/pending/sleeping states collapse into `Connecting` — from the
+/// user's perspective they all mean "not yet on the wire but trying".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum RelayStatus {
     Connecting,
@@ -667,11 +666,11 @@ pub enum RelayStatus {
     Banned,
 }
 
-/// Live diagnostic snapshot for a single relay in the nostr-sdk connection
-/// pool. `NostrRuntime` refreshes the bounded map from the pool on demand
-/// and updates it from relay status notifications; Swift receives first
-/// paint through `NetworkSettingsSnapshot` and listens for diagnostics
-/// deltas to render changes.
+/// Live diagnostic snapshot for a single relay in the NMP connection pool.
+/// The Rust core refreshes the bounded map from runtime state and updates it
+/// from relay status notifications; Swift receives first paint through
+/// `NetworkSettingsSnapshot` and listens for diagnostics deltas to render
+/// changes.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RelayDiagnostic {
     pub url: String,
@@ -709,9 +708,8 @@ pub struct Nip11Document {
     pub icon: Option<String>,
 }
 
-/// Local nostrdb cache statistics. Rough — `disk_bytes` is the sum of file
-/// sizes in the ndb directory; `event_count_estimate` is an upper bound
-/// returned by a single kinds-wildcard query.
+/// Local NMP cache statistics. Rough — `disk_bytes` is the sum of persisted
+/// store files; `event_count_estimate` is an upper-bound diagnostic.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CacheStats {
     pub disk_bytes: u64,

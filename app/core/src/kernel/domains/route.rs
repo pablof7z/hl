@@ -5,9 +5,6 @@
 //!         (actions); OnboardingStateLoaded (event); LoadOnboardingFlag (effect);
 //!         and the project_app_root / project_root_shell snapshot helpers.
 
-use nostr::nips::nip19::ToBech32;
-use nostr::PublicKey;
-
 use crate::onboarding::OnboardingStore;
 
 use crate::kernel::app::{AppState, SessionState};
@@ -251,9 +248,7 @@ pub(crate) fn project_app_root(state: &AppState) -> AppRootSnapshot {
     let (active_pubkey_hex, active_pubkey_npub) = match &state.session {
         SessionState::Present { pubkey, .. } => {
             let hex = pubkey.clone();
-            let npub = PublicKey::from_hex(&hex)
-                .ok()
-                .and_then(|pk| pk.to_bech32().ok());
+            let npub = nmp_nostr_id::encode_npub(&hex).ok();
             (Some(hex), npub)
         }
         _ => (None, None),

@@ -36,7 +36,7 @@
 //!   (`PageFilled`). The effect runner advances `after_seq` *per page* so the
 //!   next `DrainFeed` continues from where we left off.
 //! - **D5 (bounded):** Page size and raw-byte budget are capped by constants
-//!   from `nmp_ffi::pull` (`MAX_PULL_PAGE_ENTRIES`, `MAX_PULL_PAGE_RAW_BYTES`).
+//!   from `NmpApp::mirror_pull_page_raw_bytes` callers (locally-defined page-size constants).
 //! - **D6 (no-op on garbage):** malformed binary wire → no-op event, no panic.
 //! - **Gap rebase:** on a `Gap` result the `FeedState` is cleared and the cursor
 //!   is reset to `first_available_seq` per ADR-0058 §10.
@@ -184,7 +184,7 @@ pub fn highlight_feed_scope() -> PullScope {
 ///
 /// Phase 7: the article reader overlay needs the highlights anchored to the
 /// article being read. Mirrors the bespoke `highlights::query_for_article`
-/// NdbFilter (`kinds([9802]).tags([address], 'a')`) — but expressed as an
+/// filter (`kinds([9802]).tags([address], 'a')`) — but expressed as an
 /// `InterestShape` so it flows through the same feed-pull engine the room-lane
 /// (4I) and home (4G/4H) feeds use. `address` is the `"<kind>:<pubkey>:<d>"`
 /// coordinate (D3: opaque from the caller, never constructed by the kernel).
@@ -349,7 +349,7 @@ pub(crate) fn run_effect_register_feed_cursor(
         tracing::debug!(?key, "RegisterFeedCursor: no live NmpApp (test mode)");
         return 0;
     };
-    let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
+    let nmp_ref: &nmp_native_runtime::NmpApp = &handle.app;
 
     let cursor_handle = {
         let slot = nmp_ref.pull_cursor_registry_handle();
@@ -415,7 +415,7 @@ pub(crate) fn run_effect_register_feed_cursor(
 /// Call `nmp_app_pull_page` and emit a `KernelEvent::FeedPage` with the decoded rows.
 ///
 /// This is the ADR-0058 drain step. Decodes the binary Page wire format from
-/// `nmp_ffi::pull::nmp_app_pull_page`:
+/// `NmpApp::mirror_pull_page_raw_bytes`:
 ///
 /// ```text
 /// result := u8 variant
@@ -441,8 +441,6 @@ pub(crate) fn run_effect_drain_feed(
     tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
     nmp: Option<&NmpHandle>,
 ) {
-    use nmp_ffi::pull::{nmp_mirror_free_bytes, nmp_mirror_pull_page};
-
     let Some(handle) = nmp else {
         tracing::debug!(?key, "DrainFeed: no live NmpApp (test mode)");
         return;
@@ -453,25 +451,14 @@ pub(crate) fn run_effect_drain_feed(
         return;
     }
 
-    // SAFETY: `handle.ptr` is a valid, non-null NmpApp pointer for the
-    // duration of this call (NmpHandle is kept alive by the actor task).
-    let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
+    let nmp_ref: &nmp_native_runtime::NmpApp = &handle.app;
 
-    // Call nmp_app_pull_page. It is `pub extern "C"` (not `unsafe`) in nmp-ffi,
-    // so the call itself does not require an unsafe block; we cast the pointer
-    // here, which is safe because nmp_ref is a valid reference to an NmpApp.
-    let owned_bytes = nmp_mirror_pull_page(
-        nmp_ref as *const nmp_ffi::NmpApp,
-        cursor_id,
-        FEED_PAGE_SIZE,
-        FEED_RAW_BYTE_CAP,
-    );
+    // Rust owns the returned Vec<u8> — no separate free call (nmp-ffi's
+    // NmpMirrorBytes ptr/len/cap wrapper + nmp_mirror_free_bytes are gone).
+    let owned_bytes =
+        nmp_ref.mirror_pull_page_raw_bytes(cursor_id, FEED_PAGE_SIZE, FEED_RAW_BYTE_CAP as usize);
 
-    // Borrow the bytes, then free — no early return between borrow and free.
     let result = decode_pull_page_wire(key.clone(), cursor_id, &owned_bytes);
-
-    // nmp_free_bytes is `pub extern "C"` (not `unsafe`) — call directly.
-    nmp_mirror_free_bytes(owned_bytes);
 
     match result {
         Some(event) => {
@@ -496,7 +483,7 @@ pub(crate) fn run_effect_release_feed_cursor(cursor_id: u64, nmp: Option<&NmpHan
     if cursor_id == 0 {
         return; // cursor was never registered; nothing to unregister
     }
-    let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
+    let nmp_ref: &nmp_native_runtime::NmpApp = &handle.app;
     let _ = nmp_ref
         .actor_sender()
         .send(nmp_core::actor::ActorCommand::Interests(
@@ -522,7 +509,7 @@ pub(crate) fn advance_feed_cursor(cursor_id: u64, after_seq: u64, nmp: Option<&N
     if cursor_id == 0 {
         return;
     }
-    let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
+    let nmp_ref: &nmp_native_runtime::NmpApp = &handle.app;
     let _ = nmp_ref
         .actor_sender()
         .send(nmp_core::actor::ActorCommand::Interests(
@@ -544,19 +531,13 @@ pub(crate) fn advance_feed_cursor(cursor_id: u64, after_seq: u64, nmp: Option<&N
 // the compiler sees those trailing assignments as unused. Allow them —
 // the pattern is intentional (the cursor must advance past each field).
 #[allow(unused_assignments)]
-fn decode_pull_page_wire(
-    key: FeedKey,
-    cursor_id: u64,
-    bytes: &nmp_ffi::pull::NmpMirrorBytes,
-) -> Option<KernelEvent> {
-    if bytes.ptr.is_null() || bytes.len == 0 {
+fn decode_pull_page_wire(key: FeedKey, cursor_id: u64, bytes: &[u8]) -> Option<KernelEvent> {
+    if bytes.is_empty() {
         tracing::warn!(?key, "DrainFeed: empty bytes returned");
         return None;
     }
 
-    // SAFETY: `bytes` is valid for `bytes.len` bytes, alive for this call,
-    // produced by `nmp_app_pull_page` (Rust-side allocation, aligned, init'd).
-    let buf: &[u8] = unsafe { std::slice::from_raw_parts(bytes.ptr, bytes.len) };
+    let buf: &[u8] = bytes;
 
     let mut cur = 0usize;
 
@@ -940,37 +921,20 @@ mod tests {
     /// Garbage binary wire input produces no-op (D6 — malformed_page_no_ops).
     #[test]
     fn malformed_page_no_ops() {
-        use nmp_ffi::pull::NmpMirrorBytes;
-
         // Simulate garbage bytes that look like a Page variant but are truncated.
         let garbage: Vec<u8> = vec![0u8, 0xDE, 0xAD, 0xBE, 0xEF]; // variant=Page, then truncated
-        let mut v = garbage.clone();
-        let bytes = NmpMirrorBytes {
-            ptr: v.as_mut_ptr(),
-            len: v.len(),
-            cap: v.capacity(),
-        };
-        // decode_pull_page_wire must return None on malformed input (D6: no panic).
-        let result = decode_pull_page_wire("test.key".into(), 1, &bytes);
+                                                                  // decode_pull_page_wire must return None on malformed input (D6: no panic).
+        let result = decode_pull_page_wire("test.key".into(), 1, &garbage);
         assert!(result.is_none(), "malformed wire must produce no-op");
-        // Do NOT call nmp_free_bytes here — v owns the memory.
-        std::mem::forget(bytes); // let v drop normally
     }
 
     /// Garbage all-zeros wire produces no-op.
     #[test]
     fn all_zeros_wire_no_ops() {
-        use nmp_ffi::pull::NmpMirrorBytes;
-
-        let mut zeros = vec![0u8; 32];
-        let bytes = NmpMirrorBytes {
-            ptr: zeros.as_mut_ptr(),
-            len: zeros.len(),
-            cap: zeros.capacity(),
-        };
+        let zeros = vec![0u8; 32];
         // variant 0 = Page; next_after_seq=0, latest_seq=0, has_more=0, entry_count=0
         // This is actually a valid (empty) page — should produce Some(FeedPage).
-        let result = decode_pull_page_wire("test.key".into(), 1, &bytes);
+        let result = decode_pull_page_wire("test.key".into(), 1, &zeros);
         // variant=0, next_after_seq=0 (8B), latest_seq=0 (8B), has_more=0 (1B), entry_count=0 (4B) = 22B
         // Buffer is 32B so we have enough: expect Some with no rows.
         assert!(result.is_some(), "valid empty page should decode");
@@ -981,7 +945,6 @@ mod tests {
             assert!(rows.is_empty());
             assert!(exhausted, "has_more=0 means exhausted");
         }
-        std::mem::forget(bytes);
     }
 
     /// Article feed scope fails closed when follow set is empty.

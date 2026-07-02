@@ -59,7 +59,7 @@ use std::sync::{Arc, Mutex};
 
 use nmp_core::substrate::{ObservedProjection, ObservedProjectionRegistrar};
 use nmp_core::ObservedProjectionSink;
-use nmp_ffi::NmpApp;
+use nmp_native_runtime::NmpApp;
 use nmp_planner::InterestShape;
 use tokio::sync::mpsc;
 
@@ -339,7 +339,7 @@ pub(crate) fn run_effect_publish_discussion(
         tracing::debug!("PublishDiscussionEvent: no live NmpApp (test mode)");
         return;
     };
-    let nmp_ref: &NmpApp = unsafe { handle.ptr.as_ref() };
+    let nmp_ref: &NmpApp = &handle.app;
 
     #[derive(serde::Deserialize)]
     struct EventTemplate {

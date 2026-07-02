@@ -45,9 +45,9 @@
 
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
 use nmp_core::substrate::ActionPayload;
-use nmp_ffi::{nmp_app_dispatch_action_bytes, nmp_free_string, NmpApp};
+use nmp_native_runtime::NmpApp;
 use nmp_nip29::action::{
-    CreateInviteInput, CreatePublicGroupInput, DiscoverGroupsInput, JoinGroupInput, PutUserInput,
+    CreateGroupInput, CreateInviteInput, DiscoverGroupsInput, JoinGroupInput, PutUserInput,
 };
 use nmp_nip29::decode_discovered_groups_snapshot;
 
@@ -204,15 +204,13 @@ pub(crate) fn run_effect_dispatch_nip29_action(
                 return;
             }
         },
-        "nmp.nip29.create_public_group" => {
-            match serde_json::from_str::<CreatePublicGroupInput>(&json) {
-                Ok(a) => a.encode(),
-                Err(e) => {
-                    tracing::warn!(error = %e, "nip29: failed to deserialise CreatePublicGroupInput");
-                    return;
-                }
+        "nmp.nip29.create_public_group" => match serde_json::from_str::<CreateGroupInput>(&json) {
+            Ok(a) => a.encode(),
+            Err(e) => {
+                tracing::warn!(error = %e, "nip29: failed to deserialise CreateGroupInput");
+                return;
             }
-        }
+        },
         "nmp.nip29.put_user" => match serde_json::from_str::<PutUserInput>(&json) {
             Ok(a) => a.encode(),
             Err(e) => {
@@ -241,12 +239,7 @@ pub(crate) fn run_effect_dispatch_nip29_action(
         &payload_bytes,
     );
 
-    let result_ptr =
-        nmp_app_dispatch_action_bytes(handle.ptr.as_ptr(), envelope.as_ptr(), envelope.len());
-
-    if !result_ptr.is_null() {
-        nmp_free_string(result_ptr);
-    }
+    let _ = nmp_uniffi_support::dispatch_action_vec(&handle.app, envelope);
 }
 
 /// Execute `Effect::WireGroupDiscovery { relay_url }`.
@@ -268,7 +261,9 @@ pub(crate) fn run_effect_wire_group_discovery(relay_url: String, nmp_ref: &NmpAp
     if relay_url.trim().is_empty() {
         return;
     }
-    let _ = nmp_ref.open_group_discovery(relay_url);
+    let _handle = nmp_ref.open_nip29_group_discovery_session(
+        nmp_native_runtime::Nip29GroupDiscoverySession::new(relay_url),
+    );
 }
 
 // ─── Discovery policy helpers ────────────────────────────────────────────────

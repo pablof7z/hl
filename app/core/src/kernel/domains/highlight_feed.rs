@@ -373,7 +373,7 @@ pub(crate) fn run_effect_publish_highlight(
         tracing::debug!("PublishHighlightEvent: no live NmpApp (test mode)");
         return;
     };
-    let nmp_ref: &nmp_ffi::NmpApp = unsafe { handle.ptr.as_ref() };
+    let nmp_ref: &nmp_native_runtime::NmpApp = &handle.app;
 
     // Deserialize the event template to extract kind/content/tags (the only
     // fields the kernel provides — nmp fills id/sig/pubkey/created_at).

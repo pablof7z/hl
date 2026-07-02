@@ -1,12 +1,14 @@
 //! Artifact share (kind:11) building, publishing, and querying. Ports
 //! `web/src/lib/ndk/artifacts.ts`.
 
+#[cfg(test)]
 use nostr_sdk::prelude::*;
 
 use crate::errors::CoreError;
 use crate::models::{ArtifactPreview, ArtifactRecord};
 
 /// kind:11 "Thread" is used both for artifact shares and for discussions.
+#[cfg(test)]
 const KIND_ARTIFACT_SHARE: u16 = 11;
 
 const TRACKING_PARAMS: &[&str] = &[
@@ -196,6 +198,7 @@ pub fn unpublished_record(preview: ArtifactPreview) -> ArtifactRecord {
 
 // -- Event helpers -----------------------------------------------------------
 
+#[cfg(test)]
 pub(crate) fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
     for tag in event.tags.iter() {
         let slice = tag.as_slice();
@@ -210,6 +213,7 @@ pub(crate) fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a st
 /// `["chapter", "<start_seconds>", "<title>"]`. Skips malformed entries
 /// silently — chapter metadata is best-effort and a bad publisher shouldn't
 /// break the listening surface. Output is sorted by start time.
+#[cfg(test)]
 pub(crate) fn read_chapters(event: &Event) -> Vec<crate::models::Chapter> {
     let mut chapters: Vec<crate::models::Chapter> = event
         .tags
@@ -246,6 +250,7 @@ pub(crate) fn read_chapters(event: &Event) -> Vec<crate::models::Chapter> {
 /// — every tag the publisher emits has to be lifted off the event here, or
 /// downstream views see empty strings (e.g. an empty `audio_url` makes the
 /// podcast player refuse to load anything).
+#[cfg(test)]
 pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Option<ArtifactRecord> {
     let title = first_tag_value(event, "title").unwrap_or("").to_string();
     let url = first_tag_value(event, "r").unwrap_or("").to_string();
@@ -340,6 +345,7 @@ pub(crate) fn artifact_record_from_event(event: &Event, group_id: &str) -> Optio
     })
 }
 
+#[cfg(test)]
 fn highlight_reference_for_artifact(
     reference_tag_name: &str,
     reference_tag_value: &str,
@@ -366,6 +372,7 @@ fn highlight_reference_for_artifact(
     }
 }
 
+#[cfg(test)]
 fn is_external_content_reference(value: &str, kind: &str) -> bool {
     let value = value.to_ascii_lowercase();
     let kind = kind.to_ascii_lowercase();
@@ -599,6 +606,7 @@ fn first_non_empty(values: &[&str]) -> String {
 
 /// Pure builder for the kind:11 artifact share event. Mirrors
 /// `buildArtifactShareEvent` (`web/src/lib/ndk/artifacts.ts:509-590`).
+#[cfg(test)]
 pub(crate) fn build_share_event(
     group_id: &str,
     preview: &ArtifactPreview,
@@ -692,6 +700,7 @@ pub(crate) fn build_share_event(
     Ok(EventBuilder::new(Kind::Custom(KIND_ARTIFACT_SHARE), content).tags(tags))
 }
 
+#[cfg(test)]
 fn parse_tag(parts: &[&str]) -> Result<Tag, CoreError> {
     Tag::parse(parts.iter().map(|s| s.to_string()).collect::<Vec<_>>())
         .map_err(|e| CoreError::Other(format!("build tag: {e}")))
@@ -1098,5 +1107,4 @@ mod tests {
             "r:https://example.com/post"
         );
     }
-
 }
