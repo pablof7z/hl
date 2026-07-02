@@ -5214,9 +5214,8 @@ public func FfiConverterTypeBookmarksSnapshot_lower(_ value: BookmarksSnapshot) 
 
 
 /**
- * Local nostrdb cache statistics. Rough — `disk_bytes` is the sum of file
- * sizes in the ndb directory; `event_count_estimate` is an upper bound
- * returned by a single kinds-wildcard query.
+ * Local NMP cache statistics. Rough — `disk_bytes` is the sum of persisted
+ * store files; `event_count_estimate` is an upper-bound diagnostic.
  */
 public struct CacheStats {
     public var diskBytes: UInt64
@@ -28290,7 +28289,7 @@ public enum DataChangeType {
      * The current user's NIP-51 kind:10003 bookmark list was updated
      * (either by us via `toggle_bookmark` or by another client relaying a
      * newer event). App-scope delta — Swift re-queries the authoritative
-     * list from nostrdb.
+     * list from the NMP-owned core snapshot.
      */
     case bookmarksUpdated
     /**
@@ -28309,7 +28308,7 @@ public enum DataChangeType {
      */
     case webBookmarksUpdated
     /**
-     * A referenced NIP-19 entity resolved from nostrdb after its
+     * A referenced NIP-19 entity resolved by the NMP-owned core after its
      * view-scoped subscription warmed the cache. Swift applies the payload
      * directly to the card that installed the subscription.
      */
