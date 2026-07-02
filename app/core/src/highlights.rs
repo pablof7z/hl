@@ -3,12 +3,15 @@
 
 use std::collections::HashSet;
 
+#[cfg(test)]
 use nostr_sdk::prelude::*;
 
 use crate::errors::CoreError;
+#[cfg(test)]
+use crate::models::{ArtifactRecord, BlossomUpload};
 use crate::models::{
-    ArtifactRecord, BlossomUpload, BookRoute, HighlightDraft, HighlightRecord, HighlightSourceKind,
-    HydratedHighlight, ProfileMetadata,
+    BookRoute, HighlightDraft, HighlightRecord, HighlightSourceKind, HydratedHighlight,
+    ProfileMetadata,
 };
 use crate::profile::{
     profile_display_projection, profile_display_with_label_projection, ProfileDisplayFallback,
@@ -20,6 +23,7 @@ use ::url::Url;
 /// NIP-84 highlight event.
 const KIND_HIGHLIGHT: u16 = 9802;
 /// NIP-18 generic repost used to share a highlight into a NIP-29 community.
+#[cfg(test)]
 const KIND_GENERIC_REPOST: u16 = 16;
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -842,6 +846,7 @@ fn book_highlight_reference(catalog_id: &str) -> Option<String> {
 /// Pure: build a `HighlightRecord` from an already-cached kind:9802 event.
 /// Separate from `record_from_event` above, which relies on the draft for
 /// clip fields known up front.
+#[cfg(test)]
 pub(crate) fn record_from_cached_event(event: &Event) -> Option<HighlightRecord> {
     if event.kind.as_u16() != KIND_HIGHLIGHT {
         return None;
@@ -901,6 +906,7 @@ pub(crate) fn record_from_cached_event(event: &Event) -> Option<HighlightRecord>
     })
 }
 
+#[cfg(test)]
 fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
     for tag in event.tags.iter() {
         let slice = tag.as_slice();
@@ -914,6 +920,7 @@ fn first_tag_value<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
 /// Extract the image URL from a NIP-92 `imeta` tag on a highlight event.
 /// Tag shape: `["imeta", "url <url>", "m <mime>", ...]`. Returns the first
 /// `url <…>` value found, or empty when no imeta tag carries a url.
+#[cfg(test)]
 pub(crate) fn imeta_image_url(event: &Event) -> String {
     for tag in event.tags.iter() {
         let slice = tag.as_slice();
@@ -955,6 +962,7 @@ pub fn article_reader_highlight_draft(
 
 /// Build the kind:9802 highlight `EventBuilder`. Pure — safe to unit test.
 /// Matches `publishCanonicalHighlight` (highlights.ts:359-423).
+#[cfg(test)]
 pub(crate) fn build_highlight_event(
     draft: &HighlightDraft,
     artifact: &ArtifactRecord,
@@ -1067,6 +1075,7 @@ pub(crate) fn build_highlight_event(
 /// Build a NIP-92 `imeta` tag from a Blossom upload descriptor.
 /// Tag shape: `["imeta", "url <url>", "m <mime>", "x <sha>", "size <bytes>", "dim WxH", "alt <text>"]`.
 /// `dim` and `alt` are omitted when not meaningful (zero dim, empty alt).
+#[cfg(test)]
 pub(crate) fn build_imeta_tag(image: &BlossomUpload) -> Result<Tag, CoreError> {
     let mut parts: Vec<String> = vec!["imeta".to_string()];
     parts.push(format!("url {}", image.url));
@@ -1085,6 +1094,7 @@ pub(crate) fn build_imeta_tag(image: &BlossomUpload) -> Result<Tag, CoreError> {
 
 /// Build the kind:16 repost `EventBuilder` that shares a highlight into a
 /// NIP-29 community. Pure — safe to unit test.
+#[cfg(test)]
 pub(crate) fn build_repost_event(
     highlight_event_id: EventId,
     highlight_author_pubkey_hex: &str,
@@ -1113,10 +1123,12 @@ pub(crate) fn build_repost_event(
         .tags(vec![e_tag, k_tag, p_tag, h_tag]))
 }
 
+#[cfg(test)]
 fn build_clip_fallback_quote(start: f64, end: f64) -> String {
     format!("Clip {}-{}", format_clip_time(start), format_clip_time(end))
 }
 
+#[cfg(test)]
 fn format_clip_time(value: f64) -> String {
     let total_seconds = if value.is_finite() && value > 0.0 {
         value.round() as u64

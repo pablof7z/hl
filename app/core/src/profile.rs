@@ -2,25 +2,19 @@
 //! through NMP-owned projections; this module only maps raw kind:0 event
 //! content into Highlighter's profile snapshot shape.
 
-use nostr_sdk::prelude::*;
 use serde::Deserialize;
 
 use crate::errors::CoreError;
 use crate::models::{ProfileMetadata, ProfileUpdateDraft};
 
-#[cfg(test)]
-const KIND_METADATA: u16 = 0;
-
 /// Pure: parse a kind:0 event into a `ProfileMetadata`. Unknown fields are
 /// silently dropped; a completely unparseable body yields a record with only
 /// the pubkey populated so the view still has something to render.
-pub fn parse_metadata(event: &Event) -> ProfileMetadata {
-    let pubkey = event.pubkey.to_hex();
-    let created_at = Some(event.created_at.as_secs());
-    let raw: RawMetadata = serde_json::from_str(&event.content).unwrap_or_default();
+pub fn parse_metadata(pubkey: &str, created_at: u64, content: &str) -> ProfileMetadata {
+    let raw: RawMetadata = serde_json::from_str(content).unwrap_or_default();
 
     ProfileMetadata {
-        pubkey,
+        pubkey: pubkey.to_string(),
         name: raw.name.unwrap_or_default().trim().to_string(),
         display_name: raw
             .display_name
@@ -39,7 +33,7 @@ pub fn parse_metadata(event: &Event) -> ProfileMetadata {
         nip05: raw.nip05.unwrap_or_default().trim().to_string(),
         website: raw.website.unwrap_or_default().trim().to_string(),
         lud16: raw.lud16.unwrap_or_default().trim().to_string(),
-        created_at,
+        created_at: Some(created_at),
     }
 }
 
@@ -517,17 +511,14 @@ fn profile_update_raw_is_dirty(input: &ProfileUpdateProjectionInput) -> bool {
 mod tests {
     use super::*;
 
-    fn sign_metadata(keys: &Keys, json: &str) -> Event {
-        EventBuilder::new(Kind::Custom(KIND_METADATA), json)
-            .sign_with_keys(keys)
-            .expect("sign")
+    fn parse_test_metadata(pubkey: &str, json: &str) -> ProfileMetadata {
+        parse_metadata(pubkey, 1_700_000_000, json)
     }
 
     #[test]
     fn parses_standard_fields() {
-        let keys = Keys::generate();
-        let event = sign_metadata(
-            &keys,
+        let p = parse_test_metadata(
+            "a".repeat(64).as_str(),
             r#"{
                 "name": "alice",
                 "display_name": "Alice Smith",
@@ -539,7 +530,6 @@ mod tests {
                 "lud16": "alice@x"
             }"#,
         );
-        let p = parse_metadata(&event);
         assert_eq!(p.name, "alice");
         assert_eq!(p.display_name, "Alice Smith");
         assert_eq!(p.about, "hey");
@@ -552,26 +542,21 @@ mod tests {
 
     #[test]
     fn falls_back_from_display_name_alias() {
-        let keys = Keys::generate();
-        let event = sign_metadata(&keys, r#"{"displayName": "CamelCase"}"#);
-        let p = parse_metadata(&event);
+        let p = parse_test_metadata("a", r#"{"displayName": "CamelCase"}"#);
         assert_eq!(p.display_name, "CamelCase");
     }
 
     #[test]
     fn image_substitutes_for_missing_picture() {
-        let keys = Keys::generate();
-        let event = sign_metadata(&keys, r#"{"image": "https://x/i.png"}"#);
-        let p = parse_metadata(&event);
+        let p = parse_test_metadata("a", r#"{"image": "https://x/i.png"}"#);
         assert_eq!(p.picture, "https://x/i.png");
     }
 
     #[test]
     fn unparseable_content_yields_pubkey_only_record() {
-        let keys = Keys::generate();
-        let event = sign_metadata(&keys, "not json");
-        let p = parse_metadata(&event);
-        assert_eq!(p.pubkey, keys.public_key().to_hex());
+        let pubkey = "b".repeat(64);
+        let p = parse_test_metadata(&pubkey, "not json");
+        assert_eq!(p.pubkey, pubkey);
         assert!(p.name.is_empty());
         assert!(p.about.is_empty());
     }
