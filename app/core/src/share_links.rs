@@ -5,8 +5,6 @@
 
 use crate::errors::CoreError;
 use crate::relays::highlighter_relay;
-use nostr_sdk::nips::nip19::{Nip19Coordinate, Nip19Event, ToBech32};
-use nostr_sdk::prelude::*;
 
 const HIGHLIGHT_SHARE_BASE_URL: &str = "https://beta.highlighter.com/highlight/";
 const ARTICLE_SHARE_BASE_URL: &str = "https://highlighter.com/a/";
@@ -64,32 +62,29 @@ pub fn curation_set_share_url_snapshot(coordinate: String) -> CurationSetShareUr
 /// - the pubkey is not valid hex, or
 /// - the d_tag is empty.
 pub fn curation_set_share_url(coordinate: String) -> Result<String, CoreError> {
-    let (kind, public_key, identifier) = curation_set_address_parts(&coordinate)?;
-    let coordinate = Coordinate {
-        kind,
-        public_key,
+    let (kind, pubkey, identifier) = curation_set_address_parts(&coordinate)?;
+    let naddr = nmp_nostr_id::encode_naddr(&nmp_nostr_id::NaddrData {
         identifier,
-    };
-    let relay = RelayUrl::parse(highlighter_relay())
-        .map_err(|e| CoreError::InvalidInput(format!("bad relay hint: {e}")))?;
-    let naddr = Nip19Coordinate::new(coordinate, [relay])
-        .to_bech32()
-        .map_err(|e| CoreError::InvalidInput(format!("encode naddr: {e}")))?;
+        pubkey,
+        kind,
+        relays: vec![highlighter_relay().to_owned()],
+    })
+    .map_err(|e| CoreError::InvalidInput(format!("encode naddr: {e}")))?;
 
     Ok(format!("{CURATION_SET_SHARE_BASE_URL}{naddr}"))
 }
 
 /// Parse and validate a `"30004:<pubkey_hex>:<d_tag>"` coordinate string.
-/// Returns `(Kind, PublicKey, identifier)` on success.
-fn curation_set_address_parts(coordinate: &str) -> Result<(Kind, PublicKey, String), CoreError> {
+/// Returns `(kind, pubkey_hex, identifier)` on success.
+fn curation_set_address_parts(coordinate: &str) -> Result<(u32, String, String), CoreError> {
     let mut parts = coordinate.trim().splitn(3, ':');
     let kind_str = parts
         .next()
         .ok_or_else(|| CoreError::InvalidInput("coordinate missing kind".into()))?;
     let kind_num = kind_str
-        .parse::<u16>()
+        .parse::<u32>()
         .map_err(|e| CoreError::InvalidInput(format!("bad coordinate kind: {e}")))?;
-    if kind_num != CURATION_SET_EVENT_KIND {
+    if kind_num != u32::from(CURATION_SET_EVENT_KIND) {
         return Err(CoreError::InvalidInput(
             "coordinate is not a kind:30004 curation set".into(),
         ));
@@ -99,7 +94,7 @@ fn curation_set_address_parts(coordinate: &str) -> Result<(Kind, PublicKey, Stri
         .next()
         .ok_or_else(|| CoreError::InvalidInput("coordinate missing pubkey".into()))?
         .trim();
-    let public_key = PublicKey::from_hex(pubkey_hex)
+    nmp_nostr_id::encode_npub(pubkey_hex)
         .map_err(|e| CoreError::InvalidInput(format!("bad coordinate pubkey: {e}")))?;
 
     let identifier = parts
@@ -113,7 +108,7 @@ fn curation_set_address_parts(coordinate: &str) -> Result<(Kind, PublicKey, Stri
         ));
     }
 
-    Ok((Kind::from(kind_num), public_key, identifier))
+    Ok((kind_num, pubkey_hex.to_owned(), identifier))
 }
 
 pub fn article_share_url_snapshot(address: String) -> ArticleShareUrlSnapshot {
@@ -130,17 +125,14 @@ pub fn article_share_url_snapshot(address: String) -> ArticleShareUrlSnapshot {
 }
 
 pub fn article_share_url(address: String) -> Result<String, CoreError> {
-    let (kind, public_key, identifier) = article_address_parts(&address)?;
-    let coordinate = Coordinate {
-        kind,
-        public_key,
+    let (kind, pubkey, identifier) = article_address_parts(&address)?;
+    let naddr = nmp_nostr_id::encode_naddr(&nmp_nostr_id::NaddrData {
         identifier,
-    };
-    let relay = RelayUrl::parse(highlighter_relay())
-        .map_err(|e| CoreError::InvalidInput(format!("bad relay hint: {e}")))?;
-    let naddr = Nip19Coordinate::new(coordinate, [relay])
-        .to_bech32()
-        .map_err(|e| CoreError::InvalidInput(format!("encode naddr: {e}")))?;
+        pubkey,
+        kind,
+        relays: vec![highlighter_relay().to_owned()],
+    })
+    .map_err(|e| CoreError::InvalidInput(format!("encode naddr: {e}")))?;
 
     Ok(format!("{ARTICLE_SHARE_BASE_URL}{naddr}"))
 }
@@ -149,35 +141,28 @@ pub fn highlight_share_url(
     event_id_hex: String,
     author_pubkey_hex: Option<String>,
 ) -> Result<String, CoreError> {
-    let id = EventId::from_hex(&event_id_hex)
-        .map_err(|e| CoreError::InvalidInput(format!("bad event id: {e}")))?;
-    let mut nevent = Nip19Event::new(id);
-    if let Some(pk_hex) = author_pubkey_hex {
-        let trimmed = pk_hex.trim();
-        if !trimmed.is_empty() {
-            let author = PublicKey::from_hex(trimmed)
-                .map_err(|e| CoreError::InvalidInput(format!("bad author pubkey: {e}")))?;
-            nevent = nevent.author(author);
-        }
-    }
-    nevent = nevent.kind(Kind::from(HIGHLIGHT_EVENT_KIND as u16));
-    let relay = RelayUrl::parse(highlighter_relay())
-        .map_err(|e| CoreError::InvalidInput(format!("bad relay hint: {e}")))?;
-    nevent = nevent.relays([relay]);
-    let encoded = nevent
-        .to_bech32()
-        .map_err(|e| CoreError::InvalidInput(format!("encode nevent: {e}")))?;
+    let author = author_pubkey_hex.and_then(|pk_hex| {
+        let trimmed = pk_hex.trim().to_owned();
+        (!trimmed.is_empty()).then_some(trimmed)
+    });
+    let encoded = nmp_nostr_id::encode_nevent(&nmp_nostr_id::NeventData {
+        event_id: event_id_hex,
+        relays: vec![highlighter_relay().to_owned()],
+        author,
+        kind: Some(HIGHLIGHT_EVENT_KIND),
+    })
+    .map_err(|e| CoreError::InvalidInput(format!("encode nevent: {e}")))?;
     Ok(format!("{HIGHLIGHT_SHARE_BASE_URL}{encoded}"))
 }
 
-fn article_address_parts(address: &str) -> Result<(Kind, PublicKey, String), CoreError> {
+fn article_address_parts(address: &str) -> Result<(u32, String, String), CoreError> {
     let mut parts = address.trim().splitn(3, ':');
     let kind = parts
         .next()
         .ok_or_else(|| CoreError::InvalidInput("article address missing kind".into()))?
-        .parse::<u16>()
+        .parse::<u32>()
         .map_err(|e| CoreError::InvalidInput(format!("bad article kind: {e}")))?;
-    if kind != ARTICLE_EVENT_KIND {
+    if kind != u32::from(ARTICLE_EVENT_KIND) {
         return Err(CoreError::InvalidInput(
             "address is not a NIP-23 article".into(),
         ));
@@ -187,7 +172,7 @@ fn article_address_parts(address: &str) -> Result<(Kind, PublicKey, String), Cor
         .next()
         .ok_or_else(|| CoreError::InvalidInput("article address missing pubkey".into()))?
         .trim();
-    let public_key = PublicKey::from_hex(pubkey_hex)
+    nmp_nostr_id::encode_npub(pubkey_hex)
         .map_err(|e| CoreError::InvalidInput(format!("bad article pubkey: {e}")))?;
 
     let identifier = parts
@@ -201,14 +186,13 @@ fn article_address_parts(address: &str) -> Result<(Kind, PublicKey, String), Cor
         ));
     }
 
-    Ok((Kind::from(kind), public_key, identifier))
+    Ok((kind, pubkey_hex.to_owned(), identifier))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::events::NostrEntityRef;
-    use nostr_sdk::nips::nip19::{FromBech32, Nip19, Nip19Coordinate, Nip19Profile};
 
     fn decode_nostr_entity(input: &str) -> Result<NostrEntityRef, crate::errors::CoreError> {
         let trimmed = input
@@ -216,44 +200,35 @@ mod tests {
             .strip_prefix("nostr:")
             .unwrap_or(input.trim())
             .trim();
-        let decoded = Nip19::from_bech32(trimmed).map_err(|e| {
+        let decoded = nmp_nostr_id::parse(trimmed).map_err(|e| {
             crate::errors::CoreError::InvalidInput(format!("bad nostr entity: {e}"))
         })?;
         Ok(match decoded {
-            Nip19::Pubkey(pk) => NostrEntityRef::Profile {
-                pubkey_hex: pk.to_hex(),
+            nmp_nostr_id::Nip19Entity::Npub(pubkey_hex) => NostrEntityRef::Profile {
+                pubkey_hex,
                 relays: Vec::new(),
             },
-            Nip19::Profile(Nip19Profile {
-                public_key, relays, ..
-            }) => NostrEntityRef::Profile {
-                pubkey_hex: public_key.to_hex(),
-                relays: relays.into_iter().map(|u| u.to_string()).collect(),
+            nmp_nostr_id::Nip19Entity::Nprofile(data) => NostrEntityRef::Profile {
+                pubkey_hex: data.pubkey,
+                relays: data.relays,
             },
-            Nip19::EventId(id) => NostrEntityRef::Event {
-                event_id_hex: id.to_hex(),
+            nmp_nostr_id::Nip19Entity::Note(event_id_hex) => NostrEntityRef::Event {
+                event_id_hex,
                 relays: Vec::new(),
                 author_hint_hex: None,
                 kind_hint: None,
             },
-            Nip19::Event(nostr_sdk::nips::nip19::Nip19Event {
-                event_id,
-                author,
-                kind,
-                relays,
-            }) => NostrEntityRef::Event {
-                event_id_hex: event_id.to_hex(),
-                relays: relays.into_iter().map(|u| u.to_string()).collect(),
-                author_hint_hex: author.map(|pk| pk.to_hex()),
-                kind_hint: kind.map(|k| k.as_u16() as u32),
+            nmp_nostr_id::Nip19Entity::Nevent(data) => NostrEntityRef::Event {
+                event_id_hex: data.event_id,
+                relays: data.relays,
+                author_hint_hex: data.author,
+                kind_hint: data.kind,
             },
-            Nip19::Coordinate(Nip19Coordinate {
-                coordinate, relays, ..
-            }) => NostrEntityRef::Address {
-                kind: coordinate.kind.as_u16() as u32,
-                pubkey_hex: coordinate.public_key.to_hex(),
-                d_tag: coordinate.identifier,
-                relays: relays.into_iter().map(|u| u.to_string()).collect(),
+            nmp_nostr_id::Nip19Entity::Naddr(data) => NostrEntityRef::Address {
+                kind: data.kind,
+                pubkey_hex: data.pubkey,
+                d_tag: data.identifier,
+                relays: data.relays,
             },
             _ => {
                 return Err(crate::errors::CoreError::InvalidInput(

@@ -944,7 +944,6 @@ dependencies = [
  "nmp-store",
  "nmp-substrate",
  "nmp-uniffi-support",
- "nostr",
  "nostr-sdk",
  "parking_lot",
  "regex",
