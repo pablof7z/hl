@@ -44,7 +44,7 @@
 
 use std::collections::BTreeMap;
 
-use nmp_content::wire::longform_fb::decode_longform_articles;
+use nmp_nip23::wire::longform_fb::decode_longform_articles;
 
 use crate::kernel::app::AppState;
 use crate::kernel::snapshot::{
@@ -58,7 +58,7 @@ use crate::kernel::view::ViewId;
 pub(crate) const ARTICLE_HIGHLIGHT_FEED_KEY_PREFIX: &str = "hl.feed.article_highlights.";
 
 // Re-export so `projections.rs` can match without importing nmp_content directly.
-pub(crate) use nmp_content::wire::longform_fb::SCHEMA_ID as ARTICLES_SCHEMA_ID;
+pub(crate) use nmp_nip23::wire::longform_fb::SCHEMA_ID as ARTICLES_SCHEMA_ID;
 
 // ─── READ side: projection frame apply ──────────────────────────────────────
 
@@ -87,8 +87,8 @@ pub(crate) fn apply_articles(state: &mut AppState, payload: &[u8]) {
                         address: address.clone(),
                         id: doc.id.clone(),
                         author_pubkey: doc.author_pubkey.clone(),
-                        author_display_name: doc.author_display_name.clone(),
-                        author_picture_url: doc.author_picture_url.clone(),
+                        author_display_name: None,
+                        author_picture_url: None,
                         title: doc.title.clone(),
                         summary: doc.summary.clone(),
                         hero_image_url: doc.hero_image_url.clone(),
@@ -275,8 +275,8 @@ mod tests {
     use crate::kernel::actor::{reduce, Cmd};
     use crate::kernel::clock::{Clock, ManualClock};
     use crate::kernel::effect::Effect;
-    use nmp_content::longform::ArticleFeedItem;
-    use nmp_content::wire::longform_fb::encode_longform_articles;
+    use nmp_nip23::wire::longform_fb::encode_longform_articles;
+    use nmp_nip23::ArticleFeedItem;
     use std::collections::BTreeMap;
 
     fn make_state() -> AppState {

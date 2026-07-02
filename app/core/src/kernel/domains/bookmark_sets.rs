@@ -559,10 +559,7 @@ pub(crate) fn reduce_action_rename_set(
 /// relay-echo loop completes and the `SetListProjection` re-snapshots.
 ///
 /// D6: no-op when the set cannot be found or serialisation fails.
-pub(crate) fn reduce_action_delete_set(
-    state: &AppState,
-    set_coordinate: String,
-) -> Vec<Effect> {
+pub(crate) fn reduce_action_delete_set(state: &AppState, set_coordinate: String) -> Vec<Effect> {
     // Verify the set exists AND is owned by the active account before issuing the
     // deletion (D6 no-op on miss / not-mine — never kind:5 someone else's set).
     if find_owned_curation_set(state, &set_coordinate).is_none() {
@@ -600,11 +597,7 @@ pub(crate) fn reduce_action_delete_set(
 /// `d_tag` is derived from `title` + `now` (same slug algorithm). Emits
 /// `Effect::PublishSetEvent` with the event template. D6: no-op on
 /// serialisation failure.
-pub(crate) fn reduce_action_create_set(
-    _state: &AppState,
-    title: String,
-    now: u64,
-) -> Vec<Effect> {
+pub(crate) fn reduce_action_create_set(_state: &AppState, title: String, now: u64) -> Vec<Effect> {
     let slug: String = title
         .to_lowercase()
         .chars()
@@ -987,7 +980,16 @@ pub(crate) fn register_set_projections(
     }
 
     let set_proj_ref = Arc::clone(&set_proj);
-    nmp_ref.register_typed_snapshot_projection(BOOKMARK_SETS_SCHEMA_ID, move || {
+    let Ok(set_projection_key) =
+        nmp_ownership::DynamicProjectionKey::app_owned(BOOKMARK_SETS_SCHEMA_ID)
+    else {
+        tracing::warn!(
+            key = BOOKMARK_SETS_SCHEMA_ID,
+            "bookmark_sets::register_set_projections: invalid set projection key"
+        );
+        return;
+    };
+    nmp_ref.register_typed_snapshot_projection(set_projection_key, move || {
         let payload = set_proj_ref.snapshot_payload()?;
         Some(nmp_core::TypedProjectionData {
             key: BOOKMARK_SETS_SCHEMA_ID.to_string(),
@@ -1016,7 +1018,16 @@ pub(crate) fn register_set_projections(
     }
 
     let web_proj_ref = Arc::clone(&web_proj);
-    nmp_ref.register_typed_snapshot_projection(WEB_BOOKMARKS_SCHEMA_ID, move || {
+    let Ok(web_projection_key) =
+        nmp_ownership::DynamicProjectionKey::app_owned(WEB_BOOKMARKS_SCHEMA_ID)
+    else {
+        tracing::warn!(
+            key = WEB_BOOKMARKS_SCHEMA_ID,
+            "bookmark_sets::register_set_projections: invalid web-bookmarks projection key"
+        );
+        return;
+    };
+    nmp_ref.register_typed_snapshot_projection(web_projection_key, move || {
         let payload = web_proj_ref.snapshot_payload()?;
         Some(nmp_core::TypedProjectionData {
             key: WEB_BOOKMARKS_SCHEMA_ID.to_string(),
@@ -1882,10 +1893,7 @@ mod tests {
                         })
                         .unwrap_or(false)
                 });
-                assert!(
-                    has_k_tag,
-                    "deletion event must have `k`==\"30004\" tag"
-                );
+                assert!(has_k_tag, "deletion event must have `k`==\"30004\" tag");
             }
             other => panic!("expected PublishSetEvent, got: {other:?}"),
         }
@@ -1998,8 +2006,7 @@ mod tests {
                     t.as_array()
                         .map(|a| {
                             a.first().and_then(|v| v.as_str()) == Some("title")
-                                && a.get(1).and_then(|v| v.as_str())
-                                    == Some("My New Collection")
+                                && a.get(1).and_then(|v| v.as_str()) == Some("My New Collection")
                         })
                         .unwrap_or(false)
                 });
@@ -2051,7 +2058,11 @@ mod tests {
                 title: "New Title".to_string(),
             }),
         );
-        assert_eq!(typed_effects.len(), 1, "typed RenameSet must emit one effect");
+        assert_eq!(
+            typed_effects.len(),
+            1,
+            "typed RenameSet must emit one effect"
+        );
         let Effect::PublishSetEvent { json: typed_json } = &typed_effects[0] else {
             panic!("expected PublishSetEvent");
         };

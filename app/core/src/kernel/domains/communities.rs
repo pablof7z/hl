@@ -16,7 +16,7 @@
 //! 5. `reduce_event_joined_groups_updated` stores the rows in `AppState.communities`.
 //! 6. `project_communities_snapshot` projects them into `ViewSnapshot::Communities`.
 
-use nmp_native_runtime::NmpApp;
+use nmp_native_runtime::{Nip29JoinedGroupsSession, NmpApp};
 use nmp_nip29::decode_joined_groups_snapshot;
 
 use crate::kernel::app::AppState;
@@ -43,7 +43,10 @@ use crate::kernel::snapshot::{CommunitiesSnapshot, CommunityRow, ViewSnapshot};
 /// interest separately; hl relies on the standing kind:39001/39002 subscriptions
 /// from the active-account interest set for now.)
 pub(crate) fn register_joined_groups_projection(nmp_ref: &NmpApp, active_pubkey: String) {
-    nmp_ref.open_joined_groups(active_pubkey, String::new());
+    let _handle = nmp_ref.open_nip29_joined_groups_session(Nip29JoinedGroupsSession::new(
+        active_pubkey,
+        String::new(),
+    ));
 }
 
 // ─── Frame decode (called from projections::dispatch_typed_frame) ─────────────

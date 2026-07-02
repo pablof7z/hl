@@ -548,15 +548,15 @@ fn reduce_action_envelope(
         ClipExtendSegmentPayload, ClipMarkInPayload, ClipMarkOutPayload, ClipSetEndPayload,
         ClipSetStartPayload, CommitSearchRecentQueryPayload, CreateAccountPayload,
         CreateAndAddToSetPayload, CreateRoomInvitesPayload, CreateRoomPayload, CreateSetPayload,
-        DeleteSetPayload, FollowPayload, RenameSetPayload,
-        JoinRoomPayload, LeaveRoomPayload, LookupIsbnPayload, MarkWhatsNewSeenPayload,
-        OcrRecognizePayload, PairBunkerPayload, PresentSheetPayload, PublishClipPayload,
-        PublishHighlightPayload, ReactPayload, ReleaseEntityRefPayload, ReleaseProfilePayload,
-        RemoveBookmarkPayload, RemoveFromSetPayload, RemoveRelayPayload, ResolveEntityRefPayload,
-        RunOmniboxPayload, RunSearchPayload, SelectRootTabPayload, SetBookPickerQueryPayload,
-        SetRelayConfigsPayload, SetRelayRolePayload, ShareArtifactToRoomPayload,
-        ShareHighlightToRoomPayload, ShareMintInvitePayload, ShareToRoomPayload, SignInNsecPayload,
-        ToggleReactionPayload, UnfollowPayload, UnreactPayload,
+        DeleteSetPayload, FollowPayload, JoinRoomPayload, LeaveRoomPayload, LookupIsbnPayload,
+        MarkWhatsNewSeenPayload, OcrRecognizePayload, PairBunkerPayload, PresentSheetPayload,
+        PublishClipPayload, PublishHighlightPayload, ReactPayload, ReleaseEntityRefPayload,
+        ReleaseProfilePayload, RemoveBookmarkPayload, RemoveFromSetPayload, RemoveRelayPayload,
+        RenameSetPayload, ResolveEntityRefPayload, RunOmniboxPayload, RunSearchPayload,
+        SelectRootTabPayload, SetBookPickerQueryPayload, SetRelayConfigsPayload,
+        SetRelayRolePayload, ShareArtifactToRoomPayload, ShareHighlightToRoomPayload,
+        ShareMintInvitePayload, ShareToRoomPayload, SignInNsecPayload, ToggleReactionPayload,
+        UnfollowPayload, UnreactPayload,
     };
 
     match envelope.namespace.as_str() {
@@ -2929,7 +2929,10 @@ pub(crate) async fn actor_task(
                     // idempotent on an unknown session.
                     if let Some(handle) = nmp_handle.as_ref() {
                         let nmp_ref: &NmpApp = &handle.app;
-                        nmp_ref.close_search_session(search::SEARCH_SESSION_ID);
+                        let handle = nmp_native_runtime::Nip50SearchHandle::for_key(
+                            search::SEARCH_SESSION_ID,
+                        );
+                        nmp_ref.close_search_session(&handle);
                     }
                 }
                 lifecycle_effects.extend(search::lifecycle_effects_for_view_close(id));
@@ -3197,11 +3200,15 @@ pub(crate) fn start_nmp_app(
     // exactly the protocol features hl uses, by owner crate. Mirrors the
     // shape of `nmp-cli`'s `lib.rs.tmpl` starter and 29er's
     // `compose_29er_runtime`. MUST run before `start()`.
-    let substrate_handles = nmp_substrate::install(&mut app, nmp_substrate::SubstrateConfig::default());
+    let substrate_handles =
+        nmp_substrate::install(&mut app, nmp_substrate::SubstrateConfig::default());
     nmp_nip50::register_search_scopes(&app);
     nmp_nip50::register_input_scopes(&app);
     nmp_nip02::register_follow_actions(&mut app);
-    nmp_core::substrate::ProtocolDescriptor::register_actions(&nmp_nip25::Nip25Descriptor, &mut app);
+    nmp_core::substrate::ProtocolDescriptor::register_actions(
+        &nmp_nip25::Nip25Descriptor,
+        &mut app,
+    );
     nmp_nip29::register_input_scopes(&app);
     let nip29_registered = nmp_nip29::register::register_actions(&mut app);
     debug_assert!(
@@ -3211,7 +3218,9 @@ pub(crate) fn start_nmp_app(
     nmp_nip51::register_bookmark_runtime(&mut app);
     nmp_nip51::register_bookmark_set_runtime(&mut app);
     nmp_nip51::register_web_bookmark_runtime(&mut app);
+    nmp_replies::register_actions(&mut app);
     nmp_nip22::register_runtime(&mut app);
+    nmp_nip23::register_longform_projection(&mut app);
     nmp_blossom::register_actions(&mut app);
     nmp_nip11::register(&app);
 

@@ -234,7 +234,10 @@ fn open_multi_kind_search(nmp_ref: &NmpApp, query: &str) {
         Some(r) => r,
         None => return,
     };
-    let _key = nmp_ref.open_search(request, super::search::SEARCH_SESSION_ID);
+    let _handle = nmp_ref.open_search_session(nmp_native_runtime::Nip50SearchSession::new(
+        request,
+        super::search::SEARCH_SESSION_ID,
+    ));
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────────

@@ -66,7 +66,7 @@
 //!
 //! Search is read-only (no write action for search hits) — no double-publish risk.
 
-use nmp_native_runtime::NmpApp;
+use nmp_native_runtime::{Nip50SearchSession, NmpApp};
 use nmp_nip50::{
     decode_search_results_snapshot, SearchRequest, SearchScope as NmpSearchScope, SearchTargets,
     DEFAULT_MAX_SEARCH_HITS, SEARCH_RESULTS_SCHEMA_ID,
@@ -296,7 +296,7 @@ pub(crate) fn run_effect_run_search(
     query: String,
     scope_json: String,
     nmp: Option<&crate::kernel::actor::NmpHandle>,
-    tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
+    _tx: &tokio::sync::mpsc::UnboundedSender<crate::kernel::actor::Cmd>,
 ) {
     let Some(handle) = nmp else { return };
 
@@ -333,7 +333,7 @@ pub(crate) fn run_effect_run_search(
     // seed, per-relay pinned interests, result projection, and typed `N50S`
     // sidecar (registered under `nmp.nip50.search.<session_id>`). Idempotent
     // re-open on the same session id (prior session is torn down first).
-    let _key = nmp_ref.open_search(request, SEARCH_SESSION_ID);
+    let _handle = nmp_ref.open_search_session(Nip50SearchSession::new(request, SEARCH_SESSION_ID));
 }
 
 // ─── Snapshot projection ─────────────────────────────────────────────────────

@@ -371,7 +371,15 @@ pub(crate) fn register_bookmark_list_projection(
     // and BookmarkListMetadata do not (only Serialize) at b4404159 — so we
     // serialise the items Vec directly to avoid the asymmetry.
     let typed_proj = Arc::clone(&projection);
-    nmp_ref.register_typed_snapshot_projection(BOOKMARK_SCHEMA_ID, move || {
+    let Ok(projection_key) = nmp_ownership::DynamicProjectionKey::app_owned(BOOKMARK_SCHEMA_ID)
+    else {
+        tracing::warn!(
+            key = BOOKMARK_SCHEMA_ID,
+            "bookmarks::register_bookmark_list_projection: invalid app-owned projection key"
+        );
+        return;
+    };
+    nmp_ref.register_typed_snapshot_projection(projection_key, move || {
         let snapshot = typed_proj.snapshot();
         // Serialise items Vec<BookmarkItem> to JSON bytes (serde envelope).
         let payload = match serde_json::to_vec(&snapshot.items) {

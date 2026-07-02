@@ -35,12 +35,6 @@ fn encode_payload_for_namespace(namespace: &str, json: &str) -> Result<Vec<u8>, 
         "nmp.nip29.create_invite" => {
             encode::<nmp_nip29::action::CreateInviteInput>(namespace, json)
         }
-        "nmp.nip29.repost_in_group" => {
-            encode::<nmp_nip29::action::RepostInGroupInput>(namespace, json)
-        }
-        "nmp.nip29.share_event_in_group" => {
-            encode::<nmp_nip29::action::ShareEventInGroupInput>(namespace, json)
-        }
         "nmp.nip29.publish_group_event" => {
             encode::<nmp_nip29::action::PublishGroupEventInput>(namespace, json)
         }
@@ -48,7 +42,7 @@ fn encode_payload_for_namespace(namespace: &str, json: &str) -> Result<Vec<u8>, 
         "nmp.nip51.add_bookmark" | "nmp.nip51.remove_bookmark" => {
             encode::<nmp_nip51::BookmarkUpdateInput>(namespace, json)
         }
-        "nmp.nip22.post_comment" => encode::<nmp_nip22::PostCommentAction>(namespace, json),
+        "nmp.replies.reply" => encode::<nmp_replies::ReplyAction>(namespace, json),
         "nmp.blossom.upload" => encode::<nmp_blossom::UploadInput>(namespace, json),
         other => Err(format!("no typed payload encoder for namespace '{other}'")),
     }
