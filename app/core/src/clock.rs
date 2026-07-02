@@ -4,17 +4,11 @@
 
 use std::time::UNIX_EPOCH;
 
-use nostr_sdk::Timestamp;
-
 pub trait Clock: Send + Sync + std::fmt::Debug {
     fn now_unix_seconds(&self) -> u64;
 
     fn now_unix_nanos(&self) -> u128 {
         u128::from(self.now_unix_seconds()) * 1_000_000_000
-    }
-
-    fn now_nostr_timestamp(&self) -> Timestamp {
-        Timestamp::from(self.now_unix_seconds())
     }
 }
 
