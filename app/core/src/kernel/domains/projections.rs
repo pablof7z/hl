@@ -64,16 +64,20 @@ pub(crate) fn dispatch_typed_frame(
     frame_bytes: &[u8],
     now: u64,
 ) -> Vec<Effect> {
-    // Decode the full typed-projection sidecar from the frame.
+    // Decode the frame envelope and full typed-projection sidecar together.
     // A frame that fails to decode (wrong file identifier, truncated, etc.)
     // is silently dropped — D6. We also catch FlatBuffers panics (e.g. on
     // slices shorter than the minimum FlatBuffers header size) so that garbage
     // bytes from tests or adversarial frames cannot abort the actor thread.
     let frame_copy = frame_bytes.to_vec(); // must be 'static for catch_unwind
-    let decode_result =
-        std::panic::catch_unwind(move || nmp_core::decode_snapshot_typed_projections(&frame_copy));
-    let projections = match decode_result {
-        Ok(Ok(p)) => p,
+    let decode_result = std::panic::catch_unwind(move || {
+        nmp_core::decode_snapshot_envelope(&frame_copy).and_then(|envelope| {
+            nmp_core::decode_snapshot_typed_projections(&frame_copy)
+                .map(|projections| (envelope, projections))
+        })
+    });
+    let (envelope, projections) = match decode_result {
+        Ok(Ok(decoded)) => decoded,
         Ok(Err(_)) | Err(_) => return vec![], // decode error or panic — D6
     };
 
@@ -118,11 +122,9 @@ pub(crate) fn dispatch_typed_frame(
             }
 
             // ── Phase 3D arm: "claimed_profiles" — REMOVED (ADR-0063 Lane H) ──
-            // NMP deleted the bulk `"claimed_profiles"` typed sidecar; visited-
+            // NMP deleted the bulk `"claimed_profiles"` typed sidecar; visited
             // profile resolution is now served by the per-key `refs.profile`
-            // row-delta projection (`nmp_core::refs::RefProfileStore`). See the
-            // FOLLOW-UP note in `profiles.rs`. `AppState::claimed_profiles` is
-            // still populated via `KernelEvent::ProfileCardUpdated`.
+            // row-delta projection below.
 
             // ── Phase 3E arm: "nmp.nip29.discovered_groups" ──────────────────
             // Decode the `"nmp.nip29.discovered_groups"` FlatBuffers payload via
@@ -157,8 +159,8 @@ pub(crate) fn dispatch_typed_frame(
             // `nmp_content::wire::longform_fb::decode_longform_articles` and
             // store raw `ArticleRow` records in `AppState::articles` keyed by
             // addressable coordinate `kind:author_hex:d_tag`. The longform
-            // projection is registered at boot by nmp-defaults (longform: true
-            // is the default in NmpDefaults). D6: decode errors are silent no-ops.
+            // projection is registered at boot by `nmp_nip23::register`.
+            // D6: decode errors are silent no-ops.
             // D1: raw fields only — no "Untitled" fallback, no "min read" label,
             // no hashtag formatting in the stored rows.
             super::articles::ARTICLES_SCHEMA_ID => {
@@ -220,12 +222,16 @@ pub(crate) fn dispatch_typed_frame(
             }
 
             // ── Phase 7 arm: "refs.profile" ──────────────────────────────────
-            // ADR-0063 Lane H: visited-profile cards now arrive as per-key
-            // row-delta projection (`RefProfileStore`). The bulk apply path
-            // has been removed; this arm is a no-op until the
-            // `RefProfileStore::apply_sidecar` wire-up lands as a follow-up.
-            "refs.profile" => {
-                // TODO(refs.profile): wire RefProfileStore when ADR-0063 Lane H lands.
+            // ADR-0063 Lane H: visited-profile cards arrive as per-key row
+            // deltas. `RefProfileStore` needs the frame identity to reject
+            // stale deltas across session/epoch changes.
+            nmp_core::refs::REFS_PROFILE_KEY => {
+                profiles::apply_refs_profile(
+                    state,
+                    &proj.payload,
+                    envelope.session_id,
+                    envelope.snapshot_epoch,
+                );
             }
 
             // ── Phase 7 arm: "refs.event" ─────────────────────────────────────
@@ -234,8 +240,8 @@ pub(crate) fn dispatch_typed_frame(
             }
 
             // ── Default: unknown schema_id — silent no-op (D6) ────────────────
-            // Projections registered by nmp-defaults that hl has not opted into
-            // (e.g. action_stages, bunker_handshake) arrive here. This is the
+            // Framework projections that hl has not opted into (e.g.
+            // action_stages, bunker_handshake) arrive here. This is the
             // expected path; trace-level only so hot paths stay quiet.
             _ => {
                 tracing::trace!(
@@ -253,9 +259,46 @@ pub(crate) fn dispatch_typed_frame(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nmp_core::refs::{encode_ref_row_delta_batch, RefRow, RefRowDeltaBatch};
+    use nmp_core::typed_projections::{encode_profile, ProfileCardModel};
 
     fn make_state() -> AppState {
         AppState::default()
+    }
+
+    fn make_profile_card(pubkey: &str, display_name: &str) -> ProfileCardModel {
+        ProfileCardModel {
+            pubkey: pubkey.to_string(),
+            display_name: Some(display_name.to_string()),
+            picture_url: Some(format!("https://example.com/{display_name}.png")),
+            ..Default::default()
+        }
+    }
+
+    fn refs_profile_sidecar(baseline: bool, rows: Vec<RefRow>) -> Vec<u8> {
+        encode_ref_row_delta_batch(&RefRowDeltaBatch {
+            namespace: "profile".to_string(),
+            baseline,
+            rows,
+        })
+    }
+
+    fn refs_profile_frame(session_id: u64, snapshot_epoch: u64, payload: Vec<u8>) -> Vec<u8> {
+        nmp_core::encode_snapshot_frame(
+            &nmp_core::SnapshotEnvelope {
+                session_id,
+                snapshot_epoch,
+                ..Default::default()
+            },
+            &[nmp_core::TypedProjectionData {
+                key: nmp_core::refs::REFS_PROFILE_KEY.to_string(),
+                schema_id: nmp_core::refs::REFS_PROFILE_KEY.to_string(),
+                schema_version: 1,
+                file_identifier: "NRRD".to_string(),
+                payload,
+                ..Default::default()
+            }],
+        )
     }
 
     // 3A-T1: decode_dispatch_handles_unknown_schema_id_gracefully (D6)
@@ -300,6 +343,67 @@ mod tests {
         assert!(
             result.is_ok(),
             "dispatch_typed_frame must be callable from any thread"
+        );
+    }
+
+    #[test]
+    fn refs_profile_frame_updates_and_clears_claimed_profiles() {
+        let mut state = make_state();
+        let pk = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+        let baseline = refs_profile_frame(
+            42,
+            7,
+            refs_profile_sidecar(
+                true,
+                vec![RefRow::changed(
+                    pk,
+                    1,
+                    encode_profile(&make_profile_card(pk, "Alice")),
+                )],
+            ),
+        );
+
+        let effects = dispatch_typed_frame(&mut state, &baseline, 0);
+        assert!(effects.is_empty());
+        assert_eq!(
+            state
+                .claimed_profiles
+                .get(pk)
+                .and_then(|card| card.display_name.as_deref()),
+            Some("Alice")
+        );
+
+        let update = refs_profile_frame(
+            42,
+            7,
+            refs_profile_sidecar(
+                false,
+                vec![RefRow::changed(
+                    pk,
+                    2,
+                    encode_profile(&make_profile_card(pk, "Alice v2")),
+                )],
+            ),
+        );
+        dispatch_typed_frame(&mut state, &update, 0);
+        assert_eq!(
+            state
+                .claimed_profiles
+                .get(pk)
+                .and_then(|card| card.display_name.as_deref()),
+            Some("Alice v2")
+        );
+
+        let clear = refs_profile_frame(
+            42,
+            7,
+            refs_profile_sidecar(false, vec![RefRow::cleared(pk, 3)]),
+        );
+        dispatch_typed_frame(&mut state, &clear, 0);
+        assert!(
+            !state.claimed_profiles.contains_key(pk),
+            "refs.profile clear must remove the profile snapshot row"
         );
     }
 }

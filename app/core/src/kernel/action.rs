@@ -698,10 +698,10 @@ pub enum AppAction {
     },
 
     // ── Phase 3D additions (append-only) ─────────────────────────────────────
-    /// Open a profile view for `pubkey` — triggers `nmp_app_claim_profile` via
-    /// `Effect::ClaimProfile`. The profile card arrives back as
-    /// `KernelEvent::ProfileCardUpdated` via the `"claimed_profiles"` typed
-    /// sidecar on the NMP update callback.
+    /// Open a profile view for `pubkey` — triggers
+    /// `NmpApp::resolve_ref(Profile, ..)` via `Effect::ClaimProfile`. The
+    /// profile card arrives back through the `refs.profile` typed sidecar on
+    /// the NMP update callback.
     ///
     /// `pubkey` is a raw 64-char lowercase hex pubkey. The kernel uses a stable
     /// consumer-id (`"hl.profile.<pubkey>"`) so the refcount is scoped to this
@@ -710,9 +710,9 @@ pub enum AppAction {
         pubkey: String,
     },
 
-    /// Close a profile view — triggers `nmp_app_release_profile`. Decrements the
-    /// per-consumer refcount; when it reaches zero NMP cancels the kind:0
-    /// subscription. Fire-and-forget (D6).
+    /// Close a profile view — triggers `NmpApp::release_ref(Profile, ..)`.
+    /// Decrements the per-consumer refcount; when it reaches zero NMP cancels
+    /// the kind:0 subscription. Fire-and-forget (D6).
     ReleaseProfile {
         pubkey: String,
     },
@@ -1356,13 +1356,13 @@ pub enum KernelEvent {
     DiscoveredGroupsUpdated(Vec<crate::kernel::snapshot::DiscoveredRow>),
 
     // ── Phase 3D additions (append-only) ─────────────────────────────────────
-    /// A profile card from the `"claimed_profiles"` typed sidecar was decoded.
+    /// A profile card from NMP's profile read model was decoded.
     ///
-    /// Produced by `projections::dispatch_typed_frame` when the
-    /// `"claimed_profiles"` schema_id sidecar arrives. Carries one updated
-    /// `ProfileCardModel` for the given `pubkey`. The reducer stores it in
-    /// `AppState::claimed_profiles` so the `ViewId::Profile{pubkey}` snapshot
-    /// can read it directly (non-blocking HashMap lookup).
+    /// Carries one updated `ProfileCardModel` for the given `pubkey`. The
+    /// reducer stores it in `AppState::claimed_profiles` so the
+    /// `ViewId::Profile{pubkey}` snapshot can read it directly (non-blocking
+    /// HashMap lookup). The live NMP path now uses `refs.profile`; this event
+    /// remains for reducer tests and own-profile injection.
     ///
     /// Also produced when the `"profile"` (own-account) sidecar arrives for
     /// the active account's pubkey, in case the Profile view is open for the

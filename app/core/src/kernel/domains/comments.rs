@@ -24,10 +24,11 @@
 //!
 //! `register_comment_projection(nmp_ref, tx)` is called ONCE at boot from
 //! `start_nmp_app` (after `nmp_app_start`). It creates a FRESH
-//! `Arc<CommentThreadProjection>` (separate from the one in `nmp-defaults`
-//! `register_defaults` — double observation is harmless, same pattern as bookmarks).
-//! The `nmp.nip22.post_comment` action is NOT re-registered here (nmp-defaults
-//! already wired it). The new projection observer is solely for the hl snapshot path.
+//! `Arc<CommentThreadProjection>` (separate from the one installed by
+//! `nmp_nip22::register` — double observation is harmless, same pattern as
+//! bookmarks). The `nmp.nip22.post_comment` action is NOT re-registered here
+//! because nmp_nip22 already wired it. The new projection observer is solely
+//! for the hl snapshot path.
 //!
 //! ## Threading
 //!
@@ -305,10 +306,10 @@ pub(crate) fn compute_comment_thread_snapshot(
 /// an observed projection against `nmp_ref`.
 ///
 /// This creates a SECOND `CommentThreadProjection` (separate from the one
-/// registered by `nmp-defaults::register_defaults`). Double-observation is
-/// harmless — both projections read the same kind:1111 events. The write action
-/// (`nmp.nip22.post_comment`) is NOT re-registered here; nmp-defaults already
-/// wired it via `register_defaults`. This registration is purely for the hl
+/// registered by `nmp_nip22::register`). Double-observation is harmless — both
+/// projections read the same kind:1111 events. The write action
+/// (`nmp.nip22.post_comment`) is NOT re-registered here; nmp_nip22 already
+/// wired it. This registration is purely for the hl
 /// snapshot path (`KernelEvent::CommentThreadUpdated` → `AppState::comment_threads`).
 ///
 /// Called ONCE at boot from `start_nmp_app` (after `nmp_app_start`). No re-
