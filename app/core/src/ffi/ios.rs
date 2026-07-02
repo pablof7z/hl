@@ -84,6 +84,13 @@ impl HighlighterApp {
         let _ = self.tx.send(Cmd::ActionEnvelope(action));
     }
 
+    /// Fire-and-forget dispatch of pre-built `DispatchEnvelope` bytes from a
+    /// generated native action builder (hl#125 — ADR-0071 typed byte doorway).
+    /// Forwarded to nmp verbatim; never returns a Result (Non-Negotiable #3 / D6).
+    pub fn dispatch_action_bytes(&self, bytes: Vec<u8>) {
+        let _ = self.tx.send(Cmd::DispatchActionBytes(bytes));
+    }
+
     /// Register a bounded projection for a view. Subsequent state changes will
     /// emit snapshots for this view until `close_view` is called.
     pub fn open_view(&self, view_id: ViewId, route: ViewRoute) {

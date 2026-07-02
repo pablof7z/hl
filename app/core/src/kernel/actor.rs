@@ -149,6 +149,12 @@ fn log_nmp_register<T: std::fmt::Debug>(
 pub(crate) enum Cmd {
     Action(AppAction),
     ActionEnvelope(crate::kernel::action::AppActionEnvelope),
+    /// Pre-built `DispatchEnvelope` bytes from a generated action builder
+    /// (hl#125 — ADR-0071 typed byte doorway). Forwarded verbatim to
+    /// `nmp_uniffi_support::dispatch_action_vec`, bypassing the reducer: the
+    /// action was already validated and encoded natively (Swift/Kotlin), so
+    /// there is no JSON to decode and no local `AppState` to mutate.
+    DispatchActionBytes(Vec<u8>),
     Event(KernelEvent),
     OpenView(ViewId, ViewRoute),
     CloseView(ViewId),
@@ -226,6 +232,11 @@ pub(crate) fn reduce(state: &mut AppState, cmd: Cmd, now: u64) -> Vec<Effect> {
         Cmd::OpenView(..) | Cmd::CloseView(..) | Cmd::Resume | Cmd::Suspend | Cmd::Tick => {
             // OpenView/CloseView/Resume/Suspend/Tick are handled by the actor loop
             // itself (registry + NmpApp lifecycle); the reducer has no state to change.
+        }
+        Cmd::DispatchActionBytes(_) => {
+            // Handled directly in `actor_task`'s receive loop (forwarded to nmp
+            // before `reduce` is ever called); unreachable in production. Kept as
+            // a no-op arm so direct `reduce()` calls in tests stay exhaustive.
         }
         Cmd::ProvideCapabilityResult(result) => {
             effects.extend(reduce_event(
@@ -2855,6 +2866,16 @@ pub(crate) async fn actor_task(
     let nmp_handle = nmp;
 
     while let Some(cmd) = rx.recv().await {
+        // Generated-action-builder byte doorway (hl#125): the envelope was
+        // already encoded natively, so forward it to nmp verbatim and skip
+        // the reducer entirely — no `AppState` mutation, no `Effect` to run.
+        if let Cmd::DispatchActionBytes(bytes) = cmd {
+            if let Some(handle) = nmp_handle.as_ref() {
+                let _ = nmp_uniffi_support::dispatch_action_vec(&handle.app, bytes);
+            }
+            continue;
+        }
+
         let is_shutdown = matches!(cmd, Cmd::Shutdown);
 
         // Handle view registry mutations before reducing (they need the registry).
