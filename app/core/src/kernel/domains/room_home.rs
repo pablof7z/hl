@@ -12,7 +12,7 @@
 //! * **WRITE** — NIP-29 write actions (Phase 3F plus later room/share slices):
 //!   - `AppAction::JoinRoom`            → `"nmp.nip29.join"`                   (kind:9021)
 //!   - `AppAction::LeaveRoom`           → `"nmp.nip29.leave"`                  (kind:9022)
-//!   - `AppAction::CreateRoom`          → `"nmp.nip29.create_public_group"`    (kind:9007+9002)
+//!   - `AppAction::CreateRoom`          → `"nmp.nip29.create_group"`           (kind:9007+9002)
 //!   - `AppAction::AddRoomMember`       → `"nmp.nip29.put_user"`               (kind:9000)
 //!   - `AppAction::CreateRoomInvites`   → `"nmp.nip29.create_invite"`          (kind:9009)
 //!   - `AppAction::ShareToRoom (repost=false)` → `"nmp.nip29.share_event_in_group"` (kind:11)
@@ -369,7 +369,7 @@ pub(crate) fn reduce_action_leave_room(
 
 /// Handle `AppAction::CreateRoom { group_id, name, about }`.
 ///
-/// Dispatches `"nmp.nip29.create_public_group"` via `Effect::DispatchNip29Action`.
+/// Dispatches `"nmp.nip29.create_group"` via `Effect::DispatchNip29Action`.
 ///
 /// `CreatePublicGroupInput` fields (verified on pinned nmp b4404159):
 /// - `group`: `{ host_relay_url, local_id }` (GroupId)
@@ -401,7 +401,7 @@ pub(crate) fn reduce_action_create_room(
     })
     .to_string();
     vec![Effect::DispatchNip29Action {
-        namespace: "nmp.nip29.create_public_group".to_string(),
+        namespace: "nmp.nip29.create_group".to_string(),
         json,
     }]
 }
@@ -1582,7 +1582,7 @@ mod tests {
     // 3F-T8: create_room_dispatches_create_public_group
     //
     // AppAction::CreateRoom must emit exactly one DispatchNip29Action with
-    // namespace="nmp.nip29.create_public_group" and a valid serde_json payload.
+    // namespace="nmp.nip29.create_group" and a valid serde_json payload.
     #[test]
     fn create_room_dispatches_create_public_group() {
         let mut state = make_state();
@@ -1602,7 +1602,7 @@ mod tests {
         assert_eq!(effects.len(), 1, "CreateRoom must emit exactly one effect");
         match &effects[0] {
             Effect::DispatchNip29Action { namespace, json } => {
-                assert_eq!(namespace, "nmp.nip29.create_public_group");
+                assert_eq!(namespace, "nmp.nip29.create_group");
                 let parsed: serde_json::Value =
                     serde_json::from_str(json).expect("CreateRoom payload must be valid JSON");
                 assert_eq!(parsed["name"].as_str().unwrap(), "My Room");
