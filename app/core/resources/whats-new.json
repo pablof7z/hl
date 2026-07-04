@@ -2,6 +2,12 @@
   "schema_version": 1,
   "entries": [
     {
+      "shipped_at": "2026-07-05T00:00:00Z",
+      "lines": [
+        "Fixed a bug where scrolling through posts with inline videos could make the app freeze, and videos that failed to load now show a clear placeholder instead of spinning forever."
+      ]
+    },
+    {
       "shipped_at": "2026-06-21T12:00:00Z",
       "lines": [
         "The article reader now renders every part of a post faithfully — all images (not just the first), embedded notes and profiles as rich cards, code blocks with their language, and inline videos and audio — while keeping the text fully selectable for highlighting."
