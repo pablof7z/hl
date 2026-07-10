@@ -61,7 +61,9 @@ use nmp_core::substrate::{
     InputScopeId, TextSearchTargets,
 };
 use nmp_native_runtime::NmpApp;
-use nmp_nip50::{SearchRequest, SearchScope as NmpSearchScope, SearchTargets};
+use nmp_nip50::{
+    open_search, Nip50SearchSession, SearchRequest, SearchScope as NmpSearchScope, SearchTargets,
+};
 
 use crate::kernel::action::KernelEvent;
 use crate::kernel::actor::NmpHandle;
@@ -161,6 +163,11 @@ fn target_to_outcome(query: &str, target: InputIntentTarget) -> OmniboxOutcome {
         InputIntentTarget::DirectRef { uri } => OmniboxOutcome::Navigate { uri },
         InputIntentTarget::Nip05 { identifier } => OmniboxOutcome::ResolveNip05 { identifier },
         InputIntentTarget::RelayUrl { url } => OmniboxOutcome::RelayUrl { url },
+        // hl has no NIP-AD surface (#2927) yet — no in-core action for a
+        // target class the shell can't render. Same D6 fail-closed shape as
+        // an unparseable rejection (OB-T7) or a malformed group payload
+        // (OB-T8).
+        InputIntentTarget::AdCandidate { .. } => OmniboxOutcome::NoMatch,
         InputIntentTarget::Registered { payload_json } => {
             match serde_json::from_str::<GroupIdentPayload>(&payload_json) {
                 Ok(p) => OmniboxOutcome::OpenGroup {
@@ -233,10 +240,10 @@ fn open_multi_kind_search(nmp_ref: &NmpApp, query: &str) {
         Some(r) => r,
         None => return,
     };
-    let _handle = nmp_ref.open_search_session(nmp_native_runtime::Nip50SearchSession::new(
-        request,
-        super::search::SEARCH_SESSION_ID,
-    ));
+    let _handle = open_search(
+        nmp_ref,
+        Nip50SearchSession::new(request, super::search::SEARCH_SESSION_ID),
+    );
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────────

@@ -32,9 +32,10 @@
 //! - `decode_search_results_snapshot(&[u8]) -> Result<SearchResultsSnapshot, _>`
 //!   decodes the typed `N50S` FlatBuffers sidecar payload.
 //!
-//! `nmp-ffi`:
-//! - `NmpApp::open_search(request, session_id) -> String` (snapshot key).
-//! - `NmpApp::close_search(session_id)` — tears down the session (idempotent).
+//! - `open_search(host, Nip50SearchSession::new(request, session_id)) ->
+//!   Nip50SearchHandle` — the concept-owned lifecycle door; re-opening the same
+//!   session id tears the prior session down first (idempotent).
+//! - `close_search(host, &handle)` — tears down the session (idempotent).
 //!
 //! ## Bounded results
 //!
@@ -66,10 +67,11 @@
 //!
 //! Search is read-only (no write action for search hits) — no double-publish risk.
 
-use nmp_native_runtime::{Nip50SearchSession, NmpApp};
+use nmp_native_runtime::NmpApp;
 use nmp_nip50::{
-    decode_search_results_snapshot, SearchRequest, SearchScope as NmpSearchScope, SearchTargets,
-    DEFAULT_MAX_SEARCH_HITS, SEARCH_RESULTS_SCHEMA_ID,
+    decode_search_results_snapshot, open_search, Nip50SearchSession, SearchRequest,
+    SearchScope as NmpSearchScope, SearchTargets, DEFAULT_MAX_SEARCH_HITS,
+    SEARCH_RESULTS_SCHEMA_ID,
 };
 
 use crate::kernel::action::SearchScope;
@@ -284,7 +286,7 @@ fn hl_scope_to_nmp(scope: &SearchScope) -> NmpSearchScope {
 ///   2. Build a `SearchRequest` from `query` + scope. If `SearchRequest::new`
 ///      returns `None` (blank query after nmp's `bounded_search_query` trim),
 ///      this is a no-op (D6).
-///   3. Call `nmp_ref.open_search(request, SEARCH_SESSION_ID)`. NMP resolves
+///   3. Call `open_search(nmp_ref, Nip50SearchSession::new(request, SEARCH_SESSION_ID))`. NMP resolves
 ///      `UserPreferred` relays (kind:10007), runs the #1827 cache-FTS scope to
 ///      seed results, opens the per-relay pinned interests, and owns the result
 ///      projection + typed `N50S` sidecar. Re-opening the same session id is
@@ -333,7 +335,7 @@ pub(crate) fn run_effect_run_search(
     // seed, per-relay pinned interests, result projection, and typed `N50S`
     // sidecar (registered under `nmp.nip50.search.<session_id>`). Idempotent
     // re-open on the same session id (prior session is torn down first).
-    let _handle = nmp_ref.open_search_session(Nip50SearchSession::new(request, SEARCH_SESSION_ID));
+    let _handle = open_search(nmp_ref, Nip50SearchSession::new(request, SEARCH_SESSION_ID));
 }
 
 // ─── Snapshot projection ─────────────────────────────────────────────────────
