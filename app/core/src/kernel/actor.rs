@@ -2942,10 +2942,9 @@ pub(crate) async fn actor_task(
                     // idempotent on an unknown session.
                     if let Some(handle) = nmp_handle.as_ref() {
                         let nmp_ref: &NmpApp = &handle.app;
-                        let handle = nmp_native_runtime::Nip50SearchHandle::for_key(
-                            search::SEARCH_SESSION_ID,
-                        );
-                        nmp_ref.close_search_session(&handle);
+                        let handle =
+                            nmp_nip50::Nip50SearchHandle::for_key(search::SEARCH_SESSION_ID);
+                        let _ = nmp_nip50::close_search(nmp_ref, &handle);
                     }
                 }
                 lifecycle_effects.extend(search::lifecycle_effects_for_view_close(id));

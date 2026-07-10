@@ -3,7 +3,7 @@
 //! ## Responsibilities
 //!
 //! * **WIRE** — `run_effect_wire_group_discovery(relay_url, nmp_ref)` calls
-//!   `nmp_nip29::register::open_group_discovery` to register the
+//!   `nmp_nip29::open_nip29_group_discovery_session` to register the
 //!   `DiscoveredGroupsProjection` event observer and typed snapshot sidecar
 //!   under `"nmp.nip29.discovered_groups"`.
 //!
@@ -49,7 +49,10 @@ use nmp_native_runtime::NmpApp;
 use nmp_nip29::action::{
     CreateGroupInput, CreateInviteInput, DiscoverGroupsInput, JoinGroupInput, PutUserInput,
 };
-use nmp_nip29::decode_discovered_groups_snapshot;
+use nmp_nip29::{
+    decode_discovered_groups_snapshot, open_nip29_group_discovery_session,
+    Nip29GroupDiscoverySession,
+};
 
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
@@ -261,8 +264,9 @@ pub(crate) fn run_effect_wire_group_discovery(relay_url: String, nmp_ref: &NmpAp
     if relay_url.trim().is_empty() {
         return;
     }
-    let _handle = nmp_ref.open_nip29_group_discovery_session(
-        nmp_native_runtime::Nip29GroupDiscoverySession::new(relay_url),
+    let _handle = open_nip29_group_discovery_session(
+        nmp_ref,
+        Nip29GroupDiscoverySession::new(vec![relay_url]),
     );
 }
 

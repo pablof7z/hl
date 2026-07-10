@@ -16,8 +16,8 @@
 //! 5. `reduce_event_joined_groups_updated` stores the rows in `AppState.communities`.
 //! 6. `project_communities_snapshot` projects them into `ViewSnapshot::Communities`.
 
-use nmp_native_runtime::{Nip29JoinedGroupsSession, NmpApp};
-use nmp_nip29::decode_joined_groups_snapshot;
+use nmp_native_runtime::NmpApp;
+use nmp_nip29::{decode_joined_groups_snapshot, open_nip29_joined_groups_session, Nip29JoinedGroupsSession};
 
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
@@ -28,7 +28,7 @@ use crate::kernel::snapshot::{CommunitiesSnapshot, CommunityRow, ViewSnapshot};
 /// Wire the `JoinedGroupsProjection` event observer + typed snapshot projection
 /// against `nmp_ref` for `active_pubkey`.
 ///
-/// Delegates directly to `nmp_nip29::register::wire_joined_groups`, which:
+/// Delegates directly to `nmp_nip29::open_nip29_joined_groups_session`, which:
 ///   - Registers a `JoinedGroupsProjection` as an observed projection (ingest).
 ///   - Registers a typed FlatBuffers sidecar under `"nmp.nip29.joined_groups"`.
 ///
@@ -36,14 +36,15 @@ use crate::kernel::snapshot::{CommunitiesSnapshot, CommunityRow, ViewSnapshot};
 ///   1. Once at boot (after `nmp_app_start`) via `start_nmp_app`.
 ///   2. On `IdentityChanged(Some(pubkey))` via `Effect::WireJoinedGroups`.
 ///
-/// An empty `active_pubkey` is a silent no-op (`wire_joined_groups` guards it).
-/// `host_relay_url` is passed as empty here — the projection accepts events from
-/// any relay provenance, so hl does not pin to a specific host at registration.
-/// (The interest helper `joined_groups_for_host` can be used to push a relay-pinned
-/// interest separately; hl relies on the standing kind:39001/39002 subscriptions
-/// from the active-account interest set for now.)
+/// An empty `active_pubkey` is a silent no-op (`open_nip29_joined_groups_session`
+/// guards it, returning `None`). `host_relay_url` is passed as empty here — the
+/// projection accepts events from any relay provenance, so hl does not pin to a
+/// specific host at registration. (The interest helper `joined_groups_for_host`
+/// can be used to push a relay-pinned interest separately; hl relies on the
+/// standing kind:39001/39002 subscriptions from the active-account interest set
+/// for now.)
 pub(crate) fn register_joined_groups_projection(nmp_ref: &NmpApp, active_pubkey: String) {
-    let _handle = nmp_ref.open_nip29_joined_groups_session(Nip29JoinedGroupsSession::new(
+    let _handle = open_nip29_joined_groups_session(nmp_ref, Nip29JoinedGroupsSession::new(
         active_pubkey,
         String::new(),
     ));

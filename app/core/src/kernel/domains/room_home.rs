@@ -48,10 +48,12 @@
 
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
 use nmp_core::substrate::ActionPayload;
-use nmp_native_runtime::{Nip29GroupEventsSession, NmpApp};
+use nmp_native_runtime::NmpApp;
 use nmp_nip29::action::PublishGroupEventInput;
 use nmp_nip29::decode_group_events_snapshot;
+use nmp_nip29::open_nip29_group_events_session;
 use nmp_nip29::GroupId;
+use nmp_nip29::Nip29GroupEventsSession;
 
 use crate::kernel::app::AppState;
 use crate::kernel::domains::feed::ROOM_LANE_EVENT_KINDS;
@@ -171,7 +173,7 @@ pub(crate) fn lifecycle_effects_for_view_close(id: &ViewId) -> Vec<Effect> {
 /// Execute `Effect::WireGroupEvents { group_id }`.
 ///
 /// Looks up the `host_relay_url` for `group_id` in `AppState::communities` and
-/// calls `nmp_nip29::register::wire_group_events(nmp_ref, GroupId{..})` to
+/// calls `nmp_nip29::open_nip29_group_events_session(nmp_ref, GroupId{..})` to
 /// register the `GroupEventsProjection` event observer + typed FlatBuffers
 /// sidecar under `"nmp.nip29.group_events"`. Subsequent NMP snapshot ticks
 /// deliver `KernelEvent::NmpSnapshotFrame` frames that `apply_group_events_frame`
@@ -205,10 +207,13 @@ pub(crate) fn run_effect_wire_group_events(
     }
 
     let nmp_ref: &NmpApp = &handle.app;
-    let _handle = nmp_ref.open_nip29_group_events_session(Nip29GroupEventsSession::new(
-        GroupId::new(host_relay_url, group_id),
-        ROOM_LANE_EVENT_KINDS.to_vec(),
-    ));
+    let _handle = open_nip29_group_events_session(
+        nmp_ref,
+        Nip29GroupEventsSession::new(
+            GroupId::new(host_relay_url, group_id),
+            ROOM_LANE_EVENT_KINDS.to_vec(),
+        ),
+    );
 }
 
 // ─── Frame decode (called from projections::dispatch_typed_frame) ─────────────
