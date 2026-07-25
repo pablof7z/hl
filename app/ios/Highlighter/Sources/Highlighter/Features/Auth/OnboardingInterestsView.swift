@@ -1,13 +1,36 @@
 import SwiftUI
 
 struct OnboardingInterestsView: View {
+    let account: GeneratedAccount
+
     @Environment(HighlighterStore.self) private var store
 
     @State private var selectedIds: [String] = []
     @State private var isWorking = false
 
     private var projection: OnboardingInterestProjection {
-        OnboardingInterestCatalog.projection(selectedIds: selectedIds)
+        let minimumRequired: UInt32 = 3
+        let selectedSet = Set(selectedIds)
+        let chips = onboardingInterestCatalog.map { seed in
+            OnboardingInterestChip(
+                id: seed.id,
+                emoji: seed.emoji,
+                label: seed.label,
+                isSelected: selectedSet.contains(seed.id)
+            )
+        }
+        let selectedCount = UInt32(selectedSet.intersection(Set(onboardingInterestCatalog.map(\.id))).count)
+        let remaining = selectedCount < minimumRequired ? minimumRequired - selectedCount : 0
+        return OnboardingInterestProjection(
+            interests: chips,
+            selection: OnboardingInterestSelection(
+                minimumRequired: minimumRequired,
+                selectedCount: selectedCount,
+                remaining: remaining,
+                canContinue: remaining == 0,
+                followPubkeys: []
+            )
+        )
     }
 
     var body: some View {
@@ -96,10 +119,11 @@ struct OnboardingInterestsView: View {
     private func chip(_ interest: OnboardingInterestChip) -> some View {
         let active = interest.isSelected
         return Button {
-            selectedIds = OnboardingInterestCatalog.toggle(
-                selectedIds: selectedIds,
-                interestId: interest.id
-            )
+            let id = interest.id
+            guard onboardingInterestCatalog.contains(where: { $0.id == id }) else { return }
+            var selected = Set(selectedIds)
+            if selected.contains(id) { selected.remove(id) } else { selected.insert(id) }
+            selectedIds = onboardingInterestCatalog.compactMap { selected.contains($0.id) ? $0.id : nil }
         } label: {
             HStack(spacing: 6) {
                 Text(interest.emoji)
@@ -122,8 +146,7 @@ struct OnboardingInterestsView: View {
         let chosenIds = selectedIds
 
         Task {
-            // The kernel already authenticated the account (session present);
-            // just finalize onboarding so the route flips to the root shell.
+            await store.completeLogin(user: account.user)
             let outcome = await store.completeOnboardingInterests(selectedIds: chosenIds)
             if !outcome.applied {
                 // Follow-list publish failed (relays not yet connected on a fresh
@@ -190,96 +213,33 @@ private struct FlowLayout: Layout {
     }
 }
 
-// MARK: - Onboarding interest catalog (D1 inlined)
-//
-// Mirrors `app/core/src/onboarding.rs` (interest_catalog / interest_projection /
-// toggle_interest_selection). The catalog is static seed data, so per the D1
-// doctrine Swift owns this pure computation. Rust still owns the durable
-// "onboarding complete" flag and the follow-list publish in
-// `complete_onboarding_interests`.
-private enum OnboardingInterestCatalog {
-    private static let jackPubkey = "82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2"
-    private static let fiatjafPubkey = "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
-    private static let minimumRequired: UInt32 = 3
+// MARK: - Onboarding Interest Catalog (mirrors onboarding.rs INTERESTS)
 
-    private struct Seed {
-        let id: String
-        let emoji: String
-        let label: String
-        let pubkeys: [String]
-    }
-
-    private static let interests: [Seed] = [
-        Seed(id: "philosophy", emoji: "🧠", label: "Philosophy", pubkeys: [jackPubkey]),
-        Seed(id: "science_fiction", emoji: "🚀", label: "Science Fiction", pubkeys: [jackPubkey]),
-        Seed(id: "technology", emoji: "💻", label: "Technology", pubkeys: [fiatjafPubkey, jackPubkey]),
-        Seed(id: "history", emoji: "📜", label: "History", pubkeys: [jackPubkey]),
-        Seed(id: "economics", emoji: "📈", label: "Economics", pubkeys: [fiatjafPubkey]),
-        Seed(id: "psychology", emoji: "🔬", label: "Psychology", pubkeys: [jackPubkey]),
-        Seed(id: "literature", emoji: "📚", label: "Literature", pubkeys: [jackPubkey]),
-        Seed(id: "politics", emoji: "🗳️", label: "Politics", pubkeys: []),
-        Seed(id: "bitcoin", emoji: "₿", label: "Bitcoin", pubkeys: [jackPubkey, fiatjafPubkey]),
-        Seed(id: "self_improvement", emoji: "🌱", label: "Self-improvement", pubkeys: [jackPubkey]),
-        Seed(id: "science", emoji: "🔭", label: "Science", pubkeys: []),
-        Seed(id: "art", emoji: "🎨", label: "Art", pubkeys: []),
-        Seed(id: "music", emoji: "🎵", label: "Music", pubkeys: []),
-        Seed(id: "design", emoji: "✏️", label: "Design", pubkeys: []),
-        Seed(id: "writing", emoji: "✍️", label: "Writing", pubkeys: [jackPubkey]),
-        Seed(id: "startups", emoji: "⚡️", label: "Startups", pubkeys: [jackPubkey]),
-        Seed(id: "nostr", emoji: "🟣", label: "Nostr", pubkeys: [fiatjafPubkey]),
-        Seed(id: "food", emoji: "🍳", label: "Food", pubkeys: []),
-        Seed(id: "travel", emoji: "🗺️", label: "Travel", pubkeys: []),
-        Seed(id: "health", emoji: "🏃", label: "Health", pubkeys: []),
-    ]
-
-    /// Renderable chips plus the selection summary for the current set of ids.
-    static func projection(selectedIds: [String]) -> OnboardingInterestProjection {
-        let requested = Set(selectedIds)
-        let selected = Set(interests.lazy.filter { requested.contains($0.id) }.map(\.id))
-        let chips = interests.map {
-            OnboardingInterestChip(
-                id: $0.id,
-                emoji: $0.emoji,
-                label: $0.label,
-                isSelected: selected.contains($0.id)
-            )
-        }
-        return OnboardingInterestProjection(interests: chips, selection: selection(for: selected))
-    }
-
-    /// Toggle a known interest id in/out, returning ids in catalog order.
-    /// Unknown ids leave the selection unchanged (matches Rust).
-    static func toggle(selectedIds: [String], interestId: String) -> [String] {
-        let requested = Set(selectedIds)
-        var selected = Set(interests.lazy.filter { requested.contains($0.id) }.map(\.id))
-        if interests.contains(where: { $0.id == interestId }) {
-            if selected.contains(interestId) {
-                selected.remove(interestId)
-            } else {
-                selected.insert(interestId)
-            }
-        }
-        return interests.lazy.filter { selected.contains($0.id) }.map(\.id)
-    }
-
-    private static func selection(for selected: Set<String>) -> OnboardingInterestSelection {
-        let selectedCount = UInt32(selected.count)
-        let remaining = selectedCount >= minimumRequired ? 0 : minimumRequired - selectedCount
-
-        var seen = Set<String>()
-        var followPubkeys: [String] = []
-        for interest in interests where selected.contains(interest.id) {
-            for pubkey in interest.pubkeys where seen.insert(pubkey).inserted {
-                followPubkeys.append(pubkey)
-            }
-        }
-
-        return OnboardingInterestSelection(
-            minimumRequired: minimumRequired,
-            selectedCount: selectedCount,
-            remaining: remaining,
-            canContinue: remaining == 0,
-            followPubkeys: followPubkeys
-        )
-    }
+private struct OnboardingInterestSeed {
+    let id: String
+    let emoji: String
+    let label: String
 }
+
+private let onboardingInterestCatalog: [OnboardingInterestSeed] = [
+    OnboardingInterestSeed(id: "philosophy",      emoji: "🧠",  label: "Philosophy"),
+    OnboardingInterestSeed(id: "science_fiction",  emoji: "🚀",  label: "Science Fiction"),
+    OnboardingInterestSeed(id: "technology",       emoji: "💻",  label: "Technology"),
+    OnboardingInterestSeed(id: "history",          emoji: "📜",  label: "History"),
+    OnboardingInterestSeed(id: "economics",        emoji: "📈",  label: "Economics"),
+    OnboardingInterestSeed(id: "psychology",       emoji: "🔬",  label: "Psychology"),
+    OnboardingInterestSeed(id: "literature",       emoji: "📚",  label: "Literature"),
+    OnboardingInterestSeed(id: "politics",         emoji: "🗳️", label: "Politics"),
+    OnboardingInterestSeed(id: "bitcoin",          emoji: "₿",   label: "Bitcoin"),
+    OnboardingInterestSeed(id: "self_improvement", emoji: "🌱",  label: "Self-improvement"),
+    OnboardingInterestSeed(id: "science",          emoji: "🔭",  label: "Science"),
+    OnboardingInterestSeed(id: "art",              emoji: "🎨",  label: "Art"),
+    OnboardingInterestSeed(id: "music",            emoji: "🎵",  label: "Music"),
+    OnboardingInterestSeed(id: "design",           emoji: "✏️", label: "Design"),
+    OnboardingInterestSeed(id: "writing",          emoji: "✍️", label: "Writing"),
+    OnboardingInterestSeed(id: "startups",         emoji: "⚡️", label: "Startups"),
+    OnboardingInterestSeed(id: "nostr",            emoji: "🟣",  label: "Nostr"),
+    OnboardingInterestSeed(id: "food",             emoji: "🍳",  label: "Food"),
+    OnboardingInterestSeed(id: "travel",           emoji: "🗺️", label: "Travel"),
+    OnboardingInterestSeed(id: "health",           emoji: "🏃",  label: "Health"),
+]
