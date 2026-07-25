@@ -23,3 +23,6 @@ app/android/keystore.properties
 app/android/**/*.keystore
 app/android/local.properties
 **/DerivedData/
+
+# Stray session-transcript export
+/hl.json

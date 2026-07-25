@@ -1,6 +1,6 @@
 # AGENTS.md — Highlighter Mobile & Desktop Apps
 
-> The Highlighter native apps are Rust/NMP-owned products with thin native shells. App runtime, event ingestion, relay routing, protocol actions, durable product state, and screen-shaped projections belong in the Rust core through `nostr-multi-platform` (NMP). Platform-specific UI layers (Kotlin for Android, Swift for iOS, Tauri/native for desktop) render projections and execute bounded OS capabilities only.
+> The Highlighter native apps are Rust/NMP-owned products with thin native shells. App runtime, event ingestion, relay routing, protocol actions, durable product state, and screen-shaped projections belong in the Rust core through `nmp` (NMP). Platform-specific UI layers (Kotlin for Android, Swift for iOS, Tauri/native for desktop) render projections and execute bounded OS capabilities only.
 
 ## Tech Stack
 
