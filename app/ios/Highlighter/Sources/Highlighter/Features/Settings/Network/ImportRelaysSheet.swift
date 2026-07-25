@@ -1,12 +1,13 @@
 import SwiftUI
 
 /// Lets the user import another nostr account's relay list. Takes an npub
-/// (or hex pubkey), previews that user's NMP-cached kind:10002 mailbox,
+/// (or hex pubkey), fetches that user's kind:10002 via the Indexer pool,
 /// and shows the discovered relays with checkboxes. Merging is opt-in —
 /// only rows the user ticks get upserted.
 struct ImportRelaysSheet: View {
     let store: NetworkSettingsStore
 
+    @Environment(HighlighterStore.self) private var appStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var npubText: String = ""
@@ -17,11 +18,40 @@ struct ImportRelaysSheet: View {
     @State private var isApplying = false
 
     private var projection: ImportRelaysProjection {
-        store.importRelaysProjection(fetched: fetched, selectedUrls: selectedUrls)
+        let selectedSet = Set(selectedUrls)
+        var selectedConfigs: [RelayConfig] = []
+        let rows: [ImportRelayRow] = fetched.map { config in
+            let isSelected = selectedSet.contains(config.url)
+            if isSelected { selectedConfigs.append(config) }
+            let displayUrl = config.url.hasPrefix("wss://")
+                ? String(config.url.dropFirst(6))
+                : config.url
+            let roleLabel: String
+            switch (config.read, config.write) {
+            case (true, true): roleLabel = "Read + Write"
+            case (true, false): roleLabel = "Read"
+            case (false, true): roleLabel = "Write"
+            default: roleLabel = "No roles"
+            }
+            return ImportRelayRow(config: config, displayUrl: displayUrl, roleLabel: roleLabel, isSelected: isSelected)
+        }
+        let selectedCount = UInt64(selectedConfigs.count)
+        let foundCount = rows.count
+        return ImportRelaysProjection(
+            rows: rows,
+            selectedCount: selectedCount,
+            foundTitle: "Found \(foundCount) relay\(foundCount == 1 ? "" : "s")",
+            canApply: selectedCount > 0,
+            selectedConfigs: selectedConfigs
+        )
     }
 
     private var sourceProjection: ImportRelaysSourceProjection {
-        store.importRelaysSourceProjection(npub: npubText, isFetching: isFetching)
+        let submitNpub = npubText.trimmingCharacters(in: .whitespaces)
+        return ImportRelaysSourceProjection(
+            submitNpub: submitNpub,
+            canFetch: !submitNpub.isEmpty && !isFetching
+        )
     }
 
     var body: some View {
@@ -76,6 +106,8 @@ struct ImportRelaysSheet: View {
             .disabled(!sourceProjection.canFetch)
         } header: {
             Text("Source")
+        } footer: {
+            Text("Highlighter will fetch the user's kind:10002 event through your Indexer relays. Turn on Indexer for at least one relay first.")
         }
     }
 
@@ -127,15 +159,12 @@ struct ImportRelaysSheet: View {
         selectedUrls = []
         isFetching = true
         defer { isFetching = false }
-        let snapshot = store.importRelaysForPubkey(source.submitNpub)
-        if !snapshot.errorMessage.isEmpty {
-            errorText = snapshot.errorMessage
-        } else if snapshot.fetched.isEmpty {
-            errorText = "No cached relay list found for that pubkey."
-        } else {
-            fetched = snapshot.fetched
-            selectedUrls = snapshot.selectedUrls
-        }
+        let snapshot = await appStore.safeCore
+            .importRelaysFromNpubSnapshot(source.submitNpub)
+        fetched = snapshot.fetched
+        selectedUrls = snapshot.selectedUrls
+        let trimmedError = snapshot.errorMessage.trimmingCharacters(in: .whitespaces)
+        errorText = trimmedError.isEmpty ? nil : trimmedError
     }
 
     private func applySelected() async {
@@ -149,10 +178,15 @@ struct ImportRelaysSheet: View {
     }
 
     private func toggle(_ url: String) {
-        selectedUrls = store.toggleImportRelaySelection(
-            fetched: fetched,
-            selectedUrls: selectedUrls,
-            url: url
-        )
+        let known = fetched.contains { $0.url == url }
+        guard known else { return }
+        var selectedSet = Set(selectedUrls)
+        if selectedSet.contains(url) {
+            selectedSet.remove(url)
+        } else {
+            selectedSet.insert(url)
+        }
+        // Preserve fetched order (matches Rust's selected_import_urls_for_fetched)
+        selectedUrls = fetched.compactMap { selectedSet.contains($0.url) ? $0.url : nil }
     }
 }
