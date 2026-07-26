@@ -810,6 +810,13 @@ public protocol HighlighterAppProtocol: AnyObject, Sendable {
     func dispatchAction(action: AppActionEnvelope)
 
     /**
+     * Fire-and-forget dispatch of pre-built `DispatchEnvelope` bytes from a
+     * generated native action builder (hl#125 — ADR-0071 typed byte doorway).
+     * Forwarded to nmp verbatim; never returns a Result (Non-Negotiable #3 / D6).
+     */
+    func dispatchActionBytes(bytes: Data)
+
+    /**
      * Project another user's importable relay list from NMP's mailbox cache.
      *
      * This is intentionally a bounded cache preview, not a bespoke network
@@ -1017,6 +1024,18 @@ open func defaultAddRelayConfig() -> RelayConfig  {
 open func dispatchAction(action: AppActionEnvelope)  {try! rustCall() {
     uniffi_highlighter_core_fn_method_highlighterapp_dispatch_action(self.uniffiClonePointer(),
         FfiConverterTypeAppActionEnvelope_lower(action),$0
+    )
+}
+}
+
+    /**
+     * Fire-and-forget dispatch of pre-built `DispatchEnvelope` bytes from a
+     * generated native action builder (hl#125 — ADR-0071 typed byte doorway).
+     * Forwarded to nmp verbatim; never returns a Result (Non-Negotiable #3 / D6).
+     */
+open func dispatchActionBytes(bytes: Data)  {try! rustCall() {
+    uniffi_highlighter_core_fn_method_highlighterapp_dispatch_action_bytes(self.uniffiClonePointer(),
+        FfiConverterData.lower(bytes),$0
     )
 }
 }
@@ -35449,6 +35468,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlighterapp_dispatch_action() != 62969) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_highlighter_core_checksum_method_highlighterapp_dispatch_action_bytes() != 48499) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_highlighter_core_checksum_method_highlighterapp_import_relays_for_pubkey() != 61507) {
