@@ -15,10 +15,14 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 hex = "0.4"
 nmp-feedback = { git = "https://github.com/pablof7z/nmp-feedback.git", rev = "fc0589fc88d61912779741fcce7d4e7176cf9a30", default-features = false }
-# Track NMP `master` (branch) — never pin a rev. Owner directive: hl always
-# follows NMP master; run `cargo update` to advance. (Post clean-break:
-# nmp-ffi/nmp-defaults deleted; nmp-native-runtime + nmp-uniffi-support +
-# nmp-substrate are the replacements — see hl #123 / nmp #2720.)
+# New-generation NMP canary dependencies. These are pinned deliberately:
+# product traffic still runs through the legacy dependencies below until each
+# vertical slice has parity proof and deletes its old owner.
+nmp = { git = "https://github.com/pablof7z/nmp.git", rev = "c51fc80a8b5a2a54fcedf7881ca4eef139a1b512" }
+nmp-next-nip29 = { package = "nmp-nip29", git = "https://github.com/pablof7z/nmp.git", rev = "c51fc80a8b5a2a54fcedf7881ca4eef139a1b512" }
+# Frozen legacy baseline. Do not add or advance these declarations: each
+# vertical migration slice must remove old owners and lower the boundary
+# ratchet from its current maximum of 22.
 nmp-core = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
 nmp-planner = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master" }
 nmp-native-runtime = { git = "https://github.com/pablof7z/nostr-multi-platform.git", branch = "master", features = ["signer-broker", "external-signer", "search"] }

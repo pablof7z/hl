@@ -6,11 +6,13 @@ on:
     paths:
       - "app/core/**"
       - "scripts/lint-actor-blocking.sh"
+      - "scripts/check-nmp-boundary.sh"
       - ".github/workflows/core.yml"
   pull_request:
     paths:
       - "app/core/**"
       - "scripts/lint-actor-blocking.sh"
+      - "scripts/check-nmp-boundary.sh"
       - ".github/workflows/core.yml"
 
 concurrency:
@@ -48,6 +50,10 @@ jobs:
       - name: Actor-blocking lint
         working-directory: hl
         run: bash scripts/lint-actor-blocking.sh
+
+      - name: NMP dependency boundary
+        working-directory: hl
+        run: bash scripts/check-nmp-boundary.sh
 
       # NOTE: there is ONE known pre-existing flaky test in this suite
       # (it varies per run — e.g.
