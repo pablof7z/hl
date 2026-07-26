@@ -130,11 +130,9 @@ pub struct AppState {
     pub follows: Vec<String>,
 
     // ── Phase 3E additions ────────────────────────────────────────────────────
-    /// Discovered groups from the active discovery relay, decoded from the
-    /// `"nmp.nip29.discovered_groups"` typed sidecar. Empty until the
-    /// RoomExplorer view opens (discovery auto-starts in core) and the
-    /// projection frame arrives. Bounded by the discovery relay's group catalog
-    /// (cap at 256 per §2.2 of the 3E spec).
+    /// Discovered group metadata from the active new-NMP host-pinned query.
+    /// Empty until Room Explorer opens and its first bounded window arrives.
+    /// The observation and visible shelf are both capped at 256 rows.
     pub discovered_groups: Vec<crate::kernel::snapshot::DiscoveredRow>,
 
     /// Room policy injected at construction time (D3: no wss-scheme literals
@@ -732,8 +730,8 @@ impl AppState {
 /// Room discovery and curator policy (D3: no hardcoded relays in kernel).
 ///
 /// Injected at kernel construction time from `AppConfig`-adjacent bootstrap
-/// code. The kernel reads `room_policy.discovery_relay` when wiring the
-/// `DiscoveredGroupsProjection`; it never constructs relay URLs itself (D3).
+/// code. The kernel reads `room_policy.discovery_relay` when opening the
+/// host-pinned new-NMP query; it never constructs relay URLs itself (D3).
 #[derive(Debug, Clone, Default)]
 pub struct RoomPolicy {
     /// Relay to discover groups on. Empty = no active discovery.

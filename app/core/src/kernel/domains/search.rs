@@ -161,7 +161,7 @@ pub(crate) const COMMUNITY_SEARCH_CAP: usize = 20;
 /// the authoritative update arrives via the typed `N50S` sidecar on the next
 /// snapshot tick after the relay response.
 pub(crate) fn reduce_action_run_search(
-    state: &AppState,
+    _state: &AppState,
     query: String,
     scope: SearchScope,
 ) -> Vec<Effect> {
@@ -183,27 +183,10 @@ pub(crate) fn reduce_action_run_search(
         }
     };
 
-    let mut effects = vec![Effect::RunSearch {
+    vec![Effect::RunSearch {
         query: trimmed,
         scope_json,
-    }];
-
-    // D8 discovery warm-up: if we have no discovered groups yet and the
-    // discovery relay is configured, kick off discovery so the community
-    // bucket can be populated on the next snapshot pass. Reuses
-    // `StartRoomDiscovery` effects — no new interest or NMP work required.
-    let discovery_relay = state.room_policy.discovery_relay.clone();
-    if state.discovered_groups.is_empty() && !discovery_relay.is_empty() {
-        tracing::trace!(
-            relay = %discovery_relay,
-            "search::reduce_action_run_search: discovered_groups empty — warming discovery (D8)"
-        );
-        effects.extend(
-            crate::kernel::domains::discovery::reduce_action_start_room_discovery(discovery_relay),
-        );
-    }
-
-    effects
+    }]
 }
 
 pub(crate) fn reduce_action_commit_recent_query(
@@ -1383,10 +1366,10 @@ mod tests {
         );
     }
 
-    // 7-CS-T13: D8 discovery warm-up emitted when discovered_groups is empty
-    // and discovery_relay is configured.
+    // M1: search consumes the last bounded discovery snapshot but does not
+    // become a second owner of the view-scoped network observation.
     #[test]
-    fn run_search_warms_discovery_when_empty() {
+    fn run_search_does_not_start_room_explorer_discovery() {
         let mut state = make_state();
         state.room_policy.discovery_relay = "wss://discovery.test".to_string();
         let clock = ManualClock::default();
@@ -1400,23 +1383,10 @@ mod tests {
             }),
         );
 
-        // Must have RunSearch + DispatchNip29Action + WireGroupDiscovery.
-        assert_eq!(
-            effects.len(),
-            3,
-            "D8 warm-up must add 2 extra effects: got {effects:?}"
-        );
+        assert_eq!(effects.len(), 1);
         assert!(
             matches!(effects[0], Effect::RunSearch { .. }),
             "first effect must be RunSearch"
-        );
-        assert!(
-            matches!(effects[1], Effect::DispatchNip29Action { .. }),
-            "second effect must be DispatchNip29Action (warm-up)"
-        );
-        assert!(
-            matches!(effects[2], Effect::WireGroupDiscovery { .. }),
-            "third effect must be WireGroupDiscovery (warm-up)"
         );
     }
 

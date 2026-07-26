@@ -14,7 +14,8 @@ use tokio::sync::mpsc;
 use crate::capabilities::CapabilityResult;
 use crate::kernel::action::{AppAction, AppActionEnvelope};
 use crate::kernel::actor::{
-    actor_task, start_nmp_app, Cmd, HighlighterObserver, NmpKeyringHandler, SharedState,
+    actor_task, start_nmp_app, Cmd, HighlighterObserver, NmpKeyringHandler, NmpRuntimes,
+    SharedState,
 };
 use crate::kernel::app::{AppConfig, CreateAccountPolicy, KernelPolicy, RoomPolicy, SeedRelay};
 use crate::kernel::clock::SystemClock;
@@ -303,6 +304,9 @@ fn new_highlighter_app_inner(
 
     // Boot the NmpApp (Pattern 1 from nmp_runtime.rs:725-860).
     let nmp = start_nmp_app(&config.data_dir, tx.clone(), keyring_handler);
+    // Boot the supported new-NMP facade in its own trust-domain store. During
+    // migration, only explicitly cut-over capabilities use it.
+    let new_nmp = crate::kernel::new_nmp::start(&config.data_dir);
 
     // Capture NMP's relay slot for direct FFI access (bypasses actor channel for reads).
     if let Some(ref handle) = nmp {
@@ -329,7 +333,10 @@ fn new_highlighter_app_inner(
         shared_clone,
         clock,
         onboarding_store,
-        nmp,
+        NmpRuntimes {
+            legacy: nmp,
+            next: new_nmp,
+        },
         policy,
     ));
 

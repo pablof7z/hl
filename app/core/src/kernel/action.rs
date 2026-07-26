@@ -1347,12 +1347,10 @@ pub enum KernelEvent {
     FollowListUpdated(Vec<String>),
 
     // ── Phase 3E additions (append-only) ─────────────────────────────────────
-    /// The `"nmp.nip29.discovered_groups"` typed sidecar was decoded.
+    /// The new-NMP Room Explorer window was projected into bounded rows.
     ///
-    /// Produced by `projections::dispatch_typed_frame` when the schema_id
-    /// `"nmp.nip29.discovered_groups"` sidecar arrives. Stored in
-    /// `AppState.discovered_groups` by
-    /// `discovery::reduce_event_discovered_groups_updated`.
+    /// Produced by the async new-NMP observation drain and stored in
+    /// `AppState.discovered_groups`.
     DiscoveredGroupsUpdated(Vec<crate::kernel::snapshot::DiscoveredRow>),
 
     // ── Phase 3D additions (append-only) ─────────────────────────────────────
