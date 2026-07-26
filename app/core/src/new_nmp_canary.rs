@@ -4,8 +4,9 @@
 use nmp::{nmp_threads_live, Engine, EngineConfig, LiveQuery, RelayUrl};
 use nmp_next_nip29::group_discovery_demand;
 
-#[test]
-fn facade_lifecycle_opens_group_discovery_and_reopens_its_store() {
+#[tokio::test]
+async fn facade_lifecycle_opens_group_discovery_and_reopens_its_store() {
+    let _serial = crate::kernel::new_nmp::NEW_NMP_TEST_LOCK.lock().await;
     let threads_before = nmp_threads_live();
     let store_dir = tempfile::tempdir().expect("temporary NMP store directory");
     let store_path = store_dir.path().join("new-nmp-canary.redb");

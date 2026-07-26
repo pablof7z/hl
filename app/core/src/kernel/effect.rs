@@ -579,14 +579,14 @@ pub enum Effect {
     },
 
     // ── Phase 7 chat additions (append-only) ─────────────────────────────────
-    /// Register a `ChatObserver` wrapping a fresh `GroupChatProjection` scoped to
-    /// `group_id` as an observed projection against the live `NmpApp`.
+    /// Open a bounded `nmp_nip29::group_content_demand` observation scoped to
+    /// the selected host and `group_id` on the app-owned new-NMP engine.
     ///
-    /// Sent when `hl.chat.open` is dispatched. The observer filters to kind:9,
-    /// recovers `reply_to_event_id` from raw tags, and sends
-    /// `KernelEvent::ChatRoomUpdated` into the actor channel on each accepted event.
+    /// Sent when `hl.chat.open` is dispatched. The drain projects kind:9 rows,
+    /// recovers `reply_to_event_id`, and sends `KernelEvent::ChatRoomUpdated`
+    /// for every complete bounded frame.
     ///
-    /// Fire-and-forget (D6). No-op when `nmp` is `None` (test mode).
+    /// Fire-and-forget (D6). No-op when the new engine is unavailable.
     WireGroupChat {
         /// NIP-29 local group id.
         group_id: String,
@@ -597,9 +597,8 @@ pub enum Effect {
     /// Remove the hl-side chat message buffer for `group_id` from
     /// `AppState::chat_rooms`.
     ///
-    /// Sent when `hl.chat.close` is dispatched. The underlying `ChatObserver` in
-    /// nmp keeps running (singleton per-group observer); only the hl-side buffer
-    /// is cleared to bound memory. Fire-and-forget (D6).
+    /// Sent when `hl.chat.close` is dispatched. Cancels and joins the new-NMP
+    /// observation after the reducer clears the app-side buffer.
     ReleaseChatRoom {
         /// NIP-29 local group id whose chat buffer to discard.
         group_id: String,
@@ -613,8 +612,8 @@ pub enum Effect {
     ///
     /// Fire-and-forget (D6, Non-Negotiable #3): the returned correlation_id JSON
     /// is freed and discarded. The authoritative message arrives back via
-    /// `KernelEvent::ChatRoomUpdated` from the `ChatObserver` on the next
-    /// kind:9 event (relay echo).
+    /// `KernelEvent::ChatRoomUpdated` from the new-NMP read observation on the
+    /// next kind:9 relay echo.
     ///
     /// The kernel is the sole kind:9 writer for ported screens.
     DispatchChatPost {

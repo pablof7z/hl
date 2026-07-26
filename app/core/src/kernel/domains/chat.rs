@@ -2,18 +2,11 @@
 //!
 //! ## Responsibilities
 //!
-//! * **READ** — register a `ChatObserver` wrapper around `GroupChatProjection`
-//!   (nmp-nip29) per open room as an `ObservedProjectionSink`. On each kind:9 event
-//!   (kind:11 is filtered out here — see §D6 note) the observer:
-//!   (a) delegates ingest to the underlying `GroupChatProjection`,
-//!   (b) snapshots the group's message list,
-//!   (c) recovers `reply_to_event_id` from raw event tags (prefer `["e",id,"","reply"]`),
-//!   (d) sends `KernelEvent::ChatRoomUpdated { group_id, messages }` into the actor channel.
-//!
-//!   This is the Family-B integration pattern (observer→actor-channel path), the
-//!   same as `comments.rs` and `reactions.rs`. The underlying `GroupChatProjection`
-//!   accepts both kind:9 and kind:11 with matching `h` tag; the `ChatObserver`
-//!   adds a kind:9-only gate before forwarding updates.
+//! * **READ** — the app-owned production `nmp::Engine` opens
+//!   `nmp_nip29::group_content_demand(host, group_id)` per active room. Each
+//!   bounded window is projected into kind:9-only `ChatMessageRawRow`s and sent
+//!   back as `KernelEvent::ChatRoomUpdated`. The observation is cancelled on
+//!   room close, account teardown, host switch, and engine shutdown.
 //!
 //! * **WRITE** — `hl.chat.post` envelope → `reduce_action_post_chat` →
 //!   `Effect::DispatchChatPost { json }` → `run_effect_dispatch_chat_post` calls
@@ -22,23 +15,15 @@
 //!
 //! ## Wire registration
 //!
-//! `register_chat_projection(nmp_ref, group_id, host_relay_url, tx)` is called
-//! when `hl.chat.open` is dispatched. Rust derives `host_relay_url` from the
-//! joined-community projection, creates a `GroupChatProjection` scoped to
-//! `GroupId { host_relay_url, local_id: group_id }`, and wraps it in a
-//! `ChatObserver`. Per-room wiring; cleared on close and logout.
+//! `hl.chat.open` derives `host_relay_url` from the joined-community projection
+//! and starts a host-scoped new-NMP observation. Per-room wiring is released on
+//! close and account teardown.
 //!
 //! ## threading
 //!
-//! `ChatObserver::on_kernel_event` is called from the NMP event-dispatch thread.
-//! It:
-//! 1. Checks `event.kind == KIND_CHAT_MESSAGE` (kind:9 only gate).
-//! 2. Delegates ingest to `self.projection.on_kernel_event(event)`.
-//! 3. Calls `self.projection.snapshot()` — one brief Mutex acquire.
-//! 4. Recovers `reply_to_event_id` from the raw event tags.
-//! 5. Sends `Cmd::Event(KernelEvent::ChatRoomUpdated{…})` — non-blocking.
-//!
-//! D8 compliant: no blocking awaits. D6: kind != 9 → silent no-op.
+//! The new-NMP drain task receives conflated bounded windows, rebuilds the
+//! complete newest-first room buffer, and sends one actor event per frame.
+//! D8 compliant: no polling. D6: kind != 9 → silent exclusion.
 //!
 //! ## D-rules satisfied
 //!
@@ -46,28 +31,20 @@
 //!   timestamps, no byline strings, no `show_header` logic). Swift owns all
 //!   display formatting; `show_header` and reply preview are computed in the
 //!   snapshot projection from raw data.
-//! * D6 — kind:11 events (which `GroupChatProjection` would accept) are silently
-//!   rejected at the observer level. Malformed post payloads (empty content,
+//! * D6 — non-chat rows from the broader group-content demand are silently
+//!   excluded at projection. Malformed post payloads (empty content,
 //!   empty group) → no effects.
 //! * Non-Negotiable #3 — `reduce_action_post_chat` returns `Vec<Effect>` (never
 //!   `Result`); fire-and-forget.
 
-use std::sync::{Arc, Mutex};
-
-use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
-use nmp_core::substrate::{ActionPayload, ObservedProjection, ObservedProjectionRegistrar};
-use nmp_core::ObservedProjectionSink;
-use nmp_nip29::{action::PublishGroupEventInput, GroupId};
-use nmp_planner::InterestShape;
-use tokio::sync::mpsc;
-
-use crate::kernel::action::KernelEvent;
-use crate::kernel::actor::Cmd;
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::{
     ChatMessageRawRow, ChatMessageRow, ChatReplyPreview, RoomChatSnapshot,
 };
+use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
+use nmp_core::substrate::ActionPayload;
+use nmp_nip29::action::PublishGroupEventInput;
 
 // Kind constants matching nmp-nip29's kinds module
 const KIND_CHAT_MESSAGE: u32 = 9;
@@ -86,7 +63,7 @@ const SHOW_HEADER_GAP_SECS: u64 = 300;
 /// Cleared on `hl.chat.close`, `Logout`, and `IdentityChanged(None)`.
 #[derive(Debug, Clone, Default)]
 pub struct ChatRoomState {
-    /// Newest-first authoritative bounded message set (from `ChatObserver`).
+    /// Newest-first authoritative bounded message set (from new NMP).
     pub messages: Vec<ChatMessageRawRow>,
     /// Current page count (incremented by `hl.chat.load_more`; capped at 20).
     pub page_count: u32,
@@ -94,91 +71,46 @@ pub struct ChatRoomState {
     pub activity_revision: u64,
 }
 
-// ─── READ side: observed-projection sink wrapper ─────────────────────────────
+// ─── READ side: new-NMP window projection ────────────────────────────────────
 
-/// Observer wrapper that ingests NMP `KernelEvent`s (raw Nostr events) into
-/// the `GroupChatProjection` and sends `KernelEvent::ChatRoomUpdated` back into
-/// the actor channel for kind:9 events in this group.
+/// Project a complete new-NMP group-content window into the bounded chat model.
 ///
-/// This is the Family-B integration pattern (same as `CommentObserver` in
-/// comments.rs and `ReactionObserver` in reactions.rs). On each kind:9 event
-/// the observer:
-/// 1. Checks `event.kind == KIND_CHAT_MESSAGE` (kind:9 filter — GroupChatProjection
-///    also accepts kind:11 but the HL chat domain is kind:9 only per design §2).
-/// 2. Delegates ingest to the `GroupChatProjection` (which also gates on group h-tag).
-/// 3. Snapshots the updated message list from `projection.snapshot()`.
-/// 4. Recovers `reply_to_event_id` from the raw event tags.
-/// 5. Sends `KernelEvent::ChatRoomUpdated` into the actor channel.
-///
-/// D6: kind:11 events are silently dropped at step 1.
-struct ChatObserver {
-    group_id: String,
-    tx: mpsc::UnboundedSender<Cmd>,
-    messages: Mutex<Vec<ChatMessageRawRow>>,
-    /// Accumulated `event_id → reply_to_event_id` recovered from raw tags.
-    /// `GroupChatProjection.snapshot()` does not carry `reply_to`, and a single
-    /// `on_kernel_event` only has the raw tags for the *triggering* event — so we
-    /// remember each event's recovered reply target here and look every message's
-    /// reply_to up by id when rebuilding rows. Without this, every row except the
-    /// newest loses its reply preview on each resnapshot.
-    reply_index: std::sync::Mutex<std::collections::HashMap<String, String>>,
+/// `group_content_demand` also carries kind:30315 group status events. The chat
+/// screen owns kind:9 only, so every other kind is excluded here. Rebuilding
+/// from each window means removals and replacements cannot leave stale rows.
+pub(crate) fn raw_rows_from_window(window: &nmp::WindowContents) -> Vec<ChatMessageRawRow> {
+    raw_rows_from_events(window.rows.iter().map(|row| &row.event))
 }
 
-impl ObservedProjectionSink for ChatObserver {
-    fn on_kernel_event(&self, event: &nmp_core::substrate::KernelEvent) {
-        // D6: only kind:9 chat messages enter the HL chat read model.
-        // GroupChatProjection accepts kind:9 and kind:11; we gate here.
-        if event.kind != KIND_CHAT_MESSAGE {
-            return;
-        }
-
-        if h_tag_value(&event.tags) != Some(self.group_id.as_str()) {
-            return;
-        }
-
-        // Recover reply_to_event_id from the raw event tags and remember it,
-        // keyed by this event's id. Per design: prefer ["e", id, "", "reply"]
-        // marker; fallback to first "e" tag.
-        if let Some(reply_to) = recover_reply_to(&event.tags) {
-            if let Ok(mut idx) = self.reply_index.lock() {
-                idx.insert(event.id.clone(), reply_to);
-            }
-        }
-
-        let messages: Vec<ChatMessageRawRow> = {
-            let idx = self.reply_index.lock().ok();
-            let reply = idx.as_ref().and_then(|i| i.get(&event.id).cloned());
-            let Ok(mut messages) = self.messages.lock() else {
-                return;
-            };
-            messages.push(ChatMessageRawRow {
-                event_id: event.id.clone(),
-                author_pubkey: event.author.clone(),
+fn raw_rows_from_events<'a>(
+    events: impl IntoIterator<Item = &'a nmp::Event>,
+) -> Vec<ChatMessageRawRow> {
+    let mut rows: Vec<ChatMessageRawRow> = events
+        .into_iter()
+        .filter(|event| event.kind.as_u16() == KIND_CHAT_MESSAGE as u16)
+        .map(|event| {
+            let tags: Vec<Vec<String>> = event
+                .tags
+                .iter()
+                .map(|tag| tag.as_slice().to_vec())
+                .collect();
+            ChatMessageRawRow {
+                event_id: event.id.to_hex(),
+                author_pubkey: event.pubkey.to_hex(),
                 content: event.content.clone(),
-                created_at: event.created_at,
-                reply_to_event_id: reply,
-            });
-            messages.sort_by(|a, b| {
-                b.created_at
-                    .cmp(&a.created_at)
-                    .then_with(|| b.event_id.cmp(&a.event_id))
-            });
-            messages.dedup_by(|a, b| a.event_id == b.event_id);
-            messages.truncate(CHAT_MAX_MESSAGES);
-            messages.clone()
-        };
-
-        let _ = self.tx.send(Cmd::Event(KernelEvent::ChatRoomUpdated {
-            group_id: self.group_id.clone(),
-            messages,
-        }));
-    }
-}
-
-fn h_tag_value(tags: &[Vec<String>]) -> Option<&str> {
-    tags.iter()
-        .find(|t| t.len() >= 2 && t[0] == "h" && !t[1].is_empty())
-        .map(|t| t[1].as_str())
+                created_at: event.created_at.as_secs(),
+                reply_to_event_id: recover_reply_to(&tags),
+            }
+        })
+        .collect();
+    rows.sort_by(|a, b| {
+        b.created_at
+            .cmp(&a.created_at)
+            .then_with(|| b.event_id.cmp(&a.event_id))
+    });
+    rows.dedup_by(|a, b| a.event_id == b.event_id);
+    rows.truncate(CHAT_MAX_MESSAGES);
+    rows
 }
 
 /// Recover `reply_to_event_id` from raw event tags.
@@ -246,7 +178,7 @@ fn host_relay_for_group(state: &AppState, group_id: &str) -> Option<String> {
 /// Handle `hl.chat.open` — emit `Effect::WireGroupChat { group_id, host_relay_url }`.
 ///
 /// Inserts an empty `ChatRoomState` for the group if not already present.
-/// Wiring is deferred to the effect runner (which creates the `ChatObserver`).
+/// Wiring is deferred to the actor-owned new-NMP lifecycle runner.
 pub(crate) fn reduce_action_open_chat(state: &mut AppState, group_id: String) -> Vec<Effect> {
     let group_id = group_id.trim().to_string();
     let Some(host_relay_url) = host_relay_for_group(state, &group_id) else {
@@ -260,12 +192,11 @@ pub(crate) fn reduce_action_open_chat(state: &mut AppState, group_id: String) ->
 }
 
 /// Handle `hl.chat.close` — clear the room buffer from `AppState::chat_rooms`
-/// and emit `Effect::ReleaseChatRoom { group_id }` for any future async cleanup
-/// (e.g. observer slot release when nmp supports it).
+/// and emit `Effect::ReleaseChatRoom { group_id }` to cancel and join the
+/// actor-owned new-NMP observation.
 ///
 /// State mutation happens here (in the reducer) because `run_effect` does not
-/// have access to `AppState`. `ReleaseChatRoom` is reserved for future async
-/// observer de-registration.
+/// have access to `AppState`; the actor handles the async observation teardown.
 pub(crate) fn reduce_action_close_chat(state: &mut AppState, group_id: String) -> Vec<Effect> {
     if group_id.trim().is_empty() {
         return vec![];
@@ -350,55 +281,6 @@ pub(crate) fn reduce_action_mark_seen(
 }
 
 // ─── Effect runners ──────────────────────────────────────────────────────────
-
-/// Execute `Effect::WireGroupChat` — register a `ChatObserver` wrapping a fresh
-/// `GroupChatProjection` scoped to `group_id` as an observed projection against
-/// `nmp_ref`.
-///
-/// Creates a NEW `GroupChatProjection` per group per session. Fire-and-forget (D6):
-/// if observer registration fails (slot full), logged as a warning; the room buffer
-/// will not update.
-///
-/// No-op if `nmp` is `None` (test mode — tests inject `ChatRoomUpdated` directly).
-pub(crate) fn run_effect_wire_group_chat(
-    group_id: String,
-    host_relay_url: String,
-    nmp: Option<&crate::kernel::actor::NmpHandle>,
-    tx: mpsc::UnboundedSender<Cmd>,
-) {
-    let Some(handle) = nmp else { return };
-
-    let _gid = GroupId::new(host_relay_url, group_id.clone());
-    let observer = Arc::new(ChatObserver {
-        group_id,
-        tx,
-        messages: Mutex::new(Vec::new()),
-        reply_index: std::sync::Mutex::new(std::collections::HashMap::new()),
-    });
-
-    // SAFETY: ptr is a valid non-null NmpApp pointer kept alive by NmpHandle
-    // for the full actor lifetime (outlives this call).
-    let nmp_ref: &nmp_native_runtime::NmpApp = &handle.app;
-    let mut shape = InterestShape::default();
-    shape.kinds.insert(KIND_CHAT_MESSAGE);
-    shape
-        .tags
-        .entry("h".to_string())
-        .or_default()
-        .insert(_gid.local_id.clone());
-    shape.relay_pin = Some(_gid.host_relay_url.clone());
-
-    let observer_id = nmp_ref.open_observed_projection(ObservedProjection::from_shape(
-        observer as Arc<dyn ObservedProjectionSink>,
-        format!("hl.chat.{}", _gid.local_id),
-        1,
-        shape,
-        CHAT_MAX_MESSAGES,
-    ));
-    if observer_id.0 == 0 {
-        tracing::warn!("chat::run_effect_wire_group_chat: event-observer registration failed (D6)");
-    }
-}
 
 /// Execute `Effect::DispatchChatPost` — calls `nmp_app_dispatch_action`
 /// with namespace `"nmp.nip29.post_chat_message"` and the serialised JSON payload.
@@ -586,6 +468,7 @@ mod tests {
     use crate::kernel::actor::{reduce, Cmd};
     use crate::kernel::clock::{Clock, ManualClock};
     use crate::kernel::effect::Effect;
+    use nostr_sdk::{EventBuilder, Keys, Kind, Tag, Timestamp};
 
     fn make_state() -> AppState {
         AppState::default()
@@ -646,64 +529,58 @@ mod tests {
         }
     }
 
-    // 7-C1: chat_consumes_group_chat_projection_kind9_only
-    //
-    // The ChatObserver must NOT forward kind:11 events; only kind:9 enters the
-    // RoomChatSnapshot. This tests the observer-level kind gate.
+    fn signed_event(kind: u16, content: &str, created_at: u64, tags: Vec<Vec<&str>>) -> nmp::Event {
+        let tags = tags
+            .into_iter()
+            .map(|fields| {
+                Tag::parse(fields.into_iter().map(str::to_string).collect::<Vec<_>>())
+                    .expect("fixture tag must parse")
+            })
+            .collect::<Vec<_>>();
+        EventBuilder::new(Kind::from(kind), content)
+            .tags(tags)
+            .custom_created_at(Timestamp::from(created_at))
+            .sign_with_keys(&Keys::generate())
+            .expect("fixture event must sign")
+    }
+
+    // 7-C1 / M1.1: only kind:9 rows from the new-NMP content window enter chat.
     #[test]
     fn chat_consumes_group_chat_projection_kind9_only() {
-        use tokio::sync::mpsc;
+        let kind11 = signed_event(11, "discussion post", 1_000_000, vec![vec!["h", "room"]]);
+        let status = signed_event(30_315, "typing", 1_000_002, vec![vec!["h", "room"]]);
+        let kind9 = signed_event(9, "hello chat", 1_000_001, vec![vec!["h", "room"]]);
 
-        let (tx, mut rx) = mpsc::unbounded_channel::<Cmd>();
-        let group_id = "test-room".to_string();
-        let observer = ChatObserver {
-            group_id: group_id.clone(),
-            tx,
-            messages: Mutex::new(Vec::new()),
-            reply_index: std::sync::Mutex::new(std::collections::HashMap::new()),
-        };
+        let rows = raw_rows_from_events([&kind11, &status, &kind9]);
+        assert_eq!(rows.len(), 1, "only one kind:9 message may enter chat");
+        assert_eq!(rows[0].content, "hello chat");
+        assert_eq!(rows[0].created_at, 1_000_001);
+    }
 
-        // kind:11 event with matching h tag — must be rejected by ChatObserver
-        let kind11_event = nmp_core::substrate::KernelEvent {
-            id: "aaaa000000000000000000000000000000000000000000000000000000000001".to_string(),
-            author: "bbbb000000000000000000000000000000000000000000000000000000000002".to_string(),
-            kind: 11, // kind:11 — must NOT enter chat snapshot
-            created_at: 1_000_000,
-            tags: vec![vec!["h".to_string(), group_id.clone()]],
-            content: "discussion post".to_string(),
-            relay_provenance: vec![],
-        };
-        observer.on_kernel_event(&kind11_event);
-        assert!(
-            rx.try_recv().is_err(),
-            "kind:11 event must not send ChatRoomUpdated (kind:9 filter)"
+    #[test]
+    fn chat_window_projection_is_newest_first_deduped_and_keeps_reply_markers() {
+        let parent = signed_event(9, "parent", 10, vec![vec!["h", "room"]]);
+        let parent_id = parent.id.to_hex();
+        let reply = signed_event(
+            9,
+            "reply",
+            20,
+            vec![
+                vec!["h", "room"],
+                vec!["e", "fallback"],
+                vec!["e", &parent_id, "", "reply"],
+            ],
         );
 
-        // kind:9 event with matching h tag — must be accepted
-        let kind9_event = nmp_core::substrate::KernelEvent {
-            id: "cccc000000000000000000000000000000000000000000000000000000000003".to_string(),
-            author: "bbbb000000000000000000000000000000000000000000000000000000000002".to_string(),
-            kind: KIND_CHAT_MESSAGE,
-            created_at: 1_000_001,
-            tags: vec![vec!["h".to_string(), group_id]],
-            content: "hello chat".to_string(),
-            relay_provenance: vec![],
-        };
-        observer.on_kernel_event(&kind9_event);
-        let cmd = rx
-            .try_recv()
-            .expect("kind:9 event must send ChatRoomUpdated");
-        match cmd {
-            Cmd::Event(KernelEvent::ChatRoomUpdated {
-                group_id: gid,
-                messages,
-            }) => {
-                assert_eq!(gid, "test-room", "group_id must match");
-                assert_eq!(messages.len(), 1, "one kind:9 message");
-                assert_eq!(messages[0].content, "hello chat");
-            }
-            _ => panic!("expected ChatRoomUpdated"),
-        }
+        let rows = raw_rows_from_events([&parent, &reply, &parent]);
+        assert_eq!(rows.len(), 2, "duplicate event ids must collapse");
+        assert_eq!(rows[0].content, "reply");
+        assert_eq!(rows[1].content, "parent");
+        assert_eq!(
+            rows[0].reply_to_event_id.as_deref(),
+            Some(parent_id.as_str()),
+            "the explicit reply marker must beat the fallback e tag"
+        );
     }
 
     // 7-C2: chat_recovers_reply_to_from_raw

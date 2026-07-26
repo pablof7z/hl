@@ -1754,13 +1754,11 @@ pub enum KernelEvent {
     },
 
     // ── Phase 7 chat additions (append-only) ─────────────────────────────────
-    /// A NIP-29 kind:9 chat message was ingested by the `ChatObserver`
-    /// (wrapping `GroupChatProjection`) for an open room. Carries the updated
-    /// message list (newest-first, bounded) for the affected `group_id`.
+    /// A new-NMP group-content frame was projected for an open room. Carries
+    /// the complete kind:9 message list (newest-first, bounded) for `group_id`.
     ///
-    /// Produced by `ChatObserver::on_kernel_event` after delegating ingest to the
-    /// projection, recovering `reply_to_event_id` from raw tags, and snapshotting.
-    /// Also injectable directly from tests via `Cmd::Event` (no live NmpApp needed).
+    /// Produced by the app-owned observation drain after recovering
+    /// `reply_to_event_id` from raw tags. Also injectable directly in tests.
     ///
     /// D1: `ChatMessageRawRow` carries raw protocol data only — no formatted strings.
     /// Keyed by `group_id` (NIP-29 local id) in `AppState::chat_rooms`.
