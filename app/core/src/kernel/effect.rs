@@ -131,27 +131,22 @@ pub enum Effect {
     // ── Phase 3E additions (append-only) ─────────────────────────────────────
     /// Call `nmp_app_dispatch_action` with the given namespace and JSON payload.
     ///
-    /// Used for NIP-29 write/subscribe actions (discover, join, create, etc.).
+    /// Used for legacy-owned NIP-29 write actions (join, create, etc.).
     /// Fire-and-forget (D6): the returned correlation_id JSON is freed and
     /// discarded. Results arrive via the relevant `KernelEvent::*Updated` event.
     DispatchNip29Action {
-        /// NIP-29 action namespace (e.g. `"nmp.nip29.discover"`).
+        /// NIP-29 action namespace (e.g. `"nmp.nip29.join"`).
         namespace: String,
         /// JSON payload for the action (e.g. `{"relay_url":"..."}`).
         json: String,
     },
-    /// Wire the `DiscoveredGroupsProjection` event observer + typed snapshot
-    /// projection for `relay_url` into the live `NmpApp`.
-    ///
-    /// Emitted when the RoomExplorer view opens (discovery is started in core
-    /// from `room_policy.discovery_relay`). Registers the observer that
-    /// accumulates kind:39000/39001/39002 events from the relay.
-    /// Fire-and-forget: the snapshot arrives via the NMP update callback as
-    /// `KernelEvent::NmpSnapshotFrame` on the next projection tick.
-    WireGroupDiscovery {
-        /// The discovery relay URL (opaque string; kernel never constructs URLs, D3).
+    /// Open the new-NMP host-pinned kind:39000 observation for Room Explorer.
+    StartGroupDiscovery {
+        /// The discovery relay URL from product policy.
         relay_url: String,
     },
+    /// Cancel and join the Room Explorer observation.
+    StopGroupDiscovery,
 
     // ── Phase 3D additions (append-only) ─────────────────────────────────────
     /// Resolve a live profile reference with

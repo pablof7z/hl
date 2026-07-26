@@ -26,11 +26,8 @@ fn encode_payload_for_namespace(namespace: &str, json: &str) -> Result<Vec<u8>, 
         "nmp.follow" | "nmp.unfollow" => encode::<nmp_nip02::PubkeyAction>(namespace, json),
         "nmp.nip25.react" => encode::<nmp_nip25::ReactAction>(namespace, json),
         "nmp.nip25.unreact" => encode::<nmp_nip25::UnreactAction>(namespace, json),
-        "nmp.nip29.discover" => encode::<nmp_nip29::action::DiscoverGroupsInput>(namespace, json),
         "nmp.nip29.join" => encode::<nmp_nip29::action::JoinGroupInput>(namespace, json),
-        "nmp.nip29.create_group" => {
-            encode::<nmp_nip29::action::CreateGroupInput>(namespace, json)
-        }
+        "nmp.nip29.create_group" => encode::<nmp_nip29::action::CreateGroupInput>(namespace, json),
         "nmp.nip29.put_user" => encode::<nmp_nip29::action::PutUserInput>(namespace, json),
         "nmp.nip29.create_invite" => {
             encode::<nmp_nip29::action::CreateInviteInput>(namespace, json)

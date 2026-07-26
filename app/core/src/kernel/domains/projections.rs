@@ -126,15 +126,6 @@ pub(crate) fn dispatch_typed_frame(
             // profile resolution is now served by the per-key `refs.profile`
             // row-delta projection below.
 
-            // ── Phase 3E arm: "nmp.nip29.discovered_groups" ──────────────────
-            // Decode the `"nmp.nip29.discovered_groups"` FlatBuffers payload via
-            // `nmp_nip29::decode_discovered_groups_snapshot` and maps rows into
-            // `DiscoveredRow` (raw fields only). Stored in
-            // `AppState::discovered_groups`.
-            super::discovery::DISCOVERED_GROUPS_SCHEMA_ID => {
-                super::discovery::apply_discovered_groups(state, &proj.payload);
-            }
-
             // ── Phase 3F arm: "nmp.nip29.group_events" ───────────────────────
             // Decode the `"nmp.nip29.group_events"` FlatBuffers payload via
             // `nmp_nip29::decode_group_events_snapshot` and store raw event rows

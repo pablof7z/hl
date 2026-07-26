@@ -1,29 +1,22 @@
-//! Discovery domain — room explorer / discovered-groups projection (slice 3E).
+//! Discovery domain — Room Explorer state and new-NMP lifecycle.
 //!
 //! ## Responsibilities
 //!
-//! * **WIRE** — `run_effect_wire_group_discovery(relay_url, nmp_ref)` calls
-//!   `nmp_nip29::open_nip29_group_discovery_session` to register the
-//!   `DiscoveredGroupsProjection` event observer and typed snapshot sidecar
-//!   under `"nmp.nip29.discovered_groups"`.
+//! * **LIFECYCLE** — opening Room Explorer emits
+//!   `Effect::StartGroupDiscovery`; closing it emits
+//!   `Effect::StopGroupDiscovery`. The actor executes both against the
+//!   app-owned new `nmp::Engine`.
 //!
-//! * **ACTION** — `reduce_action_start_room_discovery(relay_url)` emits two
-//!   effects: `Effect::DispatchNip29Action` (pushes the relay-discovery interest
-//!   via `"nmp.nip29.discover"`) and `Effect::WireGroupDiscovery` (wires the
-//!   projection observer). Fire-and-forget (D6, Non-Negotiable #3).
-//!
-//! * **READ** — `apply_discovered_groups(state, payload)` decodes the
-//!   `"nmp.nip29.discovered_groups"` FlatBuffers payload and stores rows in
-//!   `AppState::discovered_groups`. Called from
-//!   `projections::dispatch_typed_frame`. D6: decode errors are silent no-ops.
+//! * **READ** — the new-NMP drain converts kind:39000 window rows into
+//!   `KernelEvent::DiscoveredGroupsUpdated`, which this domain reduces into
+//!   `AppState::discovered_groups`.
 //!
 //! * **SNAPSHOT** — `project_room_explorer_snapshot(state)` builds the
 //!   `ViewSnapshot::RoomExplorer(RoomExplorerSnapshot)` from state:
 //!   - `featured`: empty (curator wiring deferred to Phase 3F).
 //!   - `new_noteworthy`: public+open discovered groups, excluding already-joined
 //!     communities, capped at 256. Ordered by insertion (projection order).
-//!   - `friends_shelf`: empty in Phase 3 — requires kind:39002 member pubkeys
-//!     which are not carried in the `DiscoveredGroupsProjection` (Phase 4).
+//!   - `friends_shelf`: empty — requires a later kind:39002 member-list slice.
 //!   - `authors_shelf`: empty in Phase 3 — requires feed-interest data (Phase 4).
 //!
 //! ## D3 compliance
@@ -31,74 +24,20 @@
 //! No relay URL literals appear in this file. The `relay_url` string is opaque
 //! and always sourced from the caller (action payload or `AppState::room_policy`).
 //!
-//! ## D6 compliance
-//!
-//! All decode errors in `apply_discovered_groups` are silent no-ops logged at
-//! trace level. `run_effect_wire_group_discovery` is a no-op when `relay_url`
-//! is empty (guarded by `open_group_discovery`).
-//!
 //! ## Threading
 //!
-//! `apply_discovered_groups` runs on the actor thread (inside
-//! `projections::dispatch_typed_frame`, called from `reduce_event`). It is
-//! synchronous and non-blocking (FlatBuffers decode only, no I/O).
+//! New-NMP observation delivery is drained by an async task. Only the bounded
+//! `Vec<DiscoveredRow>` crosses into the actor, so reduction remains synchronous.
 
 use nmp_core::dispatch_envelope::{encode_dispatch_envelope, DISPATCH_ENVELOPE_SCHEMA_VERSION};
 use nmp_core::substrate::ActionPayload;
-use nmp_native_runtime::NmpApp;
-use nmp_nip29::action::{
-    CreateGroupInput, CreateInviteInput, DiscoverGroupsInput, JoinGroupInput, PutUserInput,
-};
-use nmp_nip29::{
-    decode_discovered_groups_snapshot, open_nip29_group_discovery_session,
-    Nip29GroupDiscoverySession,
-};
+use nmp_nip29::action::{CreateGroupInput, CreateInviteInput, JoinGroupInput, PutUserInput};
 
 use crate::kernel::app::AppState;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::{
     CommunityRow, DiscoveredRow, KernelRoomExplorerSnapshot, RecommendationRow, ViewSnapshot,
 };
-
-// Re-export so `projections.rs` can match without importing nmp_nip29 directly.
-pub(crate) use nmp_nip29::DISCOVERED_GROUPS_SCHEMA_ID;
-
-// ─── Frame decode ────────────────────────────────────────────────────────────
-
-/// Decode a `"nmp.nip29.discovered_groups"` FlatBuffers payload and store the
-/// resulting `Vec<DiscoveredRow>` in `AppState::discovered_groups`.
-///
-/// Called from `projections::dispatch_typed_frame` on the actor thread.
-/// Non-blocking (FlatBuffers decode only — no I/O).
-///
-/// D6: any decode error leaves `AppState::discovered_groups` unchanged
-/// (silent no-op logged at trace level).
-pub(crate) fn apply_discovered_groups(state: &mut AppState, payload: &[u8]) {
-    match decode_discovered_groups_snapshot(payload) {
-        Ok(snapshot) => {
-            state.discovered_groups = snapshot
-                .groups
-                .into_iter()
-                .map(|g| DiscoveredRow {
-                    group_id: g.group_id,
-                    host_relay_url: g.host_relay_url,
-                    name: g.name,
-                    picture: g.picture,
-                    about: g.about,
-                    member_count: g.member_count,
-                    public: g.public,
-                    open: g.open,
-                })
-                .collect();
-        }
-        Err(e) => {
-            tracing::trace!(
-                error = %e,
-                "discovery::apply_discovered_groups: decode error — AppState::discovered_groups unchanged (D6)"
-            );
-        }
-    }
-}
 
 // ─── View-open lifecycle ─────────────────────────────────────────────────────
 
@@ -107,7 +46,7 @@ pub(crate) fn apply_discovered_groups(state: &mut AppState, payload: &[u8]) {
 /// `room_home::lifecycle_effects_for_view_open`).
 ///
 /// When `id == ViewId::RoomExplorer` and `room_policy.discovery_relay` is
-/// non-empty, emits the two effects that wire and start discovery. This means
+/// non-empty, emits the effect that starts discovery. This means
 /// Swift only has to call `openView(RoomExplorer)` — discovery is derived in
 /// core from `room_policy.discovery_relay`, with no UI-supplied relay or
 /// explicit action dispatch (Phase 3G; the legacy `StartRoomDiscovery` action
@@ -131,32 +70,26 @@ pub(crate) fn lifecycle_effects_for_view_open(
     reduce_action_start_room_discovery(relay_url.clone())
 }
 
+/// Cancel the view-scoped observation when Room Explorer closes.
+pub(crate) fn lifecycle_effects_for_view_close(id: &crate::kernel::view::ViewId) -> Vec<Effect> {
+    if matches!(id, crate::kernel::view::ViewId::RoomExplorer) {
+        vec![Effect::StopGroupDiscovery]
+    } else {
+        Vec::new()
+    }
+}
+
 // ─── Action reducer ──────────────────────────────────────────────────────────
 
 /// Start room discovery against `relay_url`. Called by
 /// `lifecycle_effects_for_view_open` when the RoomExplorer view opens (the
 /// relay is derived in core from `room_policy.discovery_relay`).
 ///
-/// Emits two effects:
-/// 1. `Effect::DispatchNip29Action` — pushes the relay-discovery interest via
-///    `"nmp.nip29.discover"` with `{"relay_url":"<url>"}` payload.
-/// 2. `Effect::WireGroupDiscovery` — registers the `DiscoveredGroupsProjection`
-///    event observer + typed snapshot sidecar for `relay_url`.
-///
-/// Fire-and-forget (D6, Non-Negotiable #3): discovered groups arrive back as
-/// `KernelEvent::DiscoveredGroupsUpdated` on the next NMP projection tick.
+/// Emits one `Effect::StartGroupDiscovery`. Discovered groups arrive back as
+/// `KernelEvent::DiscoveredGroupsUpdated` from the new-NMP window drain.
 /// No relay URL literals appear here — `relay_url` is opaque (D3).
 pub(crate) fn reduce_action_start_room_discovery(relay_url: String) -> Vec<Effect> {
-    // Use serde_json to safely serialize the relay_url; a naïve format! would
-    // produce invalid JSON if the URL ever contained quotes or backslashes.
-    let json = serde_json::json!({"relay_url": relay_url}).to_string();
-    vec![
-        Effect::DispatchNip29Action {
-            namespace: "nmp.nip29.discover".to_string(),
-            json,
-        },
-        Effect::WireGroupDiscovery { relay_url },
-    ]
+    vec![Effect::StartGroupDiscovery { relay_url }]
 }
 
 // ─── Event reducer ───────────────────────────────────────────────────────────
@@ -193,13 +126,6 @@ pub(crate) fn run_effect_dispatch_nip29_action(
     // Route by namespace: deserialise the pre-built JSON to the typed struct,
     // then encode as FlatBuffers for the bytes doorway (ADR-0064 / Cut-B).
     let payload_bytes: Vec<u8> = match namespace.as_str() {
-        "nmp.nip29.discover" => match serde_json::from_str::<DiscoverGroupsInput>(&json) {
-            Ok(a) => a.encode(),
-            Err(e) => {
-                tracing::warn!(error = %e, "nip29: failed to deserialise DiscoverGroupsInput");
-                return;
-            }
-        },
         "nmp.nip29.join" => match serde_json::from_str::<JoinGroupInput>(&json) {
             Ok(a) => a.encode(),
             Err(e) => {
@@ -243,31 +169,6 @@ pub(crate) fn run_effect_dispatch_nip29_action(
     );
 
     let _ = nmp_uniffi_support::dispatch_action_vec(&handle.app, envelope);
-}
-
-/// Execute `Effect::WireGroupDiscovery { relay_url }`.
-///
-/// Calls `nmp_nip29::register::open_group_discovery(nmp_ref, relay_url)` which
-/// registers the `DiscoveredGroupsProjection` event observer + typed FlatBuffers
-/// sidecar under `"nmp.nip29.discovered_groups"`. Subsequent NMP snapshot ticks
-/// deliver `KernelEvent::NmpSnapshotFrame` frames that `apply_discovered_groups`
-/// decodes.
-///
-/// The returned `GroupDiscoveryHandle` is intentionally leaked: discovery runs
-/// for the full app lifetime (fire-and-forget, same semantics as the old
-/// `wire_group_discovery`). The observer is unregistered only when the NmpApp
-/// itself is freed.
-///
-/// An empty `relay_url` is a silent no-op (guarded by `open_group_discovery`).
-/// D6: no panic on failure — `open_group_discovery` is fallible-graceful.
-pub(crate) fn run_effect_wire_group_discovery(relay_url: String, nmp_ref: &NmpApp) {
-    if relay_url.trim().is_empty() {
-        return;
-    }
-    let _handle = open_nip29_group_discovery_session(
-        nmp_ref,
-        Nip29GroupDiscoverySession::new(vec![relay_url]),
-    );
 }
 
 // ─── Discovery policy helpers ────────────────────────────────────────────────
@@ -335,10 +236,8 @@ pub(crate) fn project_room_explorer_snapshot(state: &AppState) -> Option<ViewSna
         featured: Vec::new(),
         new_noteworthy,
         // TODO(Phase 4): wire friends-shelf from kind:39002 member events.
-        // The `DiscoveredGroupsProjection` carries `member_count` but NOT
-        // the actual member pubkeys, so we cannot intersect with
-        // `AppState::follows` here. Friends-shelf requires the per-group
-        // member-list events (kind:39002 p-tags) available in Phase 4.
+        // The metadata-only discovery demand does not carry member pubkeys,
+        // so a later kind:39002 slice owns this shelf.
         friends_shelf: Vec::<RecommendationRow>::new(),
         // TODO(Phase 4): wire authors_shelf from feed-interest data.
         authors_shelf: Vec::<RecommendationRow>::new(),
@@ -392,38 +291,32 @@ mod tests {
         }
     }
 
-    // 3E-T1: start_room_discovery_pushes_interest
-    //
-    // reduce_action_start_room_discovery must emit one DispatchNip29Action
-    // (namespace="nmp.nip29.discover", json contains relay_url) AND one
-    // WireGroupDiscovery effect. Fire-and-forget (#3).
-    // Note: AppAction::StartRoomDiscovery has been removed (Slice B, issue #89).
-    // The lifecycle auto-starts discovery via lifecycle_effects_for_view_open.
+    // M1: the lifecycle emits exactly one new-NMP owner.
     #[test]
-    fn start_room_discovery_pushes_interest() {
+    fn start_room_discovery_uses_new_nmp_owner() {
         let relay = "wss://groups.test.relay";
 
         let effects = reduce_action_start_room_discovery(relay.to_string());
 
-        // Must emit exactly two effects.
-        assert_eq!(effects.len(), 2, "start_room_discovery must emit 2 effects");
-
-        // First: DispatchNip29Action with correct namespace and relay_url in json.
+        assert_eq!(effects.len(), 1);
         match &effects[0] {
-            Effect::DispatchNip29Action { namespace, json } => {
-                assert_eq!(namespace, "nmp.nip29.discover");
-                assert!(json.contains(relay), "json must contain relay_url: {json}");
-            }
-            other => panic!("expected DispatchNip29Action, got {other:?}"),
-        }
-
-        // Second: WireGroupDiscovery with the relay_url.
-        match &effects[1] {
-            Effect::WireGroupDiscovery { relay_url } => {
+            Effect::StartGroupDiscovery { relay_url } => {
                 assert_eq!(relay_url, relay);
             }
-            other => panic!("expected WireGroupDiscovery, got {other:?}"),
+            other => panic!("expected StartGroupDiscovery, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn room_explorer_close_stops_the_view_scoped_observation() {
+        assert!(
+            matches!(
+                lifecycle_effects_for_view_close(&ViewId::RoomExplorer).as_slice(),
+                [Effect::StopGroupDiscovery]
+            ),
+            "Room Explorer close must emit exactly one stop effect"
+        );
+        assert!(lifecycle_effects_for_view_close(&ViewId::Search).is_empty());
     }
 
     // 3E-T2: discovered_groups_frame_updates_state_raw
@@ -501,9 +394,7 @@ mod tests {
 
     // 3E-T4: friends_shelf_derived_from_follows
     //
-    // friends_shelf must be an empty Vec in Phase 3. The DiscoveredGroupsProjection
-    // does not carry member pubkeys (only member_count), so we cannot derive
-    // friends-shelf memberships without kind:39002 member events (Phase 4).
+    // friends_shelf stays empty until the later kind:39002 member-list slice.
     // This test documents and verifies the Phase 3 placeholder expectation.
     //
     // TODO(Phase 4): update this test when friends-shelf is wired from
@@ -555,30 +446,6 @@ mod tests {
         } else {
             panic!("expected RoomExplorer snapshot");
         }
-    }
-
-    // 3E-T6: malformed_discovered_frame_noop
-    //
-    // apply_discovered_groups with garbage bytes must leave state unchanged (D6).
-    #[test]
-    fn malformed_discovered_frame_noop() {
-        let mut state = make_state();
-        let relay = "wss://relay.test";
-
-        // Seed with an existing entry.
-        state.discovered_groups = vec![make_discovered_row("existing", relay)];
-
-        apply_discovered_groups(&mut state, b"NOT A VALID FLATBUFFER AT ALL \x00\xFF\xFE");
-
-        assert_eq!(
-            state.discovered_groups.len(),
-            1,
-            "malformed payload must leave AppState::discovered_groups unchanged (D6)"
-        );
-        assert_eq!(
-            state.discovered_groups[0].group_id, "existing",
-            "existing row must survive malformed update"
-        );
     }
 
     // 3E-T7: closed_room_explorer_view_no_snapshot

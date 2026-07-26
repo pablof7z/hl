@@ -118,6 +118,12 @@ pub(crate) struct NmpHandle {
     pub(crate) mailbox_cache: Option<Arc<dyn MailboxCache>>,
 }
 
+/// Both runtime generations during the one-capability-at-a-time migration.
+pub(crate) struct NmpRuntimes {
+    pub(crate) legacy: Option<NmpHandle>,
+    pub(crate) next: Option<crate::kernel::new_nmp::NewNmpHandle>,
+}
+
 impl Drop for NmpHandle {
     fn drop(&mut self) {
         // Idempotent teardown: clears sinks, sends Shutdown, joins threads.
@@ -1937,11 +1943,16 @@ pub(crate) async fn run_effect(
             discovery::run_effect_dispatch_nip29_action(namespace, json, nmp);
         }
 
-        Effect::WireGroupDiscovery { relay_url } => {
-            if let Some(handle) = nmp {
-                let nmp_ref: &NmpApp = &handle.app;
-                discovery::run_effect_wire_group_discovery(relay_url, nmp_ref);
-            }
+        Effect::StartGroupDiscovery { relay_url } => {
+            let _ = relay_url;
+            tracing::trace!(
+                "StartGroupDiscovery reached generic runner — no-op (handled inline by actor_task)"
+            );
+        }
+        Effect::StopGroupDiscovery => {
+            tracing::trace!(
+                "StopGroupDiscovery reached generic runner — no-op (handled inline by actor_task)"
+            );
         }
 
         // ── Phase 3D additions ────────────────────────────────────────────────
@@ -2848,7 +2859,7 @@ pub(crate) async fn actor_task(
     shared: Arc<SharedState>,
     clock: Arc<dyn Clock>,
     onboarding_store: Arc<OnboardingStore>,
-    nmp: Option<NmpHandle>,
+    runtimes: NmpRuntimes,
     policy: Arc<KernelPolicy>,
 ) {
     // Phase 3G: propagate room policy from bootstrap into AppState so the
@@ -2863,7 +2874,10 @@ pub(crate) async fn actor_task(
 
     // Keep the NmpApp alive for the duration of the actor.
     // `nmp_ref` is passed to `run_effect` for nmp-call effects (Phase 2A+).
-    let nmp_handle = nmp;
+    let NmpRuntimes {
+        legacy: nmp_handle,
+        next: mut new_nmp,
+    } = runtimes;
 
     while let Some(cmd) = rx.recv().await {
         // Generated-action-builder byte doorway (hl#125): the envelope was
@@ -2948,6 +2962,8 @@ pub(crate) async fn actor_task(
                 lifecycle_effects.extend(entities::lifecycle_effects_for_view_close(id));
                 // ── Phase 3F: release group-events buffer when room-home view closes ──
                 lifecycle_effects.extend(room_home::lifecycle_effects_for_view_close(id));
+                // ── M1: cancel the new-NMP Room Explorer observation ────────
+                lifecycle_effects.extend(discovery::lifecycle_effects_for_view_close(id));
                 // ── Phase 4A: article reader close lifecycle (no-op in 4A) ─────
                 lifecycle_effects.extend(articles::lifecycle_effects_for_view_close(id));
                 // ── Phase 4D: clear search results inline when search view closes ──
@@ -3045,6 +3061,19 @@ pub(crate) async fn actor_task(
         // to look up cursor_id (for drain and release) or to call advance_feed_cursor.
         for effect in lifecycle_effects.into_iter().chain(effects) {
             match &effect {
+                // ── New-NMP capability lifecycle ────────────────────────────
+                Effect::StartGroupDiscovery { relay_url } => {
+                    if let Some(handle) = new_nmp.as_mut() {
+                        handle.start_discovery(relay_url.clone(), tx.clone()).await;
+                    }
+                    continue;
+                }
+                Effect::StopGroupDiscovery => {
+                    if let Some(handle) = new_nmp.as_mut() {
+                        handle.stop_discovery().await;
+                    }
+                    continue;
+                }
                 Effect::WireGroupEvents { group_id } => {
                     // Resolve host_relay_url from communities and wire the projection.
                     state.room_home_group_events_group_id = Some(group_id.clone());
@@ -3204,6 +3233,10 @@ pub(crate) async fn actor_task(
         if is_shutdown {
             break;
         }
+    }
+
+    if let Some(handle) = new_nmp.as_mut() {
+        handle.shutdown().await;
     }
 }
 
