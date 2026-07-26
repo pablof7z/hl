@@ -137,6 +137,6 @@ ready
 
 ## Hosted Artifacts
 
-- Plan page: Generated after publishing.
+- Plan page: https://pablof7z.github.io/hl/plans/new-nmp-migration/
 
 - TTS audio: https://blossom.primal.net/153349d906902941323bf063d0350e3d95941e48a4c46d80b1816f6085111fac.mp3
