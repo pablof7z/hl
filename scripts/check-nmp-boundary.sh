@@ -84,5 +84,17 @@ if [[ -n "$legacy_discovery_usage" ]]; then
   exit 1
 fi
 
+legacy_chat_read_usage="$(
+  find "$repo_root/app/core/src" -type f -name '*.rs' \
+    -exec grep -nHE \
+      'ChatObserver|run_effect_wire_group_chat|GroupChatProjection' \
+      {} + || true
+)"
+if [[ -n "$legacy_chat_read_usage" ]]; then
+  echo "NMP boundary violation: group chat reads must have exactly one new-NMP owner." >&2
+  printf '%s\n' "$legacy_chat_read_usage" >&2
+  exit 1
+fi
+
 new_count="$(printf '%s\n' "$new_dependencies" | wc -l | tr -d ' ')"
-echo "NMP boundary OK: legacy declarations=$legacy_count/$legacy_max, pinned new-NMP dependencies=$new_count, mechanism dependencies=0, unstable-mechanism=0, legacy Room Explorer discovery owners=0"
+echo "NMP boundary OK: legacy declarations=$legacy_count/$legacy_max, pinned new-NMP dependencies=$new_count, mechanism dependencies=0, unstable-mechanism=0, legacy Room Explorer discovery owners=0, legacy group chat read owners=0"

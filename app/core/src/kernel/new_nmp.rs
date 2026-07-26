@@ -4,12 +4,13 @@
 //! slice at a time. This module owns the new `nmp::Engine` and the lifecycle of
 //! capabilities already cut over. Room discovery is the first such capability.
 
+use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use nmp::{Engine, EngineConfig, Event, LiveQuery, RelayUrl, Window, WindowContents};
-use nmp_next_nip29::group_discovery_demand;
+use nmp_next_nip29::{group_content_demand, group_discovery_demand};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
@@ -20,7 +21,16 @@ use crate::kernel::snapshot::DiscoveredRow;
 const DISCOVERY_CAP: usize = 256;
 const SESSION_STOP_TIMEOUT: Duration = Duration::from_secs(2);
 
+#[cfg(test)]
+pub(crate) static NEW_NMP_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 struct DiscoverySession {
+    relay_url: String,
+    cancel: nmp::ObservationCancel,
+    drain: JoinHandle<()>,
+}
+
+struct ChatSession {
     relay_url: String,
     cancel: nmp::ObservationCancel,
     drain: JoinHandle<()>,
@@ -30,6 +40,7 @@ struct DiscoverySession {
 pub(crate) struct NewNmpHandle {
     engine: Engine,
     discovery: Option<DiscoverySession>,
+    chats: HashMap<String, ChatSession>,
 }
 
 impl NewNmpHandle {
@@ -133,9 +144,136 @@ impl NewNmpHandle {
         }
     }
 
+    /// Start one host-scoped kind:9 chat observation.
+    ///
+    /// A repeated open for the same `(group_id, host)` is idempotent. Reusing
+    /// the local group id with a different selected host first tears down the
+    /// prior observation so equal group ids on different relays never alias.
+    pub(crate) async fn start_chat(
+        &mut self,
+        group_id: String,
+        relay_url: String,
+        tx: mpsc::UnboundedSender<Cmd>,
+    ) {
+        if self
+            .chats
+            .get(&group_id)
+            .is_some_and(|session| session.relay_url == relay_url)
+        {
+            return;
+        }
+
+        self.stop_chat(&group_id).await;
+
+        let host = match RelayUrl::parse(&relay_url) {
+            Ok(host) => host,
+            Err(error) => {
+                tracing::warn!(
+                    group_id,
+                    relay_url,
+                    error = %error,
+                    "new NMP group chat rejected an invalid host"
+                );
+                return;
+            }
+        };
+        let query = LiveQuery(group_content_demand(host, &group_id));
+        let cap = NonZeroUsize::new(crate::kernel::domains::chat::CHAT_MAX_MESSAGES)
+            .expect("chat cap is non-zero");
+        let window = Window::Expandable {
+            initial: cap,
+            max: cap,
+        };
+        let subscription = match self.engine.observe_async(query, Some(window)) {
+            Ok(subscription) => subscription,
+            Err(error) => {
+                tracing::warn!(
+                    group_id,
+                    relay_url,
+                    error = %error,
+                    "new NMP group chat observation failed to open"
+                );
+                return;
+            }
+        };
+        let cancel = subscription.cancel_handle();
+        let projected_group = group_id.clone();
+        let drain = tokio::spawn(async move {
+            loop {
+                match subscription.next().await {
+                    Ok(Some(frame)) => {
+                        let Some(window) = frame.window else {
+                            tracing::warn!(
+                                group_id = projected_group,
+                                "new NMP group chat delivered an unwindowed frame"
+                            );
+                            continue;
+                        };
+                        let messages = crate::kernel::domains::chat::raw_rows_from_window(&window);
+                        if tx
+                            .send(Cmd::Event(KernelEvent::ChatRoomUpdated {
+                                group_id: projected_group.clone(),
+                                messages,
+                            }))
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Ok(None) => break,
+                    Err(error) => {
+                        tracing::warn!(
+                            group_id = projected_group,
+                            error = ?error,
+                            "new NMP group chat drain rejected concurrent delivery"
+                        );
+                        break;
+                    }
+                }
+            }
+        });
+
+        self.chats.insert(
+            group_id,
+            ChatSession {
+                relay_url,
+                cancel,
+                drain,
+            },
+        );
+    }
+
+    /// Cancel one room's observation and wait for its drain to finish.
+    pub(crate) async fn stop_chat(&mut self, group_id: &str) {
+        let Some(mut session) = self.chats.remove(group_id) else {
+            return;
+        };
+        session.cancel.cancel();
+        if tokio::time::timeout(SESSION_STOP_TIMEOUT, &mut session.drain)
+            .await
+            .is_err()
+        {
+            tracing::warn!(
+                group_id,
+                "new NMP group chat drain did not stop promptly; aborting it"
+            );
+            session.drain.abort();
+            let _ = session.drain.await;
+        }
+    }
+
+    /// Cancel every active room observation, used for account teardown.
+    pub(crate) async fn stop_all_chats(&mut self) {
+        let group_ids: Vec<String> = self.chats.keys().cloned().collect();
+        for group_id in group_ids {
+            self.stop_chat(&group_id).await;
+        }
+    }
+
     /// Deterministically stop capability drains before closing the engine.
     pub(crate) async fn shutdown(&mut self) {
         self.stop_discovery().await;
+        self.stop_all_chats().await;
         self.engine.shutdown();
     }
 }
@@ -143,6 +281,10 @@ impl NewNmpHandle {
 impl Drop for NewNmpHandle {
     fn drop(&mut self) {
         if let Some(session) = self.discovery.take() {
+            session.cancel.cancel();
+            session.drain.abort();
+        }
+        for (_, session) in self.chats.drain() {
             session.cancel.cancel();
             session.drain.abort();
         }
@@ -177,6 +319,7 @@ pub(crate) fn start(data_dir: &str) -> Option<NewNmpHandle> {
         Ok(engine) => Some(NewNmpHandle {
             engine,
             discovery: None,
+            chats: HashMap::new(),
         }),
         Err(error) => {
             tracing::warn!(
@@ -347,6 +490,7 @@ mod tests {
 
     #[tokio::test]
     async fn view_session_cancel_and_engine_shutdown_leave_no_worker() {
+        let _serial = NEW_NMP_TEST_LOCK.lock().await;
         let threads_before = nmp_threads_live();
         let data_dir = tempfile::tempdir().unwrap();
         let mut handle = start(data_dir.path().to_str().unwrap()).expect("engine must start");
@@ -362,5 +506,54 @@ mod tests {
 
         assert_eq!(nmp_threads_live(), threads_before);
         assert!(store_path(data_dir.path().to_str().unwrap()).exists());
+    }
+
+    #[tokio::test]
+    async fn chat_sessions_are_idempotent_host_sensitive_and_cancelled() {
+        let _serial = NEW_NMP_TEST_LOCK.lock().await;
+        let data_dir = tempfile::tempdir().unwrap();
+        let mut handle = start(data_dir.path().to_str().unwrap()).expect("engine must start");
+        let (tx, _rx) = mpsc::unbounded_channel();
+
+        handle
+            .start_chat(
+                "readers".to_string(),
+                "ws://127.0.0.1:1".to_string(),
+                tx.clone(),
+            )
+            .await;
+        assert_eq!(handle.chats.len(), 1);
+
+        handle
+            .start_chat(
+                "readers".to_string(),
+                "ws://127.0.0.1:1".to_string(),
+                tx.clone(),
+            )
+            .await;
+        assert_eq!(handle.chats.len(), 1, "same-host open is idempotent");
+
+        handle
+            .start_chat(
+                "readers".to_string(),
+                "ws://127.0.0.1:2".to_string(),
+                tx.clone(),
+            )
+            .await;
+        assert_eq!(handle.chats.len(), 1);
+        assert_eq!(
+            handle.chats["readers"].relay_url, "ws://127.0.0.1:2",
+            "same local id on another host must replace, never alias"
+        );
+
+        handle
+            .start_chat("writers".to_string(), "ws://127.0.0.1:3".to_string(), tx)
+            .await;
+        assert_eq!(handle.chats.len(), 2);
+        handle.stop_chat("readers").await;
+        assert!(!handle.chats.contains_key("readers"));
+        handle.stop_all_chats().await;
+        assert!(handle.chats.is_empty());
+        handle.shutdown().await;
     }
 }

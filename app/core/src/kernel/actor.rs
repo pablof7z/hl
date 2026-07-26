@@ -25,7 +25,7 @@ use nmp_native_runtime::{new_app, NmpApp};
 
 use crate::capabilities::CapabilityResult;
 use crate::kernel::action::{AppAction, KernelEvent};
-use crate::kernel::app::{AppState, KernelPolicy};
+use crate::kernel::app::{AppState, KernelPolicy, SessionState};
 use crate::kernel::clock::Clock;
 use crate::kernel::effect::Effect;
 use crate::kernel::snapshot::ViewSnapshot;
@@ -1064,7 +1064,7 @@ fn reduce_action_envelope(
             )
         }
         // ── Phase 7 chat additions (append-only) ──────────────────────────────
-        // `hl.chat.open` — register per-room ChatObserver and wire GroupChatProjection.
+        // `hl.chat.open` — start the host-scoped new-NMP chat observation.
         "hl.chat.open" => {
             let p: chat::OpenChatPayload = parse!(chat::OpenChatPayload);
             chat::reduce_action_open_chat(state, p.group_id)
@@ -1675,7 +1675,7 @@ fn reduce_event(state: &mut AppState, event: KernelEvent, now: u64) -> Vec<Effec
         KernelEvent::ChatRoomUpdated { group_id, messages } => {
             // Upsert the newest-first message buffer in AppState::chat_rooms[group_id].
             // Increments activity_revision so the snapshot can signal new activity.
-            // Produced by ChatObserver::on_kernel_event (kind:9 only).
+            // Produced by the new-NMP chat window drain (kind:9 only).
             // Also injectable directly from tests via Cmd::Event (no live NmpApp needed).
             // D1: ChatMessageRawRow carries raw protocol fields only.
             chat::reduce_event_chat_room_updated(state, group_id, messages)
@@ -2267,28 +2267,24 @@ pub(crate) async fn run_effect(
         }
         // ── Phase 7 chat additions (append-only) ─────────────────────────────
         Effect::WireGroupChat {
-            group_id,
-            host_relay_url,
+            group_id: _,
+            host_relay_url: _,
         } => {
-            // Register a ChatObserver (wrapping a fresh GroupChatProjection scoped to
-            // group_id) as an observed projection against the live NmpApp. The observer
-            // filters to kind:9 events only, recovers reply_to_event_id from raw tags,
-            // and sends KernelEvent::ChatRoomUpdated into the actor channel.
-            // No-op when nmp is None (test mode — tests inject ChatRoomUpdated directly).
-            chat::run_effect_wire_group_chat(group_id, host_relay_url, nmp, tx.clone());
+            tracing::trace!(
+                "WireGroupChat reached generic runner — no-op (handled inline by actor_task)"
+            );
         }
         Effect::ReleaseChatRoom { group_id: _ } => {
-            // The hl-side chat buffer was already cleared in reduce_action_close_chat
-            // (the reducer has access to AppState; run_effect does not). This effect
-            // arm is reserved for future async observer-slot release (nmp unregister).
-            // Currently a no-op here.
+            tracing::trace!(
+                "ReleaseChatRoom reached generic runner — no-op (handled inline by actor_task)"
+            );
         }
         Effect::DispatchChatPost { json } => {
             // Call nmp_app_dispatch_action with "nmp.nip29.post_chat_message" and the
             // serde-JSON PostChatMessageInput payload. Fire-and-forget (D6, Non-
             // Negotiable #3): returned correlation_id is freed and discarded.
             // The authoritative message arrives back via KernelEvent::ChatRoomUpdated
-            // from the ChatObserver on the relay echo (kind:9 event).
+            // from the new-NMP read observation on relay echo (kind:9 event).
             // No-op when nmp is None (test mode — tests inject ChatRoomUpdated directly).
             chat::run_effect_dispatch_chat_post(json, nmp);
         }
@@ -3016,9 +3012,26 @@ pub(crate) async fn actor_task(
         // bookmarks interest authors while the view is open. IdentityChanged also
         // changes the active account (and clears/replaces follows downstream).
         let is_identity_changed = matches!(cmd, Cmd::Event(KernelEvent::IdentityChanged(_)));
+        let should_stop_chats_for_identity = match &cmd {
+            Cmd::Event(KernelEvent::IdentityChanged(None)) => true,
+            Cmd::Event(KernelEvent::IdentityChanged(Some(next_pubkey))) => matches!(
+                &state.session,
+                SessionState::Present {
+                    pubkey: prior_pubkey,
+                    ..
+                } if prior_pubkey != next_pubkey
+            ),
+            _ => false,
+        };
 
         // Reduce (pure, sync).
         let mut effects = reduce(&mut state, cmd, now);
+
+        if should_stop_chats_for_identity {
+            if let Some(handle) = new_nmp.as_mut() {
+                handle.stop_all_chats().await;
+            }
+        }
 
         // Phase 7: if follows just updated and HomeFeed is open, emit any missing
         // cursor registrations (article feed or interaction feed that were not
@@ -3073,6 +3086,30 @@ pub(crate) async fn actor_task(
                         handle.stop_discovery().await;
                     }
                     continue;
+                }
+                Effect::WireGroupChat {
+                    group_id,
+                    host_relay_url,
+                } => {
+                    if let Some(handle) = new_nmp.as_mut() {
+                        handle
+                            .start_chat(group_id.clone(), host_relay_url.clone(), tx.clone())
+                            .await;
+                    }
+                    continue;
+                }
+                Effect::ReleaseChatRoom { group_id } => {
+                    if let Some(handle) = new_nmp.as_mut() {
+                        handle.stop_chat(group_id).await;
+                    }
+                    continue;
+                }
+                Effect::RemoveActiveAccount => {
+                    if let Some(handle) = new_nmp.as_mut() {
+                        handle.stop_all_chats().await;
+                    }
+                    // Legacy identity removal still runs below until auth owns
+                    // the new-NMP signer lifecycle (#142).
                 }
                 Effect::WireGroupEvents { group_id } => {
                     // Resolve host_relay_url from communities and wire the projection.

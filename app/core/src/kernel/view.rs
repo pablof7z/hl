@@ -198,9 +198,9 @@ pub enum ViewId {
     /// `ViewSnapshot::RoomChat(RoomChatSnapshot)` — bounded raw kind:9 message
     /// rows, oldest-first in the visible window (D1: no formatted strings).
     ///
-    /// On open: `hl.chat.open` dispatches `Effect::WireGroupChat` which registers
-    /// a `ChatObserver` per room. On close: `hl.chat.close` dispatches
-    /// `Effect::ReleaseChatRoom` which removes the room buffer.
+    /// On open: `hl.chat.open` dispatches `Effect::WireGroupChat`, starting one
+    /// host-scoped new-NMP observation. On close: `hl.chat.close` dispatches
+    /// `Effect::ReleaseChatRoom`, cancelling it and removing the room buffer.
     RoomChat {
         /// NIP-29 local group id.
         group_id: String,

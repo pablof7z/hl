@@ -476,12 +476,11 @@ pub struct AppState {
     // ── Phase 7 chat additions (append-only) ─────────────────────────────────
     /// Per-room chat message buffers, keyed by NIP-29 local `group_id`.
     ///
-    /// Updated by `KernelEvent::ChatRoomUpdated` — produced when the hl-owned
-    /// `ChatObserver` (wrapping `GroupChatProjection`) ingests a kind:9 event for
-    /// an open room. Empty until `hl.chat.open` is dispatched and the first
-    /// kind:9 event arrives. D1: values are raw `ChatMessageRawRow` fields only
-    /// (no formatted strings). Cleared on `hl.chat.close`, `Logout`, and
-    /// `IdentityChanged(None)` — the buffer is an open-view working set.
+    /// Updated by `KernelEvent::ChatRoomUpdated` from the app-owned new-NMP
+    /// group-content observation for an open room. Empty until `hl.chat.open`
+    /// and the first frame. D1: values are raw `ChatMessageRawRow` fields only.
+    /// Cleared and its observation cancelled on close, logout, and identity
+    /// teardown.
     ///
     /// Bounded by open room views: one entry per concurrently-open chat room,
     /// each capped at `CHAT_MAX_MESSAGES` (1000) rows (Non-Negotiable #7).
