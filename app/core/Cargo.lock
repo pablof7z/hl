@@ -73,6 +73,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
+name = "arrayref"
+version = "0.3.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76a2e8124351fda1ef8aaaa3bbd7ebbcb486bbcd4225aca0aa0d84bb2db8fecb"
+
+[[package]]
 name = "arrayvec"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -105,7 +111,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_derive",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -131,6 +137,17 @@ dependencies = [
  "once_cell",
  "pin-project-lite",
  "tokio",
+]
+
+[[package]]
+name = "async-trait"
+version = "0.1.91"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae36dc4177970ef04fde5178d3e2429882def40e57a451f919c098f72baa6cec"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -265,6 +282,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4388bee8683e3d04af747c73422af53102d2bd24d9eadb6cbc100baef4b43f8"
 dependencies = [
  "serde_core",
+]
+
+[[package]]
+name = "blake3"
+version = "1.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0aa83c34e62843d924f905e0f5c866eb1dd6545fc4d719e803d9ba6030371fce"
+dependencies = [
+ "arrayref",
+ "arrayvec",
+ "cc",
+ "cfg-if",
+ "constant_time_eq",
+ "cpufeatures 0.3.0",
 ]
 
 [[package]]
@@ -453,7 +484,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -461,6 +492,32 @@ name = "clap_lex"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
+
+[[package]]
+name = "combine"
+version = "4.6.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
+dependencies = [
+ "bytes",
+ "memchr",
+]
+
+[[package]]
+name = "constant_time_eq"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
+
+[[package]]
+name = "core-foundation"
+version = "0.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91e195e091a93c46f7102ec7818a2aa394e1e1771c3ab4825963fa03e45afb8f"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+]
 
 [[package]]
 name = "core-foundation-sys"
@@ -484,6 +541,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "critical-section"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "790eea4361631c5e7d22598ecd5723ff611904e3344ce8720784c93e3d83d40b"
+
+[[package]]
+name = "crossbeam-channel"
+version = "0.5.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d85363c37faeca707aef026efa9f3b34d077bce547e48f770770625c6013679e"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-epoch"
+version = "0.9.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d6914041f254d6e9176c01941b21115dcfb7089e55135a35411081bd106ef3f"
+dependencies = [
+ "crossbeam-utils",
 ]
 
 [[package]]
@@ -532,7 +613,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13b588ba4ac1a99f7f2964d24b3d896ddc6bf847ee3855dbd4366f058cfcd331"
 dependencies = [
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -549,7 +630,7 @@ checksum = "6edb4b64a43d977b8e99788fe3a04d483834fba1215a7e02caa415b626497f7f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -592,7 +673,7 @@ checksum = "1ac70aa55017e108007fbaf5aa0f54b021c98f92ff8af59d42eda9da96e3dd4f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -765,7 +846,7 @@ checksum = "e835b70203e41293343137df5c0664546da5745f82ec9b84d40be8336958447b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -964,6 +1045,76 @@ dependencies = [
 ]
 
 [[package]]
+name = "hickory-net"
+version = "0.26.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2295ed2f9c31e471e1428a8f88a3f0e1f4b27c15049592138d1eebe9c35b183"
+dependencies = [
+ "async-trait",
+ "cfg-if",
+ "data-encoding",
+ "futures-channel",
+ "futures-io",
+ "futures-util",
+ "hickory-proto",
+ "idna",
+ "ipnet",
+ "jni",
+ "rand 0.10.2",
+ "thiserror 2.0.18",
+ "tinyvec",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "hickory-proto"
+version = "0.26.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bab31817bfb44672a252e97fe81cd0c18d1b2cf892108922f6818820df8c643"
+dependencies = [
+ "data-encoding",
+ "idna",
+ "ipnet",
+ "jni",
+ "once_cell",
+ "prefix-trie",
+ "rand 0.10.2",
+ "ring",
+ "thiserror 2.0.18",
+ "tinyvec",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "hickory-resolver"
+version = "0.26.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0d58d28879ceecde6607729660c2667a081ccdc082e082675042793960f178c"
+dependencies = [
+ "cfg-if",
+ "futures-util",
+ "hickory-net",
+ "hickory-proto",
+ "ipconfig",
+ "ipnet",
+ "jni",
+ "moka",
+ "ndk-context",
+ "once_cell",
+ "parking_lot",
+ "rand 0.10.2",
+ "resolv-conf",
+ "smallvec",
+ "system-configuration",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "highlighter-core"
 version = "0.1.0"
 dependencies = [
@@ -972,6 +1123,7 @@ dependencies = [
  "dirs",
  "futures",
  "hex",
+ "nmp",
  "nmp-blossom",
  "nmp-content",
  "nmp-core",
@@ -983,16 +1135,17 @@ dependencies = [
  "nmp-nip22",
  "nmp-nip23",
  "nmp-nip25",
- "nmp-nip29",
+ "nmp-nip29 0.1.0",
+ "nmp-nip29 1.0.0-rc.1",
  "nmp-nip50",
- "nmp-nip51",
+ "nmp-nip51 1.0.0-rc.1",
  "nmp-nip78",
  "nmp-nostr-id",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-planner",
  "nmp-replies",
  "nmp-signers",
- "nmp-store",
+ "nmp-store 1.0.0-rc.1",
  "nmp-substrate",
  "nmp-uniffi-support",
  "nostr-sdk",
@@ -1035,7 +1188,7 @@ dependencies = [
  "markup5ever",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -1076,6 +1229,12 @@ name = "httparse"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
+
+[[package]]
+name = "httpdate"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
 name = "hyper"
@@ -1296,16 +1455,81 @@ dependencies = [
 ]
 
 [[package]]
+name = "ipconfig"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d40460c0ce33d6ce4b0630ad68ff63d6661961c48b6dba35e5a4d81cfb48222"
+dependencies = [
+ "socket2",
+ "widestring",
+ "windows-registry",
+ "windows-result",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "ipnet"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d98f6fed1fde3f8c21bc40a1abb88dd75e67924f9cffc3ef95607bad8017f8e2"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+
+[[package]]
+name = "jni"
+version = "0.22.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5efd9a482cf3a427f00d6b35f14332adc7902ce91efb778580e180ff90fa3498"
+dependencies = [
+ "cfg-if",
+ "combine",
+ "jni-macros",
+ "jni-sys",
+ "log",
+ "simd_cesu8",
+ "thiserror 2.0.18",
+ "walkdir",
+ "windows-link",
+]
+
+[[package]]
+name = "jni-macros"
+version = "0.22.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a00109accc170f0bdb141fed3e393c565b6f5e072365c3bd58f5b062591560a3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "rustc_version",
+ "simd_cesu8",
+ "syn 2.0.118",
+]
+
+[[package]]
+name = "jni-sys"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6377a88cb3910bee9b0fa88d4f42e1d2da8e79915598f65fb0c7ee14c878af2"
+dependencies = [
+ "jni-sys-macros",
+]
+
+[[package]]
+name = "jni-sys-macros"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38c0b942f458fe50cdac086d2f946512305e5631e720728f2a61aabcd47a6264"
+dependencies = [
+ "quote",
+ "syn 2.0.118",
+]
 
 [[package]]
 name = "js-sys"
@@ -1443,6 +1667,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "moka"
+version = "0.12.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "957228ad12042ee839f93c8f257b62b4c0ab5eaae1d4fa60de53b27c9d7c5046"
+dependencies = [
+ "crossbeam-channel",
+ "crossbeam-epoch",
+ "crossbeam-utils",
+ "equivalent",
+ "parking_lot",
+ "portable-atomic",
+ "smallvec",
+ "tagptr",
+ "uuid",
+]
+
+[[package]]
 name = "nanorand"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1450,6 +1691,12 @@ checksum = "6a51313c5820b0b02bd422f4b44776fbf47961755c74ce64afc73bfad10226c3"
 dependencies = [
  "getrandom 0.2.17",
 ]
+
+[[package]]
+name = "ndk-context"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27b02d87554356db9e9a873add8782d4ea6e3e58ea071a9adb9a2e8ddb884a8b"
 
 [[package]]
 name = "negentropy"
@@ -1464,6 +1711,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
+name = "nmp"
+version = "0.1.0"
+source = "git+https://github.com/pablof7z/nmp.git?rev=c51fc80a8b5a2a54fcedf7881ca4eef139a1b512#c51fc80a8b5a2a54fcedf7881ca4eef139a1b512"
+dependencies = [
+ "nmp-engine",
+ "nmp-grammar",
+ "nmp-resolver",
+ "nmp-router 0.1.0",
+ "nmp-signer",
+ "nmp-store 0.1.0",
+ "nmp-transport",
+ "nostr",
+ "tokio",
+]
+
+[[package]]
 name = "nmp-blossom"
 version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
@@ -1472,7 +1735,7 @@ dependencies = [
  "flatbuffers",
  "nmp-core",
  "nmp-kinds",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-signer-iface",
  "nostr",
  "serde",
@@ -1493,7 +1756,7 @@ dependencies = [
  "nmp-nip09",
  "nmp-nip84",
  "nmp-nostr-id",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "pulldown-cmark",
  "regex",
  "serde",
@@ -1514,11 +1777,11 @@ dependencies = [
  "nmp-network",
  "nmp-nip42-types",
  "nmp-nostr-id",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-planner",
  "nmp-relay-url",
  "nmp-signer-iface",
- "nmp-store",
+ "nmp-store 1.0.0-rc.1",
  "nostr",
  "serde",
  "serde_json",
@@ -1534,8 +1797,39 @@ name = "nmp-coverage-gate"
 version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
 dependencies = [
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
 ]
+
+[[package]]
+name = "nmp-engine"
+version = "0.1.0"
+source = "git+https://github.com/pablof7z/nmp.git?rev=c51fc80a8b5a2a54fcedf7881ca4eef139a1b512#c51fc80a8b5a2a54fcedf7881ca4eef139a1b512"
+dependencies = [
+ "blake3",
+ "crossbeam-channel",
+ "futures-channel",
+ "hex",
+ "hickory-resolver",
+ "httpdate",
+ "negentropy",
+ "nmp-executor",
+ "nmp-grammar",
+ "nmp-resolver",
+ "nmp-router 0.1.0",
+ "nmp-signer",
+ "nmp-store 0.1.0",
+ "nmp-transport",
+ "nostr",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "nmp-executor"
+version = "0.1.0"
+source = "git+https://github.com/pablof7z/nmp.git?rev=c51fc80a8b5a2a54fcedf7881ca4eef139a1b512#c51fc80a8b5a2a54fcedf7881ca4eef139a1b512"
 
 [[package]]
 name = "nmp-feed"
@@ -1544,10 +1838,10 @@ source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master
 dependencies = [
  "flatbuffers",
  "nmp-core",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-planner",
  "nmp-read-session",
- "nmp-store",
+ "nmp-store 1.0.0-rc.1",
  "nmp-threading",
  "serde",
  "serde_json",
@@ -1565,11 +1859,11 @@ dependencies = [
  "nmp-nip02",
  "nmp-nip09",
  "nmp-nip18",
- "nmp-nip29",
- "nmp-nip51",
- "nmp-ownership",
+ "nmp-nip29 1.0.0-rc.1",
+ "nmp-nip51 1.0.0-rc.1",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-planner",
- "nmp-store",
+ "nmp-store 1.0.0-rc.1",
  "nmp-wot",
  "trellis-core",
 ]
@@ -1584,6 +1878,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nmp-grammar"
+version = "0.1.0"
+source = "git+https://github.com/pablof7z/nmp.git?rev=c51fc80a8b5a2a54fcedf7881ca4eef139a1b512#c51fc80a8b5a2a54fcedf7881ca4eef139a1b512"
+dependencies = [
+ "blake3",
+ "nostr",
+ "serde_json",
+]
+
+[[package]]
 name = "nmp-intent"
 version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
@@ -1592,7 +1896,7 @@ dependencies = [
  "nmp-nip05",
  "nmp-nip50",
  "nmp-nostr-id",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "serde_json",
 ]
 
@@ -1601,7 +1905,7 @@ name = "nmp-kinds"
 version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
 dependencies = [
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
 ]
 
 [[package]]
@@ -1617,13 +1921,13 @@ dependencies = [
  "nmp-nip46",
  "nmp-nip46-runtime",
  "nmp-nip50",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-planner",
  "nmp-read-session",
- "nmp-router",
+ "nmp-router 1.0.0-rc.1",
  "nmp-signer-iface",
  "nmp-signers",
- "nmp-store",
+ "nmp-store 1.0.0-rc.1",
  "nostr",
  "serde",
  "serde_json",
@@ -1640,7 +1944,7 @@ dependencies = [
  "js-sys",
  "mio",
  "nmp-nip42-types",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-relay-url",
  "rustls",
  "serde_json",
@@ -1656,9 +1960,9 @@ source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master
 dependencies = [
  "flatbuffers",
  "nmp-core",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-signer-iface",
- "nmp-store",
+ "nmp-store 1.0.0-rc.1",
  "nmp-threading",
  "serde",
  "serde_json",
@@ -1673,8 +1977,8 @@ dependencies = [
  "flatbuffers",
  "nmp-core",
  "nmp-nip25",
- "nmp-ownership",
- "nmp-store",
+ "nmp-ownership 1.0.0-rc.1",
+ "nmp-store 1.0.0-rc.1",
  "serde",
  "serde_json",
  "trellis-core",
@@ -1686,7 +1990,7 @@ version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
 dependencies = [
  "nmp-core",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-wellknown-http",
  "nostr",
  "serde_json",
@@ -1698,7 +2002,7 @@ version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
 dependencies = [
  "nmp-core",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-signer-iface",
  "serde",
 ]
@@ -1709,7 +2013,7 @@ version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
 dependencies = [
  "nmp-core",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "serde",
  "serde_json",
  "ureq",
@@ -1725,7 +2029,7 @@ dependencies = [
  "nmp-feed",
  "nmp-kinds",
  "nmp-nip09",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-planner",
  "nmp-signer-iface",
  "serde",
@@ -1740,7 +2044,7 @@ dependencies = [
  "nmp-core",
  "nmp-feed",
  "nmp-kinds",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-signer-iface",
  "serde",
 ]
@@ -1757,7 +2061,7 @@ dependencies = [
  "nmp-kinds",
  "nmp-nip09",
  "nmp-nip18",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "serde",
 ]
 
@@ -1769,10 +2073,21 @@ dependencies = [
  "flatbuffers",
  "nmp-core",
  "nmp-nip09",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-signer-iface",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "nmp-nip29"
+version = "0.1.0"
+source = "git+https://github.com/pablof7z/nmp.git?rev=c51fc80a8b5a2a54fcedf7881ca4eef139a1b512#c51fc80a8b5a2a54fcedf7881ca4eef139a1b512"
+dependencies = [
+ "nmp-grammar",
+ "nmp-nip51 0.1.0",
+ "nmp-ownership 0.1.0",
+ "nostr",
 ]
 
 [[package]]
@@ -1782,12 +2097,12 @@ source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master
 dependencies = [
  "flatbuffers",
  "nmp-core",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-planner",
  "nmp-read-session",
  "nmp-relay-url",
  "nmp-signer-iface",
- "nmp-store",
+ "nmp-store 1.0.0-rc.1",
  "nostr",
  "serde",
  "serde_json",
@@ -1798,7 +2113,7 @@ name = "nmp-nip42-types"
 version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
 dependencies = [
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "serde",
  "serde_json",
 ]
@@ -1808,7 +2123,7 @@ name = "nmp-nip46"
 version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
 dependencies = [
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nostr",
  "serde_json",
 ]
@@ -1821,7 +2136,7 @@ dependencies = [
  "nmp-core",
  "nmp-network",
  "nmp-nip46",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-signer-iface",
  "nmp-signers",
  "nostr",
@@ -1837,12 +2152,22 @@ dependencies = [
  "flatbuffers",
  "nmp-core",
  "nmp-kinds",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-planner",
  "nmp-read-session",
- "nmp-store",
+ "nmp-store 1.0.0-rc.1",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "nmp-nip51"
+version = "0.1.0"
+source = "git+https://github.com/pablof7z/nmp.git?rev=c51fc80a8b5a2a54fcedf7881ca4eef139a1b512#c51fc80a8b5a2a54fcedf7881ca4eef139a1b512"
+dependencies = [
+ "nmp-grammar",
+ "nmp-ownership 0.1.0",
+ "nostr",
 ]
 
 [[package]]
@@ -1854,10 +2179,10 @@ dependencies = [
  "nmp-core",
  "nmp-kinds",
  "nmp-nip50",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-planner",
  "nmp-signer-iface",
- "nmp-store",
+ "nmp-store 1.0.0-rc.1",
  "serde",
  "serde_json",
  "trellis-core",
@@ -1869,7 +2194,7 @@ version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
 dependencies = [
  "nmp-kinds",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-relay-url",
 ]
 
@@ -1882,9 +2207,9 @@ dependencies = [
  "nmp-core",
  "nmp-coverage-gate",
  "nmp-network",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-planner",
- "nmp-store",
+ "nmp-store 1.0.0-rc.1",
  "nostr",
  "serde_json",
 ]
@@ -1896,7 +2221,7 @@ source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master
 dependencies = [
  "nmp-core",
  "nmp-kinds",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-signer-iface",
  "serde",
 ]
@@ -1908,7 +2233,7 @@ source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master
 dependencies = [
  "flatbuffers",
  "nmp-core",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-signer-iface",
  "serde",
 ]
@@ -1918,7 +2243,7 @@ name = "nmp-nostr-id"
 version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
 dependencies = [
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nostr",
 ]
 
@@ -1930,12 +2255,17 @@ dependencies = [
  "async-utility",
  "flume",
  "heed",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nostr",
  "nostr-database",
  "tokio",
  "tracing",
 ]
+
+[[package]]
+name = "nmp-ownership"
+version = "0.1.0"
+source = "git+https://github.com/pablof7z/nmp.git?rev=c51fc80a8b5a2a54fcedf7881ca4eef139a1b512#c51fc80a8b5a2a54fcedf7881ca4eef139a1b512"
 
 [[package]]
 name = "nmp-ownership"
@@ -1947,7 +2277,7 @@ name = "nmp-planner"
 version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
 dependencies = [
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-relay-url",
  "serde",
  "serde_json",
@@ -1959,7 +2289,7 @@ version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
 dependencies = [
  "nmp-core",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-planner",
  "trellis-core",
 ]
@@ -1969,7 +2299,7 @@ name = "nmp-relay-url"
 version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
 dependencies = [
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
 ]
 
 [[package]]
@@ -1983,13 +2313,33 @@ dependencies = [
  "nmp-nip01",
  "nmp-nip09",
  "nmp-nip22",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-planner",
  "nmp-read-session",
  "nmp-signer-iface",
- "nmp-store",
+ "nmp-store 1.0.0-rc.1",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "nmp-resolver"
+version = "0.1.0"
+source = "git+https://github.com/pablof7z/nmp.git?rev=c51fc80a8b5a2a54fcedf7881ca4eef139a1b512#c51fc80a8b5a2a54fcedf7881ca4eef139a1b512"
+dependencies = [
+ "nmp-grammar",
+ "nmp-store 0.1.0",
+ "nostr",
+]
+
+[[package]]
+name = "nmp-router"
+version = "0.1.0"
+source = "git+https://github.com/pablof7z/nmp.git?rev=c51fc80a8b5a2a54fcedf7881ca4eef139a1b512#c51fc80a8b5a2a54fcedf7881ca4eef139a1b512"
+dependencies = [
+ "nmp-grammar",
+ "nmp-store 0.1.0",
+ "nostr",
 ]
 
 [[package]]
@@ -2002,12 +2352,28 @@ dependencies = [
  "nmp-kinds",
  "nmp-network",
  "nmp-nip65-types",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-planner",
  "nmp-signer-iface",
- "nmp-store",
+ "nmp-store 1.0.0-rc.1",
  "serde",
  "tracing",
+]
+
+[[package]]
+name = "nmp-signer"
+version = "0.1.0"
+source = "git+https://github.com/pablof7z/nmp.git?rev=c51fc80a8b5a2a54fcedf7881ca4eef139a1b512#c51fc80a8b5a2a54fcedf7881ca4eef139a1b512"
+dependencies = [
+ "crossbeam-channel",
+ "nmp-executor",
+ "nmp-transport",
+ "nostr",
+ "serde",
+ "serde_json",
+ "tokio",
+ "url",
+ "zeroize",
 ]
 
 [[package]]
@@ -2015,7 +2381,7 @@ name = "nmp-signer-iface"
 version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
 dependencies = [
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "serde",
  "serde_json",
 ]
@@ -2026,7 +2392,7 @@ version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
 dependencies = [
  "js-sys",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-signer-iface",
  "nostr",
  "serde",
@@ -2041,13 +2407,26 @@ dependencies = [
 
 [[package]]
 name = "nmp-store"
+version = "0.1.0"
+source = "git+https://github.com/pablof7z/nmp.git?rev=c51fc80a8b5a2a54fcedf7881ca4eef139a1b512#c51fc80a8b5a2a54fcedf7881ca4eef139a1b512"
+dependencies = [
+ "blake3",
+ "nmp-grammar",
+ "nostr",
+ "redb",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "nmp-store"
 version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
 dependencies = [
  "heed",
  "nmp-kinds",
  "nmp-nostr-lmdb",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-relay-url",
  "nostr",
  "nostr-database",
@@ -2067,11 +2446,11 @@ dependencies = [
  "nmp-coverage-gate",
  "nmp-nip01",
  "nmp-nip11",
- "nmp-nip51",
+ "nmp-nip51 1.0.0-rc.1",
  "nmp-nip77",
- "nmp-ownership",
- "nmp-router",
- "nmp-store",
+ "nmp-ownership 1.0.0-rc.1",
+ "nmp-router 1.0.0-rc.1",
+ "nmp-store 1.0.0-rc.1",
 ]
 
 [[package]]
@@ -2081,11 +2460,25 @@ source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master
 dependencies = [
  "flatbuffers",
  "nmp-core",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-planner",
  "nmp-read-session",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "nmp-transport"
+version = "0.1.0"
+source = "git+https://github.com/pablof7z/nmp.git?rev=c51fc80a8b5a2a54fcedf7881ca4eef139a1b512#c51fc80a8b5a2a54fcedf7881ca4eef139a1b512"
+dependencies = [
+ "blake3",
+ "mio",
+ "nmp-executor",
+ "nmp-grammar",
+ "nostr",
+ "rustls",
+ "tungstenite 0.29.0",
 ]
 
 [[package]]
@@ -2095,7 +2488,7 @@ source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master
 dependencies = [
  "nmp-core",
  "nmp-native-runtime",
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-read-session",
  "serde_json",
 ]
@@ -2105,7 +2498,7 @@ name = "nmp-wellknown-http"
 version = "1.0.0-rc.1"
 source = "git+https://github.com/pablof7z/nostr-multi-platform.git?branch=master#0d51525e1c28bb6d832901bf66d7da5402e5c8a4"
 dependencies = [
- "nmp-ownership",
+ "nmp-ownership 1.0.0-rc.1",
  "serde_json",
 ]
 
@@ -2117,8 +2510,8 @@ dependencies = [
  "flatbuffers",
  "nmp-core",
  "nmp-network",
- "nmp-nip51",
- "nmp-ownership",
+ "nmp-nip51 1.0.0-rc.1",
+ "nmp-ownership 1.0.0-rc.1",
  "nmp-planner",
  "nostr",
  "serde",
@@ -2237,6 +2630,10 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+dependencies = [
+ "critical-section",
+ "portable-atomic",
+]
 
 [[package]]
 name = "opaque-debug"
@@ -2379,7 +2776,7 @@ dependencies = [
  "phf_shared 0.11.3",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -2424,6 +2821,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "portable-atomic"
+version = "1.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d20d5497ef88037a52ff98267d066e7f11fcc5e99bbfbd58a42336193aacec3"
+
+[[package]]
 name = "potential_utf"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2446,6 +2849,17 @@ name = "precomputed-hash"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "925383efa346730478fb4838dbe9137d2a47675ad789c546d150a6e1dd4ab31c"
+
+[[package]]
+name = "prefix-trie"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cf6e3177f0684016a5c209b00882e15f8bdd3f3bb48f0491df10cd102d0c6e7"
+dependencies = [
+ "either",
+ "ipnet",
+ "num-traits",
+]
 
 [[package]]
 name = "proc-macro2"
@@ -2630,6 +3044,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "redb"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e925444704b5f17d32bf42f5b6e2df050bceebc3dcd6e71cc73dafe8092e839"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2718,6 +3141,12 @@ dependencies = [
  "web-sys",
  "webpki-roots 1.0.8",
 ]
+
+[[package]]
+name = "resolv-conf"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e061d1b48cb8d38042de4ae0a7a6401009d6143dc80d2e2d6f31f0bdd6470c7"
 
 [[package]]
 name = "ring"
@@ -2819,6 +3248,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "same-file"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
+dependencies = [
+ "winapi-util",
+]
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2857,7 +3295,7 @@ checksum = "1783eabc414609e28a5ba76aee5ddd52199f7107a0b24c2e9746a1ecc34a683d"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -2948,7 +3386,7 @@ checksum = "d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -3031,6 +3469,22 @@ dependencies = [
  "errno",
  "libc",
 ]
+
+[[package]]
+name = "simd_cesu8"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11031e251abf8611c80f460e19dbdeb54a66db918e49c65a7065b46ac7aec520"
+dependencies = [
+ "rustc_version",
+ "simdutf8",
+]
+
+[[package]]
+name = "simdutf8"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "siphasher"
@@ -3145,6 +3599,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "syn"
+version = "3.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53e9bae58849f64dfa4f5d5ae372c8341f7305f82a3868709269343628b659a3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-ident",
+]
+
+[[package]]
 name = "sync_wrapper"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3170,8 +3635,35 @@ checksum = "728a70f3dbaf5bab7f0c4b1ac8d7ae5ea60a4b5549c8a5914361c99147a709d2"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
+
+[[package]]
+name = "system-configuration"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a13f3d0daba03132c0aa9767f98351b3488edc2c100cda2d2ec2b04f3d8d3c8b"
+dependencies = [
+ "bitflags",
+ "core-foundation",
+ "system-configuration-sys",
+]
+
+[[package]]
+name = "system-configuration-sys"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e1d1b10ced5ca923a1fcb8d03e96b8d3268065d724548c0211415ff6ac6bac4"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+]
+
+[[package]]
+name = "tagptr"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b2093cf4c8eb1e67749a6762251bc9cd836b6fc171623bd0a9d324d37af2417"
 
 [[package]]
 name = "tempfile"
@@ -3232,7 +3724,7 @@ checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -3243,7 +3735,7 @@ checksum = "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -3305,7 +3797,7 @@ checksum = "385a6cb71ab9ab790c5fe8d67f1645e6c450a7ce006a33de03daa956cf70a496"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -3443,7 +3935,7 @@ checksum = "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -3535,6 +4027,25 @@ dependencies = [
  "sha1",
  "thiserror 2.0.18",
  "utf-8",
+]
+
+[[package]]
+name = "tungstenite"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c01152af293afb9c7c2a57e4b559c5620b421f6d133261c60dd2d0cdb38e6b8"
+dependencies = [
+ "bytes",
+ "data-encoding",
+ "http",
+ "httparse",
+ "log",
+ "rand 0.9.4",
+ "rustls",
+ "rustls-pki-types",
+ "sha1",
+ "thiserror 2.0.18",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]
@@ -3635,7 +4146,7 @@ dependencies = [
  "indexmap",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -3650,7 +4161,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde",
- "syn",
+ "syn 2.0.118",
  "toml",
  "uniffi_meta",
 ]
@@ -3772,6 +4283,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
+name = "walkdir"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
+dependencies = [
+ "same-file",
+ "winapi-util",
+]
+
+[[package]]
 name = "want"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3837,7 +4358,7 @@ dependencies = [
  "bumpalo",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
  "wasm-bindgen-shared",
 ]
 
@@ -3911,6 +4432,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "widestring"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72069c3113ab32ab29e5584db3c6ec55d416895e60715417b5b883a357c3e471"
+
+[[package]]
 name = "winapi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3925,6 +4452,15 @@ name = "winapi-i686-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
+
+[[package]]
+name = "winapi-util"
+version = "0.1.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
+dependencies = [
+ "windows-sys 0.48.0",
+]
 
 [[package]]
 name = "winapi-x86_64-pc-windows-gnu"
@@ -3953,7 +4489,7 @@ checksum = "053e2e040ab57b9dc951b72c264860db7eb3b0200ba345b4e4c3b14f67855ddf"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -3964,7 +4500,7 @@ checksum = "3f316c4a2570ba26bbec722032c4099d8c8bc095efccdc15688708623367e358"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -3972,6 +4508,17 @@ name = "windows-link"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
+
+[[package]]
+name = "windows-registry"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02752bf7fbdcce7f2a27a742f798510f3e5ad88dbe84871e5168e2120c3d5720"
+dependencies = [
+ "windows-link",
+ "windows-result",
+ "windows-strings",
+]
 
 [[package]]
 name = "windows-result"
@@ -4179,7 +4726,7 @@ checksum = "de844c262c8848816172cef550288e7dc6c7b7814b4ee56b3e1553f275f1858e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
  "synstructure",
 ]
 
@@ -4200,7 +4747,7 @@ checksum = "e2e817b7b52d0c7358d3246da9d69935ebb18116b2b102b4230dac079b4862f5"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -4220,7 +4767,7 @@ checksum = "11532158c46691caf0f2593ea8358fed6bbf68a0315e80aae9bd41fbade684a1"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
  "synstructure",
 ]
 
@@ -4242,7 +4789,7 @@ checksum = "3c50655cbb0fe3fc43170059e702f1ce5e19b84cec58dc87b037a09935c2f328"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -4275,7 +4822,7 @@ checksum = "625dc425cab0dca6dc3c3319506e6593dcb08a9f387ea3b284dbd52a92c40555"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.118",
 ]
 
 [[package]]

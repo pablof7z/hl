@@ -1,5 +1,8 @@
 uniffi::setup_scaffolding!();
 
+#[cfg(test)]
+mod new_nmp_canary;
+
 // ── New nmp-lane kernel (Phase 1) ────────────────────────────────────────────
 pub mod capabilities;
 pub mod ffi;
